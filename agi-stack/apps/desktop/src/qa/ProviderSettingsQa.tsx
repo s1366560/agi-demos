@@ -1,11 +1,12 @@
 import '@radix-ui/themes/styles.css';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
 import { SettingsWindow, type SettingsSection } from '../features/settings/SettingsWindow';
 import { I18nProvider } from '../i18n';
 import type {
   AuthState,
+  AgentWsEvent,
   DesktopRuntimeConfig,
   LlmProviderAuthMethod,
   LlmProviderRoutingPolicy,
@@ -1899,6 +1900,8 @@ try {
 
 function ProviderSettingsQa() {
   const searchParams = new URLSearchParams(window.location.search);
+  const agentDefinitionEventMode = searchParams.get('agent-definition-event') === '1';
+  const [agentDefinitionEvent, setAgentDefinitionEvent] = useState<AgentWsEvent | null>(null);
   const [config, setConfig] = useState<DesktopRuntimeConfig>(() => ({
     ...qaConfig,
     mode: searchParams.get('mode') === 'cloud' ? 'cloud' : qaConfig.mode,
@@ -1921,6 +1924,34 @@ function ProviderSettingsQa() {
     requestedSection && supportedSections.has(requestedSection as SettingsSection)
       ? (requestedSection as SettingsSection)
       : 'models';
+  useEffect(() => {
+    if (!agentDefinitionEventMode) return;
+    const timer = window.setTimeout(() => {
+      if (!agents.some((agent) => agent.id === 'agent-incident-responder')) {
+        agents = [
+          ...agents,
+          {
+            id: 'agent-incident-responder',
+            name: 'incident_responder',
+            display_name: 'Incident responder',
+            enabled: true,
+            status: 'active',
+            model_name: 'openai/gpt-5.1',
+            project_id: QA_PROJECT_ID,
+            allowed_tools: ['read', 'terminal'],
+            allowed_skills: ['incident-response'],
+            allowed_mcp_servers: [],
+            updated_at: new Date().toISOString(),
+          },
+        ];
+      }
+      setAgentDefinitionEvent({
+        type: 'agent_definition_created',
+        data: { agent_id: 'agent-incident-responder', agent_name: 'incident_responder' },
+      });
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [agentDefinitionEventMode]);
   return (
     <SettingsWindow
       open
@@ -1931,6 +1962,7 @@ function ProviderSettingsQa() {
       wsConnected
       wsError={null}
       runtimeDisabledReason={null}
+      agentDefinitionEvent={agentDefinitionEvent}
       onClose={() => undefined}
       onConfigChange={setConfig}
       onRuntimeStatusRefresh={async () => undefined}

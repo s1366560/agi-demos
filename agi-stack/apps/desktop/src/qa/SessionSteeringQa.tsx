@@ -422,6 +422,30 @@ const conversationTerminalTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
+const agentDefinitionTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'agent-definition-created-release',
+    type: 'agent_definition_created',
+    eventTimeUs: 1_784_282_059_000_000,
+    eventCounter: 19,
+    payload: { agent_id: 'agent-release', agent_name: 'release_guardian' },
+  },
+  {
+    id: 'agent-definition-updated-release',
+    type: 'agent_definition_updated',
+    eventTimeUs: 1_784_282_060_000_000,
+    eventCounter: 20,
+    payload: { agent_id: 'agent-release', agent_name: 'release_guardian' },
+  },
+  {
+    id: 'agent-definition-deleted-release',
+    type: 'agent_definition_deleted',
+    eventTimeUs: 1_784_282_061_000_000,
+    eventCounter: 21,
+    payload: { agent_id: 'agent-release', agent_name: 'release_guardian' },
+  },
+];
+
 function SessionSteeringQa() {
   const searchParams = new URLSearchParams(window.location.search);
   const historyMode = searchParams.get('history');
@@ -430,6 +454,7 @@ function SessionSteeringQa() {
   const httpServiceEventsMode = searchParams.get('http-service-events') === '1';
   const doomLoopEventsMode = searchParams.get('doom-loop-events') === '1';
   const terminalEventsMode = searchParams.get('terminal-events') === '1';
+  const agentDefinitionEventsMode = searchParams.get('agent-definition-events') === '1';
   const [delivery, setDelivery] = useState<RunInputDelivery>('steer_now');
   const [references, setReferences] = useState<CodeRangeReference[]>([]);
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([queuedInput]);
@@ -450,7 +475,9 @@ function SessionSteeringQa() {
                 ? [...timelineState.items, ...doomLoopTimelineItems]
                 : terminalEventsMode
                   ? [...timelineState.items, ...conversationTerminalTimelineItems]
-                  : timelineState.items;
+                  : agentDefinitionEventsMode
+                    ? [...timelineState.items, ...agentDefinitionTimelineItems]
+                    : timelineState.items;
     return {
       ...timelineState,
       items,

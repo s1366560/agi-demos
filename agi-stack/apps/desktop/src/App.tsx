@@ -198,6 +198,7 @@ import {
   type SettingsEntry,
 } from './features/settings/settingsEntryRouting';
 import { SettingsWindow, type SettingsSection } from './features/settings/SettingsWindow';
+import { latestAgentDefinitionEvent } from './features/settings/agentDefinitionEventModel';
 import { useWorkspaceAgentPolicy } from './features/settings/useWorkspaceAgentPolicy';
 import { useWorkspaceRuntimeProvider } from './features/settings/useWorkspaceRuntimeProvider';
 import {
@@ -1747,6 +1748,10 @@ export function App() {
     showRuntimeConfig && connection === 'ready',
     auth.context?.revision ?? null,
     scopedConversation?.id ?? null,
+  );
+  const agentDefinitionEvent = useMemo(
+    () => latestAgentDefinitionEvent(socket.events),
+    [socket.events],
   );
   const modalOpen = loginModalOpen || commandPaletteOpen || newTaskOpen || settingsWindowOpen;
   const localRuntimeMode = config.mode === 'local' && runsInTauri;
@@ -6154,6 +6159,7 @@ export function App() {
           wsConnected={socket.connected}
           wsError={socket.error}
           runtimeDisabledReason={runtimeDisabledReason}
+          agentDefinitionEvent={agentDefinitionEvent}
           onClose={() => setSettingsWindowOpen(false)}
           onConfigChange={handleConfigChange}
           onRuntimeStatusRefresh={refreshLocalRuntimeStatus}

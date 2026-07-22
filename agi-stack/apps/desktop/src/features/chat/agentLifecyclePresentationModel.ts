@@ -14,6 +14,7 @@ export type AgentLifecycleFamily =
   | 'toolset'
   | 'doomLoop'
   | 'conversation'
+  | 'agentDefinition'
   | 'skill'
   | 'model'
   | 'context'
@@ -197,6 +198,21 @@ const lifecycleEventDefinitions: Record<
     family: 'conversation',
     state: 'attention',
     detailFields: ['rationale'],
+  },
+  agent_definition_created: {
+    family: 'agentDefinition',
+    state: 'complete',
+    detailFields: ['agent_id', 'agentId'],
+  },
+  agent_definition_updated: {
+    family: 'agentDefinition',
+    state: 'complete',
+    detailFields: ['agent_id', 'agentId'],
+  },
+  agent_definition_deleted: {
+    family: 'agentDefinition',
+    state: 'stopped',
+    detailFields: ['agent_id', 'agentId'],
   },
   agent_message_sent: {
     family: 'agentMessage',
@@ -457,6 +473,9 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
     return item.type === 'agent_goal_completed'
       ? timelineEventString(item, ['summary']) ?? ''
       : timelineEventString(item, ['reason']) ?? '';
+  }
+  if (family === 'agentDefinition') {
+    return timelineEventString(item, ['agent_name', 'agentName', 'agent_id', 'agentId']) ?? '';
   }
   if (family === 'context') {
     return item.type === 'context_compressed'

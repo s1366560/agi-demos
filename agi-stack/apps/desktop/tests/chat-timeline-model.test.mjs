@@ -1513,6 +1513,59 @@ test('conversation terminal events expose completion and gate-specific stop stat
   );
 });
 
+test('Agent definition mutation events expose the changed definition and operation state', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'agent-definition-created-1',
+      type: 'agent_definition_created',
+      eventTimeUs: 75_000_000,
+      eventCounter: 1,
+      payload: { agent_id: 'agent-release', agent_name: 'release_guardian' },
+    }),
+    {
+      family: 'agentDefinition',
+      state: 'complete',
+      subject: 'release_guardian',
+      detail: 'agent-release',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'agent-definition-updated-1',
+      type: 'agent_definition_updated',
+      eventTimeUs: 76_000_000,
+      eventCounter: 2,
+      payload: { agent_id: 'agent-release', agent_name: 'release_guardian' },
+    }),
+    {
+      family: 'agentDefinition',
+      state: 'complete',
+      subject: 'release_guardian',
+      detail: 'agent-release',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'agent-definition-deleted-1',
+      type: 'agent_definition_deleted',
+      eventTimeUs: 77_000_000,
+      eventCounter: 3,
+      payload: { agent_id: 'agent-release', agent_name: 'release_guardian' },
+    }),
+    {
+      family: 'agentDefinition',
+      state: 'stopped',
+      subject: 'release_guardian',
+      detail: 'agent-release',
+      isError: false,
+    },
+  );
+});
+
 test('artifact ready and error stream events settle the original created row', () => {
   const created = {
     id: 'artifact-created-1',

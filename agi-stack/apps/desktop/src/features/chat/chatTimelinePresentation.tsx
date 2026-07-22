@@ -175,6 +175,11 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
       ? t('chat.agentGoalCompleted')
       : t('chat.agentConversationFinished');
   }
+  if (lifecycle?.family === 'agentDefinition') {
+    if (item.type === 'agent_definition_created') return t('chat.agentDefinitionCreated');
+    if (item.type === 'agent_definition_updated') return t('chat.agentDefinitionUpdated');
+    return t('chat.agentDefinitionDeleted');
+  }
   if (lifecycle?.family === 'skill') {
     if (item.type === 'skill_matched') return t('chat.skillMatched');
     if (item.type === 'skill_tool_start' || item.type === 'skill_tool_result') {
@@ -234,6 +239,7 @@ export function isImportantTimelineItem(item: AgentTimelineItem): boolean {
   if (item.type === 'agent_goal_completed' || item.type === 'agent_conversation_finished') {
     return true;
   }
+  if (item.type.startsWith('agent_definition_')) return true;
   return false;
 }
 
@@ -242,7 +248,8 @@ export function isTimelineItemInitiallyExpanded(item: AgentTimelineItem): boolea
   return (
     item.type !== 'doom_loop_detected' &&
     item.type !== 'agent_goal_completed' &&
-    item.type !== 'agent_conversation_finished'
+    item.type !== 'agent_conversation_finished' &&
+    !item.type.startsWith('agent_definition_')
   );
 }
 

@@ -298,6 +298,7 @@ function NoProjectEntryQa() {
           wsConnected={false}
           wsError={null}
           runtimeDisabledReason={newTaskDisabledReason}
+          agentDefinitionEvent={null}
           onClose={() => setSettingsOpen(false)}
           onConfigChange={setConfig}
           onRuntimeStatusRefresh={async () => undefined}

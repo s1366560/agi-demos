@@ -90,6 +90,20 @@ test('conversation terminal events stay visible while their raw payloads stay co
   assert.match(expansionPolicy, /agent_conversation_finished/);
 });
 
+test('Agent definition mutations stay visible without expanding management payloads', () => {
+  const importancePolicy = chatSource.match(
+    /function isImportantTimelineItem\(item: AgentTimelineItem\): boolean \{[\s\S]*?\n\}/,
+  )?.[0];
+  const expansionPolicy = chatSource.match(
+    /function isTimelineItemInitiallyExpanded\(item: AgentTimelineItem\): boolean \{[\s\S]*?\n\}/,
+  )?.[0];
+
+  assert.ok(importancePolicy, 'timeline importance policy must remain explicit');
+  assert.ok(expansionPolicy, 'timeline expansion policy must remain explicit');
+  assert.match(importancePolicy, /agent_definition_/);
+  assert.match(expansionPolicy, /agent_definition_/);
+});
+
 test('narrow session timelines preserve lifecycle status labels', () => {
   assert.match(
     chatStyles,
@@ -179,6 +193,9 @@ test('chat copy and diagnostics are localized in both supported locales', () => 
     'chat.doomLoopIntervened',
     'chat.agentGoalCompleted',
     'chat.agentConversationFinished',
+    'chat.agentDefinitionCreated',
+    'chat.agentDefinitionUpdated',
+    'chat.agentDefinitionDeleted',
     'chat.callsCount',
     'chat.suggestedFollowUps',
     'chat.sendSuggestion',

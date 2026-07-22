@@ -17,6 +17,7 @@ import type {
   ManagedPlugin,
   ManagedSkill,
   ManagedSubAgent,
+  AgentWsEvent,
 } from '../../types';
 import { RuntimeConfigPanel } from '../runtime/RuntimeConfigPanel';
 import {
@@ -72,6 +73,7 @@ type SettingsWindowProps = {
   wsConnected: boolean;
   wsError: string | null;
   runtimeDisabledReason: string | null;
+  agentDefinitionEvent: AgentWsEvent | null;
   onClose: () => void;
   onConfigChange: (config: DesktopRuntimeConfig) => void;
   onRuntimeStatusRefresh: () => Promise<void>;
@@ -89,6 +91,7 @@ export function SettingsWindow({
   wsConnected,
   wsError,
   runtimeDisabledReason,
+  agentDefinitionEvent,
   onClose,
   onConfigChange,
   onRuntimeStatusRefresh,
@@ -110,6 +113,8 @@ export function SettingsWindow({
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const resourceRequestId = useRef(0);
+  const agentDefinitionEventRef = useRef<AgentWsEvent | null>(null);
+  const agentDefinitionEventsReadyRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const activeSectionRef = useRef(section);
   const resourceContextKey = `${config.mode}:${config.tenantId}:${config.projectId}`;
@@ -300,6 +305,23 @@ export function SettingsWindow({
       resourceRequestId.current += 1;
     };
   }, [isResourceSection, loadResources, open, section]);
+
+  useEffect(() => {
+    if (!open) {
+      agentDefinitionEventsReadyRef.current = false;
+      agentDefinitionEventRef.current = null;
+      return;
+    }
+    if (!agentDefinitionEventsReadyRef.current) {
+      agentDefinitionEventsReadyRef.current = true;
+      agentDefinitionEventRef.current = agentDefinitionEvent;
+      return;
+    }
+    if (agentDefinitionEventRef.current === agentDefinitionEvent) return;
+    agentDefinitionEventRef.current = agentDefinitionEvent;
+    if (!agentDefinitionEvent || activeSectionRef.current !== 'agents') return;
+    void loadResources('agents');
+  }, [agentDefinitionEvent, loadResources, open]);
 
   const filteredItems = useMemo(() => {
     if (
