@@ -4,12 +4,20 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { applyHitlResponseStreamEvent, hitlResponsePresentation } = require(
+const {
+  applyHitlResponseStreamEvent,
+  foldHitlResponseTimelineItems,
+  hitlResponsePresentation,
+} = require(
   '/tmp/agistack-desktop-test-dist/src/features/chat/hitlResponseEventModel.js',
 );
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const cardSource = readFileSync(
   new URL('../src/features/chat/HitlResponseCard.tsx', import.meta.url),
+  'utf8',
+);
+const timelineSource = readFileSync(
+  new URL('../src/features/chat/ChatTimeline.tsx', import.meta.url),
   'utf8',
 );
 const qaSource = readFileSync(new URL('../src/qa/SessionSteeringQa.tsx', import.meta.url), 'utf8');
@@ -146,6 +154,60 @@ test('Desktop wires reply folding into live ingestion and the QA surface exercis
     'chat.response.allowed',
     'chat.response.denied',
   ]) {
+    assert.equal(i18nSource.split(`'${key}'`).length - 1, 2, `${key} must cover both locales`);
+  }
+});
+
+test('MCP elicitation replies fold into their request without retaining response values', () => {
+  const request = asked('elicitation_asked', 'elicitation-1', {
+    payload: {
+      request_id: 'elicitation-1',
+      server_id: 'mcp-release',
+      server_name: 'Release MCP',
+      message: 'Choose the release region',
+      requested_schema: {
+        type: 'object',
+        properties: {
+          region: { type: 'string' },
+          api_token: { type: 'string' },
+        },
+        required: ['region', 'api_token'],
+      },
+    },
+  });
+  const response = {
+    type: 'elicitation_answered',
+    data: {
+      request_id: 'elicitation-1',
+      response: { region: 'eu-west', api_token: 'must-never-render' },
+    },
+  };
+
+  const live = applyHitlResponseStreamEvent([request], response);
+  assert.equal(live.handled, true);
+  assert.equal(live.items.length, 1);
+  assert.equal(live.items[0].answered, true);
+  assert.deepEqual(live.items[0].providedFields, ['region', 'api_token']);
+  assert.doesNotMatch(JSON.stringify(live.items), /eu-west|must-never-render/);
+
+  const history = foldHitlResponseTimelineItems([
+    request,
+    {
+      id: 'elicitation-answer-1',
+      type: 'elicitation_answered',
+      eventTimeUs: 2_000_000,
+      eventCounter: 2,
+      payload: response.data,
+    },
+  ]);
+  assert.equal(history.length, 1);
+  assert.equal(history[0].answered, true);
+  assert.deepEqual(history[0].providedFields, ['region', 'api_token']);
+  assert.doesNotMatch(JSON.stringify(history), /eu-west|must-never-render/);
+  assert.match(timelineSource, /lifecycle\?\.family === 'elicitation'/);
+  assert.match(qaSource, /elicitation-events/);
+  assert.match(qaSource, /qa-secret-must-never-render/);
+  for (const key of ['chat.elicitationRequest', 'chat.elicitationResponse']) {
     assert.equal(i18nSource.split(`'${key}'`).length - 1, 2, `${key} must cover both locales`);
   }
 });

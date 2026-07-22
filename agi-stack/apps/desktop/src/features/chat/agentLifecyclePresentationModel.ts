@@ -28,6 +28,7 @@ export type AgentLifecycleFamily =
   | 'model'
   | 'context'
   | 'mcpApp'
+  | 'elicitation'
   | 'memory'
   | 'task'
   | 'artifact'
@@ -489,6 +490,8 @@ const lifecycleEventDefinitions: Record<
     state: 'running',
     detailFields: ['context_summary'],
   },
+  elicitation_asked: { family: 'elicitation', state: 'waiting' },
+  elicitation_answered: { family: 'elicitation', state: 'complete' },
 };
 
 /**
@@ -582,6 +585,8 @@ export function agentLifecyclePresentation(
     Boolean(timelineEventString(item, ['url']))
   ) {
     state = 'ready';
+  } else if (item.type === 'elicitation_asked' && item.answered === true) {
+    state = 'complete';
   }
 
   const subject = lifecycleSubject(item, definition.family);
@@ -623,6 +628,13 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
   }
   if (family === 'model') {
     return timelineEventString(item, ['model']) ?? '';
+  }
+  if (family === 'elicitation') {
+    return (
+      timelineEventString(item, ['server_name', 'serverName']) ??
+      timelineEventString(item, ['server_id', 'serverId']) ??
+      ''
+    );
   }
   if (family === 'doomLoop') {
     return item.type === 'doom_loop_detected'
@@ -847,6 +859,29 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
 
 function lifecycleDetail(item: AgentTimelineItem, detailFields: string[]): string {
   const lifecycle = lifecycleEventDefinitions[item.type];
+  if (lifecycle?.family === 'elicitation') {
+    const message = timelineEventString(item, ['message']);
+    const requestedSchema = timelineEventRecord(item, [
+      'requested_schema',
+      'requestedSchema',
+    ]);
+    const properties = requestedSchema ? safeRecordKeys(requestedSchema.properties) : [];
+    const providedFields = timelineEventStringArray(item, [
+      'providedFields',
+      'provided_fields',
+    ]);
+    const response = timelineEventRecord(item, ['response']);
+    const fields = uniqueStrings([
+      ...properties,
+      ...providedFields,
+      ...(response ? safeRecordKeys(response) : []),
+    ]);
+    return uniqueStrings(
+      [message, fields.length ? fields.join(', ') : null].flatMap((value) =>
+        value ? [value] : [],
+      ),
+    ).join(' · ');
+  }
   if (item.type === 'task_execution_session_updated') {
     return uniqueStrings(
       [
@@ -1363,6 +1398,27 @@ function timelineEventRecordString(
     }
   }
   return null;
+}
+
+function timelineEventRecord(
+  item: AgentTimelineItem,
+  keys: string[],
+): Record<string, unknown> | null {
+  const payload = isRecord(item.payload) ? item.payload : null;
+  for (const source of [payload, item]) {
+    if (!source) continue;
+    for (const key of keys) {
+      const value = source[key];
+      if (isRecord(value)) return value;
+    }
+  }
+  return null;
+}
+
+function safeRecordKeys(value: unknown): string[] {
+  if (!isRecord(value)) return [];
+  const unsafeKeys = new Set(['__proto__', 'constructor', 'prototype']);
+  return Object.keys(value).filter((key) => key.trim() && !unsafeKeys.has(key));
 }
 
 function firstRecordString(record: Record<string, unknown>, keys: string[]): string | null {

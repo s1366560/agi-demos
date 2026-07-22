@@ -36,6 +36,10 @@ const responseContracts: Record<string, HitlResponseContract> = {
     requestType: 'a2ui_action_asked',
     responseType: 'a2ui_action_answered',
   },
+  elicitation_answered: {
+    requestType: 'elicitation_asked',
+    responseType: 'elicitation_answered',
+  },
 };
 
 const genericRequestTypes: Record<string, string> = {
@@ -70,6 +74,20 @@ export function applyHitlResponseStreamEvent(
     return applyResponse(item, contract.responseType, data ?? {});
   });
   return { handled: true, items: changed ? items : existing };
+}
+
+/**
+ * Replay persisted HITL events through the same reducer used by live streams.
+ * Response-only rows are consumed even when their request is unavailable so
+ * encrypted-variable and MCP elicitation values never reach generic cards.
+ */
+export function foldHitlResponseTimelineItems(
+  items: AgentTimelineItem[],
+): AgentTimelineItem[] {
+  return items.reduce<AgentTimelineItem[]>((folded, item) => {
+    const result = applyHitlResponseStreamEvent(folded, item);
+    return result.handled ? result.items : [...folded, item];
+  }, []);
 }
 
 export function hitlResponsePresentation(
@@ -147,6 +165,15 @@ function applyResponse(
       ...(sourceComponentId ? { sourceComponentId } : {}),
     };
   }
+  if (responseType === 'elicitation_answered') {
+    const response = recordValue(data.response);
+    const providedFields = response ? safeRecordKeys(response) : [];
+    return {
+      ...item,
+      answered: true,
+      ...(providedFields.length ? { providedFields } : {}),
+    };
+  }
   return { ...item, answered: true };
 }
 
@@ -177,6 +204,13 @@ function responseVariableNames(
 function stringListValue(value: unknown): string[] {
   const normalized = stringValue(value);
   return normalized ? [normalized] : [];
+}
+
+function safeRecordKeys(value: Record<string, unknown>): string[] {
+  const unsafeKeys = new Set(['__proto__', 'constructor', 'prototype']);
+  return [...new Set(Object.keys(value).flatMap((key) => stringListValue(key)))].filter(
+    (key) => !unsafeKeys.has(key),
+  );
 }
 
 function timelineRequestId(item: AgentTimelineItem): string | null {

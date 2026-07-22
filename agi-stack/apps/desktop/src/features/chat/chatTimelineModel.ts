@@ -1,4 +1,5 @@
 import type { AgentTimelineItem } from '../../types';
+import { foldHitlResponseTimelineItems } from './hitlResponseEventModel';
 
 // Pure presentation logic for the agent conversation timeline. Kept free of
 // React/JSX so the node:test harness can compile and exercise it directly
@@ -166,7 +167,7 @@ const NON_TIMELINE_EVENT_TYPES = new Set([
 
 /** UI-state events drive affordances or replay and are not conversation log rows. */
 export function timelineItemsForDisplay(items: AgentTimelineItem[]): AgentTimelineItem[] {
-  return items.flatMap((item) => {
+  return foldHitlResponseTimelineItems(items).flatMap((item) => {
     if (NON_TIMELINE_EVENT_TYPES.has(item.type)) return [];
     if (item.type !== 'message') return [item];
     const message = channelInboundMessageForDisplay(item);

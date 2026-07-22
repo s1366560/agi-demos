@@ -152,6 +152,57 @@ test('live Agent complete events preserve final content and execution summary me
   assert.match(appSource, /readTextField\(data, 'content'\)/);
 });
 
+test('MCP elicitation events expose safe request and response audit semantics', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'elicitation-asked-1',
+      type: 'elicitation_asked',
+      eventTimeUs: 1_000_000,
+      eventCounter: 1,
+      payload: {
+        server_id: 'mcp-release',
+        server_name: 'Release MCP',
+        message: 'Choose the release region',
+        requested_schema: {
+          type: 'object',
+          properties: {
+            region: { type: 'string' },
+            api_token: { type: 'string' },
+          },
+        },
+      },
+    }),
+    {
+      family: 'elicitation',
+      state: 'waiting',
+      subject: 'Release MCP',
+      detail: 'Choose the release region · region, api_token',
+      isError: false,
+    },
+  );
+
+  const answered = agentLifecyclePresentation({
+    id: 'elicitation-asked-2',
+    type: 'elicitation_asked',
+    eventTimeUs: 2_000_000,
+    eventCounter: 2,
+    answered: true,
+    providedFields: ['region', 'api_token'],
+    payload: {
+      server_name: 'Release MCP',
+      message: 'Choose the release region',
+    },
+  });
+  assert.deepEqual(answered, {
+    family: 'elicitation',
+    state: 'complete',
+    subject: 'Release MCP',
+    detail: 'Choose the release region · region, api_token',
+    isError: false,
+  });
+  assert.doesNotMatch(JSON.stringify(answered), /eu-west|must-never-render/);
+});
+
 test('cost updates merge into the current Agent reply without losing execution summary fields', () => {
   const existing = [
     {

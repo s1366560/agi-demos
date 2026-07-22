@@ -695,6 +695,52 @@ const hitlResponseEvents = [
   },
 ];
 
+const elicitationTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'elicitation-pending-release-channel',
+    type: 'elicitation_asked',
+    eventTimeUs: 1_784_282_062_500_000,
+    eventCounter: 27,
+    payload: {
+      request_id: 'elicitation-pending-release-channel',
+      server_id: 'release-tools',
+      server_name: 'Release MCP',
+      message: 'Choose the release channel',
+      requested_schema: {
+        type: 'object',
+        properties: { channel: { type: 'string' } },
+      },
+    },
+  },
+  {
+    id: 'elicitation-release-region',
+    type: 'elicitation_asked',
+    eventTimeUs: 1_784_282_063_500_000,
+    eventCounter: 28,
+    payload: {
+      request_id: 'elicitation-release-region',
+      server_id: 'release-tools',
+      server_name: 'Release MCP',
+      message: 'Choose the release region',
+      requested_schema: {
+        type: 'object',
+        properties: {
+          region: { type: 'string' },
+          api_token: { type: 'string' },
+        },
+      },
+    },
+  },
+];
+
+const elicitationResponseEvent = {
+  type: 'elicitation_answered',
+  data: {
+    request_id: 'elicitation-release-region',
+    response: { region: 'eu-west', api_token: 'qa-secret-must-never-render' },
+  },
+};
+
 const a2uiCanvasComponents = [
   JSON.stringify({ beginRendering: { surfaceId: 'release-surface', root: 'release-root' } }),
   JSON.stringify({
@@ -1501,6 +1547,7 @@ function SessionSteeringQa() {
   const terminalEventsMode = searchParams.get('terminal-events') === '1';
   const agentDefinitionEventsMode = searchParams.get('agent-definition-events') === '1';
   const hitlResponseEventsMode = searchParams.get('hitl-response-events') === '1';
+  const elicitationEventsMode = searchParams.get('elicitation-events') === '1';
   const a2uiCanvasEventsMode = searchParams.get('a2ui-canvas-events') === '1';
   const a2uiCanvasDeletedEventsMode = searchParams.get('a2ui-canvas-deleted') === '1';
   const a2uiCanvasIncrementalEventsMode =
@@ -1593,7 +1640,9 @@ function SessionSteeringQa() {
                       ? [...timelineState.items, ...agentDefinitionTimelineItems]
                       : hitlResponseEventsMode
                         ? [...timelineState.items, ...hitlResponseTimelineItems]
-                        : a2uiCanvasDeletedEventsMode
+                        : elicitationEventsMode
+                          ? [...timelineState.items, ...elicitationTimelineItems]
+                          : a2uiCanvasDeletedEventsMode
                           ? [...timelineState.items, ...a2uiCanvasDeletedTimelineItems]
                           : a2uiCanvasIncrementalEventsMode
                             ? [...timelineState.items, ...a2uiCanvasIncrementalTimelineItems]
@@ -1739,6 +1788,20 @@ function SessionSteeringQa() {
     }, 1800);
     return () => window.clearTimeout(timer);
   }, [hitlResponseEventsMode]);
+
+  useEffect(() => {
+    if (!elicitationEventsMode) return;
+    const timer = window.setTimeout(() => {
+      setTimeline((current) => ({
+        ...current,
+        items: applyHitlResponseStreamEvent(
+          current.items,
+          elicitationResponseEvent,
+        ).items,
+      }));
+    }, 1800);
+    return () => window.clearTimeout(timer);
+  }, [elicitationEventsMode]);
 
   useEffect(() => {
     if (!titleEventsMode) return;
@@ -1895,6 +1958,7 @@ function SessionSteeringQa() {
                 httpServiceEventsMode ||
                 doomLoopEventsMode ||
                 hitlResponseEventsMode ||
+                elicitationEventsMode ||
                 a2uiCanvasEventsMode ||
                 a2uiCanvasDeletedEventsMode ||
                 a2uiCanvasIncrementalEventsMode ||

@@ -155,6 +155,11 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
   if (item.type.startsWith('artifact_')) return t('chat.artifact');
   if (timelineHitlType(item)) return t('chat.humanInput');
   const lifecycle = agentLifecyclePresentation(item);
+  if (lifecycle?.family === 'elicitation') {
+    return item.type === 'elicitation_answered' || item.answered === true
+      ? t('chat.elicitationResponse')
+      : t('chat.elicitationRequest');
+  }
   if (lifecycle?.family === 'subagent') return t('chat.subagent');
   if (lifecycle?.family === 'agent') return t('chat.agentEvent');
   if (lifecycle?.family === 'agentMessage') return t('chat.agentMessage');
@@ -300,6 +305,7 @@ export function isImportantTimelineItem(item: AgentTimelineItem): boolean {
   const kind = timelineKind(item);
   if (kind === 'user' || kind === 'agent') return true;
   if (timelineHitlType(item)) return true;
+  if (item.type === 'elicitation_asked') return true;
   if (item.type === 'work_plan') return true;
   if (item.type === 'doom_loop_detected') return true;
   if (item.type === 'agent_goal_completed' || item.type === 'agent_conversation_finished') {

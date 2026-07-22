@@ -43,6 +43,7 @@ import {
   toolCallPresentationKind,
 } from './chatTimelineModel';
 import type { ToolCallPair, ToolCallPresentationKind } from './chatTimelineModel';
+import { agentLifecyclePresentation } from './agentLifecyclePresentationModel';
 import {
   formatTimelineTime,
   isImportantTimelineItem,
@@ -691,6 +692,27 @@ function TimelineItemBody({
         a2uiActionView={a2uiActionView}
         approvalRequest={approvalRequest}
       />
+    );
+  }
+
+  const lifecycle = agentLifecyclePresentation(item);
+  if (lifecycle?.family === 'elicitation') {
+    const answered = item.type === 'elicitation_answered' || item.answered === true;
+    const requestId = timelineHitlRequestId(item);
+    return (
+      <div className="timeline-details">
+        {lifecycle.detail || lifecycle.subject ? (
+          <Text as="p" size="2" className="timeline-detail-summary">
+            {lifecycle.detail || lifecycle.subject}
+          </Text>
+        ) : null}
+        <div className="agent-run-meta">
+          <span>
+            {t(answered ? 'chat.status.answered' : 'chat.status.waitingForInput')}
+          </span>
+          {requestId ? <span>{requestId}</span> : null}
+        </div>
+      </div>
     );
   }
 
