@@ -682,6 +682,43 @@ const a2uiCanvasIncrementalTimelineItems: ConversationTimelineState['items'] = [
   a2uiCanvasTimelineItems[1]!,
 ];
 
+const planUiStateTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'plan-ui-state-enter',
+    type: 'plan_mode_enter',
+    eventTimeUs: 1_784_282_064_000_000,
+    eventCounter: 25,
+    payload: { plan_id: 'release-plan', reason: 'enter-plan-sentinel' },
+  },
+  {
+    id: 'plan-ui-state-workplan-step',
+    type: 'workplan_step_started',
+    eventTimeUs: 1_784_282_064_500_000,
+    eventCounter: 26,
+    payload: { plan_id: 'release-plan', task: 'workplan-sentinel' },
+  },
+  {
+    id: 'plan-ui-state-mode-changed',
+    type: 'plan_mode_changed',
+    eventTimeUs: 1_784_282_065_000_000,
+    eventCounter: 27,
+    payload: { conversation_id: 'conversation-desktop-session', mode: 'plan' },
+  },
+  {
+    id: 'plan-reflection-complete',
+    type: 'reflection_complete',
+    eventTimeUs: 1_784_282_065_500_000,
+    eventCounter: 28,
+    payload: {
+      plan_id: 'release-plan',
+      assessment: 'continue',
+      reasoning: 'Reflection kept visible',
+      has_adjustments: false,
+      adjustment_count: 0,
+    },
+  },
+];
+
 const titleGeneratedEvent = {
   type: 'title_generated',
   data: {
@@ -860,6 +897,7 @@ function SessionSteeringQa() {
   const a2uiCanvasDeletedEventsMode = searchParams.get('a2ui-canvas-deleted') === '1';
   const a2uiCanvasIncrementalEventsMode =
     searchParams.get('a2ui-canvas-incremental') === '1';
+  const planUiStateEventsMode = searchParams.get('plan-ui-state-events') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
@@ -924,6 +962,8 @@ function SessionSteeringQa() {
                           ? [...timelineState.items, ...a2uiCanvasDeletedTimelineItems]
                           : a2uiCanvasIncrementalEventsMode
                             ? [...timelineState.items, ...a2uiCanvasIncrementalTimelineItems]
+                            : planUiStateEventsMode
+                              ? [...timelineState.items, ...planUiStateTimelineItems]
                           : a2uiCanvasEventsMode
                             ? [...timelineState.items, ...a2uiCanvasTimelineItems]
                             : timelineState.items;
@@ -1113,6 +1153,7 @@ function SessionSteeringQa() {
                 a2uiCanvasEventsMode ||
                 a2uiCanvasDeletedEventsMode ||
                 a2uiCanvasIncrementalEventsMode ||
+                planUiStateEventsMode ||
                 artifactCanvasEventsMode ||
                 mcpAppEventsMode ||
                 titleEventsMode

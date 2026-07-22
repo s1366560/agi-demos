@@ -1736,7 +1736,7 @@ test('artifact ready and error stream events settle the original created row', (
   assert.equal(orphanReady[0].filename, 'recovered.zip');
 });
 
-test('suggestions and canvas replay events stay out of the visible conversation timeline', () => {
+test('UI-state events stay out of the visible conversation timeline', () => {
   const items = [
     {
       id: 'user-message-1',
@@ -1786,6 +1786,48 @@ test('suggestions and canvas replay events stay out of the visible conversation 
       eventTimeUs: 54_500_000,
       eventCounter: 5,
     },
+    ...[
+      'plan_mode_enter',
+      'plan_mode_exit',
+      'plan_created',
+      'plan_updated',
+      'plan_suggested',
+      'plan_exploration_started',
+      'plan_exploration_completed',
+      'plan_draft_created',
+      'plan_approved',
+      'plan_rejected',
+      'plan_cancelled',
+      'workplan_created',
+      'workplan_step_started',
+      'workplan_step_completed',
+      'workplan_step_failed',
+      'workplan_completed',
+      'workplan_failed',
+      'plan_execution_start',
+      'plan_execution_complete',
+      'plan_mode_changed',
+      'plan_status_changed',
+      'plan_step_ready',
+      'plan_step_complete',
+      'plan_step_skipped',
+      'plan_snapshot_created',
+      'plan_rollback',
+      'adjustment_applied',
+    ].map((type, index) => ({
+      id: `plan-ui-state-${index}`,
+      type,
+      payload: { plan_id: 'release-plan' },
+      eventTimeUs: 54_600_000 + index,
+      eventCounter: 6 + index,
+    })),
+    {
+      id: 'reflection-complete-1',
+      type: 'reflection_complete',
+      payload: { plan_id: 'release-plan', assessment: 'continue' },
+      eventTimeUs: 54_700_000,
+      eventCounter: 40,
+    },
   ];
 
   assert.deepEqual(latestAgentSuggestions(items), [
@@ -1794,7 +1836,12 @@ test('suggestions and canvas replay events stay out of the visible conversation 
   ]);
   assert.deepEqual(
     timelineItemsForDisplay(items).map((item) => item.id),
-    ['user-message-1', 'assistant-message-1', 'context-status-1'],
+    [
+      'user-message-1',
+      'assistant-message-1',
+      'context-status-1',
+      'reflection-complete-1',
+    ],
   );
 
   assert.deepEqual(

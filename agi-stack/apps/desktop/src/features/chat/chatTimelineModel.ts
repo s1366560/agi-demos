@@ -98,9 +98,45 @@ export function latestAgentSuggestions(items: AgentTimelineItem[]): string[] {
   return [];
 }
 
+// These protocol events are consumed as UI state or retained only for legacy
+// SSE compatibility by the Web client. Keep them in the authoritative timeline
+// state, but do not expose them as conversation rows. reflection_complete is
+// intentionally absent because Web queues it into the visible timeline.
+const NON_TIMELINE_EVENT_TYPES = new Set([
+  'suggestions',
+  'canvas_updated',
+  'plan_mode_enter',
+  'plan_mode_exit',
+  'plan_created',
+  'plan_updated',
+  'plan_suggested',
+  'plan_exploration_started',
+  'plan_exploration_completed',
+  'plan_draft_created',
+  'plan_approved',
+  'plan_rejected',
+  'plan_cancelled',
+  'workplan_created',
+  'workplan_step_started',
+  'workplan_step_completed',
+  'workplan_step_failed',
+  'workplan_completed',
+  'workplan_failed',
+  'plan_execution_start',
+  'plan_execution_complete',
+  'plan_mode_changed',
+  'plan_status_changed',
+  'plan_step_ready',
+  'plan_step_complete',
+  'plan_step_skipped',
+  'plan_snapshot_created',
+  'plan_rollback',
+  'adjustment_applied',
+]);
+
 /** UI-state events drive affordances or replay and are not conversation log rows. */
 export function timelineItemsForDisplay(items: AgentTimelineItem[]): AgentTimelineItem[] {
-  return items.filter((item) => item.type !== 'suggestions' && item.type !== 'canvas_updated');
+  return items.filter((item) => !NON_TIMELINE_EVENT_TYPES.has(item.type));
 }
 
 /**
