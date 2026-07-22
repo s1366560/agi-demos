@@ -1190,6 +1190,22 @@ const taskRecoveryTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
+const toolProgressTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'tool-progress-release-upload',
+    type: 'progress',
+    eventTimeUs: 1_784_282_086_000_000,
+    eventCounter: 65,
+    payload: {
+      tool_name: 'release_uploader',
+      progress_token: 'upload-release-bundle',
+      progress: 42,
+      total: 100,
+      message: 'Uploading release bundle',
+    },
+  },
+];
+
 const titleGeneratedEvent = {
   type: 'title_generated',
   data: {
@@ -1382,6 +1398,7 @@ function SessionSteeringQa() {
   const workspaceOrchestrationEventsMode =
     searchParams.get('workspace-orchestration-events') === '1';
   const taskRecoveryEventsMode = searchParams.get('task-recovery-events') === '1';
+  const toolProgressEventMode = searchParams.get('tool-progress-event') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
@@ -1484,6 +1501,11 @@ function SessionSteeringQa() {
                                                           ...timelineState.items,
                                                           ...taskRecoveryTimelineItems,
                                                         ]
+                                                      : toolProgressEventMode
+                                                        ? [
+                                                            ...timelineState.items,
+                                                            ...toolProgressTimelineItems,
+                                                          ]
                           : a2uiCanvasEventsMode
                             ? [...timelineState.items, ...a2uiCanvasTimelineItems]
                             : timelineState.items;

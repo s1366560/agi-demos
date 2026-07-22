@@ -1556,6 +1556,55 @@ test('task recovery events expose session health, incidents, and queued recovery
   }
 });
 
+test('tool progress events expose structured work progress without raw payload fields', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'tool-progress-release-1',
+      type: 'progress',
+      eventTimeUs: 35_800_000,
+      eventCounter: 1,
+      payload: {
+        tool_name: 'release_uploader',
+        progress_token: 'upload-release-bundle',
+        progress: 42,
+        total: 100,
+        message: 'Uploading release bundle',
+      },
+    }),
+    {
+      family: 'toolProgress',
+      state: 'running',
+      subject: 'release_uploader',
+      detail: 'Uploading release bundle',
+      isError: false,
+      progress: { unit: 'work', current: 42, total: 100 },
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'tool-progress-release-complete',
+      type: 'progress',
+      eventTimeUs: 35_900_000,
+      eventCounter: 2,
+      payload: {
+        tool_name: 'release_uploader',
+        progress_token: 'upload-release-bundle',
+        progress: 100,
+        total: 100,
+      },
+    }),
+    {
+      family: 'toolProgress',
+      state: 'complete',
+      subject: 'release_uploader',
+      detail: '',
+      isError: false,
+      progress: { unit: 'work', current: 100, total: 100 },
+    },
+  );
+});
+
 test('MCP App events expose the registered app and interactive tool result', () => {
   assert.deepEqual(
     agentLifecyclePresentation({

@@ -168,6 +168,7 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
   if (lifecycle?.family === 'selection') return t('chat.toolSelection');
   if (lifecycle?.family === 'policy') return t('chat.toolPolicy');
   if (lifecycle?.family === 'toolset') return t('chat.toolsetChange');
+  if (lifecycle?.family === 'toolProgress') return t('chat.toolProgress');
   if (lifecycle?.family === 'doomLoop') {
     return item.type === 'doom_loop_detected'
       ? t('chat.doomLoopDetected')

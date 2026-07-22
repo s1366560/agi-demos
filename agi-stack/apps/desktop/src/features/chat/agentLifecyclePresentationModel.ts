@@ -12,6 +12,7 @@ export type AgentLifecycleFamily =
   | 'selection'
   | 'policy'
   | 'toolset'
+  | 'toolProgress'
   | 'doomLoop'
   | 'conversation'
   | 'planReflection'
@@ -69,7 +70,8 @@ export type AgentLifecyclePresentation = {
       | 'messages'
       | 'memories'
       | 'artifacts'
-      | 'percent';
+      | 'percent'
+      | 'work';
     current?: number;
     total: number;
   };
@@ -276,6 +278,11 @@ const lifecycleEventDefinitions: Record<
   },
   toolset_changed: { family: 'toolset', state: 'complete' },
   tools_updated: { family: 'toolset', state: 'ready' },
+  progress: {
+    family: 'toolProgress',
+    state: 'running',
+    detailFields: ['message'],
+  },
   doom_loop_detected: { family: 'doomLoop', state: 'failed' },
   doom_loop_intervened: { family: 'doomLoop', state: 'complete' },
   skill_matched: {
@@ -544,6 +551,12 @@ export function agentLifecyclePresentation(
     explicitStatus !== 'healthy'
   ) {
     state = 'attention';
+  } else if (item.type === 'progress') {
+    const current = timelineEventNumber(item, ['progress']);
+    const total = timelineEventNumber(item, ['total']);
+    if (current !== null && total !== null && total > 0 && current >= total) {
+      state = 'complete';
+    }
   } else if (item.type === 'task_execution_session_updated') {
     const health = timelineEventString(item, ['health']);
     if (health === 'healthy') state = 'ready';
@@ -673,6 +686,9 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
       return actor ?? tool ?? '';
     }
     return actor ?? '';
+  }
+  if (family === 'toolProgress') {
+    return timelineEventString(item, ['tool_name', 'toolName']) ?? '';
   }
   if (family === 'workspaceOrchestration') {
     if (
@@ -1054,6 +1070,12 @@ function lifecycleProgress(
   item: AgentTimelineItem,
   family: AgentLifecycleFamily,
 ): AgentLifecyclePresentation['progress'] {
+  if (family === 'toolProgress') {
+    const current = timelineEventNumber(item, ['progress']);
+    const total = timelineEventNumber(item, ['total']);
+    if (current === null || current < 0 || total === null || total <= 0) return undefined;
+    return { unit: 'work', current, total };
+  }
   if (family === 'doomLoop' && item.type === 'doom_loop_detected') {
     const total = timelineEventNumber(item, ['call_count', 'callCount']);
     return total === null ? undefined : { unit: 'calls', total };
