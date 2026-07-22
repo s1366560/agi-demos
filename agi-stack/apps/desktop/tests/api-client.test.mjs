@@ -1343,7 +1343,7 @@ test('plan workflow preflight proves route support without creating server artif
   const originalFetch = globalThis.fetch;
   const responses = [
     new Response(JSON.stringify({
-      schema_version: 1,
+      schema_version: 2,
       atomic_creation: true,
       initial_conversation_mode: 'workspace',
       initial_plan_mode: 'plan',

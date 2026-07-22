@@ -723,6 +723,8 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     app.include_router(graph_stores.router)
     app.include_router(retrieval_stores.router)
     app.include_router(schema.router)
+    # Static compatibility routes must precede the dynamic /{provider_id} routes.
+    app.include_router(workspace_agent_policy.legacy_router)
     app.include_router(llm_providers.router)  # LiteLLM provider management
 
     # New routers - feature parity with server/
@@ -738,7 +740,6 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     app.include_router(workspace_tasks.router)
     app.include_router(workspace_plans.router)
     app.include_router(workspace_agent_policy.router)
-    app.include_router(workspace_agent_policy.legacy_router)
     app.include_router(task_sessions.router)
     app.include_router(workspaces.router)
     app.include_router(cron.router)

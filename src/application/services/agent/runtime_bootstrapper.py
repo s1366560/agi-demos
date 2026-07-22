@@ -115,6 +115,8 @@ def _workspace_context_from_conversation(
         getattr(conversation, "linked_workspace_task_id", None)
     ) or _non_empty_string(metadata.get("linked_workspace_task_id"))
     root_goal_task_id = _non_empty_string(metadata.get("root_goal_task_id"))
+    if linked_task_id is None and root_goal_task_id is None:
+        return None
     attempt_id = _non_empty_string(metadata.get("attempt_id")) or _non_empty_string(
         metadata.get("current_attempt_id")
     )

@@ -2316,6 +2316,7 @@ const TASK_SESSION_CAPABILITY_OPTIONAL_KEYS = new Set([
   'workspace_agent_policy',
   'capability_version',
 ]);
+const TASK_SESSION_SUPPORTED_SCHEMA_VERSIONS = new Set([1, 2]);
 
 function requireCreateTaskSessionResponse(
   payload: unknown,
@@ -2411,7 +2412,7 @@ function isAtomicTaskSessionCapability(payload: unknown): boolean {
       TASK_SESSION_CAPABILITY_KEYS,
       TASK_SESSION_CAPABILITY_OPTIONAL_KEYS,
     ) &&
-    payload.schema_version === 1 &&
+    TASK_SESSION_SUPPORTED_SCHEMA_VERSIONS.has(payload.schema_version as number) &&
     payload.atomic_creation === true &&
     payload.initial_conversation_mode === 'workspace' &&
     payload.initial_plan_mode === 'plan'

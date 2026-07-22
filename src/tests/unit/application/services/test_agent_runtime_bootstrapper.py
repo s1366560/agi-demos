@@ -7,7 +7,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.application.services.agent.runtime_bootstrapper import AgentRuntimeBootstrapper
+from src.application.services.agent.runtime_bootstrapper import (
+    AgentRuntimeBootstrapper,
+    _workspace_context_from_conversation,
+)
 from src.domain.llm_providers.models import ProviderCredentialRequiredError, ProviderType
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
 from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, ProjectChatRequest
@@ -114,6 +117,17 @@ def _build_fake_module(name: str, **attrs) -> ModuleType:
     for key, value in attrs.items():
         setattr(module, key, value)
     return module
+
+
+@pytest.mark.unit
+def test_workspace_context_does_not_grant_task_authority_from_catalog_membership() -> None:
+    conversation = SimpleNamespace(
+        workspace_id="workspace-1",
+        linked_workspace_task_id=None,
+        metadata={"source": "task_session"},
+    )
+
+    assert _workspace_context_from_conversation(conversation) is None
 
 
 @pytest.mark.unit
