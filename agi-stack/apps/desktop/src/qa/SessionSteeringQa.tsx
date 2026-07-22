@@ -41,10 +41,12 @@ import { SessionAgentsCanvas } from '../features/session/SessionAgentsCanvas';
 import { SessionContextWindowCanvas } from '../features/session/SessionContextWindowCanvas';
 import { SessionExecutionGraphCanvas } from '../features/session/SessionExecutionGraphCanvas';
 import { SessionExecutionInsightsCanvas } from '../features/session/SessionExecutionInsightsCanvas';
+import { SessionRuntimeInfrastructureCanvas } from '../features/session/SessionRuntimeInfrastructureCanvas';
 import { buildSessionAgentTree } from '../features/session/sessionAgentTreeModel';
 import { buildSessionContextWindow } from '../features/session/sessionContextWindowModel';
 import { buildSessionExecutionGraph } from '../features/session/sessionExecutionGraphModel';
 import { buildSessionExecutionInsights } from '../features/session/sessionExecutionInsightsModel';
+import { buildSessionRuntimeInfrastructure } from '../features/session/sessionRuntimeInfrastructureModel';
 import { toggleRunInputReference } from '../features/session/sessionChangesModel';
 import { I18nProvider } from '../i18n';
 import type {
@@ -2197,6 +2199,8 @@ function SessionSteeringQa() {
   const executionGraphCanvasMode = searchParams.get('execution-graph-canvas') === '1';
   const executionInsightsCanvasMode = searchParams.get('execution-insights-canvas') === '1';
   const contextWindowCanvasMode = searchParams.get('context-window-canvas') === '1';
+  const runtimeInfrastructureCanvasMode =
+    searchParams.get('runtime-infrastructure-canvas') === '1';
   const memoryEventsMode = searchParams.get('memory-events') === '1';
   const modelOverrideEventsMode = searchParams.get('model-override-events') === '1';
   const llmRuntimeEventsMode = searchParams.get('llm-runtime-events') === '1';
@@ -2293,6 +2297,15 @@ function SessionSteeringQa() {
       ),
     [contextWindowCanvasMode],
   );
+  const sessionRuntimeInfrastructure = useMemo(
+    () =>
+      buildSessionRuntimeInfrastructure(
+        runtimeInfrastructureCanvasMode
+          ? [...runtimeInfrastructureTimelineItems, ...httpServiceTimelineItems]
+          : [],
+      ),
+    [runtimeInfrastructureCanvasMode],
+  );
   const mcpAppHostApi = useMemo(
     () => ({
       callMCPAppTool: async (_appId: string, toolName: string) => ({
@@ -2326,6 +2339,12 @@ function SessionSteeringQa() {
                 ? [...timelineState.items, ...executionInsightsCanvasTimelineItems]
               : contextWindowCanvasMode
                 ? [...timelineState.items, ...contextWindowCanvasTimelineItems]
+              : runtimeInfrastructureCanvasMode
+                ? [
+                    ...timelineState.items,
+                    ...runtimeInfrastructureTimelineItems,
+                    ...httpServiceTimelineItems,
+                  ]
             : mcpAppEventsMode
               ? [...timelineState.items, ...mcpAppTimelineItems]
               : subagentEventsMode
@@ -2786,7 +2805,9 @@ function SessionSteeringQa() {
             {workspaceLifecycleEventMode ? (
               <p data-testid="workspace-lifecycle-stream">{qaWorkspaceLifecycleSummary}</p>
             ) : null}
-            {contextWindowCanvasMode ? (
+            {runtimeInfrastructureCanvasMode ? (
+              <SessionRuntimeInfrastructureCanvas model={sessionRuntimeInfrastructure} />
+            ) : contextWindowCanvasMode ? (
               <SessionContextWindowCanvas model={sessionContextWindow} />
             ) : executionInsightsCanvasMode ? (
               <SessionExecutionInsightsCanvas model={sessionExecutionInsights} />
