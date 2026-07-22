@@ -977,6 +977,49 @@ const agentTaskTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
+const agentGovernanceTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'agent-human-input-release',
+    type: 'agent_human_input_requested',
+    eventTimeUs: 1_784_282_078_500_000,
+    eventCounter: 50,
+    payload: {
+      conversation_id: 'conversation-desktop-session',
+      actor_agent_id: 'agent-reviewer',
+      question: 'Approve the production rollout?',
+      urgency: 'blocking',
+      category: 'permission',
+      rationale: 'Deployment changes production state.',
+    },
+  },
+  {
+    id: 'agent-escalated-release',
+    type: 'agent_escalated',
+    eventTimeUs: 1_784_282_079_000_000,
+    eventCounter: 51,
+    payload: {
+      conversation_id: 'conversation-desktop-session',
+      actor_agent_id: 'agent-reviewer',
+      escalated_to: 'human',
+      reason: 'Release approval required',
+      severity: 'high',
+    },
+  },
+  {
+    id: 'agent-conflict-release',
+    type: 'agent_conflict_marked',
+    eventTimeUs: 1_784_282_079_500_000,
+    eventCounter: 52,
+    payload: {
+      conversation_id: 'conversation-desktop-session',
+      actor_agent_id: 'agent-reviewer',
+      conflict_with: 'artifact-release-notes',
+      summary: 'Release evidence mismatch',
+      evidence: 'Checksum differs from the verified build.',
+    },
+  },
+];
+
 const titleGeneratedEvent = {
   type: 'title_generated',
   data: {
@@ -1164,6 +1207,7 @@ function SessionSteeringQa() {
   const sessionLifecycleEventsMode = searchParams.get('session-lifecycle-events') === '1';
   const participantEventsMode = searchParams.get('participant-events') === '1';
   const agentTaskEventsMode = searchParams.get('agent-task-events') === '1';
+  const agentGovernanceEventsMode = searchParams.get('agent-governance-events') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
@@ -1246,6 +1290,11 @@ function SessionSteeringQa() {
                                             ? [...timelineState.items, ...participantTimelineItems]
                                             : agentTaskEventsMode
                                               ? [...timelineState.items, ...agentTaskTimelineItems]
+                                              : agentGovernanceEventsMode
+                                                ? [
+                                                    ...timelineState.items,
+                                                    ...agentGovernanceTimelineItems,
+                                                  ]
                           : a2uiCanvasEventsMode
                             ? [...timelineState.items, ...a2uiCanvasTimelineItems]
                             : timelineState.items;
@@ -1444,6 +1493,7 @@ function SessionSteeringQa() {
                 sessionLifecycleEventsMode ||
                 participantEventsMode ||
                 agentTaskEventsMode ||
+                agentGovernanceEventsMode ||
                 artifactCanvasEventsMode ||
                 mcpAppEventsMode ||
                 titleEventsMode

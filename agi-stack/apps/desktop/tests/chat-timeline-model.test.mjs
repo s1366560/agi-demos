@@ -1190,6 +1190,78 @@ test('structured agent task events expose assignment, refusal, and declared prog
   );
 });
 
+test('agent governance events expose human input, escalation, and conflict evidence', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'agent-human-input-1',
+      type: 'agent_human_input_requested',
+      eventTimeUs: 34_300_000,
+      eventCounter: 1,
+      payload: {
+        conversation_id: 'conversation-release',
+        actor_agent_id: 'agent-reviewer',
+        question: 'Approve the production rollout?',
+        urgency: 'blocking',
+        category: 'permission',
+        rationale: 'Deployment changes production state.',
+      },
+    }),
+    {
+      family: 'agentGovernance',
+      state: 'blocked',
+      subject: 'agent-reviewer',
+      detail: 'Approve the production rollout? · blocking · permission',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'agent-escalated-1',
+      type: 'agent_escalated',
+      eventTimeUs: 34_400_000,
+      eventCounter: 2,
+      payload: {
+        conversation_id: 'conversation-release',
+        actor_agent_id: 'agent-reviewer',
+        escalated_to: 'human',
+        reason: 'Release approval required',
+        severity: 'high',
+      },
+    }),
+    {
+      family: 'agentGovernance',
+      state: 'attention',
+      subject: 'agent-reviewer → human',
+      detail: 'Release approval required · high',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'agent-conflict-1',
+      type: 'agent_conflict_marked',
+      eventTimeUs: 34_500_000,
+      eventCounter: 3,
+      payload: {
+        conversation_id: 'conversation-release',
+        actor_agent_id: 'agent-reviewer',
+        conflict_with: 'artifact-release-notes',
+        summary: 'Release evidence mismatch',
+        evidence: 'Checksum differs from the verified build.',
+      },
+    }),
+    {
+      family: 'agentGovernance',
+      state: 'attention',
+      subject: 'agent-reviewer ↔ artifact-release-notes',
+      detail: 'Release evidence mismatch · Checksum differs from the verified build.',
+      isError: false,
+    },
+  );
+});
+
 test('MCP App events expose the registered app and interactive tool result', () => {
   assert.deepEqual(
     agentLifecyclePresentation({

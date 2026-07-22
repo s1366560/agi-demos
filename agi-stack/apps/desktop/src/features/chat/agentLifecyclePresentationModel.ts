@@ -18,6 +18,7 @@ export type AgentLifecycleFamily =
   | 'sessionLifecycle'
   | 'participant'
   | 'agentTask'
+  | 'agentGovernance'
   | 'agentDefinition'
   | 'skill'
   | 'model'
@@ -348,6 +349,18 @@ const lifecycleEventDefinitions: Record<
     state: 'running',
     detailFields: ['summary'],
   },
+  agent_human_input_requested: {
+    family: 'agentGovernance',
+    state: 'attention',
+  },
+  agent_escalated: {
+    family: 'agentGovernance',
+    state: 'attention',
+  },
+  agent_conflict_marked: {
+    family: 'agentGovernance',
+    state: 'attention',
+  },
   mcp_app_registered: { family: 'mcpApp', state: 'ready' },
   mcp_app_result: { family: 'mcpApp', state: 'complete' },
   memory_recalled: { family: 'memory', state: 'complete' },
@@ -467,6 +480,11 @@ export function agentLifecyclePresentation(
     if (explicitStatus === 'blocked') state = 'blocked';
     if (explicitStatus === 'done') state = 'complete';
     if (explicitStatus === 'needs_review') state = 'attention';
+  } else if (
+    item.type === 'agent_human_input_requested' &&
+    timelineEventString(item, ['urgency']) === 'blocking'
+  ) {
+    state = 'blocked';
   } else if (explicitStatus === 'cancelled' || explicitStatus === 'skipped') {
     state = 'attention';
   } else if (
@@ -558,6 +576,20 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
     }
     if (item.type === 'agent_progress_declared') {
       return timelineEventString(item, ['task_id', 'taskId']) ?? actor ?? '';
+    }
+    return actor ?? '';
+  }
+  if (family === 'agentGovernance') {
+    const actor = timelineEventString(item, ['actor_agent_id', 'actorAgentId']);
+    if (item.type === 'agent_escalated') {
+      const target = timelineEventString(item, ['escalated_to', 'escalatedTo']);
+      if (actor && target) return `${actor} → ${target}`;
+      return actor ?? target ?? '';
+    }
+    if (item.type === 'agent_conflict_marked') {
+      const target = timelineEventString(item, ['conflict_with', 'conflictWith']);
+      if (actor && target) return `${actor} ↔ ${target}`;
+      return actor ?? target ?? '';
     }
     return actor ?? '';
   }
@@ -705,6 +737,31 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
 
 function lifecycleDetail(item: AgentTimelineItem, detailFields: string[]): string {
   const lifecycle = lifecycleEventDefinitions[item.type];
+  if (item.type === 'agent_human_input_requested') {
+    return uniqueStrings(
+      [
+        timelineEventString(item, ['question']),
+        timelineEventString(item, ['urgency']),
+        timelineEventString(item, ['category']),
+      ].flatMap((value) => (value ? [value] : [])),
+    ).join(' · ');
+  }
+  if (item.type === 'agent_escalated') {
+    return uniqueStrings(
+      [
+        timelineEventString(item, ['reason']),
+        timelineEventString(item, ['severity']),
+      ].flatMap((value) => (value ? [value] : [])),
+    ).join(' · ');
+  }
+  if (item.type === 'agent_conflict_marked') {
+    return uniqueStrings(
+      [
+        timelineEventString(item, ['summary']),
+        timelineEventString(item, ['evidence']),
+      ].flatMap((value) => (value ? [value] : [])),
+    ).join(' · ');
+  }
   if (item.type === 'agent_task_refused') {
     return uniqueStrings(
       [

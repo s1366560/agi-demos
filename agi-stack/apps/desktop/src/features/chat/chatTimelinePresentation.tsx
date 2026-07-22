@@ -190,6 +190,13 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
     if (item.type === 'agent_task_refused') return t('chat.agentTaskRefused');
     return t('chat.agentProgressDeclared');
   }
+  if (lifecycle?.family === 'agentGovernance') {
+    if (item.type === 'agent_human_input_requested') {
+      return t('chat.agentHumanInputRequested');
+    }
+    if (item.type === 'agent_escalated') return t('chat.agentEscalated');
+    return t('chat.agentConflictMarked');
+  }
   if (lifecycle?.family === 'agentDefinition') {
     if (item.type === 'agent_definition_created') return t('chat.agentDefinitionCreated');
     if (item.type === 'agent_definition_updated') return t('chat.agentDefinitionUpdated');
