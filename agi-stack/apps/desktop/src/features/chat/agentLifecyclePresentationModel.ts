@@ -20,6 +20,7 @@ export type AgentLifecycleFamily =
   | 'agentTask'
   | 'agentGovernance'
   | 'agentAudit'
+  | 'workspaceOrchestration'
   | 'agentDefinition'
   | 'skill'
   | 'model'
@@ -370,6 +371,32 @@ const lifecycleEventDefinitions: Record<
     family: 'agentAudit',
     state: 'complete',
   },
+  workspace_goal_materialized: {
+    family: 'workspaceOrchestration',
+    state: 'scheduled',
+    detailFields: ['goal_description', 'goalDescription'],
+  },
+  workspace_decomposition_complete: {
+    family: 'workspaceOrchestration',
+    state: 'complete',
+  },
+  workspace_worker_dispatched: {
+    family: 'workspaceOrchestration',
+    state: 'running',
+  },
+  workspace_worker_report_submitted: {
+    family: 'workspaceOrchestration',
+    state: 'waiting',
+  },
+  workspace_adjudication_complete: {
+    family: 'workspaceOrchestration',
+    state: 'complete',
+  },
+  workspace_goal_completed: {
+    family: 'workspaceOrchestration',
+    state: 'complete',
+    detailFields: ['final_status', 'finalStatus'],
+  },
   mcp_app_registered: { family: 'mcpApp', state: 'ready' },
   mcp_app_result: { family: 'mcpApp', state: 'complete' },
   memory_recalled: { family: 'memory', state: 'complete' },
@@ -617,6 +644,16 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
     }
     return actor ?? '';
   }
+  if (family === 'workspaceOrchestration') {
+    if (
+      item.type === 'workspace_goal_materialized' ||
+      item.type === 'workspace_decomposition_complete' ||
+      item.type === 'workspace_goal_completed'
+    ) {
+      return timelineEventString(item, ['goal_id', 'goalId']) ?? '';
+    }
+    return timelineEventString(item, ['task_id', 'taskId']) ?? '';
+  }
   if (family === 'agentDefinition') {
     return timelineEventString(item, ['agent_name', 'agentName', 'agent_id', 'agentId']) ?? '';
   }
@@ -761,6 +798,27 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
 
 function lifecycleDetail(item: AgentTimelineItem, detailFields: string[]): string {
   const lifecycle = lifecycleEventDefinitions[item.type];
+  if (
+    item.type === 'workspace_worker_dispatched' ||
+    item.type === 'workspace_worker_report_submitted'
+  ) {
+    return uniqueStrings(
+      [
+        timelineEventString(item, ['worker_agent_id', 'workerAgentId']),
+        item.type === 'workspace_worker_dispatched'
+          ? timelineEventString(item, ['attempt_id', 'attemptId'])
+          : timelineEventString(item, ['status']),
+      ].flatMap((value) => (value ? [value] : [])),
+    ).join(' · ');
+  }
+  if (item.type === 'workspace_adjudication_complete') {
+    return uniqueStrings(
+      [
+        timelineEventString(item, ['verdict']),
+        timelineEventString(item, ['next_task_id', 'nextTaskId']),
+      ].flatMap((value) => (value ? [value] : [])),
+    ).join(' · ');
+  }
   if (item.type === 'agent_supervisor_verdict') {
     const actions = timelineEventStringArray(item, [
       'recommended_actions',
@@ -942,6 +1000,28 @@ function lifecycleProgress(
     const current = timelineEventNumber(item, ['percent_complete', 'percentComplete']);
     if (current === null || current < 0 || current > 100) return undefined;
     return { unit: 'percent', current, total: 100 };
+  }
+  if (family === 'workspaceOrchestration') {
+    if (item.type === 'workspace_decomposition_complete') {
+      const explicitTotal = timelineEventNumber(item, ['subtask_count', 'subtaskCount']);
+      const subtaskIds = timelineEventStringArray(item, ['subtask_ids', 'subtaskIds']);
+      const total = explicitTotal ?? (subtaskIds.length > 0 ? subtaskIds.length : null);
+      return total === null ? undefined : { unit: 'tasks', total };
+    }
+    if (item.type === 'workspace_goal_completed') {
+      const total = timelineEventNumber(item, [
+        'total_subtask_count',
+        'totalSubtaskCount',
+      ]);
+      const current = timelineEventNumber(item, [
+        'completed_subtask_count',
+        'completedSubtaskCount',
+      ]);
+      if (total === null) return undefined;
+      return current === null
+        ? { unit: 'tasks', total }
+        : { unit: 'tasks', current, total };
+    }
   }
   if (family === 'context') {
     if (item.type === 'context_status') {

@@ -1051,6 +1051,83 @@ const agentAuditTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
+const workspaceOrchestrationTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'workspace-goal-materialized-release',
+    type: 'workspace_goal_materialized',
+    eventTimeUs: 1_784_282_081_000_000,
+    eventCounter: 55,
+    payload: {
+      workspace_id: 'workspace-desktop',
+      goal_id: 'goal-release',
+      goal_description: 'Validate and publish the release.',
+    },
+  },
+  {
+    id: 'workspace-decomposition-release',
+    type: 'workspace_decomposition_complete',
+    eventTimeUs: 1_784_282_081_500_000,
+    eventCounter: 56,
+    payload: {
+      workspace_id: 'workspace-desktop',
+      goal_id: 'goal-release',
+      subtask_ids: ['task-security-review', 'task-docs', 'task-publish'],
+      subtask_count: 3,
+    },
+  },
+  {
+    id: 'workspace-worker-dispatched-release',
+    type: 'workspace_worker_dispatched',
+    eventTimeUs: 1_784_282_082_000_000,
+    eventCounter: 57,
+    payload: {
+      workspace_id: 'workspace-desktop',
+      task_id: 'task-security-review',
+      worker_agent_id: 'agent-security',
+      attempt_id: 'attempt-1',
+    },
+  },
+  {
+    id: 'workspace-worker-report-release',
+    type: 'workspace_worker_report_submitted',
+    eventTimeUs: 1_784_282_082_500_000,
+    eventCounter: 58,
+    payload: {
+      workspace_id: 'workspace-desktop',
+      task_id: 'task-security-review',
+      attempt_id: 'attempt-1',
+      worker_agent_id: 'agent-security',
+      status: 'completed',
+    },
+  },
+  {
+    id: 'workspace-adjudication-release',
+    type: 'workspace_adjudication_complete',
+    eventTimeUs: 1_784_282_083_000_000,
+    eventCounter: 59,
+    payload: {
+      workspace_id: 'workspace-desktop',
+      task_id: 'task-security-review',
+      attempt_id: 'attempt-1',
+      verdict: 'accepted',
+      next_task_id: 'task-docs',
+    },
+  },
+  {
+    id: 'workspace-goal-completed-release',
+    type: 'workspace_goal_completed',
+    eventTimeUs: 1_784_282_083_500_000,
+    eventCounter: 60,
+    payload: {
+      workspace_id: 'workspace-desktop',
+      goal_id: 'goal-release',
+      final_status: 'completed',
+      completed_subtask_count: 3,
+      total_subtask_count: 3,
+    },
+  },
+];
+
 const titleGeneratedEvent = {
   type: 'title_generated',
   data: {
@@ -1240,6 +1317,8 @@ function SessionSteeringQa() {
   const agentTaskEventsMode = searchParams.get('agent-task-events') === '1';
   const agentGovernanceEventsMode = searchParams.get('agent-governance-events') === '1';
   const agentAuditEventsMode = searchParams.get('agent-audit-events') === '1';
+  const workspaceOrchestrationEventsMode =
+    searchParams.get('workspace-orchestration-events') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
@@ -1332,6 +1411,11 @@ function SessionSteeringQa() {
                                                       ...timelineState.items,
                                                       ...agentAuditTimelineItems,
                                                     ]
+                                                  : workspaceOrchestrationEventsMode
+                                                    ? [
+                                                        ...timelineState.items,
+                                                        ...workspaceOrchestrationTimelineItems,
+                                                      ]
                           : a2uiCanvasEventsMode
                             ? [...timelineState.items, ...a2uiCanvasTimelineItems]
                             : timelineState.items;
@@ -1532,6 +1616,7 @@ function SessionSteeringQa() {
                 agentTaskEventsMode ||
                 agentGovernanceEventsMode ||
                 agentAuditEventsMode ||
+                workspaceOrchestrationEventsMode ||
                 artifactCanvasEventsMode ||
                 mcpAppEventsMode ||
                 titleEventsMode

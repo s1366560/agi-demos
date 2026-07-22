@@ -202,6 +202,24 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
       ? t('chat.agentSupervisorVerdict')
       : t('chat.agentDecisionLogged');
   }
+  if (lifecycle?.family === 'workspaceOrchestration') {
+    if (item.type === 'workspace_goal_materialized') {
+      return t('chat.workspaceGoalMaterialized');
+    }
+    if (item.type === 'workspace_decomposition_complete') {
+      return t('chat.workspaceDecompositionComplete');
+    }
+    if (item.type === 'workspace_worker_dispatched') {
+      return t('chat.workspaceWorkerDispatched');
+    }
+    if (item.type === 'workspace_worker_report_submitted') {
+      return t('chat.workspaceWorkerReportSubmitted');
+    }
+    if (item.type === 'workspace_adjudication_complete') {
+      return t('chat.workspaceAdjudicationComplete');
+    }
+    return t('chat.workspaceGoalCompleted');
+  }
   if (lifecycle?.family === 'agentDefinition') {
     if (item.type === 'agent_definition_created') return t('chat.agentDefinitionCreated');
     if (item.type === 'agent_definition_updated') return t('chat.agentDefinitionUpdated');

@@ -1313,6 +1313,145 @@ test('agent audit events expose supervisor verdicts and decision-call evidence',
   );
 });
 
+test('workspace orchestration events expose the complete goal execution lifecycle', () => {
+  const cases = [
+    {
+      item: {
+        id: 'workspace-goal-materialized-1',
+        type: 'workspace_goal_materialized',
+        eventTimeUs: 34_800_000,
+        eventCounter: 1,
+        payload: {
+          workspace_id: 'workspace-release',
+          goal_id: 'goal-release',
+          goal_description: 'Validate and publish the release.',
+        },
+      },
+      expected: {
+        family: 'workspaceOrchestration',
+        state: 'scheduled',
+        subject: 'goal-release',
+        detail: 'Validate and publish the release.',
+        isError: false,
+      },
+    },
+    {
+      item: {
+        id: 'workspace-decomposition-complete-1',
+        type: 'workspace_decomposition_complete',
+        eventTimeUs: 34_900_000,
+        eventCounter: 2,
+        payload: {
+          workspace_id: 'workspace-release',
+          goal_id: 'goal-release',
+          subtask_ids: ['task-security-review', 'task-docs', 'task-publish'],
+          subtask_count: 3,
+        },
+      },
+      expected: {
+        family: 'workspaceOrchestration',
+        state: 'complete',
+        subject: 'goal-release',
+        detail: '',
+        isError: false,
+        progress: { unit: 'tasks', total: 3 },
+      },
+    },
+    {
+      item: {
+        id: 'workspace-worker-dispatched-1',
+        type: 'workspace_worker_dispatched',
+        eventTimeUs: 35_000_000,
+        eventCounter: 3,
+        payload: {
+          workspace_id: 'workspace-release',
+          task_id: 'task-security-review',
+          worker_agent_id: 'agent-security',
+          attempt_id: 'attempt-1',
+        },
+      },
+      expected: {
+        family: 'workspaceOrchestration',
+        state: 'running',
+        subject: 'task-security-review',
+        detail: 'agent-security · attempt-1',
+        isError: false,
+      },
+    },
+    {
+      item: {
+        id: 'workspace-worker-report-1',
+        type: 'workspace_worker_report_submitted',
+        eventTimeUs: 35_100_000,
+        eventCounter: 4,
+        payload: {
+          workspace_id: 'workspace-release',
+          task_id: 'task-security-review',
+          attempt_id: 'attempt-1',
+          worker_agent_id: 'agent-security',
+          status: 'completed',
+        },
+      },
+      expected: {
+        family: 'workspaceOrchestration',
+        state: 'waiting',
+        subject: 'task-security-review',
+        detail: 'agent-security · completed',
+        isError: false,
+      },
+    },
+    {
+      item: {
+        id: 'workspace-adjudication-complete-1',
+        type: 'workspace_adjudication_complete',
+        eventTimeUs: 35_200_000,
+        eventCounter: 5,
+        payload: {
+          workspace_id: 'workspace-release',
+          task_id: 'task-security-review',
+          attempt_id: 'attempt-1',
+          verdict: 'accepted',
+          next_task_id: 'task-docs',
+        },
+      },
+      expected: {
+        family: 'workspaceOrchestration',
+        state: 'complete',
+        subject: 'task-security-review',
+        detail: 'accepted · task-docs',
+        isError: false,
+      },
+    },
+    {
+      item: {
+        id: 'workspace-goal-completed-1',
+        type: 'workspace_goal_completed',
+        eventTimeUs: 35_300_000,
+        eventCounter: 6,
+        payload: {
+          workspace_id: 'workspace-release',
+          goal_id: 'goal-release',
+          final_status: 'completed',
+          completed_subtask_count: 3,
+          total_subtask_count: 3,
+        },
+      },
+      expected: {
+        family: 'workspaceOrchestration',
+        state: 'complete',
+        subject: 'goal-release',
+        detail: 'completed',
+        isError: false,
+        progress: { unit: 'tasks', current: 3, total: 3 },
+      },
+    },
+  ];
+
+  for (const { item, expected } of cases) {
+    assert.deepEqual(agentLifecyclePresentation(item), expected);
+  }
+});
+
 test('MCP App events expose the registered app and interactive tool result', () => {
   assert.deepEqual(
     agentLifecyclePresentation({
