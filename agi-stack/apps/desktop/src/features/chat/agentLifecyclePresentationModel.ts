@@ -15,6 +15,7 @@ export type AgentLifecycleFamily =
   | 'skill'
   | 'model'
   | 'context'
+  | 'mcpApp'
   | 'graphRun'
   | 'graphNode'
   | 'graphHandoff';
@@ -29,6 +30,7 @@ export type AgentLifecycleState =
   | 'received'
   | 'blocked'
   | 'scheduled'
+  | 'ready'
   | 'stopped';
 
 export type AgentLifecyclePresentation = {
@@ -256,6 +258,8 @@ const lifecycleEventDefinitions: Record<
     state: 'complete',
     detailFields: ['compression_level', 'compressionLevel'],
   },
+  mcp_app_registered: { family: 'mcpApp', state: 'ready' },
+  mcp_app_result: { family: 'mcpApp', state: 'complete' },
   graph_run_started: {
     family: 'graphRun',
     state: 'running',
@@ -292,10 +296,10 @@ const lifecycleEventDefinitions: Record<
 };
 
 /**
- * Convert authoritative SubAgent, multi-Agent, orchestration, and graph
- * protocol fields into compact UI semantics. Event type membership and
- * structured status fields are protocol facts; no free-text classification is
- * used here.
+ * Convert authoritative SubAgent, multi-Agent, skill, MCP App, orchestration,
+ * and graph protocol fields into compact UI semantics. Event type membership
+ * and structured status fields are protocol facts; no free-text classification
+ * is used here.
  */
 export function agentLifecyclePresentation(
   item: AgentTimelineItem,
@@ -343,6 +347,14 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
     return item.type === 'context_compressed'
       ? timelineEventString(item, ['compression_strategy', 'compressionStrategy']) ?? ''
       : timelineEventString(item, ['compression_level', 'compressionLevel']) ?? '';
+  }
+  if (family === 'mcpApp') {
+    return (
+      timelineEventString(item, ['title']) ??
+      timelineEventRecordString(item, ['ui_metadata', 'uiMetadata'], ['title']) ??
+      timelineEventString(item, ['tool_name', 'toolName', 'app_id', 'appId']) ??
+      ''
+    );
   }
   if (family === 'skill') {
     const skill = timelineEventString(item, ['skill_name', 'skillName']);
@@ -448,6 +460,18 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
 }
 
 function lifecycleDetail(item: AgentTimelineItem, detailFields: string[]): string {
+  if (item.type === 'mcp_app_registered' || item.type === 'mcp_app_result') {
+    const subject = lifecycleSubject(item, 'mcpApp');
+    const server = timelineEventString(item, ['server_name', 'serverName']);
+    const tool = timelineEventString(item, ['tool_name', 'toolName']);
+    const source =
+      item.type === 'mcp_app_registered' ? timelineEventString(item, ['source']) : null;
+    return uniqueStrings(
+      [server, tool === subject ? null : tool, source].flatMap((value) =>
+        value ? [value] : [],
+      ),
+    ).join(' · ');
+  }
   if (item.type === 'selection_trace' || item.type === 'policy_filtered') {
     return timelineEventStringArray(item, [
       'budget_exceeded_stages',
@@ -682,6 +706,24 @@ function timelineEventRecordArray(
     }
   }
   return [];
+}
+
+function timelineEventRecordString(
+  item: AgentTimelineItem,
+  recordKeys: string[],
+  valueKeys: string[],
+): string | null {
+  const payload = isRecord(item.payload) ? item.payload : null;
+  for (const source of [payload, item]) {
+    if (!source) continue;
+    for (const recordKey of recordKeys) {
+      const record = source[recordKey];
+      if (!isRecord(record)) continue;
+      const value = firstRecordString(record, valueKeys);
+      if (value) return value;
+    }
+  }
+  return null;
 }
 
 function firstRecordString(record: Record<string, unknown>, keys: string[]): string | null {

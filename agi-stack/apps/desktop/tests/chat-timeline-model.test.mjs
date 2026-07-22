@@ -879,6 +879,56 @@ test('context events expose token occupancy and compression results', () => {
   );
 });
 
+test('MCP App events expose the registered app and interactive tool result', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'mcp-app-registered-1',
+      type: 'mcp_app_registered',
+      eventTimeUs: 34_000_000,
+      eventCounter: 1,
+      payload: {
+        app_id: 'github-issue-board',
+        server_name: 'github',
+        tool_name: 'create_issue_board',
+        source: 'agent_developed',
+        resource_uri: 'ui://github/issue-board',
+        title: 'Issue board',
+      },
+    }),
+    {
+      family: 'mcpApp',
+      state: 'ready',
+      subject: 'Issue board',
+      detail: 'github · create_issue_board · agent_developed',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'mcp-app-result-1',
+      type: 'mcp_app_result',
+      eventTimeUs: 35_000_000,
+      eventCounter: 2,
+      payload: {
+        app_id: 'github-issue-board',
+        server_name: 'github',
+        tool_name: 'create_issue_board',
+        resource_uri: 'ui://github/issue-board',
+        ui_metadata: { title: 'Issue board' },
+        structured_content: { open: 12, closed: 34 },
+      },
+    }),
+    {
+      family: 'mcpApp',
+      state: 'complete',
+      subject: 'Issue board',
+      detail: 'github · create_issue_board',
+      isError: false,
+    },
+  );
+});
+
 test('streaming thought chunks merge into one readable timeline item and then settle', () => {
   let items = mergeThoughtStreamChunk([], {
     kind: 'start',

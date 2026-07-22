@@ -177,6 +177,11 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
       ? t('chat.contextCompressed')
       : t('chat.contextStatus');
   }
+  if (lifecycle?.family === 'mcpApp') {
+    return item.type === 'mcp_app_registered'
+      ? t('chat.mcpAppRegistered')
+      : t('chat.mcpAppResult');
+  }
   if (lifecycle?.family === 'graphRun') return t('chat.graphRun');
   if (lifecycle?.family === 'graphNode') return t('chat.graphNode');
   if (lifecycle?.family === 'graphHandoff') return t('chat.graphHandoff');
@@ -274,6 +279,9 @@ export function timelineStatus(item: AgentTimelineItem): TimelineStatus | null {
     }
     if (lifecycle.state === 'scheduled') {
       return { kind: 'waiting', label: 'chat.status.scheduled', localized: true };
+    }
+    if (lifecycle.state === 'ready') {
+      return { kind: 'ok', label: 'chat.status.ready', localized: true };
     }
     if (lifecycle.state === 'stopped') {
       return { kind: 'waiting', label: 'chat.status.stopped', localized: true };

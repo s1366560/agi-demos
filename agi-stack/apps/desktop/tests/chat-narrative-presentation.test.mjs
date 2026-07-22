@@ -94,6 +94,8 @@ test('chat copy and diagnostics are localized in both supported locales', () => 
     'chat.modelOverride',
     'chat.contextStatus',
     'chat.contextCompressed',
+    'chat.mcpAppRegistered',
+    'chat.mcpAppResult',
     'chat.tokensCount',
     'chat.tokensProgress',
     'chat.messagesCount',
