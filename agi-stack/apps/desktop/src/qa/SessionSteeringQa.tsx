@@ -242,10 +242,69 @@ const suggestionTimelineItem: ConversationTimelineState['items'][number] = {
   },
 };
 
+const runtimeInfrastructureTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'sandbox-runtime-created',
+    type: 'sandbox_created',
+    eventTimeUs: 1_784_282_045_000_000,
+    eventCounter: 5,
+    payload: {
+      sandbox_id: 'sandbox-release-1',
+      status: 'running',
+      endpoint: 'wss://sandbox.example/ws',
+    },
+  },
+  {
+    id: 'sandbox-desktop-started',
+    type: 'desktop_started',
+    eventTimeUs: 1_784_282_046_000_000,
+    eventCounter: 6,
+    payload: {
+      sandbox_id: 'sandbox-release-1',
+      resolution: '1280x720',
+      display: ':1',
+    },
+  },
+  {
+    id: 'sandbox-terminal-started',
+    type: 'terminal_started',
+    eventTimeUs: 1_784_282_047_000_000,
+    eventCounter: 7,
+    payload: {
+      sandbox_id: 'sandbox-release-1',
+      session_id: 'terminal-release-1',
+      url: 'wss://sandbox.example/terminal',
+    },
+  },
+  {
+    id: 'sandbox-terminal-stopped',
+    type: 'terminal_status',
+    eventTimeUs: 1_784_282_048_000_000,
+    eventCounter: 8,
+    payload: {
+      sandbox_id: 'sandbox-release-1',
+      session_id: 'terminal-release-1',
+      running: false,
+    },
+  },
+  {
+    id: 'sandbox-runtime-error',
+    type: 'sandbox_status',
+    eventTimeUs: 1_784_282_049_000_000,
+    eventCounter: 9,
+    payload: {
+      sandbox_id: 'sandbox-release-1',
+      status: 'error',
+      error_message: 'Runtime health probe failed',
+    },
+  },
+];
+
 function SessionSteeringQa() {
   const searchParams = new URLSearchParams(window.location.search);
   const historyMode = searchParams.get('history');
   const suggestionsMode = searchParams.get('suggestions') === '1';
+  const runtimeEventsMode = searchParams.get('runtime-events') === '1';
   const [delivery, setDelivery] = useState<RunInputDelivery>('steer_now');
   const [references, setReferences] = useState<CodeRangeReference[]>([]);
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([queuedInput]);
@@ -258,7 +317,9 @@ function SessionSteeringQa() {
         ? anchorTimelineItems
         : suggestionsMode
           ? [...timelineState.items, suggestionTimelineItem]
-          : timelineState.items;
+          : runtimeEventsMode
+            ? [...timelineState.items, ...runtimeInfrastructureTimelineItems]
+            : timelineState.items;
     return {
       ...timelineState,
       items,
@@ -376,7 +437,7 @@ function SessionSteeringQa() {
               initialInput={
                 suggestionsMode ? '' : 'Keep the public API stable and add the missing revision test.'
               }
-              activityPresence={suggestionsMode ? 'recorded' : 'live'}
+              activityPresence={suggestionsMode || runtimeEventsMode ? 'recorded' : 'live'}
               activityStructuredEvidence={null}
               sending={false}
               disabledReason={null}

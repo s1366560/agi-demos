@@ -1178,6 +1178,92 @@ test('artifact timeline events expose lifecycle state, source, and batch progres
   );
 });
 
+test('runtime infrastructure events expose sandbox, desktop, and terminal state', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'sandbox-created-1',
+      type: 'sandbox_created',
+      eventTimeUs: 60_000_000,
+      eventCounter: 1,
+      payload: {
+        sandbox_id: 'sandbox-release-1',
+        status: 'running',
+        endpoint: 'wss://sandbox.example/ws',
+      },
+    }),
+    {
+      family: 'sandbox',
+      state: 'ready',
+      subject: 'sandbox-release-1',
+      detail: 'wss://sandbox.example/ws',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'sandbox-status-error-1',
+      type: 'sandbox_status',
+      eventTimeUs: 61_000_000,
+      eventCounter: 2,
+      payload: {
+        sandbox_id: 'sandbox-release-1',
+        status: 'error',
+        error_message: 'Runtime health probe failed',
+      },
+    }),
+    {
+      family: 'sandbox',
+      state: 'failed',
+      subject: 'sandbox-release-1',
+      detail: 'Runtime health probe failed',
+      isError: true,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'desktop-started-1',
+      type: 'desktop_started',
+      eventTimeUs: 62_000_000,
+      eventCounter: 3,
+      payload: {
+        sandbox_id: 'sandbox-release-1',
+        resolution: '1280x720',
+        display: ':1',
+      },
+    }),
+    {
+      family: 'desktop',
+      state: 'ready',
+      subject: 'sandbox-release-1',
+      detail: '1280x720 · :1',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'terminal-status-1',
+      type: 'terminal_status',
+      eventTimeUs: 63_000_000,
+      eventCounter: 4,
+      payload: {
+        sandbox_id: 'sandbox-release-1',
+        session_id: 'terminal-release-1',
+        running: false,
+      },
+    }),
+    {
+      family: 'terminal',
+      state: 'stopped',
+      subject: 'terminal-release-1',
+      detail: 'sandbox-release-1',
+      isError: false,
+    },
+  );
+});
+
 test('artifact ready and error stream events settle the original created row', () => {
   const created = {
     id: 'artifact-created-1',

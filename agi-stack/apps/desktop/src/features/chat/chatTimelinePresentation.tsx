@@ -193,6 +193,9 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
       ? t('chat.memoryRecalled')
       : t('chat.memoryCaptured');
   }
+  if (lifecycle?.family === 'sandbox') return t('chat.sandboxEvent');
+  if (lifecycle?.family === 'desktop') return t('chat.desktopEvent');
+  if (lifecycle?.family === 'terminal') return t('chat.terminalEvent');
   if (lifecycle?.family === 'graphRun') return t('chat.graphRun');
   if (lifecycle?.family === 'graphNode') return t('chat.graphNode');
   if (lifecycle?.family === 'graphHandoff') return t('chat.graphHandoff');

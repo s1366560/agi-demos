@@ -52,6 +52,13 @@ test('raw task and error payloads stay collapsed until a person opens them', () 
   assert.doesNotMatch(importancePolicy, /startsWith\('task_'\)|artifact_error/);
 });
 
+test('narrow session timelines preserve lifecycle status labels', () => {
+  assert.match(
+    chatStyles,
+    /@container \(max-width: 520px\)[\s\S]*timeline-row-meta > span:not\(:last-child\):not\(\.timeline-status\)/,
+  );
+});
+
 test('artifact batch events use artifact presentation instead of generic runtime presentation', () => {
   assert.match(
     chatSource,
@@ -126,6 +133,9 @@ test('chat copy and diagnostics are localized in both supported locales', () => 
     'chat.artifactFailed',
     'chat.artifactsBatch',
     'chat.artifactsCount',
+    'chat.sandboxEvent',
+    'chat.desktopEvent',
+    'chat.terminalEvent',
     'chat.suggestedFollowUps',
     'chat.sendSuggestion',
     'chat.memoriesCount',

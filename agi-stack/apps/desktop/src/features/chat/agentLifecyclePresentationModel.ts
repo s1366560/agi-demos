@@ -19,6 +19,9 @@ export type AgentLifecycleFamily =
   | 'memory'
   | 'task'
   | 'artifact'
+  | 'sandbox'
+  | 'desktop'
+  | 'terminal'
   | 'graphRun'
   | 'graphNode'
   | 'graphHandoff';
@@ -291,6 +294,15 @@ const lifecycleEventDefinitions: Record<
     detailFields: ['error'],
   },
   artifacts_batch: { family: 'artifact', state: 'complete' },
+  sandbox_created: { family: 'sandbox', state: 'ready' },
+  sandbox_status: { family: 'sandbox', state: 'running' },
+  sandbox_terminated: { family: 'sandbox', state: 'stopped' },
+  desktop_started: { family: 'desktop', state: 'ready' },
+  desktop_status: { family: 'desktop', state: 'running' },
+  desktop_stopped: { family: 'desktop', state: 'stopped' },
+  terminal_started: { family: 'terminal', state: 'ready' },
+  terminal_status: { family: 'terminal', state: 'running' },
+  terminal_stopped: { family: 'terminal', state: 'stopped' },
   graph_run_started: {
     family: 'graphRun',
     state: 'running',
@@ -347,6 +359,23 @@ export function agentLifecyclePresentation(
     explicitStatus === 'error'
   ) {
     state = 'failed';
+  } else if (isRuntimeInfrastructureFamily(definition.family)) {
+    const running = timelineEventBoolean(item, 'running');
+    if (
+      running === false ||
+      explicitStatus === 'stopped' ||
+      explicitStatus === 'terminated' ||
+      explicitStatus === 'disconnected'
+    ) {
+      state = 'stopped';
+    } else if (
+      running === true ||
+      explicitStatus === 'running' ||
+      explicitStatus === 'ready' ||
+      explicitStatus === 'connected'
+    ) {
+      state = 'ready';
+    }
   } else if (explicitStatus === 'cancelled' || explicitStatus === 'skipped') {
     state = 'attention';
   } else if (
@@ -377,6 +406,16 @@ export function agentLifecyclePresentation(
 }
 
 function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily): string {
+  if (isRuntimeInfrastructureFamily(family)) {
+    if (family === 'terminal') {
+      return (
+        timelineEventString(item, ['session_id', 'sessionId']) ??
+        timelineEventString(item, ['sandbox_id', 'sandboxId']) ??
+        ''
+      );
+    }
+    return timelineEventString(item, ['sandbox_id', 'sandboxId']) ?? '';
+  }
   if (family === 'model') {
     return timelineEventString(item, ['model']) ?? '';
   }
@@ -515,6 +554,33 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
 }
 
 function lifecycleDetail(item: AgentTimelineItem, detailFields: string[]): string {
+  const lifecycle = lifecycleEventDefinitions[item.type];
+  if (lifecycle && isRuntimeInfrastructureFamily(lifecycle.family)) {
+    const error = timelineEventString(item, ['error_message', 'errorMessage', 'error']);
+    if (error) return error;
+    if (lifecycle.family === 'sandbox') {
+      return (
+        timelineEventString(item, ['endpoint', 'websocket_url', 'websocketUrl']) ?? ''
+      );
+    }
+    if (lifecycle.family === 'desktop') {
+      return uniqueStrings(
+        [
+          timelineEventString(item, ['resolution']),
+          timelineEventString(item, ['display']),
+          timelineEventString(item, ['url', 'desktop_url', 'desktopUrl']),
+        ].flatMap((value) => (value ? [value] : [])),
+      ).join(' · ');
+    }
+    const subject = lifecycleSubject(item, 'terminal');
+    const sandbox = timelineEventString(item, ['sandbox_id', 'sandboxId']);
+    return uniqueStrings(
+      [
+        sandbox === subject ? null : sandbox,
+        timelineEventString(item, ['url', 'terminal_url', 'terminalUrl']),
+      ].flatMap((value) => (value ? [value] : [])),
+    ).join(' · ');
+  }
   if (item.type === 'mcp_app_registered' || item.type === 'mcp_app_result') {
     const subject = lifecycleSubject(item, 'mcpApp');
     const server = timelineEventString(item, ['server_name', 'serverName']);
@@ -562,6 +628,10 @@ function lifecycleDetail(item: AgentTimelineItem, detailFields: string[]): strin
     }
   }
   return timelineEventString(item, detailFields) ?? item.error ?? '';
+}
+
+function isRuntimeInfrastructureFamily(family: AgentLifecycleFamily): boolean {
+  return family === 'sandbox' || family === 'desktop' || family === 'terminal';
 }
 
 function lifecycleProgress(

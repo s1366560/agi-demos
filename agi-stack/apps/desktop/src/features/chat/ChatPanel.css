@@ -861,7 +861,7 @@
   }
 
   .session-thread-message .transcript-author em,
-  .session-chat-narrative .timeline-row-meta > span:not(:last-child) {
+  .session-chat-narrative .timeline-row-meta > span:not(:last-child):not(.timeline-status) {
     display: none;
   }
 
