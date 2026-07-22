@@ -133,7 +133,8 @@
 }
 
 .session-steering-qa-content > .chat-shell,
-.session-steering-qa-content > .session-changes-canvas {
+.session-steering-qa-content > .session-changes-canvas,
+.session-steering-qa-content > .live-artifact-canvas {
   min-width: 0;
   min-height: 0;
   height: 100%;

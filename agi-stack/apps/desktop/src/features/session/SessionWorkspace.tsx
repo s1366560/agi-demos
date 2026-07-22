@@ -47,6 +47,7 @@ type SessionWorkspaceProps = {
   viewModel: SessionDetailViewModel;
   thread: ReactNode;
   canvas: ReactNode | ((controls: SessionCanvasControls) => ReactNode) | null;
+  canvasRevealKey?: string | null;
   onOpenCanvas: (tab?: SessionCanvasTabId) => void;
   onCloseCanvas: () => void;
   runActionPending: SessionRunAction | null;
@@ -67,6 +68,7 @@ export function SessionWorkspace({
   viewModel,
   thread,
   canvas,
+  canvasRevealKey,
   onOpenCanvas,
   onCloseCanvas,
   runActionPending,
@@ -106,6 +108,13 @@ export function SessionWorkspace({
       transitionSurface('close_canvas');
     }
   }, [hasCanvas, viewModel.id]);
+
+  useEffect(() => {
+    if (!canvasRevealKey || !hasCanvas) return;
+    setSurfaceState((current) =>
+      transitionSessionSurface(current, viewModel.id, 'open_canvas'),
+    );
+  }, [canvasRevealKey, hasCanvas, viewModel.id]);
 
   useEffect(() => {
     if (viewModel.status !== 'ready_review') {

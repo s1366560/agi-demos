@@ -14,6 +14,12 @@ import {
 
 import { ChatPanel } from '../features/chat/ChatPanel';
 import type { ComposerCatalogClient } from '../features/chat/ComposerPlusMenu';
+import { LiveArtifactCanvas } from '../features/chat/LiveArtifactCanvas';
+import {
+  applyArtifactCanvasStreamEvent,
+  emptyArtifactCanvasState,
+  selectArtifactCanvasTab,
+} from '../features/chat/artifactCanvasEventModel';
 import {
   applyConversationTitleUpdate,
   readConversationTitleStreamEvent,
@@ -533,6 +539,29 @@ const titleGeneratedEvent = {
   },
 };
 
+const artifactCanvasOpenEvents = [
+  {
+    type: 'artifact_open',
+    data: {
+      artifact_id: 'artifact-release-notes',
+      title: 'release-notes.md',
+      content: '# Cloud session release notes\n\nPreparing the verified rollout summary…',
+      content_type: 'markdown',
+      language: 'markdown',
+    },
+  },
+  {
+    type: 'artifact_open',
+    data: {
+      artifact_id: 'artifact-checklist',
+      title: 'deployment-checklist.txt',
+      content: '[x] Authenticated workspace\n[x] Model selected\n[ ] Final rollout verification',
+      content_type: 'code',
+      language: 'text',
+    },
+  },
+];
+
 const qaConversation: AgentConversation = {
   id: 'conversation-desktop-session',
   project_id: 'project-desktop',
@@ -556,11 +585,20 @@ function SessionSteeringQa() {
   const agentDefinitionEventsMode = searchParams.get('agent-definition-events') === '1';
   const hitlResponseEventsMode = searchParams.get('hitl-response-events') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
+  const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const [delivery, setDelivery] = useState<RunInputDelivery>('steer_now');
   const [references, setReferences] = useState<CodeRangeReference[]>([]);
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([queuedInput]);
   const [model, setModel] = useState('gpt-5.5');
   const [switchingModel, setSwitchingModel] = useState(false);
+  const [artifactCanvas, setArtifactCanvas] = useState(() =>
+    artifactCanvasEventsMode
+      ? artifactCanvasOpenEvents.reduce(
+          (state, event) => applyArtifactCanvasStreamEvent(state, event).state,
+          emptyArtifactCanvasState(),
+        )
+      : emptyArtifactCanvasState(),
+  );
   const [qaConversations, setQaConversations] = useState<AgentConversation[]>(() => [
     titleEventsMode ? qaConversation : { ...qaConversation, title: 'Session interaction redesign' },
   ]);
@@ -630,6 +668,23 @@ function SessionSteeringQa() {
     }, 1800);
     return () => window.clearTimeout(timer);
   }, [titleEventsMode]);
+
+  useEffect(() => {
+    if (!artifactCanvasEventsMode) return;
+    const timer = window.setTimeout(() => {
+      setArtifactCanvas((current) =>
+        applyArtifactCanvasStreamEvent(current, {
+          type: 'artifact_update',
+          data: {
+            artifact_id: 'artifact-release-notes',
+            content: '\n\nCloud session release notes verified for Desktop Canvas.',
+            append: true,
+          },
+        }).state,
+      );
+    }, 1800);
+    return () => window.clearTimeout(timer);
+  }, [artifactCanvasEventsMode]);
 
   const qaConversationTitle = qaConversations[0]?.title ?? 'Conversation';
 
@@ -749,6 +804,7 @@ function SessionSteeringQa() {
                 httpServiceEventsMode ||
                 doomLoopEventsMode ||
                 hitlResponseEventsMode ||
+                artifactCanvasEventsMode ||
                 titleEventsMode
                   ? 'recorded'
                   : 'live'
@@ -799,16 +855,25 @@ function SessionSteeringQa() {
               onRuntimeTargetChange={() => undefined}
               onOpenCommands={() => undefined}
             />
-            <SessionChangesCanvas
-              snapshot={snapshot}
-              loading={false}
-              error={null}
-              references={references}
-              onRefresh={() => undefined}
-              onToggleReference={(reference) =>
-                setReferences((current) => toggleRunInputReference(current, reference))
-              }
-            />
+            {artifactCanvasEventsMode ? (
+              <LiveArtifactCanvas
+                state={artifactCanvas}
+                onSelect={(artifactId) =>
+                  setArtifactCanvas((current) => selectArtifactCanvasTab(current, artifactId))
+                }
+              />
+            ) : (
+              <SessionChangesCanvas
+                snapshot={snapshot}
+                loading={false}
+                error={null}
+                references={references}
+                onRefresh={() => undefined}
+                onToggleReference={(reference) =>
+                  setReferences((current) => toggleRunInputReference(current, reference))
+                }
+              />
+            )}
           </div>
         </main>
       </div>

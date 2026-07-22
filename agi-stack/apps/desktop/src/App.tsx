@@ -82,6 +82,13 @@ import {
   type AgentTaskSignalStatus,
   type ChatWorkflowTarget,
 } from './features/chat/ChatPanel';
+import { LiveArtifactCanvas } from './features/chat/LiveArtifactCanvas';
+import {
+  applyArtifactCanvasStreamEvent,
+  emptyArtifactCanvasState,
+  selectArtifactCanvasTab,
+  type LiveArtifactCanvasState,
+} from './features/chat/artifactCanvasEventModel';
 import {
   composerAgentExecutionContext,
   workspaceMessageRequiresDefaultAgentLaunch,
@@ -897,6 +904,8 @@ function mergeLiveTimelineEvent(
   }
   const titleEvent = readConversationTitleStreamEvent(event);
   if (titleEvent.handled) return existing;
+  const artifactCanvasResult = applyArtifactCanvasStreamEvent(emptyArtifactCanvasState(), event);
+  if (artifactCanvasResult.handled) return existing;
   const hitlResponse = applyHitlResponseStreamEvent(existing, event);
   if (hitlResponse.handled) return hitlResponse.items;
   const timeline = existing;
@@ -1635,6 +1644,9 @@ export function App() {
   const [sessionProjectionRefreshRevision, setSessionProjectionRefreshRevision] = useState(0);
   const [conversationTimeline, setConversationTimeline] =
     useState<ConversationTimelineState>(emptyConversationTimeline);
+  const [artifactCanvasState, setArtifactCanvasState] = useState<LiveArtifactCanvasState>(() =>
+    emptyArtifactCanvasState(),
+  );
   const [agentTaskSignals, setAgentTaskSignals] = useState<AgentTaskSignal[]>([]);
   const pendingNewTaskAgentTurnsRef = useRef(
     new Map<
@@ -1695,6 +1707,7 @@ export function App() {
   } | null>(null);
   const terminalStartGenerationRef = useRef(0);
   const currentArtifactRunRef = useRef<DesktopRun | null>(null);
+  const artifactCanvasStateRef = useRef(artifactCanvasState);
   const terminalRunScopeKeyRef = useRef('');
   const workbenchRef = useRef<HTMLElement>(null);
 
@@ -1757,6 +1770,11 @@ export function App() {
     auth.context?.revision ?? null,
     scopedConversation?.id ?? null,
   );
+  useEffect(() => {
+    const emptyState = emptyArtifactCanvasState();
+    artifactCanvasStateRef.current = emptyState;
+    setArtifactCanvasState(emptyState);
+  }, [scopedConversationId]);
   const agentDefinitionEvent = useMemo(
     () => latestAgentDefinitionEvent(socket.events),
     [socket.events],
@@ -2587,6 +2605,28 @@ export function App() {
       socketEventMatchesSessionScope(event, scope, false),
     );
     if (timelineEvents.length) {
+      let nextArtifactCanvas = artifactCanvasStateRef.current;
+      let lastArtifactAction: 'open' | 'update' | 'close' | null = null;
+      for (const event of timelineEvents) {
+        const result = applyArtifactCanvasStreamEvent(nextArtifactCanvas, event);
+        if (!result.handled) continue;
+        nextArtifactCanvas = result.state;
+        if (result.action) lastArtifactAction = result.action;
+      }
+      if (nextArtifactCanvas !== artifactCanvasStateRef.current) {
+        artifactCanvasStateRef.current = nextArtifactCanvas;
+        setArtifactCanvasState(nextArtifactCanvas);
+      }
+      if (lastArtifactAction === 'open') {
+        setReviewTab('artifacts');
+        setReviewPanelOpen(true);
+      } else if (
+        lastArtifactAction === 'close' &&
+        nextArtifactCanvas.tabs.length === 0 &&
+        reviewTab === 'artifacts'
+      ) {
+        setReviewPanelOpen(false);
+      }
       setConversationTimeline((current) => {
         if (current.conversationId !== activeConversation.id) return current;
         let items = current.items;
@@ -2612,7 +2652,7 @@ export function App() {
         invalidateSessionAuthority();
       }, 150);
     }
-  }, [config.workspaceId, invalidateSessionAuthority, scopedConversation, socket.events]);
+  }, [config.workspaceId, invalidateSessionAuthority, reviewTab, scopedConversation, socket.events]);
 
   useEffect(
     () => () => {
@@ -5943,6 +5983,7 @@ export function App() {
       timelineItems={conversationTimeline.items}
       artifacts={workspaceArtifacts}
       artifactVersions={displaySessionProjection?.artifactVersions ?? []}
+      artifactCanvas={artifactCanvasState}
       artifactDeliveries={displaySessionProjection?.artifactDeliveries ?? []}
       toolInvocations={displaySessionProjection?.toolInvocations ?? []}
       currentRun={currentArtifactRun}
@@ -5982,6 +6023,13 @@ export function App() {
       onApprovePlan={approveSessionPlan}
       onResumeTaskListReview={resumeSessionTaskListReview}
       onArtifactAction={handleArtifactAction}
+      onSelectArtifactCanvasTab={(artifactId) => {
+        setArtifactCanvasState((current) => {
+          const next = selectArtifactCanvasTab(current, artifactId);
+          artifactCanvasStateRef.current = next;
+          return next;
+        });
+      }}
       onStartTerminal={() => void startTerminal()}
       onRefreshChanges={() => void loadRunChanges()}
       onToggleChangeReference={(reference) =>
@@ -6122,6 +6170,11 @@ export function App() {
                   if (tab) setReviewTab(tab);
                   setReviewPanelOpen(true);
                 }}
+                canvasRevealKey={
+                  artifactCanvasState.openRevision > 0
+                    ? `${scopedConversationId}:${artifactCanvasState.openRevision}`
+                    : null
+                }
                 onCloseCanvas={() => setReviewPanelOpen(false)}
                 runActionPending={sessionRunActionPending}
                 liveConnected={socket.connected}
@@ -6277,6 +6330,7 @@ function WorkspaceReviewPanel({
   timelineItems,
   artifacts,
   artifactVersions,
+  artifactCanvas,
   artifactDeliveries,
   toolInvocations,
   currentRun,
@@ -6307,6 +6361,7 @@ function WorkspaceReviewPanel({
   onApprovePlan,
   onResumeTaskListReview,
   onArtifactAction,
+  onSelectArtifactCanvasTab,
   onStartTerminal,
   onRefreshChanges,
   onToggleChangeReference,
@@ -6318,6 +6373,7 @@ function WorkspaceReviewPanel({
   timelineItems: AgentTimelineItem[];
   artifacts: WorkspaceArtifact[];
   artifactVersions: DesktopArtifactVersion[];
+  artifactCanvas: LiveArtifactCanvasState;
   artifactDeliveries: DesktopArtifactDelivery[];
   toolInvocations: DesktopToolInvocation[];
   currentRun: DesktopRun | null;
@@ -6360,6 +6416,7 @@ function WorkspaceReviewPanel({
     action: ArtifactVersionAction,
     feedback?: string,
   ) => Promise<void>;
+  onSelectArtifactCanvasTab: (artifactId: string) => void;
   onStartTerminal: () => void;
   onRefreshChanges: () => void;
   onToggleChangeReference: (reference: CodeRangeReference) => void;
@@ -6416,8 +6473,12 @@ function WorkspaceReviewPanel({
       if (checkEvidence.rows.length) return `${checkEvidence.rows.length}`;
       return checkEvidence.missing.length ? t('session.evidence.missing') : undefined;
     }
-    if (tab === 'artifacts' && artifactVersions.length) {
-      return `${currentArtifactVersions(artifactVersions).length}`;
+    if (tab === 'artifacts') {
+      const artifactIds = new Set([
+        ...currentArtifactVersions(artifactVersions).map((version) => version.artifact_id),
+        ...artifactCanvas.tabs.map((tab) => tab.id),
+      ]);
+      if (artifactIds.size) return `${artifactIds.size}`;
     }
     if (tab === 'sources') {
       if (sourceEvidence.rows.length) return `${sourceEvidence.rows.length}`;
@@ -6768,18 +6829,21 @@ function WorkspaceReviewPanel({
         ) : null}
 
         {activeTab === 'artifacts' ? (
-          <ArtifactLifecyclePanel
-            versions={artifactVersions}
-            deliveries={artifactDeliveries}
-            currentRun={currentRun}
-            capabilities={sessionCapabilities}
-            enforceCapabilities
-            available={sessionDataAvailable}
-            focusVersionId={focusedArtifactVersionId}
-            unversionedEvidenceCount={artifacts.length}
-            pending={artifactActionPending}
-            onAction={onArtifactAction}
-          />
+          <>
+            <LiveArtifactCanvas state={artifactCanvas} onSelect={onSelectArtifactCanvasTab} />
+            <ArtifactLifecyclePanel
+              versions={artifactVersions}
+              deliveries={artifactDeliveries}
+              currentRun={currentRun}
+              capabilities={sessionCapabilities}
+              enforceCapabilities
+              available={sessionDataAvailable}
+              focusVersionId={focusedArtifactVersionId}
+              unversionedEvidenceCount={artifacts.length}
+              pending={artifactActionPending}
+              onAction={onArtifactAction}
+            />
+          </>
         ) : null}
 
         {activeTab === 'terminal' ? (
