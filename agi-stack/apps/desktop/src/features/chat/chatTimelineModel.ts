@@ -132,6 +132,8 @@ const NON_TIMELINE_EVENT_TYPES = new Set([
   'plan_snapshot_created',
   'plan_rollback',
   'adjustment_applied',
+  'task_list_updated',
+  'task_updated',
 ]);
 
 /** UI-state events drive affordances or replay and are not conversation log rows. */

@@ -1853,6 +1853,34 @@ test('UI-state events stay out of the visible conversation timeline', () => {
       eventTimeUs: 54_700_000,
       eventCounter: 40,
     },
+    {
+      id: 'task-list-updated-1',
+      type: 'task_list_updated',
+      payload: { tasks: [{ id: 'release-task', content: 'task-list-sentinel' }] },
+      eventTimeUs: 54_800_000,
+      eventCounter: 41,
+    },
+    {
+      id: 'task-updated-1',
+      type: 'task_updated',
+      payload: { task: { id: 'release-task', content: 'task-update-sentinel' } },
+      eventTimeUs: 54_900_000,
+      eventCounter: 42,
+    },
+    {
+      id: 'task-start-1',
+      type: 'task_start',
+      payload: { task_id: 'release-task', content: 'Verify the release' },
+      eventTimeUs: 55_000_000,
+      eventCounter: 43,
+    },
+    {
+      id: 'task-complete-1',
+      type: 'task_complete',
+      payload: { task_id: 'release-task', success: true },
+      eventTimeUs: 55_100_000,
+      eventCounter: 44,
+    },
   ];
 
   assert.deepEqual(latestAgentSuggestions(items), [
@@ -1866,6 +1894,8 @@ test('UI-state events stay out of the visible conversation timeline', () => {
       'assistant-message-1',
       'context-status-1',
       'reflection-complete-1',
+      'task-start-1',
+      'task-complete-1',
     ],
   );
 
