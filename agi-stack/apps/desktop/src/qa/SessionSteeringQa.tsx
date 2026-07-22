@@ -1,5 +1,5 @@
 import '@radix-ui/themes/styles.css';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Theme } from '@radix-ui/themes';
 import {
@@ -599,6 +599,7 @@ const mcpAppResultEvent = {
               padding: 9px 13px; border: 0; border-radius: 7px;
               color: white; background: #6d45d8; cursor: pointer;
             }
+            button + button { margin-left: 8px; }
             #details[hidden] { display: none; }
           </style>
         </head>
@@ -612,15 +613,69 @@ const mcpAppResultEvent = {
               <div><dt>Failures</dt><dd>0</dd></div>
             </dl>
             <button type="button" id="toggle">Show verified items</button>
+            <button type="button" id="approve">Approve through host</button>
+            <button type="button" id="message">Send follow-up to Agent</button>
             <p id="details" hidden>
               Authentication, model routing, session startup, and event rendering verified.
             </p>
+            <p id="host-status" role="status">Connecting to Desktop host…</p>
           </main>
           <script>
+            var nextRequestId = 1;
+            var pendingRequests = {};
+            var hostStatus = document.getElementById('host-status');
+            function hostRequest(method, params) {
+              return new Promise(function (resolve, reject) {
+                var id = nextRequestId++;
+                pendingRequests[id] = { resolve: resolve, reject: reject };
+                window.parent.postMessage({ jsonrpc: '2.0', id: id, method: method, params: params }, '*');
+              });
+            }
+            window.addEventListener('message', function (event) {
+              var message = event.data;
+              if (!message || message.jsonrpc !== '2.0' || message.id === undefined) return;
+              var pending = pendingRequests[message.id];
+              if (!pending) return;
+              delete pendingRequests[message.id];
+              if (message.error) pending.reject(new Error(message.error.message || 'Host request failed'));
+              else pending.resolve(message.result);
+            });
+            hostRequest('ui/initialize', {
+              appInfo: { name: 'release-verification-qa', version: '1.0.0' },
+              appCapabilities: {},
+              protocolVersion: '2026-01-26'
+            }).then(function () {
+              window.parent.postMessage({
+                jsonrpc: '2.0', method: 'ui/notifications/initialized', params: {}
+              }, '*');
+              hostStatus.textContent = 'Connected to Desktop host';
+            }).catch(function (error) {
+              hostStatus.textContent = error.message;
+            });
             document.getElementById('toggle').addEventListener('click', function () {
               var details = document.getElementById('details');
               details.hidden = !details.hidden;
               this.textContent = details.hidden ? 'Show verified items' : 'Hide verified items';
+            });
+            document.getElementById('approve').addEventListener('click', function () {
+              hostStatus.textContent = 'Calling release tool…';
+              hostRequest('tools/call', {
+                name: 'approve_release', arguments: { release: '2026.07' }
+              }).then(function (result) {
+                hostStatus.textContent = result.isError ? 'Host tool call failed' : 'Host tool call approved';
+              }).catch(function (error) {
+                hostStatus.textContent = error.message;
+              });
+            });
+            document.getElementById('message').addEventListener('click', function () {
+              hostStatus.textContent = 'Sending follow-up…';
+              hostRequest('ui/message', {
+                role: 'user', content: [{ type: 'text', text: 'Summarize the release verification' }]
+              }).then(function () {
+                hostStatus.textContent = 'Follow-up accepted by Desktop host';
+              }).catch(function (error) {
+                hostStatus.textContent = error.message;
+              });
             });
           </script>
         </body>
@@ -675,6 +730,20 @@ function SessionSteeringQa() {
     mcpAppEventsMode
       ? applyMCPAppCanvasStreamEvent(emptyMCPAppCanvasState(), mcpAppResultEvent).state
       : emptyMCPAppCanvasState(),
+  );
+  const [mcpAppHostMessage, setMCPAppHostMessage] = useState('');
+  const mcpAppHostApi = useMemo(
+    () => ({
+      callMCPAppTool: async (_appId: string, toolName: string) => ({
+        content: [{ type: 'text', text: `${toolName} accepted` }],
+        is_error: false,
+      }),
+      readMCPAppResource: async (_projectId: string, uri: string) => ({
+        contents: [{ uri, mimeType: 'text/plain', text: 'QA resource' }],
+      }),
+      listMCPAppResources: async () => ({ resources: [] }),
+    }),
+    [],
   );
   const [qaConversations, setQaConversations] = useState<AgentConversation[]>(() => [
     titleEventsMode ? qaConversation : { ...qaConversation, title: 'Session interaction redesign' },
@@ -934,16 +1003,24 @@ function SessionSteeringQa() {
               onOpenCommands={() => undefined}
             />
             {mcpAppEventsMode ? (
-              <DesktopMCPAppCanvas
-                state={mcpAppCanvas}
-                sandboxProxyUrl="http://127.0.0.1:8000/static/sandbox_proxy.html"
-                onSelect={(tabId) =>
-                  setMCPAppCanvas((current) => selectMCPAppCanvasTab(current, tabId))
-                }
-                onClose={(tabId) =>
-                  setMCPAppCanvas((current) => closeMCPAppCanvasTab(current, tabId))
-                }
-              />
+              <>
+                <DesktopMCPAppCanvas
+                  state={mcpAppCanvas}
+                  api={mcpAppHostApi}
+                  projectId="project-desktop"
+                  sandboxProxyUrl="http://127.0.0.1:8000/static/sandbox_proxy.html"
+                  onSendMessage={(message) => setMCPAppHostMessage(message)}
+                  onSelect={(tabId) =>
+                    setMCPAppCanvas((current) => selectMCPAppCanvasTab(current, tabId))
+                  }
+                  onClose={(tabId) =>
+                    setMCPAppCanvas((current) => closeMCPAppCanvasTab(current, tabId))
+                  }
+                />
+                {mcpAppHostMessage ? (
+                  <p data-testid="mcp-app-host-message">{mcpAppHostMessage}</p>
+                ) : null}
+              </>
             ) : artifactCanvasEventsMode ? (
               <LiveArtifactCanvas
                 state={artifactCanvas}

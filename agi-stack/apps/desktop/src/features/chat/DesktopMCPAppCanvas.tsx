@@ -1,9 +1,27 @@
-import React, { Component, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
+import React, {
+  Component,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+import { createRoot, type Root } from 'react-dom/client';
 import { Badge, IconButton, Spinner, Tooltip } from '@radix-ui/themes';
 import { Cross2Icon, CubeIcon, ExclamationTriangleIcon } from '@radix-ui/react-icons';
 import type { AppRendererProps, SandboxConfig } from '@mcp-ui/client';
 
 import { useI18n } from '../../i18n';
+import type { MCPAppHostClient } from './mcpAppHostBridge';
+import {
+  callMCPAppTool,
+  listMCPAppResources,
+  mcpAppMessageText,
+  readMCPAppResource,
+  safeMCPAppExternalUrl,
+} from './mcpAppHostBridge';
 import type { MCPAppCanvasState, MCPAppCanvasTab } from './mcpAppCanvasEventModel';
 import './DesktopMCPAppCanvas.css';
 
@@ -14,7 +32,10 @@ const LazyAppRenderer = React.lazy(async () => {
 
 type DesktopMCPAppCanvasProps = {
   state: MCPAppCanvasState;
+  api: MCPAppHostClient;
+  projectId: string;
   sandboxProxyUrl: string;
+  onSendMessage: (message: string) => void | Promise<void>;
   onSelect: (tabId: string) => void;
   onClose: (tabId: string) => void;
 };
@@ -26,6 +47,10 @@ type RendererBoundaryProps = {
 };
 
 type RendererBoundaryState = { failed: boolean };
+
+type IsolatedRendererProps = {
+  renderer: ReactNode;
+};
 
 class MCPAppRendererBoundary extends Component<RendererBoundaryProps, RendererBoundaryState> {
   state: RendererBoundaryState = { failed: false };
@@ -45,9 +70,42 @@ class MCPAppRendererBoundary extends Component<RendererBoundaryProps, RendererBo
   }
 }
 
+function IsolatedMCPAppRenderer({ renderer }: IsolatedRendererProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<Root | null>(null);
+  const rendererRef = useRef(renderer);
+  rendererRef.current = renderer;
+
+  useEffect(() => {
+    let disposed = false;
+    const timerId = window.setTimeout(() => {
+      if (disposed || !containerRef.current) return;
+      const root = createRoot(containerRef.current);
+      rootRef.current = root;
+      root.render(rendererRef.current);
+    });
+    return () => {
+      disposed = true;
+      window.clearTimeout(timerId);
+      const root = rootRef.current;
+      rootRef.current = null;
+      if (root) queueMicrotask(() => root.unmount());
+    };
+  }, []);
+
+  useEffect(() => {
+    rootRef.current?.render(renderer);
+  }, [renderer]);
+
+  return <div className="desktop-mcp-app-isolated-root" ref={containerRef} />;
+}
+
 export function DesktopMCPAppCanvas({
   state,
+  api,
+  projectId,
   sandboxProxyUrl,
+  onSendMessage,
   onSelect,
   onClose,
 }: DesktopMCPAppCanvasProps) {
@@ -60,6 +118,45 @@ export function DesktopMCPAppCanvas({
   const sandboxConfig = useMemo(
     () => buildSandboxConfig(sandboxProxyUrl, active?.uiMetadata),
     [active?.uiMetadata, sandboxProxyUrl],
+  );
+  const hostContext = useMemo(
+    () => ({
+      projectId,
+      appId: active?.appId ?? null,
+      serverName: active?.serverName ?? null,
+      originalToolName: active?.toolName ?? '',
+    }),
+    [active?.appId, active?.serverName, active?.toolName, projectId],
+  );
+  const handleCallTool = useCallback<NonNullable<AppRendererProps['onCallTool']>>(
+    async (params) => callMCPAppTool(api, hostContext, params),
+    [api, hostContext],
+  );
+  const handleReadResource = useCallback<NonNullable<AppRendererProps['onReadResource']>>(
+    async ({ uri }) => readMCPAppResource(api, hostContext, uri),
+    [api, hostContext],
+  );
+  const handleListResources = useCallback<NonNullable<AppRendererProps['onListResources']>>(
+    async () => listMCPAppResources(api, hostContext),
+    [api, hostContext],
+  );
+  const handleMessage = useCallback<NonNullable<AppRendererProps['onMessage']>>(
+    async (params) => {
+      const message = mcpAppMessageText(params);
+      if (message) await onSendMessage(message);
+      return {};
+    },
+    [onSendMessage],
+  );
+  const handleOpenLink = useCallback<NonNullable<AppRendererProps['onOpenLink']>>(
+    async ({ url }) => {
+      const safeUrl = safeMCPAppExternalUrl(url);
+      if (!safeUrl) throw new Error('MCP App requested an unsafe external URL');
+      const opened = window.open(safeUrl, '_blank', 'noopener,noreferrer');
+      if (opened) opened.opener = null;
+      return {};
+    },
+    [],
   );
 
   useEffect(() => {
@@ -77,6 +174,38 @@ export function DesktopMCPAppCanvas({
         <small>{renderError ?? t('mcpApp.rendererErrorDescription')}</small>
       </span>
     </div>
+  );
+  const renderer = (
+    <MCPAppRendererBoundary fallback={errorFallback} resetKey={active.id}>
+      <Suspense
+        fallback={
+          <div className="desktop-mcp-app-loading" role="status">
+            <Spinner /> {t('mcpApp.loading')}
+          </div>
+        }
+      >
+        <LazyAppRenderer
+          toolName={active.toolName || active.appId || 'mcp-app'}
+          sandbox={sandboxConfig}
+          {...(active.resourceHtml ? { html: active.resourceHtml } : {})}
+          {...(active.resourceUri ? { toolResourceUri: active.resourceUri } : {})}
+          {...(active.toolInput ? { toolInput: active.toolInput } : {})}
+          {...(active.toolResult !== undefined
+            ? { toolResult: toCallToolResult(active.toolResult) }
+            : {})}
+          onCallTool={handleCallTool}
+          onReadResource={handleReadResource}
+          onListResources={handleListResources}
+          onMessage={handleMessage}
+          onOpenLink={handleOpenLink}
+          onSizeChanged={({ height }) => {
+            if (typeof height !== 'number' || !Number.isFinite(height)) return;
+            setFrameHeight(Math.min(900, Math.max(240, height)));
+          }}
+          onError={(error) => setRenderError(error.message)}
+        />
+      </Suspense>
+    </MCPAppRendererBoundary>
   );
 
   return (
@@ -132,31 +261,7 @@ export function DesktopMCPAppCanvas({
         {renderError ? (
           errorFallback
         ) : (
-          <MCPAppRendererBoundary fallback={errorFallback} resetKey={active.id}>
-            <Suspense
-              fallback={
-                <div className="desktop-mcp-app-loading" role="status">
-                  <Spinner /> {t('mcpApp.loading')}
-                </div>
-              }
-            >
-              <LazyAppRenderer
-                toolName={active.toolName || active.appId || 'mcp-app'}
-                sandbox={sandboxConfig}
-                {...(active.resourceHtml ? { html: active.resourceHtml } : {})}
-                {...(active.resourceUri ? { toolResourceUri: active.resourceUri } : {})}
-                {...(active.toolInput ? { toolInput: active.toolInput } : {})}
-                {...(active.toolResult !== undefined
-                  ? { toolResult: toCallToolResult(active.toolResult) }
-                  : {})}
-                onSizeChanged={({ height }) => {
-                  if (typeof height !== 'number' || !Number.isFinite(height)) return;
-                  setFrameHeight(Math.min(900, Math.max(240, height)));
-                }}
-                onError={(error) => setRenderError(error.message)}
-              />
-            </Suspense>
-          </MCPAppRendererBoundary>
+          <IsolatedMCPAppRenderer renderer={renderer} />
         )}
       </article>
     </section>

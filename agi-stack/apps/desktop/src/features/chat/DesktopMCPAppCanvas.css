@@ -78,6 +78,12 @@
   overflow: auto;
 }
 
+.desktop-mcp-app-isolated-root,
+.desktop-mcp-app-isolated-root > div {
+  min-height: inherit;
+  width: 100%;
+}
+
 .desktop-mcp-app-frame iframe {
   width: 100%;
   min-height: 400px;

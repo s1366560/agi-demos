@@ -6016,7 +6016,10 @@ export function App() {
       artifactVersions={displaySessionProjection?.artifactVersions ?? []}
       artifactCanvas={artifactCanvasState}
       mcpAppCanvas={mcpAppCanvasState}
+      mcpAppApi={api}
+      mcpAppProjectId={config.projectId}
       mcpAppSandboxProxyUrl={desktopMCPAppSandboxProxyUrl(config.apiBaseUrl)}
+      onSendMCPAppMessage={(message) => sendChatMessage(message, [])}
       artifactDeliveries={displaySessionProjection?.artifactDeliveries ?? []}
       toolInvocations={displaySessionProjection?.toolInvocations ?? []}
       currentRun={currentArtifactRun}
@@ -6391,7 +6394,10 @@ function WorkspaceReviewPanel({
   artifactVersions,
   artifactCanvas,
   mcpAppCanvas,
+  mcpAppApi,
+  mcpAppProjectId,
   mcpAppSandboxProxyUrl,
+  onSendMCPAppMessage,
   artifactDeliveries,
   toolInvocations,
   currentRun,
@@ -6438,7 +6444,10 @@ function WorkspaceReviewPanel({
   artifactVersions: DesktopArtifactVersion[];
   artifactCanvas: LiveArtifactCanvasState;
   mcpAppCanvas: MCPAppCanvasState;
+  mcpAppApi: DesktopApiClient;
+  mcpAppProjectId: string;
   mcpAppSandboxProxyUrl: string;
+  onSendMCPAppMessage: (message: string) => void;
   artifactDeliveries: DesktopArtifactDelivery[];
   toolInvocations: DesktopToolInvocation[];
   currentRun: DesktopRun | null;
@@ -6911,7 +6920,10 @@ function WorkspaceReviewPanel({
         {activeTab === 'apps' ? (
           <DesktopMCPAppCanvas
             state={mcpAppCanvas}
+            api={mcpAppApi}
+            projectId={mcpAppProjectId}
             sandboxProxyUrl={mcpAppSandboxProxyUrl}
+            onSendMessage={onSendMCPAppMessage}
             onSelect={onSelectMCPAppCanvasTab}
             onClose={onCloseMCPAppCanvasTab}
           />

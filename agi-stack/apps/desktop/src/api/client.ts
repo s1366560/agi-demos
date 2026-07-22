@@ -110,6 +110,32 @@ type RequestOptions = {
   skipAuth?: boolean;
 };
 
+export type DesktopMCPAppSummary = {
+  id: string;
+  server_name?: string | null;
+  tool_name?: string | null;
+};
+
+export type DesktopMCPAppToolCallResponse = {
+  content: unknown[];
+  is_error: boolean;
+  error_message?: string | null;
+  error_code?: string | null;
+};
+
+export type DesktopMCPAppResourceReadResponse = {
+  contents: Array<{ uri: string; mimeType: string; text: string }>;
+};
+
+export type DesktopMCPAppResourceListResponse = {
+  resources: Array<{
+    uri: string;
+    name?: string;
+    mimeType?: string;
+    description?: string;
+  }>;
+};
+
 const WORKSPACE_ROSTER_PAGE_SIZE = 500;
 const IDENTITY_CATALOG_PAGE_SIZE = 100;
 const IDENTITY_CATALOG_MAX_PAGES = 1_000;
@@ -1389,6 +1415,74 @@ export class DesktopApiClient {
   private managedSkillTenantParams(): URLSearchParams {
     const tenantId = requireValue(this.config.tenantId, 'tenant id');
     return new URLSearchParams({ tenant_id: tenantId });
+  }
+
+  async listMCPApps(projectId: string): Promise<DesktopMCPAppSummary[]> {
+    const scopedProjectId = requireValue(projectId, 'project id');
+    const params = new URLSearchParams({ project_id: scopedProjectId });
+    return this.request<DesktopMCPAppSummary[]>(`/api/v1/mcp/apps?${params.toString()}`);
+  }
+
+  async callMCPAppTool(
+    appId: string,
+    toolName: string,
+    argumentsValue: Record<string, unknown>,
+  ): Promise<DesktopMCPAppToolCallResponse> {
+    return this.request<DesktopMCPAppToolCallResponse>(
+      `/api/v1/mcp/apps/${encodeURIComponent(requireValue(appId, 'MCP App id'))}/tool-call`,
+      {
+        method: 'POST',
+        body: {
+          tool_name: requireValue(toolName, 'MCP tool name'),
+          arguments: argumentsValue,
+        },
+      },
+    );
+  }
+
+  async callMCPAppToolDirect(
+    projectId: string,
+    serverName: string,
+    toolName: string,
+    argumentsValue: Record<string, unknown>,
+  ): Promise<DesktopMCPAppToolCallResponse> {
+    return this.request<DesktopMCPAppToolCallResponse>('/api/v1/mcp/apps/proxy/tool-call', {
+      method: 'POST',
+      body: {
+        project_id: requireValue(projectId, 'project id'),
+        server_name: requireValue(serverName, 'MCP server name'),
+        tool_name: requireValue(toolName, 'MCP tool name'),
+        arguments: argumentsValue,
+      },
+    });
+  }
+
+  async readMCPAppResource(
+    projectId: string,
+    uri: string,
+    serverName?: string | null,
+  ): Promise<DesktopMCPAppResourceReadResponse> {
+    return this.request<DesktopMCPAppResourceReadResponse>('/api/v1/mcp/apps/resources/read', {
+      method: 'POST',
+      body: {
+        project_id: requireValue(projectId, 'project id'),
+        uri: requireValue(uri, 'MCP resource URI'),
+        ...(serverName?.trim() ? { server_name: serverName.trim() } : {}),
+      },
+    });
+  }
+
+  async listMCPAppResources(
+    projectId: string,
+    serverName?: string | null,
+  ): Promise<DesktopMCPAppResourceListResponse> {
+    return this.request<DesktopMCPAppResourceListResponse>('/api/v1/mcp/apps/resources/list', {
+      method: 'POST',
+      body: {
+        project_id: requireValue(projectId, 'project id'),
+        ...(serverName?.trim() ? { server_name: serverName.trim() } : {}),
+      },
+    });
   }
 
   async listManagedPlugins(signal?: AbortSignal): Promise<ManagedPlugin[]> {
