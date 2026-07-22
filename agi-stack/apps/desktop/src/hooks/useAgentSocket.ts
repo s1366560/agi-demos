@@ -82,6 +82,21 @@ export function canQueuePendingAgentRunMessage(
   return mode === 'cloud' && enabled && Boolean(credential.trim());
 }
 
+export function pendingAgentRunQueueScopeKey(
+  config: DesktopRuntimeConfig,
+  contextRevision: number | null,
+): string {
+  return [
+    config.apiBaseUrl.trim(),
+    config.apiKey.trim(),
+    config.localApiToken.trim(),
+    config.mode,
+    config.tenantId.trim(),
+    config.projectId.trim(),
+    contextRevision ?? '',
+  ].join('\u0000');
+}
+
 export function enqueuePendingAgentRunMessage(
   queue: PendingAgentMessageQueue,
   message: AgentRunMessage,
@@ -157,6 +172,7 @@ export function useAgentSocket(
   const pendingAgentMessagesRef = useRef(createPendingAgentMessageQueue());
   const pendingEventsRef = useRef<AgentWsEvent[]>([]);
   const eventsFlushCancelRef = useRef<(() => void) | null>(null);
+  const pendingAgentQueueScopeKey = pendingAgentRunQueueScopeKey(config, contextRevision);
 
   const client = useMemo(
     () => new DesktopApiClient(config),
@@ -212,15 +228,7 @@ export function useAgentSocket(
     () => () => {
       pendingAgentMessagesRef.current.clear();
     },
-    [
-      config.apiBaseUrl,
-      config.apiKey,
-      config.localApiToken,
-      config.mode,
-      config.projectId,
-      config.tenantId,
-      contextRevision,
-    ],
+    [pendingAgentQueueScopeKey],
   );
 
   useEffect(() => {

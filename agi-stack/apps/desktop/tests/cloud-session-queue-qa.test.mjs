@@ -8,8 +8,9 @@ const source = readFileSync(
 );
 
 test('cloud session QA exercises the production socket queue before opening realtime', () => {
-  assert.match(source, /useAgentSocket\(config, true, 1, 'conversation-cloud'\)/);
+  assert.match(source, /useAgentSocket\(activeConfig, true, 1, 'conversation-cloud'\)/);
   assert.match(source, /socket\.sendAgentMessage\(\{/);
+  assert.match(source, /workspaceId: 'workspace-created-for-session'/);
   assert.match(source, /QaWebSocket\.latest\?\.open\(\)/);
   assert.match(source, /messageId: 'message-cloud-1'/);
   assert.match(source, /agentId: 'definition-reviewer'/);

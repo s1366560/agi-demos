@@ -71,7 +71,8 @@ const config: DesktopRuntimeConfig = {
 function CloudSessionQueueQa() {
   const [, refresh] = useState(0);
   const [accepted, setAccepted] = useState(false);
-  const socket = useAgentSocket(config, true, 1, 'conversation-cloud');
+  const [activeConfig, setActiveConfig] = useState(config);
+  const socket = useAgentSocket(activeConfig, true, 1, 'conversation-cloud');
   const sentMessages = QaWebSocket.latest?.sent ?? [];
   const agentMessages = sentMessages.filter((message) => message.type === 'send_message');
   const latestAgentMessage = agentMessages[agentMessages.length - 1];
@@ -136,30 +137,35 @@ function CloudSessionQueueQa() {
           <button
             type="button"
             onClick={() => {
-              setAccepted(
-                socket.sendAgentMessage({
-                  conversationId: 'conversation-cloud',
-                  projectId: 'project-cloud',
-                  message: 'Prepare a structured plan',
-                  messageId: 'message-cloud-1',
-                  agentId: 'definition-reviewer',
-                  forcedSkillName: 'source-research',
-                  mentions: ['agent-research'],
-                  fileMetadata: [
-                    {
-                      filename: 'evidence.txt',
-                      sandbox_path: '/workspace/input/evidence.txt',
-                      mime_type: 'text/plain',
-                      size_bytes: 42,
-                    },
-                  ],
-                  appModelContext: {
-                    desktop_composer_context: {
-                      resources: [{ kind: 'plugin', resource_id: 'github' }],
-                    },
+              const queued = socket.sendAgentMessage({
+                conversationId: 'conversation-cloud',
+                projectId: 'project-cloud',
+                message: 'Prepare a structured plan',
+                messageId: 'message-cloud-1',
+                agentId: 'definition-reviewer',
+                forcedSkillName: 'source-research',
+                mentions: ['agent-research'],
+                fileMetadata: [
+                  {
+                    filename: 'evidence.txt',
+                    sandbox_path: '/workspace/input/evidence.txt',
+                    mime_type: 'text/plain',
+                    size_bytes: 42,
                   },
-                }),
-              );
+                ],
+                appModelContext: {
+                  desktop_composer_context: {
+                    resources: [{ kind: 'plugin', resource_id: 'github' }],
+                  },
+                },
+              });
+              setAccepted(queued);
+              if (queued) {
+                setActiveConfig((current) => ({
+                  ...current,
+                  workspaceId: 'workspace-created-for-session',
+                }));
+              }
             }}
           >
             Start cloud session

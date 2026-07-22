@@ -12,6 +12,7 @@ const {
   enqueuePendingAgentRunMessage,
   eventCursor,
   flushPendingAgentRunMessages,
+  pendingAgentRunQueueScopeKey,
   reconnectDelay,
   resetAgentSocketContextState,
   transitionAgentSocketConversationSelection,
@@ -76,6 +77,51 @@ test('failed socket flush preserves pending cloud turns for the next reconnect',
 
   assert.equal(flushPendingAgentRunMessages(queue, () => false), 0);
   assert.equal(queue.size, 2);
+});
+
+test('pending cloud turns survive workspace activation within the same project', () => {
+  const baseConfig = {
+    apiBaseUrl: 'https://cloud.memstack.example',
+    apiKey: 'cloud-session',
+    localApiToken: '',
+    tenantId: 'tenant-1',
+    projectId: 'project-1',
+    workspaceId: 'workspace-before-create',
+    mode: 'cloud',
+    workspaceRoot: '',
+  };
+
+  assert.equal(
+    pendingAgentRunQueueScopeKey(baseConfig, 7),
+    pendingAgentRunQueueScopeKey(
+      { ...baseConfig, workspaceId: 'workspace-created-for-session' },
+      7,
+    ),
+  );
+});
+
+test('pending cloud turns reset when authenticated project authority changes', () => {
+  const baseConfig = {
+    apiBaseUrl: 'https://cloud.memstack.example',
+    apiKey: 'cloud-session',
+    localApiToken: '',
+    tenantId: 'tenant-1',
+    projectId: 'project-1',
+    workspaceId: 'workspace-1',
+    mode: 'cloud',
+    workspaceRoot: '',
+  };
+  const currentKey = pendingAgentRunQueueScopeKey(baseConfig, 7);
+
+  assert.notEqual(
+    currentKey,
+    pendingAgentRunQueueScopeKey({ ...baseConfig, projectId: 'project-2' }, 7),
+  );
+  assert.notEqual(
+    currentKey,
+    pendingAgentRunQueueScopeKey({ ...baseConfig, apiKey: 'rotated-session' }, 7),
+  );
+  assert.notEqual(currentKey, pendingAgentRunQueueScopeKey(baseConfig, 8));
 });
 
 test('queued cloud turns preserve Agent, skill, mention, attachment, and composer context routing', () => {
