@@ -63,6 +63,7 @@ const terminalEventTypes = new Set([
   'subagent_announce_giveup',
   'subagent_announce_expired',
   'subagent_killed',
+  'subagent_doom_loop',
   'subagent_depth_limited',
   'subagent_spawn_rejected',
   'subagent_orphan_detected',
@@ -192,6 +193,27 @@ function groupIdentity(items: readonly AgentTimelineItem[]): SubAgentIdentity {
 type SubAgentIdentity = { id: string; name: string; route: string };
 
 function eventIdentity(item: AgentTimelineItem): SubAgentIdentity {
+  if (item.type === 'subagent_delegation') {
+    return {
+      id: eventString(item, ['to_subagent_id', 'toSubagentId']),
+      name: eventString(item, ['to_subagent_name', 'toSubagentName']),
+      route: eventString(item, ['conversation_id', 'conversationId']),
+    };
+  }
+  if (item.type === 'subagent_announce_sent') {
+    return {
+      id: eventString(item, ['agent_id', 'agentId']),
+      name: eventString(item, ['agent_name', 'agentName']),
+      route: eventString(item, ['session_id', 'sessionId']),
+    };
+  }
+  if (item.type === 'subagent_announce_received') {
+    return {
+      id: eventString(item, ['from_agent_id', 'fromAgentId']),
+      name: eventString(item, ['from_agent_name', 'fromAgentName']),
+      route: eventString(item, ['session_id', 'sessionId']),
+    };
+  }
   return {
     id: eventString(item, ['subagent_id', 'subagentId', 'run_id', 'runId']),
     name: eventString(item, ['subagent_name', 'subagentName']),
@@ -284,10 +306,15 @@ function buildSubAgentTimelineGroup(items: AgentTimelineItem[]): SubAgentTimelin
     statusMessage,
     toolCallsCount,
     phases: {
-      routed: items.some((item) => item.type === 'subagent_routed'),
+      routed: items.some(
+        (item) => item.type === 'subagent_routed' || item.type === 'subagent_delegation',
+      ),
       started: items.some((item) => startedEventTypes.has(item.type)),
       executing: items.some((item) => executingEventTypes.has(item.type)),
-      ended: items.some((item) => terminalEventTypes.has(item.type)),
+      ended: items.some(
+        (item) =>
+          terminalEventTypes.has(item.type) || item.type === 'subagent_announce_received',
+      ),
     },
   };
 }
@@ -302,7 +329,8 @@ function subAgentStatus(
     item.type === 'subagent_announce_giveup' ||
     item.type === 'subagent_announce_expired' ||
     item.type === 'subagent_spawn_rejected' ||
-    item.type === 'subagent_orphan_detected'
+    item.type === 'subagent_orphan_detected' ||
+    item.type === 'subagent_doom_loop'
   ) {
     return 'error';
   }
@@ -311,6 +339,12 @@ function subAgentStatus(
   if (item.type === 'subagent_queued') return 'queued';
   if (item.type === 'background_launched') return 'background';
   if (item.type === 'subagent_steered') return 'steered';
+  if (
+    item.type === 'subagent_announce_sent' ||
+    item.type === 'subagent_announce_received'
+  ) {
+    return 'success';
+  }
   if (
     item.type === 'subagent_completed' ||
     item.type === 'subagent_run_completed' ||

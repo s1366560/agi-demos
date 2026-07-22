@@ -498,6 +498,68 @@ const subagentTimelineItems: ConversationTimelineState['items'] = [
       success: true,
     },
   },
+  {
+    id: 'subagent-review-announce-sent',
+    type: 'subagent_announce_sent',
+    eventTimeUs: 1_784_282_048_000_000,
+    eventCounter: 8,
+    payload: {
+      agent_id: 'regression-reviewer',
+      session_id: 'session-regression-reviewer',
+      parent_agent_id: 'main-agent',
+      result_preview: 'Focused regression checks pass.',
+    },
+  },
+  {
+    id: 'subagent-review-announce-received',
+    type: 'subagent_announce_received',
+    eventTimeUs: 1_784_282_049_000_000,
+    eventCounter: 9,
+    payload: {
+      agent_id: 'main-agent',
+      session_id: 'session-regression-reviewer',
+      from_agent_id: 'regression-reviewer',
+      from_agent_name: 'Regression reviewer',
+      result_preview: 'Focused regression checks pass with complete evidence.',
+    },
+  },
+  {
+    id: 'subagent-loop-delegation',
+    type: 'subagent_delegation',
+    eventTimeUs: 1_784_282_050_000_000,
+    eventCounter: 10,
+    payload: {
+      conversation_id: 'conversation-desktop-session',
+      from_agent_id: null,
+      to_subagent_id: 'loop-investigator',
+      to_subagent_name: 'Loop investigator',
+      trigger_type: 'semantic',
+      task_description: 'Inspect repeated terminal invocations.',
+    },
+  },
+  {
+    id: 'subagent-loop-started',
+    type: 'subagent_started',
+    eventTimeUs: 1_784_282_051_000_000,
+    eventCounter: 11,
+    payload: {
+      subagent_id: 'loop-investigator',
+      subagent_name: 'Loop investigator',
+      task: 'Inspect repeated terminal invocations.',
+    },
+  },
+  {
+    id: 'subagent-loop-detected',
+    type: 'subagent_doom_loop',
+    eventTimeUs: 1_784_282_052_000_000,
+    eventCounter: 12,
+    payload: {
+      subagent_id: 'loop-investigator',
+      subagent_name: 'Loop investigator',
+      reason: 'Repeated terminal invocation detected.',
+      threshold: 3,
+    },
+  },
 ];
 
 const multiAgentCanvasTimelineItems: ConversationTimelineState['items'] = [

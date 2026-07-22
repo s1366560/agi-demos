@@ -3299,6 +3299,120 @@ test('SubAgent grouping claims a matching terminal event across interleaved main
   assert.equal(grouped.claimedItemIds.includes('main-thought-1'), false);
 });
 
+test('SubAgent delegation and doom-loop events preserve child identity and terminal failure', () => {
+  const items = [
+    {
+      id: 'subagent-delegated-doom-loop',
+      type: 'subagent_delegation',
+      eventTimeUs: 1,
+      eventCounter: 1,
+      payload: {
+        conversation_id: 'conversation-doom-loop',
+        from_agent_id: null,
+        to_subagent_id: 'reviewer-doom-loop',
+        to_subagent_name: 'Loop reviewer',
+        trigger_type: 'semantic',
+        task_description: 'Inspect the repeated tool calls',
+      },
+    },
+    {
+      id: 'subagent-started-doom-loop',
+      type: 'subagent_started',
+      eventTimeUs: 2,
+      eventCounter: 2,
+      payload: {
+        subagent_id: 'reviewer-doom-loop',
+        subagent_name: 'Loop reviewer',
+        task: 'Inspect the repeated tool calls',
+      },
+    },
+    {
+      id: 'subagent-doom-loop',
+      type: 'subagent_doom_loop',
+      eventTimeUs: 3,
+      eventCounter: 3,
+      payload: {
+        subagent_id: 'reviewer-doom-loop',
+        subagent_name: 'Loop reviewer',
+        reason: 'Repeated terminal invocation detected',
+        threshold: 3,
+      },
+    },
+  ];
+
+  const grouped = groupSubAgentTimelineItems(items);
+  assert.equal(grouped.groups.length, 1);
+  assert.deepEqual(grouped.groups[0], {
+    id: 'subagent-group:subagent-delegated-doom-loop:subagent-doom-loop',
+    startItemId: 'subagent-delegated-doom-loop',
+    itemIds: items.map((item) => item.id),
+    items,
+    mode: 'single',
+    subagentId: 'reviewer-doom-loop',
+    subagentName: 'Loop reviewer',
+    status: 'error',
+    task: 'Inspect the repeated tool calls',
+    reason: 'Repeated terminal invocation detected',
+    summary: '',
+    error: '',
+    confidence: null,
+    tokensUsed: null,
+    executionTimeMs: null,
+    progress: null,
+    statusMessage: '',
+    toolCallsCount: null,
+    phases: {
+      routed: true,
+      started: true,
+      executing: false,
+      ended: true,
+    },
+  });
+});
+
+test('SubAgent result announcements render one completed child communication lifecycle', () => {
+  const items = [
+    {
+      id: 'subagent-announce-sent',
+      type: 'subagent_announce_sent',
+      eventTimeUs: 1,
+      eventCounter: 1,
+      payload: {
+        agent_id: 'reviewer-announcement',
+        session_id: 'session-announcement',
+        parent_agent_id: 'main-agent',
+        result_preview: 'Regression suite passed.',
+      },
+    },
+    {
+      id: 'subagent-announce-received',
+      type: 'subagent_announce_received',
+      eventTimeUs: 2,
+      eventCounter: 2,
+      payload: {
+        agent_id: 'main-agent',
+        session_id: 'session-announcement',
+        from_agent_id: 'reviewer-announcement',
+        from_agent_name: 'Announcement reviewer',
+        result_preview: 'Regression suite passed with 42 checks.',
+      },
+    },
+  ];
+
+  const grouped = groupSubAgentTimelineItems(items);
+  assert.equal(grouped.groups.length, 1);
+  assert.equal(grouped.groups[0].subagentId, 'reviewer-announcement');
+  assert.equal(grouped.groups[0].subagentName, 'Announcement reviewer');
+  assert.equal(grouped.groups[0].status, 'success');
+  assert.equal(grouped.groups[0].summary, 'Regression suite passed with 42 checks.');
+  assert.deepEqual(grouped.groups[0].phases, {
+    routed: false,
+    started: false,
+    executing: false,
+    ended: true,
+  });
+});
+
 test('SubAgent grouping never combines structurally different executions', () => {
   const grouped = groupSubAgentTimelineItems([
     {
@@ -3358,6 +3472,10 @@ test('Desktop renders SubAgent groups as structured first-class timeline cards',
   assert.match(chatTimelineSource, /groupSubAgentTimelineItems/);
   assert.match(chatTimelineSource, /subagent-progress-bar/);
   assert.match(sessionSteeringQaSource, /subagent-events/);
+  assert.match(sessionSteeringQaSource, /type: 'subagent_delegation'/);
+  assert.match(sessionSteeringQaSource, /type: 'subagent_doom_loop'/);
+  assert.match(sessionSteeringQaSource, /type: 'subagent_announce_sent'/);
+  assert.match(sessionSteeringQaSource, /type: 'subagent_announce_received'/);
   assert.equal(
     i18nSource.split("'chat.subagentExecution'").length - 1,
     2,
