@@ -17,6 +17,7 @@
     "src/features/auth/loginScreenModel.ts",
     "src/features/automations/automationModel.ts",
     "src/features/chat/a2uiAction.ts",
+    "src/features/chat/agentLifecyclePresentationModel.ts",
     "src/features/chat/chatComposerModel.ts",
     "src/features/chat/chatTimelineModel.ts",
     "src/hooks/useAgentSocket.ts",

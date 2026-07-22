@@ -14,10 +14,11 @@ declare global {
 }
 
 // Visual QA fixture for the agent conversation timeline: day dividers, a
-// reasoning row, paired tool calls (complete / running / failed), markdown
-// with a highlighted code block, a streaming assistant reply, and the live
-// working indicator. Item timestamps are relative to load time so the day
-// dividers are deterministic ("yesterday" then "today").
+// reasoning row, paired tool calls (complete / running / failed), SubAgent and
+// graph lifecycle rows, markdown with a highlighted code block, a streaming
+// assistant reply, and the live working indicator. Item timestamps are
+// relative to load time so the day dividers are deterministic ("yesterday"
+// then "today").
 
 const nowMs = Date.now();
 const HOUR = 3_600_000;
@@ -167,6 +168,60 @@ const conversationItems: AgentTimelineItem[] = [
     eventTimeUs: (nowMs - 2 * HOUR) * 1000,
     eventCounter: 10,
     timestamp: nowMs - 2 * HOUR,
+  }),
+  item({
+    id: 'subagent-started-1',
+    type: 'subagent_started',
+    payload: {
+      subagent_name: 'Regression reviewer',
+      task: 'Verify the concurrent disposal fix',
+    },
+    eventTimeUs: (nowMs - 1.99 * HOUR) * 1000,
+    eventCounter: 11,
+    timestamp: nowMs - 1.99 * HOUR,
+  }),
+  item({
+    id: 'graph-run-started-1',
+    type: 'graph_run_started',
+    payload: { graph_name: 'Release validation', pattern: 'supervisor' },
+    eventTimeUs: (nowMs - 1.98 * HOUR) * 1000,
+    eventCounter: 12,
+    timestamp: nowMs - 1.98 * HOUR,
+  }),
+  item({
+    id: 'graph-handoff-1',
+    type: 'graph_handoff',
+    payload: {
+      from_label: 'Planner',
+      to_label: 'Reviewer',
+      context_summary: 'Patch ready for verification',
+    },
+    eventTimeUs: (nowMs - 1.97 * HOUR) * 1000,
+    eventCounter: 13,
+    timestamp: nowMs - 1.97 * HOUR,
+  }),
+  item({
+    id: 'graph-node-failed-1',
+    type: 'graph_node_failed',
+    payload: {
+      node_label: 'Run regression tests',
+      error_message: '1 test failed after 12.4s',
+    },
+    eventTimeUs: (nowMs - 1.96 * HOUR) * 1000,
+    eventCounter: 14,
+    timestamp: nowMs - 1.96 * HOUR,
+  }),
+  item({
+    id: 'subagent-completed-1',
+    type: 'subagent_completed',
+    payload: {
+      subagent_name: 'Patch reviewer',
+      summary: 'Public API remains unchanged',
+      success: true,
+    },
+    eventTimeUs: (nowMs - 1.95 * HOUR) * 1000,
+    eventCounter: 15,
+    timestamp: nowMs - 1.95 * HOUR,
   }),
   item({
     id: 'act-3',

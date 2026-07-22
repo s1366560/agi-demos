@@ -4,6 +4,9 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
+const { agentLifecyclePresentation } = require(
+  '/tmp/agistack-desktop-test-dist/src/features/chat/agentLifecyclePresentationModel.js',
+);
 const {
   assistantExecutionSummary,
   detectPayloadLanguage,
@@ -142,6 +145,108 @@ test('live Agent complete events preserve final content and execution summary me
   assert.match(appSource, /type === 'complete'[\s\S]*?mergeAssistantCompletionEvent\(/);
   assert.match(appSource, /objectField\(data, 'execution_summary'\)/);
   assert.match(appSource, /readTextField\(data, 'content'\)/);
+});
+
+test('subagent lifecycle events expose readable subjects, details, and protocol states', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'subagent-started-1',
+      type: 'subagent_started',
+      eventTimeUs: 1_000_000,
+      eventCounter: 1,
+      payload: {
+        subagent_name: 'Regression reviewer',
+        task: 'Verify the concurrent disposal fix',
+      },
+    }),
+    {
+      family: 'subagent',
+      state: 'running',
+      subject: 'Regression reviewer',
+      detail: 'Verify the concurrent disposal fix',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'subagent-failed-1',
+      type: 'subagent_failed',
+      eventTimeUs: 2_000_000,
+      eventCounter: 2,
+      payload: {
+        subagent_name: 'CI verifier',
+        error: 'Runner image is missing the fixture module',
+      },
+    }),
+    {
+      family: 'subagent',
+      state: 'failed',
+      subject: 'CI verifier',
+      detail: 'Runner image is missing the fixture module',
+      isError: true,
+    },
+  );
+});
+
+test('graph lifecycle events render run, node, and handoff semantics without raw JSON', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'graph-completed-1',
+      type: 'graph_run_completed',
+      eventTimeUs: 3_000_000,
+      eventCounter: 1,
+      payload: { graph_name: 'Release validation', total_steps: 6 },
+    }),
+    {
+      family: 'graphRun',
+      state: 'complete',
+      subject: 'Release validation',
+      detail: '',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'graph-node-failed-1',
+      type: 'graph_node_failed',
+      eventTimeUs: 4_000_000,
+      eventCounter: 2,
+      payload: {
+        node_label: 'Run regression tests',
+        error_message: '1 test failed after 12.4s',
+      },
+    }),
+    {
+      family: 'graphNode',
+      state: 'failed',
+      subject: 'Run regression tests',
+      detail: '1 test failed after 12.4s',
+      isError: true,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'graph-handoff-1',
+      type: 'graph_handoff',
+      eventTimeUs: 5_000_000,
+      eventCounter: 3,
+      payload: {
+        from_label: 'Planner',
+        to_label: 'Reviewer',
+        context_summary: 'Patch ready for verification',
+      },
+    }),
+    {
+      family: 'graphHandoff',
+      state: 'running',
+      subject: 'Planner → Reviewer',
+      detail: 'Patch ready for verification',
+      isError: false,
+    },
+  );
 });
 
 test('streaming thought chunks merge into one readable timeline item and then settle', () => {

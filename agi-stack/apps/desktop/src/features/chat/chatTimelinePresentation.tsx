@@ -14,6 +14,7 @@ import type {
   ToolDisplayData,
   ToolFileMetadata,
 } from '../../types';
+import { agentLifecyclePresentation } from './agentLifecyclePresentationModel';
 
 export type TimelineKind = 'user' | 'agent' | 'runtime' | 'tool' | 'artifact';
 
@@ -145,6 +146,11 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
   if (item.type.startsWith('task_')) return t('chat.task');
   if (item.type.startsWith('artifact_')) return t('chat.artifact');
   if (timelineHitlType(item)) return t('chat.humanInput');
+  const lifecycle = agentLifecyclePresentation(item);
+  if (lifecycle?.family === 'subagent') return t('chat.subagent');
+  if (lifecycle?.family === 'graphRun') return t('chat.graphRun');
+  if (lifecycle?.family === 'graphNode') return t('chat.graphNode');
+  if (lifecycle?.family === 'graphHandoff') return t('chat.graphHandoff');
   if (item.type.startsWith('subagent_')) return t('chat.subagent');
   if (item.type.startsWith('chain_')) return t('chat.chain');
   if (item.type.startsWith('agent_')) return t('chat.agentEvent');
@@ -183,6 +189,10 @@ export function timelineSummary(
   kind: TimelineKind,
   t: (key: string, values?: Record<string, string | number>) => string,
 ): string {
+  const lifecycle = agentLifecyclePresentation(item);
+  if (lifecycle) {
+    return [lifecycle.subject, lifecycle.detail].filter(Boolean).join(' · ') || item.type;
+  }
   if (item.error) return item.error;
   if (timelineHitlType(item)) return timelineHitlQuestion(item, t);
   if (kind === 'artifact') return item.filename || item.artifactId || item.type;
@@ -203,6 +213,23 @@ export function timelineSummary(
 }
 
 export function timelineStatus(item: AgentTimelineItem): TimelineStatus | null {
+  const lifecycle = agentLifecyclePresentation(item);
+  if (lifecycle) {
+    if (lifecycle.state === 'failed') {
+      return { kind: 'error', label: 'chat.status.error', localized: true };
+    }
+    if (lifecycle.state === 'complete') {
+      return { kind: 'ok', label: 'chat.status.result', localized: true };
+    }
+    if (lifecycle.state === 'attention') {
+      return { kind: 'waiting', label: 'chat.status.needsAttention', localized: true };
+    }
+    return {
+      kind: 'waiting',
+      label: lifecycle.state === 'waiting' ? 'chat.status.waiting' : 'chat.status.running',
+      localized: true,
+    };
+  }
   if (item.isError || item.error) {
     return { kind: 'error', label: 'chat.status.error', localized: true };
   }
