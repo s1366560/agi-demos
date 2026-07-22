@@ -655,6 +655,32 @@ const conversationItems: AgentTimelineItem[] = [
     timestamp: nowMs - 1.8996 * HOUR,
   }),
   item({
+    id: 'task-start-1',
+    type: 'task_start',
+    payload: {
+      task_id: 'release-task-2',
+      content: 'Verify the release evidence',
+      order_index: 1,
+      total_tasks: 4,
+    },
+    eventTimeUs: (nowMs - 1.8995 * HOUR) * 1000,
+    eventCounter: 47,
+    timestamp: nowMs - 1.8995 * HOUR,
+  }),
+  item({
+    id: 'task-complete-1',
+    type: 'task_complete',
+    payload: {
+      task_id: 'release-task-3',
+      status: 'failed',
+      order_index: 2,
+      total_tasks: 4,
+    },
+    eventTimeUs: (nowMs - 1.8994 * HOUR) * 1000,
+    eventCounter: 48,
+    timestamp: nowMs - 1.8994 * HOUR,
+  }),
+  item({
     id: 'act-3',
     type: 'act',
     toolName: 'shell_command',

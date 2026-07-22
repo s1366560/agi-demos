@@ -976,6 +976,95 @@ test('memory events expose authoritative recall and capture counts', () => {
   );
 });
 
+test('task timeline markers expose content, progress, and terminal status', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'task-start-1',
+      type: 'task_start',
+      eventTimeUs: 38_000_000,
+      eventCounter: 1,
+      payload: {
+        task_id: 'task-2',
+        content: 'Verify the release evidence',
+        order_index: 1,
+        total_tasks: 4,
+      },
+    }),
+    {
+      family: 'task',
+      state: 'running',
+      subject: 'Verify the release evidence',
+      detail: '',
+      isError: false,
+      progress: { unit: 'tasks', current: 2, total: 4 },
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'task-complete-1',
+      type: 'task_complete',
+      eventTimeUs: 39_000_000,
+      eventCounter: 2,
+      taskId: 'task-2',
+      status: 'completed',
+      orderIndex: 1,
+      totalTasks: 4,
+    }),
+    {
+      family: 'task',
+      state: 'complete',
+      subject: '',
+      detail: '',
+      isError: false,
+      progress: { unit: 'tasks', current: 2, total: 4 },
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'task-complete-failed-1',
+      type: 'task_complete',
+      eventTimeUs: 40_000_000,
+      eventCounter: 3,
+      payload: {
+        task_id: 'task-3',
+        status: 'failed',
+        order_index: 2,
+        total_tasks: 4,
+      },
+    }),
+    {
+      family: 'task',
+      state: 'failed',
+      subject: '',
+      detail: '',
+      isError: true,
+      progress: { unit: 'tasks', current: 3, total: 4 },
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'task-complete-cancelled-1',
+      type: 'task_complete',
+      eventTimeUs: 41_000_000,
+      eventCounter: 4,
+      status: 'cancelled',
+      orderIndex: 3,
+      totalTasks: 4,
+    }),
+    {
+      family: 'task',
+      state: 'attention',
+      subject: '',
+      detail: '',
+      isError: false,
+      progress: { unit: 'tasks', current: 4, total: 4 },
+    },
+  );
+});
+
 test('streaming thought chunks merge into one readable timeline item and then settle', () => {
   let items = mergeThoughtStreamChunk([], {
     kind: 'start',

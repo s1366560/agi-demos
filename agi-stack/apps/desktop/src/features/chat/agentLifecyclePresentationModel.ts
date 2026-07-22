@@ -17,6 +17,7 @@ export type AgentLifecycleFamily =
   | 'context'
   | 'mcpApp'
   | 'memory'
+  | 'task'
   | 'graphRun'
   | 'graphNode'
   | 'graphHandoff';
@@ -270,6 +271,8 @@ const lifecycleEventDefinitions: Record<
   mcp_app_result: { family: 'mcpApp', state: 'complete' },
   memory_recalled: { family: 'memory', state: 'complete' },
   memory_captured: { family: 'memory', state: 'complete' },
+  task_start: { family: 'task', state: 'running' },
+  task_complete: { family: 'task', state: 'complete' },
   graph_run_started: {
     family: 'graphRun',
     state: 'running',
@@ -369,6 +372,11 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
   if (family === 'memory') {
     return item.type === 'memory_captured'
       ? timelineEventStringArray(item, ['categories']).join(', ')
+      : '';
+  }
+  if (family === 'task') {
+    return item.type === 'task_start'
+      ? timelineEventString(item, ['content']) ?? ''
       : '';
   }
   if (family === 'skill') {
@@ -562,6 +570,14 @@ function lifecycleProgress(
       explicitCount ??
       (item.type === 'memory_recalled' && recalledCount > 0 ? recalledCount : null);
     return total === null ? undefined : { unit: 'memories', total };
+  }
+  if (family === 'task') {
+    const total = timelineEventNumber(item, ['total_tasks', 'totalTasks']);
+    const orderIndex = timelineEventNumber(item, ['order_index', 'orderIndex']);
+    if (total === null) return undefined;
+    return orderIndex === null
+      ? { unit: 'tasks', total }
+      : { unit: 'tasks', current: orderIndex + 1, total };
   }
   if (family === 'skill') {
     if (item.type === 'skill_matched') {

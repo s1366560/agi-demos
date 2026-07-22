@@ -143,6 +143,8 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
   if (item.type === 'act') return t('chat.toolCall');
   if (item.type === 'observe') return t('chat.toolResult');
   if (item.type === 'work_plan') return t('chat.workPlan');
+  if (item.type === 'task_start') return t('chat.taskStarted');
+  if (item.type === 'task_complete') return t('chat.taskCompleted');
   if (item.type.startsWith('task_')) return t('chat.task');
   if (item.type.startsWith('artifact_')) return t('chat.artifact');
   if (timelineHitlType(item)) return t('chat.humanInput');

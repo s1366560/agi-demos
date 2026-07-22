@@ -98,6 +98,8 @@ test('chat copy and diagnostics are localized in both supported locales', () => 
     'chat.mcpAppResult',
     'chat.memoryRecalled',
     'chat.memoryCaptured',
+    'chat.taskStarted',
+    'chat.taskCompleted',
     'chat.memoriesCount',
     'chat.tokensCount',
     'chat.tokensProgress',
