@@ -1,7 +1,9 @@
 import type {
+  ComposerContextItem,
   CreateTaskSessionRequest,
   DesktopRuntimeConfig,
   RuntimeNodeState,
+  WorkspaceAgentPolicySelection,
   WorkspaceAuthorityCollection,
   WorkspaceSummary,
 } from '../../types';
@@ -230,6 +232,30 @@ export function buildLocalTaskSessionRequest(
       capability_mode: definition.kind === 'programming' ? 'code' : 'work',
     },
     initial_message: { content: objective },
+  };
+}
+
+export function buildRuntimeTaskSessionRequest(
+  mode: DesktopRuntimeConfig['mode'],
+  definition: NewTaskDefinition,
+  workspaceSelection: string,
+  idempotencyKey: string,
+  contextItems: ComposerContextItem[],
+  workspacePolicy?: WorkspaceAgentPolicySelection,
+): CreateTaskSessionRequest {
+  const request = buildLocalTaskSessionRequest(
+    definition,
+    workspaceSelection,
+    idempotencyKey,
+  );
+  if (mode === 'cloud') return request;
+  return {
+    ...request,
+    initial_message: {
+      ...request.initial_message,
+      context_items: contextItems,
+    },
+    ...(workspacePolicy ? { workspace_policy: workspacePolicy } : {}),
   };
 }
 

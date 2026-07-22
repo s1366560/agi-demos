@@ -224,7 +224,7 @@ import {
 } from './features/task/newTaskPlanModel';
 import {
   browserTaskSessionCreationStorage,
-  buildLocalTaskSessionRequest,
+  buildRuntimeTaskSessionRequest,
   clearTaskSessionCreationAttempt,
   readTaskSessionCreationAttempt,
   resolveNewTaskWorkspaceAuthority,
@@ -4279,15 +4279,15 @@ export function App() {
     setNewThreadError(null);
     try {
       const client = new DesktopApiClient(config);
-      const request = buildLocalTaskSessionRequest(definition, workspaceId, attempt.idempotencyKey);
-      const result = await client.createTaskSession({
-        ...request,
-        initial_message: {
-          ...request.initial_message,
-          context_items: input.contextItems,
-        },
-        ...(policySelection ? { workspace_policy: policySelection } : {}),
-      });
+      const request = buildRuntimeTaskSessionRequest(
+        config.mode,
+        definition,
+        workspaceId,
+        attempt.idempotencyKey,
+        input.contextItems,
+        policySelection,
+      );
+      const result = await client.createTaskSession(request);
       const session: NewTaskSession = {
         workspace: result.workspace,
         conversation: result.conversation,

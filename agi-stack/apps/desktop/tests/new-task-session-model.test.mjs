@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 const {
   browserTaskSessionCreationStorage,
   buildLocalTaskSessionRequest,
+  buildRuntimeTaskSessionRequest,
   canUseNewTaskWorkspaceSelection,
   clearTaskSessionCreationAttempt,
   newTaskWorkspaceLabel,
@@ -272,6 +273,73 @@ test('local task-session request uses the exact existing workspace union', () =>
     title: 'Research provider UX',
     capability_mode: 'work',
   });
+});
+
+test('runtime task-session requests keep local extensions out of the cloud contract', () => {
+  const definition = {
+    title: 'Review cloud session startup',
+    objective: 'Create a cloud-compatible planning session',
+    kind: 'general',
+    workspaceRoot: '',
+    contextSources: ['project_memory'],
+  };
+  const contextItems = [
+    {
+      kind: 'plugin',
+      resource_id: 'github',
+      label: 'GitHub',
+    },
+  ];
+  const workspacePolicy = {
+    expected_revision: 7,
+    route: { provider_id: 'provider-1', model_id: 'model-1' },
+    reasoning_effort: 'high',
+    permission_mode: 'workspace_write',
+  };
+
+  assert.deepEqual(
+    buildRuntimeTaskSessionRequest(
+      'cloud',
+      definition,
+      'workspace-a',
+      'task-session-cloud',
+      contextItems,
+      workspacePolicy,
+    ),
+    {
+      idempotency_key: 'task-session-cloud',
+      workspace: { kind: 'existing', workspace_id: 'workspace-a' },
+      conversation: {
+        title: 'Review cloud session startup',
+        capability_mode: 'work',
+      },
+      initial_message: { content: 'Create a cloud-compatible planning session' },
+    },
+  );
+
+  assert.deepEqual(
+    buildRuntimeTaskSessionRequest(
+      'local',
+      definition,
+      'workspace-a',
+      'task-session-local',
+      contextItems,
+      workspacePolicy,
+    ),
+    {
+      idempotency_key: 'task-session-local',
+      workspace: { kind: 'existing', workspace_id: 'workspace-a' },
+      conversation: {
+        title: 'Review cloud session startup',
+        capability_mode: 'work',
+      },
+      initial_message: {
+        content: 'Create a cloud-compatible planning session',
+        context_items: contextItems,
+      },
+      workspace_policy: workspacePolicy,
+    },
+  );
 });
 
 test('planning label prefers the atomically persisted workspace before catalog refresh', () => {
