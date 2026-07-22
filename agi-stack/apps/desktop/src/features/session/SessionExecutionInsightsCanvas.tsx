@@ -222,24 +222,50 @@ function InsightEvidence({ entry }: { entry: SessionExecutionInsightEntry }) {
 
       {entry.toolset ? (
         <div className="session-insights-toolset-evidence">
-          <dl className="session-insights-facts">
-            <InsightFact label={t('session.insights.source')} value={entry.toolset.source} />
-            <InsightFact label={t('session.insights.action')} value={entry.toolset.action} />
-            <InsightFact label={t('session.insights.plugin')} value={entry.toolset.pluginName} />
-            <InsightFact
-              label={t('session.insights.refreshStatus')}
-              value={entry.toolset.refreshStatus}
-            />
-            <InsightFact
-              label={t('session.insights.refreshedTools')}
-              value={entry.toolset.refreshedToolCount}
-            />
-          </dl>
-          <EvidenceCopy
-            label={t('session.insights.mutationFingerprint')}
-            value={entry.toolset.mutationFingerprint}
-            code
-          />
+          {entry.toolset.updateKind === 'tools_updated' ? (
+            <>
+              <dl className="session-insights-facts">
+                <InsightFact
+                  label={t('session.insights.source')}
+                  value={entry.toolset.serverName}
+                />
+                <InsightFact
+                  label={t('session.insights.refreshStatus')}
+                  value={
+                    entry.toolset.requiresRefresh
+                      ? t('session.runtime.enabled')
+                      : t('session.runtime.disabled')
+                  }
+                />
+              </dl>
+              <EvidenceCopy
+                label={t('session.insights.refreshedTools')}
+                value={entry.toolset.toolNames.join(', ')}
+                code
+              />
+            </>
+          ) : (
+            <>
+              <dl className="session-insights-facts">
+                <InsightFact label={t('session.insights.source')} value={entry.toolset.source} />
+                <InsightFact label={t('session.insights.action')} value={entry.toolset.action} />
+                <InsightFact label={t('session.insights.plugin')} value={entry.toolset.pluginName} />
+                <InsightFact
+                  label={t('session.insights.refreshStatus')}
+                  value={entry.toolset.refreshStatus}
+                />
+                <InsightFact
+                  label={t('session.insights.refreshedTools')}
+                  value={entry.toolset.refreshedToolCount}
+                />
+              </dl>
+              <EvidenceCopy
+                label={t('session.insights.mutationFingerprint')}
+                value={entry.toolset.mutationFingerprint}
+                code
+              />
+            </>
+          )}
         </div>
       ) : null}
 
@@ -331,7 +357,13 @@ function stageHeadline(
   if (entry.policy) {
     return t('session.insights.filteredTools', { count: entry.policy.removedTotal });
   }
-  return entry.toolset?.pluginName ?? entry.toolset?.action ?? entry.toolset?.source ?? '';
+  return (
+    entry.toolset?.serverName ??
+    entry.toolset?.pluginName ??
+    entry.toolset?.action ??
+    entry.toolset?.source ??
+    ''
+  );
 }
 
 function formatInsightTime(eventTimeUs: number): string {

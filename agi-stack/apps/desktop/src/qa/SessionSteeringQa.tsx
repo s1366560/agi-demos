@@ -817,6 +817,18 @@ const executionInsightsCanvasTimelineItems: ConversationTimelineState['items'] =
       mutation_fingerprint: 'sha256:release-verification',
     },
   },
+  {
+    id: 'insights-release-tools-updated',
+    type: 'tools_updated',
+    eventTimeUs: 1_784_282_062_000_000,
+    eventCounter: 21,
+    payload: {
+      project_id: 'project-release',
+      server_name: 'release-tools',
+      tool_names: ['mcp__release__verify', 'mcp__release__publish'],
+      requires_refresh: true,
+    },
+  },
 ];
 
 const contextWindowCanvasTimelineItems: ConversationTimelineState['items'] = [

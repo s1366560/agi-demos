@@ -39,12 +39,16 @@ export type SessionExecutionInsightEntry = {
     budgetExceededStages: string[];
   } | null;
   toolset: {
-    source: string;
+    updateKind: 'toolset_changed' | 'tools_updated';
+    source: string | null;
     action: string | null;
     pluginName: string | null;
     refreshStatus: string | null;
     refreshedToolCount: number | null;
     mutationFingerprint: string | null;
+    serverName: string | null;
+    toolNames: string[];
+    requiresRefresh: boolean | null;
   } | null;
 };
 
@@ -81,6 +85,7 @@ const insightEventTypes = new Set([
   'selection_trace',
   'policy_filtered',
   'toolset_changed',
+  'tools_updated',
 ]);
 
 const toolsetRefreshStatuses = new Set([
@@ -234,6 +239,32 @@ function readInsightEntry(item: AgentTimelineItem): SessionExecutionInsightEntry
     };
   }
 
+  if (type === 'tools_updated') {
+    const serverName = fieldString(item, 'server_name', 'serverName');
+    const toolNames = fieldStringList(item, 'tool_names', 'toolNames');
+    const requiresRefresh = fieldBoolean(item, 'requires_refresh', 'requiresRefresh');
+    if (!serverName || !toolNames || requiresRefresh === null) return null;
+    return {
+      ...base,
+      stage: 'toolset',
+      routing: null,
+      selection: null,
+      policy: null,
+      toolset: {
+        updateKind: 'tools_updated',
+        source: null,
+        action: null,
+        pluginName: null,
+        refreshStatus: null,
+        refreshedToolCount: null,
+        mutationFingerprint: null,
+        serverName,
+        toolNames,
+        requiresRefresh,
+      },
+    };
+  }
+
   const source = fieldString(item, 'source');
   const refreshStatus = fieldString(item, 'refresh_status', 'refreshStatus');
   if (!source || (refreshStatus && !toolsetRefreshStatuses.has(refreshStatus))) return null;
@@ -244,6 +275,7 @@ function readInsightEntry(item: AgentTimelineItem): SessionExecutionInsightEntry
     selection: null,
     policy: null,
     toolset: {
+      updateKind: 'toolset_changed',
       source,
       action: fieldString(item, 'action'),
       pluginName: fieldString(item, 'plugin_name', 'pluginName'),
@@ -258,6 +290,9 @@ function readInsightEntry(item: AgentTimelineItem): SessionExecutionInsightEntry
         'mutation_fingerprint',
         'mutationFingerprint',
       ),
+      serverName: fieldString(item, 'server_name', 'serverName'),
+      toolNames: fieldStringList(item, 'tool_names', 'toolNames') ?? [],
+      requiresRefresh: null,
     },
   };
 }
@@ -327,6 +362,11 @@ function fieldString(item: AgentTimelineItem, ...keys: string[]): string | null 
 
 function fieldNonNegativeNumber(item: AgentTimelineItem, ...keys: string[]): number | null {
   return nonNegativeNumberValue(fieldValue(item, ...keys));
+}
+
+function fieldBoolean(item: AgentTimelineItem, ...keys: string[]): boolean | null {
+  const value = fieldValue(item, ...keys);
+  return typeof value === 'boolean' ? value : null;
 }
 
 function fieldStringList(item: AgentTimelineItem, ...keys: string[]): string[] | null {

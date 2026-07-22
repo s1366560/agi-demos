@@ -139,12 +139,16 @@ test('builds one structured execution trace from routing, selection, policy, and
   ]);
   assert.equal(model.activeTrace?.entries[2].policy?.removedTotal, 3);
   assert.deepEqual(model.activeTrace?.entries[3].toolset, {
+    updateKind: 'toolset_changed',
     source: 'plugin_manager',
     action: 'install',
     pluginName: 'github',
     refreshStatus: 'success',
     refreshedToolCount: 3,
     mutationFingerprint: 'sha256:release',
+    serverName: null,
+    toolNames: [],
+    requiresRefresh: null,
   });
 });
 
@@ -178,6 +182,45 @@ test('selects the latest trace and keeps identity-less diagnostics isolated', ()
     'trace:trace-old',
   ]);
   assert.equal(model.traces[1].entries[0].toolset?.refreshStatus, 'deferred');
+});
+
+test('projects tools_updated as structured MCP registry evidence', () => {
+  const model = buildSessionExecutionInsights([
+    event(
+      'registry-update',
+      'tools_updated',
+      {
+        project_id: 'project-release',
+        server_name: 'release-tools',
+        tool_names: ['mcp__release__verify', 'mcp__release__publish'],
+        requires_refresh: true,
+      },
+      1
+    ),
+  ]);
+
+  assert.equal(model.traces.length, 1);
+  assert.deepEqual(model.summary, {
+    traces: 1,
+    entries: 1,
+    routing: 0,
+    selection: 0,
+    policy: 0,
+    toolset: 1,
+    warnings: 0,
+  });
+  assert.deepEqual(model.activeTrace?.entries[0].toolset, {
+    updateKind: 'tools_updated',
+    source: null,
+    action: null,
+    pluginName: null,
+    refreshStatus: null,
+    refreshedToolCount: null,
+    mutationFingerprint: null,
+    serverName: 'release-tools',
+    toolNames: ['mcp__release__verify', 'mcp__release__publish'],
+    requiresRefresh: true,
+  });
 });
 
 test('fails closed for malformed, duplicate, and unrelated diagnostics', () => {
@@ -219,7 +262,17 @@ test('fails closed for malformed, duplicate, and unrelated diagnostics', () => {
       { trace_id: 'trace-valid', source: 'plugin_manager', refresh_status: 'invented' },
       6
     ),
-    event('unrelated', 'skill_matched', { trace_id: 'trace-valid' }, 7),
+    event(
+      'bad-registry-update',
+      'tools_updated',
+      {
+        server_name: 'release-tools',
+        tool_names: ['mcp__release__verify'],
+        requires_refresh: 'yes',
+      },
+      7
+    ),
+    event('unrelated', 'skill_matched', { trace_id: 'trace-valid' }, 8),
   ]);
 
   assert.equal(model.traces.length, 1);
@@ -232,6 +285,7 @@ test('recognizes only the exact execution insight protocol', () => {
     'selection_trace',
     'policy_filtered',
     'toolset_changed',
+    'tools_updated',
   ]) {
     assert.equal(isSessionExecutionInsightEvent({ type }), true);
   }
@@ -254,5 +308,8 @@ test('Desktop exposes a dynamic Insights canvas with selectable diagnostic evide
   assert.match(canvasSource, /session-execution-insights-canvas/);
   assert.match(canvasSource, /aria-pressed=\{selected\}/);
   assert.match(canvasSource, /selection\.stages\.map/);
+  assert.match(canvasSource, /entry\.toolset\.toolNames\.join/);
+  assert.match(canvasSource, /entry\.toolset\.requiresRefresh/);
   assert.match(qaSource, /execution-insights-canvas/);
+  assert.match(qaSource, /insights-release-tools-updated/);
 });
