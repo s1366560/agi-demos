@@ -1,4 +1,5 @@
 import type { AgentTimelineItem } from '../../types';
+import { applyHitlResponseStreamEvent } from './hitlResponseEventModel';
 
 export type A2UIActionOption = {
   actionName: string;
@@ -23,20 +24,7 @@ export function markA2UIActionAnswered(
   existing: AgentTimelineItem[],
   event: unknown,
 ): AgentTimelineItem[] {
-  const envelope = asRecord(event);
-  const eventType = stringValue(envelope?.type ?? envelope?.event_type);
-  if (eventType !== 'a2ui_action_answered') return existing;
-  const data = asRecord(envelope?.data) ?? asRecord(envelope?.payload) ?? envelope;
-  const requestId = stringValue(data?.request_id ?? data?.requestId);
-  if (!requestId) return existing;
-  return existing.map((item) => {
-    if (item.type !== 'a2ui_action_asked') return item;
-    const payload = asRecord(item.payload) ?? item;
-    const itemRequestId = stringValue(
-      item.requestId ?? item.request_id ?? payload.request_id ?? payload.requestId,
-    );
-    return itemRequestId === requestId ? { ...item, answered: true } : item;
-  });
+  return applyHitlResponseStreamEvent(existing, event).items;
 }
 
 export function resolveA2UIActionView(

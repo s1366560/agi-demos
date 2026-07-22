@@ -65,6 +65,7 @@ const testFiles = [
   'cloud-session-queue-qa.test.mjs',
   'desktop-shell-fidelity.test.mjs',
   'desktop-a11y-i18n.test.mjs',
+  'hitl-response-events.test.mjs',
   'login-screen-fidelity.test.mjs',
   'login-screen-model.test.mjs',
   'macos-dev-signing.test.mjs',

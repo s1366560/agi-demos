@@ -1,5 +1,5 @@
 import '@radix-ui/themes/styles.css';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Theme } from '@radix-ui/themes';
 import {
@@ -14,6 +14,7 @@ import {
 
 import { ChatPanel } from '../features/chat/ChatPanel';
 import type { ComposerCatalogClient } from '../features/chat/ComposerPlusMenu';
+import { applyHitlResponseStreamEvent } from '../features/chat/hitlResponseEventModel';
 import { SessionChangesCanvas } from '../features/session/SessionChangesCanvas';
 import { toggleRunInputReference } from '../features/session/sessionChangesModel';
 import { I18nProvider } from '../i18n';
@@ -446,6 +447,78 @@ const agentDefinitionTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
+const hitlResponseTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'clarification-cache-strategy',
+    type: 'clarification_asked',
+    eventTimeUs: 1_784_282_062_000_000,
+    eventCounter: 22,
+    requestId: 'clarification-cache-strategy',
+    question: 'Which cache should protect the shared session state?',
+    options: ['Redis', 'In-memory'],
+  },
+  {
+    id: 'decision-release-window',
+    type: 'decision_asked',
+    eventTimeUs: 1_784_282_063_000_000,
+    eventCounter: 23,
+    requestId: 'decision-release-window',
+    question: 'Should the verified patch ship in this release window?',
+    options: ['Ship', 'Hold'],
+  },
+  {
+    id: 'env-deployment-token',
+    type: 'env_var_requested',
+    eventTimeUs: 1_784_282_064_000_000,
+    eventCounter: 24,
+    requestId: 'env-deployment-token',
+    question: 'Provide the deployment credential.',
+    fields: [{ name: 'DEPLOY_TOKEN', label: 'Deployment token', required: true }],
+  },
+  {
+    id: 'permission-release-command',
+    type: 'permission_asked',
+    eventTimeUs: 1_784_282_065_000_000,
+    eventCounter: 25,
+    requestId: 'permission-release-command',
+    question: 'Allow the release verification command?',
+    action: 'execute',
+    resource: 'terminal',
+    riskLevel: 'medium',
+  },
+  {
+    id: 'a2ui-approve-release',
+    type: 'a2ui_action_asked',
+    eventTimeUs: 1_784_282_066_000_000,
+    eventCounter: 26,
+    requestId: 'a2ui-approve-release',
+    question: 'Choose the release action.',
+  },
+];
+
+const hitlResponseEvents = [
+  {
+    type: 'clarification_answered',
+    data: { request_id: 'clarification-cache-strategy', answer: 'Redis' },
+  },
+  {
+    type: 'decision_answered',
+    data: { request_id: 'decision-release-window', decision: 'Ship' },
+  },
+  {
+    type: 'env_var_provided',
+    data: { request_id: 'env-deployment-token', saved_variables: ['DEPLOY_TOKEN'] },
+  },
+  {
+    type: 'permission_replied',
+    data: { request_id: 'permission-release-command', granted: true },
+  },
+  {
+    type: 'a2ui_action_answered',
+    data: { request_id: 'a2ui-approve-release', action_name: 'approve_release' },
+  },
+];
+
 function SessionSteeringQa() {
   const searchParams = new URLSearchParams(window.location.search);
   const historyMode = searchParams.get('history');
@@ -455,6 +528,7 @@ function SessionSteeringQa() {
   const doomLoopEventsMode = searchParams.get('doom-loop-events') === '1';
   const terminalEventsMode = searchParams.get('terminal-events') === '1';
   const agentDefinitionEventsMode = searchParams.get('agent-definition-events') === '1';
+  const hitlResponseEventsMode = searchParams.get('hitl-response-events') === '1';
   const [delivery, setDelivery] = useState<RunInputDelivery>('steer_now');
   const [references, setReferences] = useState<CodeRangeReference[]>([]);
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([queuedInput]);
@@ -477,6 +551,8 @@ function SessionSteeringQa() {
                   ? [...timelineState.items, ...conversationTerminalTimelineItems]
                   : agentDefinitionEventsMode
                     ? [...timelineState.items, ...agentDefinitionTimelineItems]
+                    : hitlResponseEventsMode
+                      ? [...timelineState.items, ...hitlResponseTimelineItems]
                     : timelineState.items;
     return {
       ...timelineState,
@@ -493,6 +569,20 @@ function SessionSteeringQa() {
       },
     };
   });
+
+  useEffect(() => {
+    if (!hitlResponseEventsMode) return;
+    const timer = window.setTimeout(() => {
+      setTimeline((current) => ({
+        ...current,
+        items: hitlResponseEvents.reduce(
+          (items, event) => applyHitlResponseStreamEvent(items, event).items,
+          current.items,
+        ),
+      }));
+    }, 1800);
+    return () => window.clearTimeout(timer);
+  }, [hitlResponseEventsMode]);
 
   const loadEarlierHistory = () => {
     setTimeline((current) => ({ ...current, loadingEarlier: true, error: null }));
@@ -599,7 +689,8 @@ function SessionSteeringQa() {
                 suggestionsMode ||
                 runtimeEventsMode ||
                 httpServiceEventsMode ||
-                doomLoopEventsMode
+                doomLoopEventsMode ||
+                hitlResponseEventsMode
                   ? 'recorded'
                   : 'live'
               }

@@ -46,7 +46,7 @@ test('raw task and error payloads stay collapsed until a person opens them', () 
   )?.[0];
 
   assert.ok(importancePolicy, 'timeline importance policy must remain explicit');
-  assert.match(importancePolicy, /timelineHitlType\(item\) && !item\.answered/);
+  assert.match(importancePolicy, /timelineHitlType\(item\)/);
   assert.match(importancePolicy, /item\.type === 'work_plan'/);
   assert.doesNotMatch(importancePolicy, /item\.isError|item\.error/);
   assert.doesNotMatch(importancePolicy, /startsWith\('task_'\)|artifact_error/);
@@ -102,6 +102,16 @@ test('Agent definition mutations stay visible without expanding management paylo
   assert.ok(expansionPolicy, 'timeline expansion policy must remain explicit');
   assert.match(importancePolicy, /agent_definition_/);
   assert.match(expansionPolicy, /agent_definition_/);
+});
+
+test('answered HITL requests remain visible as resolved narrative cards', () => {
+  const importancePolicy = chatSource.match(
+    /function isImportantTimelineItem\(item: AgentTimelineItem\): boolean \{[\s\S]*?\n\}/,
+  )?.[0];
+
+  assert.ok(importancePolicy, 'timeline importance policy must remain explicit');
+  assert.match(importancePolicy, /if \(timelineHitlType\(item\)\) return true/);
+  assert.doesNotMatch(importancePolicy, /timelineHitlType\(item\) && !item\.answered/);
 });
 
 test('narrow session timelines preserve lifecycle status labels', () => {

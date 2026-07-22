@@ -4300,6 +4300,29 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   line-height: 15px;
 }
 
+.timeline-hitl-response {
+  display: grid;
+  gap: 3px;
+  padding: 7px 8px;
+  border: 1px solid rgba(76, 221, 168, 0.2);
+  border-radius: 7px;
+  background: rgba(76, 221, 168, 0.06);
+}
+
+.timeline-hitl-response span {
+  color: var(--desktop-faint);
+  font-size: 10px;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.timeline-hitl-response strong {
+  overflow-wrap: anywhere;
+  color: var(--desktop-text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .timeline-details pre {
   max-width: 100%;
   margin: 0;

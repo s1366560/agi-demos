@@ -82,7 +82,6 @@ import {
   type AgentTaskSignalStatus,
   type ChatWorkflowTarget,
 } from './features/chat/ChatPanel';
-import { markA2UIActionAnswered } from './features/chat/a2uiAction';
 import {
   composerAgentExecutionContext,
   workspaceMessageRequiresDefaultAgentLaunch,
@@ -94,6 +93,7 @@ import {
   mergeThoughtStreamChunk,
   mergeToolStreamItem,
 } from './features/chat/chatTimelineModel';
+import { applyHitlResponseStreamEvent } from './features/chat/hitlResponseEventModel';
 import { SessionEvidenceCanvas } from './features/session/SessionEvidenceCanvas';
 import { SessionChangesCanvas } from './features/session/SessionChangesCanvas';
 import { SessionInvocationActivity } from './features/session/SessionInvocationLedger';
@@ -891,8 +891,9 @@ function mergeLiveTimelineEvent(
       payload: data,
     });
   }
-  const timeline =
-    type === 'a2ui_action_answered' ? markA2UIActionAnswered(existing, event) : existing;
+  const hitlResponse = applyHitlResponseStreamEvent(existing, event);
+  if (hitlResponse.handled) return hitlResponse.items;
+  const timeline = existing;
   const item = timelineItemFromSocketEvent(event);
   if (
     item &&

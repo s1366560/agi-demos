@@ -13,6 +13,7 @@ import {
   validateApprovalRequest,
 } from '../session/sessionDecisionModel';
 import type { A2UIActionView } from './a2uiAction';
+import { hitlResponsePresentation } from './hitlResponseEventModel';
 import {
   booleanPayloadField,
   timelineHitlFields,
@@ -50,6 +51,7 @@ export function HitlResponseCard({
     item.allowCustom ?? booleanPayloadField(item, 'allow_custom') ?? options.length === 0;
   const question = timelineHitlQuestion(item, t);
   const approvalValidation = approvalRequest ? validateApprovalRequest(approvalRequest) : null;
+  const responsePresentation = hitlResponsePresentation(item, hitlType);
 
   const submit = async (responseData: Record<string, unknown>) => {
     if (!requestId || answered || busy || authorityDisabled) return;
@@ -93,6 +95,17 @@ export function HitlResponseCard({
         <span>{t(answered ? 'chat.status.answered' : 'chat.status.waitingForInput')}</span>
         {requestId ? <span>{requestId}</span> : <span>{t('chat.missingRequestId')}</span>}
       </div>
+
+      {responsePresentation ? (
+        <div className="timeline-hitl-response" role="status">
+          <span>{t(responsePresentation.labelKey)}</span>
+          <strong>
+            {responsePresentation.valueKey
+              ? t(responsePresentation.valueKey)
+              : responsePresentation.value}
+          </strong>
+        </div>
+      ) : null}
 
       {authorityDisabled ? (
         <Text size="1" color="amber">

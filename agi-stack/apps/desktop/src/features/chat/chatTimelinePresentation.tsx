@@ -233,7 +233,7 @@ export function timelineIcon(kind: TimelineKind, item: AgentTimelineItem): React
 export function isImportantTimelineItem(item: AgentTimelineItem): boolean {
   const kind = timelineKind(item);
   if (kind === 'user' || kind === 'agent') return true;
-  if (timelineHitlType(item) && !item.answered) return true;
+  if (timelineHitlType(item)) return true;
   if (item.type === 'work_plan') return true;
   if (item.type === 'doom_loop_detected') return true;
   if (item.type === 'agent_goal_completed' || item.type === 'agent_conversation_finished') {
