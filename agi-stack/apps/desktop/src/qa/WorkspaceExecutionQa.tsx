@@ -1,10 +1,14 @@
 import '@radix-ui/themes/styles.css';
 import { Theme } from '@radix-ui/themes';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
 import { DesktopSidebar } from '../features/navigation/DesktopSidebar';
 import { WorkspaceOverview } from '../features/workspace/WorkspaceOverview';
+import {
+  applyWorkspaceActivityStreamEvent,
+  type WorkspaceLiveActivity,
+} from '../features/workspace/workspaceActivityEventModel';
 import { I18nProvider } from '../i18n';
 import type {
   AgentConversation,
@@ -23,6 +27,34 @@ declare global {
 }
 
 const now = '2026-07-13T10:42:00Z';
+
+const workspaceActivityEvents = [
+  {
+    type: 'blackboard_post_created',
+    data: {
+      surface_boundary: 'owned',
+      authority_class: 'authoritative',
+      post: {
+        id: 'post-release-readiness',
+        workspace_id: 'desktop-client',
+        title: 'Release readiness',
+        content: 'Cloud conversation and event rendering verified.',
+      },
+    },
+  },
+  {
+    type: 'topology_updated',
+    data: {
+      workspace_id: 'desktop-client',
+      operation: 'node_created',
+      node: {
+        id: 'node-release-agent',
+        workspace_id: 'desktop-client',
+        title: 'Release Agent',
+      },
+    },
+  },
+];
 
 function run(id: string, conversationId: string, status: DesktopRun['status']): DesktopRun {
   return {
@@ -284,7 +316,10 @@ const plan: PlanSnapshot = {
 
 function WorkspaceExecutionQa() {
   const scenario = new URLSearchParams(window.location.search).get('scenario');
+  const workspaceActivityEventMode =
+    new URLSearchParams(window.location.search).get('workspace-activity-event') === '1';
   const [mode, setMode] = useState<'work' | 'code'>('work');
+  const [liveActivity, setLiveActivity] = useState<WorkspaceLiveActivity[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(workspaces[0].id);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState(
@@ -322,6 +357,20 @@ function WorkspaceExecutionQa() {
     setSelectedConversationId(conversation.id);
     setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
   };
+
+  useEffect(() => {
+    if (!workspaceActivityEventMode) return;
+    const timer = window.setTimeout(() => {
+      setLiveActivity((current) =>
+        workspaceActivityEvents.reduce(
+          (activities, event) =>
+            applyWorkspaceActivityStreamEvent(activities, event, 'desktop-client').activities,
+          current,
+        ),
+      );
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [workspaceActivityEventMode]);
 
   return (
     <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
@@ -436,6 +485,7 @@ function WorkspaceExecutionQa() {
               },
             }}
             sandboxStatus="connected"
+            liveActivity={liveActivity}
             newTaskDisabledReason={null}
             onNewTask={() => undefined}
             onRetryWorkspaces={() => undefined}

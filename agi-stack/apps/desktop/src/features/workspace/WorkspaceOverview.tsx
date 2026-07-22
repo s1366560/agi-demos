@@ -37,6 +37,7 @@ import {
   conversationTreeStatusPresentation,
   type WorkspaceTreeStatusTone,
 } from './workspaceTreeModel';
+import type { WorkspaceLiveActivity } from './workspaceActivityEventModel';
 import { WorkspaceContextState } from './WorkspaceContextState';
 import './WorkspaceOverview.css';
 
@@ -50,6 +51,7 @@ type WorkspaceOverviewProps = {
   agents: WorkspaceAuthorityCollection<WorkspaceAgentBinding>;
   plan: PlanSnapshot | null;
   sandboxStatus: string | null;
+  liveActivity?: WorkspaceLiveActivity[];
   newTaskDisabledReason: string | null;
   onNewTask: () => void;
   onRetryWorkspaces: () => void;
@@ -67,6 +69,7 @@ export function WorkspaceOverview({
   agents,
   plan,
   sandboxStatus,
+  liveActivity = [],
   newTaskDisabledReason,
   onNewTask,
   onRetryWorkspaces,
@@ -83,6 +86,7 @@ export function WorkspaceOverview({
     plan,
     sandboxStatus,
   });
+  const recentActivity = [...liveActivity, ...model.recentActivity].slice(0, 5);
   const sandboxPresentation = workspaceSandboxStatusPresentation(
     model.environment.sandboxStatus,
   );
@@ -434,8 +438,8 @@ export function WorkspaceOverview({
               <ActivityLogIcon />
             </header>
             <div>
-              {model.recentActivity.length ? (
-                model.recentActivity.map((activity, index) => (
+              {recentActivity.length ? (
+                recentActivity.map((activity, index) => (
                   <div key={`${activity.title}-${index}`}>
                     <span>
                       <FileTextIcon />

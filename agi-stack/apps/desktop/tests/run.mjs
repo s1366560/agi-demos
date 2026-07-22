@@ -74,6 +74,7 @@ const testFiles = [
   'workspace-task-event-model.test.mjs',
   'workspace-roster-event-model.test.mjs',
   'workspace-lifecycle-event-model.test.mjs',
+  'workspace-activity-event-model.test.mjs',
   'login-screen-fidelity.test.mjs',
   'login-screen-model.test.mjs',
   'macos-dev-signing.test.mjs',

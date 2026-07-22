@@ -260,6 +260,10 @@ import {
   writeTaskSessionCreationAttempt,
 } from './features/task/newTaskSessionModel';
 import { WorkspaceOverview } from './features/workspace/WorkspaceOverview';
+import {
+  applyWorkspaceActivityStreamEvent,
+  type WorkspaceLiveActivity,
+} from './features/workspace/workspaceActivityEventModel';
 import { beginDesktopRuntimeScopeTransition } from './features/workspace/workspaceOverviewModel';
 import {
   beginWorkspaceConversationRequest,
@@ -1596,6 +1600,7 @@ export function App() {
   const [loginPassword, setLoginPassword] = useState('');
   const [workspaceSso, setWorkspaceSso] = useState<WorkspaceSsoPresentation | null>(null);
   const [dataset, setDataset] = useState<RuntimeDataset>(emptyDataset);
+  const [workspaceLiveActivity, setWorkspaceLiveActivity] = useState<WorkspaceLiveActivity[]>([]);
   const [connection, setConnection] = useState<ConnectionState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<string>('never');
@@ -1674,6 +1679,8 @@ export function App() {
   const sessionEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const conversationMetadataEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const authoritativeRunEventsHeadRef = useRef<AgentWsEvent | null>(null);
+  const workspaceActivityEventsHeadRef = useRef<AgentWsEvent | null>(null);
+  const workspaceActivityScopeRef = useRef('');
   const workspaceLifecycleEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const workspaceMessageEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const workspaceRosterEventsHeadRef = useRef<AgentWsEvent | null>(null);
@@ -2687,6 +2694,26 @@ export function App() {
     },
     [scopedConversationId],
   );
+
+  useEffect(() => {
+    const workspaceId = config.workspaceId.trim();
+    if (workspaceActivityScopeRef.current !== workspaceId) {
+      workspaceActivityScopeRef.current = workspaceId;
+      workspaceActivityEventsHeadRef.current = socket.events[0] ?? null;
+      setWorkspaceLiveActivity([]);
+      return;
+    }
+    const events = socketEventsSince(socket.events, workspaceActivityEventsHeadRef.current);
+    workspaceActivityEventsHeadRef.current = socket.events[0] ?? null;
+    if (!workspaceId || !events.length) return;
+    setWorkspaceLiveActivity((current) => {
+      let activities = current;
+      for (const event of events) {
+        activities = applyWorkspaceActivityStreamEvent(activities, event, workspaceId).activities;
+      }
+      return activities;
+    });
+  }, [config.workspaceId, socket.events]);
 
   useEffect(() => {
     const events = socketEventsSince(socket.events, workspaceRosterEventsHeadRef.current);
@@ -5961,6 +5988,7 @@ export function App() {
         agents={dataset.workspaceAgents}
         plan={activeDataset.plan}
         sandboxStatus={dataset.sandbox?.status ?? null}
+        liveActivity={workspaceLiveActivity}
         newTaskDisabledReason={newTaskDisabledReason}
         onNewTask={() => openNewTask(config.workspaceId)}
         onRetryWorkspaces={() => void refreshRuntime()}
