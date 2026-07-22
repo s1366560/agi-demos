@@ -75,10 +75,7 @@ import { useMessageAreaKeyboard } from './message/useMessageAreaKeyboard';
 import { useMessageAreaScroll } from './message/useMessageAreaScroll';
 import { useTurnCollapse } from './message/useTurnCollapse';
 import { MessageBubble } from './MessageBubble';
-import {
-  MESSAGE_MAX_WIDTH_CLASSES,
-  WIDE_MESSAGE_MAX_WIDTH_CLASSES,
-} from './styles';
+import { MESSAGE_MAX_WIDTH_CLASSES, WIDE_MESSAGE_MAX_WIDTH_CLASSES } from './styles';
 import { ExecutionTimeline } from './timeline/ExecutionTimeline';
 import { JitContextCard } from './timeline/JitContextCard';
 import { MemoryCapturedStep } from './timeline/MemoryRecalledStep';
@@ -274,7 +271,7 @@ const InternalLoading: React.FC<
         <p className="text-slate-500">
           {message ||
             t('components.messageArea.loadingConversation', {
-              defaultValue: 'Loading conversation...',
+              defaultValue: 'Loading conversation…',
             })}
         </p>
       </div>
@@ -533,11 +530,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     virtualizerRef.current = virtualizer;
 
     const shouldAdjustVirtualizerScroll = useCallback(
-      (
-        item: VirtualItem,
-        _delta: number,
-        instance: Virtualizer<HTMLDivElement, Element>
-      ) => {
+      (item: VirtualItem, _delta: number, instance: Virtualizer<HTMLDivElement, Element>) => {
         const container = containerRef.current;
         if (!container) return true;
 
@@ -722,7 +715,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                 <Loader2 className="animate-spin text-primary mr-2" size={16} />
                 <span className="text-xs text-slate-500">
                   {scrollIndicatorChild?.props.label ||
-                    t('components.messageArea.loading', { defaultValue: 'Loading...' })}
+                    t('components.messageArea.loading', { defaultValue: 'Loading…' })}
                 </span>
               </div>
             </div>
@@ -784,7 +777,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                           aria-label={t('agent.actions.jumpToMessage', 'Jump to message')}
                         >
                           <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 leading-relaxed">
-                            {content || '...'}
+                            {content || '…'}
                           </p>
                         </button>
                         <button
@@ -1009,12 +1002,19 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                                 ? 'opacity-100'
                                 : 'opacity-0 group-hover/turn:opacity-100 focus:opacity-100'
                             }`}
-                            aria-label={isTurnFolded ? 'Expand turn' : 'Collapse turn'}
+                            aria-label={
+                              isTurnFolded
+                                ? t('agent.actions.expandTurn', 'Expand turn')
+                                : t('agent.actions.collapseTurn', 'Collapse turn')
+                            }
                             data-testid="turn-fold-toggle"
                           >
                             {isTurnFolded
-                              ? `Expand (${String(turn.agentIndices.length)})`
-                              : 'Collapse'}
+                              ? t('agent.actions.expandTurnWithCount', {
+                                  count: turn.agentIndices.length,
+                                  defaultValue: 'Expand ({{count}})',
+                                })
+                              : t('agent.actions.collapseTurn', 'Collapse turn')}
                           </button>
                         ) : null}
                       </div>

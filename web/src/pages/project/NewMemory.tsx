@@ -3,11 +3,11 @@ import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 
+import { message } from 'antd';
 import {
   AlertCircle,
   Bold,
   CheckCircle,
-  ChevronDown,
   Code,
   Italic,
   Link as LinkIcon,
@@ -21,9 +21,12 @@ import {
 
 import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 
+import { MarkdownContent } from '../../components/agent/chat/MarkdownContent';
 import { memoryAPI } from '../../services/api';
 import { graphService } from '../../services/graphService';
 import { subscribeToTaskEvents } from '../../services/taskStream';
+import { confirmAction } from '../../utils/confirmAction';
+import { logger } from '../../utils/logger';
 
 interface TaskStatus {
   task_id: string;
@@ -93,7 +96,7 @@ const getResponseDetail = (error: unknown): string | undefined => {
 };
 
 export const NewMemory: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const translate = useCallback(
     (key: string, fallback: string) => {
       const value = t(key, fallback);
@@ -107,7 +110,7 @@ export const NewMemory: React.FC = () => {
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [tags, setTags] = useState<string[]>(['meeting', 'strategy']);
+  const [tags, setTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -137,7 +140,7 @@ export const NewMemory: React.FC = () => {
         setDraftSavedAt(parsed.savedAt);
       }
     } catch (error) {
-      console.warn('Failed to load memory draft:', error);
+      logger.warn('[NewMemory] Failed to load memory draft:', error);
     }
   }, [draftStorageKey]);
 
@@ -147,7 +150,7 @@ export const NewMemory: React.FC = () => {
         onProgress: (event) => {
           const data = parseEventRecord(event.data);
           if (!data) {
-            console.warn('Invalid task progress payload');
+            logger.warn('[NewMemory] Invalid task progress payload');
             return;
           }
 
@@ -163,7 +166,7 @@ export const NewMemory: React.FC = () => {
         onCompleted: (event) => {
           const task = parseEventRecord(event.data);
           if (!task) {
-            console.warn('Invalid task completion payload');
+            logger.warn('[NewMemory] Invalid task completion payload');
             return;
           }
 
@@ -182,13 +185,13 @@ export const NewMemory: React.FC = () => {
         },
         onFailed: (event) => {
           const task = parseEventRecord(event.data);
-          console.error('Failed event:', task);
+          logger.error('[NewMemory] Task failed event:', task);
           setError(readString(task ?? {}, 'message') ?? t('project.memories.new.error.processing'));
           setIsSaving(false);
           setCurrentTask(null);
         },
         onError: (error) => {
-          console.error('SSE connection error:', error);
+          logger.error('[NewMemory] SSE connection error:', error);
           setError(
             t(
               'project.memories.new.error.taskUpdatesFailed',
@@ -242,7 +245,7 @@ export const NewMemory: React.FC = () => {
       const result = await graphService.optimizeContent({ content });
       setContent(result.content);
     } catch (error) {
-      console.error('Failed to optimize content:', error);
+      logger.error('[NewMemory] Failed to optimize content:', error);
       setError(
         t(
           'project.memories.new.error.aiOptimizeFailed',
@@ -283,7 +286,7 @@ export const NewMemory: React.FC = () => {
         setIsSaving(false);
       }
     } catch (err: unknown) {
-      console.error('Failed to create memory:', err);
+      logger.error('[NewMemory] Failed to create memory:', err);
       setError(
         getResponseDetail(err) ??
           t('project.memories.new.error.createFailed', 'Failed to create memory')
@@ -305,8 +308,9 @@ export const NewMemory: React.FC = () => {
       window.localStorage.setItem(draftStorageKey, JSON.stringify(draft));
       setDraftSavedAt(savedAt);
       setError(null);
+      void message.success(t('project.memories.new.footer.draft_saved_toast', 'Draft saved'));
     } catch (error) {
-      console.error('Failed to save memory draft:', error);
+      logger.error('[NewMemory] Failed to save memory draft:', error);
       setError(t('project.memories.new.error.createFailed', 'Failed to create memory'));
     }
   };
@@ -328,7 +332,10 @@ export const NewMemory: React.FC = () => {
       : 'hover:bg-slate-100 hover:text-primary dark:hover:bg-slate-700'
   }`;
   const draftSavedTime = draftSavedAt
-    ? new Date(draftSavedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    ? new Date(draftSavedAt).toLocaleTimeString(i18n.language, {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
     : null;
 
   return (
@@ -338,6 +345,22 @@ export const NewMemory: React.FC = () => {
         <div className="flex min-w-0 items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
           <Link
             to={`${projectBasePath}/memories`}
+            onClick={(e) => {
+              // Guard against losing typed content when navigating away.
+              if (!title.trim() && !content.trim()) return;
+              e.preventDefault();
+              void confirmAction({
+                title: t(
+                  'project.memories.new.discard_unsaved_confirm',
+                  'Leave without saving? Unsaved content will be lost.'
+                ),
+                danger: true,
+              }).then((confirmed) => {
+                if (confirmed) {
+                  void navigate(`${projectBasePath}/memories`);
+                }
+              });
+            }}
             className="truncate hover:text-primary transition-colors"
           >
             {t('project.memories.title')}
@@ -389,7 +412,10 @@ export const NewMemory: React.FC = () => {
 
           {/* Progress Status Card */}
           {currentTask && (
-            <div className="rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 p-6">
+            <div
+              className="rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 p-6"
+              aria-live="polite"
+            >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <div className="rounded-full bg-indigo-100 dark:bg-indigo-900/50 p-2">
@@ -424,9 +450,16 @@ export const NewMemory: React.FC = () => {
               </div>
 
               {/* Progress Bar */}
-              <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
+              <div
+                className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden"
+                role="progressbar"
+                aria-valuenow={currentTask.progress}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={t('project.memories.new.status.processing')}
+              >
                 <div
-                  className="h-full bg-indigo-600 transition-[width] duration-300 ease-out dark:bg-indigo-400"
+                  className="h-full bg-indigo-600 transition-[width] duration-300 ease-out motion-reduce:transition-none dark:bg-indigo-400"
                   style={{ width: `${currentTask.progress.toString()}%` }}
                 />
               </div>
@@ -441,7 +474,10 @@ export const NewMemory: React.FC = () => {
 
           {/* Error Message */}
           {error && (
-            <div className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4">
+            <div
+              className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4"
+              role="alert"
+            >
               <div className="flex items-center gap-3">
                 <AlertCircle size={24} className="text-red-600 dark:text-red-400" />
                 <div className="flex-1">
@@ -470,7 +506,7 @@ export const NewMemory: React.FC = () => {
             {/* Metadata Inputs */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6 p-6 border-b border-slate-100 dark:border-slate-800">
               {/* Title */}
-              <div className="md:col-span-8">
+              <div className="md:col-span-12">
                 <label
                   htmlFor="memory-title"
                   className="mb-2 block text-sm font-medium text-slate-900 dark:text-white"
@@ -488,28 +524,6 @@ export const NewMemory: React.FC = () => {
                   className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-[color,background-color,border-color,box-shadow,opacity,transform]"
                   placeholder={t('project.memories.new.form.title_placeholder')}
                 />
-              </div>
-              {/* Context */}
-              <div className="md:col-span-4">
-                <label
-                  htmlFor="memory-context"
-                  className="mb-2 block text-sm font-medium text-slate-900 dark:text-white"
-                >
-                  {t('project.memories.new.form.context')}
-                </label>
-                <div className="relative">
-                  <select
-                    id="memory-context"
-                    className="w-full appearance-none rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-[color,background-color,border-color,box-shadow,opacity,transform]"
-                  >
-                    <option>{t('project.memories.new.placeholders.context_option_1')}</option>
-                    <option>{t('project.memories.new.placeholders.context_option_2')}</option>
-                    <option>{t('project.memories.new.placeholders.context_option_3')}</option>
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500">
-                    <ChevronDown size={20} />
-                  </div>
-                </div>
               </div>
               {/* Tags */}
               <div className="md:col-span-12">
@@ -697,6 +711,7 @@ export const NewMemory: React.FC = () => {
                     ref={textareaRef}
                     className="w-full h-full resize-none border-none p-6 outline-none text-slate-800 dark:text-slate-200 font-mono text-sm leading-relaxed bg-transparent focus:ring-0"
                     placeholder={t('project.memories.new.editor.placeholder')}
+                    aria-label={t('project.memories.new.editor.placeholder')}
                     value={content}
                     onChange={(e) => {
                       setContent(e.target.value);
@@ -712,7 +727,7 @@ export const NewMemory: React.FC = () => {
                 <div className="flex flex-col h-full bg-slate-50/50 dark:bg-[#1a1d26]/50 p-6 overflow-y-auto">
                   <div className="prose prose-sm dark:prose-invert max-w-none">
                     {content ? (
-                      <div className="whitespace-pre-wrap">{content}</div>
+                      <MarkdownContent content={content} />
                     ) : (
                       <>
                         <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">

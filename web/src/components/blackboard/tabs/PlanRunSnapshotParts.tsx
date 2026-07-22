@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 import {
   Activity,
   CheckCircle2,
@@ -52,6 +54,7 @@ export function NodeRow({
   isSelected: boolean;
   onSelect: () => void;
 }) {
+  const { t } = useTranslation();
   const progress = Math.max(0, Math.min(100, node.progress.percent || 0));
   const progressNote = node.progress.note.trim();
   const writeSet = nodeWriteSet(node);
@@ -79,10 +82,38 @@ export function NodeRow({
           </div>
           <div className="mt-2 flex flex-wrap gap-2 font-mono text-[11px] text-text-muted">
             <span>{shortId(node.id)}</span>
-            {node.assignee_agent_id && <span>owner {shortId(node.assignee_agent_id)}</span>}
-            {node.depends_on.length > 0 && <span>deps {String(node.depends_on.length)}</span>}
-            {node.acceptance_criteria.length > 0 && <span>checks {criterionSummary(node)}</span>}
-            {writeSet.length > 0 && <span>write {String(writeSet.length)}</span>}
+            {node.assignee_agent_id && (
+              <span>
+                {t('blackboard.planRunOwnerShort', {
+                  id: shortId(node.assignee_agent_id),
+                  defaultValue: 'owner {{id}}',
+                })}
+              </span>
+            )}
+            {node.depends_on.length > 0 && (
+              <span>
+                {t('blackboard.planRunDepsShort', {
+                  count: node.depends_on.length,
+                  defaultValue: 'deps {{count}}',
+                })}
+              </span>
+            )}
+            {node.acceptance_criteria.length > 0 && (
+              <span>
+                {t('blackboard.planRunChecksSummary', {
+                  summary: criterionSummary(node, t),
+                  defaultValue: 'checks {{summary}}',
+                })}
+              </span>
+            )}
+            {writeSet.length > 0 && (
+              <span>
+                {t('blackboard.planRunWriteShort', {
+                  count: writeSet.length,
+                  defaultValue: 'write {{count}}',
+                })}
+              </span>
+            )}
           </div>
           {progressNote && (
             <p className="mt-2 line-clamp-2 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
@@ -112,18 +143,33 @@ export function NodeRow({
 }
 
 export function TimelineRow({ event }: { event: WorkspacePlanEvent }) {
+  const { t } = useTranslation();
   const summary = eventSummary(event);
   return (
     <li className="border-b border-border-separator py-3 last:border-b-0 dark:border-border-dark">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="break-words text-sm font-medium text-text-primary dark:text-text-inverse">
-            {eventLabel(event)}
+            {eventLabel(event, t)}
           </div>
           <div className="mt-1 flex flex-wrap gap-2 font-mono text-[11px] text-text-muted">
             <span>{formatTime(event.created_at)}</span>
-            {event.node_id && <span>node {shortId(event.node_id)}</span>}
-            {event.attempt_id && <span>attempt {shortId(event.attempt_id)}</span>}
+            {event.node_id && (
+              <span>
+                {t('blackboard.planRunNodeShort', {
+                  id: shortId(event.node_id),
+                  defaultValue: 'node {{id}}',
+                })}
+              </span>
+            )}
+            {event.attempt_id && (
+              <span>
+                {t('blackboard.planRunAttemptShort', {
+                  id: shortId(event.attempt_id),
+                  defaultValue: 'attempt {{id}}',
+                })}
+              </span>
+            )}
           </div>
         </div>
         <span className="shrink-0 rounded-full border border-border-light px-2 py-0.5 text-[10px] font-semibold uppercase text-text-secondary dark:border-border-dark dark:text-text-muted">
@@ -148,6 +194,7 @@ export function OutboxRow({
   onRetry: (item: WorkspacePlanOutboxItem) => void;
   isActionPending: boolean;
 }) {
+  const { t } = useTranslation();
   const retryAction = item.actions?.retry_outbox;
   return (
     <li className="border-b border-border-separator py-3 last:border-b-0 dark:border-border-dark">
@@ -161,7 +208,14 @@ export function OutboxRow({
             <span>
               {String(item.attempt_count)} / {String(item.max_attempts)}
             </span>
-            {outboxNodeId(item) && <span>node {shortId(outboxNodeId(item))}</span>}
+            {outboxNodeId(item) && (
+              <span>
+                {t('blackboard.planRunNodeShort', {
+                  id: shortId(outboxNodeId(item)),
+                  defaultValue: 'node {{id}}',
+                })}
+              </span>
+            )}
           </div>
           {item.last_error && (
             <p className="mt-2 line-clamp-2 break-words text-xs text-status-text-error dark:text-status-text-error-dark">
@@ -188,7 +242,7 @@ export function OutboxRow({
               className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-border-light bg-surface-light px-2.5 text-xs font-medium text-text-primary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60 dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse dark:hover:bg-surface-dark-alt"
             >
               <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-              {retryAction?.label || 'Retry'}
+              {retryAction?.label || t('common.retry', { defaultValue: 'Retry' })}
             </button>
           )}
         </div>

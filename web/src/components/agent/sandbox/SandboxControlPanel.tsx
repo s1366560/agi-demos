@@ -70,7 +70,7 @@ function ServiceStatusCard({ type, status, isLoading, onStart, onStop }: Service
           {isLoading ? (
             <Badge
               status="processing"
-              text={t('components.sandboxControl.starting', { defaultValue: 'Starting...' })}
+              text={t('components.sandboxControl.starting', { defaultValue: 'Starting…' })}
             />
           ) : isRunning ? (
             <Badge
@@ -94,7 +94,7 @@ function ServiceStatusCard({ type, status, isLoading, onStart, onStop }: Service
                 <div className="flex items-center gap-2">
                   <Link size={12} className="text-gray-500" />
                   <Text copyable={{ text: status.url }} className="text-xs text-gray-600">
-                    {status.url.length > 50 ? `${status.url.slice(0, 47)}...` : status.url}
+                    {status.url.length > 50 ? `${status.url.slice(0, 47)}…` : status.url}
                   </Text>
                 </div>
               )}
@@ -127,7 +127,7 @@ function ServiceStatusCard({ type, status, isLoading, onStart, onStop }: Service
                   <span className="text-gray-500">
                     {t('components.sandboxControl.session', { defaultValue: 'Session:' })}
                   </span>
-                  <span className="text-gray-700">{status.sessionId.slice(0, 8)}...</span>
+                  <span className="text-gray-700">{status.sessionId.slice(0, 8)}…</span>
                 </div>
               )}
             </div>

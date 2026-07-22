@@ -194,7 +194,7 @@ describe('MemoryList Compound Component', () => {
       const { MemoryList } = await import('../../../pages/project/MemoryList');
       render(<MemoryList />);
       await waitFor(() => {
-        expect(screen.getByPlaceholderText('Search memories...')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Search memories…')).toBeInTheDocument();
       });
     });
 
@@ -234,14 +234,14 @@ describe('MemoryList Compound Component', () => {
     it('should render search input', async () => {
       const { MemoryList } = await import('../../../pages/project/MemoryList');
       render(<MemoryList.Toolbar search="" onSearchChange={vi.fn()} />);
-      expect(screen.getByPlaceholderText('Search memories...')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Search memories…')).toBeInTheDocument();
     });
 
     it('should call onSearchChange when typing', async () => {
       const { MemoryList } = await import('../../../pages/project/MemoryList');
       const onSearchChange = vi.fn();
       render(<MemoryList.Toolbar search="" onSearchChange={onSearchChange} />);
-      const input = screen.getByPlaceholderText('Search memories...');
+      const input = screen.getByPlaceholderText('Search memories…');
       fireEvent.change(input, { target: { value: 'Meeting' } });
       expect(onSearchChange).toHaveBeenCalledWith('Meeting');
     });
@@ -354,7 +354,7 @@ describe('MemoryList Compound Component', () => {
     it('should render loading message', async () => {
       const { MemoryList } = await import('../../../pages/project/MemoryList');
       render(<MemoryList.Loading />);
-      expect(screen.getByLabelText('Loading...')).toBeInTheDocument();
+      expect(screen.getByLabelText('Loading…')).toBeInTheDocument();
     });
   });
 
@@ -396,7 +396,7 @@ describe('MemoryList Compound Component', () => {
       );
       expect(screen.getByText('Delete Memory')).toBeInTheDocument();
       expect(
-        screen.getByText((_content, element) => element?.textContent === '"Meeting Notes"')
+        screen.getByText((_content, element) => element?.textContent === '“Meeting Notes”')
       ).toBeInTheDocument();
     });
 
@@ -457,7 +457,7 @@ describe('MemoryList Compound Component', () => {
       await waitFor(() => {
         expect(screen.getByText('Meeting Notes')).toBeInTheDocument();
       });
-      const input = screen.getByPlaceholderText('Search memories...');
+      const input = screen.getByPlaceholderText('Search memories…');
       fireEvent.change(input, { target: { value: 'Research' } });
       await waitFor(() => {
         expect(screen.queryByText('Meeting Notes')).not.toBeInTheDocument();
@@ -515,7 +515,7 @@ describe('MemoryList Compound Component', () => {
       await waitFor(() => {
         expect(screen.getByText('Delete Memory')).toBeInTheDocument();
         expect(
-          screen.getByText((_content, element) => element?.textContent === '"Meeting Notes"')
+          screen.getByText((_content, element) => element?.textContent === '“Meeting Notes”')
         ).toBeInTheDocument();
       });
     });

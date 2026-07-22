@@ -29,6 +29,8 @@ import { useTenantStore } from '@/stores/tenant';
 
 import { registryService } from '@/services/registryService';
 
+import { formatDateTime } from '@/utils/date';
+
 import {
   useLazyMessage,
   LazyPopconfirm,
@@ -78,42 +80,42 @@ const getTypeIcon = (type: string) => {
 
 const getStatusConfig = (
   status: string
-): { color: string; bgColor: string; icon: LucideIcon; label: string } => {
+): { color: string; bgColor: string; icon: LucideIcon; labelKey: string } => {
   switch (status) {
     case 'connected':
       return {
         color: 'text-green-600 dark:text-green-400',
         bgColor: 'bg-green-100 dark:bg-green-900/30',
         icon: CheckCircle,
-        label: 'Connected',
+        labelKey: 'tenant.orgSettings.registry.statusLabels.connected',
       };
     case 'disconnected':
       return {
         color: 'text-slate-600 dark:text-slate-400',
         bgColor: 'bg-slate-100 dark:bg-slate-700',
         icon: XCircle,
-        label: 'Disconnected',
+        labelKey: 'tenant.orgSettings.registry.statusLabels.disconnected',
       };
     case 'error':
       return {
         color: 'text-red-600 dark:text-red-400',
         bgColor: 'bg-red-100 dark:bg-red-900/30',
         icon: AlertCircle,
-        label: 'Error',
+        labelKey: 'tenant.orgSettings.registry.statusLabels.error',
       };
     case 'checking':
       return {
         color: 'text-blue-600 dark:text-blue-400',
         bgColor: 'bg-blue-100 dark:bg-blue-900/30',
         icon: Loader2,
-        label: 'Checking',
+        labelKey: 'tenant.orgSettings.registry.statusLabels.checking',
       };
     default:
       return {
         color: 'text-slate-400',
         bgColor: 'bg-slate-100 dark:bg-slate-800',
         icon: AlertCircle,
-        label: 'Unknown',
+        labelKey: 'tenant.orgSettings.registry.statusLabels.unknown',
       };
   }
 };
@@ -157,7 +159,13 @@ const RegistryForm: React.FC<RegistryFormProps> = ({
   }, [name, type, url, username, password, isDefault, onSave]);
 
   return (
-    <div className="space-y-4">
+    <form
+      className="space-y-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void handleSubmit();
+      }}
+    >
       <div>
         <label
           htmlFor="registry-name"
@@ -172,6 +180,7 @@ const RegistryForm: React.FC<RegistryFormProps> = ({
           onChange={(e) => {
             setName(e.target.value);
           }}
+          spellCheck={false}
           className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none"
           placeholder={t('tenant.orgSettings.registry.form.namePlaceholder')}
         />
@@ -200,11 +209,13 @@ const RegistryForm: React.FC<RegistryFormProps> = ({
         </label>
         <input
           id="registry-url"
-          type="text"
+          type="url"
+          inputMode="url"
           value={url}
           onChange={(e) => {
             setUrl(e.target.value);
           }}
+          spellCheck={false}
           className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none font-mono text-sm"
           placeholder={t('tenant.orgSettings.registry.form.urlPlaceholder')}
         />
@@ -224,6 +235,8 @@ const RegistryForm: React.FC<RegistryFormProps> = ({
           onChange={(e) => {
             setUsername(e.target.value);
           }}
+          autoComplete="off"
+          spellCheck={false}
           className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none"
           placeholder={t('tenant.orgSettings.registry.form.usernamePlaceholder')}
         />
@@ -243,6 +256,8 @@ const RegistryForm: React.FC<RegistryFormProps> = ({
           onChange={(e) => {
             setPassword(e.target.value);
           }}
+          autoComplete="new-password"
+          spellCheck={false}
           className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none"
           placeholder={
             registry
@@ -281,17 +296,14 @@ const RegistryForm: React.FC<RegistryFormProps> = ({
           {t('common.cancel')}
         </button>
         <button
-          type="button"
-          onClick={() => {
-            void handleSubmit();
-          }}
+          type="submit"
           disabled={isSubmitting || !name || !url}
           className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSubmitting ? t('common.loading') : t('common.save')}
         </button>
       </div>
-    </div>
+    </form>
   );
 };
 
@@ -591,7 +603,7 @@ export const OrgRegistry: React.FC = () => {
                         <div className={`p-1.5 rounded-lg ${statusConfig.bgColor}`}>
                           {(() => {
                             const Icon = getTypeIcon(registry.type);
-                            return <Icon size={18} className={`\${statusConfig.color}`} />;
+                            return <Icon size={18} className={statusConfig.color} />;
                           })()}
                         </div>
                         <div>
@@ -620,17 +632,20 @@ export const OrgRegistry: React.FC = () => {
                         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig.bgColor} ${statusConfig.color}`}
                       >
                         {isTesting ? (
-                          <RefreshCcw size={14} className="animate-spin" />
+                          <RefreshCcw
+                            size={14}
+                            className="animate-spin motion-reduce:animate-none"
+                          />
                         ) : (
                           <statusConfig.icon size={14} className="mr-1.5" />
                         )}
-                        {isTesting ? 'Checking...' : statusConfig.label}
+                        {isTesting
+                          ? t('tenant.orgSettings.registry.checking')
+                          : t(statusConfig.labelKey)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">
-                      {registry.last_checked
-                        ? new Date(registry.last_checked).toLocaleString()
-                        : '-'}
+                      {registry.last_checked ? formatDateTime(registry.last_checked) : '-'}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -695,6 +710,7 @@ export const OrgRegistry: React.FC = () => {
         width={560}
       >
         <RegistryForm
+          key={editingRegistry?.id ?? 'new'}
           registry={editingRegistry}
           onSave={handleSaveRegistry}
           onCancel={() => {

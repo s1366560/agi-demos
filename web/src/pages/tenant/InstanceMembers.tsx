@@ -25,6 +25,8 @@ import {
   useInstanceActions,
 } from '../../stores/instance';
 
+import { formatDate } from './utils/instanceUtils';
+
 import type { InstanceMemberResponse, UserSearchResult } from '../../services/instanceService';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -32,11 +34,11 @@ const { Search } = Input;
 const MEMBERS_PAGE_SIZE = 25;
 
 const ROLE_OPTIONS = [
-  { value: 'admin', label: 'Admin' },
-  { value: 'editor', label: 'Editor' },
-  { value: 'user', label: 'User' },
-  { value: 'viewer', label: 'Viewer' },
-];
+  { value: 'admin', labelKey: 'tenant.instances.members.roles.admin' },
+  { value: 'editor', labelKey: 'tenant.instances.members.roles.editor' },
+  { value: 'user', labelKey: 'tenant.instances.members.roles.user' },
+  { value: 'viewer', labelKey: 'tenant.instances.members.roles.viewer' },
+] as const;
 
 export const InstanceMembers: React.FC = () => {
   const { t } = useTranslation();
@@ -122,6 +124,11 @@ export const InstanceMembers: React.FC = () => {
     );
   }, [members, search]);
 
+  const roleOptions = useMemo(
+    () => ROLE_OPTIONS.map((role) => ({ value: role.value, label: t(role.labelKey) })),
+    [t]
+  );
+
   const columns: ColumnsType<InstanceMemberResponse> = [
     {
       title: t('tenant.instances.members.colUser'),
@@ -152,17 +159,18 @@ export const InstanceMembers: React.FC = () => {
         <LazySelect
           value={member.role}
           onChange={(val: string) => handleRoleChange(member, val)}
-          options={ROLE_OPTIONS}
+          options={roleOptions}
           size="small"
           className="w-28"
           disabled={isSubmitting}
+          aria-label={t('tenant.instances.members.colRole')}
         />
       ),
     },
     {
       title: t('tenant.instances.members.colJoined'),
       key: 'joined',
-      render: (_, member) => new Date(member.created_at).toLocaleDateString(),
+      render: (_, member) => formatDate(member.created_at),
     },
     {
       title: t('common.actions.label'),
@@ -326,6 +334,14 @@ export const InstanceMembers: React.FC = () => {
           }
           className="w-full max-w-sm"
         />
+        {search ? (
+          <p className="mt-1 text-xs text-text-muted dark:text-text-muted">
+            {t(
+              'tenant.instances.members.searchScopeHint',
+              'Search filters members on the current page only'
+            )}
+          </p>
+        ) : null}
       </div>
 
       {/* Members Table */}
@@ -415,6 +431,7 @@ export const InstanceMembers: React.FC = () => {
                     key={user.id}
                     type="text"
                     block
+                    aria-pressed={selectedUserId === user.id}
                     onClick={() => {
                       setSelectedUserId(user.id);
                     }}
@@ -452,7 +469,7 @@ export const InstanceMembers: React.FC = () => {
               onChange={(val: string) => {
                 setSelectedRole(val);
               }}
-              options={ROLE_OPTIONS}
+              options={roleOptions}
               className="w-full"
             />
           </div>

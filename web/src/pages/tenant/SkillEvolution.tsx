@@ -28,7 +28,6 @@ import { formatDateTime } from '@/utils/date';
 import { EvolutionJobRow } from '@/components/skill/EvolutionJobRow';
 import { LazyEmpty, LazySpin, useLazyMessage } from '@/components/ui/lazyAntd';
 
-
 import type {
   SkillEvolutionConfigResponse,
   SkillEvolutionJobResponse,

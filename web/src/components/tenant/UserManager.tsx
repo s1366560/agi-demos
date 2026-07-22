@@ -20,6 +20,7 @@ import { formatDateOnly } from '@/utils/date';
 
 import { AppModal } from '@/components/common';
 
+import { invitationService } from '../../services/invitationService';
 import { projectService } from '../../services/projectService';
 import { tenantService } from '../../services/tenantService';
 import { useProjectStore } from '../../stores/project';
@@ -104,7 +105,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
 
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [_error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState<string>('all');
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -116,13 +117,13 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
     if (!currentTenant) return;
 
     setIsLoading(true);
-    setError(null);
+    setLoadError(null);
     try {
       const response = (await tenantService.listMembers(currentTenant.id)) as MemberListResponse;
       setUsers(normalizeMemberResponse(response));
     } catch (err) {
       console.error('Failed to load tenant users:', err);
-      setError(t('tenant.users.load_error'));
+      setLoadError(t('tenant.users.load_error'));
     } finally {
       setIsLoading(false);
     }
@@ -132,13 +133,13 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
     if (!currentProject) return;
 
     setIsLoading(true);
-    setError(null);
+    setLoadError(null);
     try {
       const response = (await projectService.listMembers(currentProject.id)) as MemberListResponse;
       setUsers(normalizeMemberResponse(response));
     } catch (err) {
       console.error('Failed to load project users:', err);
-      setError(t('tenant.users.load_error'));
+      setLoadError(t('tenant.users.load_error'));
     } finally {
       setIsLoading(false);
     }
@@ -177,8 +178,60 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
     return matchesSearch && matchesRole;
   });
 
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('member');
+  const [inviteMessage, setInviteMessage] = useState('');
+  const [inviteSubmitting, setInviteSubmitting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
+  const resetInviteForm = () => {
+    setInviteEmail('');
+    setInviteRole('member');
+    setInviteMessage('');
+    setInviteError(null);
+  };
+
   const handleInviteUser = () => {
+    resetInviteForm();
     setIsInviteModalOpen(true);
+  };
+
+  const reloadUsers = useCallback(() => {
+    if (context === 'tenant') {
+      void loadTenantUsers();
+    } else {
+      void loadProjectUsers();
+    }
+  }, [context, loadTenantUsers, loadProjectUsers]);
+
+  const handleInviteSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!currentTenant || inviteSubmitting) return;
+
+    const email = inviteEmail.trim();
+    if (!email) return;
+
+    setInviteSubmitting(true);
+    setInviteError(null);
+    invitationService
+      .create(currentTenant.id, {
+        email,
+        role: inviteRole,
+        ...(inviteMessage.trim() ? { message: inviteMessage.trim() } : {}),
+      })
+      .then(() => {
+        void message.success(t('tenant.users.invite_modal.success', 'Invitation sent.'));
+        setIsInviteModalOpen(false);
+        resetInviteForm();
+        reloadUsers();
+      })
+      .catch((error: unknown) => {
+        console.error('Failed to send invitation:', error);
+        setInviteError(t('tenant.users.invite_modal.error', 'Failed to send invitation.'));
+      })
+      .finally(() => {
+        setInviteSubmitting(false);
+      });
   };
 
   const handleEditUser = (user: User) => {
@@ -325,8 +378,23 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
 
       <div className="p-4 sm:p-6">
         {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
+          <div className="flex items-center justify-center py-8" role="status">
+            <div
+              aria-hidden="true"
+              className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"
+            ></div>
+            <span className="sr-only">{t('common.loading')}</span>
+          </div>
+        ) : loadError ? (
+          <div className="flex flex-col items-center gap-2 py-8" role="alert">
+            <p className="text-gray-600 dark:text-slate-400">{loadError}</p>
+            <button
+              type="button"
+              onClick={reloadUsers}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
+            >
+              {t('common.retry')}
+            </button>
           </div>
         ) : filteredUsers.length === 0 ? (
           <div className="text-center py-8">
@@ -407,6 +475,10 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
                     }}
                     className="p-2 text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                     title={t('tenant.users.actions.edit')}
+                    aria-label={t('tenant.users.actions.editUser', {
+                      name: user.name,
+                      defaultValue: 'Edit {{name}}',
+                    })}
                   >
                     <Edit3 className="h-4 w-4" />
                   </button>
@@ -419,9 +491,13 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
                       disabled={removingUserId === user.id}
                       className="p-2 text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
                       title={t('tenant.users.actions.remove')}
+                      aria-label={t('tenant.users.actions.removeUser', {
+                        name: user.name,
+                        defaultValue: 'Remove {{name}}',
+                      })}
                     >
                       {removingUserId === user.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
                       ) : (
                         <Trash2 className="h-4 w-4" />
                       )}
@@ -456,21 +532,32 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
             <button
               type="submit"
               form="user-invite-form"
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
+              disabled={inviteSubmitting}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {t('tenant.users.invite_modal.submit')}
+              {inviteSubmitting ? t('tenant.users.saving') : t('tenant.users.invite_modal.submit')}
             </button>
           </>
         }
       >
-        <form id="user-invite-form" className="space-y-4">
+        <form id="user-invite-form" className="space-y-4" onSubmit={handleInviteSubmit}>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+            <label
+              htmlFor="user-invite-email"
+              className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+            >
               {t('tenant.users.invite_modal.email')} *
             </label>
             <input
+              id="user-invite-email"
+              name="email"
               type="email"
-              aria-label={t('tenant.users.invite_modal.email')}
+              autoComplete="email"
+              spellCheck={false}
+              value={inviteEmail}
+              onChange={(e) => {
+                setInviteEmail(e.target.value);
+              }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
               placeholder={t('tenant.users.invite_modal.email_placeholder')}
               required
@@ -478,11 +565,19 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+            <label
+              htmlFor="user-invite-role"
+              className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+            >
               {t('tenant.users.invite_modal.role')} *
             </label>
             <select
-              aria-label={t('tenant.users.invite_modal.role')}
+              id="user-invite-role"
+              name="role"
+              value={inviteRole}
+              onChange={(e) => {
+                setInviteRole(e.target.value);
+              }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
             >
               <option value="member">{t('tenant.users.roles.member')}</option>
@@ -492,16 +587,30 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+            <label
+              htmlFor="user-invite-message"
+              className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+            >
               {t('tenant.users.invite_modal.message')}
             </label>
             <textarea
-              aria-label={t('tenant.users.invite_modal.message')}
+              id="user-invite-message"
+              name="message"
+              value={inviteMessage}
+              onChange={(e) => {
+                setInviteMessage(e.target.value);
+              }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
               placeholder={t('tenant.users.invite_modal.message_placeholder')}
               rows={3}
             />
           </div>
+
+          {inviteError && (
+            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+              {inviteError}
+            </p>
+          )}
         </form>
       </AppModal>
 

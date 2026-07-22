@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { useParams, Link } from 'react-router-dom';
 
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { message } from 'antd';
 import {
   AlertCircle,
   ChevronLeft,
@@ -41,6 +42,7 @@ import { formatDateOnly } from '@/utils/date';
 import { AppModal } from '@/components/common';
 
 import { memoryAPI } from '../../services/api';
+import { logger } from '../../utils/logger';
 
 import type { Memory } from '../../types/memory';
 import type { TFunction } from 'i18next';
@@ -69,7 +71,7 @@ const TEXTS = {
   title: 'Memories',
   subtitle: 'All stored memories in your knowledge graph',
   addMemory: 'Add Memory',
-  searchPlaceholder: 'Search memories...',
+  searchPlaceholder: 'Search memories…',
   filterLabel: 'Filter',
   allTypes: 'All Types',
   contentTypeLabel: 'Memory type',
@@ -91,9 +93,13 @@ const TEXTS = {
   emptyTitle: 'No memories found',
   emptySubtitle: 'Create a memory to start indexing project knowledge.',
   emptyCreateButton: 'Create Memory',
-  loading: 'Loading...',
+  loading: 'Loading…',
   projectNotFound: 'Project not found',
   retry: 'Retry',
+  fetchFailed: 'Failed to load memories. Please check your connection and try again.',
+  deleteSuccess: 'Memory deleted',
+  deleteFailed: 'Failed to delete memory',
+  reprocessFailed: 'Failed to start processing. Please try again.',
 
   // Table headers
   tableName: 'Name',
@@ -223,6 +229,14 @@ function useMemoryListTexts(): MemoryListTexts {
       deleteCancel: textFallback(t, 'common.cancel', TEXTS.deleteCancel),
       deleteMemory: textFallback(t, 'project.memories.delete.actionLabel', TEXTS.deleteMemory),
       reprocess: textFallback(t, 'project.memories.actions.reprocess', TEXTS.reprocess),
+      fetchFailed: textFallback(t, 'project.memories.loadFailed', TEXTS.fetchFailed),
+      deleteSuccess: textFallback(t, 'common.status.deleted', TEXTS.deleteSuccess),
+      deleteFailed: textFallback(t, 'common.errors.delete_failed', TEXTS.deleteFailed),
+      reprocessFailed: textFallback(
+        t,
+        'project.memories.errors.reprocessFailed',
+        TEXTS.reprocessFailed
+      ),
     }),
     [t]
   );
@@ -439,14 +453,14 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
       setPageSize(data.page_size);
     } catch (error) {
       if (fetchSequenceRef.current !== sequence) return;
-      console.error('Failed to list memories:', error);
-      setFetchError('Failed to load memories. Please check your connection and try again.');
+      logger.error('[MemoryList] Failed to list memories:', error);
+      setFetchError(texts.fetchFailed);
     } finally {
       if (fetchSequenceRef.current === sequence) {
         setIsLoading(false);
       }
     }
-  }, [contentTypeFilter, debouncedSearch, page, pageSize, projectId]);
+  }, [contentTypeFilter, debouncedSearch, page, pageSize, projectId, texts.fetchFailed]);
 
   useEffect(() => {
     setPage(1);
@@ -471,14 +485,17 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
     try {
       await memoryAPI.delete(projectId, memoryToDelete.id);
       await fetchMemories();
+      message.success(texts.deleteSuccess);
       setIsDeleteModalOpen(false);
       setMemoryToDelete(null);
     } catch (error) {
-      console.error('Failed to delete memory:', error);
+      logger.error('[MemoryList] Failed to delete memory:', error);
+      // Keep the modal open so the user can retry or cancel.
+      message.error(texts.deleteFailed);
     } finally {
       setDeletingId(null);
     }
-  }, [memoryToDelete, projectId, fetchMemories]);
+  }, [memoryToDelete, projectId, fetchMemories, texts.deleteSuccess, texts.deleteFailed]);
 
   const handleReprocess = useCallback(
     async (id: string) => {
@@ -489,10 +506,11 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
           prev.map((m) => (m.id === id ? { ...m, processing_status: 'PENDING' } : m))
         );
       } catch (error) {
-        console.error('Failed to reprocess:', error);
+        logger.error('[MemoryList] Failed to reprocess:', error);
+        message.error(texts.reprocessFailed);
       }
     },
-    [projectId]
+    [projectId, texts.reprocessFailed]
   );
 
   // Initial fetch
@@ -699,7 +717,7 @@ const ToolbarInternal: React.FC<ToolbarProps> = ({
             <Search size={16} className="text-slate-400" />
           </div>
           <input
-            type="text"
+            type="search"
             value={search}
             onChange={(e) => onSearchChange?.(e.target.value)}
             className="block h-9 w-full rounded-md border border-slate-200 bg-white pl-10 pr-3 text-sm text-slate-950 outline-none transition-colors placeholder:text-slate-400 hover:border-slate-300 focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10 dark:border-slate-800 dark:bg-slate-900/30 dark:text-slate-50 dark:hover:border-slate-700 dark:focus:border-slate-400 dark:focus:ring-slate-50/10"
@@ -963,7 +981,7 @@ const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
                 {memory.title || 'Untitled'}
               </Link>
               <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                <span className="font-mono opacity-70">{memory.id.substring(0, 8)}...</span>
+                <span className="font-mono opacity-70">{memory.id.substring(0, 8)}…</span>
               </div>
             </div>
           </div>
@@ -995,7 +1013,7 @@ const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
           <span className="whitespace-nowrap">{formatDateOnly(memory.created_at)}</span>
         </td>
         <td className="w-[110px] px-5 py-2 text-right">
-          <div className="flex items-center justify-end gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+          <div className="flex items-center justify-end gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
             {actions && (
               <button
                 type="button"
@@ -1081,7 +1099,7 @@ EmptyInternal.displayName = 'MemoryList.Empty';
 const LoadingInternal: React.FC<{ className?: string | undefined }> = ({ className = '' }) => {
   const texts = useMemoryListTexts();
   return (
-    <div className={`space-y-0 ${className}`} aria-label={texts.loading}>
+    <div className={`space-y-0 ${className}`} role="status" aria-label={texts.loading}>
       {Array.from({ length: 6 }, (_, row) => (
         <div
           key={`memory-skeleton-${String(row)}`}
@@ -1115,7 +1133,7 @@ interface ErrorProps {
 const ErrorInternal: React.FC<ErrorProps> = ({ error, onRetry, className = '' }) => {
   const texts = useMemoryListTexts();
   return (
-    <div className={`px-6 py-14 text-center ${className}`}>
+    <div className={`px-6 py-14 text-center ${className}`} role="alert">
       <div className="flex flex-col items-center gap-4">
         <div className="flex h-10 w-10 items-center justify-center rounded-md border border-error-border bg-error-bg text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-error-light">
           <AlertCircle size={18} aria-hidden="true" />
@@ -1179,7 +1197,9 @@ const PaginationInternal: React.FC<{ className?: string | undefined }> = ({ clas
         </label>
         <button
           type="button"
-          onClick={() => { actions.setPage(Math.max(1, safePage - 1)); }}
+          onClick={() => {
+            actions.setPage(Math.max(1, safePage - 1));
+          }}
           disabled={safePage <= 1}
           className="inline-flex h-8 w-8 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-950/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:focus:ring-slate-50/10"
           aria-label={texts.previousPage}
@@ -1192,7 +1212,9 @@ const PaginationInternal: React.FC<{ className?: string | undefined }> = ({ clas
         </span>
         <button
           type="button"
-          onClick={() => { actions.setPage(Math.min(totalPages, safePage + 1)); }}
+          onClick={() => {
+            actions.setPage(Math.min(totalPages, safePage + 1));
+          }}
           disabled={safePage >= totalPages}
           className="inline-flex h-8 w-8 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-950/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:focus:ring-slate-50/10"
           aria-label={texts.nextPage}
@@ -1255,7 +1277,7 @@ const DeleteModalInternal: React.FC<DeleteModalProps> = memo(
         <p className="text-slate-600 dark:text-slate-300">
           {texts.deleteMessage}
           <br />
-          <span className="font-medium text-slate-900 dark:text-white">"{memoryTitle}"</span>
+          <span className="font-medium text-slate-900 dark:text-white">“{memoryTitle}”</span>
         </p>
       </AppModal>
     );

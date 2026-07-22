@@ -86,6 +86,18 @@ export const SelectionToolbar = memo<SelectionToolbarProps>(({ containerRef, onA
     };
   }, []);
 
+  // Dismiss on Escape
+  useEffect(() => {
+    if (!visible) return undefined;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setVisible(false);
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [visible]);
+
   if (!visible) return null;
 
   const actions = [

@@ -21,12 +21,15 @@ import { useDebounce } from '@/hooks/useDebounce';
 
 import {
   useLazyMessage,
+  LazyAlert,
   LazyButton,
   LazyPopconfirm,
   LazyEmpty,
   LazySpin,
   LazyModal,
 } from '@/components/ui/lazyAntd';
+
+import { formatDate } from './utils/instanceUtils';
 
 import type { ColumnsType } from 'antd/es/table';
 
@@ -54,6 +57,7 @@ export const InstanceGenes: React.FC = () => {
   const messageApi = useLazyMessage();
 
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [instanceGenes, setInstanceGenes] = useState<InstanceGeneResponse[]>([]);
   const [instanceGenesTotal, setInstanceGenesTotal] = useState(0);
@@ -81,6 +85,7 @@ export const InstanceGenes: React.FC = () => {
       instanceGenesRequestId.current = requestId;
       const isLatestRequest = () => instanceGenesRequestId.current === requestId;
       setIsLoading(true);
+      setLoadError(false);
       try {
         const response = await geneMarketService.listInstanceGenes(instanceId, {
           tenant_id: tenantId,
@@ -97,6 +102,7 @@ export const InstanceGenes: React.FC = () => {
       } catch (err) {
         if (!isLatestRequest()) return;
         console.error('Failed to fetch instance genes:', err);
+        setLoadError(true);
         messageApi?.error(t('tenant.instances.genes.fetchError'));
       } finally {
         if (isLatestRequest()) {
@@ -255,7 +261,7 @@ export const InstanceGenes: React.FC = () => {
         dataIndex: 'usage_count',
         key: 'usage_count',
         render: (count: number) => (
-          <span className="text-sm text-text-muted dark:text-text-muted">{count}</span>
+          <span className="text-sm tabular-nums text-text-muted dark:text-text-muted">{count}</span>
         ),
       },
       {
@@ -263,7 +269,7 @@ export const InstanceGenes: React.FC = () => {
         key: 'installed',
         render: (_, gene) => (
           <span className="text-sm text-text-muted dark:text-text-muted">
-            {gene.installed_at ? new Date(gene.installed_at).toLocaleDateString() : '-'}
+            {gene.installed_at ? formatDate(gene.installed_at) : '-'}
           </span>
         ),
       },
@@ -405,6 +411,22 @@ export const InstanceGenes: React.FC = () => {
           <div className="flex items-center justify-center py-20">
             <LazySpin size="large" />
           </div>
+        ) : loadError ? (
+          <div className="py-20 flex flex-col items-center gap-4">
+            <LazyAlert
+              type="error"
+              showIcon
+              message={t('tenant.instances.genes.fetchError')}
+              className="max-w-md"
+            />
+            <LazyButton
+              onClick={() => {
+                void fetchInstanceGenes(currentPage);
+              }}
+            >
+              {t('common.retry', 'Retry')}
+            </LazyButton>
+          </div>
         ) : instanceGenes.length === 0 ? (
           <div className="py-20">
             <LazyEmpty description={t('tenant.instances.genes.noGenes')} />
@@ -501,6 +523,7 @@ export const InstanceGenes: React.FC = () => {
                     key={gene.id}
                     type="text"
                     block
+                    aria-pressed={selectedGeneId === gene.id}
                     onClick={() => {
                       setSelectedGeneId(gene.id);
                     }}

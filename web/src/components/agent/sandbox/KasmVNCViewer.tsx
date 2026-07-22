@@ -98,7 +98,7 @@ export function KasmVNCViewer({
   const connectingToDesktopLabel = tFallback(
     t,
     'components.kasmVNC.connectingToDesktop',
-    'Connecting to desktop...'
+    'Connecting to desktop…'
   );
   const failedToConnectLabel = tFallback(
     t,
@@ -218,8 +218,14 @@ export function KasmVNCViewer({
             }, delay);
           } else {
             setConnectionState('error');
-            onError?.('Connection lost after max retries');
-            onDisconnect?.('Connection lost');
+            onError?.(
+              tFallback(
+                t,
+                'components.kasmVNC.connectionLostRetries',
+                'Connection lost after max retries'
+              )
+            );
+            onDisconnect?.(tFallback(t, 'components.kasmVNC.connectionLost', 'Connection lost'));
           }
         }
       );
@@ -247,7 +253,16 @@ export function KasmVNCViewer({
       setConnectionState('error');
       onError?.(`Failed to connect: ${err instanceof Error ? err.message : String(err)}`);
     }
-  }, [wsUrl, currentResolution, dynamicResize, onConnect, onDisconnect, onError, safeDisconnect]);
+  }, [
+    wsUrl,
+    currentResolution,
+    dynamicResize,
+    onConnect,
+    onDisconnect,
+    onError,
+    safeDisconnect,
+    t,
+  ]);
 
   // Connect on mount and when wsUrl changes
   useEffect(() => {
@@ -339,7 +354,7 @@ export function KasmVNCViewer({
     },
     connecting: {
       color: '#faad14',
-      text: tFallback(t, 'components.kasmVNC.status.connecting', 'Connecting...'),
+      text: tFallback(t, 'components.kasmVNC.status.connecting', 'Connecting…'),
     },
     connected: {
       color: '#52c41a',
@@ -433,7 +448,9 @@ export function KasmVNCViewer({
       <div className="flex-1 relative bg-black overflow-hidden">
         {connectionState === 'connecting' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/60 z-10 pointer-events-none">
-            <Spin indicator={<Loader2 className="animate-spin" size={32} />} />
+            <Spin
+              indicator={<Loader2 className="animate-spin motion-reduce:animate-none" size={32} />}
+            />
             <span className="text-white text-sm">{connectingToDesktopLabel}</span>
           </div>
         )}

@@ -14,12 +14,12 @@
  *   - @/components/common - ErrorBoundary, SkeletonLoader
  *   - @/components/agent - MessageArea, InputBar
  *   - @/components/shared - Modal components, UI components
- *   - @/components/graph - GraphVisualization, EntityCard
- *   - @/components/agent/layout - ChatHistorySidebar, LayoutModeSelector
- *   - @/components/agent/chat - MessageBubble, InputBar, IdleState
- *   - @/components/agent/execution - WorkPlanProgress, ToolExecutionLive
- *   - @/components/agent/sandbox - SandboxTerminal, SandboxPanel
- *   - @/components/agent/patterns - PatternList, ThinkingChain
+ *   - @/components/graph - CytoscapeGraph, EntityCard
+ *   - @/components/agent/layout - LayoutModeSelector
+ *   - @/components/agent/chat - MarkdownContent, ChatSearch
+ *   - @/components/agent/execution - ActivityTimeline, ToolCallVisualization
+ *   - @/components/agent/sandbox - SandboxTerminal, SandboxControlPanel
+ *   - @/components/agent/patterns - PatternList, PatternInspector
  */
 
 // Re-exports for IDE support - prefer sub-barrel imports in production code
@@ -31,11 +31,7 @@ export { ErrorBoundary, SkeletonLoader, type SkeletonLoaderProps } from './commo
 export { MessageArea, MessageBubble, InputBar, RightPanel, SandboxSection } from './agent';
 
 // Shared components (modals, UI components)
-export {
-  DeleteConfirmationModal,
-  LanguageSwitcher,
-  ThemeToggle,
-} from './shared';
+export { DeleteConfirmationModal, LanguageSwitcher, ThemeToggle } from './shared';
 
 // Graph components (knowledge graph visualization)
 export {

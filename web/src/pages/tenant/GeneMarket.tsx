@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import {
   Alert,
@@ -19,6 +19,7 @@ import {
   Rate,
   Empty,
   Pagination,
+  Spin,
 } from 'antd';
 import { Download, Search as SearchIcon } from 'lucide-react';
 
@@ -35,6 +36,8 @@ import {
 import { useCurrentTenant } from '../../stores/tenant';
 
 import { visibilityLabel, visibilityOptions, visibilityTagColor } from './geneVisibility';
+import { GeneFormFields } from './utils/GeneFormFields';
+import { isFormValidationError, normalizeOptionalText, splitCsv } from './utils/geneFormUtils';
 
 import type {
   ContentVisibilityValue,
@@ -63,28 +66,11 @@ interface PublishGeneFormValues {
   gene_slugs?: string;
 }
 
-const normalizeOptionalText = (value: string | undefined): string | undefined => {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : undefined;
-};
-
-const splitTags = (value: string | undefined): string[] =>
-  Array.from(
-    new Set(
-      (value ?? '')
-        .split(',')
-        .map((tag) => tag.trim())
-        .filter(Boolean)
-    )
-  );
-
-const isFormValidationError = (error: unknown): boolean =>
-  typeof error === 'object' && error !== null && 'errorFields' in error;
-
 export const GeneMarket: FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const currentTenant = useCurrentTenant();
   const tenantId = routeTenantId ?? currentTenant?.id ?? null;
 
@@ -186,8 +172,26 @@ export const GeneMarket: FC = () => {
     };
   }, [clearError, reset]);
 
+  // Deep-link the active tab via ?tab= (e.g. ?tab=genomes)
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'genomes' && activeTab !== 'genomes') {
+      setActiveTab('genomes');
+    } else if (tabParam === 'genes' && activeTab !== 'genes') {
+      setActiveTab('genes');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   const handleTabChange = (key: string) => {
     setActiveTab(key as 'genes' | 'genomes');
+    const next = new URLSearchParams(searchParams);
+    if (key === 'genomes') {
+      next.set('tab', 'genomes');
+    } else {
+      next.delete('tab');
+    }
+    setSearchParams(next, { replace: true });
   };
 
   const handlePublishGene = () => {
@@ -208,7 +212,7 @@ export const GeneMarket: FC = () => {
           slug: values.slug.trim(),
           tenant_id: tenantId,
           visibility: values.visibility ?? 'public',
-          gene_slugs: splitTags(values.gene_slugs),
+          gene_slugs: splitCsv(values.gene_slugs),
         };
         const shortDescription = normalizeOptionalText(values.short_description);
         if (shortDescription) {
@@ -232,7 +236,7 @@ export const GeneMarket: FC = () => {
         tenant_id: tenantId,
         version: normalizeOptionalText(values.version) ?? '1.0.0',
         visibility: values.visibility ?? 'public',
-        tags: splitTags(values.tags),
+        tags: splitCsv(values.tags),
         source: 'self_created',
       };
       const category = normalizeOptionalText(values.category);
@@ -254,10 +258,6 @@ export const GeneMarket: FC = () => {
       void navigate(created.id);
     } catch (error) {
       if (isFormValidationError(error)) {
-        return;
-      }
-      if (error instanceof Error) {
-        message.error(error.message);
         return;
       }
       message.error(
@@ -303,14 +303,12 @@ export const GeneMarket: FC = () => {
     [activeTab]
   );
 
-  const renderStars = (rating: number | null | undefined, count: number = 0) => {
+  const renderStars = (rating: number | null | undefined) => {
     const val = rating ?? 0;
     return (
       <Space size="small" className="items-center">
         <Rate disabled allowHalf value={val} className="text-sm" />
-        <span className="text-sm text-slate-500">
-          {val.toFixed(1)} ({count} {t('tenant.genes.ratings')})
-        </span>
+        <span className="text-sm text-slate-500">{val.toFixed(1)}</span>
       </Space>
     );
   };
@@ -336,16 +334,12 @@ export const GeneMarket: FC = () => {
           {genes.map((gene: GeneResponse) => (
             <Card
               key={gene.id}
-              className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-primary-300 dark:hover:border-primary-600 transition-colors cursor-pointer"
-              onClick={() => {
-                void navigate(gene.id);
-              }}
+              className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-primary-300 dark:hover:border-primary-600 transition-colors"
               actions={[
                 <Button
                   key="install"
                   type="link"
-                  onClick={(e) => {
-                    e.stopPropagation();
+                  onClick={() => {
                     void navigate(`${gene.id}?install=1`);
                   }}
                 >
@@ -354,8 +348,7 @@ export const GeneMarket: FC = () => {
                 <Button
                   key="rate"
                   type="link"
-                  onClick={(e) => {
-                    e.stopPropagation();
+                  onClick={() => {
                     void navigate(`${gene.id}?rate=1`);
                   }}
                 >
@@ -364,7 +357,14 @@ export const GeneMarket: FC = () => {
               ]}
             >
               <div className="flex justify-between items-start gap-2 mb-2">
-                <h3 className="min-w-0 flex-1 text-lg font-semibold truncate">{gene.name}</h3>
+                <h3 className="min-w-0 flex-1 text-lg font-semibold truncate">
+                  <Link
+                    to={gene.id}
+                    className="text-inherit hover:text-primary-600 dark:hover:text-primary-400"
+                  >
+                    {gene.name}
+                  </Link>
+                </h3>
                 <Space size={[4, 4]} wrap className="justify-end">
                   {getPublishStatusBadge(gene.is_published)}
                   {getVisibilityBadge(gene.visibility)}
@@ -386,7 +386,7 @@ export const GeneMarket: FC = () => {
                     {tag}
                   </Tag>
                 ))}
-                {gene.tags.length > 3 && <Tag>...</Tag>}
+                {gene.tags.length > 3 && <Tag>…</Tag>}
               </div>
 
               <div className="flex justify-between items-center text-sm text-slate-500">
@@ -394,7 +394,7 @@ export const GeneMarket: FC = () => {
                   <Download size={14} className="mr-1 align-text-bottom" />
                   {gene.install_count}
                 </div>
-                {renderStars(gene.avg_rating, 0)}
+                {renderStars(gene.avg_rating)}
               </div>
             </Card>
           ))}
@@ -421,35 +421,31 @@ export const GeneMarket: FC = () => {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {genomes.map((genome: GenomeResponse) => (
-            <Card
-              key={genome.id}
-              className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-primary-300 dark:hover:border-primary-600 transition-colors cursor-pointer"
-              onClick={() => {
-                void navigate(`./genomes/${genome.id}`);
-              }}
-            >
-              <div className="flex justify-between items-start gap-2 mb-2">
-                <h3 className="min-w-0 flex-1 text-lg font-semibold truncate">{genome.name}</h3>
-                <Space size={[4, 4]} wrap className="justify-end">
-                  {getPublishStatusBadge(genome.is_published)}
-                  {getVisibilityBadge(genome.visibility)}
-                </Space>
-              </div>
+            <Link key={genome.id} to={`./genomes/${genome.id}`} className="block">
+              <Card className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-primary-300 dark:hover:border-primary-600 transition-colors">
+                <div className="flex justify-between items-start gap-2 mb-2">
+                  <h3 className="min-w-0 flex-1 text-lg font-semibold truncate">{genome.name}</h3>
+                  <Space size={[4, 4]} wrap className="justify-end">
+                    {getPublishStatusBadge(genome.is_published)}
+                    {getVisibilityBadge(genome.visibility)}
+                  </Space>
+                </div>
 
-              <p className="text-slate-600 dark:text-slate-400 text-sm mb-4 line-clamp-2 min-h-10">
-                {genome.description}
-              </p>
+                <p className="text-slate-600 dark:text-slate-400 text-sm mb-4 line-clamp-2 min-h-10">
+                  {genome.description}
+                </p>
 
-              <div className="mb-4 flex gap-2">
-                <Tag color="purple">
-                  {genome.gene_slugs.length} {t('tenant.genes.genesCount')}
-                </Tag>
-              </div>
+                <div className="mb-4 flex gap-2">
+                  <Tag color="purple">
+                    {genome.gene_slugs.length} {t('tenant.genes.genesCount')}
+                  </Tag>
+                </div>
 
-              <div className="flex justify-end items-center text-sm text-slate-500">
-                {renderStars(genome.avg_rating, 0)}
-              </div>
-            </Card>
+                <div className="flex justify-end items-center text-sm text-slate-500">
+                  {renderStars(genome.avg_rating)}
+                </div>
+              </Card>
+            </Link>
           ))}
         </div>
       )}
@@ -612,12 +608,24 @@ export const GeneMarket: FC = () => {
           {
             key: 'genes',
             label: `${t('tenant.genes.tabs.genes')} (${String(geneTotal)})`,
-            children: loading ? <div>{t('tenant.genes.loading')}</div> : renderGenesGrid(),
+            children: loading ? (
+              <div className="flex min-h-48 items-center justify-center">
+                <Spin size="large" />
+              </div>
+            ) : (
+              renderGenesGrid()
+            ),
           },
           {
             key: 'genomes',
             label: `${t('tenant.genes.tabs.genomes')} (${String(genomeTotal)})`,
-            children: loading ? <div>{t('tenant.genes.loading')}</div> : renderGenomesGrid(),
+            children: loading ? (
+              <div className="flex min-h-48 items-center justify-center">
+                <Spin size="large" />
+              </div>
+            ) : (
+              renderGenomesGrid()
+            ),
           },
         ]}
       />
@@ -654,56 +662,49 @@ export const GeneMarket: FC = () => {
           layout="vertical"
           initialValues={{ version: '1.0.0', visibility: 'public' }}
         >
-          <Form.Item
-            name="name"
-            label={t('tenant.genes.publish.name')}
-            rules={[{ required: true, message: t('tenant.genes.publish.nameRequired') }]}
-          >
-            <Input placeholder={t('tenant.genes.publish.namePlaceholder')} />
-          </Form.Item>
-          <Form.Item
-            name="slug"
-            label={t('tenant.genes.publish.slug')}
-            rules={[{ required: true, message: t('tenant.genes.publish.slugRequired') }]}
-          >
-            <Input placeholder={t('tenant.genes.publish.slugPlaceholder')} />
-          </Form.Item>
-          {activeTab === 'genes' && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Form.Item name="category" label={t('tenant.genes.publish.category')}>
-                <Input placeholder={t('tenant.genes.publish.categoryPlaceholder')} />
-              </Form.Item>
-              <Form.Item name="version" label={t('tenant.genes.publish.version')}>
-                <Input placeholder="1.0.0" />
-              </Form.Item>
-            </div>
-          )}
-          <Form.Item name="short_description" label={t('tenant.genes.publish.shortDescription')}>
-            <Input placeholder={t('tenant.genes.publish.shortDescriptionPlaceholder')} />
-          </Form.Item>
-          <Form.Item name="description" label={t('tenant.genes.description')}>
-            <Input.TextArea
-              rows={4}
-              placeholder={t('tenant.genes.publish.descriptionPlaceholder')}
-            />
-          </Form.Item>
-          <Form.Item name="visibility" label={t('tenant.genes.publish.visibility')}>
-            <Select>
-              {visibilityOptions(t).map((option) => (
-                <Option key={option.value} value={option.value}>
-                  {option.label}
-                </Option>
-              ))}
-            </Select>
-          </Form.Item>
-          {activeTab === 'genomes' ? (
-            <Form.Item name="gene_slugs" label={t('tenant.genes.publish.geneSlugs')}>
-              <Input placeholder={t('tenant.genes.publish.geneSlugsPlaceholder')} />
-            </Form.Item>
+          {activeTab === 'genes' ? (
+            <GeneFormFields />
           ) : (
-            <Form.Item name="tags" label={t('tenant.genes.publish.tags')}>
-              <Input placeholder={t('tenant.genes.publish.tagsPlaceholder')} />
-            </Form.Item>
+            <>
+              <Form.Item
+                name="name"
+                label={t('tenant.genes.publish.name')}
+                rules={[{ required: true, message: t('tenant.genes.publish.nameRequired') }]}
+              >
+                <Input placeholder={t('tenant.genes.publish.namePlaceholder')} />
+              </Form.Item>
+              <Form.Item
+                name="slug"
+                label={t('tenant.genes.publish.slug')}
+                rules={[{ required: true, message: t('tenant.genes.publish.slugRequired') }]}
+              >
+                <Input placeholder={t('tenant.genes.publish.slugPlaceholder')} />
+              </Form.Item>
+              <Form.Item
+                name="short_description"
+                label={t('tenant.genes.publish.shortDescription')}
+              >
+                <Input placeholder={t('tenant.genes.publish.shortDescriptionPlaceholder')} />
+              </Form.Item>
+              <Form.Item name="description" label={t('tenant.genes.description')}>
+                <Input.TextArea
+                  rows={4}
+                  placeholder={t('tenant.genes.publish.descriptionPlaceholder')}
+                />
+              </Form.Item>
+              <Form.Item name="visibility" label={t('tenant.genes.publish.visibility')}>
+                <Select>
+                  {visibilityOptions(t).map((option) => (
+                    <Option key={option.value} value={option.value}>
+                      {option.label}
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+              <Form.Item name="gene_slugs" label={t('tenant.genes.publish.geneSlugs')}>
+                <Input placeholder={t('tenant.genes.publish.geneSlugsPlaceholder')} />
+              </Form.Item>
+            </>
           )}
         </Form>
       </Modal>

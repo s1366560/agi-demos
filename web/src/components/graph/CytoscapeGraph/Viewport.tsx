@@ -99,7 +99,7 @@ const ViewportLoading: React.FC = () => {
         />
         <p className="text-slate-600 dark:text-slate-400 mt-2">
           {t('graph.cytoscapeViewport.loadingVisualization', {
-            defaultValue: 'Loading graph visualization...',
+            defaultValue: 'Loading graph visualization…',
           })}
         </p>
       </div>
@@ -410,30 +410,37 @@ export function CytoscapeGraphViewport({
   return (
     <div className="relative min-h-0 flex-1">
       {loading && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/90 dark:bg-slate-900/90">
+        <div
+          role="status"
+          className="absolute inset-0 z-10 flex items-center justify-center bg-white/90 dark:bg-slate-900/90"
+        >
           <div className="text-center">
             <Loader2
+              aria-hidden="true"
               size={36}
               className="text-blue-600 animate-spin motion-reduce:animate-none mx-auto"
             />
             <p className="text-slate-600 dark:text-slate-400 mt-2">
-              {t('graph.cytoscapeViewport.loadingGraph', { defaultValue: 'Loading graph...' })}
+              {t('graph.cytoscapeViewport.loadingGraph', { defaultValue: 'Loading graph…' })}
             </p>
           </div>
         </div>
       )}
 
       {error && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/90 dark:bg-slate-900/90">
+        <div
+          role="alert"
+          className="absolute inset-0 z-10 flex items-center justify-center bg-white/90 dark:bg-slate-900/90"
+        >
           <div className="text-center">
-            <AlertCircle size={36} className="text-red-600 mx-auto" />
+            <AlertCircle aria-hidden="true" size={36} className="text-red-600 mx-auto" />
             <p className="text-slate-600 dark:text-slate-400 mt-2">{error}</p>
             <button
               type="button"
               onClick={() => {
                 void loadGraphData();
               }}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500"
+              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md transition-colors hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             >
               {t('common.retry', { defaultValue: 'Retry' })}
             </button>

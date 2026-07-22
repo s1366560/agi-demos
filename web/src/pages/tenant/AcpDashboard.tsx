@@ -754,7 +754,11 @@ export const AcpDashboard: React.FC = () => {
                     <Input placeholder="uv" />
                   </Form.Item>
                   <Form.Item name="argsText" label={t('tenant.acp.form.args')}>
-                    <Input.TextArea rows={4} spellCheck={false} placeholder={'run\npython\n-m\nagent'} />
+                    <Input.TextArea
+                      rows={4}
+                      spellCheck={false}
+                      placeholder={'run\npython\n-m\nagent'}
+                    />
                   </Form.Item>
                 </>
               );

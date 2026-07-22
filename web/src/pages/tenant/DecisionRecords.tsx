@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
-import { Input, Modal, Select } from 'antd';
+import { Input, Modal, Pagination, Select } from 'antd';
 import { RefreshCw, Search as SearchIcon } from 'lucide-react';
 
 import {
@@ -14,6 +14,7 @@ import {
   LazyAlert,
 } from '@/components/ui/lazyAntd';
 
+import { useDebounce } from '../../hooks/useDebounce';
 import { useTenantStore } from '../../stores/tenant';
 import {
   useTrustDecisions,
@@ -21,11 +22,14 @@ import {
   useTrustError,
   useTrustActions,
 } from '../../stores/trust';
+import { formatDateTime } from '../../utils/date';
 
 import type { DecisionRecord } from '../../services/trustService';
 
 const { Search } = Input;
 const { Option } = Select;
+
+const PAGE_SIZE = 20;
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -47,6 +51,11 @@ export const DecisionRecords: React.FC = () => {
   const [workspaceFilter, setWorkspaceFilter] = useState('');
   const [agentFilter, setAgentFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Debounce the free-text filters so typing does not fire a request per keystroke
+  const debouncedWorkspaceFilter = useDebounce(workspaceFilter, 400);
+  const debouncedAgentFilter = useDebounce(agentFilter, 400);
 
   const [selectedRecord, setSelectedRecord] = useState<DecisionRecord | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -58,12 +67,12 @@ export const DecisionRecords: React.FC = () => {
 
   const buildParams = useCallback(() => {
     const params: { workspace_id: string; agent_id?: string; decision_type?: string } = {
-      workspace_id: workspaceFilter || 'default',
+      workspace_id: debouncedWorkspaceFilter || 'default',
     };
-    if (agentFilter) params.agent_id = agentFilter;
+    if (debouncedAgentFilter) params.agent_id = debouncedAgentFilter;
     if (typeFilter) params.decision_type = typeFilter;
     return params;
-  }, [workspaceFilter, agentFilter, typeFilter]);
+  }, [debouncedWorkspaceFilter, debouncedAgentFilter, typeFilter]);
 
   const loadDecisions = useCallback(async () => {
     if (!tenantId) return;
@@ -115,13 +124,7 @@ export const DecisionRecords: React.FC = () => {
     setIsResolveModalOpen(true);
   };
 
-  const formatTimestamp = (ts: string) => {
-    try {
-      return new Date(ts).toLocaleString();
-    } catch {
-      return ts;
-    }
-  };
+  const formatTimestamp = (ts: string) => formatDateTime(ts) || ts;
 
   const getOutcomeBadgeClass = (outcome: string) => {
     switch (outcome) {
@@ -150,6 +153,10 @@ export const DecisionRecords: React.FC = () => {
     );
   }
 
+  // The decisions API has no page params, so paginate the loaded list client-side
+  const pagedDecisions = decisions.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const isInitialLoading = isLoading && decisions.length === 0;
+
   return (
     <div className="max-w-full mx-auto w-full flex flex-col gap-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -168,7 +175,10 @@ export const DecisionRecords: React.FC = () => {
             title={t('tenant.decisionRecords.refresh')}
             className="inline-flex items-center justify-center gap-2 px-3 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
           >
-            <RefreshCw size={16} />
+            <RefreshCw
+              size={16}
+              className={isLoading ? 'animate-spin motion-reduce:animate-none' : undefined}
+            />
           </button>
         </div>
       </div>
@@ -180,6 +190,7 @@ export const DecisionRecords: React.FC = () => {
               placeholder={t('tenant.decisionRecords.filters.workspaceId')}
               value={workspaceFilter}
               onChange={(e) => {
+                setCurrentPage(1);
                 setWorkspaceFilter(e.target.value);
               }}
               allowClear
@@ -196,6 +207,7 @@ export const DecisionRecords: React.FC = () => {
               placeholder={t('tenant.decisionRecords.filters.agentId')}
               value={agentFilter}
               onChange={(e) => {
+                setCurrentPage(1);
                 setAgentFilter(e.target.value);
               }}
               allowClear
@@ -213,6 +225,7 @@ export const DecisionRecords: React.FC = () => {
               placeholder={t('tenant.decisionRecords.filters.decisionType')}
               value={typeFilter}
               onChange={(val) => {
+                setCurrentPage(1);
                 setTypeFilter(val);
               }}
               allowClear
@@ -243,7 +256,7 @@ export const DecisionRecords: React.FC = () => {
         />
       )}
 
-      {isLoading ? (
+      {isInitialLoading ? (
         <div className="flex items-center justify-center py-20">
           <LazySpin size="large" />
         </div>
@@ -278,7 +291,7 @@ export const DecisionRecords: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                {decisions.map((record) => (
+                {pagedDecisions.map((record) => (
                   <tr
                     key={record.id}
                     className="hover:bg-slate-50 dark:hover:bg-slate-900/30 transition-colors"
@@ -333,6 +346,19 @@ export const DecisionRecords: React.FC = () => {
               </tbody>
             </table>
           </div>
+          {decisions.length > PAGE_SIZE && (
+            <div className="flex justify-end border-t border-slate-200 px-4 py-3 dark:border-slate-700">
+              <Pagination
+                current={currentPage}
+                pageSize={PAGE_SIZE}
+                total={decisions.length}
+                showSizeChanger={false}
+                onChange={(nextPage) => {
+                  setCurrentPage(nextPage);
+                }}
+              />
+            </div>
+          )}
         </div>
       )}
 

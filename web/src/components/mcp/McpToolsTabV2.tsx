@@ -20,6 +20,9 @@ import type { ToolWithServer } from './McpToolItemV2';
 
 const { Search: AntSearch } = Input;
 
+/** Cap rendered tool rows so large catalogs stay responsive. */
+const TOOL_RENDER_CAP = 50;
+
 export const McpToolsTabV2: React.FC = () => {
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
@@ -146,6 +149,7 @@ export const McpToolsTabV2: React.FC = () => {
             onChange={setServerFilter}
             className="w-full sm:w-52"
             placeholder={t('mcp.tools.filterByServer')}
+            aria-label={t('mcp.tools.filterByServer')}
             options={serverOptions}
             suffix={<Server size={14} className="text-slate-400" />}
           />
@@ -169,7 +173,7 @@ export const McpToolsTabV2: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredTools.map((tool, idx) => {
+          {filteredTools.slice(0, TOOL_RENDER_CAP).map((tool, idx) => {
             const key = `${tool.serverId}-${tool.name}-${idx.toString()}`;
             const isExpanded = expandedKey === key;
 
@@ -184,6 +188,16 @@ export const McpToolsTabV2: React.FC = () => {
               />
             );
           })}
+          {filteredTools.length > TOOL_RENDER_CAP && (
+            <p className="pt-1 text-center text-xs text-slate-400 dark:text-slate-500">
+              {t('mcp.tools.renderCapNote', {
+                shown: TOOL_RENDER_CAP,
+                total: filteredTools.length,
+                defaultValue:
+                  'Showing first {{shown}} of {{total}} tools — refine your search or server filter.',
+              })}
+            </p>
+          )}
         </div>
       )}
     </div>

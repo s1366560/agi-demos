@@ -14,8 +14,6 @@ import {
   Form,
   Input,
   Rate,
-  Select,
-  Timeline,
   Typography,
   Space,
   message,
@@ -44,34 +42,24 @@ import {
   useGeneReviewsLoading,
   useEvolutionEvents,
   useGeneMarketLoading,
-  useGeneMarketStore,
   useGeneMarketActions,
 } from '../../stores/geneMarket';
 import { useCurrentTenant } from '../../stores/tenant';
 
-import { visibilityLabel, visibilityOptions, visibilityTagColor } from './geneVisibility';
+import { visibilityLabel, visibilityTagColor } from './geneVisibility';
+import { EvolutionTimeline } from './utils/EvolutionTimeline';
+import { GeneFormFields } from './utils/GeneFormFields';
+import {
+  isFormValidationError,
+  normalizeNullableText,
+  showGeneActionError,
+  splitCsv,
+} from './utils/geneFormUtils';
+import { InstanceSelect } from './utils/InstanceSelect';
 
-import type {
-  ContentVisibilityValue,
-  EvolutionEventType,
-  GeneUpdate,
-} from '../../services/geneMarketService';
+import type { ContentVisibilityValue, GeneUpdate } from '../../services/geneMarketService';
 
 const { Title, Text, Paragraph } = Typography;
-
-const EVENT_TYPE_COLORS: Record<EvolutionEventType, string> = {
-  learned: 'green',
-  forgot: 'red',
-  upgraded: 'blue',
-  created_variant: 'purple',
-  installed_genome: 'cyan',
-  uninstalled_genome: 'orange',
-  simplified: 'geekblue',
-};
-
-const isEvolutionEventType = (type: string): type is EvolutionEventType => {
-  return Object.prototype.hasOwnProperty.call(EVENT_TYPE_COLORS, type);
-};
 
 interface InstallFormValues {
   instance_id: string;
@@ -98,24 +86,6 @@ interface EditGeneFormValues {
   visibility?: ContentVisibilityValue;
   tags?: string;
 }
-
-const normalizeNullableText = (value: string | undefined): string | null => {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : null;
-};
-
-const splitCsv = (value: string | undefined): string[] =>
-  Array.from(
-    new Set(
-      (value ?? '')
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean)
-    )
-  );
-
-const isFormValidationError = (error: unknown): boolean =>
-  typeof error === 'object' && error !== null && 'errorFields' in error;
 
 export const GeneDetail: FC = () => {
   const { tenantId: routeTenantId, geneId } = useParams<{ tenantId?: string; geneId: string }>();
@@ -155,6 +125,9 @@ export const GeneDetail: FC = () => {
   const [isPublishSubmitting, setIsPublishSubmitting] = useState(false);
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
   const [isEditSubmitting, setIsEditSubmitting] = useState(false);
+  const [isInstallSubmitting, setIsInstallSubmitting] = useState(false);
+  const [isRateSubmitting, setIsRateSubmitting] = useState(false);
+  const [isReviewSubmitting, setIsReviewSubmitting] = useState(false);
   const [installForm] = Form.useForm<InstallFormValues>();
   const [rateForm] = Form.useForm<RateFormValues>();
   const [editForm] = Form.useForm<EditGeneFormValues>();
@@ -162,9 +135,6 @@ export const GeneDetail: FC = () => {
   const [reviewForm] = Form.useForm<ReviewFormValues>();
   const [reviewPage, setReviewPage] = useState(1);
   const reviewPageSize = 5;
-  const showActionError = (fallbackMessage: string) => {
-    message.error(useGeneMarketStore.getState().error ?? fallbackMessage);
-  };
 
   useEffect(() => {
     if (!geneId || !tenantId) {
@@ -210,7 +180,13 @@ export const GeneDetail: FC = () => {
   }, [searchParams, setSearchParams, shouldOpenInstallModal, shouldOpenRateModal]);
 
   const handleInstallSubmit = async () => {
-    const values = await installForm.validateFields();
+    let values: InstallFormValues;
+    try {
+      values = await installForm.validateFields();
+    } catch {
+      // antd validation errors are shown inline on the form
+      return;
+    }
     let configOverride: Record<string, unknown> = {};
     if (values.config_override) {
       try {
@@ -221,6 +197,7 @@ export const GeneDetail: FC = () => {
       }
     }
 
+    setIsInstallSubmitting(true);
     try {
       await installGene(
         values.instance_id,
@@ -234,56 +211,76 @@ export const GeneDetail: FC = () => {
       setIsInstallModalVisible(false);
       installForm.resetFields();
     } catch {
-      showActionError(t('tenant.genes.installError'));
+      showGeneActionError(t('tenant.genes.installError'));
+    } finally {
+      setIsInstallSubmitting(false);
     }
   };
 
   const handleRateSubmit = async () => {
+    let values: RateFormValues;
     try {
-      const values = await rateForm.validateFields();
-      if (geneId && tenantId) {
-        await rateGene(
-          geneId,
-          {
-            rating: values.score,
-            comment: values.comment ?? null,
-          },
-          { tenant_id: tenantId }
-        );
-        message.success(t('tenant.genes.rateSuccess'));
-        setIsRateModalVisible(false);
-        rateForm.resetFields();
-      }
+      values = await rateForm.validateFields();
     } catch {
-      showActionError(t('tenant.genes.rateError'));
+      return;
+    }
+    if (!geneId || !tenantId) {
+      return;
+    }
+    setIsRateSubmitting(true);
+    try {
+      await rateGene(
+        geneId,
+        {
+          rating: values.score,
+          comment: values.comment ?? null,
+        },
+        { tenant_id: tenantId }
+      );
+      message.success(t('tenant.genes.rateSuccess'));
+      setIsRateModalVisible(false);
+      rateForm.resetFields();
+    } catch {
+      showGeneActionError(t('tenant.genes.rateError'));
+    } finally {
+      setIsRateSubmitting(false);
     }
   };
 
   const handleReviewSubmit = async () => {
+    let values: ReviewFormValues;
     try {
-      const values = await reviewForm.validateFields();
-      if (geneId && tenantId) {
-        const options = { tenant_id: tenantId };
-        await createGeneReview(
-          geneId,
-          {
-            rating: values.rating,
-            content: values.content,
-          },
-          options
-        );
-        setReviewPage(1);
-        await fetchGeneReviews(geneId, 1, reviewPageSize, options);
-        message.success(t('gene.reviewSubmitSuccess'));
-        setIsReviewModalVisible(false);
-        reviewForm.resetFields();
-      }
+      values = await reviewForm.validateFields();
     } catch {
-      showActionError(t('gene.reviewSubmitError'));
+      return;
+    }
+    if (!geneId || !tenantId) {
+      return;
+    }
+    setIsReviewSubmitting(true);
+    try {
+      const options = { tenant_id: tenantId };
+      await createGeneReview(
+        geneId,
+        {
+          rating: values.rating,
+          content: values.content,
+        },
+        options
+      );
+      setReviewPage(1);
+      await fetchGeneReviews(geneId, 1, reviewPageSize, options);
+      message.success(t('gene.reviewSubmitSuccess'));
+      setIsReviewModalVisible(false);
+      reviewForm.resetFields();
+    } catch {
+      showGeneActionError(t('gene.reviewSubmitError'));
+    } finally {
+      setIsReviewSubmitting(false);
     }
   };
 
-  const handlePublishToggle = async () => {
+  const runPublishToggle = async () => {
     if (!geneId || !tenantId || !currentGene) {
       return;
     }
@@ -297,7 +294,7 @@ export const GeneDetail: FC = () => {
         message.success(t('tenant.genes.publishSuccess', 'Gene published successfully'));
       }
     } catch {
-      showActionError(
+      showGeneActionError(
         currentGene.is_published
           ? t('tenant.genes.unpublishError', 'Failed to unpublish gene')
           : t('tenant.genes.publishError', 'Failed to publish gene')
@@ -305,6 +302,31 @@ export const GeneDetail: FC = () => {
     } finally {
       setIsPublishSubmitting(false);
     }
+  };
+
+  const handlePublishToggle = () => {
+    if (!currentGene) {
+      return;
+    }
+    if (!currentGene.is_published) {
+      void runPublishToggle();
+      return;
+    }
+    // Unpublishing removes marketplace visibility — confirm first
+    Modal.confirm({
+      title: t('tenant.genes.unpublishConfirmTitle', {
+        name: currentGene.name,
+        defaultValue: 'Unpublish {{name}}?',
+      }),
+      content: t(
+        'tenant.genes.unpublishConfirmContent',
+        'This removes the gene from the public marketplace. Installed copies keep working.'
+      ),
+      okText: t('tenant.genes.unpublishAction', 'Unpublish'),
+      okType: 'danger',
+      cancelText: t('common.cancel', 'Cancel'),
+      onOk: runPublishToggle,
+    });
   };
 
   const handleDeleteGene = () => {
@@ -332,7 +354,7 @@ export const GeneDetail: FC = () => {
           setIsDeleteSubmitting(false);
           void navigate(-1);
         } catch {
-          showActionError(t('tenant.genes.deleteError', 'Failed to delete gene'));
+          showGeneActionError(t('tenant.genes.deleteError', 'Failed to delete gene'));
           setIsDeleteSubmitting(false);
         }
       },
@@ -380,7 +402,7 @@ export const GeneDetail: FC = () => {
       editForm.resetFields();
     } catch (error) {
       if (!isFormValidationError(error)) {
-        showActionError(t('tenant.genes.updateError', 'Failed to update gene'));
+        showGeneActionError(t('tenant.genes.updateError', 'Failed to update gene'));
       }
     } finally {
       setIsEditSubmitting(false);
@@ -403,19 +425,11 @@ export const GeneDetail: FC = () => {
             await fetchGeneReviews(geneId, nextPage, reviewPageSize, options);
             message.success(t('gene.reviewDeleteSuccess'));
           } catch {
-            showActionError(t('gene.reviewDeleteError'));
+            showGeneActionError(t('gene.reviewDeleteError'));
           }
         }
       },
     });
-  };
-
-  const getEventColor = (type: string) => {
-    return isEvolutionEventType(type) ? EVENT_TYPE_COLORS[type] : 'default';
-  };
-
-  const getEventTypeLabel = (type: string) => {
-    return t(`tenant.evolution.types.${type}`, type);
   };
 
   if (isLoading && !currentGene) {
@@ -478,9 +492,7 @@ export const GeneDetail: FC = () => {
             {t('tenant.genes.editAction', 'Edit')}
           </Button>
           <Button
-            onClick={() => {
-              void handlePublishToggle();
-            }}
+            onClick={handlePublishToggle}
             loading={isPublishSubmitting}
             danger={currentGene.is_published}
             icon={
@@ -579,7 +591,7 @@ export const GeneDetail: FC = () => {
 
       <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
         <Title level={4}>{t('tenant.genes.description')}</Title>
-        <Paragraph className="whitespace-pre-wrap">
+        <Paragraph className="whitespace-pre-wrap break-words">
           {currentGene.description || t('tenant.genes.noDescription')}
         </Paragraph>
       </Card>
@@ -605,39 +617,9 @@ export const GeneDetail: FC = () => {
         </Title>
 
         {evolutionEvents.length > 0 ? (
-          <Timeline
-            items={evolutionEvents.map((event) => ({
-              color: getEventColor(event.event_type),
-              content: (
-                <div className="flex flex-col gap-1 mb-4">
-                  <div className="flex items-center gap-2">
-                    <Tag color={getEventColor(event.event_type)}>
-                      {getEventTypeLabel(event.event_type)}
-                    </Tag>
-                    <Text type="secondary" className="text-xs">
-                      {new Date(event.created_at).toLocaleString()}
-                    </Text>
-                  </div>
-                  {(event.gene_name || event.gene_slug) && (
-                    <Text strong>{event.gene_name || event.gene_slug}</Text>
-                  )}
-                  {(event.from_version || event.to_version) && (
-                    <div className="text-xs font-mono bg-slate-50 dark:bg-slate-900 p-2 rounded mt-2 border border-slate-200 dark:border-slate-800">
-                      <div className="text-slate-500">
-                        {event.from_version || 'none'}
-                        <span className="mx-2">→</span>
-                        {event.to_version || 'none'}
-                      </div>
-                    </div>
-                  )}
-                  {event.trigger && (
-                    <Text type="secondary" className="text-xs mt-1">
-                      {t('tenant.genes.triggeredBy')}: {event.trigger}
-                    </Text>
-                  )}
-                </div>
-              ),
-            }))}
+          <EvolutionTimeline
+            events={evolutionEvents}
+            triggerLabel={t('tenant.genes.triggeredBy')}
           />
         ) : (
           <Text type="secondary">{t('tenant.genes.noEvolutionEvents')}</Text>
@@ -725,7 +707,7 @@ export const GeneDetail: FC = () => {
           setIsReviewModalVisible(false);
           reviewForm.resetFields();
         }}
-        confirmLoading={isLoading}
+        confirmLoading={isReviewSubmitting}
       >
         <Form form={reviewForm} layout="vertical" className="mt-4" initialValues={{ rating: 5 }}>
           <Form.Item
@@ -756,7 +738,7 @@ export const GeneDetail: FC = () => {
           setIsInstallModalVisible(false);
           installForm.resetFields();
         }}
-        confirmLoading={isLoading}
+        confirmLoading={isInstallSubmitting}
       >
         <Form form={installForm} layout="vertical" className="mt-4">
           <Form.Item
@@ -764,7 +746,7 @@ export const GeneDetail: FC = () => {
             label={t('tenant.genes.instanceId')}
             rules={[{ required: true, message: t('tenant.genes.instanceIdRequired') }]}
           >
-            <Input placeholder={t('tenant.genes.instanceIdPlaceholder')} />
+            <InstanceSelect placeholder={t('tenant.genes.instanceIdPlaceholder')} />
           </Form.Item>
 
           <Form.Item
@@ -795,50 +777,7 @@ export const GeneDetail: FC = () => {
         destroyOnHidden
       >
         <Form form={editForm} layout="vertical" className="mt-4">
-          <Form.Item
-            name="name"
-            label={t('tenant.genes.publish.name', 'Name')}
-            rules={[{ required: true, message: t('tenant.genes.publish.nameRequired') }]}
-          >
-            <Input placeholder={t('tenant.genes.publish.namePlaceholder')} />
-          </Form.Item>
-          <Form.Item
-            name="slug"
-            label={t('tenant.genes.publish.slug', 'Slug')}
-            rules={[{ required: true, message: t('tenant.genes.publish.slugRequired') }]}
-          >
-            <Input placeholder={t('tenant.genes.publish.slugPlaceholder')} />
-          </Form.Item>
-          <Form.Item
-            name="version"
-            label={t('tenant.genes.publish.version', 'Version')}
-            rules={[
-              { required: true, message: t('tenant.genes.versionRequired', 'Version is required') },
-            ]}
-          >
-            <Input placeholder="1.0.0" />
-          </Form.Item>
-          <Form.Item name="category" label={t('tenant.genes.publish.category', 'Category')}>
-            <Input placeholder={t('tenant.genes.publish.categoryPlaceholder')} />
-          </Form.Item>
-          <Form.Item
-            name="short_description"
-            label={t('tenant.genes.publish.shortDescription', 'Short description')}
-          >
-            <Input placeholder={t('tenant.genes.publish.shortDescriptionPlaceholder')} />
-          </Form.Item>
-          <Form.Item name="description" label={t('tenant.genes.description', 'Description')}>
-            <Input.TextArea
-              rows={4}
-              placeholder={t('tenant.genes.publish.descriptionPlaceholder')}
-            />
-          </Form.Item>
-          <Form.Item name="visibility" label={t('tenant.genes.publish.visibility', 'Visibility')}>
-            <Select options={[...visibilityOptions(t)]} />
-          </Form.Item>
-          <Form.Item name="tags" label={t('tenant.genes.publish.tags', 'Tags')}>
-            <Input placeholder={t('tenant.genes.publish.tagsPlaceholder')} />
-          </Form.Item>
+          <GeneFormFields />
         </Form>
       </Modal>
 
@@ -852,7 +791,7 @@ export const GeneDetail: FC = () => {
           setIsRateModalVisible(false);
           rateForm.resetFields();
         }}
-        confirmLoading={isLoading}
+        confirmLoading={isRateSubmitting}
       >
         <Form form={rateForm} layout="vertical" className="mt-4" initialValues={{ score: 5 }}>
           <Form.Item

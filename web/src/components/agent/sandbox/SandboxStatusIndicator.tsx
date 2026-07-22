@@ -261,7 +261,7 @@ const MetricsPopover: FC<{
         <div className="flex items-center justify-center py-4">
           <Loader2 size={16} className="animate-spin motion-reduce:animate-none text-slate-400" />
           <span className="ml-2 text-sm text-slate-500">
-            {t('agent.sandbox.loading', 'Loading...')}
+            {t('agent.sandbox.loading', 'Loading…')}
           </span>
         </div>
       )}
@@ -758,7 +758,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
         size={12}
         className={config.animate || starting ? 'animate-spin motion-reduce:animate-none' : ''}
       />
-      <span>{starting ? t('agent.sandbox.status.starting', 'Starting') : config.label}</span>
+      <span>{starting ? t('agent.sandbox.status.starting', 'Starting…') : config.label}</span>
       {sandbox?.status === 'running' && <PlayCircle size={10} className="text-emerald-500" />}
     </>
   );
@@ -775,7 +775,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
           onStop={() => handleStop()}
         />
       }
-      trigger="hover"
+      trigger={['hover', 'focus']}
       placement="topLeft"
       open={popoverOpen}
       onOpenChange={setPopoverOpen}
@@ -797,10 +797,12 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
         </button>
       ) : (
         <span
+          tabIndex={0}
           className={`
             flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium
             ${config.bgColor} ${config.color}
             transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70
             ${className || ''}
           `}
         >

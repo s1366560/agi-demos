@@ -14,12 +14,14 @@ import {
   AlertTriangle,
   Plus,
   X,
+  Loader2,
 } from 'lucide-react';
 
 import { AppModal } from '@/components/common';
 
 import { schemaAPI } from '../../../services/api';
 import { confirmAction } from '../../../utils/confirmAction';
+import { logger } from '../../../utils/logger';
 
 import type { EdgeMapping, SchemaEdgeType, SchemaEntityType } from '../../../types/memory';
 
@@ -30,6 +32,7 @@ export default function EdgeMapList() {
   const [entityTypes, setEntityTypes] = useState<SchemaEntityType[]>([]);
   const [edgeTypes, setEdgeTypes] = useState<SchemaEdgeType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // UI State
   const [filterSource, setFilterSource] = useState<string>('All');
@@ -40,10 +43,12 @@ export default function EdgeMapList() {
   // Add Mapping State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newMapData, setNewMapData] = useState({ source: '', target: '', edge: '' });
+  const [isCreating, setIsCreating] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!projectId) return;
     setLoading(true);
+    setLoadError(null);
     try {
       const [maps, entities, edges] = await Promise.all([
         schemaAPI.listEdgeMaps(projectId),
@@ -54,18 +59,24 @@ export default function EdgeMapList() {
       setEntityTypes(entities);
       setEdgeTypes(edges);
     } catch (error) {
-      console.error('Failed to load data:', error);
+      logger.error('[EdgeMapList] Failed to load data:', error);
+      setLoadError(t('project.schema.mappings.load_error', 'Failed to load schema mappings.'));
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, t]);
 
   useEffect(() => {
     void loadData();
   }, [loadData]);
 
   const handleCreate = async () => {
-    if (!projectId) return;
+    if (!projectId || isCreating) return;
+    if (!newMapData.edge) {
+      void message.error(t('project.schema.mappings.no_edge_types', 'Create an edge type first.'));
+      return;
+    }
+    setIsCreating(true);
     try {
       await schemaAPI.createEdgeMap(projectId, {
         source_type: newMapData.source,
@@ -74,10 +85,13 @@ export default function EdgeMapList() {
       });
       setIsAddModalOpen(false);
       setNewMapData({ source: '', target: '', edge: '' });
+      void message.success(t('project.schema.mappings.create_success', 'Mapping created'));
       await loadData();
     } catch (error) {
-      console.error('Failed to create mapping:', error);
+      logger.error('[EdgeMapList] Failed to create mapping:', error);
       void message.error(t('project.schema.mappings.create_error'));
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -116,18 +130,43 @@ export default function EdgeMapList() {
       await schemaAPI.deleteEdgeMap(projectId, id);
       await loadData();
     } catch (error) {
-      console.error('Failed to delete:', error);
+      logger.error('[EdgeMapList] Failed to delete:', error);
+      void message.error(t('project.schema.mappings.delete_error', 'Failed to delete mapping'));
     }
   };
 
   const openAddModal = (source: string, target: string) => {
+    if (edgeTypes.length === 0) return;
     setNewMapData({ source, target, edge: edgeTypes[0]?.name ?? '' });
     setIsAddModalOpen(true);
   };
 
   if (loading)
     return (
-      <div className="p-8 text-center text-slate-500 dark:text-gray-500">{t('common.loading')}</div>
+      <div className="p-8 text-center text-slate-500 dark:text-gray-500" role="status">
+        {t('common.loading')}
+      </div>
+    );
+
+  if (loadError)
+    return (
+      <div className="flex h-full items-center justify-center p-8">
+        <div
+          role="alert"
+          className="flex flex-col items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-6 py-10 text-center dark:border-red-500/30 dark:bg-red-500/10"
+        >
+          <p className="text-sm text-red-600 dark:text-red-400">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => {
+              void loadData();
+            }}
+            className="inline-flex h-9 items-center rounded-lg bg-slate-950 px-4 text-sm font-medium text-slate-50 transition-colors hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/20 dark:bg-slate-50 dark:text-slate-950 dark:hover:bg-slate-200 dark:focus-visible:ring-slate-50/20"
+          >
+            {t('common.retry', 'Retry')}
+          </button>
+        </div>
+      </div>
     );
 
   // Combine system types and user types
@@ -377,7 +416,7 @@ export default function EdgeMapList() {
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center justify-between">
                           <span className="text-slate-500 dark:text-text-muted text-xs font-normal">
-                            Source \ Target
+                            {t('project.schema.mappings.source_target', 'Source \\ Target')}
                           </span>
                         </div>
                       </div>
@@ -402,21 +441,34 @@ export default function EdgeMapList() {
                   {filteredRows.map((row) => (
                     <tr key={row} className="group">
                       {/* Row Header */}
-                      <td className="sticky left-0 z-30 bg-slate-50 dark:bg-surface-dark p-3 border-r border-slate-200 dark:border-border-dark font-medium text-slate-900 dark:text-slate-100 shadow-sm group-hover:bg-slate-100 dark:group-hover:bg-surface-dark-alt transition-colors">
+                      <th
+                        scope="row"
+                        className="sticky left-0 z-30 bg-slate-50 dark:bg-surface-dark p-3 border-r border-slate-200 dark:border-border-dark text-left font-medium text-slate-900 dark:text-slate-100 shadow-sm group-hover:bg-slate-100 dark:group-hover:bg-surface-dark-alt transition-colors"
+                      >
                         <div className="flex items-center gap-2">
                           <div className="size-6 rounded bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center">
                             <span className="text-xs font-bold">{row.charAt(0)}</span>
                           </div>
                           {row}
                         </div>
-                      </td>
+                      </th>
                       {/* Cells */}
                       {filteredCols.map((col) => {
                         const cellMappings = mappings.filter(
                           (m) => m.source_type === row && m.target_type === col
                         );
 
-                        if (hideEmpty && cellMappings.length === 0) return null;
+                        if (hideEmpty && cellMappings.length === 0) {
+                          // Keep the grid aligned: render a placeholder cell instead of
+                          // skipping the <td> entirely.
+                          return (
+                            <td
+                              key={`${row}-${col}`}
+                              aria-hidden="true"
+                              className="p-3 bg-slate-100/60 dark:bg-slate-900/40 border-r border-slate-200/50 dark:border-border-dark/30"
+                            />
+                          );
+                        }
 
                         return (
                           <td
@@ -427,7 +479,7 @@ export default function EdgeMapList() {
                               {cellMappings.map((map) => (
                                 <span
                                   key={map.id}
-                                  className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium border cursor-pointer group/chip ${
+                                  className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium border group/chip ${
                                     map.source === 'generated'
                                       ? 'bg-purple-50 dark:bg-purple-500/20 text-purple-700 dark:text-purple-200 border-purple-200 dark:border-purple-500/30 hover:bg-purple-100 dark:hover:bg-purple-500/30'
                                       : 'bg-blue-50 dark:bg-primary/20 text-blue-700 dark:text-blue-200 border-blue-200 dark:border-primary/30 hover:bg-blue-100 dark:hover:bg-primary/30'
@@ -443,7 +495,7 @@ export default function EdgeMapList() {
                                     aria-label={t('project.schema.mappings.remove_mapping', {
                                       edge: map.edge_type,
                                     })}
-                                    className="rounded text-current opacity-0 transition-opacity hover:text-red-600 group-hover/chip:opacity-100 dark:hover:text-slate-100"
+                                    className="rounded text-current opacity-0 transition-opacity hover:text-red-600 focus-visible:opacity-100 group-hover/chip:opacity-100 dark:hover:text-slate-100"
                                   >
                                     <X className="h-3 w-3" />
                                   </button>
@@ -451,6 +503,7 @@ export default function EdgeMapList() {
                               ))}
                               <button
                                 type="button"
+                                disabled={edgeTypes.length === 0}
                                 onClick={() => {
                                   openAddModal(row, col);
                                 }}
@@ -458,7 +511,7 @@ export default function EdgeMapList() {
                                   source: row,
                                   target: col,
                                 })}
-                                className="text-slate-400 dark:text-text-muted hover:text-slate-900 dark:hover:text-slate-100 rounded-full size-6 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800"
+                                className="text-slate-400 dark:text-text-muted hover:text-slate-900 dark:hover:text-slate-100 rounded-full size-6 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                               >
                                 <Plus className="w-4 h-4" />
                               </button>
@@ -496,12 +549,21 @@ export default function EdgeMapList() {
             </button>
             <button
               type="button"
+              disabled={isCreating || !newMapData.edge}
               onClick={() => {
                 void handleCreate();
               }}
-              className="px-4 py-2 text-sm font-bold text-slate-50 bg-blue-600 dark:bg-primary rounded-lg hover:bg-blue-700 dark:hover:bg-primary-light shadow-sm"
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold text-slate-50 bg-blue-600 dark:bg-primary rounded-lg hover:bg-blue-700 dark:hover:bg-primary-light shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {t('project.schema.mappings.modal.add')}
+              {isCreating && (
+                <Loader2
+                  className="w-4 h-4 animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
+              )}
+              {isCreating
+                ? t('project.schema.mappings.modal.adding', 'Adding…')
+                : t('project.schema.mappings.modal.add')}
             </button>
           </>
         }

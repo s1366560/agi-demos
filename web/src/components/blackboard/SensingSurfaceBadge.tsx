@@ -6,10 +6,7 @@ interface SensingSurfaceBadgeProps {
   fallbackLabel: string;
 }
 
-/**
- * @deprecated Use `SurfaceBadge` with `boundary="sensing"` directly.
- * Thin wrapper kept for existing consumers.
- */
+/** Thin wrapper over `SurfaceBadge`, kept for existing consumers. */
 export function SensingSurfaceBadge({ labelKey, fallbackLabel }: SensingSurfaceBadgeProps) {
   return (
     <SurfaceBadge

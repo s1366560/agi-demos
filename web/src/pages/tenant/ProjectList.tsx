@@ -32,7 +32,6 @@ import { useDebounce } from '../../hooks/useDebounce';
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 
-
 import type { TFunction } from 'i18next';
 
 const formatStorageUsagePercent = (bytes: number, maxBytes?: number | null): string => {

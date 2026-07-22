@@ -36,6 +36,7 @@ export const BackendStoreSelectors: React.FC<BackendStoreSelectorsProps> = ({
   const [retrievalStores, setRetrievalStores] = useState<BackendStore[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,7 +75,7 @@ export const BackendStoreSelectors: React.FC<BackendStoreSelectorsProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [tenantId, t]);
+  }, [tenantId, t, reloadToken]);
 
   const graphEnvStore = useMemo(
     () => graphStores.find((store) => store.source === 'env'),
@@ -109,9 +110,27 @@ export const BackendStoreSelectors: React.FC<BackendStoreSelectorsProps> = ({
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
-          {error}
+        <div
+          role="alert"
+          className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300"
+        >
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setReloadToken((token) => token + 1);
+            }}
+            className="shrink-0 rounded-lg px-3 py-1.5 font-medium transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:hover:bg-red-900/40"
+          >
+            {t('common.retry', { defaultValue: 'Retry' })}
+          </button>
         </div>
+      )}
+
+      {isLoading && (
+        <p className="mb-4 text-sm text-slate-500 dark:text-slate-400" role="status">
+          {t('common.loading', { defaultValue: 'Loading…' })}
+        </p>
       )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

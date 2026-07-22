@@ -108,7 +108,7 @@ export function SwitchField({
   return (
     <div className="flex min-h-9 items-center justify-between gap-3 rounded-md border border-border-light bg-surface-muted px-3 py-2 dark:border-border-dark dark:bg-surface-dark-alt">
       <span className="text-sm text-text-primary dark:text-text-inverse">{label}</span>
-      <Switch checked={checked} onChange={onChange} />
+      <Switch aria-label={label} checked={checked} onChange={onChange} />
     </div>
   );
 }

@@ -82,6 +82,7 @@ vi.mock('../../../stores/cluster', () => ({
 
 vi.mock('../../../stores/instance', () => ({
   useInstanceActions: () => ({ createInstance: mocks.createInstance }),
+  useInstanceSubmitting: () => false,
 }));
 
 vi.mock('../../../stores/project', () => ({

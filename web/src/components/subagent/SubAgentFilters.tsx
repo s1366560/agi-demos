@@ -65,9 +65,9 @@ export const SubAgentFilters = memo<SubAgentFiltersProps>(
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
-              aria-label={t('tenant.subagents.filter.searchPlaceholder', 'Search subagents...')}
-              placeholder={t('tenant.subagents.filter.searchPlaceholder', 'Search subagents...')}
+              className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:border-primary"
+              aria-label={t('tenant.subagents.filter.searchPlaceholder', 'Search subagents…')}
+              placeholder={t('tenant.subagents.filter.searchPlaceholder', 'Search subagents…')}
               value={search}
               onChange={handleSearchInput}
             />
@@ -75,11 +75,16 @@ export const SubAgentFilters = memo<SubAgentFiltersProps>(
 
           <div className="flex items-center gap-3 flex-wrap">
             {/* Status pills */}
-            <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-600 p-0.5 bg-slate-50 dark:bg-slate-900">
+            <div
+              role="radiogroup"
+              aria-label={t('tenant.subagents.filter.statusGroup', 'Filter by status')}
+              className="inline-flex rounded-lg border border-slate-200 dark:border-slate-600 p-0.5 bg-slate-50 dark:bg-slate-900"
+            >
               {STATUS_OPTIONS.map((opt) => (
                 <button
                   key={opt.value}
                   type="button"
+                  aria-pressed={statusFilter === opt.value}
                   onClick={() => {
                     onStatusFilterChange(opt.value);
                   }}

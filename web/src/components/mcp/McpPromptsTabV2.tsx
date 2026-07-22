@@ -198,6 +198,7 @@ export const McpPromptsTabV2: React.FC = () => {
             onChange={setServerFilter}
             className="w-full sm:w-52"
             placeholder={t('mcp.prompts.filterByServer')}
+            aria-label={t('mcp.prompts.filterByServer')}
             options={serverOptions}
             suffix={<Server size={14} className="text-slate-400" />}
           />

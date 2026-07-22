@@ -46,6 +46,7 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({ tool, isExpanded, 
         type="button"
         className="w-full p-4 cursor-pointer text-left bg-transparent border-0"
         onClick={onToggle}
+        aria-expanded={isExpanded}
       >
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0 flex-1">

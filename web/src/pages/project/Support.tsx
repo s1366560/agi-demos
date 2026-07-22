@@ -13,6 +13,7 @@ import {
   Plus,
   ChevronLeft,
   ChevronRight,
+  Loader2,
 } from 'lucide-react';
 
 import { formatDateTime } from '@/utils/date';
@@ -20,6 +21,7 @@ import { formatDateTime } from '@/utils/date';
 import api from '../../services/api';
 import { useTenantStore } from '../../stores/tenant';
 import { confirmAction } from '../../utils/confirmAction';
+import { logger } from '../../utils/logger';
 
 interface SupportTicket {
   id: string;
@@ -63,6 +65,7 @@ export const Support: React.FC = () => {
   const [totalTickets, setTotalTickets] = useState(0);
   const [hasMoreTickets, setHasMoreTickets] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showNewTicket, setShowNewTicket] = useState(false);
 
@@ -82,6 +85,7 @@ export const Support: React.FC = () => {
       }
 
       setIsLoading(true);
+      setLoadError(null);
       try {
         const data = await api.get<SupportTicketsResponse>('/support/tickets', {
           params: {
@@ -94,12 +98,13 @@ export const Support: React.FC = () => {
         setTotalTickets(data.total);
         setHasMoreTickets(data.has_more);
       } catch (error) {
-        console.error('Failed to load support tickets:', error);
+        logger.error('[Support] Failed to load support tickets:', error);
+        setLoadError(t('project.support.messages.load_fail', 'Failed to load support tickets.'));
       } finally {
         setIsLoading(false);
       }
     },
-    [currentTenant]
+    [currentTenant, t]
   );
 
   useEffect(() => {
@@ -114,7 +119,9 @@ export const Support: React.FC = () => {
     e.preventDefault();
 
     if (!subject.trim() || !ticketMessage.trim()) {
-      message.warning(t('project.support.form.subject_placeholder'));
+      message.warning(
+        t('project.support.form.required_error', 'Subject and message are required.')
+      );
       return;
     }
 
@@ -138,7 +145,7 @@ export const Support: React.FC = () => {
 
       message.success(t('project.support.messages.submit_success'));
     } catch (error) {
-      console.error('Failed to submit ticket:', error);
+      logger.error('[Support] Failed to submit ticket:', error);
       message.error(t('project.support.messages.submit_fail'));
     } finally {
       setIsSubmitting(false);
@@ -150,9 +157,10 @@ export const Support: React.FC = () => {
 
     try {
       await api.post(`/support/tickets/${ticketId}/close`);
+      message.success(t('project.support.messages.close_success', 'Ticket closed'));
       await loadTickets(currentPage);
     } catch (error) {
-      console.error('Failed to close ticket:', error);
+      logger.error('[Support] Failed to close ticket:', error);
       message.error(t('project.support.messages.close_fail'));
     }
   };
@@ -327,10 +335,15 @@ export const Support: React.FC = () => {
             }}
           >
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label
+                htmlFor="ticket-subject"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+              >
                 {t('project.support.form.subject')}
               </label>
               <input
+                id="ticket-subject"
+                name="subject"
                 type="text"
                 value={subject}
                 onChange={(e) => {
@@ -343,10 +356,15 @@ export const Support: React.FC = () => {
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label
+                htmlFor="ticket-priority"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+              >
                 {t('project.support.form.priority')}
               </label>
               <select
+                id="ticket-priority"
+                name="priority"
                 value={priority}
                 onChange={(e) => {
                   setPriority(e.target.value);
@@ -361,10 +379,15 @@ export const Support: React.FC = () => {
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label
+                htmlFor="ticket-message"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+              >
                 {t('project.support.form.message')}
               </label>
               <textarea
+                id="ticket-message"
+                name="message"
                 value={ticketMessage}
                 onChange={(e) => {
                   setTicketMessage(e.target.value);
@@ -382,7 +405,14 @@ export const Support: React.FC = () => {
                 disabled={isSubmitting}
                 className="flex items-center gap-2 bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors"
               >
-                <Send className="h-4 w-4" />
+                {isSubmitting ? (
+                  <Loader2
+                    className="h-4 w-4 animate-spin motion-reduce:animate-none"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <Send className="h-4 w-4" aria-hidden="true" />
+                )}
                 {isSubmitting
                   ? t('project.support.form.submitting')
                   : t('project.support.form.submit')}
@@ -408,8 +438,28 @@ export const Support: React.FC = () => {
         </h2>
 
         {isLoading ? (
-          <div className="flex items-center justify-center h-32">
+          <div
+            className="flex items-center justify-center h-32"
+            role="status"
+            aria-label={t('common.loading', 'Loading…')}
+          >
             <div className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        ) : loadError ? (
+          <div
+            className="flex flex-col items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-8 text-center dark:border-red-900/50 dark:bg-red-900/20"
+            role="alert"
+          >
+            <p className="text-sm text-red-700 dark:text-red-400">{loadError}</p>
+            <button
+              type="button"
+              onClick={() => {
+                void loadTickets(currentPage);
+              }}
+              className="inline-flex h-9 items-center rounded-md bg-slate-950 px-4 text-sm font-medium text-slate-50 transition-colors hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/20 dark:bg-slate-50 dark:text-slate-950 dark:hover:bg-slate-200 dark:focus-visible:ring-slate-50/20"
+            >
+              {t('common.retry', 'Retry')}
+            </button>
           </div>
         ) : tickets.length === 0 ? (
           <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-8 text-center">
@@ -469,8 +519,8 @@ export const Support: React.FC = () => {
                 className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-6"
               >
                 <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1 break-words">
                       {ticket.subject}
                     </h3>
                     <div className="flex items-center gap-3 text-sm">
@@ -494,7 +544,7 @@ export const Support: React.FC = () => {
                       onClick={() => {
                         void handleCloseTicket(ticket.id);
                       }}
-                      className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                      className="shrink-0 rounded-md px-2 py-1 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-slate-800 dark:hover:text-white"
                     >
                       {t('project.support.tickets.close')}
                     </button>

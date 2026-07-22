@@ -150,6 +150,7 @@ export const AppLauncher: FC<AppLauncherProps> = ({ variant = 'header' }) => {
           onClick={handleRefresh}
           className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           title={t('components.mcpApp.launcher.refreshApps', 'Refresh apps')}
+          aria-label={t('components.mcpApp.launcher.refreshApps', 'Refresh apps')}
         >
           <RefreshCw
             size={12}
@@ -162,7 +163,8 @@ export const AppLauncher: FC<AppLauncherProps> = ({ variant = 'header' }) => {
       {totalReady > 5 && (
         <div className="px-3 pb-2">
           <Input
-            placeholder={t('components.mcpApp.launcher.searchPlaceholder', 'Search apps...')}
+            aria-label={t('components.mcpApp.launcher.searchPlaceholder', 'Search apps…')}
+            placeholder={t('components.mcpApp.launcher.searchPlaceholder', 'Search apps…')}
             prefix={<Search size={12} className="text-slate-400" />}
             value={search}
             onChange={(e) => {
@@ -337,7 +339,7 @@ const AppLauncherItem: FC<{
       </button>
 
       {/* Actions */}
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 transition-opacity">
         <button
           type="button"
           onClick={(e) => {
@@ -350,8 +352,9 @@ const AppLauncherItem: FC<{
               : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
           }`}
           title={pinned ? unpinLabel : pinLabel}
+          aria-label={pinned ? unpinLabel : pinLabel}
         >
-          <Pin size={12} className={pinned ? 'fill-current' : ''} />
+          <Pin aria-hidden="true" size={12} className={pinned ? 'fill-current' : ''} />
         </button>
         <button
           type="button"
@@ -361,8 +364,9 @@ const AppLauncherItem: FC<{
           }}
           className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           title={openLabel}
+          aria-label={openLabel}
         >
-          <ExternalLink size={12} />
+          <ExternalLink aria-hidden="true" size={12} />
         </button>
       </div>
     </div>

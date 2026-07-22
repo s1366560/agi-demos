@@ -248,7 +248,10 @@ export function PatternInspector({
                 onAdminNotesChange(e.target.value);
               }}
               placeholder={t('components.patternInspector.adminNotesPlaceholder', {
-                defaultValue: 'Add notes about this pattern...',
+                defaultValue: 'Add notes about this pattern…',
+              })}
+              aria-label={t('components.patternInspector.adminNotes', {
+                defaultValue: 'Admin Notes',
               })}
               className="w-full px-3 py-2 rounded-md border border-slate-200 dark:border-border-dark bg-white dark:bg-surface-dark text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary resize-none"
               rows={4}

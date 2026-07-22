@@ -14,8 +14,10 @@ import {
   Users,
 } from 'lucide-react';
 
+import { formatStorage } from '../../hooks/useDateFormatter';
 import { tenantAPI } from '../../services/api';
 import { useTenantStore } from '../../stores/tenant';
+import { logger } from '../../utils/logger';
 
 interface TenantOverviewProject {
   id: string;
@@ -79,17 +81,6 @@ function getTenantOverviewStats(tenantId: string): Promise<TenantOverviewStats> 
 
 const clampPercent = (value: number): number => Math.max(0, Math.min(100, value));
 
-const formatStorage = (bytes: number) => {
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(1)} KB`;
-  const mb = bytes / (1024 * 1024);
-  if (mb < 1024) return `${mb.toFixed(1)} MB`;
-  const tb = bytes / (1024 * 1024 * 1024 * 1024);
-  if (tb >= 1) return `${tb.toFixed(1)} TB`;
-  const gb = bytes / (1024 * 1024 * 1024);
-  return `${gb.toFixed(1)} GB`;
-};
-
 const isActiveProject = (status?: string | null): boolean => status?.toLowerCase() === 'active';
 
 const hasValue = (value?: string | null): value is string => Boolean(value?.trim());
@@ -131,6 +122,8 @@ export const TenantOverview: React.FC = () => {
   const tenantId = routeTenantId ?? currentTenant?.id ?? null;
   const [stats, setStats] = useState<TenantOverviewStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [statsError, setStatsError] = useState(false);
+  const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
     let isCurrent = true;
@@ -143,6 +136,7 @@ export const TenantOverview: React.FC = () => {
       }
 
       setStats(null);
+      setStatsError(false);
       setIsLoadingStats(true);
       try {
         const data = await getTenantOverviewStats(tenantId);
@@ -150,7 +144,10 @@ export const TenantOverview: React.FC = () => {
           setStats(data);
         }
       } catch (error) {
-        console.error('Failed to fetch tenant stats:', error);
+        logger.error('Failed to fetch tenant stats', error);
+        if (isCurrent) {
+          setStatsError(true);
+        }
       } finally {
         if (isCurrent) {
           setIsLoadingStats(false);
@@ -163,13 +160,35 @@ export const TenantOverview: React.FC = () => {
     return () => {
       isCurrent = false;
     };
-  }, [tenantId]);
+  }, [tenantId, retryToken]);
 
   if (!tenantId) {
     return <div className="p-8 text-center text-slate-500">{t('tenant.overview.loading')}</div>;
   }
 
-  if (isLoadingStats || !stats) {
+  if (isLoadingStats) {
+    return <div className="p-8 text-center text-slate-500">{t('common.loading')}</div>;
+  }
+
+  if (!stats) {
+    if (statsError) {
+      return (
+        <div className="flex flex-col items-center gap-3 p-8 text-center">
+          <p role="alert" className="text-slate-500 dark:text-slate-400">
+            {t('tenant.overview.loadFailed')}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setRetryToken((token) => token + 1);
+            }}
+            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            {t('common.retry')}
+          </button>
+        </div>
+      );
+    }
     return <div className="p-8 text-center text-slate-500">{t('common.loading')}</div>;
   }
 
@@ -209,9 +228,9 @@ export const TenantOverview: React.FC = () => {
     <div className="max-w-full mx-auto flex flex-col gap-8">
       {/* Page Heading */}
       <div className="flex flex-col gap-1">
-        <h2 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
           {t('tenant.overview.title')}
-        </h2>
+        </h1>
         <p className="text-slate-500 dark:text-slate-400">{t('tenant.overview.subtitle')}</p>
       </div>
 
@@ -231,7 +250,7 @@ export const TenantOverview: React.FC = () => {
               {t('tenant.overview.totalStorage')}
             </p>
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              <h3 className="text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+              <h3 className="text-2xl font-semibold tracking-tight tabular-nums text-slate-950 dark:text-slate-50">
                 {formatStorage(stats.storage.used)}
               </h3>
               <span className="text-sm text-slate-500 dark:text-slate-400">
@@ -260,7 +279,7 @@ export const TenantOverview: React.FC = () => {
             <p className="mb-1 text-sm font-medium text-slate-500 dark:text-slate-400">
               {t('tenant.overview.activeProjects')}
             </p>
-            <h3 className="text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+            <h3 className="text-2xl font-semibold tracking-tight tabular-nums text-slate-950 dark:text-slate-50">
               {stats.projects.active}
             </h3>
           </div>
@@ -282,7 +301,7 @@ export const TenantOverview: React.FC = () => {
             <p className="mb-1 text-sm font-medium text-slate-500 dark:text-slate-400">
               {t('tenant.overview.teamMembers')}
             </p>
-            <h3 className="text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+            <h3 className="text-2xl font-semibold tracking-tight tabular-nums text-slate-950 dark:text-slate-50">
               {stats.members.total}
             </h3>
           </div>
@@ -461,6 +480,11 @@ export const TenantOverview: React.FC = () => {
           data-testid="overview-project-mobile-list"
           className="divide-y divide-slate-100 dark:divide-slate-800 md:hidden"
         >
+          {stats.projects.list.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+              {t('tenant.overview.noProjects')}
+            </p>
+          ) : null}
           {stats.projects.list.map((project) => (
             <div key={project.id} className="px-4 py-4">
               <div className="flex items-start justify-between gap-3">
@@ -503,9 +527,7 @@ export const TenantOverview: React.FC = () => {
               </div>
               <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
                 <div>
-                  <dt className="text-xs font-medium text-slate-500">
-                    {t('common.stats.owner')}
-                  </dt>
+                  <dt className="text-xs font-medium text-slate-500">{t('common.stats.owner')}</dt>
                   <dd className="mt-1 truncate text-slate-700 dark:text-slate-300">
                     {project.owner}
                   </dd>
@@ -523,7 +545,10 @@ export const TenantOverview: React.FC = () => {
           ))}
         </div>
 
-        <div data-testid="overview-project-desktop-table" className="hidden overflow-x-auto md:block">
+        <div
+          data-testid="overview-project-desktop-table"
+          className="hidden overflow-x-auto md:block"
+        >
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
@@ -545,6 +570,16 @@ export const TenantOverview: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {stats.projects.list.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="py-8 px-6 text-center text-sm text-slate-500 dark:text-slate-400"
+                  >
+                    {t('tenant.overview.noProjects')}
+                  </td>
+                </tr>
+              ) : null}
               {stats.projects.list.map((project) => (
                 <tr
                   key={project.id}
@@ -556,7 +591,12 @@ export const TenantOverview: React.FC = () => {
                         <Plug size={20} />
                       </div>
                       <div>
-                        <p className="font-medium text-slate-900 dark:text-white">{project.name}</p>
+                        <Link
+                          to={`/tenant/${tenantId}/project/${project.id}`}
+                          className="font-medium text-slate-900 transition-colors hover:text-primary hover:underline dark:text-white"
+                        >
+                          {project.name}
+                        </Link>
                         <p className="text-xs text-slate-500">ID: #{project.id.slice(0, 8)}</p>
                       </div>
                     </div>

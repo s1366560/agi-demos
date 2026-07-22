@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
-import { Input, Tag, Dropdown, Breadcrumb, Tree, Modal } from 'antd';
+import { App, Input, Tag, Dropdown, Breadcrumb, Tree } from 'antd';
 import {
   Download,
   Eye,
@@ -29,11 +29,14 @@ import { instanceFileService } from '@/services/instanceFileService';
 
 import {
   useLazyMessage,
+  LazyAlert,
   LazyEmpty,
   LazySpin,
   LazyModal,
   LazyButton,
 } from '@/components/ui/lazyAntd';
+
+import { formatDate } from './utils/instanceUtils';
 
 import type { MenuProps, TreeDataNode } from 'antd';
 
@@ -82,9 +85,12 @@ export const InstanceFiles: React.FC = () => {
   const { t } = useTranslation();
   const { instanceId } = useParams<{ instanceId: string }>();
   const messageApi = useLazyMessage();
+  const { modal } = App.useApp();
 
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [fileTree, setFileTree] = useState<FileNode[]>([]);
   const [search, setSearch] = useState('');
   const [selectedNode, setSelectedNode] = useState<FileNode | null>(null);
@@ -100,10 +106,12 @@ export const InstanceFiles: React.FC = () => {
   const fetchFileTree = useCallback(async () => {
     if (!instanceId) return;
     setIsLoading(true);
+    setLoadError(false);
     try {
       const response = await instanceFileService.listFiles(instanceId);
       setFileTree(response.tree);
     } catch {
+      setLoadError(true);
       messageApi?.error(t('tenant.instances.files.fetchError'));
     } finally {
       setIsLoading(false);
@@ -161,12 +169,14 @@ export const InstanceFiles: React.FC = () => {
         const treeNode: TreeDataNode = {
           key: node.key,
           title: (
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               {(() => {
                 const Icon = getFileIcon(node);
-                return <Icon size={16} />;
+                return <Icon size={16} className="shrink-0" />;
               })()}
-              <span className={selectedNode?.key === node.key ? 'font-medium text-info-dark' : ''}>
+              <span
+                className={`truncate ${selectedNode?.key === node.key ? 'font-medium text-info-dark' : ''}`}
+              >
                 {node.name}
               </span>
             </div>
@@ -294,12 +304,13 @@ export const InstanceFiles: React.FC = () => {
   }, [instanceId, createName, createType, createParentPath, messageApi, t, fetchFileTree]);
 
   const handleUpload = useCallback(() => {
-    if (!instanceId) return;
+    if (!instanceId || isUploading) return;
     const input = document.createElement('input');
     input.type = 'file';
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
+      setIsUploading(true);
       try {
         const directory = selectedNode?.type === 'folder' ? selectedNode.key : '';
         await instanceFileService.uploadFile(instanceId, file, directory);
@@ -307,10 +318,12 @@ export const InstanceFiles: React.FC = () => {
         void fetchFileTree();
       } catch {
         messageApi?.error(t('tenant.instances.files.uploadError'));
+      } finally {
+        setIsUploading(false);
       }
     };
     input.click();
-  }, [instanceId, selectedNode, messageApi, t, fetchFileTree]);
+  }, [instanceId, isUploading, selectedNode, messageApi, t, fetchFileTree]);
 
   const getBreadcrumbItems = useCallback((key: string) => {
     const parts = key.split('/');
@@ -375,7 +388,7 @@ export const InstanceFiles: React.FC = () => {
       icon: <Trash2 size={16} />,
       danger: true,
       onClick: () => {
-        Modal.confirm({
+        modal.confirm({
           title: t('tenant.instances.files.deleteConfirm'),
           content:
             selectedNode.type === 'folder'
@@ -390,7 +403,7 @@ export const InstanceFiles: React.FC = () => {
     });
 
     return items;
-  }, [selectedNode, t, handlePreview, handleDownload, handleDelete]);
+  }, [selectedNode, t, modal, handlePreview, handleDownload, handleDelete]);
 
   if (!instanceId) return null;
 
@@ -427,7 +440,12 @@ export const InstanceFiles: React.FC = () => {
           >
             {t('tenant.instances.files.newFile')}
           </LazyButton>
-          <LazyButton type="primary" onClick={handleUpload} icon={<Upload size={16} />}>
+          <LazyButton
+            type="primary"
+            onClick={handleUpload}
+            loading={isUploading}
+            icon={<Upload size={16} />}
+          >
             {t('tenant.instances.files.upload')}
           </LazyButton>
         </div>
@@ -525,6 +543,22 @@ export const InstanceFiles: React.FC = () => {
                 <div className="flex justify-center py-8">
                   <LazySpin />
                 </div>
+              ) : loadError ? (
+                <div className="py-8 flex flex-col items-center gap-3 px-4">
+                  <LazyAlert
+                    type="error"
+                    showIcon
+                    message={t('tenant.instances.files.fetchError')}
+                  />
+                  <LazyButton
+                    size="small"
+                    onClick={() => {
+                      void fetchFileTree();
+                    }}
+                  >
+                    {t('common.retry', 'Retry')}
+                  </LazyButton>
+                </div>
               ) : filteredFileTree.length === 0 ? (
                 <div className="py-8">
                   <LazyEmpty
@@ -581,7 +615,11 @@ export const InstanceFiles: React.FC = () => {
                         {t('tenant.instances.files.colType')}
                       </span>
                       <p className="text-sm text-text-primary dark:text-text-inverse">
-                        <Tag>{selectedNode.type === 'folder' ? 'Folder' : 'File'}</Tag>
+                        <Tag>
+                          {selectedNode.type === 'folder'
+                            ? t('tenant.instances.files.typeFolder', 'Folder')
+                            : t('tenant.instances.files.typeFile', 'File')}
+                        </Tag>
                         {selectedNode.mime_type && (
                           <span className="ml-2 text-text-muted">{selectedNode.mime_type}</span>
                         )}
@@ -600,7 +638,7 @@ export const InstanceFiles: React.FC = () => {
                         {t('tenant.instances.files.colModified')}
                       </span>
                       <p className="text-sm text-text-primary dark:text-text-inverse">
-                        {new Date(selectedNode.modified_at).toLocaleString()}
+                        {formatDate(selectedNode.modified_at)}
                       </p>
                     </div>
                   </div>
@@ -630,7 +668,7 @@ export const InstanceFiles: React.FC = () => {
               </>
             ) : (
               <div className="flex flex-col items-center justify-center py-20 text-text-muted dark:text-text-muted">
-                <FolderOpen size={16} className="text-5xl mb-3" />
+                <FolderOpen size={48} className="mb-3" />
                 <p>{t('tenant.instances.files.selectFile')}</p>
               </div>
             )}

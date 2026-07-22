@@ -229,10 +229,9 @@ describe('TenantOverview', () => {
       expect(screen.getAllByText('12.0 KB').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByTestId('overview-project-mobile-list')).toHaveClass('md:hidden');
       expect(screen.getByTestId('overview-project-desktop-table')).toHaveClass('hidden');
-      expect(screen.getByRole('link', { name: 'Project One' })).toHaveAttribute(
-        'href',
-        '/tenant/t1/project/project-1'
-      );
+      for (const link of screen.getAllByRole('link', { name: 'Project One' })) {
+        expect(link).toHaveAttribute('href', '/tenant/t1/project/project-1');
+      }
       expect(screen.getByRole('link', { name: 'Open project Project One' })).toHaveAttribute(
         'href',
         '/tenant/t1/project/project-1'

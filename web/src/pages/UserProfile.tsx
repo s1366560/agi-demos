@@ -3,7 +3,16 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
-import { AlertCircle, Building2, Calendar, Camera, CheckCircle, KeyRound, MapPin, X } from 'lucide-react';
+import {
+  AlertCircle,
+  Building2,
+  Calendar,
+  Camera,
+  CheckCircle,
+  KeyRound,
+  MapPin,
+  X,
+} from 'lucide-react';
 
 import { formatDateOnly } from '@/utils/date';
 import { confirmAction } from '@/utils/confirmAction';

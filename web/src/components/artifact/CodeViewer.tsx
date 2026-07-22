@@ -1,5 +1,6 @@
 /**
- * CodeViewer - Display code/data files with syntax highlighting
+ * CodeViewer - Display code/data files (emits a language-* class on <code>;
+ * no syntax highlighter is currently wired in)
  */
 
 import React, { useState, useEffect } from 'react';
@@ -204,6 +205,11 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
             <Button
               type="text"
               size="small"
+              aria-label={
+                copied
+                  ? t('components.codeViewer.copied', { defaultValue: 'Copied!' })
+                  : t('components.codeViewer.copyCode', { defaultValue: 'Copy code' })
+              }
               icon={copied ? <Check size={14} /> : <Copy size={14} />}
               onClick={() => {
                 void handleCopy();

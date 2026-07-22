@@ -29,6 +29,7 @@ vi.mock('lucide-react', () => ({
   ShieldAlert: () => <span data-testid="shield-alert-icon">ShieldAlert</span>,
   SlidersHorizontal: () => <span data-testid="sliders-icon">Sliders</span>,
   Wrench: () => <span data-testid="wrench-icon">Wrench</span>,
+  Loader2: () => <span data-testid="loader-icon">Loading</span>,
 }));
 
 // Mock i18n

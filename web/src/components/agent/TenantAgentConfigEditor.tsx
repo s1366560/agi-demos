@@ -1029,6 +1029,9 @@ export function TenantAgentConfigEditor({
                               </Text>
                               <Input
                                 className="mt-2"
+                                aria-label={t(
+                                  'tenant.agentConfigEditor.runtimeHooks.custom.hookName'
+                                )}
                                 value={hook.hook_name}
                                 placeholder={t(
                                   'tenant.agentConfigEditor.runtimeHooks.custom.hookNamePlaceholder'
@@ -1048,6 +1051,9 @@ export function TenantAgentConfigEditor({
                               </Text>
                               <InputNumber
                                 className="mt-2"
+                                aria-label={t(
+                                  'tenant.agentConfigEditor.runtimeHooks.custom.priority'
+                                )}
                                 style={{ width: '100%' }}
                                 value={hook.priority ?? null}
                                 placeholder={t(
@@ -1068,6 +1074,9 @@ export function TenantAgentConfigEditor({
                               </Text>
                               <Select
                                 className="mt-2"
+                                aria-label={t(
+                                  'tenant.agentConfigEditor.runtimeHooks.custom.hookFamily'
+                                )}
                                 value={hook.hook_family ?? null}
                                 options={HOOK_FAMILY_OPTIONS.map((value) => ({
                                   label: t(
@@ -1090,6 +1099,9 @@ export function TenantAgentConfigEditor({
                               </Text>
                               <Select
                                 className="mt-2"
+                                aria-label={t(
+                                  'tenant.agentConfigEditor.runtimeHooks.custom.executorKind'
+                                )}
                                 value={hook.executor_kind ?? null}
                                 options={EXECUTOR_KIND_OPTIONS.map((value) => ({
                                   label: t(
@@ -1116,6 +1128,9 @@ export function TenantAgentConfigEditor({
                               </Text>
                               <Input
                                 className="mt-2"
+                                aria-label={t(
+                                  'tenant.agentConfigEditor.runtimeHooks.custom.sourceRef'
+                                )}
                                 value={hook.source_ref ?? ''}
                                 placeholder={t(
                                   'tenant.agentConfigEditor.runtimeHooks.custom.sourceRefPlaceholder'
@@ -1135,6 +1150,9 @@ export function TenantAgentConfigEditor({
                               </Text>
                               <Input
                                 className="mt-2"
+                                aria-label={t(
+                                  'tenant.agentConfigEditor.runtimeHooks.custom.entrypoint'
+                                )}
                                 value={hook.entrypoint ?? ''}
                                 placeholder={t(
                                   'tenant.agentConfigEditor.runtimeHooks.custom.entrypointPlaceholder'
@@ -1154,6 +1172,9 @@ export function TenantAgentConfigEditor({
                               </Text>
                               <TextArea
                                 className="mt-2"
+                                aria-label={t(
+                                  'tenant.agentConfigEditor.runtimeHooks.custom.settings'
+                                )}
                                 rows={6}
                                 value={hook.settings_draft}
                                 placeholder={t(

@@ -33,18 +33,18 @@ const LIMIT = 200;
 const POLL_INTERVAL_MS = 30_000;
 const EVENT_REFRESH_DEBOUNCE_MS = 1200;
 
-const VERDICT_LABELS: Record<ReflectionVerdict['action'], string> = {
-  create: 'Created',
-  reinforce: 'Reinforced',
-  deprecate: 'Deprecated',
-  noop: 'No-op',
-};
-
 const VERDICT_BADGE_CLASS: Record<ReflectionVerdict['action'], string> = {
   create: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   reinforce: 'bg-blue-50 text-blue-700 border-blue-200',
   deprecate: 'bg-orange-50 text-orange-700 border-orange-200',
   noop: 'bg-zinc-50 text-zinc-600 border-zinc-200',
+};
+
+const VERDICT_LABEL_KEYS: Record<ReflectionVerdict['action'], string> = {
+  create: 'playbooks.verdicts.create',
+  reinforce: 'playbooks.verdicts.reinforce',
+  deprecate: 'playbooks.verdicts.deprecate',
+  noop: 'playbooks.verdicts.noop',
 };
 
 interface SectionProps {
@@ -118,29 +118,35 @@ const PlaybookCard: FC<{ playbook: Playbook }> = ({ playbook }) => {
   );
 };
 
-const VerdictRow: FC<{ verdict: ReflectionVerdict }> = ({ verdict }) => (
-  <li className="flex gap-3 py-3 first:pt-0 last:pb-0">
-    <div className="shrink-0">
-      <span
-        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${VERDICT_BADGE_CLASS[verdict.action]}`}
-      >
-        {VERDICT_LABELS[verdict.action]}
-      </span>
-    </div>
-    <div className="min-w-0 flex-1">
-      <p className="text-sm text-zinc-900">{verdict.rationale || '(no rationale)'}</p>
-      <p className="mt-0.5 text-xs text-zinc-500">
-        {formatDateOnly(verdict.created_at)}
-        {verdict.playbook_id !== null && (
-          <>
-            {' · '}
-            <span className="font-mono text-zinc-600">{verdict.playbook_id}</span>
-          </>
-        )}
-      </p>
-    </div>
-  </li>
-);
+const VerdictRow: FC<{ verdict: ReflectionVerdict }> = ({ verdict }) => {
+  const { t } = useTranslation();
+
+  return (
+    <li className="flex gap-3 py-3 first:pt-0 last:pb-0">
+      <div className="shrink-0">
+        <span
+          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${VERDICT_BADGE_CLASS[verdict.action]}`}
+        >
+          {t(VERDICT_LABEL_KEYS[verdict.action], verdict.action)}
+        </span>
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-zinc-900">
+          {verdict.rationale || t('playbooks.noRationale', '(no rationale)')}
+        </p>
+        <p className="mt-0.5 text-xs text-zinc-500">
+          {formatDateOnly(verdict.created_at)}
+          {verdict.playbook_id !== null && (
+            <>
+              {' · '}
+              <span className="font-mono text-zinc-600">{verdict.playbook_id}</span>
+            </>
+          )}
+        </p>
+      </div>
+    </li>
+  );
+};
 
 export const PlaybookLibrary: FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -267,24 +273,30 @@ export const PlaybookLibrary: FC = () => {
           disabled={loading}
         >
           {loading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2
+              className="h-4 w-4 animate-spin motion-reduce:animate-none"
+              aria-hidden="true"
+            />
           ) : (
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
           )}
           <span>{t('common.refresh', 'Refresh')}</span>
         </button>
       </header>
 
       {error !== null && (
-        <div className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          <AlertCircle className="h-4 w-4" />
+        <div
+          className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          role="alert"
+        >
+          <AlertCircle className="h-4 w-4" aria-hidden="true" />
           <span>{error}</span>
         </div>
       )}
 
       <Section
         title={t('playbooks.section.playbooks', 'Distilled playbooks')}
-        icon={<BookOpen className="h-4 w-4 text-zinc-500" />}
+        icon={<BookOpen className="h-4 w-4 text-zinc-500" aria-hidden="true" />}
         count={playbooks.length}
       >
         {playbooks.length === 0 ? (
@@ -305,7 +317,7 @@ export const PlaybookLibrary: FC = () => {
 
       <Section
         title={t('playbooks.section.verdicts', 'Reflection verdicts')}
-        icon={<Sparkles className="h-4 w-4 text-zinc-500" />}
+        icon={<Sparkles className="h-4 w-4 text-zinc-500" aria-hidden="true" />}
         count={verdicts.length}
       >
         {verdicts.length === 0 ? (

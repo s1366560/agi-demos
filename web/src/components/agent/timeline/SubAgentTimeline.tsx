@@ -41,6 +41,10 @@ import { useAgentV3Store } from '../../../stores/agentV3';
 import { SubAgentActions } from './SubAgentActions';
 import { SubAgentDetailPanel } from './SubAgentDetailPanel';
 import {
+  SUBAGENT_SESSION_SPAWNED_FALLBACK,
+  SUBAGENT_UNKNOWN_ERROR_FALLBACK,
+} from '../message/groupTimelineEvents';
+import {
   formatDuration,
   formatTokens,
   resolveSubAgentName,
@@ -180,6 +184,10 @@ StatusPill.displayName = 'StatusPill';
 function useHumanizedError(rawError: string | undefined | null): string | null {
   const { t } = useTranslation();
   if (!rawError) return null;
+
+  if (rawError === SUBAGENT_UNKNOWN_ERROR_FALLBACK) {
+    return t('agent.subagent.unknownError', 'Unknown error');
+  }
 
   for (const { pattern, key, fallback } of ERROR_PATTERNS) {
     if (pattern.test(rawError)) {
@@ -685,7 +693,9 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
           {/* Task description */}
           {group.task && (
             <p className="max-w-[76ch] text-xs text-slate-600 dark:text-slate-400 leading-relaxed break-words [overflow-wrap:anywhere]">
-              {group.task}
+              {group.task === SUBAGENT_SESSION_SPAWNED_FALLBACK
+                ? t('agent.subagent.sessionSpawned', 'Session spawned')
+                : group.task}
             </p>
           )}
 

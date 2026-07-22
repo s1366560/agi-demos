@@ -1516,6 +1516,7 @@ const SURFACE_CARD_CLASS =
 const A2UI_VIEWER_CLASS = 'a2ui-surface-theme';
 
 const A2UIRenderFallback = memo<A2UIRenderFallbackProps>(({ messages }) => {
+  const { t } = useTranslation();
   const textValues = useMemo(() => extractLiteralTextValues(messages).slice(0, 40), [messages]);
   if (textValues.length === 0) {
     return (
@@ -1526,10 +1527,18 @@ const A2UIRenderFallback = memo<A2UIRenderFallbackProps>(({ messages }) => {
         >
           <div className="text-center">
             <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
-              Unable to render A2UI content preview.
+              {tFallback(
+                t,
+                'components.a2uiRenderer.unableToRender',
+                'Unable to render A2UI content preview.'
+              )}
             </p>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Showing plain message output is not available for this surface.
+              {tFallback(
+                t,
+                'components.a2uiRenderer.plainOutputUnavailable',
+                'Showing plain message output is not available for this surface.'
+              )}
             </p>
           </div>
         </div>
@@ -1540,7 +1549,7 @@ const A2UIRenderFallback = memo<A2UIRenderFallbackProps>(({ messages }) => {
     <div className={SURFACE_SHELL_CLASS}>
       <div className={`${SURFACE_CARD_CLASS} p-4 sm:p-5`}>
         <div className="mb-3 text-xs font-medium tracking-wide text-slate-500 dark:text-slate-400">
-          A2UI Text Preview
+          {tFallback(t, 'components.a2uiRenderer.textPreview', 'A2UI Text Preview')}
         </div>
         <div className="flex min-w-0 flex-col gap-2">
           {textValues.map((line, index) => (
@@ -1560,18 +1569,19 @@ const A2UIRenderFallback = memo<A2UIRenderFallbackProps>(({ messages }) => {
 A2UIRenderFallback.displayName = 'A2UIRenderFallback';
 
 const A2UIParseError = memo<A2UIParseErrorProps>(({ message, messages }) => {
+  const { t } = useTranslation();
   const textValues = useMemo(() => extractLiteralTextValues(messages).slice(0, 8), [messages]);
   return (
     <div className={SURFACE_SHELL_CLASS}>
       <div className={`${SURFACE_CARD_CLASS} p-4 sm:p-5`} role="alert" aria-live="polite">
         <div className="mb-2 text-sm font-semibold text-red-600 dark:text-red-300">
-          Invalid A2UI payload
+          {tFallback(t, 'components.a2uiRenderer.invalidPayload', 'Invalid A2UI payload')}
         </div>
         <p className="text-sm text-slate-700 dark:text-slate-200">{message}</p>
         {textValues.length > 0 ? (
           <div className="mt-4">
             <div className="mb-2 text-xs font-medium tracking-wide text-slate-500 dark:text-slate-400">
-              Recovered text preview
+              {tFallback(t, 'components.a2uiRenderer.recoveredPreview', 'Recovered text preview')}
             </div>
             <div className="flex min-w-0 flex-col gap-2">
               {textValues.map((line, index) => (
@@ -1614,6 +1624,7 @@ interface ActionErrorState {
 
 export const A2UISurfaceRenderer = memo<A2UISurfaceRendererProps>(
   ({ surfaceId, messages, snapshot }) => {
+    const { t } = useTranslation();
     const { parsed, resolvedSurfaceId, errorMessage } = useMemo(() => {
       if (snapshot && isUsableA2UISnapshot(snapshot)) {
         const snapshotResult = parseA2UISnapshot(snapshot, surfaceId);
@@ -1666,12 +1677,24 @@ export const A2UISurfaceRenderer = memo<A2UISurfaceRendererProps>(
           });
         };
         if (!conversationId) {
-          setScopedError('This canvas action is no longer connected to an active conversation.');
+          setScopedError(
+            tFallback(
+              t,
+              'components.a2uiRenderer.actionDisconnected',
+              'This canvas action is no longer connected to an active conversation.'
+            )
+          );
           console.warn('[A2UI] No active conversation -- cannot dispatch action');
           return;
         }
         if (!hitlRequestId) {
-          setScopedError('This interactive surface is no longer awaiting input.');
+          setScopedError(
+            tFallback(
+              t,
+              'components.a2uiRenderer.actionNotAwaiting',
+              'This interactive surface is no longer awaiting input.'
+            )
+          );
           console.warn('[A2UI] Missing HITL request_id -- refusing to dispatch action');
           return;
         }
@@ -1686,11 +1709,17 @@ export const A2UISurfaceRenderer = memo<A2UISurfaceRendererProps>(
             action.context
           )
           .catch((err: unknown) => {
-            setScopedError('Failed to send the canvas action. Please try again.');
+            setScopedError(
+              tFallback(
+                t,
+                'components.a2uiRenderer.actionSendFailed',
+                'Failed to send the canvas action. Please try again.'
+              )
+            );
             console.error('[A2UI] Failed to dispatch action:', err);
           });
       },
-      [conversationId, effectiveSurfaceId, hitlRequestId, messages]
+      [conversationId, effectiveSurfaceId, hitlRequestId, messages, t]
     );
 
     if (errorMessage) {
@@ -1707,10 +1736,18 @@ export const A2UISurfaceRenderer = memo<A2UISurfaceRendererProps>(
           >
             <div className="text-center">
               <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                Waiting for A2UI surface data...
+                {tFallback(
+                  t,
+                  'components.a2uiRenderer.waitingForData',
+                  'Waiting for A2UI surface data…'
+                )}
               </p>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                The agent is still preparing this canvas panel.
+                {tFallback(
+                  t,
+                  'components.a2uiRenderer.preparingPanel',
+                  'The agent is still preparing this canvas panel.'
+                )}
               </p>
             </div>
           </div>

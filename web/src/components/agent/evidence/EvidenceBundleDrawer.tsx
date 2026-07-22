@@ -1,17 +1,28 @@
 import React, { useMemo, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
+import { formatTimeOnly } from '@/utils/date';
+
 import { LazyDrawer, LazyEmpty, LazyTabs } from '@/components/ui/lazyAntd';
 
 import { buildEvidenceBundle, EVIDENCE_TAB_ORDER, type EvidenceTab } from './evidenceBundle';
 
 import type { Artifact } from '@/types/agent/config';
 
-const TAB_LABEL: Record<EvidenceTab, string> = {
-  testRuns: 'Test runs',
-  diffs: 'Diffs',
-  screenshots: 'Screenshots',
-  logs: 'Logs',
+import type { TFunction } from 'i18next';
+
+const TAB_LABEL_KEYS: Record<EvidenceTab, { key: string; fallback: string }> = {
+  testRuns: { key: 'agent.evidence.tabs.testRuns', fallback: 'Test runs' },
+  diffs: { key: 'agent.evidence.tabs.diffs', fallback: 'Diffs' },
+  screenshots: { key: 'agent.evidence.tabs.screenshots', fallback: 'Screenshots' },
+  logs: { key: 'agent.evidence.tabs.logs', fallback: 'Logs' },
 };
+
+function getTabLabel(tab: EvidenceTab, t: TFunction): string {
+  const entry = TAB_LABEL_KEYS[tab];
+  return t(entry.key, { defaultValue: entry.fallback });
+}
 
 export interface EvidenceBundleDrawerProps {
   open: boolean;
@@ -28,13 +39,8 @@ interface ItemRowProps {
 
 const ItemRow: React.FC<ItemRowProps> = ({ artifact }) => {
   const sizeKb = (artifact.sizeBytes / 1024).toFixed(1);
-  return (
-    <a
-      href={artifact.url ?? '#'}
-      target={artifact.url ? '_blank' : undefined}
-      rel="noreferrer"
-      className="flex items-start gap-3 rounded-md border border-transparent px-3 py-2 hover:border-slate-200 hover:bg-slate-50 dark:hover:border-slate-700 dark:hover:bg-slate-800/60"
-    >
+  const content = (
+    <>
       <div className="flex-1 min-w-0">
         <div className="text-[13px] font-medium text-slate-900 dark:text-slate-100 truncate">
           {artifact.filename}
@@ -45,15 +51,34 @@ const ItemRow: React.FC<ItemRowProps> = ({ artifact }) => {
         </div>
       </div>
       <span className="text-[11px] text-slate-400 dark:text-slate-500 shrink-0">
-        {new Date(artifact.createdAt).toLocaleTimeString()}
+        {formatTimeOnly(artifact.createdAt)}
       </span>
+    </>
+  );
+  const rowClassName =
+    'flex items-start gap-3 rounded-md border border-transparent px-3 py-2 hover:border-slate-200 hover:bg-slate-50 dark:hover:border-slate-700 dark:hover:bg-slate-800/60';
+
+  if (!artifact.url) {
+    return <div className={rowClassName}>{content}</div>;
+  }
+
+  return (
+    <a href={artifact.url} target="_blank" rel="noreferrer" className={rowClassName}>
+      {content}
     </a>
   );
 };
 
 const TabPanel: React.FC<{ items: readonly Artifact[] }> = ({ items }) => {
+  const { t } = useTranslation();
   if (items.length === 0) {
-    return <LazyEmpty description="No evidence in this bucket yet." />;
+    return (
+      <LazyEmpty
+        description={t('agent.evidence.emptyBucket', {
+          defaultValue: 'No evidence in this bucket yet.',
+        })}
+      />
+    );
   }
   return (
     <div className="flex flex-col gap-1 py-1">
@@ -73,23 +98,26 @@ export const EvidenceBundleDrawer: React.FC<EvidenceBundleDrawerProps> = ({
   onClose,
   artifacts,
   width = 520,
-  title = 'Evidence bundle',
+  title,
 }) => {
+  const { t } = useTranslation();
   const bundle = useMemo(() => buildEvidenceBundle(artifacts), [artifacts]);
   const initialTab: EvidenceTab = useMemo(() => {
-    return EVIDENCE_TAB_ORDER.find((t) => bundle[t].length > 0) ?? 'testRuns';
+    return EVIDENCE_TAB_ORDER.find((tab) => bundle[tab].length > 0) ?? 'testRuns';
   }, [bundle]);
   const [activeKey, setActiveKey] = useState<EvidenceTab>(initialTab);
 
+  const drawerTitle = title ?? t('agent.evidence.bundleTitle', { defaultValue: 'Evidence bundle' });
+
   const items = EVIDENCE_TAB_ORDER.map((tab) => ({
     key: tab,
-    label: `${TAB_LABEL[tab]} (${bundle[tab].length.toString()})`,
+    label: `${getTabLabel(tab, t)} (${bundle[tab].length.toString()})`,
     children: <TabPanel items={bundle[tab]} />,
   }));
 
   return (
     <LazyDrawer
-      title={`${title} · ${bundle.total.toString()}`}
+      title={`${drawerTitle} · ${bundle.total.toString()}`}
       open={open}
       onClose={onClose}
       size={width}

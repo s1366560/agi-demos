@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useNavigate, Link, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import { AlertCircle, Brain, Loader2, Network, Settings } from 'lucide-react';
 
@@ -9,17 +9,13 @@ import { BackendStoreSelectors } from '@/components/project/BackendStoreSelector
 
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
+import { confirmAction } from '../../utils/confirmAction';
 
 import type { GraphConfig, MemoryRulesConfig, Project, ProjectUpdate } from '../../types/memory';
-
-const projectStatusOptions = ['active', 'paused', 'archived'] as const;
-
-type ProjectFormStatus = (typeof projectStatusOptions)[number];
 
 interface ProjectEditFormData {
   name: string;
   description: string;
-  status: ProjectFormStatus;
   memory_rules: MemoryRulesConfig;
   graph_config: GraphConfig;
   graph_store_id: string | null;
@@ -43,20 +39,15 @@ const defaultGraphConfig: GraphConfig = {
 const defaultFormData: ProjectEditFormData = {
   name: '',
   description: '',
-  status: 'active',
   memory_rules: defaultMemoryRules,
   graph_config: defaultGraphConfig,
   graph_store_id: null,
   retrieval_store_id: null,
 };
 
-const isProjectFormStatus = (value: string): value is ProjectFormStatus =>
-  projectStatusOptions.includes(value as ProjectFormStatus);
-
 const toProjectFormData = (project: Partial<Project>): ProjectEditFormData => ({
   name: project.name ?? '',
   description: project.description ?? '',
-  status: 'active',
   memory_rules: {
     max_episodes: project.memory_rules?.max_episodes ?? defaultMemoryRules.max_episodes,
     retention_days: project.memory_rules?.retention_days ?? defaultMemoryRules.retention_days,
@@ -75,6 +66,51 @@ const toProjectFormData = (project: Partial<Project>): ProjectEditFormData => ({
   retrieval_store_id: project.retrieval_store_id ?? null,
 });
 
+const numberInputClass =
+  'w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none';
+
+/**
+ * Number input that keeps a local string while editing so clearing the field
+ * does not snap back to the default; commits parsed values and restores the
+ * last valid value on blur.
+ */
+const NumberInput: React.FC<{
+  id: string;
+  name: string;
+  min?: number | undefined;
+  max?: number | undefined;
+  value: number;
+  onCommit: (value: number) => void;
+}> = ({ id, name, min, max, value, onCommit }) => {
+  const [raw, setRaw] = useState(String(value));
+
+  useEffect(() => {
+    setRaw(String(value));
+  }, [value]);
+
+  return (
+    <input
+      id={id}
+      name={name}
+      type="number"
+      min={min}
+      max={max}
+      value={raw}
+      onChange={(e) => {
+        setRaw(e.target.value);
+        const parsed = parseInt(e.target.value, 10);
+        if (!Number.isNaN(parsed)) {
+          onCommit(parsed);
+        }
+      }}
+      onBlur={() => {
+        setRaw(String(value));
+      }}
+      className={numberInputClass}
+    />
+  );
+};
+
 export const EditProject: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -84,6 +120,7 @@ export const EditProject: React.FC = () => {
   const [isFetching, setIsFetching] = useState(true);
 
   const [formData, setFormData] = useState<ProjectEditFormData>(defaultFormData);
+  const [initialData, setInitialData] = useState<ProjectEditFormData | null>(null);
 
   useEffect(() => {
     const fetchProject = async () => {
@@ -94,7 +131,9 @@ export const EditProject: React.FC = () => {
 
       try {
         const project = await getProject(tenantId, projectId);
-        setFormData(toProjectFormData(project));
+        const next = toProjectFormData(project);
+        setFormData(next);
+        setInitialData(next);
       } catch (err) {
         console.error('Failed to fetch project:', err);
       } finally {
@@ -126,6 +165,26 @@ export const EditProject: React.FC = () => {
 
   const projectListPath = `/tenant/${tenantId ?? currentTenant?.id ?? ''}/projects`;
 
+  const isDirty = initialData !== null && JSON.stringify(formData) !== JSON.stringify(initialData);
+
+  const handleCancel = () => {
+    if (!isDirty) {
+      void navigate(projectListPath);
+      return;
+    }
+    void confirmAction({
+      title: t('project.edit.discardConfirmTitle'),
+      content: t('project.edit.discardConfirmContent'),
+      okText: t('project.edit.discardConfirmOk'),
+      cancelText: t('project.edit.actions.cancel'),
+      danger: true,
+    }).then((confirmed) => {
+      if (confirmed) {
+        void navigate(projectListPath);
+      }
+    });
+  };
+
   if (isFetching) {
     return <div className="p-8 text-center text-slate-500">{t('tenant.projects.loading')}</div>;
   }
@@ -141,7 +200,10 @@ export const EditProject: React.FC = () => {
       </div>
 
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg flex items-center gap-2">
+        <div
+          role="alert"
+          className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg flex items-center gap-2"
+        >
           <AlertCircle size={16} />
           {error}
         </div>
@@ -166,12 +228,19 @@ export const EditProject: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="col-span-1">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              <label
+                htmlFor="project-name"
+                className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+              >
                 {t('project.edit.name')} <span className="text-red-500">*</span>
               </label>
               <input
+                id="project-name"
+                name="name"
                 type="text"
                 required
+                autoComplete="off"
+                spellCheck={false}
                 value={formData.name}
                 onChange={(e) => {
                   setFormData({ ...formData, name: e.target.value });
@@ -180,31 +249,16 @@ export const EditProject: React.FC = () => {
                 placeholder={t('project.edit.namePlaceholder')}
               />
             </div>
-            <div className="col-span-1">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                {t('project.edit.status')}
-              </label>
-              <select
-                value={formData.status}
-                onChange={(e) => {
-                  const nextStatus = e.target.value;
-                  setFormData({
-                    ...formData,
-                    status: isProjectFormStatus(nextStatus) ? nextStatus : 'active',
-                  });
-                }}
-                className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-[color,background-color,border-color,box-shadow,opacity,transform]"
-              >
-                <option value="active">{t('project.edit.status_options.active')}</option>
-                <option value="paused">{t('project.edit.status_options.paused')}</option>
-                <option value="archived">{t('project.edit.status_options.archived')}</option>
-              </select>
-            </div>
             <div className="col-span-1 md:col-span-2">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              <label
+                htmlFor="project-description"
+                className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+              >
                 {t('project.edit.description')}
               </label>
               <textarea
+                id="project-description"
+                name="description"
                 rows={3}
                 value={formData.description}
                 onChange={(e) => {
@@ -247,74 +301,79 @@ export const EditProject: React.FC = () => {
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  <label
+                    htmlFor="memory-max-episodes"
+                    className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+                  >
                     {t('project.edit.memory_rules.max_episodes')}
                   </label>
-                  <input
-                    type="number"
-                    min="100"
-                    max="10000"
+                  <NumberInput
+                    id="memory-max-episodes"
+                    name="max_episodes"
+                    min={100}
+                    max={10000}
                     value={formData.memory_rules.max_episodes}
-                    onChange={(e) => {
+                    onCommit={(value) => {
                       setFormData({
                         ...formData,
-                        memory_rules: {
-                          ...formData.memory_rules,
-                          max_episodes: parseInt(e.target.value) || 1000,
-                        },
+                        memory_rules: { ...formData.memory_rules, max_episodes: value },
                       });
                     }}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  <label
+                    htmlFor="memory-retention-days"
+                    className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+                  >
                     {t('project.edit.memory_rules.retention')}
                   </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="365"
+                  <NumberInput
+                    id="memory-retention-days"
+                    name="retention_days"
+                    min={1}
+                    max={365}
                     value={formData.memory_rules.retention_days}
-                    onChange={(e) => {
+                    onCommit={(value) => {
                       setFormData({
                         ...formData,
-                        memory_rules: {
-                          ...formData.memory_rules,
-                          retention_days: parseInt(e.target.value) || 30,
-                        },
+                        memory_rules: { ...formData.memory_rules, retention_days: value },
                       });
                     }}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                <label
+                  htmlFor="memory-refresh-interval"
+                  className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+                >
                   {t('project.edit.memory_rules.refresh_interval')}
                 </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="168"
+                <NumberInput
+                  id="memory-refresh-interval"
+                  name="refresh_interval"
+                  min={1}
+                  max={168}
                   value={formData.memory_rules.refresh_interval}
-                  onChange={(e) => {
+                  onCommit={(value) => {
                     setFormData({
                       ...formData,
-                      memory_rules: {
-                        ...formData.memory_rules,
-                        refresh_interval: parseInt(e.target.value) || 24,
-                      },
+                      memory_rules: { ...formData.memory_rules, refresh_interval: value },
                     });
                   }}
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                 />
               </div>
 
               <div className="flex items-center gap-3 pt-2">
-                <label className="relative inline-flex items-center cursor-pointer">
+                <label
+                  htmlFor="memory-auto-refresh"
+                  className="relative inline-flex items-center cursor-pointer"
+                >
                   <input
+                    id="memory-auto-refresh"
+                    name="auto_refresh"
                     type="checkbox"
                     checked={formData.memory_rules.auto_refresh}
                     onChange={(e) => {
@@ -326,10 +385,10 @@ export const EditProject: React.FC = () => {
                     className="sr-only peer"
                   />
                   <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/40 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform dark:border-gray-600 peer-checked:bg-primary"></div>
+                  <span className="ml-3 text-sm font-medium text-slate-700 dark:text-slate-300">
+                    {t('project.edit.memory_rules.auto_refresh')}
+                  </span>
                 </label>
-                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  {t('project.edit.memory_rules.auto_refresh')}
-                </span>
               </div>
             </div>
           </div>
@@ -348,50 +407,53 @@ export const EditProject: React.FC = () => {
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  <label
+                    htmlFor="graph-max-nodes"
+                    className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+                  >
                     {t('project.edit.graph_config.max_nodes')}
                   </label>
-                  <input
-                    type="number"
-                    min="100"
+                  <NumberInput
+                    id="graph-max-nodes"
+                    name="max_nodes"
+                    min={100}
                     value={formData.graph_config.max_nodes}
-                    onChange={(e) => {
+                    onCommit={(value) => {
                       setFormData({
                         ...formData,
-                        graph_config: {
-                          ...formData.graph_config,
-                          max_nodes: parseInt(e.target.value) || 5000,
-                        },
+                        graph_config: { ...formData.graph_config, max_nodes: value },
                       });
                     }}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  <label
+                    htmlFor="graph-max-edges"
+                    className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+                  >
                     {t('project.edit.graph_config.max_edges')}
                   </label>
-                  <input
-                    type="number"
-                    min="100"
+                  <NumberInput
+                    id="graph-max-edges"
+                    name="max_edges"
+                    min={100}
                     value={formData.graph_config.max_edges}
-                    onChange={(e) => {
+                    onCommit={(value) => {
                       setFormData({
                         ...formData,
-                        graph_config: {
-                          ...formData.graph_config,
-                          max_edges: parseInt(e.target.value) || 10000,
-                        },
+                        graph_config: { ...formData.graph_config, max_edges: value },
                       });
                     }}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                   />
                 </div>
               </div>
 
               <div>
                 <div className="flex justify-between items-center mb-2">
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                  <label
+                    htmlFor="graph-similarity"
+                    className="block text-sm font-medium text-slate-700 dark:text-slate-300"
+                  >
                     {t('project.edit.graph_config.similarity')}
                   </label>
                   <span className="text-xs font-mono bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-600 dark:text-slate-300">
@@ -399,6 +461,8 @@ export const EditProject: React.FC = () => {
                   </span>
                 </div>
                 <input
+                  id="graph-similarity"
+                  name="similarity_threshold"
                   type="range"
                   min="0.1"
                   max="1.0"
@@ -422,8 +486,13 @@ export const EditProject: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-3 pt-2">
-                <label className="relative inline-flex items-center cursor-pointer">
+                <label
+                  htmlFor="graph-community-detection"
+                  className="relative inline-flex items-center cursor-pointer"
+                >
                   <input
+                    id="graph-community-detection"
+                    name="community_detection"
                     type="checkbox"
                     checked={formData.graph_config.community_detection}
                     onChange={(e) => {
@@ -438,10 +507,10 @@ export const EditProject: React.FC = () => {
                     className="sr-only peer"
                   />
                   <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/40 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform dark:border-gray-600 peer-checked:bg-primary"></div>
+                  <span className="ml-3 text-sm font-medium text-slate-700 dark:text-slate-300">
+                    {t('project.edit.graph_config.community_detection')}
+                  </span>
                 </label>
-                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  {t('project.edit.graph_config.community_detection')}
-                </span>
               </div>
             </div>
           </div>
@@ -449,12 +518,13 @@ export const EditProject: React.FC = () => {
 
         {/* Footer Actions */}
         <div className="flex items-center justify-end gap-4 pt-6 border-t border-slate-200 dark:border-slate-800">
-          <Link
-            to={projectListPath}
+          <button
+            type="button"
+            onClick={handleCancel}
             className="px-6 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
           >
             {t('project.edit.actions.cancel')}
-          </Link>
+          </button>
           <button
             type="submit"
             disabled={isLoading || !formData.name.trim()}

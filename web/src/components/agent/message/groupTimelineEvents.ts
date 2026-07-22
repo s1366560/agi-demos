@@ -13,6 +13,14 @@ export type GroupedItem =
   | { kind: 'timeline'; steps: TimelineStep[]; startIndex: number }
   | { kind: 'subagent'; group: SubAgentGroup; startIndex: number };
 
+/**
+ * Sentinel fallback strings stored on SubAgentGroup when the event payload carries
+ * no error/task text. Renderers must translate these via i18n at render time
+ * (see SubAgentTimeline) instead of showing the raw English literal.
+ */
+export const SUBAGENT_UNKNOWN_ERROR_FALLBACK = 'Unknown error';
+export const SUBAGENT_SESSION_SPAWNED_FALLBACK = 'Session spawned';
+
 function parseRecord(value: unknown): Record<string, unknown> | null {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     return value as Record<string, unknown>;
@@ -510,14 +518,14 @@ function buildSubAgentGroup(
         group.subagentId = group.subagentId || d.subagentId || '';
         group.subagentName = group.subagentName || d.subagentName || '';
         group.status = 'error';
-        group.error = d.error || 'Unknown error';
+        group.error = d.error || SUBAGENT_UNKNOWN_ERROR_FALLBACK;
         break;
       }
       case 'subagent_session_spawned': {
         const d = ev;
         group.subagentId = group.subagentId || d.subagentId || '';
         group.subagentName = group.subagentName || d.subagentName || '';
-        group.task = group.task || 'Session spawned';
+        group.task = group.task || SUBAGENT_SESSION_SPAWNED_FALLBACK;
         break;
       }
       case 'subagent_session_message_sent': {

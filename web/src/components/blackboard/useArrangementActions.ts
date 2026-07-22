@@ -2,6 +2,8 @@ import { useCallback, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { confirmAction } from '@/utils/confirmAction';
+
 import { useLazyMessage } from '@/components/ui/lazyAntd';
 import { hexToPixel } from '@/components/workspace/hex/useHexLayout';
 
@@ -15,7 +17,6 @@ import {
 
 import { getErrorMessage } from '@/types/common';
 import type { TopologyNode, WorkspaceAgent } from '@/types/workspace';
-import { confirmAction } from '@/utils/confirmAction';
 
 import type { MoveMode, SelectionState } from './arrangementUtils';
 

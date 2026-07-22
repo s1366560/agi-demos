@@ -16,6 +16,7 @@ import {
   Download,
   History,
   List,
+  Loader2,
   RefreshCw,
   Search as SearchIcon,
 } from 'lucide-react';
@@ -32,6 +33,8 @@ import { useTenantStore } from '@/stores/tenant';
 
 import type { AuditEntry } from '@/services/auditService';
 
+import { formatDateTime } from '@/utils/date';
+
 import {
   useLazyMessage,
   LazySelect,
@@ -42,27 +45,27 @@ import {
 
 const { Search } = Input;
 
-const RESOURCE_TYPE_OPTIONS = [
-  { value: '', label: 'All Types' },
-  { value: 'instance', label: 'Instance' },
-  { value: 'project', label: 'Project' },
-  { value: 'user', label: 'User' },
-  { value: 'tenant', label: 'Tenant' },
-  { value: 'cluster', label: 'Cluster' },
-  { value: 'registry', label: 'Registry' },
-  { value: 'member', label: 'Member' },
-];
+const RESOURCE_TYPE_VALUES = [
+  '',
+  'instance',
+  'project',
+  'user',
+  'tenant',
+  'cluster',
+  'registry',
+  'member',
+] as const;
 
-const ACTION_OPTIONS = [
-  { value: '', label: 'All Actions' },
-  { value: 'create', label: 'Create' },
-  { value: 'update', label: 'Update' },
-  { value: 'delete', label: 'Delete' },
-  { value: 'login', label: 'Login' },
-  { value: 'logout', label: 'Logout' },
-  { value: 'invite', label: 'Invite' },
-  { value: 'export', label: 'Export' },
-];
+const ACTION_VALUES = [
+  '',
+  'create',
+  'update',
+  'delete',
+  'login',
+  'logout',
+  'invite',
+  'export',
+] as const;
 
 const PAGE_SIZE = 15;
 
@@ -177,13 +180,25 @@ export const OrgAudit: React.FC = () => {
 
   const totalPages = useMemo(() => Math.ceil(total / PAGE_SIZE), [total]);
 
-  const formatTimestamp = (ts: string) => {
-    try {
-      return new Date(ts).toLocaleString();
-    } catch {
-      return ts;
-    }
-  };
+  const resourceTypeOptions = useMemo(
+    () =>
+      RESOURCE_TYPE_VALUES.map((value) => ({
+        value,
+        label: t(`tenant.orgSettings.audit.resourceTypes.${value || 'all'}`),
+      })),
+    [t]
+  );
+
+  const actionOptions = useMemo(
+    () =>
+      ACTION_VALUES.map((value) => ({
+        value,
+        label: t(`tenant.orgSettings.audit.actions.${value || 'all'}`),
+      })),
+    [t]
+  );
+
+  const formatTimestamp = (ts: string) => formatDateTime(ts) || ts;
 
   if (!tenantId) {
     return (
@@ -224,7 +239,11 @@ export const OrgAudit: React.FC = () => {
             }}
             className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-slate-50 rounded-lg transition-colors disabled:opacity-50"
           >
-            <Download size={16} />
+            {isExporting ? (
+              <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />
+            ) : (
+              <Download size={16} />
+            )}
             {t('tenant.orgSettings.audit.exportCsv')}
           </button>
           <button
@@ -235,7 +254,11 @@ export const OrgAudit: React.FC = () => {
             }}
             className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
           >
-            <Braces size={16} />
+            {isExporting ? (
+              <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />
+            ) : (
+              <Braces size={16} />
+            )}
             {t('tenant.orgSettings.audit.exportJson')}
           </button>
         </div>
@@ -307,7 +330,7 @@ export const OrgAudit: React.FC = () => {
             onChange={(val: string) => {
               setActionFilter(val);
             }}
-            options={ACTION_OPTIONS}
+            options={actionOptions}
             className="w-full"
             placeholder={t('tenant.orgSettings.audit.filterAction')}
           />
@@ -316,7 +339,7 @@ export const OrgAudit: React.FC = () => {
             onChange={(val: string) => {
               setResourceTypeFilter(val);
             }}
-            options={RESOURCE_TYPE_OPTIONS}
+            options={resourceTypeOptions}
             className="w-full"
             placeholder={t('tenant.orgSettings.audit.filterResourceType')}
           />
@@ -506,7 +529,7 @@ export const OrgAudit: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  IP
+                  {t('tenant.auditLogs.ipAddress')}
                 </p>
                 <p className="text-sm text-slate-900 dark:text-slate-100 font-mono">
                   {selectedEntry.ip_address ?? '-'}
@@ -517,7 +540,7 @@ export const OrgAudit: React.FC = () => {
             {selectedEntry.user_agent && (
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  User Agent
+                  {t('tenant.auditLogs.userAgent')}
                 </p>
                 <p className="text-sm text-slate-600 dark:text-slate-300 break-all">
                   {selectedEntry.user_agent}

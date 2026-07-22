@@ -3,7 +3,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
 
-import { Timeline, Badge, Card, Typography, Alert, Pagination, Tag } from 'antd';
+import { Card, Typography, Alert, Pagination } from 'antd';
 import { ArrowLeft } from 'lucide-react';
 
 import { LazyButton, LazySpin, LazyEmpty, LazySelect } from '@/components/ui/lazyAntd';
@@ -16,50 +16,15 @@ import {
   useGeneMarketActions,
 } from '../../stores/geneMarket';
 
-import { formatDate } from './utils/instanceUtils';
+import { EvolutionTimeline } from './utils/EvolutionTimeline';
+import { EVENT_TYPE_OPTIONS, getEventTypeLabel } from './utils/evolutionUtils';
 
 import type {
   EvolutionEventListParams,
   EvolutionEventType,
 } from '../../services/geneMarketService';
-import type { TFunction } from 'i18next';
 
-const { Title, Text } = Typography;
-
-const EVENT_TYPE_COLORS: Record<string, string> = {
-  learned: 'green',
-  forgot: 'red',
-  upgraded: 'blue',
-  created_variant: 'purple',
-  installed_genome: 'cyan',
-  uninstalled_genome: 'orange',
-  simplified: 'geekblue',
-};
-
-const EVENT_TYPE_OPTIONS: EvolutionEventType[] = [
-  'learned',
-  'forgot',
-  'upgraded',
-  'created_variant',
-  'installed_genome',
-  'uninstalled_genome',
-  'simplified',
-];
-
-const getEventColor = (eventType: string): string => {
-  return EVENT_TYPE_COLORS[eventType] ?? 'default';
-};
-
-const getEventTypeLabel = (t: TFunction, type: string) => {
-  return t(`tenant.evolution.types.${type}`, type);
-};
-
-const getStatusBadge = (status: string): 'success' | 'error' | 'processing' | 'default' => {
-  if (status === 'completed' || status === 'success') return 'success';
-  if (status === 'pending' || status === 'running') return 'processing';
-  if (status === 'failed' || status === 'error') return 'error';
-  return 'default';
-};
+const { Title } = Typography;
 
 export const EvolutionLog: React.FC = () => {
   const { t } = useTranslation();
@@ -148,36 +113,10 @@ export const EvolutionLog: React.FC = () => {
       ) : (
         <>
           <Card className="bg-surface-light dark:bg-surface-dark rounded-lg border border-border-light dark:border-border-dark">
-            <Timeline
-              items={evolutionEvents.map((evt) => ({
-                color: getEventColor(evt.event_type),
-                content: (
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <Tag color={getEventColor(evt.event_type)}>
-                        {getEventTypeLabel(t, evt.event_type)}
-                      </Tag>
-                      <Badge status={getStatusBadge(evt.status)} text={evt.status} />
-                    </div>
-                    {(evt.gene_name || evt.gene_slug) && (
-                      <Text className="text-sm">{evt.gene_name || evt.gene_slug}</Text>
-                    )}
-                    <Text type="secondary" className="text-xs">
-                      {formatDate(evt.created_at)}
-                    </Text>
-                    {evt.from_version && evt.to_version && (
-                      <Text className="text-sm">
-                        {evt.from_version} → {evt.to_version}
-                      </Text>
-                    )}
-                    {evt.trigger && (
-                      <Text type="secondary" className="text-sm">
-                        {t('tenant.evolution.trigger', 'Trigger')}: {evt.trigger}
-                      </Text>
-                    )}
-                  </div>
-                ),
-              }))}
+            <EvolutionTimeline
+              events={evolutionEvents}
+              showStatus
+              triggerLabel={t('tenant.evolution.trigger', 'Trigger')}
             />
           </Card>
 

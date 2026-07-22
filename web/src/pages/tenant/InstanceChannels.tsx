@@ -22,6 +22,7 @@ import { instanceChannelService } from '@/services/instanceChannelService';
 
 import {
   useLazyMessage,
+  LazyAlert,
   LazyButton,
   LazySelect,
   LazyPopconfirm,
@@ -29,6 +30,8 @@ import {
   LazySpin,
   LazyModal,
 } from '@/components/ui/lazyAntd';
+
+import { formatDate } from './utils/instanceUtils';
 
 import type { ColumnsType } from 'antd/es/table';
 
@@ -52,24 +55,24 @@ type ChannelStatus = 'connected' | 'disconnected' | 'error' | 'pending';
 
 interface ChannelTypeOption {
   value: ChannelType;
-  label: string;
+  labelKey: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
 }
 
 const DEFAULT_CHANNEL_TYPE_OPTION: ChannelTypeOption = {
   value: 'mcp',
-  label: 'MCP Server',
+  labelKey: 'tenant.instances.channels.types.mcp',
   icon: Network,
 };
 
 const CHANNEL_TYPE_OPTIONS: ChannelTypeOption[] = [
   DEFAULT_CHANNEL_TYPE_OPTION,
-  { value: 'webhook', label: 'Webhook', icon: Webhook },
-  { value: 'websocket', label: 'WebSocket', icon: Link },
-  { value: 'api', label: 'REST API', icon: Plug },
-  { value: 'slack', label: 'Slack', icon: MessageCircle },
-  { value: 'discord', label: 'Discord', icon: MessageSquare },
-  { value: 'email', label: 'Email', icon: Mail },
+  { value: 'webhook', labelKey: 'tenant.instances.channels.types.webhook', icon: Webhook },
+  { value: 'websocket', labelKey: 'tenant.instances.channels.types.websocket', icon: Link },
+  { value: 'api', labelKey: 'tenant.instances.channels.types.api', icon: Plug },
+  { value: 'slack', labelKey: 'tenant.instances.channels.types.slack', icon: MessageCircle },
+  { value: 'discord', labelKey: 'tenant.instances.channels.types.discord', icon: MessageSquare },
+  { value: 'email', labelKey: 'tenant.instances.channels.types.email', icon: Mail },
 ];
 
 const STATUS_COLORS: Record<ChannelStatus, string> = {
@@ -85,6 +88,7 @@ export const InstanceChannels: React.FC = () => {
   const messageApi = useLazyMessage();
 
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [channels, setChannels] = useState<ChannelConfig[]>([]);
   const [search, setSearch] = useState('');
@@ -100,10 +104,12 @@ export const InstanceChannels: React.FC = () => {
   const fetchChannels = useCallback(async () => {
     if (!instanceId) return;
     setIsLoading(true);
+    setLoadError(false);
     try {
       const response = await instanceChannelService.listChannels(instanceId);
       setChannels(response.items);
     } catch {
+      setLoadError(true);
       messageApi?.error(t('tenant.instances.channels.fetchError'));
     } finally {
       setIsLoading(false);
@@ -254,7 +260,7 @@ export const InstanceChannels: React.FC = () => {
       key: 'type',
       render: (_, channel) => {
         const typeInfo = getChannelTypeInfo(channel.channel_type);
-        return <Tag>{typeInfo.label}</Tag>;
+        return <Tag>{t(typeInfo.labelKey)}</Tag>;
       },
     },
     {
@@ -270,7 +276,7 @@ export const InstanceChannels: React.FC = () => {
       title: t('tenant.instances.channels.colLastConnected'),
       key: 'last_connected_at',
       render: (_, channel) =>
-        channel.last_connected_at ? new Date(channel.last_connected_at).toLocaleString() : '-',
+        channel.last_connected_at ? formatDate(channel.last_connected_at) : '-',
     },
     {
       title: t('tenant.instances.channels.colActions'),
@@ -330,6 +336,11 @@ export const InstanceChannels: React.FC = () => {
               </label>
               <Input
                 id="mcp-server-url"
+                type="url"
+                inputMode="url"
+                name="server_url"
+                autoComplete="off"
+                spellCheck={false}
                 value={(formConfig.server_url as string) || ''}
                 onChange={(e) => {
                   setFormConfig({ ...formConfig, server_url: e.target.value });
@@ -369,6 +380,11 @@ export const InstanceChannels: React.FC = () => {
               </label>
               <Input
                 id="webhook-url"
+                type="url"
+                inputMode="url"
+                name="url"
+                autoComplete="off"
+                spellCheck={false}
                 value={(formConfig.url as string) || ''}
                 onChange={(e) => {
                   setFormConfig({ ...formConfig, url: e.target.value });
@@ -385,6 +401,8 @@ export const InstanceChannels: React.FC = () => {
               </label>
               <Input.Password
                 id="webhook-secret"
+                autoComplete="off"
+                spellCheck={false}
                 value={(formConfig.secret as string) || ''}
                 onChange={(e) => {
                   setFormConfig({ ...formConfig, secret: e.target.value });
@@ -406,6 +424,11 @@ export const InstanceChannels: React.FC = () => {
               </label>
               <Input
                 id="api-base-url"
+                type="url"
+                inputMode="url"
+                name="base_url"
+                autoComplete="off"
+                spellCheck={false}
                 value={(formConfig.base_url as string) || ''}
                 onChange={(e) => {
                   setFormConfig({ ...formConfig, base_url: e.target.value });
@@ -422,6 +445,8 @@ export const InstanceChannels: React.FC = () => {
               </label>
               <Input.Password
                 id="api-key"
+                autoComplete="off"
+                spellCheck={false}
                 value={(formConfig.api_key as string) || ''}
                 onChange={(e) => {
                   setFormConfig({ ...formConfig, api_key: e.target.value });
@@ -471,7 +496,7 @@ export const InstanceChannels: React.FC = () => {
               <Network size={16} className="text-info-dark dark:text-info-light" />
             </div>
             <div>
-              <p className="text-2xl font-semibold text-text-primary dark:text-text-inverse">
+              <p className="text-2xl font-semibold tabular-nums text-text-primary dark:text-text-inverse">
                 {channels.length}
               </p>
               <p className="text-xs text-text-muted dark:text-text-muted">
@@ -486,7 +511,7 @@ export const InstanceChannels: React.FC = () => {
               <Link size={16} className="text-success-dark dark:text-success-light" />
             </div>
             <div>
-              <p className="text-2xl font-semibold text-text-primary dark:text-text-inverse">
+              <p className="text-2xl font-semibold tabular-nums text-text-primary dark:text-text-inverse">
                 {channels.filter((c) => c.status === 'connected').length}
               </p>
               <p className="text-xs text-text-muted dark:text-text-muted">
@@ -501,7 +526,7 @@ export const InstanceChannels: React.FC = () => {
               <Unlink size={16} className="text-gray-600 dark:text-gray-400" />
             </div>
             <div>
-              <p className="text-2xl font-semibold text-text-primary dark:text-text-inverse">
+              <p className="text-2xl font-semibold tabular-nums text-text-primary dark:text-text-inverse">
                 {
                   channels.filter((c) => c.status === 'disconnected' || c.status === 'pending')
                     .length
@@ -519,7 +544,7 @@ export const InstanceChannels: React.FC = () => {
               <AlertCircle size={16} className="text-error-dark dark:text-error-light" />
             </div>
             <div>
-              <p className="text-2xl font-semibold text-text-primary dark:text-text-inverse">
+              <p className="text-2xl font-semibold tabular-nums text-text-primary dark:text-text-inverse">
                 {channels.filter((c) => c.status === 'error').length}
               </p>
               <p className="text-xs text-text-muted dark:text-text-muted">
@@ -555,6 +580,22 @@ export const InstanceChannels: React.FC = () => {
           <div className="flex items-center justify-center py-20">
             <LazySpin size="large" />
           </div>
+        ) : loadError ? (
+          <div className="py-20 flex flex-col items-center gap-4">
+            <LazyAlert
+              type="error"
+              showIcon
+              message={t('tenant.instances.channels.fetchError')}
+              className="max-w-md"
+            />
+            <LazyButton
+              onClick={() => {
+                void fetchChannels();
+              }}
+            >
+              {t('common.retry', 'Retry')}
+            </LazyButton>
+          </div>
         ) : filteredChannels.length === 0 ? (
           <div className="py-20">
             <LazyEmpty description={t('tenant.instances.channels.noChannels')} />
@@ -564,7 +605,7 @@ export const InstanceChannels: React.FC = () => {
             columns={columns}
             dataSource={filteredChannels}
             rowKey="id"
-            pagination={false}
+            pagination={{ pageSize: 20, hideOnSinglePage: true, showSizeChanger: false }}
             scroll={{ x: 'max-content' }}
             className="max-w-full"
           />
@@ -623,7 +664,7 @@ export const InstanceChannels: React.FC = () => {
                 label: (
                   <span className="flex items-center gap-2">
                     <o.icon size={16} />
-                    {o.label}
+                    {t(o.labelKey)}
                   </span>
                 ),
               }))}

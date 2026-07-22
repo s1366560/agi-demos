@@ -253,6 +253,22 @@ export const StandardMCPAppRenderer = forwardRef<
     // "Not connected" errors from @mcp-ui/client setHostContext.
     const [appInitialized, setAppInitialized] = useState(false);
     const [displayMode, setDisplayMode] = useState<MCPAppDisplayMode>('inline');
+    const fullscreenExitRef = useRef<HTMLButtonElement>(null);
+
+    // Fullscreen overlay: Escape exits and focus moves into the overlay.
+    useEffect(() => {
+      if (displayMode !== 'fullscreen') return undefined;
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+          setDisplayMode('inline');
+        }
+      };
+      document.addEventListener('keydown', handleKeyDown);
+      fullscreenExitRef.current?.focus();
+      return () => {
+        document.removeEventListener('keydown', handleKeyDown);
+      };
+    }, [displayMode]);
     const containerRef = useRef<HTMLDivElement>(null);
 
     // SEP-1865 P1-1: Track app capabilities parsed from ui/initialize postMessage
@@ -307,6 +323,17 @@ export const StandardMCPAppRenderer = forwardRef<
 
     // Helper: send a JSON-RPC request to the guest app iframe and await the response.
     // Returns a promise that resolves when the iframe posts back a matching JSON-RPC response.
+    // Narrow postMessage targets to the sandbox iframe origin when it is an
+    // absolute http(s) URL; fall back to '*' for srcdoc/about:blank frames.
+    const resolveIframeTargetOrigin = (iframe: HTMLIFrameElement): string => {
+      try {
+        const url = new URL(iframe.src);
+        return url.protocol === 'https:' || url.protocol === 'http:' ? url.origin : '*';
+      } catch {
+        return '*';
+      }
+    };
+
     const sendRpcToApp = useCallback(
       (method: string, params?: Record<string, unknown>): Promise<unknown> => {
         return new Promise<unknown>((resolve, reject) => {
@@ -319,7 +346,7 @@ export const StandardMCPAppRenderer = forwardRef<
           pendingRpcRequests.current.set(id, { resolve, reject });
           iframe.contentWindow.postMessage(
             { jsonrpc: '2.0', id, method, ...(params !== undefined ? { params } : {}) },
-            '*'
+            resolveIframeTargetOrigin(iframe)
           );
           // Timeout after 30s to prevent memory leaks from unresolved promises
           setTimeout(() => {
@@ -340,7 +367,7 @@ export const StandardMCPAppRenderer = forwardRef<
         if (!iframe?.contentWindow) return;
         iframe.contentWindow.postMessage(
           { jsonrpc: '2.0', method, ...(params !== undefined ? { params } : {}) },
-          '*'
+          resolveIframeTargetOrigin(iframe)
         );
       },
       []
@@ -954,7 +981,7 @@ export const StandardMCPAppRenderer = forwardRef<
           <React.Suspense
             fallback={
               <div className="flex items-center justify-center" style={{ height }}>
-                <Spin tip={translate('components.mcpApp.renderer.loading', 'Loading MCP App...')}>
+                <Spin tip={translate('components.mcpApp.renderer.loading', 'Loading MCP App…')}>
                   <div style={{ minHeight: 100 }} />
                 </Spin>
               </div>
@@ -1016,6 +1043,7 @@ export const StandardMCPAppRenderer = forwardRef<
                 }}
               >
                 <Button
+                  ref={fullscreenExitRef}
                   size="small"
                   onClick={() => {
                     setDisplayMode('inline');
@@ -1064,7 +1092,6 @@ export const StandardMCPAppRenderer = forwardRef<
                   alignItems: 'center',
                   padding: '4px 8px',
                   borderBottom: '1px solid var(--color-border-primary, #e2e8f0)',
-                  cursor: 'move',
                   flexShrink: 0,
                   fontSize: 12,
                   color: 'var(--color-text-secondary, #64748b)',

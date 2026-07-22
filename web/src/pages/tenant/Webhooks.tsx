@@ -94,6 +94,7 @@ export const Webhooks: React.FC = () => {
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [eventTypes, setEventTypes] = useState<string[]>([]);
   const [eventTypesError, setEventTypesError] = useState<string | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -207,6 +208,7 @@ export const Webhooks: React.FC = () => {
     const isCurrentTenant = () => selectedTenantIdRef.current === requestTenantId;
     try {
       const values = await form.validateFields();
+      setSaving(true);
       if (editingWebhook) {
         await webhookService.updateWebhook(editingWebhook.id, values);
         if (!isCurrentTenant()) return;
@@ -227,6 +229,8 @@ export const Webhooks: React.FC = () => {
           ? t('webhooks.updateError', 'Failed to update webhook')
           : t('webhooks.createError', 'Failed to create webhook')
       );
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -257,6 +261,7 @@ export const Webhooks: React.FC = () => {
       title: t('webhooks.url', 'URL'),
       dataIndex: 'url',
       key: 'url',
+      ellipsis: true,
     },
     {
       title: t('webhooks.events', 'Events'),
@@ -303,7 +308,7 @@ export const Webhooks: React.FC = () => {
   return (
     <div style={{ padding: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Title level={4}>{t('nav.webhooks')}</Title>
+        <Title level={1}>{t('nav.webhooks')}</Title>
         <Button
           type="primary"
           onClick={() => {
@@ -318,7 +323,22 @@ export const Webhooks: React.FC = () => {
         <Alert title={eventTypesError} type="warning" showIcon style={{ marginBottom: 16 }} />
       ) : null}
       {loadError ? (
-        <Alert title={loadError} type="error" showIcon style={{ marginBottom: 16 }} />
+        <Alert
+          title={loadError}
+          type="error"
+          showIcon
+          style={{ marginBottom: 16 }}
+          action={
+            <Button
+              size="small"
+              onClick={() => {
+                void fetchWebhooks();
+              }}
+            >
+              {t('common.retry', 'Retry')}
+            </Button>
+          }
+        />
       ) : null}
 
       <Table
@@ -342,6 +362,7 @@ export const Webhooks: React.FC = () => {
         onCancel={() => {
           setIsModalVisible(false);
         }}
+        confirmLoading={saving}
         destroyOnHidden
       >
         <Form form={form} layout="vertical">
@@ -360,7 +381,7 @@ export const Webhooks: React.FC = () => {
               { type: 'url', message: t('webhooks.urlInvalid', 'Please enter a valid URL') },
             ]}
           >
-            <Input />
+            <Input type="url" />
           </Form.Item>
           <Form.Item
             name="events"

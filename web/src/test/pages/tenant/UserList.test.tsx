@@ -123,7 +123,7 @@ describe('UserList', () => {
     renderUserList();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Open actions for Ada Lovelace' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Remove User' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove User' }));
 
     await waitFor(() => {
       expect(removeMember).toHaveBeenCalledWith('t1', 'u-1');

@@ -110,10 +110,8 @@ export const Header: React.FC<HeaderProps> = ({ children }) => {
               </div>
               <input
                 className="block w-full sm:w-64 pl-10 pr-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg leading-5 bg-white dark:bg-slate-800 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm dark:text-white transition-[color,background-color,border-color,box-shadow,opacity,transform]"
-                placeholder={t(
-                  'components.taskList.searchPlaceholder',
-                  'Search Task ID or Name...'
-                )}
+                aria-label={t('components.taskList.searchAria', 'Search tasks')}
+                placeholder={t('components.taskList.searchPlaceholder', 'Search Task ID or Name…')}
                 type="text"
                 value={searchQuery}
                 onChange={(e) => {
@@ -123,6 +121,7 @@ export const Header: React.FC<HeaderProps> = ({ children }) => {
             </div>
             <select
               className="block w-auto pl-3 pr-10 py-2 text-base border-slate-300 dark:border-slate-600 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-lg bg-white dark:bg-slate-800 dark:text-white"
+              aria-label={t('components.taskList.statusFilter', 'Filter by status')}
               value={statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value);
@@ -188,19 +187,19 @@ export const Item: React.FC<ItemProps> = ({ task, children }) => {
           </td>
           <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-300">
             {task.name}
-            <div className="text-xs text-slate-400 font-mono mt-0.5">{task.shortId}...</div>
+            <div className="text-xs text-slate-400 font-mono mt-0.5">{task.shortId}…</div>
           </td>
           {!entityId && (
             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400 font-mono">
               {task.entity_id
-                ? `${task.entity_type ?? 'entity'}:${task.entity_id.substring(0, 8)}...`
+                ? `${task.entity_type ?? 'entity'}:${task.entity_id.substring(0, 8)}…`
                 : '-'}
             </td>
           )}
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
+          <td className="px-6 py-4 whitespace-nowrap text-sm tabular-nums text-slate-500 dark:text-slate-400">
             {task.duration || '-'}
           </td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
+          <td className="px-6 py-4 whitespace-nowrap text-sm tabular-nums text-slate-500 dark:text-slate-400">
             {task.formattedDate}
           </td>
           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -321,21 +320,33 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [limit] = useState(50);
   const [offset, setOffset] = useState(0);
+
+  // Debounce server-side search so each keystroke does not refetch.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [searchQuery]);
 
   const fetchTasks = useCallback(async () => {
     try {
       const data = await taskAPI.getRecentTasks({
         limit,
         offset,
-        search: searchQuery || undefined,
+        search: debouncedSearchQuery || undefined,
         status: statusFilter !== 'all' ? statusFilter : undefined,
         entity_id: entityId,
         entity_type: entityType,
@@ -357,20 +368,24 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
       setTasks(tasks);
       setTotal(data.total);
       setHasMore(data.has_more);
+      setFetchError(false);
       setLoading(false);
       setRefreshing(false);
     } catch (error) {
       console.error('Failed to fetch tasks:', error);
+      setFetchError(true);
       setLoading(false);
       setRefreshing(false);
     }
-  }, [limit, offset, searchQuery, statusFilter, entityId, entityType]);
+  }, [limit, offset, debouncedSearchQuery, statusFilter, entityId, entityType]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchTasks();
     const interval = setInterval(() => {
-      void fetchTasks();
+      if (document.visibilityState === 'visible') {
+        void fetchTasks();
+      }
     }, 5000);
     return () => {
       clearInterval(interval);
@@ -396,6 +411,7 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
     try {
       await taskAPI.retryTask(taskId);
       await fetchTasks();
+      void message.success(t('components.taskList.messages.retrySuccess', 'Task retry queued.'));
     } catch (error) {
       console.error(`Failed to retry task ${taskId}:`, error);
       void message.error(
@@ -415,6 +431,7 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
     try {
       await taskAPI.stopTask(taskId);
       await fetchTasks();
+      void message.success(t('components.taskList.messages.stopSuccess', 'Task stopped.'));
     } catch (error) {
       console.error(`Failed to stop task ${taskId}:`, error);
       void message.error(
@@ -491,8 +508,12 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
 
   if (loading && !tasks.length) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <div className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="flex items-center justify-center p-8" role="status">
+        <div
+          aria-hidden="true"
+          className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-primary"
+        ></div>
+        <span className="sr-only">{t('common.loading', 'Loading…')}</span>
       </div>
     );
   }
@@ -548,6 +569,23 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
             <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
               {filteredTasks.length > 0 ? (
                 filteredTasks.map((task) => <Item key={task.id} task={task} />)
+              ) : fetchError ? (
+                <tr>
+                  <td colSpan={entityId ? 5 : 6} className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center gap-2" role="alert">
+                      <p className="text-slate-500 dark:text-slate-400">
+                        {t('components.taskList.loadFailed', 'Failed to load tasks.')}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleRefresh}
+                        className="rounded-lg px-3 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                      >
+                        {t('common.retry', 'Retry')}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
               ) : (
                 <EmptyState colSpan={entityId ? 5 : 6} />
               )}

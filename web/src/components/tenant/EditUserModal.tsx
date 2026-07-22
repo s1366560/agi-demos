@@ -6,7 +6,6 @@ import { formatDateOnly } from '@/utils/date';
 
 import { AppModal } from '@/components/common';
 
-
 interface User {
   id: string;
   email: string;
@@ -37,6 +36,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
   const { t } = useTranslation();
   const [role, setRole] = useState<string>(user.role);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     setRole(user.role);
@@ -44,11 +44,13 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 
   const handleSave = async () => {
     setIsSaving(true);
+    setSaveError(null);
     try {
       await onSave(user.id, { role });
       onClose();
     } catch (error) {
       console.error('Failed to update user role:', error);
+      setSaveError(t('tenant.users.updateRoleFailed', 'Failed to update user role.'));
     } finally {
       setIsSaving(false);
     }
@@ -116,10 +118,14 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 
         {/* Role Selection */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+          <label
+            htmlFor="edit-user-role"
+            className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2"
+          >
             {t('tenant.users.invite_modal.role')}
           </label>
           <select
+            id="edit-user-role"
             value={role}
             onChange={(e) => {
               setRole(e.target.value);
@@ -136,6 +142,11 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           {user.role === 'owner' && (
             <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
               {t('tenant.users.owner_role_immutable')}
+            </p>
+          )}
+          {saveError && (
+            <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+              {saveError}
             </p>
           )}
         </div>

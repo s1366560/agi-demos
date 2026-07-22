@@ -265,7 +265,9 @@ export const InstanceLayout: React.FC = () => {
                   : 'border-transparent text-text-muted hover:text-text-secondary dark:text-text-muted dark:hover:text-text-inverse hover:border-border-separator'
               }`}
             >
-              {tab.icon}
+              <span aria-hidden="true" className="inline-flex">
+                {tab.icon}
+              </span>
               {tab.label}
             </button>
           );
@@ -287,8 +289,9 @@ export const InstanceLayout: React.FC = () => {
         cancelButtonProps={{ disabled: isSubmitting }}
       >
         <div className="flex items-center gap-4 py-4">
-          <span>{t('tenant.instances.detail.replicas')}:</span>
+          <label htmlFor="scale-replicas-input">{t('tenant.instances.detail.replicas')}:</label>
           <InputNumber
+            id="scale-replicas-input"
             min={0}
             max={10}
             value={newReplicas}

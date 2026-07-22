@@ -68,20 +68,38 @@ export function GraphMinimap({
   const viewportWidth = Math.max(10, viewport.width * minimapScale);
   const viewportHeight = Math.max(10, viewport.height * minimapScale);
 
+  // Keyboard parity for click-to-center: arrow keys nudge the viewport.
+  const nudgeStep = Math.max(40, layout.width / 20);
+  const handleKeyDown = (event: React.KeyboardEvent<SVGSVGElement>) => {
+    const centerX = viewport.left + viewport.width / 2;
+    const centerY = viewport.top + viewport.height / 2;
+    let dx = 0;
+    let dy = 0;
+    if (event.key === 'ArrowLeft') dx = -nudgeStep;
+    else if (event.key === 'ArrowRight') dx = nudgeStep;
+    else if (event.key === 'ArrowUp') dy = -nudgeStep;
+    else if (event.key === 'ArrowDown') dy = nudgeStep;
+    else return;
+    event.preventDefault();
+    onCenterPoint(centerX + dx, centerY + dy);
+  };
+
   return (
     <svg
       width={MINIMAP_WIDTH}
       height={MINIMAP_HEIGHT}
       viewBox={`0 0 ${String(MINIMAP_WIDTH)} ${String(MINIMAP_HEIGHT)}`}
-      role="img"
+      role="button"
       aria-label={label}
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
       onPointerDown={(event) => {
         const rect = event.currentTarget.getBoundingClientRect();
         const x = (event.clientX - rect.left - offsetX) / minimapScale;
         const y = (event.clientY - rect.top - offsetY) / minimapScale;
         onCenterPoint(x, y);
       }}
-      className="block cursor-crosshair"
+      className="block cursor-crosshair rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
       data-testid="execution-dag-minimap"
     >
       <rect

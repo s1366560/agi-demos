@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
-import { Input, Select, Switch } from 'antd';
+import { Input, Select, Spin, Switch } from 'antd';
 import {
   Archive,
   Check,
@@ -26,6 +26,9 @@ import { useCurrentWorkspace, useWorkspaceActions, useWorkspaceMembers } from '@
 
 import { workspaceService } from '@/services/workspaceService';
 
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning';
+
+import { confirmAction } from '@/utils/confirmAction';
 import {
   sourceControlDefaultsForProvider,
   isIsolatedSandboxCodeRoot,
@@ -68,6 +71,51 @@ import type {
 
 const { TextArea } = Input;
 
+/**
+ * Number input that keeps raw text while editing and only commits the
+ * fallback when the field is left empty on blur, so users can clear and
+ * retype without the value snapping back to the default mid-edit.
+ */
+const DraftNumberInput: React.FC<{
+  id: string;
+  min: number;
+  value: number;
+  fallback: number;
+  onCommit: (value: number) => void;
+}> = ({ id, min, value, fallback, onCommit }) => {
+  const [text, setText] = useState(String(value));
+  const [lastValue, setLastValue] = useState(value);
+  if (value !== lastValue) {
+    // Sync when the draft value changes externally (reset / workspace reload).
+    setLastValue(value);
+    setText(String(value));
+  }
+
+  return (
+    <Input
+      id={id}
+      type="number"
+      min={min}
+      value={text}
+      onChange={(event) => {
+        const raw = event.target.value;
+        setText(raw);
+        const parsed = Number(raw);
+        if (raw.trim() !== '' && Number.isFinite(parsed)) {
+          onCommit(parsed);
+        }
+      }}
+      onBlur={() => {
+        const parsed = Number(text);
+        if (text.trim() === '' || !Number.isFinite(parsed)) {
+          setText(String(fallback));
+          onCommit(fallback);
+        }
+      }}
+    />
+  );
+};
+
 export const WorkspaceSettingsPanel: React.FC<{
   tenantId: string;
   projectId: string;
@@ -90,6 +138,8 @@ export const WorkspaceSettingsPanel: React.FC<{
   const [newMemberUserId, setNewMemberUserId] = useState('');
   const [newMemberRole, setNewMemberRole] = useState<WorkspaceMemberRole>('viewer');
   const [isAddingMember, setIsAddingMember] = useState(false);
+
+  useUnsavedChangesWarning(isDirty && !isSaving);
 
   useEffect(() => {
     if (!workspace) return;
@@ -225,11 +275,20 @@ export const WorkspaceSettingsPanel: React.FC<{
     ? getOptionLabel(draft.collaborationMode, COLLABORATION_MODE_OPTIONS, t)
     : '';
 
-  const handleReset = useCallback(() => {
+  const handleReset = useCallback(async () => {
     if (!workspace) return;
+    if (
+      isDirty &&
+      !(await confirmAction({
+        title: t('workspaceSettings.actions.resetConfirm'),
+        danger: true,
+      }))
+    ) {
+      return;
+    }
     setDraft(syncDraftFromWorkspace(workspace));
     setIsDirty(false);
-  }, [workspace]);
+  }, [isDirty, t, workspace]);
 
   const handleSave = useCallback(async () => {
     if (!tenantId || !projectId || !workspaceId || !draft || !canSave) return;
@@ -333,7 +392,11 @@ export const WorkspaceSettingsPanel: React.FC<{
   );
 
   if (!workspace || !draft) {
-    return null;
+    return (
+      <div className="flex min-h-[240px] items-center justify-center" role="status">
+        <Spin size="large" />
+      </div>
+    );
   }
 
   return (
@@ -354,7 +417,9 @@ export const WorkspaceSettingsPanel: React.FC<{
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={handleReset}
+            onClick={() => {
+              void handleReset();
+            }}
             disabled={!isDirty || isSaving}
             className="inline-flex h-9 items-center gap-2 rounded-md border border-border-light bg-surface-light px-3 text-sm font-medium text-text-primary transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50 dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse dark:hover:bg-surface-dark-alt"
           >
@@ -633,7 +698,9 @@ export const WorkspaceSettingsPanel: React.FC<{
                     </div>
                     <p className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
                       {draft.deliveryContractSource || 'metadata'} ·{' '}
-                      {Math.round(draft.deliveryContractConfidence * 100)}% confidence
+                      {t('workspaceSettings.delivery.contractConfidence', {
+                        percent: Math.round(draft.deliveryContractConfidence * 100),
+                      })}
                     </p>
                     <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
                       <span className="max-w-full truncate rounded border border-border-light bg-surface-light px-2 py-1 font-mono text-[11px] text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
@@ -693,13 +760,13 @@ export const WorkspaceSettingsPanel: React.FC<{
                 label={t('workspaceSettings.delivery.timeoutSeconds')}
                 htmlFor="workspace-delivery-timeout"
               >
-                <Input
+                <DraftNumberInput
                   id="workspace-delivery-timeout"
-                  type="number"
                   min={1}
                   value={draft.deliveryTimeoutSeconds}
-                  onChange={(event) => {
-                    updateDraft('deliveryTimeoutSeconds', Number(event.target.value) || 600);
+                  fallback={600}
+                  onCommit={(next) => {
+                    updateDraft('deliveryTimeoutSeconds', next);
                   }}
                 />
               </Field>
@@ -707,13 +774,13 @@ export const WorkspaceSettingsPanel: React.FC<{
                 label={t('workspaceSettings.delivery.previewPort')}
                 htmlFor="workspace-delivery-port"
               >
-                <Input
+                <DraftNumberInput
                   id="workspace-delivery-port"
-                  type="number"
                   min={1}
                   value={draft.deliveryPreviewPort}
-                  onChange={(event) => {
-                    updateDraft('deliveryPreviewPort', Number(event.target.value) || 3000);
+                  fallback={3000}
+                  onCommit={(next) => {
+                    updateDraft('deliveryPreviewPort', next);
                   }}
                 />
               </Field>
@@ -752,16 +819,13 @@ export const WorkspaceSettingsPanel: React.FC<{
                     label={t('workspaceSettings.delivery.dronePollIntervalSeconds')}
                     htmlFor="workspace-delivery-drone-poll"
                   >
-                    <Input
+                    <DraftNumberInput
                       id="workspace-delivery-drone-poll"
-                      type="number"
                       min={1}
                       value={draft.deliveryDronePollIntervalSeconds}
-                      onChange={(event) => {
-                        updateDraft(
-                          'deliveryDronePollIntervalSeconds',
-                          Number(event.target.value) || 5
-                        );
+                      fallback={5}
+                      onCommit={(next) => {
+                        updateDraft('deliveryDronePollIntervalSeconds', next);
                       }}
                     />
                   </Field>
@@ -1079,16 +1143,13 @@ export const WorkspaceSettingsPanel: React.FC<{
                       label={t('workspaceSettings.delivery.droneServerPort')}
                       htmlFor="workspace-delivery-drone-server-port"
                     >
-                      <Input
+                      <DraftNumberInput
                         id="workspace-delivery-drone-server-port"
-                        type="number"
                         min={1}
                         value={draft.deliveryDroneServerPort}
-                        onChange={(event) => {
-                          updateDraft(
-                            'deliveryDroneServerPort',
-                            Number(event.target.value) || 8080
-                          );
+                        fallback={8080}
+                        onCommit={(next) => {
+                          updateDraft('deliveryDroneServerPort', next);
                         }}
                       />
                     </Field>
@@ -1215,16 +1276,13 @@ export const WorkspaceSettingsPanel: React.FC<{
                       label={t('workspaceSettings.delivery.droneRunnerPort')}
                       htmlFor="workspace-delivery-drone-runner-port"
                     >
-                      <Input
+                      <DraftNumberInput
                         id="workspace-delivery-drone-runner-port"
-                        type="number"
                         min={1}
                         value={draft.deliveryDroneRunnerPort}
-                        onChange={(event) => {
-                          updateDraft(
-                            'deliveryDroneRunnerPort',
-                            Number(event.target.value) || 3001
-                          );
+                        fallback={3001}
+                        onCommit={(next) => {
+                          updateDraft('deliveryDroneRunnerPort', next);
                         }}
                       />
                     </Field>
@@ -1232,16 +1290,13 @@ export const WorkspaceSettingsPanel: React.FC<{
                       label={t('workspaceSettings.delivery.droneRunnerCapacity')}
                       htmlFor="workspace-delivery-drone-runner-capacity"
                     >
-                      <Input
+                      <DraftNumberInput
                         id="workspace-delivery-drone-runner-capacity"
-                        type="number"
                         min={1}
                         value={draft.deliveryDroneRunnerCapacity}
-                        onChange={(event) => {
-                          updateDraft(
-                            'deliveryDroneRunnerCapacity',
-                            Number(event.target.value) || 2
-                          );
+                        fallback={2}
+                        onCommit={(next) => {
+                          updateDraft('deliveryDroneRunnerCapacity', next);
                         }}
                       />
                     </Field>
@@ -1407,17 +1462,13 @@ export const WorkspaceSettingsPanel: React.FC<{
                           label={t('workspaceSettings.delivery.port')}
                           htmlFor={`delivery-service-port-${String(index)}`}
                         >
-                          <Input
+                          <DraftNumberInput
                             id={`delivery-service-port-${String(index)}`}
-                            type="number"
                             min={1}
                             value={service.internal_port}
-                            onChange={(event) => {
-                              updateDeliveryService(
-                                index,
-                                'internal_port',
-                                Number(event.target.value) || 3000
-                              );
+                            fallback={3000}
+                            onCommit={(next) => {
+                              updateDeliveryService(index, 'internal_port', next);
                             }}
                           />
                         </Field>
@@ -1699,6 +1750,9 @@ export const WorkspaceSettingsPanel: React.FC<{
                   setNewMemberUserId(event.target.value);
                 }}
                 placeholder={t('workspaceSettings.members.addMemberPlaceholder')}
+                aria-label={t('workspaceSettings.members.addMemberPlaceholder')}
+                spellCheck={false}
+                autoComplete="off"
                 onPressEnter={() => {
                   void handleAddMember();
                 }}
@@ -1706,6 +1760,7 @@ export const WorkspaceSettingsPanel: React.FC<{
               <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
                 <Select
                   value={newMemberRole}
+                  aria-label={t('workspaceSettings.members.role')}
                   onChange={(value: WorkspaceMemberRole) => {
                     setNewMemberRole(value);
                   }}
@@ -1741,13 +1796,22 @@ export const WorkspaceSettingsPanel: React.FC<{
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border-light dark:border-border-dark">
-                      <th className="px-2 py-2 text-left text-xs font-semibold text-text-secondary dark:text-text-muted">
+                      <th
+                        scope="col"
+                        className="px-2 py-2 text-left text-xs font-semibold text-text-secondary dark:text-text-muted"
+                      >
                         {t('workspaceSettings.members.email')}
                       </th>
-                      <th className="px-2 py-2 text-left text-xs font-semibold text-text-secondary dark:text-text-muted">
+                      <th
+                        scope="col"
+                        className="px-2 py-2 text-left text-xs font-semibold text-text-secondary dark:text-text-muted"
+                      >
                         {t('workspaceSettings.members.role')}
                       </th>
-                      <th className="px-2 py-2 text-right text-xs font-semibold text-text-secondary dark:text-text-muted">
+                      <th
+                        scope="col"
+                        className="px-2 py-2 text-right text-xs font-semibold text-text-secondary dark:text-text-muted"
+                      >
                         {t('workspaceSettings.members.actions')}
                       </th>
                     </tr>
@@ -1764,6 +1828,9 @@ export const WorkspaceSettingsPanel: React.FC<{
                         <td className="px-2 py-2">
                           <Select
                             value={member.role}
+                            aria-label={t('workspaceSettings.members.roleForMember', {
+                              email: member.user_email ?? member.user_id,
+                            })}
                             onChange={(value: WorkspaceMemberRole) => {
                               void handleRoleChange(member.id, value);
                             }}

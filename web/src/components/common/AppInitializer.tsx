@@ -37,11 +37,7 @@ const InitialLoadingScreen: React.FC<{ timedOut?: boolean | undefined }> = ({
         </div>
 
         {/* Loading spinner */}
-        <div
-          className="flex items-center gap-2 text-slate-500"
-          role="status"
-          aria-live="polite"
-        >
+        <div className="flex items-center gap-2 text-slate-500" role="status" aria-live="polite">
           <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin motion-reduce:animate-none" />
           <span className="text-sm">{t('common.loading')}</span>
         </div>

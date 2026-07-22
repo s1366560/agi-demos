@@ -271,7 +271,7 @@ describe('TaskList (Compound Components)', () => {
       render(<TaskList />);
 
       await waitFor(() => {
-        expect(screen.getByText('memory:entity-1...')).toBeInTheDocument();
+        expect(screen.getByText('memory:entity-1…')).toBeInTheDocument();
       });
     });
   });

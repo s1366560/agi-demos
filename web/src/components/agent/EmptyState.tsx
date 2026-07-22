@@ -169,6 +169,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
               hover:shadow-lg hover:shadow-primary/10
               transition-shadow duration-200 ease-out
               text-left
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2
             "
           >
             <div
@@ -234,6 +235,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
               group flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left
               last:border-b-0 hover:bg-slate-50 dark:border-slate-700/60 dark:hover:bg-slate-700/30
               transition-[color,background-color,border-color,box-shadow,opacity] duration-150
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50
             "
           >
             <div

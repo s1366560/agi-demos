@@ -171,7 +171,7 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 transition-opacity">
                     <button
                       type="button"
                       onClick={() => {
@@ -217,9 +217,21 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
 
   if (error) {
     return (
-      <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-lg flex items-center gap-3 border border-red-200 dark:border-red-800">
-        <AlertCircle size={20} />
-        {error}
+      <div
+        role="alert"
+        className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-lg flex items-center gap-3 border border-red-200 dark:border-red-800"
+      >
+        <AlertCircle aria-hidden="true" size={20} />
+        <span className="flex-1">{error}</span>
+        <button
+          type="button"
+          onClick={() => {
+            void loadAssignments();
+          }}
+          className="shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:hover:bg-red-900/40"
+        >
+          {t('common.retry', 'Retry')}
+        </button>
       </div>
     );
   }

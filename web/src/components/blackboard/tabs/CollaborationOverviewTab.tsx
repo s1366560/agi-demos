@@ -7,6 +7,8 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { useWorkspaceStore } from '@/stores/workspace';
 
+import { formatDistanceToNow } from '@/utils/date';
+
 import { HostedProjectionBadge } from '../HostedProjectionBadge';
 
 import type { WorkspaceAgent, WorkspaceMessage } from '@/types/workspace';
@@ -19,13 +21,7 @@ export interface CollaborationOverviewTabProps {
 }
 
 function formatTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  if (diff < 60000) return 'just now';
-  if (diff < 3600000) return `${String(Math.floor(diff / 60000))}m ago`;
-  if (diff < 86400000) return `${String(Math.floor(diff / 3600000))}h ago`;
-  return date.toLocaleDateString();
+  return formatDistanceToNow(dateStr) || dateStr;
 }
 
 export function CollaborationOverviewTab({
@@ -115,8 +111,9 @@ export function CollaborationOverviewTab({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-text-secondary dark:text-text-muted" />
+          <Filter aria-hidden="true" className="h-4 w-4 text-text-secondary dark:text-text-muted" />
           <select
+            aria-label={t('blackboard.collaboration.filterByAgent', 'Filter by agent')}
             value={filterAgent}
             onChange={(e) => {
               setFilterAgent(e.target.value);
@@ -136,7 +133,7 @@ export function CollaborationOverviewTab({
       {/* Stats */}
       <div className="flex gap-4">
         <div className="rounded-lg border border-border-light bg-surface-light px-4 py-3 dark:border-border-dark dark:bg-surface-dark">
-          <div className="text-2xl font-semibold text-text-primary dark:text-text-inverse">
+          <div className="text-2xl font-semibold tabular-nums text-text-primary dark:text-text-inverse">
             {agentMessages.length}
           </div>
           <div className="text-xs text-text-secondary dark:text-text-muted">
@@ -144,7 +141,7 @@ export function CollaborationOverviewTab({
           </div>
         </div>
         <div className="rounded-lg border border-border-light bg-surface-light px-4 py-3 dark:border-border-dark dark:bg-surface-dark">
-          <div className="text-2xl font-semibold text-text-primary dark:text-text-inverse">
+          <div className="text-2xl font-semibold tabular-nums text-text-primary dark:text-text-inverse">
             {new Set(agentMessages.map((m: WorkspaceMessage) => m.sender_id)).size}
           </div>
           <div className="text-xs text-text-secondary dark:text-text-muted">

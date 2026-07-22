@@ -26,6 +26,8 @@ import {
   useInstanceStore,
 } from '../../stores/instance';
 
+import { formatDate, getStatusColor } from './utils/instanceUtils';
+
 import type { InstanceMemberResponse } from '../../services/instanceService';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -59,24 +61,6 @@ const HEALTH_CONFIG: Record<string, HealthConfig> = {
   },
   unknown: UNKNOWN_HEALTH_CONFIG,
 };
-
-const STATUS_COLORS: Record<string, string> = {
-  running: 'green',
-  stopped: 'default',
-  pending: 'orange',
-  error: 'red',
-  creating: 'blue',
-  deleting: 'volcano',
-};
-
-function formatUptime(createdAt: string): string {
-  const diff = Date.now() - new Date(createdAt).getTime();
-  const days = Math.floor(diff / 86400000);
-  const hours = Math.floor((diff % 86400000) / 3600000);
-  if (days > 0) return `${String(days)}d ${String(hours)}h`;
-  const minutes = Math.floor((diff % 3600000) / 60000);
-  return hours > 0 ? `${String(hours)}h ${String(minutes)}m` : `${String(minutes)}m`;
-}
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -192,9 +176,31 @@ export const InstanceOverview: React.FC = () => {
       title: t('tenant.instances.columns.createdAt'),
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (date: string) => new Date(date).toLocaleString(),
+      render: (date: string) => formatDate(date),
     },
   ];
+
+  const formatUptime = (createdAt: string): string => {
+    const diff = Date.now() - new Date(createdAt).getTime();
+    const days = Math.floor(diff / 86400000);
+    const hours = Math.floor((diff % 86400000) / 3600000);
+    const minutes = Math.floor((diff % 3600000) / 60000);
+    if (days > 0) {
+      return t('tenant.instances.detail.uptimeDh', {
+        days,
+        hours,
+        defaultValue: '{{days}}d {{hours}}h',
+      });
+    }
+    if (hours > 0) {
+      return t('tenant.instances.detail.uptimeHm', {
+        hours,
+        minutes,
+        defaultValue: '{{hours}}h {{minutes}}m',
+      });
+    }
+    return t('tenant.instances.detail.uptimeM', { minutes, defaultValue: '{{minutes}}m' });
+  };
 
   if (!instance) {
     return null;
@@ -214,7 +220,7 @@ export const InstanceOverview: React.FC = () => {
             {healthCfg.icon}
             <span className="text-sm font-semibold capitalize">{healthKey}</span>
           </div>
-          <Tag color={STATUS_COLORS[instance.status] || 'default'} className="text-xs">
+          <Tag color={getStatusColor(instance.status)} className="text-xs">
             {instance.status}
           </Tag>
           <div className="flex items-center gap-1 text-xs text-text-secondary dark:text-text-muted">
@@ -227,7 +233,12 @@ export const InstanceOverview: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2">
           <LazyButton
             icon={
-              <RefreshCw size={14} className={actionLoading === 'refresh' ? 'animate-spin' : ''} />
+              <RefreshCw
+                size={14}
+                className={
+                  actionLoading === 'refresh' ? 'animate-spin motion-reduce:animate-none' : ''
+                }
+              />
             }
             onClick={handleRefresh}
             loading={actionLoading === 'refresh'}
@@ -248,6 +259,7 @@ export const InstanceOverview: React.FC = () => {
                     setScaleTarget(v);
                   }}
                   size="small"
+                  aria-label={t('tenant.instances.detail.replicas', 'Replicas')}
                 />
               </div>
             }
@@ -337,7 +349,11 @@ export const InstanceOverview: React.FC = () => {
               onClick={() => {
                 setShowToken(!showToken);
               }}
-              aria-label={showToken ? 'Hide token' : 'Show token'}
+              aria-label={
+                showToken
+                  ? t('tenant.instances.detail.hideToken', 'Hide token')
+                  : t('tenant.instances.detail.showToken', 'Show token')
+              }
             />
             <LazyButton onClick={handleCopyToken}>{t('common.copy')}</LazyButton>
           </div>
@@ -419,6 +435,7 @@ export const InstanceOverview: React.FC = () => {
           columns={memberColumns}
           dataSource={members}
           rowKey="id"
+          loading={isMembersLoading}
           pagination={false}
           scroll={{ x: 'max-content' }}
           className="max-w-full"

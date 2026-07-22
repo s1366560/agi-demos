@@ -51,7 +51,6 @@ import { formatDateOnly, formatDateTime } from '@/utils/date';
 import { VirtualGrid } from '../../components/common';
 import { getEntityTypeColor } from '../../components/graph';
 import { graphService } from '../../services/graphService';
-
 import { logger } from '../../utils/logger';
 
 import type {

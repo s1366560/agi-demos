@@ -6,10 +6,7 @@ interface DerivedSurfaceBadgeProps {
   fallbackLabel: string;
 }
 
-/**
- * @deprecated Use `SurfaceBadge` with `boundary="derived"` directly.
- * Thin wrapper kept for existing consumers.
- */
+/** Thin wrapper over `SurfaceBadge`, kept for existing consumers. */
 export function DerivedSurfaceBadge({ labelKey, fallbackLabel }: DerivedSurfaceBadgeProps) {
   return (
     <SurfaceBadge

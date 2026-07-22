@@ -15,10 +15,7 @@ import {
   type WorkspaceTaskPlanRow,
 } from './WorkspaceTaskPlanPanelModel';
 
-import type {
-  WorkspacePlanSnapshot,
-  WorkspaceTaskStatus,
-} from '@/types/workspace';
+import type { WorkspacePlanSnapshot, WorkspaceTaskStatus } from '@/types/workspace';
 
 import type { TFunction } from 'i18next';
 
@@ -182,7 +179,18 @@ const WorkspaceTaskPlanRowItem = memo<{ row: WorkspaceTaskPlanRow; locale: strin
               ) : null}
             </div>
             {typeof row.progressPercent === 'number' ? (
-              <div className="mt-2 h-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+              <div
+                className="mt-2 h-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"
+                role="progressbar"
+                aria-valuenow={Math.max(0, Math.min(100, row.progressPercent))}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={tFallback(
+                  t,
+                  'agent.rightPanel.workspacePlan.rowProgressLabel',
+                  'Task progress'
+                )}
+              >
                 <div
                   className={`h-full rounded-full transition-[width] duration-500 ${config.bar}`}
                   style={{ width: `${String(Math.max(0, Math.min(100, row.progressPercent)))}%` }}
@@ -305,6 +313,24 @@ export const WorkspaceTaskPlanPanel = memo<WorkspaceTaskPlanPanelProps>(
     const defaultExpandedIterationGroupId =
       currentIterationGroupId ?? iterationGroups[0]?.id ?? null;
 
+    if (loading && rows.length === 0 && !hasPlan) {
+      return (
+        <div className="px-4 py-6" aria-busy="true">
+          <div className="space-y-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="h-8 w-8 shrink-0 rounded-lg bg-slate-200 dark:bg-slate-700 animate-pulse motion-reduce:animate-none" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-2/3 rounded bg-slate-200 dark:bg-slate-700 animate-pulse motion-reduce:animate-none" />
+                  <div className="h-2.5 w-1/3 rounded bg-slate-200 dark:bg-slate-700 animate-pulse motion-reduce:animate-none" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
     if (!loading && rows.length === 0 && !hasPlan) {
       return (
         <div className="flex flex-col items-center justify-center px-4 py-12">
@@ -344,16 +370,27 @@ export const WorkspaceTaskPlanPanel = memo<WorkspaceTaskPlanPanelProps>(
                   })}
                 </span>
                 {error ? (
-                  <span className="text-amber-600 dark:text-amber-400">
+                  <span className="text-amber-600 dark:text-amber-400" title={error}>
                     {tFallback(t, 'agent.rightPanel.workspacePlan.partial', 'Partial')}
                   </span>
                 ) : loading ? (
-                  <span>{tFallback(t, 'agent.rightPanel.workspacePlan.loading', 'Loading')}</span>
+                  <span>{tFallback(t, 'agent.rightPanel.workspacePlan.loading', 'Loading…')}</span>
                 ) : (
                   <span>{stats.completion}%</span>
                 )}
               </div>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+              <div
+                className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"
+                role="progressbar"
+                aria-valuenow={stats.completion}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={tFallback(
+                  t,
+                  'agent.rightPanel.workspacePlan.completionLabel',
+                  'Plan completion'
+                )}
+              >
                 <div
                   className="h-full rounded-full bg-emerald-500 transition-[width] duration-500 dark:bg-emerald-400"
                   style={{ width: `${String(stats.completion)}%` }}

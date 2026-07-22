@@ -2,8 +2,7 @@
  * TDD Tests for RightPanel refactored components
  *
  * Test coverage for:
- * - ResizeHandle component (extracted from RightPanel)
- * - RightPanel (refactored to use extracted components)
+ * - RightPanel (uses the shared Resizer component, tested in Resizer.test.tsx)
  */
 
 import type { ReactElement } from 'react';
@@ -93,8 +92,6 @@ import { useGraphStore } from '@/stores/graphStore';
 import { useWorkspaceStore } from '@/stores/workspace';
 // eslint-disable-next-line no-restricted-imports
 import { RightPanel } from '@/components/agent/RightPanel';
-// eslint-disable-next-line no-restricted-imports
-import { ResizeHandle } from '@/components/agent/rightPanel/ResizeHandle';
 
 function renderRightPanel(ui: ReactElement) {
   return render(<MemoryRouter>{ui}</MemoryRouter>);
@@ -186,89 +183,6 @@ function mockWorkspaceSnapshot() {
   };
 }
 
-describe('ResizeHandle (Extracted Component)', () => {
-  it('should render resize handle with correct classes', () => {
-    const onResize = vi.fn();
-    const { container } = render(<ResizeHandle onResize={onResize} />);
-
-    const handle = container.querySelector('.left-0.top-0.bottom-0');
-    expect(handle).toBeInTheDocument();
-  });
-
-  it('should have cursor-ew-resize class', () => {
-    const onResize = vi.fn();
-    const { container } = render(<ResizeHandle onResize={onResize} />);
-
-    const handle = container.querySelector('.cursor-ew-resize');
-    expect(handle).toBeInTheDocument();
-  });
-
-  it('should call onResize when dragging', async () => {
-    const onResize = vi.fn();
-    const { container } = render(<ResizeHandle onResize={onResize} />);
-
-    const handle = container.firstChild as HTMLElement;
-    expect(handle).toBeInTheDocument();
-
-    // Simulate mouse down
-    fireEvent.mouseDown(handle, { clientX: 100 });
-
-    // Simulate mouse move
-    const moveEvent = new MouseEvent('mousemove', { clientX: 150 });
-    Object.defineProperty(moveEvent, 'clientX', { value: 150 });
-    act(() => {
-      document.dispatchEvent(moveEvent);
-    });
-
-    await waitFor(() => {
-      // The delta should be calculated (150 - 100 = 50)
-      expect(onResize).toHaveBeenCalledWith(50);
-    });
-
-    // Cleanup
-    const upEvent = new MouseEvent('mouseup', {});
-    act(() => {
-      document.dispatchEvent(upEvent);
-    });
-  });
-
-  it('should show dragging state during drag', async () => {
-    const onResize = vi.fn();
-    const { container } = render(<ResizeHandle onResize={onResize} />);
-
-    const handle = container.firstChild as HTMLElement;
-
-    // Initially not dragging
-    expect(handle).not.toHaveClass('bg-slate-300/70');
-
-    // Start dragging
-    fireEvent.mouseDown(handle, { clientX: 100 });
-
-    await waitFor(() => {
-      expect(handle).toHaveClass('bg-slate-300/70');
-    });
-
-    // Cleanup
-    const upEvent = new MouseEvent('mouseup', {});
-    act(() => {
-      document.dispatchEvent(upEvent);
-    });
-  });
-
-  it('should prevent default on mouse down', () => {
-    const onResize = vi.fn();
-    const { container } = render(<ResizeHandle onResize={onResize} />);
-
-    const handle = container.firstChild as HTMLElement;
-    const event = new MouseEvent('mousedown', { clientX: 100, bubbles: true, cancelable: true });
-    event.preventDefault = vi.fn();
-
-    fireEvent(handle, event);
-
-    expect(event.preventDefault).toHaveBeenCalled();
-  });
-});
-
 describe('RightPanel (Refactored)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -310,8 +224,7 @@ describe('RightPanel (Refactored)', () => {
   });
 
   // Note: Full integration tests for RightPanel are skipped due to antd Tabs complexity
-  // The core components (ResizeHandle, PlanContent) are fully tested above
-  // RightPanel is a thin wrapper that uses these tested components
+  // RightPanel composes separately tested components (Resizer, plan/task panels)
 
   it('should be defined and exportable', () => {
     expect(RightPanel).toBeDefined();

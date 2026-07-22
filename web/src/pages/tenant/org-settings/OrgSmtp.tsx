@@ -10,7 +10,7 @@ import { useTenantStore } from '@/stores/tenant';
 import { smtpService } from '@/services/smtpService';
 import type { SmtpConfigCreate } from '@/services/smtpService';
 
-import { useLazyMessage, LazySpin } from '@/components/ui/lazyAntd';
+import { useLazyMessage, LazyPopconfirm, LazySpin } from '@/components/ui/lazyAntd';
 
 export const OrgSmtp: React.FC = () => {
   const { t } = useTranslation();
@@ -184,17 +184,24 @@ export const OrgSmtp: React.FC = () => {
           </p>
         </div>
         {config && (
-          <button
-            type="button"
-            onClick={() => {
-              void handleDelete();
-            }}
-            disabled={isSubmitting}
-            className="inline-flex items-center gap-2 px-4 py-2 border border-red-200 text-red-600 dark:border-red-900/50 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-sm font-medium"
+          <LazyPopconfirm
+            title={t(
+              'tenant.orgSettings.smtp.deleteConfirm',
+              'Delete the SMTP configuration? Notification emails will no longer be sent.'
+            )}
+            onConfirm={() => void handleDelete()}
+            okText={t('common.delete', 'Delete')}
+            cancelText={t('common.cancel', 'Cancel')}
           >
-            <Trash2 size={16} />
-            {t('common.delete', 'Delete')}
-          </button>
+            <button
+              type="button"
+              disabled={isSubmitting}
+              className="inline-flex items-center gap-2 px-4 py-2 border border-red-200 text-red-600 dark:border-red-900/50 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-sm font-medium"
+            >
+              <Trash2 size={16} />
+              {t('common.delete', 'Delete')}
+            </button>
+          </LazyPopconfirm>
         )}
       </div>
 
@@ -219,6 +226,8 @@ export const OrgSmtp: React.FC = () => {
               onChange={(e) => {
                 setHost(e.target.value);
               }}
+              autoComplete="off"
+              spellCheck={false}
               className="w-full rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 text-slate-900 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               placeholder={t('tenant.orgSettings.smtp.hostPlaceholder')}
             />
@@ -236,7 +245,8 @@ export const OrgSmtp: React.FC = () => {
               type="number"
               value={port}
               onChange={(e) => {
-                setPort(parseInt(e.target.value, 10));
+                const parsed = parseInt(e.target.value, 10);
+                setPort(Number.isNaN(parsed) ? 0 : parsed);
               }}
               className="w-full rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 text-slate-900 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               placeholder={t('tenant.orgSettings.smtp.portPlaceholder')}
@@ -257,6 +267,8 @@ export const OrgSmtp: React.FC = () => {
               onChange={(e) => {
                 setUsername(e.target.value);
               }}
+              autoComplete="off"
+              spellCheck={false}
               className="w-full rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 text-slate-900 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               placeholder={t('tenant.orgSettings.smtp.usernamePlaceholder')}
             />
@@ -277,6 +289,8 @@ export const OrgSmtp: React.FC = () => {
                 onChange={(e) => {
                   setPassword(e.target.value);
                 }}
+                autoComplete="new-password"
+                spellCheck={false}
                 className="w-full rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 pr-10 text-slate-900 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 placeholder={
                   config
@@ -317,6 +331,8 @@ export const OrgSmtp: React.FC = () => {
               onChange={(e) => {
                 setFromEmail(e.target.value);
               }}
+              autoComplete="email"
+              spellCheck={false}
               className="w-full rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 text-slate-900 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               placeholder={t('tenant.orgSettings.smtp.fromEmailPlaceholder')}
             />
@@ -395,6 +411,9 @@ export const OrgSmtp: React.FC = () => {
                 onChange={(e) => {
                   setRecipientEmail(e.target.value);
                 }}
+                aria-label={t('tenant.orgSettings.smtp.recipientEmail', 'Recipient email address')}
+                autoComplete="email"
+                spellCheck={false}
                 className="w-full rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 text-slate-900 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 placeholder={t('tenant.orgSettings.smtp.recipientEmail', 'Recipient email address')}
               />

@@ -328,7 +328,7 @@ export interface UserTenant {
   id: string;
   user_id: string;
   tenant_id: string;
-  role: 'owner' | 'admin' | 'member' | 'guest';
+  role: 'owner' | 'admin' | 'member' | 'editor' | 'viewer' | 'guest';
   permissions: Record<string, unknown>;
   created_at: string;
   // User info joined from users table

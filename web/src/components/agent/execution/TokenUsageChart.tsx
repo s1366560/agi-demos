@@ -268,6 +268,7 @@ export const TokenUsageChart: React.FC<TokenUsageChartProps> = ({
           onClick={() => {
             setIsExpanded(!isExpanded);
           }}
+          aria-expanded={isExpanded}
           className="flex items-center gap-1 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
         >
           {isExpanded ? (

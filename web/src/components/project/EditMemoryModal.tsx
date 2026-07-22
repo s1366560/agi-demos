@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Loader2, Save, X } from 'lucide-react';
+import { AlertTriangle, Loader2, Save, X } from 'lucide-react';
 
 import { AppModal } from '@/components/common';
 
@@ -65,7 +65,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
       // Validate version field - required for optimistic locking
       if (typeof memory.version !== 'number') {
         console.error(`Memory ${memory.id} missing or invalid version field`);
-        setError('This memory data is outdated. Please refresh the page and try again.');
+        setError(t('memory.edit.outdatedData'));
         setIsSaving(false);
         return;
       }
@@ -92,9 +92,9 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
       };
       // Handle version conflict error specifically
       if (error.response?.status === 409) {
-        setError('This memory has been modified by another user. Please refresh and try again.');
+        setError(t('memory.edit.conflict'));
       } else {
-        setError(error.response?.data?.detail || 'Failed to update memory. Please try again.');
+        setError(error.response?.data?.detail || t('memory.edit.updateFailed'));
       }
     } finally {
       setIsSaving(false);
@@ -141,132 +141,133 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
       </div>
 
       {/* Form */}
-        <form
-          onSubmit={(e) => {
-            void handleSubmit(e);
-          }}
-          className="flex-1 overflow-y-auto p-6 space-y-4"
-        >
-          {error && (
-            <div
-              className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4"
-              role="alert"
-              aria-live="assertive"
-            >
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-            </div>
-          )}
-
-          <div>
-            <label
-              htmlFor="memory-title"
-              className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2"
-            >
-              {t('memory.edit.titleLabel')} *
-            </label>
-            <input
-              id="memory-title"
-              type="text"
-              value={title}
-              onChange={(e) => {
-                setTitle(e.target.value);
-              }}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
-              placeholder={t('memory.edit.titlePlaceholder')}
-              required
-              disabled={isSaving}
-              aria-required="true"
-              autoFocus
-            />
+      <form
+        onSubmit={(e) => {
+          void handleSubmit(e);
+        }}
+        className="flex-1 overflow-y-auto p-6 space-y-4"
+      >
+        {error && (
+          <div
+            className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4"
+            role="alert"
+            aria-live="assertive"
+          >
+            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
           </div>
+        )}
 
-          <div>
-            <label
-              htmlFor="memory-content"
-              className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2"
-            >
-              {t('memory.edit.contentLabel')} *
-            </label>
-            <textarea
-              id="memory-content"
-              value={content}
-              onChange={(e) => {
-                setContent(e.target.value);
-              }}
-              rows={12}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white resize-none"
-              placeholder={t('memory.edit.contentPlaceholder')}
-              required
-              disabled={isSaving}
-              aria-required="true"
-            />
-          </div>
+        <div>
+          <label
+            htmlFor="memory-title"
+            className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2"
+          >
+            {t('memory.edit.titleLabel')} *
+          </label>
+          <input
+            id="memory-title"
+            type="text"
+            value={title}
+            onChange={(e) => {
+              setTitle(e.target.value);
+            }}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
+            placeholder={t('memory.edit.titlePlaceholder')}
+            required
+            disabled={isSaving}
+            aria-required="true"
+            autoFocus
+          />
+        </div>
 
-          <div>
-            <label
-              htmlFor="memory-tags"
-              className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2"
-            >
-              {t('memory.edit.tagsLabel')}
-            </label>
-            <div className="flex flex-wrap gap-2 mb-2">
-              {tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded-full text-sm"
-                >
-                  {tag}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleRemoveTag(tag);
-                    }}
-                    className="hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-50 rounded-full transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                    disabled={isSaving}
-                    aria-label={t('memory.edit.removeTagAria', { tag })}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <input
-                id="memory-tags"
-                type="text"
-                value={newTag}
-                onChange={(e) => {
-                  setNewTag(e.target.value);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAddTag();
-                  }
-                }}
-                className="flex-1 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
-                placeholder={t('memory.edit.addTagPlaceholder', 'Add new tag')}
-                disabled={isSaving}
-                aria-label={t('memory.edit.addTagAria', 'Add new tag')}
-              />
-              <button
-                type="button"
-                onClick={handleAddTag}
-                className="px-4 py-2 bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50"
-                disabled={isSaving}
+        <div>
+          <label
+            htmlFor="memory-content"
+            className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2"
+          >
+            {t('memory.edit.contentLabel')} *
+          </label>
+          <textarea
+            id="memory-content"
+            value={content}
+            onChange={(e) => {
+              setContent(e.target.value);
+            }}
+            rows={12}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white resize-none"
+            placeholder={t('memory.edit.contentPlaceholder')}
+            required
+            disabled={isSaving}
+            aria-required="true"
+          />
+        </div>
+
+        <div>
+          <label
+            htmlFor="memory-tags"
+            className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2"
+          >
+            {t('memory.edit.tagsLabel')}
+          </label>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {tags.map((tag) => (
+              <span
+                key={tag}
+                className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded-full text-sm"
               >
-                {t('memory.edit.addTag')}
-              </button>
-            </div>
+                {tag}
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleRemoveTag(tag);
+                  }}
+                  className="hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-50 rounded-full transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  disabled={isSaving}
+                  aria-label={t('memory.edit.removeTagAria', { tag })}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
           </div>
+          <div className="flex gap-2">
+            <input
+              id="memory-tags"
+              type="text"
+              value={newTag}
+              onChange={(e) => {
+                setNewTag(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAddTag();
+                }
+              }}
+              className="flex-1 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
+              placeholder={t('memory.edit.addTagPlaceholder', 'Add new tag')}
+              disabled={isSaving}
+              aria-label={t('memory.edit.addTagAria', 'Add new tag')}
+            />
+            <button
+              type="button"
+              onClick={handleAddTag}
+              className="px-4 py-2 bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50"
+              disabled={isSaving}
+            >
+              {t('memory.edit.addTag')}
+            </button>
+          </div>
+        </div>
 
-          {/* Optimistic locking notice */}
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md p-4">
-            <p className="text-sm text-yellow-800 dark:text-yellow-300">
-              ⚠️ {t('memory.edit.optimisticLockWarning')}
-            </p>
-          </div>
-        </form>
+        {/* Optimistic locking notice */}
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md p-4">
+          <p className="flex items-start gap-2 text-sm text-yellow-800 dark:text-yellow-300">
+            <AlertTriangle aria-hidden="true" size={16} className="mt-0.5 shrink-0" />
+            <span>{t('memory.edit.optimisticLockWarning')}</span>
+          </p>
+        </div>
+      </form>
     </AppModal>
   );
 };

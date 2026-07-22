@@ -289,12 +289,16 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
               <button
                 type="button"
                 disabled={deleting.has(app.id)}
-                className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+                aria-label={t('mcp.appCard.deleteAria', {
+                  name: title,
+                  defaultValue: 'Delete {{name}}',
+                })}
+                className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
               >
                 {deleting.has(app.id) ? (
                   <Loader2 size={14} className={ANIMATION_CLASSES.spin} />
                 ) : (
-                  <Trash2 size={14} />
+                  <Trash2 size={14} aria-hidden="true" />
                 )}
               </button>
             </Popconfirm>

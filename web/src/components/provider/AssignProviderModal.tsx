@@ -10,7 +10,6 @@ import { providerAPI } from '../../services/api';
 
 import type { ProviderConfig } from '../../types/memory';
 
-
 type OperationType = 'llm' | 'embedding' | 'rerank';
 
 interface AssignProviderModalProps {
@@ -105,10 +104,14 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+          <label
+            htmlFor="assign-provider-operation-type"
+            className="block text-sm font-medium text-slate-700 dark:text-slate-300"
+          >
             {t('components.provider.assign.operationType')}
           </label>
           <select
+            id="assign-provider-operation-type"
             value={operationType}
             onChange={(e) => {
               const nextOperationType = e.target.value;
@@ -123,9 +126,7 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
             className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow"
           >
             <option value="llm">{t('components.provider.operationTypes.llm')}</option>
-            <option value="embedding">
-              {t('components.provider.operationTypes.embedding')}
-            </option>
+            <option value="embedding">{t('components.provider.operationTypes.embedding')}</option>
             <option value="rerank">{t('components.provider.operationTypes.rerank')}</option>
           </select>
           <p className="text-xs text-slate-500">
@@ -134,14 +135,18 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+          <label
+            htmlFor="assign-provider-priority"
+            className="block text-sm font-medium text-slate-700 dark:text-slate-300"
+          >
             {t('components.provider.assign.priority')}
           </label>
           <input
+            id="assign-provider-priority"
             type="number"
             value={priority}
             onChange={(e) => {
-              setPriority(parseInt(e.target.value));
+              setPriority(parseInt(e.target.value, 10) || 0);
             }}
             min={0}
             className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow"

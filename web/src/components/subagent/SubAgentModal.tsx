@@ -26,6 +26,7 @@ import { X } from 'lucide-react';
 import { agentService } from '../../services/agentService';
 import { mcpAPI } from '../../services/mcpService';
 import { skillAPI } from '../../services/skillService';
+import { useModelCatalog, useProviderStore } from '../../stores/provider';
 import { useSubAgentStore, useSubAgentSubmitting } from '../../stores/subagent';
 
 import type {
@@ -158,7 +159,30 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
   const isSubmitting = useSubAgentSubmitting();
   const { createSubAgent, updateSubAgent } = useSubAgentStore();
 
+  const modelCatalog = useModelCatalog();
+  const fetchModelCatalog = useProviderStore((s) => s.fetchModelCatalog);
+
   const isEditMode = !!subagent;
+
+  // LLM model options come from the shared backend model catalog (single
+  // source of truth); LLM_MODELS below is only a fallback while the catalog
+  // is unavailable.
+  useEffect(() => {
+    if (isOpen && modelCatalog.length === 0) {
+      void fetchModelCatalog();
+    }
+  }, [isOpen, modelCatalog.length, fetchModelCatalog]);
+
+  const llmModelOptions = React.useMemo(() => {
+    if (modelCatalog.length === 0) return LLM_MODELS;
+    return [
+      {
+        value: 'inherit',
+        label: t('tenant.subagents.modal.modelInherit', 'Inherit from Tenant Config'),
+      },
+      ...modelCatalog.map((model) => ({ value: model.name, label: model.name })),
+    ];
+  }, [modelCatalog, t]);
 
   // Track previous state to only update when values actually change
   const prevSubagentRef = useRef<SubAgentResponse | null>(null);
@@ -349,7 +373,9 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
           }
         }
       }
-      // API errors handled by store
+      if (!isFormValidationError(error)) {
+        message.error(t('tenant.subagents.saveFailed'));
+      }
     }
   }, [
     form,
@@ -494,7 +520,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
               initialValue="inherit"
             >
               <Select>
-                {LLM_MODELS.map((model) => (
+                {llmModelOptions.map((model) => (
                   <Option key={model.value} value={model.value}>
                     {model.label}
                   </Option>
@@ -507,7 +533,12 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                 <ColorPicker
                   value={selectedColor}
                   onChange={handleColorChange}
-                  presets={[{ label: 'Presets', colors: COLOR_PRESETS }]}
+                  presets={[
+                    {
+                      label: t('tenant.subagents.modal.colorPresets', 'Presets'),
+                      colors: COLOR_PRESETS,
+                    },
+                  ]}
                 />
                 <div
                   className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-600"
@@ -541,11 +572,15 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
           </Form.Item>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+            <label
+              htmlFor="subagent-keyword-input"
+              className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+            >
               {t('tenant.subagents.modal.triggerKeywords')}
             </label>
             <div className="flex gap-2 mb-2">
               <Input
+                id="subagent-keyword-input"
                 placeholder={t('tenant.subagents.modal.addKeyword')}
                 value={keywordInput}
                 onChange={(e) => {
@@ -583,11 +618,15 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+            <label
+              htmlFor="subagent-example-input"
+              className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+            >
               {t('tenant.subagents.modal.triggerExamples')}
             </label>
             <div className="flex gap-2 mb-2">
               <Input
+                id="subagent-example-input"
                 placeholder={t('tenant.subagents.modal.addExample')}
                 value={exampleInput}
                 onChange={(e) => {
@@ -637,11 +676,15 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
 
           {/* Keyword Tester */}
           <div className="pt-4 border-t border-slate-200 dark:border-slate-700 mt-4">
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+            <label
+              htmlFor="subagent-test-query-input"
+              className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+            >
               {t('tenant.subagents.modal.testKeywords')}
             </label>
             <div className="flex gap-2">
               <Input
+                id="subagent-test-query-input"
                 placeholder={t('tenant.subagents.modal.testQueryPlaceholder')}
                 value={testQuery}
                 onChange={(e) => {
@@ -660,6 +703,8 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
             </div>
             {testResult && (
               <div
+                role="status"
+                aria-live="polite"
                 className={`mt-2 text-sm ${
                   testResult.matched ? 'text-green-600 font-medium' : 'text-amber-600'
                 }`}

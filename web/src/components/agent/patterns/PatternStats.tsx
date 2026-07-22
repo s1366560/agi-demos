@@ -4,6 +4,8 @@
  * Displays key metrics: Total Patterns, Success Rate, Deprecated Patterns.
  */
 
+import { useTranslation } from 'react-i18next';
+
 import { Network, BarChart3, Archive, TrendingUp, TrendingDown, LucideIcon } from 'lucide-react';
 
 export interface PatternStatsProps {
@@ -51,6 +53,7 @@ export function PatternStats({
   deprecatedTrend = 0,
   compact = false,
 }: PatternStatsProps) {
+  const { t } = useTranslation();
   const formatTrend = (value: number) => {
     const sign = value >= 0 ? '+' : '';
     return `${sign}${String(value)}%`;
@@ -71,7 +74,7 @@ export function PatternStats({
   const stats: StatCard[] = [
     {
       id: 'total',
-      label: 'Total Patterns Learned',
+      label: t('components.patternStats.totalLearned', { defaultValue: 'Total Patterns Learned' }),
       value: totalPatterns,
       icon: Network,
       color: 'bg-blue-500',
@@ -79,7 +82,7 @@ export function PatternStats({
     },
     {
       id: 'success',
-      label: 'Avg. Success Rate',
+      label: t('components.patternStats.avgSuccessRate', { defaultValue: 'Avg. Success Rate' }),
       value: `${String(successRate)}%`,
       icon: BarChart3,
       color: 'bg-emerald-500',
@@ -87,7 +90,7 @@ export function PatternStats({
     },
     {
       id: 'deprecated',
-      label: 'Deprecated Patterns',
+      label: t('components.patternStats.deprecated', { defaultValue: 'Deprecated Patterns' }),
       value: deprecatedCount,
       icon: Archive,
       color: 'bg-slate-500',
@@ -129,7 +132,9 @@ export function PatternStats({
 
             {/* Value */}
             <div className="mt-3">
-              <p className="text-2xl font-bold text-slate-900 dark:text-white">{stat.value}</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white tabular-nums">
+                {stat.value}
+              </p>
               <p className="text-xs text-slate-500 mt-0.5">{stat.label}</p>
             </div>
           </div>

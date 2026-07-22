@@ -99,7 +99,7 @@ export const ConversationRosterSection = memo<ConversationRosterSectionProps>(
           </p>
         )}
         {error && (
-          <p className="text-xs text-error">
+          <p className="text-xs text-error" role="alert">
             {t('blackboard.rosters.error', { defaultValue: 'Failed to load conversations.' })}
           </p>
         )}
@@ -118,7 +118,7 @@ export const ConversationRosterSection = memo<ConversationRosterSectionProps>(
             return (
               <li
                 key={c.id}
-                className="rounded-md border border-[rgba(0,0,0,0.08)] bg-white"
+                className="rounded-md border border-border-light bg-surface-light dark:border-border-dark dark:bg-surface-dark"
                 data-testid={`conversation-roster-item-${c.id}`}
               >
                 <button

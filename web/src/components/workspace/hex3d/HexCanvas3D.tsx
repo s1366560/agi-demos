@@ -10,6 +10,8 @@ import {
 } from 'react';
 import type { ComponentRef } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { OrbitControls } from '@react-three/drei';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Vector3, DoubleSide } from 'three';
@@ -83,6 +85,7 @@ export const HexCanvas3D = forwardRef<HexCanvas3DRef, HexCanvas3DProps>(
     },
     ref
   ) => {
+    const { t } = useTranslation();
     const [zoomTarget, setZoomTarget] = useState<Vector3 | null>(null);
     const particlesRef = useRef<MessageFlowParticlesRef>(null);
 
@@ -167,7 +170,13 @@ export const HexCanvas3D = forwardRef<HexCanvas3DRef, HexCanvas3DProps>(
     }, [hoveredHex, agents]);
 
     return (
-      <div className="relative h-full w-full cursor-crosshair overflow-hidden bg-[#04070d]">
+      <div
+        className="relative h-full w-full cursor-crosshair overflow-hidden bg-[#04070d]"
+        role="img"
+        aria-label={t('blackboard.arrangement.threeDAriaLabel', {
+          defaultValue: 'Three-dimensional workstation arrangement',
+        })}
+      >
         {canvasReady ? (
           <Canvas key={canvasKey} camera={{ position: [0, 12, 12], fov: 50 }}>
             <HexScene>
@@ -221,8 +230,13 @@ export const HexCanvas3D = forwardRef<HexCanvas3DRef, HexCanvas3DProps>(
             <CameraAnimator targetPosition={zoomTarget} />
           </Canvas>
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-zinc-500">
-            Initializing 3D view...
+          <div
+            className="flex h-full items-center justify-center text-sm text-zinc-500"
+            role="status"
+          >
+            {t('workspaceDetail.hex3d.initializing', {
+              defaultValue: 'Initializing 3D view…',
+            })}
           </div>
         )}
       </div>

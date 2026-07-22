@@ -23,6 +23,7 @@ import { invitationService } from '@/services/invitationService';
 
 import { confirmAction } from '@/utils/confirmAction';
 import { formatDateOnly } from '@/utils/date';
+import { logger } from '@/utils/logger';
 
 import type { UserTenant } from '@/types/memory';
 
@@ -107,6 +108,7 @@ export const UserList: React.FC = () => {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [openActionUserId, setOpenActionUserId] = useState<string | null>(null);
   const [removingUserId, setRemovingUserId] = useState<string | null>(null);
+  const [membersLoadError, setMembersLoadError] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
 
   const loadMembers = React.useCallback(async () => {
@@ -118,8 +120,10 @@ export const UserList: React.FC = () => {
     try {
       const response = await listMembers(tenantId);
       setMembers(normalizeMembersPayload(response).map(normalizeMember));
+      setMembersLoadError(false);
     } catch (error) {
-      console.error('Failed to fetch members:', error);
+      logger.error('Failed to fetch members', error);
+      setMembersLoadError(true);
       setNotice({ kind: 'error', message: t('tenant.users.load_error') });
     }
   }, [listMembers, tenantId, t]);
@@ -135,7 +139,7 @@ export const UserList: React.FC = () => {
       const response = await invitationService.listPending(tenantId);
       setPendingInvites(response.total);
     } catch (error) {
-      console.error('Failed to fetch pending invitations:', error);
+      logger.error('Failed to fetch pending invitations', error);
       setPendingInvites(0);
     } finally {
       setPendingLoading(false);
@@ -146,6 +150,28 @@ export const UserList: React.FC = () => {
     void loadMembers();
     void loadPendingInvitations();
   }, [loadMembers, loadPendingInvitations]);
+
+  // Close the row action menu on Escape or outside click
+  useEffect(() => {
+    if (!openActionUserId) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenActionUserId(null);
+      }
+    };
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!(event.target instanceof Element)) return;
+      if (!event.target.closest('[data-user-menu-root]')) {
+        setOpenActionUserId(null);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [openActionUserId]);
 
   useEffect(() => {
     setPage(1);
@@ -206,7 +232,7 @@ export const UserList: React.FC = () => {
       setNotice({ kind: 'success', message: t('tenant.users.invite_success') });
       await loadPendingInvitations();
     } catch (error) {
-      console.error('Failed to invite member:', error);
+      logger.error('Failed to invite member', error);
       setNotice({ kind: 'error', message: t('tenant.users.invite_error') });
     } finally {
       setInviteLoading(false);
@@ -229,7 +255,7 @@ export const UserList: React.FC = () => {
       setNotice({ kind: 'success', message: t('tenant.users.remove_success') });
       await loadMembers();
     } catch (error) {
-      console.error('Failed to remove member:', error);
+      logger.error('Failed to remove member', error);
       setNotice({ kind: 'error', message: t('tenant.users.remove_error') });
     } finally {
       setRemovingUserId(null);
@@ -237,7 +263,11 @@ export const UserList: React.FC = () => {
   };
 
   if (!tenantId) {
-    return <div className="p-8 text-center text-slate-500">{t('tenant.overview.loading')}</div>;
+    return (
+      <div className="p-8 text-center text-slate-500 dark:text-slate-400">
+        {t('common.noTenant')}
+      </div>
+    );
   }
 
   const maxUsers = Math.max(tenantForLimits?.max_users || members.length || 1, 1);
@@ -259,7 +289,7 @@ export const UserList: React.FC = () => {
             setIsInviteOpen((open) => !open);
           }}
         >
-          <Plus size={20} />
+          <Plus size={20} aria-hidden="true" />
           {t('tenant.users.inviteMember')}
         </button>
       </div>
@@ -292,6 +322,9 @@ export const UserList: React.FC = () => {
                 placeholder={t('tenant.users.invite_modal.email_placeholder')}
                 required
                 type="email"
+                name="email"
+                autoComplete="email"
+                spellCheck={false}
                 value={inviteEmail}
                 onChange={(event) => {
                   setInviteEmail(event.target.value);
@@ -341,7 +374,7 @@ export const UserList: React.FC = () => {
               disabled={inviteLoading}
               type="submit"
             >
-              <Mail size={16} />
+              <Mail size={16} aria-hidden="true" />
               {inviteLoading ? t('tenant.users.saving') : t('tenant.users.invite_modal.submit')}
             </button>
           </div>
@@ -358,7 +391,14 @@ export const UserList: React.FC = () => {
                 <span className="text-lg text-slate-400 font-normal">/{maxUsers}</span>
               </h3>
             </div>
-            <div className="mt-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="mt-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden"
+              role="progressbar"
+              aria-valuenow={Math.round(usagePercent)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={t('common.stats.total')}
+            >
               <div
                 className="bg-primary h-1.5 rounded-full"
                 style={{ width: `${String(usagePercent)}%` }}
@@ -366,7 +406,7 @@ export const UserList: React.FC = () => {
             </div>
           </div>
           <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-primary">
-            <BadgeCheck size={16} />
+            <BadgeCheck size={16} aria-hidden="true" />
           </div>
         </div>
         <div className="bg-surface-light dark:bg-surface-dark p-6 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex items-start justify-between">
@@ -380,7 +420,7 @@ export const UserList: React.FC = () => {
             <p className="text-xs text-slate-500 mt-1">{t('tenant.users.stats.adminAccessHint')}</p>
           </div>
           <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg text-green-600">
-            <ShieldCheck size={16} />
+            <ShieldCheck size={16} aria-hidden="true" />
           </div>
         </div>
         <div className="bg-surface-light dark:bg-surface-dark p-6 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex items-start justify-between">
@@ -394,7 +434,7 @@ export const UserList: React.FC = () => {
             <p className="text-xs text-slate-500 mt-1">{t('tenant.users.pending_hint')}</p>
           </div>
           <div className="p-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg text-orange-500">
-            <Mail size={16} />
+            <Mail size={16} aria-hidden="true" />
           </div>
         </div>
       </div>
@@ -408,6 +448,7 @@ export const UserList: React.FC = () => {
             <input
               className="block w-full pl-10 pr-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg leading-5 bg-white dark:bg-surface-dark text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm"
               placeholder={t('tenant.users.searchPlaceholder')}
+              aria-label={t('tenant.users.searchPlaceholder')}
               type="text"
               value={search}
               onChange={(event) => {
@@ -419,6 +460,7 @@ export const UserList: React.FC = () => {
             <div className="relative">
               <select
                 className="appearance-none bg-white dark:bg-surface-dark border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 py-2 pl-3 pr-8 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary cursor-pointer"
+                aria-label={t('tenant.users.allRoles')}
                 value={roleFilter}
                 onChange={(event) => {
                   setRoleFilter(event.target.value);
@@ -482,6 +524,25 @@ export const UserList: React.FC = () => {
                     {t('tenant.users.loading')}
                   </td>
                 </tr>
+              ) : membersLoadError && members.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-6 py-8 text-center">
+                    <div className="flex flex-col items-center gap-3" role="alert">
+                      <span className="text-slate-500 dark:text-slate-400">
+                        {t('tenant.users.load_error')}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void loadMembers();
+                        }}
+                        className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                      >
+                        {t('common.retry')}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
               ) : filteredMembers.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-6 py-8 text-center text-slate-500">
@@ -525,21 +586,28 @@ export const UserList: React.FC = () => {
                     </td>
                     <td className="relative px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button
+                        aria-haspopup="menu"
                         aria-expanded={openActionUserId === member.user_id}
                         aria-label={t('tenant.users.openActions', { name: member.name })}
                         className="text-slate-400 hover:text-primary transition-colors"
                         type="button"
+                        data-user-menu-root
                         onClick={() => {
                           setOpenActionUserId((openUserId) =>
                             openUserId === member.user_id ? null : member.user_id
                           );
                         }}
                       >
-                        <MoreVertical size={16} />
+                        <MoreVertical size={16} aria-hidden="true" />
                       </button>
                       {openActionUserId === member.user_id ? (
-                        <div className="absolute right-6 top-10 z-10 w-44 rounded-lg border border-slate-200 bg-white p-1 text-left shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                        <div
+                          role="menu"
+                          className="absolute right-6 top-10 z-10 w-44 rounded-lg border border-slate-200 bg-white p-1 text-left shadow-lg dark:border-slate-700 dark:bg-slate-900"
+                          data-user-menu-root
+                        >
                           <button
+                            role="menuitem"
                             className="w-full rounded-md px-3 py-2 text-left text-sm text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:bg-transparent dark:text-red-300 dark:hover:bg-red-900/20"
                             disabled={member.role === 'owner' || removingUserId === member.user_id}
                             title={

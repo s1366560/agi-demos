@@ -20,7 +20,7 @@ const StatsCard = memo<StatsCardProps>(({ title, value, icon }) => (
       <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{title}</p>
       <div className="text-slate-400 dark:text-slate-500">{icon}</div>
     </div>
-    <p className="text-2xl font-bold text-slate-900 dark:text-white mt-2">{value}</p>
+    <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-white mt-2">{value}</p>
   </div>
 ));
 

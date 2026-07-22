@@ -1124,145 +1124,148 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
         }
       >
         <div className="flex-1 overflow-y-auto">
-            <div className="flex border-b border-slate-200 dark:border-border-dark sticky top-0 bg-white dark:bg-background-dark z-10 px-6 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('general');
-                }}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'general'
-                    ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400 bg-blue-50 dark:bg-blue-500/5'
-                    : 'text-slate-500 dark:text-text-muted border-transparent hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                {entityText(t, 'generalSettings', TEXTS.generalSettings)}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('attributes');
-                }}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'attributes'
-                    ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400 bg-blue-50 dark:bg-blue-500/5'
-                    : 'text-slate-500 dark:text-text-muted border-transparent hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                {entityText(t, 'attributesSchema', TEXTS.attributesSchema)}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('relationships');
-                }}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'relationships'
-                    ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400 bg-blue-50 dark:bg-blue-500/5'
-                    : 'text-slate-500 dark:text-text-muted border-transparent hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                {entityText(t, 'relationships', TEXTS.relationships)}
-              </button>
-            </div>
-
-            <div className="p-6 flex flex-col gap-8">
-              {activeTab === 'general' && (
-                <div className="flex flex-col gap-4">
-                  <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                    {entityText(t, 'modal.basicInfo', TEXTS.modal.basicInfo)}
-                  </h4>
-                  <div className="grid grid-cols-1 gap-4">
-                    <div>
-                      <label
-                        htmlFor="entity-type-name"
-                        className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block"
-                      >
-                        {entityText(t, 'modal.nameLabel', TEXTS.modal.nameLabel)}
-                      </label>
-                      <input
-                        id="entity-type-name"
-                        className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 font-mono focus:border-blue-600 dark:focus:border-primary focus:ring-1 focus:ring-blue-600 dark:focus:ring-primary outline-none transition-colors"
-                        type="text"
-                        spellCheck={false}
-                        value={formData.name}
-                        onChange={(e) => {
-                          setFormData({ ...formData, name: e.target.value });
-                        }}
-                        placeholder={entityText(
-                          t,
-                          'modal.namePlaceholder',
-                          TEXTS.modal.namePlaceholder
-                        )}
-                        disabled={!!editingEntity}
-                      />
-                    </div>
-                    <div>
-                      <label
-                        htmlFor="entity-type-description"
-                        className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block"
-                      >
-                        {entityText(t, 'modal.descLabel', TEXTS.modal.descLabel)}
-                      </label>
-                      <textarea
-                        id="entity-type-description"
-                        className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 focus:border-blue-600 dark:focus:border-primary focus:ring-1 focus:ring-blue-600 dark:focus:ring-primary outline-none transition-colors h-32"
-                        value={formData.description}
-                        onChange={(e) => {
-                          setFormData({ ...formData, description: e.target.value });
-                        }}
-                        placeholder={entityText(
-                          t,
-                          'modal.descPlaceholder',
-                          TEXTS.modal.descPlaceholder
-                        )}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'attributes' && (
-                <>
-                  <div className="bg-blue-50 dark:bg-blue-500/5 border border-blue-200 dark:border-blue-500/20 rounded-lg p-4 flex gap-3">
-                    <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" aria-hidden="true" />
-                    <div className="flex flex-col gap-1">
-                      <h4 className="text-sm font-bold text-blue-900 dark:text-blue-100">
-                        {entityText(t, 'modal.infoTitle', TEXTS.modal.infoTitle)}
-                      </h4>
-                      <p className="text-xs text-blue-700 dark:text-blue-200/70">
-                        {entityText(t, 'modal.infoDesc', TEXTS.modal.infoDesc)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <AttributeEditor
-                    attributes={attributes}
-                    onAdd={addAttribute}
-                    onUpdate={updateAttribute}
-                    onRemove={removeAttribute}
-                    labels={attributeEditorLabels}
-                    showRequired
-                    showValidation
-                  />
-                </>
-              )}
-
-              {activeTab === 'relationships' && (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-full mb-4">
-                    <GripVertical className="w-8 h-8 text-slate-400" />
-                  </div>
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                    {entityText(t, 'relationshipMapping', TEXTS.relationshipMapping)}
-                  </h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-sm">
-                    {entityText(t, 'relationshipsComingSoon', TEXTS.relationshipsComingSoon)}
-                  </p>
-                </div>
-              )}
-            </div>
+          <div className="flex border-b border-slate-200 dark:border-border-dark sticky top-0 bg-white dark:bg-background-dark z-10 px-6 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('general');
+              }}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'general'
+                  ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400 bg-blue-50 dark:bg-blue-500/5'
+                  : 'text-slate-500 dark:text-text-muted border-transparent hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              {entityText(t, 'generalSettings', TEXTS.generalSettings)}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('attributes');
+              }}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'attributes'
+                  ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400 bg-blue-50 dark:bg-blue-500/5'
+                  : 'text-slate-500 dark:text-text-muted border-transparent hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              {entityText(t, 'attributesSchema', TEXTS.attributesSchema)}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('relationships');
+              }}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'relationships'
+                  ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400 bg-blue-50 dark:bg-blue-500/5'
+                  : 'text-slate-500 dark:text-text-muted border-transparent hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              {entityText(t, 'relationships', TEXTS.relationships)}
+            </button>
           </div>
+
+          <div className="p-6 flex flex-col gap-8">
+            {activeTab === 'general' && (
+              <div className="flex flex-col gap-4">
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  {entityText(t, 'modal.basicInfo', TEXTS.modal.basicInfo)}
+                </h4>
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <label
+                      htmlFor="entity-type-name"
+                      className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block"
+                    >
+                      {entityText(t, 'modal.nameLabel', TEXTS.modal.nameLabel)}
+                    </label>
+                    <input
+                      id="entity-type-name"
+                      className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 font-mono focus:border-blue-600 dark:focus:border-primary focus:ring-1 focus:ring-blue-600 dark:focus:ring-primary outline-none transition-colors"
+                      type="text"
+                      spellCheck={false}
+                      value={formData.name}
+                      onChange={(e) => {
+                        setFormData({ ...formData, name: e.target.value });
+                      }}
+                      placeholder={entityText(
+                        t,
+                        'modal.namePlaceholder',
+                        TEXTS.modal.namePlaceholder
+                      )}
+                      disabled={!!editingEntity}
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="entity-type-description"
+                      className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block"
+                    >
+                      {entityText(t, 'modal.descLabel', TEXTS.modal.descLabel)}
+                    </label>
+                    <textarea
+                      id="entity-type-description"
+                      className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 focus:border-blue-600 dark:focus:border-primary focus:ring-1 focus:ring-blue-600 dark:focus:ring-primary outline-none transition-colors h-32"
+                      value={formData.description}
+                      onChange={(e) => {
+                        setFormData({ ...formData, description: e.target.value });
+                      }}
+                      placeholder={entityText(
+                        t,
+                        'modal.descPlaceholder',
+                        TEXTS.modal.descPlaceholder
+                      )}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'attributes' && (
+              <>
+                <div className="bg-blue-50 dark:bg-blue-500/5 border border-blue-200 dark:border-blue-500/20 rounded-lg p-4 flex gap-3">
+                  <Info
+                    className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5"
+                    aria-hidden="true"
+                  />
+                  <div className="flex flex-col gap-1">
+                    <h4 className="text-sm font-bold text-blue-900 dark:text-blue-100">
+                      {entityText(t, 'modal.infoTitle', TEXTS.modal.infoTitle)}
+                    </h4>
+                    <p className="text-xs text-blue-700 dark:text-blue-200/70">
+                      {entityText(t, 'modal.infoDesc', TEXTS.modal.infoDesc)}
+                    </p>
+                  </div>
+                </div>
+
+                <AttributeEditor
+                  attributes={attributes}
+                  onAdd={addAttribute}
+                  onUpdate={updateAttribute}
+                  onRemove={removeAttribute}
+                  labels={attributeEditorLabels}
+                  showRequired
+                  showValidation
+                />
+              </>
+            )}
+
+            {activeTab === 'relationships' && (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-full mb-4">
+                  <GripVertical className="w-8 h-8 text-slate-400" />
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                  {entityText(t, 'relationshipMapping', TEXTS.relationshipMapping)}
+                </h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-sm">
+                  {entityText(t, 'relationshipsComingSoon', TEXTS.relationshipsComingSoon)}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
       </AppModal>
     );
   }

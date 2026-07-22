@@ -351,8 +351,8 @@ function LoadingContent({ artifact }: { artifact: Artifact }) {
         <Spin indicator={<Loader2 className="animate-spin" size={24} />} />
         <Text type="secondary">
           {artifact.status === 'pending'
-            ? t('components.artifactRenderer.preparing', { defaultValue: 'Preparing...' })
-            : t('components.artifactRenderer.uploading', { defaultValue: 'Uploading...' })}
+            ? t('components.artifactRenderer.preparing', { defaultValue: 'Preparing…' })
+            : t('components.artifactRenderer.uploading', { defaultValue: 'Uploading…' })}
         </Text>
       </Space>
     </div>
@@ -641,6 +641,9 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
                 <Button
                   type="text"
                   size="small"
+                  aria-label={t('components.artifactRenderer.download', {
+                    defaultValue: 'Download',
+                  })}
                   icon={<Download size={14} />}
                   href={artifact.url}
                   target="_blank"
@@ -653,6 +656,7 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
                 <Button
                   type="text"
                   size="small"
+                  aria-label={t('components.artifactRenderer.expand', { defaultValue: 'Expand' })}
                   icon={<Maximize2 size={14} />}
                   onClick={() => {
                     onExpand(artifact);
@@ -664,7 +668,7 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
         )
       }
     >
-      <div style={{ maxHeight, overflow: 'auto' }}>
+      <div className="relative" style={{ maxHeight, overflow: 'auto' }}>
         {loading && artifact.status === 'ready' && !error && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-10">
             <Spin />

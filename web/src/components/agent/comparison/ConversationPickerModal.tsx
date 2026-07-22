@@ -97,9 +97,9 @@ export const ConversationPickerModal = memo(
               onChange={(e) => {
                 setSearch(e.target.value);
               }}
-              placeholder={t('comparison.search', 'Search conversations...')}
+              placeholder={t('comparison.search', 'Search conversations…')}
               className="w-full rounded-md border border-slate-200 bg-slate-100 py-1.5 pl-8 pr-3 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-primary/50 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200"
-              aria-label={t('comparison.search', 'Search conversations...')}
+              aria-label={t('comparison.search', 'Search conversations…')}
             />
           </div>
         </div>
@@ -132,7 +132,10 @@ export const ConversationPickerModal = memo(
                     </p>
                     <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
                       <span>
-                        {conv.message_count} {conv.message_count === 1 ? 'message' : 'messages'}
+                        {t('comparison.messageCount', {
+                          count: conv.message_count,
+                          defaultValue: '{{count}} messages',
+                        })}
                       </span>
                       {conv.updated_at && (
                         <>

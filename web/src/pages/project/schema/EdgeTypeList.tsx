@@ -1117,65 +1117,69 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
         }
       >
         <div className="flex-1 overflow-y-auto">
-            <div className="flex border-b border-slate-200 dark:border-border-dark sticky top-0 bg-white dark:bg-background-dark z-10 px-6 pt-2">
-              <h4 className="px-4 py-3 text-sm font-bold text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 bg-blue-50 dark:bg-blue-500/5">
-                {edgeText(t, 'modalTabAttributes', TEXTS.modal.tabAttributes)}
+          <div className="flex border-b border-slate-200 dark:border-border-dark sticky top-0 bg-white dark:bg-background-dark z-10 px-6 pt-2">
+            <h4 className="px-4 py-3 text-sm font-bold text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 bg-blue-50 dark:bg-blue-500/5">
+              {edgeText(t, 'modalTabAttributes', TEXTS.modal.tabAttributes)}
+            </h4>
+          </div>
+          <div className="p-6 flex flex-col gap-8">
+            {/* Basic Info */}
+            <div className="flex flex-col gap-4">
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                {edgeText(t, 'modalBasicInfo', TEXTS.modal.basicInfo)}
               </h4>
-            </div>
-            <div className="p-6 flex flex-col gap-8">
-              {/* Basic Info */}
-              <div className="flex flex-col gap-4">
-                <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                  {edgeText(t, 'modalBasicInfo', TEXTS.modal.basicInfo)}
-                </h4>
-                <div className="grid grid-cols-1 gap-4">
-                  <div>
-                    <label
-                      htmlFor="edge-type-name"
-                      className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block"
-                    >
-                      {edgeText(t, 'modalNameLabel', TEXTS.modal.nameLabel)}
-                    </label>
-                    <input
-                      id="edge-type-name"
-                      className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 font-mono focus:border-blue-600 dark:focus:border-primary focus:ring-1 focus:ring-blue-600 dark:focus:ring-primary outline-none transition-colors"
-                      type="text"
-                      spellCheck={false}
-                      value={formData.name}
-                      onChange={(e) => {
-                        setFormData({ ...formData, name: e.target.value });
-                      }}
-                      placeholder={edgeText(t, 'modalNamePlaceholder', TEXTS.modal.namePlaceholder)}
-                      disabled={!!editingEdge}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
-                      {edgeText(t, 'modalDescLabel', TEXTS.modal.descLabel)}
-                    </label>
-                    <input
-                      className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 focus:border-blue-600 dark:focus:border-primary focus:ring-1 focus:ring-blue-600 dark:focus:ring-primary outline-none transition-colors"
-                      type="text"
-                      value={formData.description}
-                      onChange={(e) => {
-                        setFormData({ ...formData, description: e.target.value });
-                      }}
-                      placeholder={edgeText(t, 'modalDescPlaceholder', TEXTS.modal.descPlaceholder)}
-                    />
-                  </div>
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label
+                    htmlFor="edge-type-name"
+                    className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block"
+                  >
+                    {edgeText(t, 'modalNameLabel', TEXTS.modal.nameLabel)}
+                  </label>
+                  <input
+                    id="edge-type-name"
+                    className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 font-mono focus:border-blue-600 dark:focus:border-primary focus:ring-1 focus:ring-blue-600 dark:focus:ring-primary outline-none transition-colors"
+                    type="text"
+                    spellCheck={false}
+                    value={formData.name}
+                    onChange={(e) => {
+                      setFormData({ ...formData, name: e.target.value });
+                    }}
+                    placeholder={edgeText(t, 'modalNamePlaceholder', TEXTS.modal.namePlaceholder)}
+                    disabled={!!editingEdge}
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="edge-type-description"
+                    className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block"
+                  >
+                    {edgeText(t, 'modalDescLabel', TEXTS.modal.descLabel)}
+                  </label>
+                  <input
+                    id="edge-type-description"
+                    className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 focus:border-blue-600 dark:focus:border-primary focus:ring-1 focus:ring-blue-600 dark:focus:ring-primary outline-none transition-colors"
+                    type="text"
+                    value={formData.description}
+                    onChange={(e) => {
+                      setFormData({ ...formData, description: e.target.value });
+                    }}
+                    placeholder={edgeText(t, 'modalDescPlaceholder', TEXTS.modal.descPlaceholder)}
+                  />
                 </div>
               </div>
-
-              {/* Attributes */}
-              <AttributeEditor
-                attributes={attributes}
-                onAdd={addAttribute}
-                onUpdate={updateAttribute}
-                onRemove={removeAttribute}
-                labels={attributeEditorLabels}
-              />
             </div>
+
+            {/* Attributes */}
+            <AttributeEditor
+              attributes={attributes}
+              onAdd={addAttribute}
+              onUpdate={updateAttribute}
+              onRemove={removeAttribute}
+              labels={attributeEditorLabels}
+            />
           </div>
+        </div>
       </AppModal>
     );
   }

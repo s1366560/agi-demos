@@ -95,8 +95,10 @@ export const WorkspaceGroupChatPanel: React.FC<WorkspaceGroupChatPanelProps> = (
   );
 
   const currentName = useMemo(
-    () => workspaces.find((w) => w.id === workspaceId)?.name ?? 'Workspace Chat',
-    [workspaces, workspaceId]
+    () =>
+      workspaces.find((w) => w.id === workspaceId)?.name ??
+      t('workspaceDetail.chat.workspaceChatFallback', 'Workspace Chat'),
+    [workspaces, workspaceId, t]
   );
 
   if (!workspaceId) {
@@ -123,10 +125,12 @@ export const WorkspaceGroupChatPanel: React.FC<WorkspaceGroupChatPanelProps> = (
             <>
               <button
                 type="button"
+                aria-haspopup="listbox"
+                aria-expanded={pickerOpen}
                 onClick={() => {
                   setPickerOpen((p) => !p);
                 }}
-                className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left transition-colors hover:bg-slate-100 dark:hover:bg-slate-700/50"
+                className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:hover:bg-slate-700/50"
               >
                 <span className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
                   {currentName}
@@ -136,9 +140,13 @@ export const WorkspaceGroupChatPanel: React.FC<WorkspaceGroupChatPanelProps> = (
                 />
               </button>
               {pickerOpen && (
-                <div className="absolute left-0 top-full z-50 mt-1.5 w-64 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                <div
+                  role="listbox"
+                  aria-label={t('workspaceDetail.chat.workspaces', 'Workspaces')}
+                  className="absolute left-0 top-full z-50 mt-1.5 w-64 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800"
+                >
                   <div className="px-3 py-2 text-xs font-medium uppercase tracking-wider text-slate-400">
-                    Workspaces
+                    {t('workspaceDetail.chat.workspaces', 'Workspaces')}
                   </div>
                   <div className="max-h-56 overflow-y-auto">
                     {workspaces.map((w) => {
@@ -147,6 +155,8 @@ export const WorkspaceGroupChatPanel: React.FC<WorkspaceGroupChatPanelProps> = (
                         <button
                           key={w.id}
                           type="button"
+                          role="option"
+                          aria-selected={isActive}
                           onClick={() => {
                             handleSelect(w.id);
                           }}

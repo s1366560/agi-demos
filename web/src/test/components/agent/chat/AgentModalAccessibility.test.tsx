@@ -89,7 +89,7 @@ describe('agent custom modal accessibility', () => {
       'aria-modal',
       'true'
     );
-    expect(screen.getByRole('textbox', { name: 'Search conversations...' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Search conversations…' })).toBeInTheDocument();
 
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();

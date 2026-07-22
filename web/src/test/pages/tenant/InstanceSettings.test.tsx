@@ -74,7 +74,17 @@ vi.mock('@/components/ui/lazyAntd', () => ({
       {children}
     </button>
   ),
-  LazyPopconfirm: ({ children }: { children?: ReactNode }) => <>{children}</>,
+  LazyPopconfirm: ({ children, onConfirm }: { children?: ReactNode; onConfirm?: () => void }) => (
+    // Simulate a confirmed Popconfirm: clicking the trigger fires onConfirm
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+    <span
+      onClick={() => {
+        onConfirm?.();
+      }}
+    >
+      {children}
+    </span>
+  ),
   LazySelect: ({
     disabled,
     id,

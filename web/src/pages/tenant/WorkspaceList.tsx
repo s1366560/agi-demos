@@ -3,12 +3,17 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router-dom';
 
-import { Input, Progress, Spin, Tag } from 'antd';
+import { Input, Pagination, Progress, Spin, Tag } from 'antd';
 import { FolderKanban, LayoutGrid, Plus, Search, Target } from 'lucide-react';
 
 import { useCurrentProject, useProjectStore } from '@/stores/project';
 import { useCurrentTenant } from '@/stores/tenant';
-import { useWorkspaceActions, useWorkspaceLoading, useWorkspaces } from '@/stores/workspace';
+import {
+  useWorkspaceActions,
+  useWorkspaceError,
+  useWorkspaceLoading,
+  useWorkspaces,
+} from '@/stores/workspace';
 
 import {
   workspaceObjectiveService,
@@ -173,9 +178,11 @@ export function WorkspaceList() {
   const listProjects = useProjectStore((state) => state.listProjects);
   const workspaces = useWorkspaces();
   const isLoading = useWorkspaceLoading();
+  const workspaceError = useWorkspaceError();
   const { loadWorkspaces } = useWorkspaceActions();
 
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
   const [summaries, setSummaries] = useState<Record<string, ObjectiveSummary>>({});
 
   const tenantId = params.tenantId ?? currentTenant?.id ?? null;
@@ -216,7 +223,8 @@ export function WorkspaceList() {
 
   useEffect(() => {
     if (!tenantId || !projectId) return;
-    void loadWorkspaces(tenantId, projectId);
+    // The store records the failure in `error` (surfaced below with retry).
+    loadWorkspaces(tenantId, projectId).catch(() => {});
   }, [tenantId, projectId, loadWorkspaces]);
 
   // Fetch summaries in bounded batches. Default tenants can have many
@@ -267,6 +275,14 @@ export function WorkspaceList() {
     );
   }, [workspaces, query]);
 
+  const WORKSPACES_PAGE_SIZE = 24;
+  const totalWorkspacePages = Math.max(1, Math.ceil(filtered.length / WORKSPACES_PAGE_SIZE));
+  const safeWorkspacePage = Math.min(page, totalWorkspacePages);
+  const pagedWorkspaces = filtered.slice(
+    (safeWorkspacePage - 1) * WORKSPACES_PAGE_SIZE,
+    safeWorkspacePage * WORKSPACES_PAGE_SIZE
+  );
+
   if (!tenantId || !projectId) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center p-6">
@@ -314,15 +330,16 @@ export function WorkspaceList() {
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="sm:w-80">
           <label className="sr-only" htmlFor="workspace-search-input">
-            {t('tenant.workspaceList.searchPlaceholder', 'Search workspaces...')}
+            {t('tenant.workspaceList.searchPlaceholder', 'Search workspaces…')}
           </label>
           <Input
             id="workspace-search-input"
             prefix={<Search size={14} className="text-text-muted" />}
-            placeholder={t('tenant.workspaceList.searchPlaceholder', 'Search workspaces...')}
+            placeholder={t('tenant.workspaceList.searchPlaceholder', 'Search workspaces…')}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
+              setPage(1);
             }}
             allowClear
           />
@@ -342,6 +359,23 @@ export function WorkspaceList() {
           <div className="flex min-h-[240px] items-center justify-center">
             <Spin />
           </div>
+        ) : workspaceError && workspaces.length === 0 ? (
+          <div
+            className="flex min-h-[240px] flex-col items-center justify-center gap-3"
+            role="alert"
+          >
+            <p className="text-sm text-text-secondary dark:text-text-muted">{workspaceError}</p>
+            <button
+              type="button"
+              onClick={() => {
+                if (!tenantId || !projectId) return;
+                loadWorkspaces(tenantId, projectId).catch(() => {});
+              }}
+              className="rounded-md border border-border-light px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-border-dark dark:text-text-inverse"
+            >
+              {t('common.retry')}
+            </button>
+          </div>
         ) : filtered.length === 0 ? (
           <EmptyStateSimple
             icon={LayoutGrid}
@@ -360,141 +394,159 @@ export function WorkspaceList() {
             }
           />
         ) : (
-          <ul
-            className="grid min-w-0 gap-3"
-            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}
-          >
-            {filtered.map((workspace) => {
-              const updated = workspace.updated_at ?? workspace.created_at;
-              const archived = workspace.is_archived === true;
-              const summary = summaries[workspace.id];
-              const useCase = getWorkspaceUseCase(workspace);
-              const collaboration = getWorkspaceCollaborationMode(workspace);
-              const codeRoot = getSandboxCodeRoot(workspace);
-              return (
-                <li key={workspace.id} className="min-w-0 h-full">
-                  <Link
-                    to={`/tenant/${tenantId}/project/${projectId}/blackboard?workspaceId=${workspace.id}`}
-                    aria-label={workspace.name}
-                    className="group flex h-full min-w-0 flex-col gap-2 overflow-hidden rounded-md border border-border-light bg-surface-light p-4 transition-colors hover:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-border-dark dark:bg-surface-dark"
-                  >
-                    <div className="flex min-w-0 items-start justify-between gap-2">
-                      <h3 className="line-clamp-1 text-[15px] font-medium text-text-primary group-hover:text-primary dark:text-text-inverse">
-                        {workspace.name}
-                      </h3>
-                      {archived ? (
-                        <Tag color="default" className="!m-0 flex-shrink-0">
-                          {t('tenant.workspaceList.archived', 'Archived')}
-                        </Tag>
-                      ) : null}
-                    </div>
-                    <p className="line-clamp-2 min-h-[2.5rem] min-w-0 break-words text-xs text-text-secondary dark:text-text-muted">
-                      {workspace.description?.trim() || '—'}
-                    </p>
-                    <div className="flex min-w-0 flex-wrap gap-1.5">
-                      <Tag
-                        color={useCase === 'general' ? 'default' : 'blue'}
-                        className="!m-0 shrink-0"
-                      >
-                        {useCaseLabels[useCase]}
-                      </Tag>
-                      <Tag
-                        color={collaboration === 'single_agent' ? 'default' : 'purple'}
-                        className="!m-0 shrink-0"
-                      >
-                        {collaborationModeLabels[collaboration]}
-                      </Tag>
-                      {codeRoot ? (
-                        <Tag
-                          color="geekblue"
-                          className="!m-0 min-w-0 max-w-full truncate"
-                          title={codeRoot}
-                        >
-                          {codeRoot}
-                        </Tag>
-                      ) : null}
-                    </div>
-
-                    {/* Objective / task progress */}
-                    <div
-                      className="mt-1 min-w-0 rounded border border-border-light/60 bg-surface-muted px-3 py-2 dark:border-border-dark dark:bg-surface-dark-alt"
-                      aria-label={t('tenant.workspaceList.objectiveProgress', 'Objective progress')}
+          <>
+            <ul
+              className="grid min-w-0 gap-3"
+              style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}
+            >
+              {pagedWorkspaces.map((workspace) => {
+                const updated = workspace.updated_at ?? workspace.created_at;
+                const archived = workspace.is_archived === true;
+                const summary = summaries[workspace.id];
+                const useCase = getWorkspaceUseCase(workspace);
+                const collaboration = getWorkspaceCollaborationMode(workspace);
+                const codeRoot = getSandboxCodeRoot(workspace);
+                return (
+                  <li key={workspace.id} className="min-w-0 h-full">
+                    <Link
+                      to={`/tenant/${tenantId}/project/${projectId}/blackboard?workspaceId=${workspace.id}`}
+                      aria-label={workspace.name}
+                      className="group flex h-full min-w-0 flex-col gap-2 overflow-hidden rounded-md border border-border-light bg-surface-light p-4 transition-colors hover:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-border-dark dark:bg-surface-dark"
                     >
-                      <div className="mb-1 flex items-center justify-between gap-2 text-xs">
-                        <span className="flex min-w-0 items-center gap-1.5 text-text-secondary dark:text-text-muted">
-                          <Target size={12} aria-hidden />
-                          <span className="truncate">
-                            {!summary || summary.loading
-                              ? t('tenant.workspaceList.loadingObjectives', 'Loading…')
-                              : summary.source === 'objectives'
-                                ? t('tenant.workspaceList.objectivesCount', {
-                                    count:
-                                      summary.objectives > 0 ? summary.objectives : summary.total,
-                                    defaultValue: `${String(summary.objectives > 0 ? summary.objectives : summary.total)} objectives`,
-                                  })
-                                : summary.source === 'plan' || summary.source === 'tasks'
-                                  ? t('tenant.workspaceList.tasksCount', {
-                                      count: summary.total,
-                                      defaultValue: `${String(summary.total)} tasks`,
-                                    })
-                                  : t('tenant.workspaceList.noObjectives', 'No objectives yet')}
-                          </span>
-                        </span>
-                        <span className="shrink-0 font-medium tabular-nums text-text-primary dark:text-text-inverse">
-                          {summary && !summary.loading && summary.source !== 'empty'
-                            ? `${String(summary.avgProgress)}%`
-                            : '—'}
-                        </span>
+                      <div className="flex min-w-0 items-start justify-between gap-2">
+                        <h3 className="line-clamp-1 text-[15px] font-medium text-text-primary group-hover:text-primary dark:text-text-inverse">
+                          {workspace.name}
+                        </h3>
+                        {archived ? (
+                          <Tag color="default" className="!m-0 flex-shrink-0">
+                            {t('tenant.workspaceList.archived', 'Archived')}
+                          </Tag>
+                        ) : null}
                       </div>
-                      <Progress
-                        percent={summary && !summary.loading ? summary.avgProgress : 0}
-                        size="small"
-                        showInfo={false}
-                        {...(summary && !summary.loading && summary.avgProgress >= 100
-                          ? { strokeColor: '#10b981' }
-                          : {})}
-                        aria-hidden
-                      />
-                      {summary && !summary.loading && summary.source !== 'empty' ? (
-                        <div className="mt-1 truncate text-[11px] text-text-muted">
-                          {t('tenant.workspaceList.completedCount', {
-                            completed: summary.completed,
-                            total:
-                              summary.source === 'objectives'
-                                ? summary.objectives > 0
-                                  ? summary.objectives
-                                  : summary.total
-                                : summary.total,
-                            defaultValue: `${String(summary.completed)} of ${String(
-                              summary.source === 'objectives'
-                                ? summary.objectives > 0
-                                  ? summary.objectives
-                                  : summary.total
-                                : summary.total
-                            )} complete`,
-                          })}
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div className="mt-auto flex min-w-0 items-center justify-between gap-2 pt-2 text-xs text-text-muted dark:text-text-muted">
-                      <span className="min-w-0 truncate">
-                        {t('tenant.workspaceList.updated', {
-                          time: formatDistanceToNow(updated),
-                          defaultValue: `Updated ${formatDistanceToNow(updated)}`,
-                        })}
-                      </span>
-                      {workspace.office_status ? (
-                        <Tag color="default" className="!m-0 shrink-0">
-                          {workspace.office_status}
+                      <p className="line-clamp-2 min-h-[2.5rem] min-w-0 break-words text-xs text-text-secondary dark:text-text-muted">
+                        {workspace.description?.trim() || '—'}
+                      </p>
+                      <div className="flex min-w-0 flex-wrap gap-1.5">
+                        <Tag
+                          color={useCase === 'general' ? 'default' : 'blue'}
+                          className="!m-0 shrink-0"
+                        >
+                          {useCaseLabels[useCase]}
                         </Tag>
-                      ) : null}
-                    </div>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+                        <Tag
+                          color={collaboration === 'single_agent' ? 'default' : 'purple'}
+                          className="!m-0 shrink-0"
+                        >
+                          {collaborationModeLabels[collaboration]}
+                        </Tag>
+                        {codeRoot ? (
+                          <Tag
+                            color="geekblue"
+                            className="!m-0 min-w-0 max-w-full truncate"
+                            title={codeRoot}
+                          >
+                            {codeRoot}
+                          </Tag>
+                        ) : null}
+                      </div>
+
+                      {/* Objective / task progress */}
+                      <div
+                        className="mt-1 min-w-0 rounded border border-border-light/60 bg-surface-muted px-3 py-2 dark:border-border-dark dark:bg-surface-dark-alt"
+                        aria-label={t(
+                          'tenant.workspaceList.objectiveProgress',
+                          'Objective progress'
+                        )}
+                      >
+                        <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+                          <span className="flex min-w-0 items-center gap-1.5 text-text-secondary dark:text-text-muted">
+                            <Target size={12} aria-hidden />
+                            <span className="truncate">
+                              {!summary || summary.loading
+                                ? t('tenant.workspaceList.loadingObjectives', 'Loading…')
+                                : summary.source === 'objectives'
+                                  ? t('tenant.workspaceList.objectivesCount', {
+                                      count:
+                                        summary.objectives > 0 ? summary.objectives : summary.total,
+                                      defaultValue: `${String(summary.objectives > 0 ? summary.objectives : summary.total)} objectives`,
+                                    })
+                                  : summary.source === 'plan' || summary.source === 'tasks'
+                                    ? t('tenant.workspaceList.tasksCount', {
+                                        count: summary.total,
+                                        defaultValue: `${String(summary.total)} tasks`,
+                                      })
+                                    : t('tenant.workspaceList.noObjectives', 'No objectives yet')}
+                            </span>
+                          </span>
+                          <span className="shrink-0 font-medium tabular-nums text-text-primary dark:text-text-inverse">
+                            {summary && !summary.loading && summary.source !== 'empty'
+                              ? `${String(summary.avgProgress)}%`
+                              : '—'}
+                          </span>
+                        </div>
+                        <Progress
+                          percent={summary && !summary.loading ? summary.avgProgress : 0}
+                          size="small"
+                          showInfo={false}
+                          {...(summary && !summary.loading && summary.avgProgress >= 100
+                            ? { strokeColor: '#10b981' }
+                            : {})}
+                          aria-hidden
+                        />
+                        {summary && !summary.loading && summary.source !== 'empty' ? (
+                          <div className="mt-1 truncate text-[11px] text-text-muted">
+                            {t('tenant.workspaceList.completedCount', {
+                              completed: summary.completed,
+                              total:
+                                summary.source === 'objectives'
+                                  ? summary.objectives > 0
+                                    ? summary.objectives
+                                    : summary.total
+                                  : summary.total,
+                              defaultValue: `${String(summary.completed)} of ${String(
+                                summary.source === 'objectives'
+                                  ? summary.objectives > 0
+                                    ? summary.objectives
+                                    : summary.total
+                                  : summary.total
+                              )} complete`,
+                            })}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-auto flex min-w-0 items-center justify-between gap-2 pt-2 text-xs text-text-muted dark:text-text-muted">
+                        <span className="min-w-0 truncate">
+                          {t('tenant.workspaceList.updated', {
+                            time: formatDistanceToNow(updated),
+                            defaultValue: `Updated ${formatDistanceToNow(updated)}`,
+                          })}
+                        </span>
+                        {workspace.office_status ? (
+                          <Tag color="default" className="!m-0 shrink-0">
+                            {workspace.office_status}
+                          </Tag>
+                        ) : null}
+                      </div>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+            {filtered.length > WORKSPACES_PAGE_SIZE ? (
+              <div className="mt-4 flex justify-end">
+                <Pagination
+                  current={safeWorkspacePage}
+                  pageSize={WORKSPACES_PAGE_SIZE}
+                  total={filtered.length}
+                  showSizeChanger={false}
+                  onChange={(nextPage) => {
+                    setPage(nextPage);
+                  }}
+                />
+              </div>
+            ) : null}
+          </>
         )}
       </div>
     </div>

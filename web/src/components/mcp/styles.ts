@@ -231,8 +231,8 @@ export const BADGE_STYLES = {
 // ============================================================================
 
 export const ANIMATION_CLASSES = {
-  pulse: 'animate-pulse',
-  spin: 'animate-spin',
-  fadeIn: 'animate-in fade-in duration-300',
-  slideUp: 'animate-in slide-in-from-bottom-4 duration-300',
+  pulse: 'animate-pulse motion-reduce:animate-none',
+  spin: 'animate-spin motion-reduce:animate-none',
+  fadeIn: 'animate-in fade-in duration-300 motion-reduce:animate-none',
+  slideUp: 'animate-in slide-in-from-bottom-4 duration-300 motion-reduce:animate-none',
 };

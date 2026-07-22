@@ -134,7 +134,7 @@ export const SplitPaneLayout: FC<SplitPaneLayoutProps> = ({
 
         {/* Drag handle */}
         <div
-          className={`flex-shrink-0 w-1.5 h-full cursor-col-resize relative group transition-colors z-10 mobile-hidden ${handleBgHover}`}
+          className={`flex-shrink-0 w-1.5 h-full cursor-col-resize relative group transition-colors z-10 mobile-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset ${handleBgHover}`}
           role="slider"
           aria-valuenow={Math.round(splitRatio * 100)}
           aria-valuemin={minRatio * 100}

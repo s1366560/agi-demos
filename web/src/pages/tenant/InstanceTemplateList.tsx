@@ -7,6 +7,8 @@ import { useNavigate } from 'react-router-dom';
 import { Card, Tag, Form, Input, Typography, Space, Pagination } from 'antd';
 import { Copy, Upload, Trash2, Eye, Plus, Search } from 'lucide-react';
 
+import { formatDateOnly } from '@/utils/date';
+
 import {
   useLazyMessage,
   LazyPopconfirm,
@@ -48,8 +50,6 @@ const slugifyTemplateName = (name: string): string =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 255) || 'template';
-
-const buildCloneName = (name: string): string => `Copy of ${name}`.slice(0, 200);
 
 const templateStatusToPublished = (status: TemplateStatusFilter): boolean | undefined => {
   if (status === 'published') return true;
@@ -139,7 +139,11 @@ export const InstanceTemplateList: FC = () => {
       setIsCreateModalVisible(false);
       form.resetFields();
     } catch (err) {
-      if (err instanceof Error && err.message.includes('Unexpected token')) {
+      if (typeof err === 'object' && err !== null && 'errorFields' in err) {
+        // antd validation errors are shown inline on the form
+        return;
+      }
+      if (err instanceof SyntaxError) {
         messageApi?.error(t('tenant.templates.invalidJson'));
       } else if (err instanceof Error) {
         messageApi?.error(err.message);
@@ -147,9 +151,20 @@ export const InstanceTemplateList: FC = () => {
     }
   };
 
+  const handleStatusFilterChange = (value: TemplateStatusFilter) => {
+    setStatusFilter(value);
+    loadTemplates({ page: 1, status: value }).catch(() =>
+      messageApi?.error(t('tenant.templates.fetchError'))
+    );
+  };
+
   const handleClone = async (id: string, name: string) => {
     try {
-      await cloneTemplate(id, buildCloneName(name));
+      const cloneName = t('tenant.templates.cloneName', {
+        name,
+        defaultValue: 'Copy of {{name}}',
+      }).slice(0, 200);
+      await cloneTemplate(id, cloneName);
       messageApi?.success(t('tenant.templates.cloneSuccess'));
       void loadTemplates({ page });
     } catch (err) {
@@ -209,6 +224,7 @@ export const InstanceTemplateList: FC = () => {
 
       <div className="flex items-center gap-4 bg-surface-light dark:bg-surface-dark p-4 rounded-lg border border-border-light dark:border-border-dark">
         <Input
+          aria-label={t('tenant.templates.searchPlaceholder')}
           placeholder={t('tenant.templates.searchPlaceholder')}
           prefix={<Search className="w-4 h-4 text-text-muted" />}
           value={searchText}
@@ -221,7 +237,7 @@ export const InstanceTemplateList: FC = () => {
         <LazySelect
           aria-label={t('tenant.templates.statusFilterLabel')}
           value={statusFilter}
-          onChange={setStatusFilter}
+          onChange={handleStatusFilterChange}
           options={[
             { value: 'all', label: t('tenant.templates.filterAll') },
             { value: 'published', label: t('tenant.templates.filterPublished') },
@@ -229,6 +245,11 @@ export const InstanceTemplateList: FC = () => {
           ]}
           style={{ width: 150 }}
         />
+        {searchText ? (
+          <Text type="secondary" className="text-xs">
+            {t('tenant.templates.searchScopeHint', 'Search filters templates on the current page')}
+          </Text>
+        ) : null}
       </div>
 
       {isLoading && templates.length === 0 ? (
@@ -321,7 +342,7 @@ export const InstanceTemplateList: FC = () => {
                   <span className="flex items-center gap-1">
                     <Copy className="w-3 h-3" /> {template.install_count || 0}
                   </span>
-                  <span>{new Date(template.created_at).toLocaleDateString()}</span>
+                  <span>{formatDateOnly(template.created_at)}</span>
                 </div>
               </div>
             </Card>
@@ -368,9 +389,28 @@ export const InstanceTemplateList: FC = () => {
             <Input.TextArea rows={3} placeholder={t('tenant.templates.descriptionPlaceholder')} />
           </Form.Item>
 
-          <Form.Item name="default_config" label={t('tenant.templates.baseConfig')}>
+          <Form.Item
+            name="default_config"
+            label={t('tenant.templates.baseConfig')}
+            rules={[
+              {
+                validator: (_rule, value: unknown) => {
+                  if (typeof value !== 'string' || !value.trim()) {
+                    return Promise.resolve();
+                  }
+                  try {
+                    JSON.parse(value);
+                    return Promise.resolve();
+                  } catch {
+                    return Promise.reject(new Error(t('tenant.templates.invalidJson')));
+                  }
+                },
+              },
+            ]}
+          >
             <Input.TextArea
               rows={4}
+              spellCheck={false}
               placeholder={t('tenant.templates.baseConfigPlaceholder')}
               className="font-mono text-sm"
             />

@@ -204,7 +204,10 @@ export const AttributeEditor: React.FC<AttributeEditorProps> = React.memo(
               >
                 <div className="bg-slate-50 dark:bg-surface-dark-alt px-4 py-2 flex items-center justify-between border-b border-slate-200 dark:border-border-dark">
                   <div className="flex items-center gap-2">
-                    <FileEdit className="w-4 h-4 text-blue-600 dark:text-primary" aria-hidden="true" />
+                    <FileEdit
+                      className="w-4 h-4 text-blue-600 dark:text-primary"
+                      aria-hidden="true"
+                    />
                     <span className="text-xs font-bold text-slate-700 dark:text-white uppercase tracking-wide">
                       {labels.attributeTitle(idx + 1)}
                     </span>

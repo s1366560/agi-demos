@@ -436,6 +436,20 @@ export const SubAgentList: React.FC = () => {
         <div className="flex items-center justify-center py-16">
           <Spin size="large" />
         </div>
+      ) : error && visibleSubagents.length === 0 ? (
+        <div
+          role="alert"
+          className="flex flex-col items-center gap-3 rounded-xl border border-red-200 bg-red-50 py-10 dark:border-red-800 dark:bg-red-900/20"
+        >
+          <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            className="inline-flex items-center gap-1.5 rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900/40"
+          >
+            {t('common.retry')}
+          </button>
+        </div>
       ) : visibleSubagents.length === 0 ? (
         <SubAgentEmptyState hasFilters={hasFilters} onCreate={handleCreate} />
       ) : (

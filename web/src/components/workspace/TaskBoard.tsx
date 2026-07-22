@@ -171,6 +171,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
   const [isExperienceLoading, setIsExperienceLoading] = useState(false);
   const [isRecoveryActionRunning, setIsRecoveryActionRunning] = useState(false);
   const [experienceError, setExperienceError] = useState<string | null>(null);
+  const [experienceReloadToken, setExperienceReloadToken] = useState(0);
 
   const workspaceTasks = useMemo(() => {
     return tasks
@@ -252,7 +253,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [selectedTask, selectedTaskId, t, workspaceId]);
+  }, [selectedTask, selectedTaskId, t, workspaceId, experienceReloadToken]);
 
   const handleAddTask = async () => {
     const trimmedTitle = title.trim();
@@ -473,7 +474,11 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
           />
           <Select
             aria-label={t('workspaceDetail.taskBoard.priority', 'Priority')}
-            options={PRIORITY_OPTIONS}
+            options={PRIORITY_OPTIONS.map((opt) =>
+              opt.value === ''
+                ? { ...opt, label: t('workspaceDetail.taskBoard.priorityNone', 'None') }
+                : opt
+            )}
             value={priority}
             onChange={setPriority}
             placeholder={t('workspaceDetail.taskBoard.priority')}
@@ -544,7 +549,9 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
                 <div className="flex-1 space-y-2 overflow-y-auto p-2">
                   {colTasks.length === 0 ? (
                     <div className="flex h-full min-h-[80px] items-center justify-center">
-                      <span className="text-xs text-text-muted/60 dark:text-text-muted/40">--</span>
+                      <span className="text-xs text-text-muted/60 dark:text-text-muted/40">
+                        {t('workspaceDetail.taskBoard.noTasks', 'No tasks')}
+                      </span>
                     </div>
                   ) : (
                     colTasks.map((task) => {
@@ -597,7 +604,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
                             )}
                             {isRootGoal && (
                               <span className="rounded-full border border-info-border bg-info-bg px-2 py-0.5 text-[10px] font-semibold uppercase text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark">
-                                Root goal
+                                {t('workspaceDetail.taskBoard.rootGoal', 'Root goal')}
                               </span>
                             )}
                             {isRootGoal && goalHealth && (
@@ -617,12 +624,17 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
                                   'border-border-light bg-surface-light text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary'
                                 }`}
                               >
-                                Evidence {verificationGrade}
+                                {t('workspaceDetail.taskBoard.evidenceGrade', {
+                                  grade: verificationGrade,
+                                  defaultValue: 'Evidence {{grade}}',
+                                })}
                               </span>
                             )}
                             {pending && (
                               <span className="rounded-full border border-info-border bg-info-bg px-2 py-0.5 text-[10px] font-semibold uppercase text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark">
-                                Pending adjudication
+                                {t('workspaceDetail.taskBoard.pendingAdjudicationBadge', {
+                                  defaultValue: 'Pending adjudication',
+                                })}
                               </span>
                             )}
                             {observability.launchState && (
@@ -642,7 +654,10 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
                                   'border-border-light bg-surface-light text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary'
                                 }`}
                               >
-                                Durable {formatMetadataLabel(observability.durableVerdict)}
+                                {t('workspaceDetail.taskBoard.durableVerdict', {
+                                  verdict: formatMetadataLabel(observability.durableVerdict),
+                                  defaultValue: 'Durable {{verdict}}',
+                                })}
                               </span>
                             )}
                             {observability.missingConversation && (
@@ -653,7 +668,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
                                 )}
                               >
                                 <span className="rounded-full border border-warning-border bg-warning-bg px-2 py-0.5 text-[10px] font-semibold uppercase text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark">
-                                  No conversation
+                                  {t('workspaceDetail.taskBoard.noConversation', 'No conversation')}
                                 </span>
                               </Tooltip>
                             )}
@@ -733,9 +748,15 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
                               )}
                               {observability.agentsDigest && (
                                 <p className="break-all">
-                                  AGENTS {observability.agentsDigest.slice(0, 12)}
+                                  {t('workspaceDetail.taskBoard.agentsDigest', {
+                                    digest: observability.agentsDigest.slice(0, 12),
+                                    defaultValue: 'AGENTS {{digest}}',
+                                  })}
                                   {observability.loadedAgentsCount > 0
-                                    ? ` · ${String(observability.loadedAgentsCount)} file(s)`
+                                    ? ` · ${t('workspaceDetail.taskBoard.agentsFiles', {
+                                        count: observability.loadedAgentsCount,
+                                        defaultValue: '{{count}} file(s)',
+                                      })}`
                                     : ''}
                                 </p>
                               )}
@@ -831,6 +852,9 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
             loading={isExperienceLoading}
             recoveryActionLoading={isRecoveryActionRunning}
             error={experienceError}
+            onRetry={() => {
+              setExperienceReloadToken((token) => token + 1);
+            }}
             onRecoveryAction={(action) => {
               void handleRecoveryAction(action);
             }}

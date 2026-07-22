@@ -27,6 +27,7 @@ vi.mock('../../../stores/project', () => ({
 vi.mock('../../../stores/workspace', () => ({
   useWorkspaces: () => workspaceState.workspaces,
   useWorkspaceLoading: () => workspaceState.isLoading,
+  useWorkspaceError: () => workspaceState.error ?? null,
   useWorkspaceActions: () => workspaceState.actions,
 }));
 

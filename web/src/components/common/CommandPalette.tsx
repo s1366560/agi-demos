@@ -22,14 +22,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
-import {
-  MessageSquarePlus,
-  Moon,
-  Sun,
-  Languages,
-  ArrowRight,
-  type LucideIcon,
-} from 'lucide-react';
+import { MessageSquarePlus, Moon, Sun, Languages, ArrowRight, type LucideIcon } from 'lucide-react';
 
 import { useConversationsStore } from '@/stores/agent/conversationsStore';
 import { useThemeStore } from '@/stores/theme';
@@ -215,7 +208,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
               conversationId: conv.id,
               projectId: conv.project_id,
               workspaceId: conv.workspace_id,
-            }),
+            })
           );
           close();
         },
@@ -255,19 +248,14 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   // Scroll active item into view.
   useEffect(() => {
     if (!open) return;
-    const el = listRef.current?.querySelector<HTMLElement>(
-      `[data-cp-index="${safeActiveIndex}"]`,
-    );
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-cp-index="${safeActiveIndex}"]`);
     el?.scrollIntoView({ block: 'nearest' });
   }, [safeActiveIndex, open]);
 
-  const executeItem = useCallback(
-    (item: CommandItem | undefined) => {
-      if (!item) return;
-      item.action();
-    },
-    [],
-  );
+  const executeItem = useCallback((item: CommandItem | undefined) => {
+    if (!item) return;
+    item.action();
+  }, []);
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -276,9 +264,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         setActiveIndex((i) => (i + 1) % Math.max(1, filteredItems.length));
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setActiveIndex((i) =>
-          i === 0 ? Math.max(0, filteredItems.length - 1) : i - 1,
-        );
+        setActiveIndex((i) => (i === 0 ? Math.max(0, filteredItems.length - 1) : i - 1));
       } else if (e.key === 'Enter') {
         e.preventDefault();
         executeItem(filteredItems[safeActiveIndex]);
@@ -291,7 +277,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         inputRef.current?.focus();
       }
     },
-    [filteredItems, safeActiveIndex, executeItem, close],
+    [filteredItems, safeActiveIndex, executeItem, close]
   );
 
   if (!open) return null;
@@ -383,8 +369,12 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                       role="option"
                       aria-selected={isActive}
                       data-cp-index={idx}
-                      onMouseEnter={() => { setActiveIndex(idx); }}
-                      onClick={() => { executeItem(item); }}
+                      onMouseEnter={() => {
+                        setActiveIndex(idx);
+                      }}
+                      onClick={() => {
+                        executeItem(item);
+                      }}
                       className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors ${
                         isActive
                           ? 'bg-[var(--color-panel-2,#111720)] text-[var(--color-text,#e7edf6)]'
@@ -432,7 +422,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         </div>
       </div>
     </div>,
-    document.body,
+    document.body
   );
 };
 

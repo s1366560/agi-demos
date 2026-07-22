@@ -249,7 +249,11 @@ export function ArrangementActionDrawer({
                       <button
                         key={swatch}
                         type="button"
-                        aria-label={t('blackboard.arrangement.fields.pickColor', 'Pick color')}
+                        aria-label={t('blackboard.arrangement.fields.pickColorValue', {
+                          color: swatch,
+                          defaultValue: 'Pick color {{color}}',
+                        })}
+                        aria-pressed={colorDraft === swatch}
                         onClick={() => {
                           setColorDraft(swatch);
                         }}

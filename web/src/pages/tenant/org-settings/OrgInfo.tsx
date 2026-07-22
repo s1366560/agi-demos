@@ -31,7 +31,6 @@ import { formatStorage } from '@/hooks/useDateFormatter';
 
 import { formatDateOnly } from '@/utils/date';
 
-
 import type { Tenant } from '@/types/memory';
 
 interface OrgInfoFormProps {
@@ -84,7 +83,13 @@ const OrgInfoForm: React.FC<OrgInfoFormProps> = ({ tenant }) => {
         {t('tenant.orgSettings.info.general')}
       </h2>
 
-      <div className="flex flex-col gap-6 max-w-2xl">
+      <form
+        className="flex flex-col gap-6 max-w-2xl"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleSave();
+        }}
+      >
         <div>
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
             {t('tenant.orgSettings.info.logo')}
@@ -126,6 +131,8 @@ const OrgInfoForm: React.FC<OrgInfoFormProps> = ({ tenant }) => {
             className="w-full rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 text-slate-900 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
             id="org-name"
             type="text"
+            autoComplete="organization"
+            spellCheck={false}
             value={name}
             onChange={(event) => {
               setName(event.target.value);
@@ -169,10 +176,7 @@ const OrgInfoForm: React.FC<OrgInfoFormProps> = ({ tenant }) => {
           <button
             className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 font-medium text-slate-50 transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-70"
             disabled={isLoading}
-            type="button"
-            onClick={() => {
-              void handleSave();
-            }}
+            type="submit"
           >
             {isLoading ? (
               <Loader2 size={20} className="animate-spin motion-reduce:animate-none" />
@@ -180,7 +184,7 @@ const OrgInfoForm: React.FC<OrgInfoFormProps> = ({ tenant }) => {
             {t('common.save')}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 };

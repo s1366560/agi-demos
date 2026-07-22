@@ -168,7 +168,7 @@ function getNodeAccentColor(theme: GraphTheme, type: string, entityType: string)
 }
 
 function truncateLabel(value: string, maxLength: number): string {
-  return value.length > maxLength ? value.substring(0, maxLength) + '...' : value;
+  return value.length > maxLength ? value.substring(0, maxLength) + '…' : value;
 }
 
 // ========================================

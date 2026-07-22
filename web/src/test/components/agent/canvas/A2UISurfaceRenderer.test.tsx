@@ -48,7 +48,7 @@ describe('A2UISurfaceRenderer', () => {
       },
     },
   ];
-  const waitingText = 'Waiting for A2UI surface data...';
+  const waitingText = 'Waiting for A2UI surface data…';
 
   beforeEach(() => {
     viewerSpy.mockClear();

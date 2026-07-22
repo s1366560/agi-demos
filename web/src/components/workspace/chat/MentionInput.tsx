@@ -174,7 +174,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
             <button
               type="button"
               key={`${mention.type}-${mention.id}`}
-              id={`${listboxId}-opt-${idx}`}
+              id={`${listboxId}-opt-${String(idx)}`}
               role="option"
               aria-selected={idx === selectedIndex}
               tabIndex={-1}
@@ -208,7 +208,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
         aria-autocomplete="list"
         aria-activedescendant={
           showDropdown && filteredMentions.length > 0
-            ? `${listboxId}-opt-${selectedIndex}`
+            ? `${listboxId}-opt-${String(selectedIndex)}`
             : undefined
         }
         value={content}

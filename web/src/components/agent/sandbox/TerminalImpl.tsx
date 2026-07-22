@@ -7,6 +7,8 @@
 
 import { useEffect, useRef, useCallback, useMemo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Terminal } from '@xterm/xterm';
@@ -35,6 +37,10 @@ const TERMINAL_MESSAGE_TYPES = new Set<TerminalMessage['type']>([
   'connected',
   'pong',
 ]);
+
+const MAX_RECONNECT_ATTEMPTS = 5;
+const BASE_RECONNECT_DELAY_MS = 3000;
+const MAX_RECONNECT_DELAY_MS = 30000;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
@@ -114,11 +120,13 @@ export function TerminalImpl({
   onError,
   isFullscreen,
 }: TerminalImplProps) {
+  const { t } = useTranslation();
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstance = useRef<Terminal | null>(null);
   const fitAddon = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectAttemptsRef = useRef(0);
 
   // Ref to hold connect function for use in onclose callback
   const connectRef = useRef<() => void>(() => undefined);
@@ -235,8 +243,11 @@ export function TerminalImpl({
             if (msg.session_id) {
               onConnect(msg.session_id);
             }
+            reconnectAttemptsRef.current = 0;
             // Write welcome message
-            terminalInstance.current?.writeln('\x1b[32m✓ Connected to sandbox terminal\x1b[0m');
+            terminalInstance.current?.writeln(
+              `\x1b[32m${t('components.sandboxTerminal.connectedWelcome', { defaultValue: '✓ Connected to sandbox terminal' })}\x1b[0m`
+            );
             terminalInstance.current?.writeln('');
             break;
 
@@ -247,7 +258,10 @@ export function TerminalImpl({
             break;
 
           case 'error':
-            onError(msg.message || 'Unknown error');
+            onError(
+              msg.message ||
+                t('components.sandboxTerminal.unknownError', { defaultValue: 'Unknown error' })
+            );
             break;
 
           case 'pong':
@@ -261,17 +275,32 @@ export function TerminalImpl({
 
     ws.onerror = (event) => {
       console.error('[Terminal] WebSocket error:', event);
-      onError('Connection error');
+      onError(
+        t('components.sandboxTerminal.connectionError', { defaultValue: 'Connection error' })
+      );
     };
 
     ws.onclose = (event) => {
       onDisconnect();
 
-      // Auto-reconnect on abnormal close
+      // Auto-reconnect on abnormal close with capped exponential backoff
       if (event.code !== 1000 && event.code !== 1001) {
+        if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+          onError(
+            t('components.sandboxTerminal.maxRetriesReached', {
+              defaultValue: 'Unable to reconnect after several attempts. Please retry manually.',
+            })
+          );
+          return;
+        }
+        const delay = Math.min(
+          BASE_RECONNECT_DELAY_MS * 2 ** reconnectAttemptsRef.current,
+          MAX_RECONNECT_DELAY_MS
+        );
+        reconnectAttemptsRef.current += 1;
         reconnectTimeoutRef.current = setTimeout(() => {
           connectRef.current();
-        }, 3000);
+        }, delay);
       }
     };
 
@@ -285,7 +314,7 @@ export function TerminalImpl({
         }
       });
     }
-  }, [getWsUrl, onConnect, onDisconnect, onError]);
+  }, [getWsUrl, onConnect, onDisconnect, onError, t]);
 
   // Keep connectRef updated
   useEffect(() => {
@@ -294,6 +323,7 @@ export function TerminalImpl({
 
   // Disconnect
   const disconnect = useCallback(() => {
+    reconnectAttemptsRef.current = 0;
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;

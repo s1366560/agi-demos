@@ -32,6 +32,7 @@ import {
   LazySpin,
 } from '@/components/ui/lazyAntd';
 
+import { useDebounce } from '../../hooks/useDebounce';
 import {
   useAuditActions,
   useAuditError,
@@ -42,7 +43,6 @@ import {
   useRuntimeHookAuditSummaryLoading,
 } from '../../stores/audit';
 import { useTenantStore } from '../../stores/tenant';
-import { useDebounce } from '../../hooks/useDebounce';
 import { formatDateTime } from '../../utils/date';
 
 import type {
@@ -391,9 +391,7 @@ export const AuditLogs: React.FC = () => {
       RESOURCE_TYPE_VALUES.map((value) => ({
         value,
         label: getLocalizedLabel(
-          value
-            ? `tenant.auditLogs.resourceTypes.${value}`
-            : 'tenant.auditLogs.resourceTypes.all',
+          value ? `tenant.auditLogs.resourceTypes.${value}` : 'tenant.auditLogs.resourceTypes.all',
           value ? formatFallbackLabel(value) : 'All Types'
         ),
       })),

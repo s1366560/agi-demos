@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 
 import { Form, Input, Switch, Select, InputNumber, Drawer, Button, Space, Divider } from 'antd';
 
+import { confirmAction } from '@/utils/confirmAction';
+
 import type {
   CronJobCreate,
   CronJobUpdate,
@@ -186,13 +188,34 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
           schedule: normalizeScheduleForSubmit(values.schedule),
         } as CronJobCreate | CronJobUpdate;
 
-        void onSubmit(payload).then(() => {
-          form.resetFields();
-        });
+        void onSubmit(payload)
+          .then(() => {
+            form.resetFields();
+          })
+          .catch(() => {
+            // Submission failed — keep the entered values so the user can retry.
+          });
       })
-      .catch((_err: unknown) => {
-        console.error('Validation failed:', _err);
+      .catch(() => {
+        // Validation failures are expected — antd Form shows inline errors.
       });
+  };
+
+  const handleClose = () => {
+    if (!form.isFieldsTouched()) {
+      onClose();
+      return;
+    }
+    void confirmAction({
+      title: t('project.cronJobs.discardChanges', 'Discard unsaved changes?'),
+      okText: t('common.discard', 'Discard'),
+      cancelText: t('common.cancel'),
+      danger: true,
+    }).then((confirmed) => {
+      if (confirmed) {
+        onClose();
+      }
+    });
   };
 
   return (
@@ -201,11 +224,11 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
         initialData ? t('project.cronJobs.formEditTitle') : t('project.cronJobs.formCreateTitle')
       }
       size="large"
-      onClose={onClose}
+      onClose={handleClose}
       open={open}
       extra={
         <Space>
-          <Button onClick={onClose}>{t('common.cancel')}</Button>
+          <Button onClick={handleClose}>{t('common.cancel')}</Button>
           <Button
             type="primary"
             onClick={() => {
@@ -265,7 +288,7 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
             rules={[{ required: true, message: t('project.cronJobs.formCronRequired') }]}
             help={t('project.cronJobs.formCronHelp')}
           >
-            <Input placeholder="* * * * *" />
+            <Input placeholder="* * * * *" spellCheck={false} />
           </Form.Item>
         )}
 
@@ -296,9 +319,23 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
           <Form.Item
             name={['schedule', 'config', 'run_at']}
             label={t('project.cronJobs.formTargetTime')}
-            rules={[{ required: true, message: t('project.cronJobs.formTargetTimeRequired') }]}
+            rules={[
+              { required: true, message: t('project.cronJobs.formTargetTimeRequired') },
+              {
+                validator: (_rule, value: unknown) =>
+                  typeof value !== 'string' || !Number.isNaN(Date.parse(value))
+                    ? Promise.resolve()
+                    : Promise.reject(
+                        new Error(
+                          t('project.cronJobs.formTargetTimeInvalid', {
+                            defaultValue: 'Enter a valid ISO 8601 date-time',
+                          })
+                        )
+                      ),
+              },
+            ]}
           >
-            <Input placeholder="2026-03-06T12:00:00Z" />
+            <Input placeholder="2026-03-06T12:00:00Z" spellCheck={false} />
           </Form.Item>
         )}
 

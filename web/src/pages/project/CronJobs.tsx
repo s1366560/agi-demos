@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
 import {
+  Alert,
   Button,
   Table,
   Switch,
@@ -27,6 +28,8 @@ import {
   useCronFilters,
 } from '@/stores/cron';
 
+import { formatDateTime } from '@/utils/date';
+
 import { CronJobForm } from '@/components/cron/CronJobForm';
 
 import type {
@@ -40,6 +43,9 @@ import type {
 import type { TableProps } from 'antd/es/table';
 
 const RUNS_PAGE_SIZE = 10;
+
+const formatDurationMs = (ms: number): string =>
+  ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${String(ms)} ms`;
 
 export const CronJobs: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -67,12 +73,45 @@ export const CronJobs: React.FC = () => {
   const [editingJob, setEditingJob] = useState<CronJobResponse | null>(null);
   const [runsJobId, setRunsJobId] = useState<string | null>(null);
   const [runsPage, setRunsPage] = useState(1);
+  const [jobsError, setJobsError] = useState<string | null>(null);
+
+  // The cron store rethrows on failure; catch here so rejections are handled
+  // and the page can show an error state with a retry action.
+  const loadJobs = useCallback(async () => {
+    if (!projectId) return;
+    try {
+      await fetchJobs(projectId);
+      setJobsError(null);
+    } catch {
+      setJobsError(t('project.cronJobs.loadFailed', 'Failed to load cron jobs.'));
+    }
+  }, [projectId, fetchJobs, t]);
+
+  const loadRuns = useCallback(
+    async (jobId: string, page: number) => {
+      if (!projectId) return;
+      try {
+        await fetchRuns(projectId, jobId, RUNS_PAGE_SIZE, (page - 1) * RUNS_PAGE_SIZE);
+      } catch {
+        message.error(t('project.cronJobs.runsLoadFailed', 'Failed to load run history.'));
+      }
+    },
+    [projectId, fetchRuns, t]
+  );
 
   useEffect(() => {
-    if (projectId) {
-      void fetchJobs(projectId);
-    }
-  }, [projectId, fetchJobs]);
+    // Inline loader: the retry button and pagination use loadJobs instead.
+    const loadInitialJobs = async () => {
+      if (!projectId) return;
+      try {
+        await fetchJobs(projectId);
+        setJobsError(null);
+      } catch {
+        setJobsError(t('project.cronJobs.loadFailed', 'Failed to load cron jobs.'));
+      }
+    };
+    void loadInitialJobs();
+  }, [projectId, fetchJobs, t]);
 
   const handleCreateNew = () => {
     setEditingJob(null);
@@ -87,9 +126,7 @@ export const CronJobs: React.FC = () => {
   const handleViewRuns = (jobId: string) => {
     setRunsJobId(jobId);
     setRunsPage(1);
-    if (projectId) {
-      void fetchRuns(projectId, jobId, RUNS_PAGE_SIZE, 0);
-    }
+    void loadRuns(jobId, 1);
     setRunsOpen(true);
   };
 
@@ -106,6 +143,8 @@ export const CronJobs: React.FC = () => {
       setFormOpen(false);
     } catch (_err) {
       message.error(t('project.cronJobs.saveFailed'));
+      // Rethrow so CronJobForm keeps the entered values instead of resetting.
+      throw _err;
     }
   };
 
@@ -129,7 +168,7 @@ export const CronJobs: React.FC = () => {
       await triggerRun(projectId, jobId);
       message.success(t('project.cronJobs.triggerSuccess'));
       if (runsOpen && runsJobId === jobId) {
-        void fetchRuns(projectId, jobId, RUNS_PAGE_SIZE, (runsPage - 1) * RUNS_PAGE_SIZE);
+        void loadRuns(jobId, runsPage);
       }
     } catch (_err) {
       message.error(t('project.cronJobs.triggerFailed'));
@@ -151,17 +190,15 @@ export const CronJobs: React.FC = () => {
     const nextPageSize = pagination.pageSize ?? filters.pageSize;
 
     setFilters({ page: nextPage, pageSize: nextPageSize });
-    if (projectId) {
-      void fetchJobs(projectId);
-    }
+    void loadJobs();
   };
 
   const handleRunsTableChange: TableProps<CronJobRunResponse>['onChange'] = (pagination) => {
     const nextPage = pagination.current ?? runsPage;
 
     setRunsPage(nextPage);
-    if (projectId && runsJobId) {
-      void fetchRuns(projectId, runsJobId, RUNS_PAGE_SIZE, (nextPage - 1) * RUNS_PAGE_SIZE);
+    if (runsJobId) {
+      void loadRuns(runsJobId, nextPage);
     }
   };
 
@@ -302,12 +339,14 @@ export const CronJobs: React.FC = () => {
       title: t('project.cronJobs.runStartedAt'),
       dataIndex: 'started_at',
       key: 'started_at',
-      render: (val: string) => new Date(val).toLocaleString(),
+      render: (val: string) => formatDateTime(val),
     },
     {
       title: t('project.cronJobs.runDurationMs'),
       dataIndex: 'duration_ms',
       key: 'duration_ms',
+      render: (val: number | null) =>
+        val === null ? '-' : <span className="tabular-nums">{formatDurationMs(val)}</span>,
     },
     {
       title: t('project.cronJobs.runError'),
@@ -363,6 +402,24 @@ export const CronJobs: React.FC = () => {
       </div>
 
       <div className="min-w-0 overflow-hidden">
+        {jobsError && (
+          <Alert
+            type="error"
+            showIcon
+            className="mb-4"
+            title={jobsError}
+            action={
+              <Button
+                size="small"
+                onClick={() => {
+                  void loadJobs();
+                }}
+              >
+                {t('common.retry', 'Retry')}
+              </Button>
+            }
+          />
+        )}
         <Table
           dataSource={jobs}
           columns={columns}

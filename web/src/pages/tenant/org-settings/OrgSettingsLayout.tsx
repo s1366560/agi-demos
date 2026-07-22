@@ -5,10 +5,10 @@
  * Routes: /tenant/org-settings/info, /members, /clusters, /audit, /registry
  */
 
-import React, { useCallback } from 'react';
+import React from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useParams } from 'react-router-dom';
 
 import { Building2, Cloud, Dna, FileText, Mail, Server, Users } from 'lucide-react';
 
@@ -33,21 +33,17 @@ const TABS: {
 export const OrgSettingsLayout: React.FC = () => {
   const { t } = useTranslation();
   const location = useLocation();
-  const navigate = useNavigate();
   const { tenantId } = useParams<{ tenantId: string }>();
   const currentTenant = useTenantStore((s) => s.currentTenant);
 
-  // Extract current tab from URL
+  // Extract current tab from URL; the index route highlights the info tab
   const pathParts = location.pathname.split('/');
-  const currentTab = pathParts[pathParts.length - 1] as SettingsTab;
+  const lastSegment = pathParts[pathParts.length - 1];
+  const currentTab: SettingsTab = TABS.some((tab) => tab.key === lastSegment)
+    ? (lastSegment as SettingsTab)
+    : 'info';
 
-  const handleTabChange = useCallback(
-    (tab: SettingsTab) => {
-      const basePath = tenantId ? `/tenant/${tenantId}/org-settings` : '/tenant/org-settings';
-      void navigate(`${basePath}/${tab}`);
-    },
-    [navigate, tenantId]
-  );
+  const basePath = tenantId ? `/tenant/${tenantId}/org-settings` : '/tenant/org-settings';
 
   if (!currentTenant) {
     return (
@@ -80,11 +76,9 @@ export const OrgSettingsLayout: React.FC = () => {
                 const TabIcon = tab.icon;
                 return (
                   <li key={tab.key} className="shrink-0 lg:shrink">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleTabChange(tab.key);
-                      }}
+                    <NavLink
+                      to={`${basePath}/${tab.key}`}
+                      aria-current={isActive ? 'page' : undefined}
                       className={`flex h-full min-w-max items-center gap-2 border-b px-4 py-3 text-left transition-colors lg:w-full lg:gap-3 lg:border-b-0 lg:border-l ${
                         isActive
                           ? 'border-primary-500 bg-primary-50 text-primary-600 dark:bg-primary-900/20 dark:text-primary-400'
@@ -93,7 +87,7 @@ export const OrgSettingsLayout: React.FC = () => {
                     >
                       <TabIcon size={20} className="shrink-0" />
                       <span className="text-sm font-medium">{t(tab.labelKey)}</span>
-                    </button>
+                    </NavLink>
                   </li>
                 );
               })}

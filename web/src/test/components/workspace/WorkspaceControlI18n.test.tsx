@@ -30,7 +30,7 @@ describe('workspace localized controls', () => {
     expect(screen.getByPlaceholderText('E.g., Increase Q3 Revenue')).toBeInTheDocument();
     expect(screen.getByText('Description')).toBeInTheDocument();
     expect(
-      screen.getByPlaceholderText('Add some details about this objective...')
+      screen.getByPlaceholderText('Add some details about this objective…')
     ).toBeInTheDocument();
     expect(screen.getByText('Type')).toBeInTheDocument();
     expect(screen.getByText('Progress (%)')).toBeInTheDocument();

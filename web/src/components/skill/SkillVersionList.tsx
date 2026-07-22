@@ -14,7 +14,6 @@ import { formatDateTime } from '@/utils/date';
 
 import { LazyEmpty, LazyPopconfirm } from '@/components/ui/lazyAntd';
 
-
 import type { SkillVersionResponse } from '@/types/agent';
 
 const pageText = 'text-[oklch(0.24_0.01_255)] dark:text-[oklch(0.94_0.006_255)]';

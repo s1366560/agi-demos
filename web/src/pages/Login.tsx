@@ -257,42 +257,42 @@ export const Login: React.FC = () => {
 
           {/* Demo Credentials Hint — dev-only so production never exposes seed accounts. */}
           {import.meta.env.DEV && (
-          <div className="mt-10 p-5 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-100 dark:border-blue-900/30">
-            <div className="flex items-center space-x-2 mb-3">
-              <ShieldCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">
-                {t('login.demo.title')}
-              </h3>
+            <div className="mt-10 p-5 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-100 dark:border-blue-900/30">
+              <div className="flex items-center space-x-2 mb-3">
+                <ShieldCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                  {t('login.demo.title')}
+                </h3>
+              </div>
+              <div className="space-y-2 text-sm">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleDemoLogin('admin');
+                  }}
+                  className="flex w-full flex-col gap-1 rounded bg-blue-100/50 p-2 text-left text-blue-800 transition-colors hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
+                  aria-label={t('login.demo.adminAria')}
+                >
+                  <span className="font-medium leading-tight">{t('login.demo.admin')}</span>
+                  <span className="break-all font-mono text-xs leading-snug">
+                    admin@memstack.ai / adminpassword
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleDemoLogin('user');
+                  }}
+                  className="flex w-full flex-col gap-1 rounded bg-blue-100/50 p-2 text-left text-blue-800 transition-colors hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
+                  aria-label={t('login.demo.userAria')}
+                >
+                  <span className="font-medium leading-tight">{t('login.demo.user')}</span>
+                  <span className="break-all font-mono text-xs leading-snug">
+                    user@memstack.ai / userpassword
+                  </span>
+                </button>
+              </div>
             </div>
-            <div className="space-y-2 text-sm">
-              <button
-                type="button"
-                onClick={() => {
-                  handleDemoLogin('admin');
-                }}
-                className="flex w-full flex-col gap-1 rounded bg-blue-100/50 p-2 text-left text-blue-800 transition-colors hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
-                aria-label={t('login.demo.adminAria')}
-              >
-                <span className="font-medium leading-tight">{t('login.demo.admin')}</span>
-                <span className="break-all font-mono text-xs leading-snug">
-                  admin@memstack.ai / adminpassword
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  handleDemoLogin('user');
-                }}
-                className="flex w-full flex-col gap-1 rounded bg-blue-100/50 p-2 text-left text-blue-800 transition-colors hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
-                aria-label={t('login.demo.userAria')}
-              >
-                <span className="font-medium leading-tight">{t('login.demo.user')}</span>
-                <span className="break-all font-mono text-xs leading-snug">
-                  user@memstack.ai / userpassword
-                </span>
-              </button>
-            </div>
-          </div>
           )}
         </div>
       </div>

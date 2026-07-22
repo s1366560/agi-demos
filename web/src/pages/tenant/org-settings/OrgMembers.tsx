@@ -10,9 +10,22 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Input } from 'antd';
-import { Search as SearchIcon, UserMinus, UserPlus, Users } from 'lucide-react';
+import {
+  Crown,
+  Eye,
+  Search as SearchIcon,
+  ShieldCheck,
+  User,
+  UserMinus,
+  UserPlus,
+  Users,
+} from 'lucide-react';
 
 import { useTenantStore } from '@/stores/tenant';
+
+import { tenantService } from '@/services/tenantService';
+
+import { formatDateOnly } from '@/utils/date';
 
 import {
   useLazyMessage,
@@ -28,11 +41,11 @@ import type { UserTenant } from '@/types/memory';
 const { Search } = Input;
 
 const ROLE_OPTIONS = [
-  { value: 'owner', label: 'Owner' },
-  { value: 'admin', label: 'Admin' },
-  { value: 'editor', label: 'Editor' },
-  { value: 'viewer', label: 'Viewer' },
-];
+  { value: 'owner', labelKey: 'tenant.orgSettings.members.roles.owner' },
+  { value: 'admin', labelKey: 'tenant.orgSettings.members.roles.admin' },
+  { value: 'editor', labelKey: 'tenant.orgSettings.members.roles.editor' },
+  { value: 'viewer', labelKey: 'tenant.orgSettings.members.roles.viewer' },
+] as const;
 
 const getRoleBadgeColor = (role: string): string => {
   switch (role) {
@@ -95,27 +108,47 @@ export const OrgMembers: React.FC = () => {
     return result;
   }, [members, search, roleFilter]);
 
+  const roleOptions = useMemo(
+    () => ROLE_OPTIONS.map((role) => ({ value: role.value, label: t(role.labelKey) })),
+    [t]
+  );
+  const assignableRoleOptions = useMemo(
+    () => roleOptions.filter((role) => role.value !== 'owner'),
+    [roleOptions]
+  );
+
   // Stats
   const stats = useMemo(
     () => ({
       total: members.length,
       owners: members.filter((m) => m.role === 'owner').length,
       admins: members.filter((m) => m.role === 'admin').length,
-      members_count: members.filter((m) => m.role === 'member').length,
-      guests: members.filter((m) => m.role === 'guest').length,
+      editors: members.filter((m) => m.role === 'editor').length,
+      viewers: members.filter((m) => m.role === 'viewer').length,
     }),
     [members]
   );
 
   const handleRoleChange = useCallback(
-    (member: UserTenant, newRole: UserTenant['role']) => {
+    async (member: UserTenant, newRole: UserTenant['role']) => {
+      if (!currentTenant) return;
+      const previousRole = member.role;
       // Optimistic update
       setMembers((prev) =>
         prev.map((m) => (m.user_id === member.user_id ? { ...m, role: newRole } : m))
       );
-      message?.success(t('tenant.orgSettings.members.roleUpdated'));
+      try {
+        await tenantService.updateMemberRole(currentTenant.id, member.user_id, newRole);
+        message?.success(t('tenant.orgSettings.members.roleUpdated'));
+      } catch {
+        // Roll back on failure
+        setMembers((prev) =>
+          prev.map((m) => (m.user_id === member.user_id ? { ...m, role: previousRole } : m))
+        );
+        message?.error(t('tenant.orgSettings.members.roleUpdateError'));
+      }
     },
-    [message, t]
+    [currentTenant, message, t]
   );
 
   const handleRemove = useCallback(
@@ -194,25 +227,25 @@ export const OrgMembers: React.FC = () => {
           {
             label: t('tenant.orgSettings.members.stats.owners'),
             value: stats.owners,
-            icon: 'workspace_premium',
+            icon: Crown,
             color: 'text-purple-600',
           },
           {
             label: t('tenant.orgSettings.members.stats.admins'),
             value: stats.admins,
-            icon: 'admin_panel_settings',
+            icon: ShieldCheck,
             color: 'text-blue-600',
           },
           {
-            label: t('tenant.orgSettings.members.stats.members'),
-            value: stats.members_count,
-            icon: 'person',
+            label: t('tenant.orgSettings.members.stats.editors'),
+            value: stats.editors,
+            icon: User,
             color: 'text-green-600',
           },
           {
-            label: t('tenant.orgSettings.members.stats.guests'),
-            value: stats.guests,
-            icon: 'visibility',
+            label: t('tenant.orgSettings.members.stats.viewers'),
+            value: stats.viewers,
+            icon: Eye,
             color: 'text-slate-600',
           },
         ].map((stat) => (
@@ -253,12 +286,10 @@ export const OrgMembers: React.FC = () => {
           onChange={(val: string) => {
             setRoleFilter(val);
           }}
-          options={[
-            { value: '', label: t('tenant.orgSettings.members.allRoles') },
-            ...ROLE_OPTIONS,
-          ]}
+          options={[{ value: '', label: t('tenant.orgSettings.members.allRoles') }, ...roleOptions]}
           className="w-40"
           placeholder={t('tenant.orgSettings.members.filterByRole')}
+          aria-label={t('tenant.orgSettings.members.filterByRole')}
         />
       </div>
 
@@ -319,25 +350,24 @@ export const OrgMembers: React.FC = () => {
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeColor(member.role)}`}
                         >
-                          {member.role}
+                          {t('tenant.orgSettings.members.roles.owner')}
                         </span>
                       ) : (
                         <LazySelect
                           value={member.role}
                           onChange={(val: string) => {
-                            handleRoleChange(member, val as UserTenant['role']);
+                            void handleRoleChange(member, val as UserTenant['role']);
                           }}
-                          options={ROLE_OPTIONS.filter((r) => r.value !== 'owner')}
+                          options={assignableRoleOptions}
                           size="small"
                           className="w-28"
                           disabled={isSubmitting}
+                          aria-label={t('tenant.orgSettings.members.colRole')}
                         />
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">
-                      {member.joined_at
-                        ? new Date(member.joined_at).toLocaleDateString()
-                        : new Date(member.created_at).toLocaleDateString()}
+                      {formatDateOnly(member.joined_at ?? member.created_at)}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {member.role !== 'owner' && (
@@ -390,12 +420,14 @@ export const OrgMembers: React.FC = () => {
             <input
               id="member-email"
               type="email"
+              autoComplete="email"
+              spellCheck={false}
               value={newMemberEmail}
               onChange={(e) => {
                 setNewMemberEmail(e.target.value);
               }}
               placeholder={t('tenant.orgSettings.members.emailPlaceholder')}
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none"
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:border-primary transition-colors outline-none"
             />
           </div>
           <div>
@@ -411,7 +443,7 @@ export const OrgMembers: React.FC = () => {
               onChange={(val: string) => {
                 setNewMemberRole(val);
               }}
-              options={ROLE_OPTIONS.filter((r) => r.value !== 'owner')}
+              options={assignableRoleOptions}
               className="w-full"
             />
           </div>

@@ -149,6 +149,7 @@ export function Blackboard() {
     workspacesError,
     surfaceLoading,
     handleRetrySurface,
+    handleRetryWorkspaces,
   } = useBlackboardLifecycle({
     tenantId,
     projectId,
@@ -338,13 +339,25 @@ export function Blackboard() {
   if (workspacesError) {
     return (
       <div className="flex h-full min-h-0 flex-col bg-background-light p-3 dark:bg-background-dark sm:p-4">
-        <div className="rounded-md border border-error/25 bg-error/10 p-6 text-sm leading-7 text-status-text-error dark:text-status-text-error-dark">
+        <div
+          role="alert"
+          className="rounded-md border border-error/25 bg-error/10 p-6 text-sm leading-7 text-status-text-error dark:text-status-text-error-dark"
+        >
           <div className="text-lg font-semibold text-text-primary dark:text-text-inverse">
             {t('common.error', 'Error')}
           </div>
           <p className="mt-2 break-words text-status-text-error dark:text-status-text-error-dark">
             {workspacesError}
           </p>
+          <button
+            type="button"
+            onClick={() => {
+              void handleRetryWorkspaces();
+            }}
+            className="mt-4 min-h-10 rounded-md border border-error/25 bg-surface-light px-4 text-sm font-medium text-status-text-error transition-colors duration-150 hover:bg-error/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:bg-white/5 dark:text-status-text-error-dark"
+          >
+            {t('common.retry', 'Retry')}
+          </button>
         </div>
       </div>
     );

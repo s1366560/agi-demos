@@ -1,5 +1,7 @@
 import { memo, useEffect, useId, useMemo, useRef } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { type A2UIViewerProps } from '@copilotkit/a2ui-renderer';
 
 import {
@@ -72,18 +74,21 @@ function buildViewerSurfaceId(
   return `surface${baseId.replace(/:/g, '-')}${String(hash)}`;
 }
 
-const EmptyFallback = memo<{ className?: string | undefined }>(({ className }) => (
-  <div
-    className={className}
-    style={{
-      padding: 16,
-      color: '#666',
-      fontFamily: 'system-ui',
-    }}
-  >
-    No content to display
-  </div>
-));
+const EmptyFallback = memo<{ className?: string | undefined }>(({ className }) => {
+  const { t } = useTranslation();
+  return (
+    <div
+      className={className}
+      style={{
+        padding: 16,
+        color: '#666',
+        fontFamily: 'system-ui',
+      }}
+    >
+      {t('components.a2uiViewer.noContent', { defaultValue: 'No content to display' })}
+    </div>
+  );
+});
 
 EmptyFallback.displayName = 'EmptyFallback';
 

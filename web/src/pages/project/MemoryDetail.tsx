@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import {
   Database,
@@ -31,6 +31,7 @@ import { TaskList } from '../../components/tasks/TaskList';
 import { subscribeToTask, TaskStatus } from '../../hooks/useTaskSSE';
 import { memoryAPI } from '../../services/api';
 import { Memory } from '../../types/memory';
+import { logger } from '../../utils/logger';
 
 interface ProcessingProgress {
   progress: number;
@@ -72,9 +73,13 @@ export const MemoryDetail: React.FC = () => {
   const { projectBasePath } = useProjectBasePath();
   const [memory, setMemory] = useState<Memory | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'content' | 'metadata' | 'history' | 'raw' | 'tasks'>(
-    'content'
-  );
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const initialTab =
+    tabParam === 'metadata' || tabParam === 'raw' || tabParam === 'tasks' ? tabParam : 'content';
+  const [activeTab, setActiveTab] = useState<'content' | 'metadata' | 'raw' | 'tasks'>(initialTab);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -136,6 +141,7 @@ export const MemoryDetail: React.FC = () => {
 
     const fetchMemory = async () => {
       setIsLoading(true);
+      setLoadError(null);
       try {
         const data = await memoryAPI.get(projectId, memoryId);
         if (fetchRequestSeqRef.current !== requestSeq) {
@@ -152,7 +158,8 @@ export const MemoryDetail: React.FC = () => {
         }
       } catch (error) {
         if (fetchRequestSeqRef.current === requestSeq) {
-          console.error('Failed to fetch memory:', error);
+          logger.error('[MemoryDetail] Failed to fetch memory:', error);
+          setLoadError(t('project.memories.detail.load_failed', 'Failed to load this memory.'));
         }
       } finally {
         if (fetchRequestSeqRef.current === requestSeq) {
@@ -167,7 +174,7 @@ export const MemoryDetail: React.FC = () => {
         fetchRequestSeqRef.current += 1;
       }
     };
-  }, [projectId, memoryId, subscribeToMemoryTask]);
+  }, [projectId, memoryId, subscribeToMemoryTask, reloadToken, t]);
 
   if (!projectId || !memoryId) {
     return (
@@ -179,7 +186,26 @@ export const MemoryDetail: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="p-8 text-center text-slate-500">{t('project.memories.detail.loading')}</div>
+      <div className="p-8 text-center text-slate-500" role="status">
+        {t('project.memories.detail.loading')}
+      </div>
+    );
+  }
+
+  if (loadError && !memory) {
+    return (
+      <div className="flex flex-col items-center gap-3 p-8 text-center" role="alert">
+        <p className="text-sm text-red-600 dark:text-red-400">{loadError}</p>
+        <button
+          type="button"
+          onClick={() => {
+            setReloadToken((value) => value + 1);
+          }}
+          className="inline-flex h-9 items-center rounded-md bg-slate-950 px-4 text-sm font-medium text-slate-50 transition-colors hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/20 dark:bg-slate-50 dark:text-slate-950 dark:hover:bg-slate-200 dark:focus-visible:ring-slate-50/20"
+        >
+          {t('common.retry', 'Retry')}
+        </button>
+      </div>
     );
   }
 
@@ -195,7 +221,7 @@ export const MemoryDetail: React.FC = () => {
         const data = await memoryAPI.get(projectId, memoryId);
         setMemory(data);
       } catch (error) {
-        console.error('Failed to refresh memory:', error);
+        logger.error('[MemoryDetail] Failed to refresh memory:', error);
       }
     }
   };
@@ -208,7 +234,7 @@ export const MemoryDetail: React.FC = () => {
       await memoryAPI.delete(projectId, memoryId);
       void navigate(`${projectBasePath}/memories`);
     } catch (error) {
-      console.error('Failed to delete memory:', error);
+      logger.error('[MemoryDetail] Failed to delete memory:', error);
       message?.error(t('project.memories.detail.delete_failed'));
       setIsDeleting(false);
       setDeleteModalOpen(false);
@@ -229,7 +255,7 @@ export const MemoryDetail: React.FC = () => {
         subscribeToMemoryTask(response.task_id);
       }
     } catch (error) {
-      console.error('Failed to reprocess:', error);
+      logger.error('[MemoryDetail] Failed to reprocess:', error);
       message?.error(
         t(
           'project.memories.errors.reprocessFailed',
@@ -266,9 +292,25 @@ export const MemoryDetail: React.FC = () => {
       URL.revokeObjectURL(url);
       message?.success(t('memory.detail.exportSuccess', { defaultValue: 'Memory exported' }));
     } catch (error) {
-      console.error('Failed to export memory:', error);
+      logger.error('[MemoryDetail] Failed to export memory:', error);
       message?.error(t('memory.detail.exportFailed', { defaultValue: 'Failed to export memory' }));
     }
+  };
+
+  const handleTabChange = (tabId: typeof activeTab) => {
+    setActiveTab(tabId);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (tabId === 'content') {
+          next.delete('tab');
+        } else {
+          next.set('tab', tabId);
+        }
+        return next;
+      },
+      { replace: true }
+    );
   };
 
   const metadataTags = getMemoryMetadataTags(memory.metadata);
@@ -532,20 +574,27 @@ export const MemoryDetail: React.FC = () => {
                           {processingProgress?.message ||
                             t(
                               'project.memories.detail.extracting_knowledge',
-                              'Extracting knowledge...'
+                              'Extracting knowledge…'
                             )}
                         </p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-lg font-bold text-slate-950 dark:text-white">
+                      <div className="text-lg font-bold tabular-nums text-slate-950 dark:text-white">
                         {processingProgress?.progress ?? 0}%
                       </div>
                     </div>
                   </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+                  <div
+                    className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"
+                    role="progressbar"
+                    aria-valuenow={processingProgress?.progress ?? 0}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={t('project.memories.detail.processing', 'Processing Memory')}
+                  >
                     <div
-                      className="h-full bg-slate-950 transition-[width] duration-300 ease-out dark:bg-white"
+                      className="h-full bg-slate-950 transition-[width] duration-300 ease-out motion-reduce:transition-none dark:bg-white"
                       style={{ width: `${String(processingProgress?.progress ?? 0)}%` }}
                     />
                   </div>
@@ -553,13 +602,15 @@ export const MemoryDetail: React.FC = () => {
               )}
 
               <div className="border-b border-slate-200 px-4 dark:border-slate-800 md:px-6">
-                <div className="flex gap-1 overflow-x-auto py-3">
+                <div className="flex gap-1 overflow-x-auto py-3" role="tablist">
                   {tabs.map((tab) => (
                     <button
                       key={tab.id}
                       type="button"
+                      role="tab"
+                      aria-selected={activeTab === tab.id}
                       onClick={() => {
-                        setActiveTab(tab.id);
+                        handleTabChange(tab.id);
                       }}
                       className={`h-8 rounded-md px-3 text-sm font-medium transition-colors ${
                         activeTab === tab.id
@@ -573,7 +624,10 @@ export const MemoryDetail: React.FC = () => {
                 </div>
               </div>
 
-              <div className="min-h-[360px] p-4 text-base leading-7 text-slate-800 dark:text-slate-200 md:p-6">
+              <div
+                className="min-h-[360px] p-4 text-base leading-7 text-slate-800 dark:text-slate-200 md:p-6"
+                role="tabpanel"
+              >
                 {activeTab === 'content' && (
                   <div className="max-w-4xl whitespace-pre-wrap text-[15px] leading-7">
                     {memory.content || t('project.memories.detail.no_content')}
@@ -621,7 +675,7 @@ export const MemoryDetail: React.FC = () => {
                   <History size={16} />
                   {t('common.created_at')} {formatDateTime(memory.created_at)}
                 </div>
-                <div>ID: {memory.id.slice(0, 12)}...</div>
+                <div>ID: {memory.id.slice(0, 12)}…</div>
               </div>
             </section>
 

@@ -15,7 +15,6 @@ import { formatDateTime } from '@/utils/date';
 
 import { LazyPopconfirm } from '@/components/ui/lazyAntd';
 
-
 import type { SkillEvolutionRouteEntry } from '@/types/agent';
 
 const pageText = 'text-[oklch(0.24_0.01_255)] dark:text-[oklch(0.94_0.006_255)]';
@@ -64,10 +63,7 @@ export function EvolutionJobRow({
               <Tag>
                 {isVersion
                   ? 'version'
-                  : t(
-                      `tenant.skillEvolution.jobActions.${entry.action ?? ''}`,
-                      entry.action ?? ''
-                    )}
+                  : t(`tenant.skillEvolution.jobActions.${entry.action ?? ''}`, entry.action ?? '')}
               </Tag>
               {entry.status ? (
                 <Tag color={entry.status === 'applied' ? 'success' : 'default'}>

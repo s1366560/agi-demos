@@ -50,7 +50,6 @@ import { useMarkdownPlugins } from '../../components/agent/chat/markdownPlugins'
 import { safeMarkdownComponents } from '../../components/agent/chat/safeMarkdownComponents';
 import { MARKDOWN_PROSE_CLASSES } from '../../components/agent/styles';
 
-
 import type {
   SkillEvolutionDetailResponse,
   SkillResponse,

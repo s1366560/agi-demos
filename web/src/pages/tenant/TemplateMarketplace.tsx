@@ -3,13 +3,14 @@
  * Lists templates with search, category filtering, and install actions.
  */
 
-import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
 import { Input, Tag, Empty, Spin, App } from 'antd';
-import { Search, Download, Star, Package, Shield, Bot } from 'lucide-react';
+import { Search, Download, Star, Package, Shield, Bot, RefreshCw } from 'lucide-react';
 
+import { useDebounce } from '../../hooks/useDebounce';
 import { subagentTemplateService } from '../../services/subagentTemplateService';
 
 import type { SubAgentTemplateListItem } from '../../services/subagentTemplateService';
@@ -29,12 +30,16 @@ export const TemplateMarketplace: React.FC = () => {
   const [templates, setTemplates] = useState<SubAgentTemplateListItem[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retryToken, setRetryToken] = useState(0);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [installing, setInstalling] = useState<Set<string>>(new Set());
+  const [seeding, setSeeding] = useState(false);
   const loadRequestSeqRef = useRef(0);
+  const debouncedSearch = useDebounce(search, 300);
 
-  // Load templates and categories
+  // Load templates and categories (server-side search/filter)
   useEffect(() => {
     const requestSeq = loadRequestSeqRef.current + 1;
     loadRequestSeqRef.current = requestSeq;
@@ -45,7 +50,7 @@ export const TemplateMarketplace: React.FC = () => {
         const [listRes, cats] = await Promise.all([
           subagentTemplateService.list({
             category: selectedCategory || undefined,
-            search: search || undefined,
+            search: debouncedSearch || undefined,
           }),
           subagentTemplateService.getCategories(),
         ]);
@@ -55,8 +60,10 @@ export const TemplateMarketplace: React.FC = () => {
 
         setTemplates(listRes.templates);
         setCategories(cats);
+        setLoadError(false);
       } catch {
         if (loadRequestSeqRef.current === requestSeq) {
+          setLoadError(true);
           message.error(t('agent.templates.loadError', 'Failed to load templates'));
         }
       } finally {
@@ -72,7 +79,7 @@ export const TemplateMarketplace: React.FC = () => {
         loadRequestSeqRef.current += 1;
       }
     };
-  }, [selectedCategory, search, message, t]);
+  }, [selectedCategory, debouncedSearch, retryToken, message, t]);
 
   const handleInstall = useCallback(
     async (templateId: string) => {
@@ -98,6 +105,8 @@ export const TemplateMarketplace: React.FC = () => {
   );
 
   const handleSeed = useCallback(async () => {
+    if (seeding) return;
+    setSeeding(true);
     try {
       const result = await subagentTemplateService.seed();
       message.success(
@@ -108,22 +117,13 @@ export const TemplateMarketplace: React.FC = () => {
       // Reload
       const listRes = await subagentTemplateService.list();
       setTemplates(listRes.templates);
+      setLoadError(false);
     } catch {
       message.error(t('agent.templates.seedError', 'Failed to seed templates'));
+    } finally {
+      setSeeding(false);
     }
-  }, [message, t]);
-
-  const filteredTemplates = useMemo(() => {
-    if (!search) return templates;
-    const q = search.toLowerCase();
-    return templates.filter(
-      (tpl) =>
-        tpl.name.toLowerCase().includes(q) ||
-        tpl.display_name.toLowerCase().includes(q) ||
-        tpl.description.toLowerCase().includes(q) ||
-        tpl.tags.some((tag) => tag.toLowerCase().includes(q))
-    );
-  }, [templates, search]);
+  }, [message, seeding, t]);
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -146,10 +146,14 @@ export const TemplateMarketplace: React.FC = () => {
           onClick={() => {
             void handleSeed();
           }}
+          disabled={seeding}
           className="px-3 py-1.5 text-xs rounded-md border border-slate-300 dark:border-slate-600
-            text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {t('agent.templates.seedBuiltin', 'Seed Built-in')}
+          {seeding
+            ? t('agent.templates.seeding', 'Seeding…')
+            : t('agent.templates.seedBuiltin', 'Seed Built-in')}
         </button>
       </div>
 
@@ -157,7 +161,8 @@ export const TemplateMarketplace: React.FC = () => {
       <div className="flex items-center gap-3 mb-5">
         <Input
           prefix={<Search size={14} className="text-slate-400" />}
-          placeholder={t('agent.templates.search', 'Search templates...')}
+          placeholder={t('agent.templates.search', 'Search templates…')}
+          aria-label={t('agent.templates.search', 'Search templates…')}
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
@@ -165,44 +170,74 @@ export const TemplateMarketplace: React.FC = () => {
           className="max-w-sm"
           allowClear
         />
-        <div className="flex gap-1.5 flex-wrap">
-          <Tag
-            {...(selectedCategory === '' ? { color: 'blue' as const } : {})}
-            className="cursor-pointer"
+        <div
+          className="flex gap-1.5 flex-wrap"
+          role="group"
+          aria-label={t('agent.templates.categoryFilter', 'Category filter')}
+        >
+          <button
+            type="button"
+            aria-pressed={selectedCategory === ''}
             onClick={() => {
               setSelectedCategory('');
             }}
+            className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${
+              selectedCategory === ''
+                ? 'border-blue-300 bg-blue-50 text-blue-600 dark:border-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                : 'border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700'
+            }`}
           >
             {t('agent.templates.all', 'All')}
-          </Tag>
+          </button>
           {categories.map((cat) => (
-            <Tag
+            <button
               key={cat}
-              {...(selectedCategory === cat ? { color: CATEGORY_COLORS[cat] || 'blue' } : {})}
-              className="cursor-pointer"
+              type="button"
+              aria-pressed={selectedCategory === cat}
               onClick={() => {
                 setSelectedCategory(cat);
               }}
+              className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${
+                selectedCategory === cat
+                  ? 'border-blue-300 bg-blue-50 text-blue-600 dark:border-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                  : 'border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700'
+              }`}
             >
               {cat}
-            </Tag>
+            </button>
           ))}
         </div>
       </div>
 
       {/* Template Grid */}
       {loading ? (
-        <div className="flex justify-center py-20">
+        <div className="flex justify-center py-20" role="status">
           <Spin size="large" />
         </div>
-      ) : filteredTemplates.length === 0 ? (
+      ) : loadError ? (
+        <div className="flex flex-col items-center gap-3 py-20">
+          <p className="text-sm text-slate-500 dark:text-slate-400" role="alert">
+            {t('agent.templates.loadError', 'Failed to load templates')}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setRetryToken((token) => token + 1);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-700"
+          >
+            <RefreshCw size={12} />
+            {t('common.retry')}
+          </button>
+        </div>
+      ) : templates.length === 0 ? (
         <Empty
           description={t('agent.templates.noResults', 'No templates found')}
           className="py-20"
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredTemplates.map((tpl) => (
+          {templates.map((tpl) => (
             <div
               key={tpl.id}
               className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800
@@ -266,7 +301,8 @@ export const TemplateMarketplace: React.FC = () => {
                   }}
                   disabled={installing.has(tpl.id)}
                   className="px-2.5 py-1 text-xs rounded-md bg-blue-500 hover:bg-blue-600
-                    text-white disabled:opacity-50 transition-colors flex items-center gap-1"
+                    text-white disabled:opacity-50 transition-colors flex items-center gap-1
+                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
                 >
                   {installing.has(tpl.id) ? (
                     <Spin size="small" />

@@ -26,6 +26,8 @@ import { blackboardFileService } from '@/services/blackboardFileService';
 import type { BlackboardFileItem } from '@/services/blackboardFileService';
 import { parseError } from '@/services/client/ApiError';
 
+import { formatFileSize } from '@/utils/format';
+
 import { AppModal } from '@/components/common';
 import { LazyPopconfirm, useLazyMessage } from '@/components/ui/lazyAntd';
 
@@ -55,13 +57,6 @@ function isTextType(contentType: string): boolean {
       'application/x-yaml',
     ].includes(contentType)
   );
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '-';
-  if (bytes < 1024) return `${String(bytes)} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -672,8 +667,12 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
 
       {/* File list */}
       {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-text-secondary dark:text-text-muted" />
+        <div className="flex items-center justify-center py-12" role="status">
+          <Loader2
+            aria-hidden="true"
+            className="h-6 w-6 animate-spin text-text-secondary dark:text-text-muted"
+          />
+          <span className="sr-only">{t('common.loading', 'Loading…')}</span>
         </div>
       ) : files.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border-separator bg-surface-light p-8 text-center dark:border-border-dark dark:bg-surface-dark">

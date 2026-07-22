@@ -26,8 +26,6 @@ describe('NewMemory', () => {
   it('labels icon-only controls for assistive technology', () => {
     render(<NewMemory />);
 
-    expect(screen.getByRole('button', { name: 'Remove meeting tag' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Remove strategy tag' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Bold' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Code Block' })).toBeInTheDocument();
   });
@@ -55,7 +53,7 @@ describe('NewMemory', () => {
     expect(parsedDraft).toMatchObject({
       title: 'Planning notes',
       content: 'Draft body for later.',
-      tags: ['meeting', 'strategy'],
+      tags: [],
     });
     expect(parsedDraft.savedAt).toEqual(expect.any(String));
     expect(screen.getByText(/Draft saved at/)).toBeInTheDocument();

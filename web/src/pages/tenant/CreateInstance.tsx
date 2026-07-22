@@ -3,16 +3,17 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
-import { Steps, Form, Input, InputNumber, Space, Descriptions } from 'antd';
+import { Alert, Steps, Form, Input, InputNumber, Space, Descriptions } from 'antd';
 
 import { LazyButton, LazySelect, useLazyMessage } from '@/components/ui/lazyAntd';
 
 import { instanceTemplateService } from '../../services/instanceTemplateService';
 import { useClusters, useClusterActions } from '../../stores/cluster';
-import { useInstanceActions } from '../../stores/instance';
+import { useInstanceActions, useInstanceSubmitting } from '../../stores/instance';
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 import { useWorkspaces, useWorkspaceStore } from '../../stores/workspace';
+import { confirmAction } from '../../utils/confirmAction';
 
 import { parseInstanceJsonObject } from './utils/createInstanceUtils';
 
@@ -76,8 +77,11 @@ export const CreateInstance: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<InstanceFormValues>({});
   const [appliedTemplateId, setAppliedTemplateId] = useState<string | null>(null);
+  const [infraLoadError, setInfraLoadError] = useState(false);
+  const [infraReloadKey, setInfraReloadKey] = useState(0);
 
   const { createInstance } = useInstanceActions();
+  const isSubmitting = useInstanceSubmitting();
   const clusters = useClusters();
   const { listClusters } = useClusterActions();
   const workspaces = useWorkspaces();
@@ -99,15 +103,28 @@ export const CreateInstance: React.FC = () => {
   const templateId = searchParams.get('templateId');
 
   useEffect(() => {
-    listClusters().catch((err: unknown) => {
-      console.error('Failed to list clusters:', err);
-    });
-    if (tenantId && projectId) {
-      loadWorkspaces(tenantId, projectId).catch((err: unknown) => {
-        console.error('Failed to list workspaces:', err);
-      });
-    }
-  }, [listClusters, loadWorkspaces, tenantId, projectId]);
+    let cancelled = false;
+    const load = async () => {
+      try {
+        await listClusters();
+        if (tenantId && projectId) {
+          await loadWorkspaces(tenantId, projectId);
+        }
+        if (!cancelled) {
+          setInfraLoadError(false);
+        }
+      } catch (err: unknown) {
+        console.error('Failed to load clusters/workspaces:', err);
+        if (!cancelled) {
+          setInfraLoadError(true);
+        }
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [listClusters, loadWorkspaces, tenantId, projectId, infraReloadKey]);
 
   useEffect(() => {
     if (!templateId || appliedTemplateId === templateId) return;
@@ -146,15 +163,32 @@ export const CreateInstance: React.FC = () => {
       const isSlugTouched = form.isFieldTouched('slug');
       const currentSlug = form.getFieldValue('slug') as unknown;
       if (!isSlugTouched || typeof currentSlug !== 'string' || currentSlug.length === 0) {
-        const slug = name
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/(^-|-$)/g, '');
-        form.setFieldsValue({ slug });
+        form.setFieldsValue({ slug: name ? slugifyInstanceName(name) : '' });
       }
     },
     [form]
   );
+
+  const handleCancel = useCallback(() => {
+    if (!form.isFieldsTouched()) {
+      void navigate('..');
+      return;
+    }
+    void confirmAction({
+      title: t('tenant.instances.create.cancelConfirmTitle', 'Discard this instance?'),
+      content: t(
+        'tenant.instances.create.cancelConfirmContent',
+        'You have unsaved changes. Leaving now will discard them.'
+      ),
+      okText: t('tenant.instances.create.cancelConfirmOk', 'Discard'),
+      cancelText: t('common.cancel', 'Cancel'),
+      danger: true,
+    }).then((confirmed) => {
+      if (confirmed) {
+        void navigate('..');
+      }
+    });
+  }, [form, navigate, t]);
 
   const getJsonObjectRule = useCallback(
     (fieldLabel: string) => ({
@@ -186,6 +220,21 @@ export const CreateInstance: React.FC = () => {
     if (value && typeof value === 'object') return JSON.stringify(value);
     return '';
   }, []);
+
+  const getReviewDisplayValue = useCallback(
+    (key: string, value: unknown): string => {
+      if (typeof value === 'string') {
+        if (key === 'cluster_id') {
+          return clusters.find((c) => c.id === value)?.name ?? value;
+        }
+        if (key === 'workspace_id') {
+          return scopedWorkspaces.find((ws) => ws.id === value)?.name ?? value;
+        }
+      }
+      return formatReviewValue(value);
+    },
+    [clusters, scopedWorkspaces, formatReviewValue]
+  );
 
   const stepsInfo = React.useMemo(
     () => [
@@ -536,7 +585,7 @@ export const CreateInstance: React.FC = () => {
                 };
                 return (
                   <Descriptions.Item key={key} label={getLabel(key)}>
-                    {formatReviewValue(value)}
+                    {getReviewDisplayValue(key, value)}
                   </Descriptions.Item>
                 );
               })}
@@ -551,7 +600,7 @@ export const CreateInstance: React.FC = () => {
       handleNameChange,
       formData,
       scopedWorkspaces,
-      formatReviewValue,
+      getReviewDisplayValue,
       getJsonObjectRule,
     ]
   );
@@ -643,6 +692,27 @@ export const CreateInstance: React.FC = () => {
         {t('tenant.instances.create.title', 'Create Instance')}
       </h1>
 
+      {infraLoadError ? (
+        <Alert
+          type="error"
+          showIcon
+          message={t(
+            'tenant.instances.create.infraLoadError',
+            'Failed to load clusters and workspaces'
+          )}
+          action={
+            <LazyButton
+              size="small"
+              onClick={() => {
+                setInfraReloadKey((key) => key + 1);
+              }}
+            >
+              {t('common.retry', 'Retry')}
+            </LazyButton>
+          }
+        />
+      ) : null}
+
       <div className="bg-surface-light dark:bg-surface-dark rounded-lg p-8 border border-border-light dark:border-border-dark">
         <Steps
           current={currentStep}
@@ -668,11 +738,7 @@ export const CreateInstance: React.FC = () => {
             {t('tenant.instances.create.actions.back', 'Back')}
           </LazyButton>
           <Space>
-            <LazyButton
-              onClick={() => {
-                void navigate('..');
-              }}
-            >
+            <LazyButton onClick={handleCancel} disabled={isSubmitting}>
               {t('tenant.instances.create.actions.cancel', 'Cancel')}
             </LazyButton>
             {currentStep < stepsInfo.length - 1 ? (
@@ -680,7 +746,7 @@ export const CreateInstance: React.FC = () => {
                 {t('tenant.instances.create.actions.next', 'Next')}
               </LazyButton>
             ) : (
-              <LazyButton type="primary" onClick={handleSubmit}>
+              <LazyButton type="primary" loading={isSubmitting} onClick={handleSubmit}>
                 {t('tenant.instances.create.actions.submit', 'Create')}
               </LazyButton>
             )}

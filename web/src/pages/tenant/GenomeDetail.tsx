@@ -22,18 +22,26 @@ import {
 } from 'antd';
 import { ArchiveX, ArrowLeft, Download, Edit2, Star, Trash2, UploadCloud } from 'lucide-react';
 
+import { formatDateTime } from '@/utils/date';
+
 import {
   useCurrentGenome,
   useCurrentGenomeGenes,
   useCurrentGenomeGenesLoading,
   useGeneMarketLoading,
   useGeneMarketError,
-  useGeneMarketStore,
   useGeneMarketActions,
 } from '../../stores/geneMarket';
 import { useCurrentTenant } from '../../stores/tenant';
 
 import { visibilityLabel, visibilityOptions, visibilityTagColor } from './geneVisibility';
+import {
+  isFormValidationError,
+  normalizeNullableText,
+  showGeneActionError,
+  splitCsv,
+} from './utils/geneFormUtils';
+import { InstanceSelect } from './utils/InstanceSelect';
 
 import type { ContentVisibilityValue, GenomeUpdate } from '../../services/geneMarketService';
 
@@ -58,24 +66,6 @@ interface EditGenomeFormValues {
   gene_slugs?: string;
   config_override?: string;
 }
-
-const normalizeNullableText = (value: string | undefined): string | null => {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : null;
-};
-
-const splitCsv = (value: string | undefined): string[] =>
-  Array.from(
-    new Set(
-      (value ?? '')
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean)
-    )
-  );
-
-const isFormValidationError = (error: unknown): boolean =>
-  typeof error === 'object' && error !== null && 'errorFields' in error;
 
 export const GenomeDetail: React.FC = () => {
   const { t } = useTranslation();
@@ -123,6 +113,8 @@ export const GenomeDetail: React.FC = () => {
     return genomeGeneSlugKey.split('\n');
   }, [genomeGeneSlugKey]);
 
+  const [reloadKey, setReloadKey] = useState(0);
+
   useEffect(() => {
     if (genomeId && tenantId) {
       const options = { tenant_id: tenantId };
@@ -132,7 +124,7 @@ export const GenomeDetail: React.FC = () => {
       setCurrentGenome(null);
       clearError();
     };
-  }, [genomeId, getGenome, setCurrentGenome, clearError, tenantId]);
+  }, [genomeId, getGenome, setCurrentGenome, clearError, tenantId, reloadKey]);
 
   useEffect(() => {
     if (genomeGeneSlugKey === null || !tenantId) {
@@ -148,10 +140,6 @@ export const GenomeDetail: React.FC = () => {
     const availableSlugs = new Set(genomeGenes.map((gene) => gene.slug));
     return genomeGeneSlugs.filter((slug) => !availableSlugs.has(slug));
   }, [genomeGeneSlugKey, genomeGeneSlugs, genomeGenes]);
-
-  const showActionError = (fallbackMessage: string) => {
-    message.error(useGeneMarketStore.getState().error ?? fallbackMessage);
-  };
 
   const handleInstallSubmit = async () => {
     const values = await installForm.validateFields();
@@ -181,13 +169,13 @@ export const GenomeDetail: React.FC = () => {
       setIsInstallModalVisible(false);
       installForm.resetFields();
     } catch {
-      showActionError(t('tenant.genomeDetail.installError', 'Failed to install genome'));
+      showGeneActionError(t('tenant.genomeDetail.installError', 'Failed to install genome'));
     } finally {
       setIsInstallSubmitting(false);
     }
   };
 
-  const handlePublishToggle = async () => {
+  const runPublishToggle = async () => {
     if (!genomeId || !tenantId || !genome) {
       return;
     }
@@ -203,7 +191,7 @@ export const GenomeDetail: React.FC = () => {
         message.success(t('tenant.genomeDetail.publishSuccess', 'Genome published successfully'));
       }
     } catch {
-      showActionError(
+      showGeneActionError(
         genome.is_published
           ? t('tenant.genomeDetail.unpublishError', 'Failed to unpublish genome')
           : t('tenant.genomeDetail.publishError', 'Failed to publish genome')
@@ -211,6 +199,31 @@ export const GenomeDetail: React.FC = () => {
     } finally {
       setIsPublishSubmitting(false);
     }
+  };
+
+  const handlePublishToggle = () => {
+    if (!genome) {
+      return;
+    }
+    if (!genome.is_published) {
+      void runPublishToggle();
+      return;
+    }
+    // Unpublishing removes marketplace visibility — confirm first
+    Modal.confirm({
+      title: t('tenant.genomeDetail.unpublishConfirmTitle', {
+        name: genome.name,
+        defaultValue: 'Unpublish {{name}}?',
+      }),
+      content: t(
+        'tenant.genomeDetail.unpublishConfirmContent',
+        'This removes the genome from the public marketplace. Installed copies keep working.'
+      ),
+      okText: t('tenant.genes.unpublishAction', 'Unpublish'),
+      okType: 'danger',
+      cancelText: t('common.cancel', 'Cancel'),
+      onOk: runPublishToggle,
+    });
   };
 
   const handleRateSubmit = async () => {
@@ -233,7 +246,7 @@ export const GenomeDetail: React.FC = () => {
       setIsRateModalVisible(false);
       rateForm.resetFields();
     } catch {
-      showActionError(t('tenant.genomeDetail.rateError', 'Failed to submit genome rating'));
+      showGeneActionError(t('tenant.genomeDetail.rateError', 'Failed to submit genome rating'));
     } finally {
       setIsRateSubmitting(false);
     }
@@ -264,7 +277,7 @@ export const GenomeDetail: React.FC = () => {
           setIsDeleteSubmitting(false);
           void navigate(-1);
         } catch {
-          showActionError(t('tenant.genomeDetail.deleteError', 'Failed to delete genome'));
+          showGeneActionError(t('tenant.genomeDetail.deleteError', 'Failed to delete genome'));
           setIsDeleteSubmitting(false);
         }
       },
@@ -329,7 +342,7 @@ export const GenomeDetail: React.FC = () => {
         return;
       }
       if (!isFormValidationError(error)) {
-        showActionError(t('tenant.genomeDetail.updateError', 'Failed to update genome'));
+        showGeneActionError(t('tenant.genomeDetail.updateError', 'Failed to update genome'));
       }
     } finally {
       setIsEditSubmitting(false);
@@ -345,6 +358,28 @@ export const GenomeDetail: React.FC = () => {
   }
 
   if (!genome && !loading) {
+    // A load failure shows an error with retry; only genuine 404s get "not found"
+    if (error) {
+      return (
+        <Alert
+          type="error"
+          title={t('tenant.genomeDetail.loadFailed', 'Failed to load genome')}
+          description={error}
+          showIcon
+          action={
+            <Button
+              size="small"
+              onClick={() => {
+                clearError();
+                setReloadKey((key) => key + 1);
+              }}
+            >
+              {t('common.retry', 'Retry')}
+            </Button>
+          }
+        />
+      );
+    }
     return (
       <Alert
         type="warning"
@@ -396,9 +431,7 @@ export const GenomeDetail: React.FC = () => {
             {t('tenant.genomeDetail.installAction', 'Install')}
           </Button>
           <Button
-            onClick={() => {
-              void handlePublishToggle();
-            }}
+            onClick={handlePublishToggle}
             loading={isPublishSubmitting}
             danger={genome.is_published}
             icon={
@@ -435,7 +468,7 @@ export const GenomeDetail: React.FC = () => {
       {error && <Alert type="error" title={error} closable={{ onClose: clearError }} />}
 
       <Card className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-        <Descriptions column={2} bordered>
+        <Descriptions column={{ xs: 1, sm: 2 }} bordered>
           <Descriptions.Item label={t('tenant.genomeDetail.fields.id', 'ID')}>
             <Paragraph copyable className="!mb-0">
               {genome.id}
@@ -450,7 +483,7 @@ export const GenomeDetail: React.FC = () => {
               : t('tenant.genes.statusDraft', 'Draft')}
           </Descriptions.Item>
           <Descriptions.Item label={t('tenant.genomeDetail.fields.createdAt', 'Created At')}>
-            {new Date(genome.created_at).toLocaleString()}
+            {formatDateTime(genome.created_at)}
           </Descriptions.Item>
           <Descriptions.Item
             label={t('tenant.genomeDetail.fields.description', 'Description')}
@@ -561,7 +594,9 @@ export const GenomeDetail: React.FC = () => {
               },
             ]}
           >
-            <Input placeholder={t('tenant.genes.instanceIdPlaceholder', 'Enter instance ID')} />
+            <InstanceSelect
+              placeholder={t('tenant.genes.instanceIdPlaceholder', 'Enter instance ID')}
+            />
           </Form.Item>
           <Form.Item
             name="config_override"

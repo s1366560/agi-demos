@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { Input } from 'antd';
-import { Loader2, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 
 import { providerAPI } from '@/services/api';
 import { instanceService } from '@/services/instanceService';
@@ -109,6 +109,18 @@ export const InstanceSettings: React.FC = () => {
       clearError();
     }
   }, [error, message, clearError]);
+
+  // Warn before a full page unload while there are unsaved general settings
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => {
+      window.removeEventListener('beforeunload', handler);
+    };
+  }, [isDirty]);
 
   useEffect(() => {
     const requestId = ++providersRequestId.current;
@@ -302,6 +314,9 @@ export const InstanceSettings: React.FC = () => {
             </label>
             <Input
               id="instance-name"
+              name="name"
+              autoComplete="off"
+              spellCheck={false}
               value={name}
               onChange={handleNameChange}
               placeholder={t('tenant.instances.create.basic.name')}
@@ -327,12 +342,17 @@ export const InstanceSettings: React.FC = () => {
             />
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex items-center justify-end gap-3">
+            {isDirty ? (
+              <p className="m-0 text-xs text-text-muted" role="status">
+                {t('tenant.instances.settings.unsavedChanges', 'You have unsaved changes')}
+              </p>
+            ) : null}
             <LazyButton
               type="primary"
               onClick={handleSave}
               disabled={!isDirty || isSubmitting}
-              icon={isSubmitting ? <Loader2 size={16} className="animate-spin" /> : undefined}
+              loading={isSubmitting}
             >
               {t('common.save')}
             </LazyButton>
@@ -427,14 +447,19 @@ export const InstanceSettings: React.FC = () => {
                   <p className="m-0 text-xs text-success-dark dark:text-success-light">
                     {t('tenant.instances.settings.llmApiKeySet')}
                   </p>
-                  <LazyButton
-                    danger
-                    size="small"
-                    onClick={handleClearLlmApiKeyOverride}
-                    disabled={llmConfigSaving}
+                  <LazyPopconfirm
+                    title={t(
+                      'tenant.instances.settings.llmApiKeyClearConfirm',
+                      'Clear the stored API key override?'
+                    )}
+                    onConfirm={handleClearLlmApiKeyOverride}
+                    okText={t('common.confirm')}
+                    cancelText={t('common.cancel')}
                   >
-                    {t('tenant.instances.settings.llmApiKeyClearOverride')}
-                  </LazyButton>
+                    <LazyButton danger size="small" disabled={llmConfigSaving}>
+                      {t('tenant.instances.settings.llmApiKeyClearOverride')}
+                    </LazyButton>
+                  </LazyPopconfirm>
                 </div>
               )}
             </div>
@@ -444,7 +469,7 @@ export const InstanceSettings: React.FC = () => {
                 type="primary"
                 onClick={handleLlmConfigSave}
                 disabled={llmConfigSaving}
-                icon={llmConfigSaving ? <Loader2 size={16} className="animate-spin" /> : undefined}
+                loading={llmConfigSaving}
               >
                 {t('common.save')}
               </LazyButton>

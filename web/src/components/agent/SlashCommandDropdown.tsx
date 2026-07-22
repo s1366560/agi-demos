@@ -13,6 +13,7 @@ import {
   useCallback,
   useImperativeHandle,
   useMemo,
+  useId,
   forwardRef,
   memo,
 } from 'react';
@@ -43,6 +44,7 @@ export const SlashCommandDropdown = memo(
   forwardRef<SlashCommandDropdownHandle, SlashCommandDropdownProps>(
     ({ query, visible, onSelect, selectedIndex, onSelectedIndexChange }, ref) => {
       const { t } = useTranslation();
+      const listboxId = useId();
       const [commands, setCommands] = useState<CommandInfo[]>([]);
       const [skills, setSkills] = useState<SkillResponse[]>([]);
       const [loading, setLoading] = useState(false);
@@ -134,7 +136,12 @@ export const SlashCommandDropdown = memo(
       useEffect(() => {
         const item = itemRefs.current.get(selectedIndex);
         if (item) {
-          item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          item.scrollIntoView({
+            block: 'nearest',
+            behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+              ? 'auto'
+              : 'smooth',
+          });
         }
       }, [selectedIndex]);
 
@@ -166,7 +173,7 @@ export const SlashCommandDropdown = memo(
           <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {loading
-                ? t('agent.slashCommand.loading', 'Loading...')
+                ? t('agent.slashCommand.loading', 'Loading…')
                 : query
                   ? unifiedList.length === 0
                     ? t('agent.slashCommand.noMatch', 'No matches for "{{query}}"', { query })
@@ -178,7 +185,7 @@ export const SlashCommandDropdown = memo(
           {/* List */}
           {loading ? (
             <div className="px-3 py-4 text-center text-sm text-slate-400">
-              {t('agent.slashCommand.loading', 'Loading...')}
+              {t('agent.slashCommand.loading', 'Loading…')}
             </div>
           ) : unifiedList.length === 0 ? (
             <div className="px-3 py-4 text-center text-sm text-slate-400">
@@ -187,7 +194,12 @@ export const SlashCommandDropdown = memo(
                 : t('agent.slashCommand.noItems', 'No commands or skills available')}
             </div>
           ) : (
-            <div className="py-1">
+            <div
+              className="py-1"
+              role="listbox"
+              aria-label={t('agent.slashCommand.title', 'Commands & Skills')}
+              aria-activedescendant={`${listboxId}-option-${String(selectedIndex)}`}
+            >
               {unifiedList.map((item, index) => {
                 const isFirstCommand = item.kind === 'command' && index === 0;
                 const isFirstSkill = item.kind === 'skill' && index === filteredCommands.length;
@@ -197,12 +209,18 @@ export const SlashCommandDropdown = memo(
                     key={`${item.kind}-${item.kind === 'command' ? item.data.name : item.data.id}`}
                   >
                     {isFirstCommand && (
-                      <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-slate-800/50">
+                      <div
+                        role="presentation"
+                        className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-slate-800/50"
+                      >
                         {t('agent.slashCommand.groupCommands', 'Commands')}
                       </div>
                     )}
                     {isFirstSkill && (
-                      <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-slate-800/50">
+                      <div
+                        role="presentation"
+                        className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-slate-800/50"
+                      >
                         {t('agent.slashCommand.groupSkills', 'Skills')}
                       </div>
                     )}
@@ -210,6 +228,9 @@ export const SlashCommandDropdown = memo(
                       ref={(el) => {
                         if (el) itemRefs.current.set(index, el);
                       }}
+                      id={`${listboxId}-option-${String(index)}`}
+                      role="option"
+                      aria-selected={index === selectedIndex}
                       onClick={() => {
                         handleItemClick(item);
                       }}
@@ -283,19 +304,19 @@ export const SlashCommandDropdown = memo(
               <kbd className="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-mono">
                 &uarr;&darr;
               </kbd>{' '}
-              navigate
+              {t('agent.slashCommand.hintNavigate', 'navigate')}
             </span>
             <span>
               <kbd className="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-mono">
                 Enter
               </kbd>{' '}
-              select
+              {t('agent.slashCommand.hintSelect', 'select')}
             </span>
             <span>
               <kbd className="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-mono">
                 Esc
               </kbd>{' '}
-              dismiss
+              {t('agent.slashCommand.hintDismiss', 'dismiss')}
             </span>
           </div>
         </div>

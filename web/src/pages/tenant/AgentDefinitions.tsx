@@ -441,7 +441,13 @@ export const AgentDefinitions: React.FC = () => {
           />
         </div>
 
-        <div className="flex items-center gap-2" role="group" aria-label={t('tenant.agentDefinitions.filters.groupLabel', { defaultValue: 'Status filter' })}>
+        <div
+          className="flex items-center gap-2"
+          role="group"
+          aria-label={t('tenant.agentDefinitions.filters.groupLabel', {
+            defaultValue: 'Status filter',
+          })}
+        >
           {(['all', 'enabled', 'disabled'] as StatusFilter[]).map((sf) => (
             <button
               key={sf}

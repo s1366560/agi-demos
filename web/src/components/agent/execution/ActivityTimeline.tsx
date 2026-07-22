@@ -18,6 +18,7 @@ import { Lightbulb, Wrench, CheckCircle, RefreshCcw, XCircle, Clock } from 'luci
 import { formatTimeOnly, formatDuration } from '@/utils/date';
 
 import type { ToolCall, ToolResult } from '../../../types/agent';
+import type { TFunction } from 'i18next';
 
 /**
  * Timeline item representing a single activity
@@ -60,11 +61,21 @@ export interface ActivityTimelineProps {
 }
 
 // Format relative time
-const formatRelativeTime = (timestamp: number): string => {
+const formatRelativeTime = (timestamp: number, t: TFunction): string => {
   const diff = Date.now() - timestamp;
-  if (diff < 1000) return 'now';
-  if (diff < 60000) return `${String(Math.floor(diff / 1000))}s ago`;
-  if (diff < 3600000) return `${String(Math.floor(diff / 60000))}m ago`;
+  if (diff < 1000) return t('agent.activityTimeline.timeNow', { defaultValue: 'now' });
+  if (diff < 60000) {
+    return t('agent.activityTimeline.timeSecondsAgo', {
+      count: Math.floor(diff / 1000),
+      defaultValue: '{{count}}s ago',
+    });
+  }
+  if (diff < 3600000) {
+    return t('agent.activityTimeline.timeMinutesAgo', {
+      count: Math.floor(diff / 60000),
+      defaultValue: '{{count}}m ago',
+    });
+  }
   return formatTimeOnly(timestamp);
 };
 
@@ -107,7 +118,9 @@ const ActivityNode: React.FC<ActivityNodeProps> = ({
     }
     switch (status) {
       case 'running':
-        return <RefreshCcw className="animate-spin text-blue-500" size={16} />;
+        return (
+          <RefreshCcw className="animate-spin motion-reduce:animate-none text-blue-500" size={16} />
+        );
       case 'success':
         return <CheckCircle className="text-emerald-500" size={16} />;
       case 'failed':
@@ -149,7 +162,7 @@ const ActivityNode: React.FC<ActivityNodeProps> = ({
         }`}
       >
         <div
-          className={`${compact ? 'w-1' : 'w-1.5'} h-${compact ? '1' : '1.5'} rounded-full ${
+          className={`${compact ? 'w-1 h-1' : 'w-1.5 h-1.5'} rounded-full ${
             isThought
               ? 'bg-amber-500'
               : status === 'success'
@@ -200,7 +213,7 @@ const ActivityNode: React.FC<ActivityNodeProps> = ({
             <span
               className={`${compact ? 'text-2xs' : 'text-xs'} text-slate-400 dark:text-slate-500`}
             >
-              {formatRelativeTime(timestamp)}
+              {formatRelativeTime(timestamp, t)}
             </span>
           </div>
         </div>
@@ -394,7 +407,7 @@ const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
       />
       <span className={`${compact ? 'text-2xs' : 'text-xs'} font-medium`}>
         {isActive
-          ? t('agent.activityTimeline.processing', { defaultValue: 'Processing...' })
+          ? t('agent.activityTimeline.processing', { defaultValue: 'Processing…' })
           : t('agent.activityTimeline.title', { defaultValue: 'Activity Timeline' })}
       </span>
       {timeline.length > 0 && (
@@ -509,7 +522,7 @@ const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
                     } text-slate-400 dark:text-slate-500 italic`}
                   >
                     {t('agent.activityTimeline.waiting', {
-                      defaultValue: 'Waiting for next activity...',
+                      defaultValue: 'Waiting for next activity…',
                     })}
                   </div>
                 </div>

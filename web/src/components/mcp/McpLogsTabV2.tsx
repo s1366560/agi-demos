@@ -14,6 +14,8 @@ import { useMCPStore } from '@/stores/mcp';
 
 import { mcpAPI } from '@/services/mcpService';
 
+import { formatDateTimeFull } from '@/utils/date';
+
 import { CARD_STYLES } from './styles';
 import { useMcpProjectScope } from './useMcpProjectScope';
 
@@ -153,10 +155,14 @@ export const McpLogsTabV2: React.FC = () => {
       <div className={`${CARD_STYLES.base} p-4 shadow-sm`}>
         <div className="flex flex-col sm:flex-row gap-4 items-end">
           <div className="flex-1 min-w-0">
-            <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">
+            <label
+              htmlFor="mcp-logs-server"
+              className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block"
+            >
               {t('mcp.logs.server')}
             </label>
             <Select
+              id="mcp-logs-server"
               value={selectedServer || null}
               onChange={setSelectedServer}
               className="w-full"
@@ -166,10 +172,14 @@ export const McpLogsTabV2: React.FC = () => {
             />
           </div>
           <div className="w-40">
-            <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">
+            <label
+              htmlFor="mcp-logs-level"
+              className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block"
+            >
               {t('mcp.logs.logLevel')}
             </label>
             <Select
+              id="mcp-logs-level"
               value={logLevel}
               onChange={setLogLevel}
               className="w-full"
@@ -252,8 +262,8 @@ export const McpLogsTabV2: React.FC = () => {
                             : JSON.stringify(log.data, null, 2)}
                       </pre>
                     </td>
-                    <td className="px-4 py-2 text-xs text-slate-500 dark:text-slate-400">
-                      {log.timestamp ?? '-'}
+                    <td className="px-4 py-2 text-xs tabular-nums text-slate-500 dark:text-slate-400">
+                      {log.timestamp ? formatDateTimeFull(log.timestamp) : '-'}
                     </td>
                   </tr>
                 ))}

@@ -44,7 +44,8 @@ export const MemoryGraph: React.FC = () => {
 
       <div
         data-testid="graph-node-detail-panel"
-        className={`absolute inset-x-4 bottom-4 top-auto z-20 flex max-h-[70%] w-auto flex-col overflow-hidden rounded-lg border border-slate-200 bg-slate-50 shadow-lg transition-transform duration-200 dark:border-slate-700 dark:bg-slate-900 sm:bottom-6 sm:left-auto sm:right-6 sm:top-6 sm:max-h-none sm:w-80 ${selectedNode ? 'translate-y-0 sm:translate-x-0' : 'translate-y-[120%] sm:translate-x-[120%] sm:translate-y-0'}`}
+        aria-hidden={!selectedNode}
+        className={`absolute inset-x-4 bottom-4 top-auto z-20 flex max-h-[70%] w-auto flex-col overflow-hidden rounded-lg border border-slate-200 bg-slate-50 shadow-lg transition-transform duration-200 motion-reduce:transition-none dark:border-slate-700 dark:bg-slate-900 sm:bottom-6 sm:left-auto sm:right-6 sm:top-6 sm:max-h-none sm:w-80 ${selectedNode ? 'translate-y-0 sm:translate-x-0' : 'translate-y-[120%] sm:translate-x-[120%] sm:translate-y-0'}`}
       >
         {selectedNode ? (
           <>
@@ -72,9 +73,7 @@ export const MemoryGraph: React.FC = () => {
               {selectedNode.uuid && (
                 <div className="flex items-center gap-2 mt-2 text-xs text-slate-400">
                   <Fingerprint size={14} />
-                  <span className="font-mono text-slate-500">
-                    {selectedNode.uuid.slice(0, 8)}...
-                  </span>
+                  <span className="font-mono text-slate-500">{selectedNode.uuid.slice(0, 8)}…</span>
                 </div>
               )}
             </div>

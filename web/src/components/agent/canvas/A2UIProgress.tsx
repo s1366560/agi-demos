@@ -1,6 +1,8 @@
 import { memo, useMemo } from 'react';
 import type { CSSProperties } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import {
   normalizeStyle,
   resolveBoundNumberValue,
@@ -41,6 +43,7 @@ export const A2UIProgress = memo(function A2UIProgress({
 }) {
   const actions = useA2UIActions();
   const { version } = useA2UIState();
+  const { t } = useTranslation();
 
   const props = node.properties ?? {};
   const label = useMemo(() => {
@@ -61,7 +64,7 @@ export const A2UIProgress = memo(function A2UIProgress({
   const clampedValue = clamp(resolvedValue, 0, resolvedMax);
   const percent = resolvedMax > 0 ? clamp((clampedValue / resolvedMax) * 100, 0, 100) : 0;
   const valueText = `${Math.round(percent).toString()}%`;
-  const labelText = label ?? 'Progress';
+  const labelText = label ?? t('components.a2uiProgress.progress', { defaultValue: 'Progress' });
   const labelId = `${surfaceId}-${node.id}-progress-label`.replace(/[^a-zA-Z0-9_-]/g, '-');
 
   const rootStyle =
@@ -94,7 +97,9 @@ export const A2UIProgress = memo(function A2UIProgress({
           role="progressbar"
           {...(label || props.showValue !== false
             ? { 'aria-labelledby': labelId }
-            : { 'aria-label': 'Progress' })}
+            : {
+                'aria-label': t('components.a2uiProgress.progress', { defaultValue: 'Progress' }),
+              })}
           aria-valuemin={0}
           aria-valuemax={resolvedMax}
           aria-valuenow={Math.round(clampedValue)}

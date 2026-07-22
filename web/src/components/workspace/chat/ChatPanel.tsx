@@ -99,10 +99,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ tenantId, projectId, works
             <Spin />
           </div>
         ) : loadError && messages.length === 0 ? (
-          <div
-            className="flex flex-col justify-center items-center h-full gap-2"
-            role="alert"
-          >
+          <div className="flex flex-col justify-center items-center h-full gap-2" role="alert">
             <span className="text-sm text-slate-500 dark:text-slate-400">
               {t('workspaceDetail.chat.loadFailed')}
             </span>

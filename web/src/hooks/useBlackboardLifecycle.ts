@@ -28,6 +28,7 @@ interface BlackboardLifecycleResult {
   workspacesError: string | null;
   surfaceLoading: boolean;
   handleRetrySurface: () => Promise<void>;
+  handleRetryWorkspaces: () => Promise<void>;
 }
 
 export function useBlackboardLifecycle({
@@ -199,6 +200,7 @@ export function useBlackboardLifecycle({
       workspacesError,
       surfaceLoading,
       handleRetrySurface,
+      handleRetryWorkspaces: loadWorkspaces,
     }),
     [
       workspaces,
@@ -207,6 +209,7 @@ export function useBlackboardLifecycle({
       workspacesError,
       surfaceLoading,
       handleRetrySurface,
+      loadWorkspaces,
     ]
   );
 }

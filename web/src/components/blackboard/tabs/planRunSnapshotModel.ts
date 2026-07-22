@@ -9,6 +9,8 @@ import type {
   WorkspaceTask,
 } from '@/types/workspace';
 
+import type { TFunction } from 'i18next';
+
 export type NodeFilter = 'all' | 'running' | 'blocked' | 'verifying' | 'done' | 'recovery';
 export type NodeActionId = 'request_replan' | 'reopen_blocked' | 'accept_with_human_review';
 export type IterationStatus = 'active' | 'completed' | 'blocked' | 'planned';
@@ -64,13 +66,13 @@ export interface WorkspacePlanIterationRun {
   };
 }
 
-export const FILTERS: Array<{ id: NodeFilter; label: string }> = [
-  { id: 'all', label: 'All' },
-  { id: 'running', label: 'Running' },
-  { id: 'verifying', label: 'Verifying' },
-  { id: 'blocked', label: 'Blocked' },
-  { id: 'done', label: 'Done' },
-  { id: 'recovery', label: 'Recovery' },
+export const FILTERS: Array<{ id: NodeFilter; labelKey: string; fallback: string }> = [
+  { id: 'all', labelKey: 'blackboard.planRunFilterAll', fallback: 'All' },
+  { id: 'running', labelKey: 'blackboard.planRunFilterRunning', fallback: 'Running' },
+  { id: 'verifying', labelKey: 'blackboard.planRunFilterVerifying', fallback: 'Verifying' },
+  { id: 'blocked', labelKey: 'blackboard.planRunFilterBlocked', fallback: 'Blocked' },
+  { id: 'done', labelKey: 'blackboard.planRunFilterDone', fallback: 'Done' },
+  { id: 'recovery', labelKey: 'blackboard.planRunFilterRecovery', fallback: 'Recovery' },
 ];
 
 const NODE_TONE: Record<string, string> = {
@@ -125,18 +127,6 @@ export function formatTime(value: string | null | undefined): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
-}
-
-export function formatRelative(value: Date | null): string {
-  if (!value) {
-    return 'never';
-  }
-  const seconds = Math.max(0, Math.round((Date.now() - value.getTime()) / 1000));
-  if (seconds < 60) {
-    return `${String(seconds)}s ago`;
-  }
-  const minutes = Math.round(seconds / 60);
-  return `${String(minutes)}m ago`;
 }
 
 export function asRecord(value: unknown): Record<string, unknown> {
@@ -527,45 +517,45 @@ export function buildIterationRuns(
     });
 }
 
-export function criterionSummary(node: WorkspacePlanNode): string {
+export function criterionSummary(node: WorkspacePlanNode, t: TFunction): string {
   if (node.acceptance_criteria.length === 0) {
-    return 'No checks';
+    return t('blackboard.planRunNoChecks', 'No checks');
   }
   const kinds = node.acceptance_criteria.map((criterion) => criterion.kind);
   return Array.from(new Set(kinds)).join(', ');
 }
 
-export function eventLabel(event: WorkspacePlanEvent): string {
+export function eventLabel(event: WorkspacePlanEvent, t: TFunction): string {
   if (event.event_type === 'worker_progress') {
-    return 'Worker progress';
+    return t('blackboard.planRunEventWorkerProgress', 'Worker progress');
   }
   if (event.event_type === 'worker_report_terminal') {
-    return 'Worker submitted result';
+    return t('blackboard.planRunEventWorkerReportTerminal', 'Worker submitted result');
   }
   if (event.event_type === 'verification_completed') {
     const payload = asRecord(event.payload);
     if (payload.passed === true) {
-      return 'Verifier accepted';
+      return t('blackboard.planRunEventVerifierAccepted', 'Verifier accepted');
     }
     if (payload.hard_fail === true) {
-      return 'Verifier blocked';
+      return t('blackboard.planRunEventVerifierBlocked', 'Verifier blocked');
     }
-    return 'Verifier requested replan';
+    return t('blackboard.planRunEventVerifierReplan', 'Verifier requested replan');
   }
   if (event.event_type === 'operator_retry_outbox') {
-    return 'Operator retried queue job';
+    return t('blackboard.planRunEventOperatorRetryOutbox', 'Operator retried queue job');
   }
   if (event.event_type === 'operator_replan_requested') {
-    return 'Operator requested replan';
+    return t('blackboard.planRunEventOperatorReplan', 'Operator requested replan');
   }
   if (event.event_type === 'operator_node_reopened') {
-    return 'Operator reopened node';
+    return t('blackboard.planRunEventOperatorReopened', 'Operator reopened node');
   }
   if (event.event_type === 'supervisor_tick') {
-    return 'Supervisor scheduled work';
+    return t('blackboard.planRunEventSupervisorTick', 'Supervisor scheduled work');
   }
   if (event.event_type === 'dispatch_deferred_write_conflict') {
-    return 'Dispatch deferred';
+    return t('blackboard.planRunEventDispatchDeferred', 'Dispatch deferred');
   }
   return event.event_type;
 }
@@ -588,31 +578,33 @@ export function rootGoalNeedsClosure(snapshot: WorkspacePlanSnapshot | null): bo
   return Boolean(root && root.status !== 'done');
 }
 
-export function planStage(snapshot: WorkspacePlanSnapshot | null): string {
+export function planStage(snapshot: WorkspacePlanSnapshot | null, t: TFunction): string {
   const plan = snapshot?.plan;
   if (!plan) {
-    return 'Not started';
+    return t('blackboard.planRunStageNotStarted', 'Not started');
   }
   const nodes = plan.nodes;
   if (rootGoalNeedsClosure(snapshot)) {
-    return snapshot.root_goal?.completion_blocker_reason ? 'Root closure needed' : 'Closing root';
+    return snapshot.root_goal?.completion_blocker_reason
+      ? t('blackboard.planRunStageRootClosureNeeded', 'Root closure needed')
+      : t('blackboard.planRunStageClosingRoot', 'Closing root');
   }
   if (plan.status === 'completed' || (nodes.length > 0 && countDone(nodes) === nodes.length)) {
-    return 'Complete';
+    return t('blackboard.planRunStageComplete', 'Complete');
   }
   if (
     nodes.some((node) => node.intent === 'blocked') ||
     snapshot.outbox.some((item) => item.status === 'failed' || item.status === 'dead_letter')
   ) {
-    return 'Recovery needed';
+    return t('blackboard.planRunStageRecoveryNeeded', 'Recovery needed');
   }
   if (nodes.some((node) => node.execution === 'verifying' || node.execution === 'reported')) {
-    return 'Verifying';
+    return t('blackboard.planRunStageVerifying', 'Verifying');
   }
   if (nodes.some((node) => node.execution === 'running' || node.execution === 'dispatched')) {
-    return 'Executing';
+    return t('blackboard.planRunStageExecuting', 'Executing');
   }
-  return 'Planning';
+  return t('blackboard.planRunStagePlanning', 'Planning');
 }
 
 export function matchesFilter(node: WorkspacePlanNode, filter: NodeFilter): boolean {

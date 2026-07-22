@@ -12,6 +12,7 @@ import React, {
   useCallback,
   useMemo,
   useEffect,
+  useRef,
   memo,
 } from 'react';
 
@@ -52,8 +53,10 @@ interface CommunitiesListContextValue {
   communities: Community[];
   selectedCommunity: Community | null;
   members: Entity[];
+  membersLoading: boolean;
   loading: boolean;
   error: string | null;
+  errorSource: ErrorSource | null;
   rebuilding: boolean;
   totalCount: number;
   page: number;
@@ -241,12 +244,14 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
     const [communities, setCommunities] = useState<Community[]>([]);
     const [selectedCommunity, setSelectedCommunity] = useState<Community | null>(null);
     const [members, setMembers] = useState<Entity[]>([]);
+    const [membersLoading, setMembersLoading] = useState(false);
     const [loading, setLoading] = useState(true);
     const [errorState, setErrorState] = useState<ErrorState | null>(null);
     const [rebuilding, setRebuilding] = useState(false);
     const [totalCount, setTotalCount] = useState(0);
     const [page, setPage] = useState(0);
     const [currentTask, setCurrentTask] = useState<BackgroundTask | null>(null);
+    const taskUnsubscribeRef = useRef<(() => void) | null>(null);
 
     // Load communities
     const loadCommunities = useCallback(async () => {
@@ -288,14 +293,21 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
     }, [tenantId, projectId, page, propLimit, t]);
 
     // Load members
-    const loadMembers = useCallback(async (communityUuid: string) => {
-      try {
-        const result = await graphService.getCommunityMembers(communityUuid, 100);
-        setMembers(result.members);
-      } catch (err) {
-        logger.error('Failed to load members:', err);
-      }
-    }, []);
+    const loadMembers = useCallback(
+      async (communityUuid: string) => {
+        setMembersLoading(true);
+        try {
+          const result = await graphService.getCommunityMembers(communityUuid, 100);
+          setMembers(result.members);
+        } catch (err) {
+          logger.error('Failed to load members:', err);
+          void message.error(t('project.graph.communities.messages.members_load_failed'));
+        } finally {
+          setMembersLoading(false);
+        }
+      },
+      [t]
+    );
 
     // Stream task status
     const streamTaskStatus = useCallback(
@@ -394,7 +406,9 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
         const result = await graphService.rebuildCommunities(true, projectId);
 
         if (result.task_id) {
-          streamTaskStatus(result.task_id);
+          // Abort any previous stream before subscribing to the new task.
+          taskUnsubscribeRef.current?.();
+          taskUnsubscribeRef.current = streamTaskStatus(result.task_id);
         } else {
           await loadCommunities();
           void message.success(
@@ -440,6 +454,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
     const selectCommunity = useCallback(
       (community: Community) => {
         setSelectedCommunity(community);
+        setMembers([]);
         void loadMembers(community.uuid);
       },
       [loadMembers]
@@ -474,13 +489,23 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
       void loadCommunities();
     }, [loadCommunities]);
 
+    // Abort the task stream on unmount so no setState happens afterwards.
+    useEffect(() => {
+      return () => {
+        taskUnsubscribeRef.current?.();
+        taskUnsubscribeRef.current = null;
+      };
+    }, []);
+
     const contextValue = useMemo<CommunitiesListContextValue>(
       () => ({
         communities,
         selectedCommunity,
         members,
+        membersLoading,
         loading,
         error: errorState?.message ?? null,
+        errorSource: errorState?.source ?? null,
         rebuilding,
         totalCount,
         page,
@@ -502,6 +527,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
         communities,
         selectedCommunity,
         members,
+        membersLoading,
         loading,
         errorState,
         rebuilding,
@@ -559,9 +585,9 @@ const Header: React.FC = memo(() => {
             void rebuildCommunities();
           }}
           disabled={rebuilding}
-          className="flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2 text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-slate-200"
+          className="flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2 text-white transition-colors hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/30 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-slate-200 dark:focus-visible:ring-slate-50/30"
         >
-          <AlertCircle size={16} />
+          <AlertCircle size={16} aria-hidden="true" />
           {rebuilding
             ? t('project.graph.communities.rebuilding')
             : t('project.graph.communities.rebuild')}
@@ -572,9 +598,9 @@ const Header: React.FC = memo(() => {
             void loadCommunities();
           }}
           disabled={loading}
-          className="flex items-center justify-center gap-2 rounded-md bg-slate-100 px-4 py-2 text-slate-700 transition-colors hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+          className="flex items-center justify-center gap-2 rounded-md bg-slate-100 px-4 py-2 text-slate-700 transition-colors hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/20 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:focus-visible:ring-slate-50/20"
         >
-          <RefreshCw size={16} />
+          <RefreshCw size={16} aria-hidden="true" />
           {t('project.graph.communities.refresh')}
         </button>
       </div>
@@ -618,8 +644,12 @@ const List: React.FC = memo(() => {
 
   if (loading) {
     return (
-      <div data-testid="loading-indicator" className="text-center py-12">
-        <Loader2 size={32} className="text-slate-400 animate-spin motion-reduce:animate-none" />
+      <div data-testid="loading-indicator" className="text-center py-12" role="status">
+        <Loader2
+          size={32}
+          className="text-slate-400 animate-spin motion-reduce:animate-none"
+          aria-hidden="true"
+        />
         <p className="text-slate-500 mt-2">{t('project.graph.communities.empty.loading')}</p>
       </div>
     );
@@ -696,9 +726,9 @@ const Pagination: React.FC = memo(() => {
           setPage(Math.max(0, page - 1));
         }}
         disabled={!hasPrevPage}
-        className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/20 dark:focus-visible:ring-slate-50/20"
       >
-        <ChevronLeft size={14} />
+        <ChevronLeft size={14} aria-hidden="true" />
         {t('common.previous')}
       </button>
       <span className="text-sm text-slate-600 dark:text-slate-400">
@@ -710,10 +740,10 @@ const Pagination: React.FC = memo(() => {
           setPage(page + 1);
         }}
         disabled={!hasNextPage}
-        className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/20 dark:focus-visible:ring-slate-50/20"
       >
         {t('common.next')}
-        <ChevronRight size={14} />
+        <ChevronRight size={14} aria-hidden="true" />
       </button>
     </div>
   );
@@ -722,7 +752,7 @@ Pagination.displayName = 'CommunitiesList.Pagination';
 
 const Detail: React.FC = memo(() => {
   const { t } = useTranslation();
-  const { selectedCommunity, members, closeDetail } = useCommunitiesListContext();
+  const { selectedCommunity, members, membersLoading, closeDetail } = useCommunitiesListContext();
 
   if (!selectedCommunity) {
     return (
@@ -766,7 +796,9 @@ const Detail: React.FC = memo(() => {
           <span className="text-xs font-semibold text-slate-500 uppercase">
             {t('project.graph.communities.detail.members')}
           </span>
-          <p className="text-2xl font-bold text-purple-600">{selectedCommunity.member_count}</p>
+          <p className="text-2xl font-bold tabular-nums text-purple-600">
+            {selectedCommunity.member_count}
+          </p>
         </div>
 
         {selectedCommunity.summary && (
@@ -813,7 +845,16 @@ const Detail: React.FC = memo(() => {
           <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">
             {t('project.graph.communities.detail.member_list', { count: members.length })}
           </h3>
-          {members.length > 0 ? (
+          {membersLoading ? (
+            <p className="flex items-center gap-2 text-sm text-slate-500" role="status">
+              <Loader2
+                size={16}
+                className="animate-spin motion-reduce:animate-none"
+                aria-hidden="true"
+              />
+              {t('project.graph.communities.empty.loading')}
+            </p>
+          ) : members.length > 0 ? (
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {members.slice(0, 20).map((member) => (
                 <div
@@ -857,6 +898,8 @@ const TaskStatus: React.FC = memo(() => {
 
   return (
     <div
+      aria-live="polite"
+      role={currentTask.status === 'failed' ? 'alert' : undefined}
       className={`rounded-lg p-4 border ${
         currentTask.status === 'completed'
           ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
@@ -905,7 +948,7 @@ const TaskStatus: React.FC = memo(() => {
                 onClick={() => {
                   void cancelTask();
                 }}
-                className="px-3 py-1 text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+                className="px-3 py-1 text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600/40"
               >
                 {t('project.graph.communities.task.cancel')}
               </button>
@@ -914,7 +957,7 @@ const TaskStatus: React.FC = memo(() => {
               <button
                 type="button"
                 onClick={dismissTask}
-                className="px-3 py-1 text-xs font-medium bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+                className="px-3 py-1 text-xs font-medium bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/20 dark:focus-visible:ring-slate-50/20"
               >
                 {t('project.graph.communities.task.dismiss')}
               </button>
@@ -935,11 +978,18 @@ const TaskStatus: React.FC = memo(() => {
             <div className="mt-2">
               <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 mb-1">
                 <span>{t('project.graph.communities.task.progress')}</span>
-                <span>{currentTask.progress}%</span>
+                <span className="tabular-nums">{currentTask.progress}%</span>
               </div>
-              <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+              <div
+                className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2"
+                role="progressbar"
+                aria-valuenow={currentTask.progress}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={t('project.graph.communities.task.progress')}
+              >
                 <div
-                  className="bg-blue-600 dark:bg-blue-500 h-2 rounded-full transition-[width] duration-300"
+                  className="bg-blue-600 dark:bg-blue-500 h-2 rounded-full transition-[width] duration-300 motion-reduce:transition-none"
                   style={{ width: formatPercent(currentTask.progress) }}
                 />
               </div>
@@ -985,30 +1035,43 @@ TaskStatus.displayName = 'CommunitiesList.TaskStatus';
 
 const ErrorMessage: React.FC = memo(() => {
   const { t } = useTranslation();
-  const { error, clearError } = useCommunitiesListContext();
+  const { error, errorSource, clearError, loadCommunities } = useCommunitiesListContext();
 
   if (!error) return null;
 
   return (
     <div
       data-testid="error-message"
+      role="alert"
       className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start gap-3"
     >
-      <AlertCircle size={16} className="text-red-600 dark:text-red-400" />
+      <AlertCircle size={16} className="text-red-600 dark:text-red-400" aria-hidden="true" />
       <div>
         <h3 className="font-semibold text-red-900 dark:text-red-300">
           {t('project.graph.communities.task.error')}
         </h3>
         <p className="text-sm text-red-800 dark:text-red-400">{error}</p>
       </div>
+      {errorSource === 'load' && (
+        <button
+          type="button"
+          onClick={() => {
+            clearError();
+            void loadCommunities();
+          }}
+          className="ml-auto shrink-0 rounded px-3 py-1 text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600/40"
+        >
+          {t('common.actions.retry', 'Retry')}
+        </button>
+      )}
       <button
         type="button"
         aria-label={t('project.graph.communities.task.dismiss')}
         title={t('project.graph.communities.task.dismiss')}
         onClick={clearError}
-        className="ml-auto text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
+        className={`${errorSource === 'load' ? '' : 'ml-auto '}shrink-0 text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300`}
       >
-        <X size={16} />
+        <X size={16} aria-hidden="true" />
       </button>
     </div>
   );

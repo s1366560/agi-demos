@@ -18,8 +18,11 @@ import { useTenantStore } from '@/stores/tenant';
 
 import { tenantAPI } from '@/services/api';
 
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning';
+
 import { confirmAction } from '@/utils/confirmAction';
 import { formatDateOnly } from '@/utils/date';
+import { logger } from '@/utils/logger';
 
 import type { Tenant } from '@/types/memory';
 
@@ -62,7 +65,7 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
           setStats(response);
         }
       } catch (error) {
-        console.error('Failed to fetch tenant settings stats:', error);
+        logger.error('Failed to fetch tenant settings stats', error);
         if (isCurrent) {
           setStats(null);
         }
@@ -80,16 +83,20 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
     };
   }, [tenant.id]);
 
+  const isDirty = name !== tenant.name || description !== (tenant.description || '');
+  useUnsavedChangesWarning(isDirty);
+
   const handleSave = async () => {
+    if (!name.trim()) return;
     setMessage(null);
     try {
       await updateTenant(tenant.id, {
-        name,
+        name: name.trim(),
         description,
       });
       setMessage({ type: 'success', text: t('tenant.settings.success') });
     } catch (error) {
-      console.error('Failed to update tenant:', error);
+      logger.error('Failed to update tenant', error);
       setMessage({ type: 'error', text: t('tenant.settings.error') });
     }
   };
@@ -107,7 +114,7 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
       await deleteTenant(tenant.id);
       void navigate('/tenant', { replace: true });
     } catch (error) {
-      console.error('Failed to delete tenant:', error);
+      logger.error('Failed to delete tenant', error);
       setMessage({ type: 'error', text: t('tenant.settings.danger.delete_error') });
     } finally {
       setIsDeleting(false);
@@ -142,12 +149,19 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
 
         <div className="flex flex-col gap-6 max-w-2xl">
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+            <label
+              htmlFor="tenant-settings-name"
+              className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+            >
               {t('tenant.settings.general.name')}
             </label>
             <input
+              id="tenant-settings-name"
               className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none"
               type="text"
+              name="name"
+              autoComplete="organization"
+              spellCheck={false}
               value={name}
               onChange={(event) => {
                 setName(event.target.value);
@@ -155,10 +169,14 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+            <label
+              htmlFor="tenant-settings-description"
+              className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+            >
               {t('tenant.settings.general.description')}
             </label>
             <textarea
+              id="tenant-settings-description"
               className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none resize-none"
               rows={3}
               value={description}
@@ -185,7 +203,7 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
           <div>
             <button
               className="bg-primary hover:bg-primary-dark text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
-              disabled={isLoading}
+              disabled={isLoading || !name.trim()}
               type="button"
               onClick={() => {
                 void handleSave();
@@ -253,7 +271,14 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
                         : `${String(activeProjects)} / ${String(projectLimit)}`}
                   </span>
                 </div>
-                <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"
+                  role="progressbar"
+                  aria-valuenow={Math.round(projectUsagePercent)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={t('tenant.settings.plan.projects')}
+                >
                   <div
                     className="h-full bg-blue-500"
                     style={{ width: `${String(projectUsagePercent)}%` }}
@@ -273,7 +298,14 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
                         : `${String(storageUsagePercent)}%`}
                   </span>
                 </div>
-                <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"
+                  role="progressbar"
+                  aria-valuenow={storageUsagePercent ?? 0}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={t('tenant.settings.plan.storage')}
+                >
                   <div
                     className="h-full bg-purple-500"
                     style={{ width: `${String(storageUsagePercent ?? 0)}%` }}
@@ -307,7 +339,9 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
               void handleDelete();
             }}
           >
-            {isDeleting ? t('tenant.settings.saving') : t('tenant.settings.danger.delete_button')}
+            {isDeleting
+              ? t('tenant.settings.danger.deleting')
+              : t('tenant.settings.danger.delete_button')}
           </button>
         </div>
       </div>

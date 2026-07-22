@@ -178,7 +178,9 @@ export const AppModal: React.FC<AppModalProps> = ({
       }
     };
     document.addEventListener('keydown', onKey, true);
-    return () => { document.removeEventListener('keydown', onKey, true); };
+    return () => {
+      document.removeEventListener('keydown', onKey, true);
+    };
   }, [open, attemptClose, closeOnEscape]);
 
   if (!open) return null;

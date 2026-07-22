@@ -404,7 +404,7 @@ function ThreadDetailView({
                   className="rounded-md bg-primary px-4 py-1.5 text-xs font-medium text-white transition-colors duration-150 hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {updatingPostId === post.id
-                    ? t('common.loading', 'Loading...')
+                    ? t('common.loading', 'Loading…')
                     : t('common.save', 'Save')}
                 </button>
                 <button
@@ -484,7 +484,7 @@ function ThreadDetailView({
       {/* Loading / not loaded states */}
       {!repliesLoaded && loadingRepliesPostId === post.id && (
         <div className="px-4 py-6 text-center text-sm text-text-muted dark:text-text-muted">
-          {t('common.loading', 'Loading...')}
+          {t('common.loading', 'Loading…')}
         </div>
       )}
 
@@ -565,7 +565,7 @@ function ThreadDetailView({
                     className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-white transition-colors duration-150 hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {updatingReplyId === reply.id
-                      ? t('common.loading', 'Loading...')
+                      ? t('common.loading', 'Loading…')
                       : t('common.save', 'Save')}
                   </button>
                   <button
@@ -612,11 +612,11 @@ function ThreadDetailView({
           <TextArea
             id="blackboard-reply-draft"
             value={replyDraft}
-            aria-label={t('blackboard.writeReply', 'Write a reply...')}
+            aria-label={t('blackboard.writeReply', 'Write a reply…')}
             onChange={(event) => {
               setReplyDraft(event.target.value);
             }}
-            placeholder={t('blackboard.writeReply', 'Write a reply...')}
+            placeholder={t('blackboard.writeReply', 'Write a reply…')}
             rows={3}
             maxLength={1000}
             showCount

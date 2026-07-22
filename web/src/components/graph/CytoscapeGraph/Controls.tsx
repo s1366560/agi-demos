@@ -64,7 +64,7 @@ export function CytoscapeGraphControls({ setCyInstance }: ControlsProps) {
             <button
               type="button"
               onClick={actions.relayout}
-              className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+              className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               title={relayoutLabel}
               aria-label={relayoutLabel}
             >
@@ -74,7 +74,7 @@ export function CytoscapeGraphControls({ setCyInstance }: ControlsProps) {
           <button
             type="button"
             onClick={actions.fitView}
-            className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             title={fitToViewLabel}
             aria-label={fitToViewLabel}
           >
@@ -83,7 +83,7 @@ export function CytoscapeGraphControls({ setCyInstance }: ControlsProps) {
           <button
             type="button"
             onClick={actions.reloadData}
-            className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             title={reloadDataLabel}
             aria-label={reloadDataLabel}
           >
@@ -93,7 +93,7 @@ export function CytoscapeGraphControls({ setCyInstance }: ControlsProps) {
             <button
               type="button"
               onClick={actions.exportImage}
-              className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+              className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               title={exportPngLabel}
               aria-label={exportPngLabel}
             >
@@ -123,7 +123,7 @@ export function CytoscapeGraphControls({ setCyInstance }: ControlsProps) {
           <button
             type="button"
             onClick={actions.relayout}
-            className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             title={relayoutLabel}
             aria-label={relayoutLabel}
           >
@@ -133,7 +133,7 @@ export function CytoscapeGraphControls({ setCyInstance }: ControlsProps) {
         <button
           type="button"
           onClick={actions.fitView}
-          className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+          className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           title={fitToViewLabel}
           aria-label={fitToViewLabel}
         >
@@ -142,7 +142,7 @@ export function CytoscapeGraphControls({ setCyInstance }: ControlsProps) {
         <button
           type="button"
           onClick={actions.reloadData}
-          className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+          className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           title={reloadDataLabel}
           aria-label={reloadDataLabel}
         >
@@ -152,7 +152,7 @@ export function CytoscapeGraphControls({ setCyInstance }: ControlsProps) {
           <button
             type="button"
             onClick={actions.exportImage}
-            className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             title={exportPngLabel}
             aria-label={exportPngLabel}
           >

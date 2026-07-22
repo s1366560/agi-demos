@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -16,6 +16,8 @@ import {
   X,
 } from 'lucide-react';
 
+import { confirmAction } from '@/utils/confirmAction';
+import { formatDateTime } from '@/utils/date';
 import { formatTaskProjectionLabel } from '@/utils/workspaceTaskProjection';
 
 import { parseCanonicalStory } from '../agent/canonicalStory/canonicalStory';
@@ -42,6 +44,8 @@ interface TaskExperiencePanelProps {
   error: string | null;
   onRecoveryAction: (action: TaskRecoveryAction) => void;
   onClose: () => void;
+  /** Optional refetch handler — renders a Retry action in the error banner. */
+  onRetry?: (() => void) | undefined;
   embedded?: boolean;
   className?: string;
 }
@@ -79,6 +83,12 @@ const RECOVERY_ACTION_ORDER: TaskRecoveryAction[] = [
   'mark_human_blocked',
 ];
 
+/** Recovery actions that change/destroy execution state — require confirmation. */
+const DESTRUCTIVE_RECOVERY_ACTIONS = new Set<TaskRecoveryAction>([
+  'terminate_stale_conversation',
+  'mark_human_blocked',
+]);
+
 function taskExperienceText(
   t: TFunction,
   key: string,
@@ -101,6 +111,7 @@ export const TaskExperiencePanel: React.FC<TaskExperiencePanelProps> = ({
   error,
   onRecoveryAction,
   onClose,
+  onRetry,
   embedded = false,
   className,
 }) => {
@@ -216,8 +227,20 @@ export const TaskExperiencePanel: React.FC<TaskExperiencePanelProps> = ({
       )}
 
       {error && !loading && (
-        <div className="mx-4 mt-3 rounded-md border border-warning-border bg-warning-bg px-3 py-2 text-xs text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark">
-          {error}
+        <div
+          role="alert"
+          className="mx-4 mt-3 flex items-center justify-between gap-2 rounded-md border border-warning-border bg-warning-bg px-3 py-2 text-xs text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark"
+        >
+          <span>{error}</span>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="shrink-0 rounded px-2 py-0.5 font-medium transition-colors hover:bg-warning-border/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            >
+              {t('common.retry', { defaultValue: 'Retry' })}
+            </button>
+          )}
         </div>
       )}
 
@@ -493,11 +516,11 @@ function SessionHealthSection({
       />
       <MetaRow
         label={taskExperienceText(t, 'labels.lastEvent', 'Last event')}
-        value={session.last_event_at}
+        value={formatTimestamp(session.last_event_at)}
       />
       <MetaRow
         label={taskExperienceText(t, 'labels.assistantEvent', 'Assistant event')}
-        value={session.last_assistant_event_at}
+        value={formatTimestamp(session.last_assistant_event_at)}
       />
       <MetaRow
         label={taskExperienceText(t, 'labels.lastError', 'Last error')}
@@ -582,7 +605,9 @@ function IncidentSection({ session }: { session: TaskExecutionSession | null }) 
     );
   }
   const ledger = session.recovery_actions.map((item) =>
-    [textValue(item.action), textValue(item.status), textValue(item.at)].filter(Boolean).join(' · ')
+    [textValue(item.action), textValue(item.status), formatTimestamp(item.at)]
+      .filter(Boolean)
+      .join(' · ')
   );
   return (
     <Section
@@ -605,7 +630,7 @@ function IncidentSection({ session }: { session: TaskExecutionSession | null }) 
             </p>
             {incident.opened_at && (
               <p className="mt-1 font-mono text-[10px] text-text-muted dark:text-text-muted">
-                {incident.opened_at}
+                {formatTimestamp(incident.opened_at)}
               </p>
             )}
           </div>
@@ -629,6 +654,37 @@ function RecoveryActionRow({
   onRecoveryAction: (action: TaskRecoveryAction) => void;
 }) {
   const { t } = useTranslation();
+  const [clickedAction, setClickedAction] = useState<TaskRecoveryAction | null>(null);
+
+  const effectiveClicked = loading ? clickedAction : null;
+
+  const handleClick = (action: TaskRecoveryAction) => {
+    setClickedAction(action);
+    if (!DESTRUCTIVE_RECOVERY_ACTIONS.has(action)) {
+      onRecoveryAction(action);
+      return;
+    }
+
+    void confirmAction({
+      title: taskExperienceText(t, 'confirm.recoveryTitle', 'Run this recovery action?'),
+      content: taskExperienceText(
+        t,
+        'confirm.recoveryContent',
+        '"{{action}}" changes the execution state of this task.',
+        { action: recoveryActionLabel(action, t) }
+      ),
+      okText: t('common.confirm', { defaultValue: 'Confirm' }),
+      cancelText: t('common.cancel', { defaultValue: 'Cancel' }),
+      danger: true,
+    }).then((confirmed) => {
+      if (confirmed) {
+        onRecoveryAction(action);
+      } else {
+        setClickedAction(null);
+      }
+    });
+  };
+
   return (
     <div className="grid grid-cols-[112px_minmax(0,1fr)] gap-2 text-xs">
       <span className="text-text-muted dark:text-text-muted">
@@ -640,10 +696,10 @@ function RecoveryActionRow({
             key={action}
             size="small"
             icon={<RefreshCcw size={12} />}
-            loading={loading}
+            loading={loading && effectiveClicked === action}
             danger={action === 'mark_human_blocked'}
             onClick={() => {
-              onRecoveryAction(action);
+              handleClick(action);
             }}
           >
             {recoveryActionLabel(action, t)}
@@ -784,7 +840,7 @@ function ActivityTab({ activity }: { activity: Array<Record<string, unknown>> })
             </p>
             {textValue(item.at) && (
               <p className="mt-1 font-mono text-[10px] text-text-muted dark:text-text-muted">
-                {textValue(item.at)}
+                {formatTimestamp(item.at)}
               </p>
             )}
           </div>
@@ -931,6 +987,13 @@ function textValue(value: unknown): string {
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   return '';
+}
+
+/** Format an ISO timestamp for display; falls back to the raw value when unparsable. */
+function formatTimestamp(value: unknown): string {
+  const raw = textValue(value);
+  if (!raw) return '';
+  return formatDateTime(raw) || raw;
 }
 
 function boolText(value: unknown, t: TFunction): string {

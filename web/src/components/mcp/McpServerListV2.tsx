@@ -61,7 +61,7 @@ const StatsCard: React.FC<StatsCardProps> = ({
     <div className="flex items-center justify-between">
       <div>
         <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-1">{title}</p>
-        <p className={`text-2xl font-bold ${textColor}`}>{value}</p>
+        <p className={`text-2xl font-bold tabular-nums ${textColor}`}>{value}</p>
         {subtitle && <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{subtitle}</p>}
       </div>
       <div

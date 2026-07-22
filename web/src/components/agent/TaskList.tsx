@@ -18,17 +18,34 @@ export interface TaskListProps {
   tasks: AgentTask[];
 }
 
-const STATUS_CONFIG: Record<TaskStatus, { icon: typeof Circle; color: string; label: string }> = {
-  pending: { icon: Circle, color: 'text-slate-400 dark:text-slate-500', label: 'Pending' },
-  in_progress: { icon: Loader2, color: 'text-blue-500 dark:text-blue-400', label: 'In Progress' },
-  completed: {
-    icon: CheckCircle2,
-    color: 'text-emerald-500 dark:text-emerald-400',
-    label: 'Completed',
-  },
-  failed: { icon: XCircle, color: 'text-red-500 dark:text-red-400', label: 'Failed' },
-  cancelled: { icon: Ban, color: 'text-slate-400 dark:text-slate-500', label: 'Cancelled' },
-};
+const STATUS_CONFIG: Record<TaskStatus, { icon: typeof Circle; color: string; labelKey: string }> =
+  {
+    pending: {
+      icon: Circle,
+      color: 'text-slate-400 dark:text-slate-500',
+      labelKey: 'agent.taskList.status.pending',
+    },
+    in_progress: {
+      icon: Loader2,
+      color: 'text-blue-500 dark:text-blue-400',
+      labelKey: 'agent.taskList.status.inProgress',
+    },
+    completed: {
+      icon: CheckCircle2,
+      color: 'text-emerald-500 dark:text-emerald-400',
+      labelKey: 'agent.taskList.status.completed',
+    },
+    failed: {
+      icon: XCircle,
+      color: 'text-red-500 dark:text-red-400',
+      labelKey: 'agent.taskList.status.failed',
+    },
+    cancelled: {
+      icon: Ban,
+      color: 'text-slate-400 dark:text-slate-500',
+      labelKey: 'agent.taskList.status.cancelled',
+    },
+  };
 
 const PRIORITY_DOT: Record<string, string> = {
   high: 'bg-red-400',
@@ -51,7 +68,13 @@ const TaskItem = memo<{ task: AgentTask }>(({ task }) => {
           : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
       }`}
     >
-      <div className={`mt-0.5 flex-shrink-0 ${config.color}`}>
+      <div
+        className={`mt-0.5 flex-shrink-0 ${config.color}`}
+        role="img"
+        aria-label={t(config.labelKey, {
+          defaultValue: task.status.replace(/_/g, ' '),
+        })}
+      >
         <Icon size={16} className={isActive ? 'animate-spin motion-reduce:animate-none' : ''} />
       </div>
       <div className="flex-1 min-w-0">
@@ -68,6 +91,11 @@ const TaskItem = memo<{ task: AgentTask }>(({ task }) => {
       {task.priority !== 'medium' && (
         <div
           className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${PRIORITY_DOT[task.priority] || ''}`}
+          role="img"
+          aria-label={t('agent.taskList.priorityTitle', {
+            defaultValue: '{{priority}} priority',
+            priority: task.priority,
+          })}
           title={t('agent.taskList.priorityTitle', {
             defaultValue: '{{priority}} priority',
             priority: task.priority,

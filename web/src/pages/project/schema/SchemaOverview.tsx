@@ -3,18 +3,7 @@ import { useCallback, useMemo, useState, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, Link } from 'react-router-dom';
 
-import {
-  Code,
-  Copy,
-  Download,
-  Search,
-  Plus,
-  MoreVertical,
-  Box,
-  Network,
-  ArrowRight,
-  Share2,
-} from 'lucide-react';
+import { Code, Copy, Download, Search, Plus, Box, Network, ArrowRight, Share2 } from 'lucide-react';
 
 import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 
@@ -156,12 +145,6 @@ const EntityCard = memo(({ entity, t }: EntityCardProps) => {
             </p>
           </div>
         </div>
-        <span
-          aria-hidden="true"
-          className="text-slate-400 dark:text-text-muted-light transition-colors"
-        >
-          <MoreVertical className="w-5 h-5" />
-        </span>
       </div>
       <div className="h-px w-full bg-slate-100 dark:bg-surface-dark-alt"></div>
       <div className="flex flex-col gap-2">
@@ -224,12 +207,6 @@ const EdgeCard = memo(({ edge, mappings, t }: EdgeCardProps) => (
           </p>
         </div>
       </div>
-      <span
-        aria-hidden="true"
-        className="text-slate-400 dark:text-text-muted-light transition-colors"
-      >
-        <MoreVertical className="w-5 h-5" />
-      </span>
     </div>
     <EdgeMappings edgeName={edge.name} mappings={mappings} t={t} />
     <EdgeAttributes edge={edge} t={t} />
@@ -327,7 +304,14 @@ export default function SchemaOverview() {
   const { projectId } = useParams<{ projectId: string }>();
   const { t } = useTranslation();
   const { projectBasePath } = useProjectBasePath();
-  const { entities = [], edges = [], mappings = [], isLoading } = useSchemaData(projectId);
+  const {
+    entities = [],
+    edges = [],
+    mappings = [],
+    isLoading,
+    error,
+    mutate,
+  } = useSchemaData(projectId);
   const [isJsonVisible, setIsJsonVisible] = useState(false);
   const [isCopyingJson, setIsCopyingJson] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -376,7 +360,35 @@ export default function SchemaOverview() {
 
   if (isLoading) {
     return (
-      <div className="p-8 text-center text-slate-500 dark:text-gray-500">{t('common.loading')}</div>
+      <div className="p-8 text-center text-slate-500 dark:text-gray-500" role="status">
+        {t('common.loading')}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-full items-center justify-center p-8">
+        <div
+          role="alert"
+          className="flex flex-col items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-6 py-10 text-center dark:border-red-500/30 dark:bg-red-500/10"
+        >
+          <p className="text-sm text-red-600 dark:text-red-400">
+            {t('project.schema.overview.load_error', 'Failed to load the project schema.')}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              void mutate.entities();
+              void mutate.edges();
+              void mutate.mappings();
+            }}
+            className="inline-flex h-9 items-center rounded-lg bg-slate-950 px-4 text-sm font-medium text-slate-50 transition-colors hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/20 dark:bg-slate-50 dark:text-slate-950 dark:hover:bg-slate-200 dark:focus-visible:ring-slate-50/20"
+          >
+            {t('common.retry', 'Retry')}
+          </button>
+        </div>
+      </div>
     );
   }
 
@@ -387,9 +399,9 @@ export default function SchemaOverview() {
           {/* Page Heading & Actions */}
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
             <div className="flex flex-col gap-2">
-              <h2 className="text-slate-900 dark:text-white text-3xl font-bold tracking-tight">
+              <h1 className="text-slate-900 dark:text-white text-3xl font-bold tracking-tight">
                 {t('project.schema.overview.title')}
-              </h2>
+              </h1>
               <p className="text-slate-500 dark:text-text-muted text-base max-w-2xl">
                 {t('project.schema.overview.subtitle')}
               </p>
@@ -481,22 +493,15 @@ export default function SchemaOverview() {
                 <Search className="text-slate-400 dark:text-text-muted group-focus-within:text-slate-600 dark:group-focus-within:text-white transition-colors w-5 h-5" />
               </div>
               <input
-                className="w-full h-12 pl-12 pr-24 bg-white dark:bg-surface-dark-alt border border-slate-200 dark:border-transparent focus:border-blue-500 dark:focus:border-primary/50 focus:ring-0 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-text-muted text-sm font-medium transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none shadow-sm"
+                className="w-full h-12 pl-12 pr-4 bg-white dark:bg-surface-dark-alt border border-slate-200 dark:border-transparent focus:border-blue-500 dark:focus:border-primary/50 focus:ring-2 focus:ring-blue-500/30 dark:focus:ring-primary/30 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-text-muted text-sm font-medium transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none shadow-sm"
                 placeholder={t('project.schema.overview.search_placeholder')}
+                aria-label={t('project.schema.overview.search_placeholder')}
                 type="text"
                 value={searchQuery}
                 onChange={(event) => {
                   setSearchQuery(event.target.value);
                 }}
               />
-              <div className="absolute inset-y-0 right-2 flex items-center">
-                <kbd
-                  aria-hidden="true"
-                  className="px-2 py-1 text-xs font-medium text-slate-500 dark:text-text-muted bg-slate-100 dark:bg-background-dark rounded border border-slate-200 dark:border-surface-dark-alt"
-                >
-                  CMD + K
-                </kbd>
-              </div>
             </div>
           </div>
 

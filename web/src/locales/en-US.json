@@ -19,6 +19,7 @@
     "yes": "Yes",
     "no": "No",
     "copy": "Copy",
+    "copied": "Copied",
     "download": "Download",
     "upload": "Upload",
     "refresh": "Refresh",
@@ -194,6 +195,13 @@
       "playbooks": "Distilled playbooks",
       "verdicts": "Reflection verdicts"
     },
+    "verdicts": {
+      "create": "Created",
+      "reinforce": "Reinforced",
+      "deprecate": "Deprecated",
+      "noop": "No-op"
+    },
+    "noRationale": "(no rationale)",
     "empty": {
       "playbooks": "No playbooks yet. The reflector will distill them as friction signals accumulate.",
       "verdicts": "No verdicts recorded yet."
@@ -497,6 +505,110 @@
     "planRunNoOutbox": "No queued events.",
     "planRunBlackboardTitle": "Typed blackboard",
     "planRunSelectNodeEmpty": "Select a node to inspect it.",
+    "planRunIteration": "Iteration {{current}}",
+    "planRunSprintTasks": "Sprint tasks",
+    "planRunLoop": "Loop",
+    "planRunPause": "Pause",
+    "planRunResume": "Resume",
+    "planRunPauseUnavailable": "Pause is not available.",
+    "planRunResumeUnavailable": "Resume is not available.",
+    "planRunOutputs": "Outputs",
+    "planRunFeedback": "Feedback",
+    "planRunReviewHistory": "Review history",
+    "planRunDeliveryTitle": "Delivery / CI/CD",
+    "planRunPipeline": "Pipeline",
+    "planRunAssessment": "Assessment",
+    "planRunHealth": "Health",
+    "planRunRestarts": "Restarts",
+    "planRunRunPipeline": "Run pipeline",
+    "planRunPipelineUnavailable": "Pipeline run is not available.",
+    "planRunRegenerate": "Regenerate",
+    "planRunRegenerateUnavailable": "Contract regeneration is not available.",
+    "planRunCodeRoot": "Code root",
+    "planRunIterationLabel": "Iteration",
+    "planRunNotConfigured": "not configured",
+    "planRunNotStarted": "not started",
+    "planRunActivePhase": "Active phase",
+    "planRunQueueJobs": "{{count}} jobs",
+    "planRunQueueFailed": "{{count}} failed",
+    "planRunPreview": "Preview",
+    "planRunUpdatedAgo": "updated {{time}}",
+    "planRunUpdatedLabel": "Updated {{time}}",
+    "planRunNever": "never",
+    "planRunNone": "none",
+    "planRunStaleSnapshot": "stale snapshot",
+    "planRunFilterAll": "All",
+    "planRunFilterRunning": "Running",
+    "planRunFilterVerifying": "Verifying",
+    "planRunFilterBlocked": "Blocked",
+    "planRunFilterDone": "Done",
+    "planRunFilterRecovery": "Recovery",
+    "planRunNode": "Node",
+    "planRunOwner": "Owner",
+    "planRunAttempt": "Attempt",
+    "planRunUpdated": "Updated",
+    "planRunPhase": "Phase",
+    "planRunChecks": "Checks",
+    "planRunWriteSet": "Write set",
+    "planRunFilesCount": "{{count}} file(s)",
+    "planRunWriteScopeGuard": "Write-scope guard",
+    "planRunTabStory": "Story",
+    "planRunTabEvidence": "Evidence",
+    "planRunTabRuns": "Runs",
+    "planRunTabReview": "Review",
+    "planRunTabBlocker": "Blocker",
+    "planRunPhaseContract": "Phase contract",
+    "planRunEntryGate": "Entry: {{gate}}",
+    "planRunExitGate": "Exit: {{gate}}",
+    "planRunNoEntryGate": "No entry gate recorded.",
+    "planRunNoExitGate": "No exit gate recorded.",
+    "planRunRouting": "Routing: {{routing}}",
+    "planRunStandardRouting": "standard routing",
+    "planRunBlockedSemantics": "Blocked: {{semantics}}",
+    "planRunHumanOnlyStops": "Human-only stops.",
+    "planRunAcceptanceCriteria": "Acceptance criteria",
+    "planRunNoAcceptanceCriteria": "No acceptance criteria recorded.",
+    "planRunEvidenceBundle": "Evidence bundle",
+    "planRunChangedFiles": "Changed files",
+    "planRunArtifacts": "Artifacts",
+    "planRunEvidenceRefs": "Evidence refs",
+    "planRunPipelineRefs": "Pipeline refs",
+    "planRunReviewGate": "Review gate",
+    "planRunNoReviewSummary": "No review summary yet.",
+    "planRunMissingLabel": "Missing: {{items}}",
+    "planRunVerificationLabel": "Verification: {{summary}}",
+    "planRunReviewLabel": "Review: {{summary}}",
+    "planRunBlockerAnalysis": "Blocker analysis",
+    "planRunRootCause": "Root cause: {{cause}}",
+    "planRunResolution": "Resolution: {{resolution}}",
+    "planRunNoBlocker": "No blocker recorded.",
+    "planRunContinueRouting": "Continue normal execution or recovery routing.",
+    "planRunRoutingDecision": "Routing: {{decision}}",
+    "planRunNoChecks": "No checks",
+    "planRunChecksSummary": "checks {{summary}}",
+    "planRunOwnerShort": "owner {{id}}",
+    "planRunDepsShort": "deps {{count}}",
+    "planRunWriteShort": "write {{count}}",
+    "planRunNodeShort": "node {{id}}",
+    "planRunAttemptShort": "attempt {{id}}",
+    "planRunStageNotStarted": "Not started",
+    "planRunStageRootClosureNeeded": "Root closure needed",
+    "planRunStageClosingRoot": "Closing root",
+    "planRunStageComplete": "Complete",
+    "planRunStageRecoveryNeeded": "Recovery needed",
+    "planRunStageVerifying": "Verifying",
+    "planRunStageExecuting": "Executing",
+    "planRunStagePlanning": "Planning",
+    "planRunEventWorkerProgress": "Worker progress",
+    "planRunEventWorkerReportTerminal": "Worker submitted result",
+    "planRunEventVerifierAccepted": "Verifier accepted",
+    "planRunEventVerifierBlocked": "Verifier blocked",
+    "planRunEventVerifierReplan": "Verifier requested replan",
+    "planRunEventOperatorRetryOutbox": "Operator retried queue job",
+    "planRunEventOperatorReplan": "Operator requested replan",
+    "planRunEventOperatorReopened": "Operator reopened node",
+    "planRunEventSupervisorTick": "Supervisor scheduled work",
+    "planRunEventDispatchDeferred": "Dispatch deferred",
     "iterationLedgerTitle": "Iteration ledger",
     "iterationLedgerDescription": "Review each sprint by tasks, outputs, verification, and interactions.",
     "iterationLedgerTotal": "{{count}} iterations",
@@ -885,6 +997,7 @@
         "accentColor": "Accent color",
         "labelPlaceholder": "Name this workstation",
         "pickColor": "Pick color",
+        "pickColorValue": "Pick color {{color}}",
         "status": "Status"
       },
       "drawerEmpty": "Use the grid to stage a layout. The action drawer adapts to the selected workstation and keeps destructive actions away from the canvas.",
@@ -1005,6 +1118,7 @@
         "cwd": "Working directory",
         "projectId": "Project ID",
         "prompt": "Prompt",
+        "defaultPrompt": "Reply with PONG only",
         "timeout": "Timeout seconds",
         "success": "ACP test succeeded",
         "failure": "ACP test failed",
@@ -1066,6 +1180,7 @@
         "delete_title": "Delete Organization",
         "delete_desc": "Permanently delete this organization and all of its data. This action cannot be undone.",
         "delete_button": "Delete Organization",
+        "deleting": "Deleting…",
         "delete_confirm": "Delete {{name}}? This action cannot be undone.",
         "delete_error": "Failed to delete organization. Please try again."
       },
@@ -1128,7 +1243,9 @@
       "last_login": "Last login: {{date}}",
       "actions": {
         "edit": "Edit User",
-        "remove": "Remove User"
+        "remove": "Remove User",
+        "editUser": "Edit {{name}}",
+        "removeUser": "Remove {{name}}"
       },
       "invite_modal": {
         "title": "Invite User",
@@ -1138,9 +1255,12 @@
         "message": "Message (Optional)",
         "message_placeholder": "Add invitation message…",
         "cancel": "Cancel",
-        "submit": "Send Invitation"
+        "submit": "Send Invitation",
+        "success": "Invitation sent.",
+        "error": "Failed to send invitation."
       },
       "owner_role_immutable": "Owner role cannot be changed",
+      "updateRoleFailed": "Failed to update user role.",
       "joined_at_label": "Joined At",
       "last_login_label": "Last Login",
       "saving": "Saving…"
@@ -1152,6 +1272,7 @@
       "createFirst": "Create your first agent",
       "empty": "No agent definitions yet",
       "noResults": "No agents match your filters",
+      "loadFailed": "Failed to load agent definitions",
       "refresh": "Refresh agent definitions",
       "toggleAgent": "Toggle {{name}}",
       "openActions": "Open actions for {{name}}",
@@ -1180,20 +1301,38 @@
           "memstack": "MemStack Native"
         },
         "binding": {
-          "priority": "Priority",
-          "score": "Score"
+          "priority": "priority {{value}}",
+          "score": "score {{value}}"
+        },
+        "labels": {
+          "discoverable": "Discoverable",
+          "enabled": "Enabled",
+          "mode": "Mode",
+          "semantic": "Semantic",
+          "keywords": "Keywords",
+          "rawTrigger": "Raw trigger",
+          "bindings": "Bindings",
+          "fallbackModels": "Fallback models",
+          "invocations": "Invocations",
+          "avgExecutionTime": "Avg execution time",
+          "successRate": "Success rate",
+          "createdAt": "Created at",
+          "updatedAt": "Updated at"
         }
       },
       "stats": {
         "agents": "{{count}} agents",
         "enabled": "{{count}} enabled",
         "tenantScoped": "{{count}} tenant",
-        "projectScoped": "{{count}} project"
+        "projectScoped": "{{count}} project",
+        "pageScopeHint": "These counts reflect the current page",
+        "currentPageNote": "(current page)"
       },
       "filters": {
         "all": "All",
         "enabled": "Enabled",
-        "disabled": "Disabled"
+        "disabled": "Disabled",
+        "groupLabel": "Status filter"
       },
       "sort": {
         "label": "Sort agent definitions",
@@ -1205,6 +1344,8 @@
         "enabled": "Agent enabled",
         "disabled": "Agent disabled",
         "deleted": "Agent definition deleted",
+        "toggleFailed": "Failed to update the agent status",
+        "deleteFailed": "Failed to delete the agent definition",
         "createSuccess": "Agent definition created",
         "updateSuccess": "Agent definition updated",
         "projectsLoadFailed": "Failed to load projects"
@@ -1349,7 +1490,9 @@
       "actions": "Actions",
       "openProject": "Open project {{name}}",
       "openProjectActions": "Open actions for {{name}}",
-      "loading": "Loading tenant information…"
+      "loading": "Loading tenant information…",
+      "loadFailed": "Failed to load tenant data",
+      "noProjects": "No projects yet"
     },
     "providers": {
       "title": "LLM Providers",
@@ -1476,6 +1619,7 @@
       "enableSuccess": "Skill enabled",
       "disableSuccess": "Skill disabled",
       "updateSuccess": "Skill updated successfully",
+      "saveFailed": "Failed to save skill",
       "import": {
         "button": "Import",
         "title": "Import Agent Skill",
@@ -1956,6 +2100,8 @@
       "updateSuccess": "MCP server updated successfully",
       "syncSuccess": "Tools synced successfully",
       "syncFailed": "Failed to sync tools",
+      "toggleFailed": "Failed to update server status",
+      "deleteFailed": "Failed to delete MCP server",
       "testSuccess": "Connection test successful",
       "testFailed": "Connection test failed",
       "actions": {
@@ -1992,6 +2138,7 @@
       },
       "filter": {
         "searchPlaceholder": "Search subagents…",
+        "statusGroup": "Filter by status",
         "all": "All",
         "enabled": "Enabled",
         "disabled": "Disabled"
@@ -2039,6 +2186,7 @@
       },
       "createSuccess": "SubAgent created successfully",
       "updateSuccess": "SubAgent updated successfully",
+      "saveFailed": "Failed to save SubAgent",
       "modal": {
         "createTitle": "Create SubAgent",
         "editTitle": "Edit SubAgent",
@@ -2114,6 +2262,8 @@
         "removeExample": "Remove example {{example}}",
         "removeMetadata": "Remove metadata row {{index}}",
         "testKeywords": "Test Keyword Match",
+        "modelInherit": "Inherit from Tenant Config",
+        "colorPresets": "Presets",
         "testQueryPlaceholder": "Enter query to test match…",
         "keywordMatchFound": "Matches keyword: \"{{keyword}}\"",
         "noExactKeywordMatch": "No exact keyword match found. The LLM may still route based on description.",
@@ -2125,6 +2275,7 @@
       "subtitle": "Bind agents to channels to control which agent handles which conversations",
       "createNew": "Create Binding",
       "createFirst": "Create your first binding",
+      "loadFailed": "Failed to load agent bindings",
       "refresh": "Refresh bindings",
       "testRoutingButton": "Test Routing",
       "toggleBinding": "Toggle binding for {{name}}",
@@ -2307,7 +2458,8 @@
       },
       "filters": {
         "workspaceId": "Filter by Workspace ID",
-        "agentInstanceId": "Filter by Agent Instance ID"
+        "agentInstanceId": "Filter by Agent Instance ID",
+        "defaultWorkspaceHint": "No workspace filter set — showing policies for the default workspace."
       },
       "columns": {
         "actionType": "Action Type",
@@ -2745,6 +2897,11 @@
       "detail": {
         "status": "Status",
         "uptime": "Uptime",
+        "uptimeDh": "{{days}}d {{hours}}h",
+        "uptimeHm": "{{hours}}h {{minutes}}m",
+        "uptimeM": "{{minutes}}m",
+        "hideToken": "Hide token",
+        "showToken": "Show token",
         "health": "Health",
         "replicas": "Replicas",
         "imageVersion": "Image Version",
@@ -2853,9 +3010,14 @@
           "cancel": "Cancel",
           "next": "Next",
           "submit": "Create Instance"
-        }
+        },
+        "cancelConfirmTitle": "Discard this instance?",
+        "cancelConfirmContent": "You have unsaved changes. Leaving now will discard them.",
+        "cancelConfirmOk": "Discard",
+        "infraLoadError": "Failed to load clusters and workspaces"
       },
       "emptyText": "No instances found",
+      "loadFailed": "Failed to load instances",
       "members": {
         "title": "Instance Members",
         "description": "Manage who has access to this instance",
@@ -2863,6 +3025,7 @@
         "searchUser": "Search Users",
         "searchUserPlaceholder": "Search by email or name…",
         "searchPlaceholder": "Filter members…",
+        "searchScopeHint": "Search filters members on the current page only",
         "colUser": "User",
         "colRole": "Role",
         "colJoined": "Joined",
@@ -2874,7 +3037,13 @@
         "roleUpdated": "Member role updated",
         "removeSuccess": "Member removed",
         "addSuccess": "Member added",
-        "removeConfirm": "Are you sure you want to remove this member?"
+        "removeConfirm": "Are you sure you want to remove this member?",
+        "roles": {
+          "admin": "Admin",
+          "editor": "Editor",
+          "user": "User",
+          "viewer": "Viewer"
+        }
       },
       "settings": {
         "title": "Instance Settings",
@@ -2902,6 +3071,8 @@
         "llmApiKeyOverrideHintExisting": "Enter a new key to replace the current override, or clear it explicitly.",
         "llmApiKeySet": "API key override is set",
         "llmApiKeyClearOverride": "Clear override",
+        "llmApiKeyClearConfirm": "Clear the stored API key override?",
+        "unsavedChanges": "You have unsaved changes",
         "llmConfigUpdateSuccess": "LLM configuration updated successfully",
         "llmConfigLoadError": "Failed to load LLM configuration"
       },
@@ -2912,6 +3083,8 @@
         "preview": "Preview",
         "newFile": "New File",
         "newFolder": "New Folder",
+        "typeFile": "File",
+        "typeFolder": "Folder",
         "deleteConfirm": "Confirm Delete",
         "deleteFolderConfirmDesc": "Are you sure you want to delete this folder and all its contents?",
         "deleteFileConfirmDesc": "Are you sure you want to delete this file?",
@@ -2957,6 +3130,15 @@
         "colType": "Type",
         "colStatus": "Status",
         "colLastConnected": "Last Connected",
+        "types": {
+          "mcp": "MCP Server",
+          "webhook": "Webhook",
+          "websocket": "WebSocket",
+          "api": "REST API",
+          "slack": "Slack",
+          "discord": "Discord",
+          "email": "Email"
+        },
         "colActions": "Actions",
         "testConnection": "Test Connection",
         "deleteConfirm": "Are you sure you want to delete this channel?",
@@ -3034,6 +3216,10 @@
       "detailTitle": "Deploy Details",
       "notFound": "Deploy record not found",
       "defaultDescription": "New deployment",
+      "manualDescription": "Manual deploy",
+      "triggeredByName": "by {{name}}",
+      "streamFailed": "Live progress updates were interrupted. The page may be out of date.",
+      "reconnect": "Reconnect",
       "empty": "No deploy records",
       "states": {
         "created": "Created",
@@ -3081,6 +3267,19 @@
       "filterFromDate": "From date",
       "filterToDate": "To date",
       "clearFilters": "Clear filters",
+      "loadFailed": "Failed to load audit logs",
+      "resourceTypes": {
+        "all": "All Types",
+        "instance": "Instance",
+        "project": "Project",
+        "user": "User",
+        "tenant": "Tenant",
+        "api_key": "API Key",
+        "member": "Member",
+        "skill": "Skill",
+        "subagent": "SubAgent",
+        "mcp_server": "MCP Server"
+      },
       "exportCsv": "Export CSV",
       "exportJson": "Export JSON",
       "exportSuccess": "Export started",
@@ -3162,6 +3361,8 @@
       "updatedSuccess": "Cluster updated successfully",
       "createdSuccess": "Cluster created successfully",
       "invalidJsonError": "Invalid JSON format",
+      "saveFailedError": "Failed to save the cluster",
+      "healthRefreshed": "Cluster health refreshed",
       "deleteConfirm": "Are you sure you want to delete this cluster?",
       "createTitle": "Add Cluster",
       "editTitle": "Edit Cluster",
@@ -3182,7 +3383,8 @@
       "stats": {
         "total": "Total Clusters",
         "healthy": "Healthy",
-        "unhealthy": "Unhealthy"
+        "unhealthy": "Unhealthy",
+        "pageNote": "(current page)"
       },
       "form": {
         "name": "Cluster Name",
@@ -3204,6 +3406,35 @@
         "memoryUsage": "Memory Usage",
         "checkedAt": "Checked At",
         "noData": "No health data available"
+      },
+      "acpRunners": {
+        "title": "ACP Runners",
+        "addPool": "Add Pool",
+        "pool": "Pool",
+        "mode": "Mode",
+        "runners": "Runners",
+        "sessions": "Sessions",
+        "token": "Registration Token",
+        "created": "Runner pool created",
+        "createTitle": "ACP Runner Pool",
+        "poolKey": "Pool Key",
+        "poolKeyRequired": "Pool key is required",
+        "poolKeyPlaceholder": "local-laptop",
+        "nameRequired": "Name is required",
+        "modeLabel": "Mode",
+        "modes": {
+          "selfHosted": "Self-hosted",
+          "kubernetes": "Kubernetes"
+        },
+        "labelsJson": "Labels JSON",
+        "capacityPolicyJson": "Capacity policy JSON",
+        "schedulingPolicyJson": "Scheduling policy JSON",
+        "tokenExpiry": "Token expiry",
+        "hours": "hours",
+        "tokenReady": "Registration token created. Copy it now; it will not be shown again.",
+        "expiresAt": "Expires at",
+        "loadFailed": "Failed to load runner pools",
+        "tokenFailed": "Failed to generate the registration token"
       },
       "status": {
         "active": "Active",
@@ -3309,6 +3540,8 @@
       "updateError": "Failed to update gene",
       "publishSuccess": "Gene published successfully",
       "unpublishSuccess": "Gene unpublished successfully",
+      "unpublishConfirmTitle": "Unpublish {{name}}?",
+      "unpublishConfirmContent": "This removes the gene from the public marketplace. Installed copies keep working.",
       "publishError": "Failed to publish gene",
       "unpublishError": "Failed to unpublish gene",
       "deleteConfirmTitle": "Delete {{name}}?",
@@ -3331,6 +3564,8 @@
       "instanceId": "Instance ID",
       "instanceIdRequired": "Instance ID is required",
       "instanceIdPlaceholder": "Enter instance ID",
+      "instanceLoadError": "Failed to load instances",
+      "noInstances": "No instances available",
       "configOverride": "Config Override (JSON)",
       "configOverrideTooltip": "Optional JSON configuration to override gene defaults",
       "configOverridePlaceholder": "{\"key\": \"value\"}",
@@ -3378,6 +3613,8 @@
       "createSuccess": "Template created successfully",
       "invalidJson": "Invalid JSON format",
       "cloneSuccess": "Template cloned successfully",
+      "cloneName": "Copy of {{name}}",
+      "searchScopeHint": "Search filters templates on the current page",
       "publishSuccess": "Template published successfully",
       "deleteSuccess": "Template deleted successfully",
       "statusPublished": "Published",
@@ -3421,6 +3658,10 @@
     },
     "genomeDetail": {
       "notFound": "Genome not found",
+      "loadFailed": "Failed to load genome",
+      "unpublishConfirmTitle": "Unpublish {{name}}?",
+      "unpublishConfirmContent": "This removes the genome from the public marketplace. Installed copies keep working.",
+      "loadingGenes": "Loading included genes…",
       "fields": {
         "id": "Genome ID",
         "visibility": "Visibility",
@@ -3519,6 +3760,13 @@
         "colRole": "Role",
         "colJoined": "Joined",
         "roleUpdated": "Member role updated",
+        "roleUpdateError": "Failed to update member role",
+        "roles": {
+          "owner": "Owner",
+          "admin": "Admin",
+          "editor": "Editor",
+          "viewer": "Viewer"
+        },
         "removeSuccess": "Member removed successfully",
         "removeConfirm": "Are you sure you want to remove this member?",
         "inviteSuccess": "Invitation sent successfully",
@@ -3552,7 +3800,15 @@
           "error": "Error"
         },
         "health": "Health",
-        "status": "Status"
+        "status": "Status",
+        "loadFailed": "Failed to load clusters",
+        "statusLabels": {
+          "active": "Active",
+          "maintenance": "Maintenance",
+          "error": "Error",
+          "inactive": "Inactive",
+          "unknown": "Unknown"
+        }
       },
       "audit": {
         "title": "Audit Logs",
@@ -3565,6 +3821,26 @@
         "filterResourceType": "Resource type",
         "filterFromDate": "From date",
         "filterToDate": "To date",
+        "resourceTypes": {
+          "all": "All Types",
+          "instance": "Instance",
+          "project": "Project",
+          "user": "User",
+          "tenant": "Tenant",
+          "cluster": "Cluster",
+          "registry": "Registry",
+          "member": "Member"
+        },
+        "actions": {
+          "all": "All Actions",
+          "create": "Create",
+          "update": "Update",
+          "delete": "Delete",
+          "login": "Login",
+          "logout": "Logout",
+          "invite": "Invite",
+          "export": "Export"
+        },
         "colTimestamp": "Timestamp",
         "colActor": "Actor",
         "colAction": "Action",
@@ -3596,6 +3872,14 @@
         "testConnection": "Test",
         "testSuccess": "Connection successful",
         "testFailed": "Connection failed",
+        "checking": "Checking…",
+        "statusLabels": {
+          "connected": "Connected",
+          "disconnected": "Disconnected",
+          "error": "Error",
+          "checking": "Checking",
+          "unknown": "Unknown"
+        },
         "colName": "Name",
         "colType": "Type",
         "colUrl": "URL",
@@ -3644,6 +3928,7 @@
         "saveError": "Failed to save SMTP configuration",
         "deleteSuccess": "SMTP configuration deleted",
         "deleteError": "Failed to delete SMTP configuration",
+        "deleteConfirm": "Delete the SMTP configuration? Notification emails will no longer be sent.",
         "testTitle": "Test Email",
         "testDescription": "Send a test email to verify your SMTP settings",
         "recipientRequired": "Recipient email is required",
@@ -3673,6 +3958,7 @@
         "saveError": "Failed to save gene policy",
         "deleteSuccess": "Gene policy deleted",
         "deleteError": "Failed to delete gene policy",
+        "deleteConfirm": "Delete this gene policy? This action cannot be undone.",
         "fetchError": "Failed to load gene policies"
       }
     },
@@ -3896,6 +4182,7 @@
       "createSuccess": "Workspace created",
       "createDuplicateError": "A workspace with this name already exists.",
       "createError": "Failed to create workspace",
+      "discardConfirm": "Discard unsaved changes?",
       "archived": "Archived",
       "active": "Active",
       "updated": "Updated {{time}}",
@@ -4178,7 +4465,10 @@
       "actions": {
         "cancel": "Cancel",
         "update": "Update Project"
-      }
+      },
+      "discardConfirmTitle": "Discard unsaved changes?",
+      "discardConfirmContent": "You have unsaved changes. Leaving now will discard them.",
+      "discardConfirmOk": "Discard"
     },
     "settings": {
       "title": "Project Settings",
@@ -4192,6 +4482,7 @@
       "basicPublic": "Make project public",
       "basicSave": "Save",
       "basicSaving": "Saving…",
+      "nameRequired": "Name is required.",
       "memoryTitle": "Memory Rules",
       "memoryMaxEpisodes": "Max Episodes",
       "memoryRetention": "Retention Days",
@@ -4243,6 +4534,11 @@
       "sandboxMemoryLabel": "Memory",
       "sandboxRestart": "Restart",
       "sandboxTerminate": "Terminate",
+      "sandboxTerminateConfirm": "Terminate sandbox?",
+      "sandboxTerminateConfirmDesc": "This stops the running sandbox environment. Unsaved work inside it may be lost.",
+      "sandboxRestartSuccess": "Sandbox restarted",
+      "sandboxTerminateSuccess": "Sandbox terminated",
+      "sandboxActionFailed": "Sandbox action failed",
       "nameLabel": "Project Name *",
       "namePlaceholder": "Enter project name",
       "descriptionLabel": "Description",
@@ -4272,7 +4568,9 @@
       "confirmDelete": "Confirm Delete",
       "deleteProject": "Delete Project",
       "saving": "Saving…",
-      "saveChanges": "Save Changes"
+      "saveChanges": "Save Changes",
+      "saveFailed": "Failed to save project settings.",
+      "deleteFailed": "Failed to delete project."
     },
     "search": {
       "eyebrow": "Knowledge retrieval",
@@ -4302,7 +4600,9 @@
         "title": "Config",
         "advanced": "Advanced",
         "params": "Parameters",
-        "filters": "Filters"
+        "filters": "Filters",
+        "collapse": "Collapse config",
+        "expand": "Expand config"
       },
       "params": {
         "retrieval_mode": "Retrieval Mode",
@@ -4319,6 +4619,7 @@
           "desc": "A specific node UUID to use as the center for node-distance reranking. Results closer to this node will rank higher."
         },
         "focalPlaceholder": "e.g. node-1234-uuid…",
+        "focal_help": "About focal node",
         "cross_encoder": "Cross-Encoder Client",
         "max_depth": "Max Depth",
         "decrease_max_depth": "Decrease max depth",
@@ -4382,6 +4683,7 @@
         "untitled": "Untitled Result",
         "unknown_date": "Unknown Date",
         "copy_id": "Copy Node ID",
+        "view_mode": "Result view mode",
         "empty_title": "No retrieval results",
         "empty_description": "Adjust the query, search mode, or filters and run retrieval again."
       },
@@ -4513,7 +4815,8 @@
           "rebuild_start_failed": "Failed to start community rebuild",
           "rebuild_failed_with_error": "Failed to rebuild: {{error}}",
           "task_cancelled": "Task cancelled",
-          "task_cancel_failed": "Failed to cancel task"
+          "task_cancel_failed": "Failed to cancel task",
+          "members_load_failed": "Failed to load members"
         }
       },
       "entities": {
@@ -4671,7 +4974,9 @@
       "messages": {
         "submit_success": "Ticket submitted successfully!",
         "submit_fail": "Failed to submit ticket",
-        "close_fail": "Failed to close ticket"
+        "close_fail": "Failed to close ticket",
+        "load_fail": "Failed to load support tickets.",
+        "close_success": "Ticket closed"
       },
       "docs": {
         "title": "Documentation",
@@ -4703,7 +5008,8 @@
         "message": "Description",
         "message_placeholder": "Describe your issue in detail…",
         "submit": "Submit Ticket",
-        "submitting": "Submitting…"
+        "submitting": "Submitting…",
+        "required_error": "Subject and message are required."
       },
       "tickets": {
         "close_confirm": "Are you sure you want to close this ticket?",
@@ -4755,6 +5061,7 @@
       "processing": "Processing Status",
       "search_placeholder": "Search memories…",
       "searchPlaceholder": "Search memories…",
+      "loadFailed": "Failed to load memories. Please check your connection and try again.",
       "contentTypeLabel": "Memory type",
       "contentTypes": {
         "text": "Text",
@@ -4868,12 +5175,14 @@
           "placeholder": "# Start typing your memory here…\n\n\nYou can use Markdown syntax to format your text.\n\n- Use lists to organize thoughts\n- **Bold** key concepts\n- Connect ideas with links",
           "markdown_supported": "Markdown Supported"
         },
+        "discard_unsaved_confirm": "Leave without saving? Unsaved content will be lost.",
         "footer": {
           "last_saved": "Last saved: Just now",
           "draft_saved": "Draft saved at {{time}}",
           "online": "Online",
           "word_count": "Word count: {{count}}",
-          "char_count": "Character count: {{count}}"
+          "char_count": "Character count: {{count}}",
+          "draft_saved_toast": "Draft saved"
         }
       },
       "detail": {
@@ -4889,6 +5198,7 @@
           "history": "History"
         },
         "no_content": "No content available.",
+        "load_failed": "Failed to load this memory.",
         "metadata": {
           "id": "ID (UUID)",
           "custom": "Custom Metadata"
@@ -4927,6 +5237,7 @@
         "subtitle": "Visual representation of the Pydantic models defining your graph structure. View entities, relationships, and their attribute definitions.",
         "view_json": "View JSON",
         "export_schema": "Export Schema",
+        "load_error": "Failed to load the project schema.",
         "json_panel_label": "Schema JSON panel",
         "json_panel_title": "Schema JSON",
         "json_panel_description": "Current entity types, relationship types, and mappings as a portable JSON document.",
@@ -5009,6 +5320,11 @@
         "subtitle": "Define the structure of entities in your knowledge graph",
         "createButton": "Create Entity Type",
         "searchPlaceholder": "Search entity types…",
+        "retry": "Retry",
+        "loadError": "Failed to load entity types.",
+        "saveError": "Failed to save entity type",
+        "deleteError": "Failed to delete entity type",
+        "discardChanges": "Discard unsaved changes?",
         "filterProject": "Project scope",
         "listView": "List View",
         "gridView": "Grid View",
@@ -5074,7 +5390,8 @@
           "lastSaved": "Last saved: {{time}}",
           "neverSaved": "Never",
           "discard": "Discard",
-          "save": "Save"
+          "save": "Save",
+          "saving": "Saving…"
         }
       },
       "edges": {
@@ -5120,6 +5437,12 @@
         "subtitle": "Define the structure of relationships in your knowledge graph",
         "createButton": "Create Edge Type",
         "searchPlaceholder": "Search edge types…",
+        "retry": "Retry",
+        "loadError": "Failed to load edge types.",
+        "deleteError": "Failed to delete edge type",
+        "newId": "New ID",
+        "modalSaving": "Saving…",
+        "modalRequired": "Required",
         "filter": "Filter",
         "downloadSchema": "Download Schema",
         "systemActive": "System Active",
@@ -5204,13 +5527,19 @@
           "title": "Add Mapping",
           "select_edge": "Select Edge Type",
           "cancel": "Cancel",
-          "add": "Add Mapping"
+          "add": "Add Mapping",
+          "adding": "Adding…"
         },
         "delete_confirm": "Are you sure you want to remove this mapping?",
         "add_mapping": "Add mapping from {{source}} to {{target}}",
         "remove_mapping": "Remove {{edge}} mapping",
         "close_modal": "Close mapping modal",
-        "create_error": "Failed to create mapping. It might already exist."
+        "create_error": "Failed to create mapping. It might already exist.",
+        "load_error": "Failed to load schema mappings.",
+        "delete_error": "Failed to delete mapping",
+        "create_success": "Mapping created",
+        "no_edge_types": "Create an edge type first.",
+        "source_target": "Source \\ Target"
       },
       "graph": {
         "node_detail": {
@@ -5401,6 +5730,8 @@
       "createJob": "Create Job",
       "updateSuccess": "Scheduled task updated successfully",
       "createSuccess": "Scheduled task created successfully",
+      "loadFailed": "Failed to load cron jobs.",
+      "runsLoadFailed": "Failed to load run history.",
       "saveFailed": "Failed to save task",
       "toggleSuccessEnabled": "Task enabled",
       "toggleSuccessDisabled": "Task disabled",
@@ -5454,6 +5785,8 @@
       "formSeconds": "Seconds",
       "formTargetTime": "Target Time (ISO-8601)",
       "formTargetTimeRequired": "Required for one-off tasks",
+      "formTargetTimeInvalid": "Enter a valid ISO 8601 date-time",
+      "discardChanges": "Discard unsaved changes?",
       "formPayloadConfiguration": "Payload Configuration",
       "formPayloadType": "Payload Type",
       "formSystemEvent": "System Event",
@@ -5596,6 +5929,7 @@
     },
     "agentTeammates": {
       "title": "Agent teammates",
+      "loadFailed": "Failed to load agents",
       "manage": "Manage",
       "startConversation": "Start conversation",
       "chatTitle": "Chat with {{name}}",
@@ -5620,6 +5954,7 @@
       "tabMemory": "Memory Rules",
       "tabGraph": "Graph Config",
       "tabSandbox": "Sandbox Settings",
+      "tabsLabel": "Project creation sections",
       "nameLabel": "Project Name *",
       "namePlaceholder": "Enter project name",
       "descriptionLabel": "Project Description",
@@ -5806,7 +6141,14 @@
       "activeSummary": "{{count}} task in progress",
       "activeSummary_one": "{{count}} task in progress",
       "activeSummary_other": "{{count}} tasks in progress",
-      "priorityTitle": "{{priority}} priority"
+      "priorityTitle": "{{priority}} priority",
+      "status": {
+        "pending": "Pending",
+        "inProgress": "In progress",
+        "completed": "Completed",
+        "failed": "Failed",
+        "cancelled": "Cancelled"
+      }
     },
     "taskLanePanel": {
       "empty": "No tasks yet. The agent will create lanes when working on complex requests.",
@@ -5846,6 +6188,16 @@
       "rowCount_other": "{{count}} rows",
       "searchAria": "Search table rows",
       "exportCsv": "Export CSV"
+    },
+    "evidence": {
+      "bundleTitle": "Evidence bundle",
+      "emptyBucket": "No evidence in this bucket yet.",
+      "tabs": {
+        "testRuns": "Test runs",
+        "diffs": "Diffs",
+        "screenshots": "Screenshots",
+        "logs": "Logs"
+      }
     },
     "multiAgent": {
       "status": {
@@ -5924,6 +6276,13 @@
     "activityTimeline": {
       "title": "Activity Timeline",
       "processing": "Processing…",
+      "timeNow": "now",
+      "timeSecondsAgo_one": "{{count}}s ago",
+      "timeSecondsAgo_other": "{{count}}s ago",
+      "timeSecondsAgo": "{{count}}s ago",
+      "timeMinutesAgo_one": "{{count}}m ago",
+      "timeMinutesAgo_other": "{{count}}m ago",
+      "timeMinutesAgo": "{{count}}m ago",
       "activityCount": "{{count}} activities",
       "activityCount_one": "{{count}} activity",
       "activityCount_other": "{{count}} activities",
@@ -6118,6 +6477,9 @@
         "aborted": "Aborted"
       }
     },
+    "resizer": {
+      "label": "Resize panel"
+    },
     "rightPanel": {
       "taskCount": "{{count}} item",
       "taskCount_one": "{{count}} item",
@@ -6126,17 +6488,22 @@
       "switchToLane": "Switch to lane view",
       "list": "List",
       "lanes": "Lanes",
+      "close": "Close panel",
       "tabs": {
         "tasks": "Tasks",
         "agent": "Session",
         "insights": "Insights",
         "agents": "Agents",
-        "graph": "Graph"
+        "graph": "Graph",
+        "ariaLabel": "Panel views"
+      },
+      "agentSession": {
+        "retry": "Retry"
       },
       "workspacePlan": {
         "planSummary": "{{done}}/{{total}} plan nodes done",
         "partial": "Partial",
-        "loading": "Loading",
+        "loading": "Loading…",
         "untitledPlan": "Workspace plan",
         "sourceTask": "Task",
         "sourceVerify": "Verify",
@@ -6151,7 +6518,9 @@
           "in_progress": "In progress",
           "blocked": "Blocked",
           "done": "Done"
-        }
+        },
+        "completionLabel": "Plan completion",
+        "rowProgressLabel": "Task progress"
       },
       "insights": {
         "empty": "Execution diagnostics will appear after the agent makes routing and tool-selection decisions.",
@@ -6333,7 +6702,21 @@
       "searchCurrentConversationPlaceholder": "Search current conversation…",
       "online": "Agent Online",
       "viewExecutionHistory": "View execution history",
-      "viewWorkflowPatterns": "View workflow patterns"
+      "viewWorkflowPatterns": "View workflow patterns",
+      "modeTooltip": "{{label}} Mode",
+      "modeAriaLabel": "{{label}} mode",
+      "modes": {
+        "chat": "Chat",
+        "task": "Task",
+        "code": "Code",
+        "canvas": "Canvas",
+        "collab": "Collab",
+        "chatDescription": "Full chat view with optional plan panel",
+        "taskDescription": "Split view: chat + task panel (50/50)",
+        "codeDescription": "Split view: chat + terminal (50/50)",
+        "canvasDescription": "Split view: chat + artifact canvas (35/65)",
+        "collabDescription": "Split view: chat + workspace group chat (55/45)"
+      }
     },
     "collab": {
       "noWorkspace": "No workspace selected"
@@ -6557,6 +6940,9 @@
       "pin": "Pin",
       "unpin": "Unpin",
       "jumpToMessage": "Jump to message",
+      "expandTurn": "Expand turn",
+      "collapseTurn": "Collapse turn",
+      "expandTurnWithCount": "Expand ({{count}})",
       "reply": "Reply"
     },
     "branch": {
@@ -6633,8 +7019,18 @@
         "online": "Online"
       },
       "slots": {
-        "suggestions": "Suggestions",
-        "artifacts": "Artifacts"
+        "task": "Task",
+        "taskProgress": "Task progress",
+        "streaming": "streaming",
+        "doomLoop": "doom-loop",
+        "suggestions_one": "{{count}} suggestion",
+        "suggestions_other": "{{count}} suggestions",
+        "suggestions": "{{count}} suggestion(s)",
+        "evidence": "Evidence",
+        "artifacts_one": "{{count}} artifact",
+        "artifacts_other": "{{count}} artifacts",
+        "artifacts": "{{count}} artifact(s)",
+        "evidenceHint": "Open the Evidence drawer to inspect screenshots, diffs, test runs and logs"
       }
     },
     "projectSelector": {
@@ -6753,6 +7149,7 @@
     },
     "inputBar": {
       "placeholder": "Ask me anything, or type '/' for commands…",
+      "voiceCallNeedsContext": "Open a conversation in a project to start a voice call.",
       "planPlaceholder": "Describe what you want to plan in detail…",
       "planModeActive": "Plan Mode Active",
       "attachFiles": "Attach files (or drag & drop)",
@@ -6809,7 +7206,10 @@
       "noSkills": "No active skills available",
       "noItems": "No commands or skills available",
       "groupCommands": "Commands",
-      "groupSkills": "Skills"
+      "groupSkills": "Skills",
+      "hintNavigate": "navigate",
+      "hintSelect": "select",
+      "hintDismiss": "dismiss"
     },
     "shortcuts": {
       "title": "Keyboard Shortcuts",
@@ -6860,6 +7260,10 @@
       "presentationDownloadMessage": "Download this presentation to open it in PowerPoint, Keynote, or compatible office software.",
       "legacyOfficeMessage": "Legacy Office format (.doc/.xls/.ppt) preview is not supported. Please convert to .docx/.xlsx/.pptx for preview.",
       "askRefine": "Ask Agent to Refine",
+      "editorLabel": "Editor for {{title}}",
+      "discardChangesTitle": "Discard unsaved changes?",
+      "discardChangesContent": "\"{{title}}\" has unsaved changes that will be lost.",
+      "discardChangesConfirm": "Discard",
       "newTab": "New tab",
       "newCode": "New Code",
       "newMarkdown": "New Markdown",
@@ -7029,6 +7433,8 @@
       "parallel_completed": "completed",
       "chain_completed": "steps completed",
       "unnamed": "Unnamed Agent",
+      "unknownError": "Unknown error",
+      "sessionSpawned": "Session spawned",
       "viewDetails": "Show details",
       "hideDetails": "Hide details",
       "progress": {
@@ -7050,7 +7456,11 @@
       "empty": "No background tasks",
       "clear": "Clear",
       "clearAll": "Clear all",
+      "clearAllConfirmTitle": "Clear all execution records?",
       "kill": "Stop execution",
+      "killConfirmTitle": "Stop this execution?",
+      "killConfirmDescription": "The running task will be terminated.",
+      "cancel": "Cancel",
       "hideDetails": "Hide details",
       "showDetails": "Show details"
     },
@@ -7112,6 +7522,8 @@
       "marketplace": "Template Marketplace",
       "marketplaceDesc": "Browse and install SubAgent templates to extend your agent capabilities.",
       "seedBuiltin": "Seed Built-in",
+      "seeding": "Seeding…",
+      "categoryFilter": "Category filter",
       "install": "Install",
       "installed": "Installed SubAgent: {{name}}",
       "installError": "Failed to install template",
@@ -7175,8 +7587,14 @@
         "accept": "Accept",
         "reject": "Reject",
         "open": "Open",
-        "acceptOption": "Accept option",
-        "rejectOption": "Reject option"
+        "acceptOption": "Accept: {{option}}",
+        "rejectOption": "Reject: {{option}}",
+        "filter": {
+          "all": "All",
+          "clarification": "Clarification",
+          "decision": "Decision",
+          "envVar": "Env var"
+        }
       },
       "title": {
         "clarification": "Needs clarification",
@@ -7219,7 +7637,11 @@
         "submit": "Submit"
       },
       "multiselect": {
-        "limit": "You may select up to {{max}} items"
+        "limit": "You may select up to {{max}} items",
+        "limitReached": "You can only select up to {{max}} items"
+      },
+      "errors": {
+        "submitFailed": "Failed to submit response. Please try again."
       },
       "action": {
         "view_details": "View details",
@@ -7282,7 +7704,7 @@
         "terminated_desc": "Sandbox has been terminated",
         "error": "Error",
         "error_desc": "Sandbox encountered an error",
-        "starting": "Starting"
+        "starting": "Starting…"
       },
       "label": "Sandbox environment",
       "click_to_start": "Click to start sandbox",
@@ -7355,7 +7777,13 @@
       "setCoordinator": "Set as coordinator",
       "setCoordinatorFor": "Set {{name}} as coordinator",
       "remove": "Remove {{name}}",
-      "removeConfirmTitle": "Remove participant?",
+      "removeConfirmTitle": "Remove {{name}} from the conversation?",
+      "removeOk": "Remove",
+      "cancel": "Cancel",
+      "retry": "Retry",
+      "setFocusedSuccess": "Focused agent updated",
+      "setCoordinatorSuccess": "Coordinator updated",
+      "actionFailed": "Action failed",
       "autonomousRequiresCoordinator": "Autonomous mode requires a coordinator. Click ★ on a participant to assign.",
       "isolatedSuggestsFocused": "Isolated mode works best with one focused agent. Click ◎ on a participant to set it.",
       "noneAvailable": "No more agents available. Add agents to the linked workspace to see them here.",
@@ -7447,8 +7875,12 @@
     "selectConversation": "Select conversation to compare",
     "search": "Search conversations…",
     "noResults": "No conversations found",
+    "messageCount_one": "{{count}} message",
+    "messageCount_other": "{{count}} messages",
+    "messageCount": "{{count}} messages",
     "loading": "Loading…",
     "noMessages": "No messages",
+    "loadFailed": "Failed to load messages",
     "exitCompare": "Exit comparison",
     "compare": "Compare"
   },
@@ -7509,7 +7941,8 @@
     "title": "Workspace Settings",
     "description": "Control the operating model, autonomy policy, code context, and access for this workspace.",
     "actions": {
-      "reset": "Reset"
+      "reset": "Reset",
+      "resetConfirm": "Discard all unsaved changes?"
     },
     "summary": {
       "useCase": "Use case",
@@ -7563,6 +7996,7 @@
       "serviceCount": "{{count}} service(s)",
       "autoPreview": "auto preview",
       "pipelineOnly": "pipeline only",
+      "contractConfidence": "{{percent}}% confidence",
       "manualLock": "Manual lock",
       "contractSource": "Contract source",
       "provider": "Provider",
@@ -7673,6 +8107,7 @@
       "removeFailed": "Failed to remove member.",
       "roleUpdateSuccess": "Member role updated successfully.",
       "roleUpdateFailed": "Failed to update member role.",
+      "roleForMember": "Role for {{email}}",
       "noMembers": "No members yet.",
       "owner": "Owner",
       "editor": "Editor",
@@ -7734,6 +8169,15 @@
       "taskTitlePlaceholder": "Task title…",
       "taskTitle": "Task title",
       "priority": "Priority",
+      "priorityNone": "None",
+      "noTasks": "No tasks",
+      "rootGoal": "Root goal",
+      "evidenceGrade": "Evidence {{grade}}",
+      "pendingAdjudicationBadge": "Pending adjudication",
+      "durableVerdict": "Durable {{verdict}}",
+      "noConversation": "No conversation",
+      "agentsDigest": "AGENTS {{digest}}",
+      "agentsFiles": "{{count}} file(s)",
       "effort": "Effort",
       "add": "Add",
       "unassigned": "Unassigned",
@@ -7775,7 +8219,9 @@
       "sendFailed": "Failed to send message",
       "loadFailed": "Failed to load messages",
       "senderAgent": "Agent",
-      "senderUser": "User"
+      "senderUser": "User",
+      "workspaceChatFallback": "Workspace Chat",
+      "workspaces": "Workspaces"
     },
     "taskExperience": {
       "title": "Task experience",
@@ -7783,6 +8229,10 @@
       "loadFailed": "Task experience could not be loaded.",
       "recoveryQueued": "Recovery action has been recorded.",
       "recoveryFailed": "Recovery action could not be applied.",
+      "confirm": {
+        "recoveryTitle": "Run this recovery action?",
+        "recoveryContent": "\"{{action}}\" changes the execution state of this task."
+      },
       "tabs": {
         "overview": "Overview",
         "contract": "Goal Contract",
@@ -7982,6 +8432,9 @@
       "busy": "Busy",
       "error": "Error",
       "statusLabel": "{{name}} ({{status}})"
+    },
+    "hex3d": {
+      "initializing": "Initializing 3D view…"
     },
     "agents": {
       "addTitle": "Add Agent to Workspace",
@@ -8273,6 +8726,12 @@
     "footer": "Only approve codes you just generated yourself. A 30-day API key will be issued to the waiting CLI."
   },
   "mcp": {
+    "toolsDrawer": {
+      "title": "Server Tools",
+      "serverTools": "{{name}} - Tools",
+      "empty": "No tools discovered. Try syncing the server.",
+      "inputSchema": "Input Schema"
+    },
     "serverDrawer": {
       "createTitle": "Create MCP Server",
       "editTitle": "Edit MCP Server",
@@ -8291,6 +8750,7 @@
         "websocket": "WebSocket"
       },
       "transportConfig": "Transport Config",
+      "saveFailed": "Failed to save MCP server",
       "jsonObjectRequired": "Transport config must be a JSON object",
       "invalidJson": "Invalid JSON configuration",
       "requiredFields": "Please complete required fields",
@@ -8370,6 +8830,7 @@
       "totalTools": "Total tools",
       "serversWithTools": "Servers with tools",
       "showCount": "Showing {{shown}} / {{total}}",
+      "renderCapNote": "Showing first {{shown}} of {{total}} tools — refine your search or server filter.",
       "searchPlaceholder": "Search tool name or description…",
       "filterByServer": "Filter by server",
       "emptyNoTools": "No tools yet",
@@ -8437,6 +8898,7 @@
       "emptyHint": "Apps will appear here once MCP servers are discovered."
     },
     "appCard": {
+      "deleteAria": "Delete {{name}}",
       "runtimePrefix": "Runtime: {{value}}",
       "resourceUri": "Resource URI",
       "noResourceUri": "No resource URI",
@@ -8486,6 +8948,8 @@
       "enableSuccess": "Server enabled",
       "disableSuccess": "Server disabled",
       "syncSuccess": "Server synced",
+      "syncFailed": "Failed to sync server",
+      "testFailed": "Connection test failed",
       "connectSuccess": "Connected",
       "connectSuccessDetail": "Connected ({{latency}}ms, {{count}} tools)",
       "connectFailed": "Connection failed: {{message}}",
@@ -8515,6 +8979,9 @@
       "addTagAria": "Add new tag",
       "addTag": "Add",
       "optimisticLockWarning": "This memory uses optimistic locking. If another user modified it concurrently, please reload and try again.",
+      "outdatedData": "This memory data is outdated. Please refresh the page and try again.",
+      "conflict": "This memory has been modified by another user. Please refresh and try again.",
+      "updateFailed": "Failed to update memory. Please try again.",
       "cancel": "Cancel",
       "saving": "Saving…",
       "save": "Save changes"
@@ -8697,6 +9164,9 @@
     "taskList": {
       "title": "Tasks",
       "searchPlaceholder": "Search Task ID or Name…",
+      "searchAria": "Search tasks",
+      "statusFilter": "Filter by status",
+      "loadFailed": "Failed to load tasks.",
       "refresh": "Refresh tasks",
       "empty": "No tasks found",
       "confirmStop": "Are you sure you want to stop this task?",
@@ -8714,7 +9184,9 @@
       },
       "messages": {
         "retryFailed": "Failed to retry task. Please try again.",
-        "stopFailed": "Failed to stop task. Please try again."
+        "stopFailed": "Failed to stop task. Please try again.",
+        "retrySuccess": "Task retry queued.",
+        "stopSuccess": "Task stopped."
       },
       "pagination": {
         "showing": "Showing {{count}} of {{total}} tasks"
@@ -9356,6 +9828,11 @@
         "hoursAgo": "{{count}}h ago"
       }
     },
+    "patternStats": {
+      "totalLearned": "Total Patterns Learned",
+      "avgSuccessRate": "Avg. Success Rate",
+      "deprecated": "Deprecated Patterns"
+    },
     "patternInspector": {
       "copySuccess": "Copied to clipboard",
       "copyFailed": "Copy failed",
@@ -9537,7 +10014,23 @@
     },
     "a2uiRenderer": {
       "errorTitle": "A2UI render error",
-      "unknownError": "Unknown error"
+      "unknownError": "Unknown error",
+      "unableToRender": "Unable to render A2UI content preview.",
+      "plainOutputUnavailable": "Showing plain message output is not available for this surface.",
+      "textPreview": "A2UI Text Preview",
+      "invalidPayload": "Invalid A2UI payload",
+      "recoveredPreview": "Recovered text preview",
+      "actionDisconnected": "This canvas action is no longer connected to an active conversation.",
+      "actionNotAwaiting": "This interactive surface is no longer awaiting input.",
+      "actionSendFailed": "Failed to send the canvas action. Please try again.",
+      "waitingForData": "Waiting for A2UI surface data…",
+      "preparingPanel": "The agent is still preparing this canvas panel."
+    },
+    "a2uiProgress": {
+      "progress": "Progress"
+    },
+    "a2uiViewer": {
+      "noContent": "No content to display"
     },
     "kasmVNC": {
       "autoResolution": "Auto (fit panel)",
@@ -9553,7 +10046,9 @@
       "fullscreen": "Fullscreen",
       "exitFullscreen": "Exit fullscreen",
       "connectingToDesktop": "Connecting to desktop…",
-      "failedToConnect": "Failed to connect to desktop"
+      "failedToConnect": "Failed to connect to desktop",
+      "connectionLost": "Connection lost",
+      "connectionLostRetries": "Connection lost after max retries"
     },
     "sandboxSection": {
       "terminal": "Terminal",
@@ -9591,7 +10086,10 @@
       "connectingToTerminal": "Connecting to terminal…",
       "connectionError": "Connection Error",
       "retry": "Retry",
-      "loadingTerminal": "Loading terminal…"
+      "loadingTerminal": "Loading terminal…",
+      "connectedWelcome": "✓ Connected to sandbox terminal",
+      "unknownError": "Unknown error",
+      "maxRetriesReached": "Unable to reconnect after several attempts. Please retry manually."
     },
     "remoteDesktop": {
       "notRunning": "Desktop is not running",
@@ -9614,7 +10112,8 @@
     }
   },
   "executionDag": {
-    "graphStats": "{{nodes}} nodes · {{edges}} edges"
+    "graphStats": "{{nodes}} nodes · {{edges}} edges",
+    "ariaLabel": "Execution graph"
   },
   "theme": {
     "dark": "Dark",

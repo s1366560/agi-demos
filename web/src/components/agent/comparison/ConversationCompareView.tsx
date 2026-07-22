@@ -68,43 +68,60 @@ interface PanelProps {
   title: string;
   messages: SimpleMessage[];
   loading: boolean;
+  error?: boolean | undefined;
+  onRetry?: (() => void) | undefined;
   placeholder?: React.ReactNode | undefined;
 }
 
-const ComparePanel = memo(({ title, messages, loading, placeholder }: PanelProps) => {
-  const { t } = useTranslation();
-  const scrollRef = useRef<HTMLDivElement>(null);
+const ComparePanel = memo(
+  ({ title, messages, loading, error, onRetry, placeholder }: PanelProps) => {
+    const { t } = useTranslation();
+    const scrollRef = useRef<HTMLDivElement>(null);
 
-  return (
-    <div className="flex-1 min-w-0 flex flex-col h-full border-r last:border-r-0 border-slate-200/60 dark:border-slate-700/50">
-      <div className="flex-shrink-0 px-4 py-2.5 border-b border-slate-200/60 dark:border-slate-700/50 bg-slate-50/80 dark:bg-slate-800/50">
-        <div className="flex items-center gap-2">
-          <MessageSquare size={14} className="text-slate-400" />
-          <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
-            {title}
-          </span>
+    return (
+      <div className="flex-1 min-w-0 flex flex-col h-full border-r last:border-r-0 border-slate-200/60 dark:border-slate-700/50">
+        <div className="flex-shrink-0 px-4 py-2.5 border-b border-slate-200/60 dark:border-slate-700/50 bg-slate-50/80 dark:bg-slate-800/50">
+          <div className="flex items-center gap-2">
+            <MessageSquare size={14} className="text-slate-400" />
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
+              {title}
+            </span>
+          </div>
+        </div>
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
+          {loading ? (
+            <div className="flex items-center justify-center h-32 text-slate-400 text-sm">
+              {t('comparison.loading', { defaultValue: 'Loading…' })}
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center h-32 gap-2 text-slate-400 text-sm">
+              <span>{t('comparison.loadFailed', { defaultValue: 'Failed to load messages' })}</span>
+              {onRetry ? (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="px-3 py-1 text-xs rounded-md bg-primary/10 text-primary-600 dark:text-primary-400 hover:bg-primary/20 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                >
+                  {t('common.retry', { defaultValue: 'Retry' })}
+                </button>
+              ) : null}
+            </div>
+          ) : placeholder ? (
+            placeholder
+          ) : messages.length === 0 ? (
+            <div className="flex items-center justify-center h-32 text-slate-400 text-sm">
+              {t('comparison.noMessages', { defaultValue: 'No messages' })}
+            </div>
+          ) : (
+            messages.map((msg) => (
+              <SimpleMessageBubble key={msg.id} role={msg.role} content={msg.content} />
+            ))
+          )}
         </div>
       </div>
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
-        {loading ? (
-          <div className="flex items-center justify-center h-32 text-slate-400 text-sm">
-            {t('comparison.loading', { defaultValue: 'Loading...' })}
-          </div>
-        ) : placeholder ? (
-          placeholder
-        ) : messages.length === 0 ? (
-          <div className="flex items-center justify-center h-32 text-slate-400 text-sm">
-            {t('comparison.noMessages', { defaultValue: 'No messages' })}
-          </div>
-        ) : (
-          messages.map((msg) => (
-            <SimpleMessageBubble key={msg.id} role={msg.role} content={msg.content} />
-          ))
-        )}
-      </div>
-    </div>
-  );
-});
+    );
+  }
+);
 
 ComparePanel.displayName = 'ComparePanel';
 
@@ -123,6 +140,10 @@ export const ConversationCompareView = memo(
     const [rightMessages, setRightMessages] = useState<SimpleMessage[]>([]);
     const [leftLoading, setLeftLoading] = useState(true);
     const [rightLoading, setRightLoading] = useState(false);
+    const [leftError, setLeftError] = useState(false);
+    const [rightError, setRightError] = useState(false);
+    const [leftLoadNonce, setLeftLoadNonce] = useState(0);
+    const [rightLoadNonce, setRightLoadNonce] = useState(0);
 
     const leftConv = conversations.find((c) => c.id === leftConversationId);
     const rightConv = rightConversationId
@@ -141,12 +162,13 @@ export const ConversationCompareView = memo(
       let cancelled = false;
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLeftLoading(true);
+      setLeftError(false);
       loadConversationMessages(leftConversationId)
         .then((msgs) => {
           if (!cancelled) setLeftMessages(msgs);
         })
         .catch(() => {
-          if (!cancelled) setLeftMessages([]);
+          if (!cancelled) setLeftError(true);
         })
         .finally(() => {
           if (!cancelled) setLeftLoading(false);
@@ -154,22 +176,24 @@ export const ConversationCompareView = memo(
       return () => {
         cancelled = true;
       };
-    }, [leftConversationId, loadConversationMessages]);
+    }, [leftConversationId, leftLoadNonce, loadConversationMessages]);
 
     useEffect(() => {
       if (!rightConversationId) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setRightMessages([]);
+        setRightError(false);
         return;
       }
       let cancelled = false;
       setRightLoading(true);
+      setRightError(false);
       loadConversationMessages(rightConversationId)
         .then((msgs) => {
           if (!cancelled) setRightMessages(msgs);
         })
         .catch(() => {
-          if (!cancelled) setRightMessages([]);
+          if (!cancelled) setRightError(true);
         })
         .finally(() => {
           if (!cancelled) setRightLoading(false);
@@ -177,7 +201,7 @@ export const ConversationCompareView = memo(
       return () => {
         cancelled = true;
       };
-    }, [rightConversationId, loadConversationMessages]);
+    }, [rightConversationId, rightLoadNonce, loadConversationMessages]);
 
     return (
       <div className="flex flex-col h-full w-full bg-white dark:bg-slate-900">
@@ -206,6 +230,10 @@ export const ConversationCompareView = memo(
             title={leftConv?.title || leftConversationId}
             messages={leftMessages}
             loading={leftLoading}
+            error={leftError}
+            onRetry={() => {
+              setLeftLoadNonce((n) => n + 1);
+            }}
           />
           <ComparePanel
             title={
@@ -214,6 +242,10 @@ export const ConversationCompareView = memo(
             }
             messages={rightMessages}
             loading={rightLoading}
+            error={rightError}
+            onRetry={() => {
+              setRightLoadNonce((n) => n + 1);
+            }}
             placeholder={
               !rightConversationId ? (
                 <div className="flex flex-col items-center justify-center h-full gap-3">

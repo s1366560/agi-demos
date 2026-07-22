@@ -4,10 +4,17 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
 import { Table, Input, Tag, Space } from 'antd';
-import { Plus, Search as SearchIcon } from 'lucide-react';
+import { Plus, RefreshCw, Search as SearchIcon } from 'lucide-react';
 
-import { LazyButton, LazyPopconfirm, LazySelect, useLazyMessage } from '@/components/ui/lazyAntd';
+import {
+  LazyAlert,
+  LazyButton,
+  LazyPopconfirm,
+  LazySelect,
+  useLazyMessage,
+} from '@/components/ui/lazyAntd';
 
+import { useDebounce } from '../../hooks/useDebounce';
 import {
   useInstances,
   useInstanceLoading,
@@ -23,12 +30,18 @@ import type { ColumnsType } from 'antd/es/table';
 
 const { Search } = Input;
 
+const PAGE_SIZE = 20;
+
 export const InstanceList: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const messageApi = useLazyMessage();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [page, setPage] = useState(1);
+
+  // Debounce search and filter server-side so results cover all pages
+  const debouncedSearch = useDebounce(search, 400);
 
   const instances = useInstances();
   const isLoading = useInstanceLoading();
@@ -46,21 +59,21 @@ export const InstanceList: React.FC = () => {
     [instances]
   );
 
-  const filteredInstances = useMemo(() => {
-    return instances.filter((instance) => {
-      if (search && !instance.name.toLowerCase().includes(search.toLowerCase())) {
-        return false;
-      }
-      if (statusFilter !== 'all' && instance.status !== statusFilter) {
-        return false;
-      }
-      return true;
-    });
-  }, [instances, search, statusFilter]);
+  const loadPage = useCallback(
+    (nextPage: number) => {
+      return listInstances({
+        page: nextPage,
+        page_size: PAGE_SIZE,
+        ...(debouncedSearch ? { search: debouncedSearch } : {}),
+        ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+      });
+    },
+    [listInstances, debouncedSearch, statusFilter]
+  );
 
   useEffect(() => {
-    void listInstances();
-  }, [listInstances]);
+    void loadPage(page);
+  }, [loadPage, page]);
 
   useEffect(() => {
     return () => {
@@ -71,10 +84,24 @@ export const InstanceList: React.FC = () => {
 
   useEffect(() => {
     if (error) {
-      const displayError = error.length > 200 ? `${error.slice(0, 200)}...` : error;
+      const displayError = error.length > 200 ? `${error.slice(0, 200)}…` : error;
       messageApi?.error(displayError);
     }
   }, [error, messageApi]);
+
+  const handlePageChange = useCallback((nextPage: number) => {
+    setPage(nextPage);
+  }, []);
+
+  const handleSearchChange = useCallback((value: string) => {
+    setPage(1);
+    setSearch(value);
+  }, []);
+
+  const handleStatusFilterChange = useCallback((value: string) => {
+    setPage(1);
+    setStatusFilter(value);
+  }, []);
 
   const handleCreate = useCallback(() => {
     void navigate('./create');
@@ -135,16 +162,16 @@ export const InstanceList: React.FC = () => {
   );
 
   const tablePagination = useMemo(
-    () =>
-      filteredInstances.length > 10
-        ? {
-            pageSize: 10,
-            showSizeChanger: false,
-            showTotal: (total: number) => t('common.pagination.total', { total }),
-            itemRender: renderPaginationItem,
-          }
-        : false,
-    [filteredInstances.length, renderPaginationItem, t]
+    () => ({
+      current: page,
+      pageSize: PAGE_SIZE,
+      total,
+      showSizeChanger: false,
+      showTotal: (nextTotal: number) => t('common.pagination.total', { total: nextTotal }),
+      itemRender: renderPaginationItem,
+      onChange: handlePageChange,
+    }),
+    [page, total, renderPaginationItem, handlePageChange, t]
   );
 
   const columns: ColumnsType<InstanceResponse> = useMemo(
@@ -309,9 +336,9 @@ export const InstanceList: React.FC = () => {
                   <SearchIcon size={16} aria-hidden="true" />
                 </>
               }
-              onSearch={setSearch}
+              onSearch={handleSearchChange}
               onChange={(e) => {
-                setSearch(e.target.value);
+                handleSearchChange(e.target.value);
               }}
               className="w-full"
               style={{ width: '100%' }}
@@ -319,7 +346,7 @@ export const InstanceList: React.FC = () => {
             <LazySelect
               aria-label={t('tenant.instances.status.all')}
               value={statusFilter}
-              onChange={setStatusFilter}
+              onChange={handleStatusFilterChange}
               className="w-full"
               style={{ width: '100%' }}
               options={[
@@ -338,9 +365,33 @@ export const InstanceList: React.FC = () => {
           </div>
         </div>
 
+        {error && (
+          <div className="border-b border-border-light p-4 dark:border-border-dark">
+            <LazyAlert
+              type="error"
+              showIcon
+              message={t('tenant.instances.loadFailed', 'Failed to load instances')}
+              description={error}
+              action={
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearError();
+                    void loadPage(page);
+                  }}
+                  className="inline-flex items-center justify-center gap-1 rounded-md border border-red-300 px-3 py-1 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950/30"
+                >
+                  <RefreshCw size={14} />
+                  {t('common.retry', 'Retry')}
+                </button>
+              }
+            />
+          </div>
+        )}
+
         <Table
           columns={columns}
-          dataSource={filteredInstances}
+          dataSource={instances}
           rowKey="id"
           loading={isLoading}
           scroll={{ x: 'max-content' }}

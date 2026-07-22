@@ -30,6 +30,8 @@ import {
   type SandboxStats,
 } from '@/services/projectSandboxService';
 
+import { formatDateTime } from '@/utils/date';
+
 const { Title, Text } = Typography;
 
 interface RuntimeRow {
@@ -215,20 +217,22 @@ export function UnifiedRuntimes() {
       title: t('tenant.runtimes.columns.tier'),
       dataIndex: 'tier',
       key: 'tier',
-      render: (t?: string) => (t ? <Tag>{t}</Tag> : '—'),
+      render: (tier?: string) => (tier ? <Tag>{tier}</Tag> : '—'),
     },
     {
       title: t('tenant.runtimes.columns.loadMemory'),
       key: 'load',
       render: (_: unknown, row: RuntimeRow) => (
-        <Text style={{ fontSize: 12 }}>{renderLoad(row)}</Text>
+        <Text style={{ fontSize: 12 }} className="tabular-nums">
+          {renderLoad(row)}
+        </Text>
       ),
     },
     {
       title: t('tenant.runtimes.columns.lastActivity'),
       dataIndex: 'lastActivity',
       key: 'lastActivity',
-      render: (t?: string | null) => (t ? new Date(t).toLocaleString() : '—'),
+      render: (value?: string | null) => (value ? formatDateTime(value) : '—'),
     },
   ];
 
@@ -238,7 +242,7 @@ export function UnifiedRuntimes() {
     <div style={{ padding: 24 }}>
       <Space orientation="vertical" size="large" style={{ width: '100%' }}>
         <div>
-          <Title level={3} style={{ marginBottom: 4 }}>
+          <Title level={1} style={{ marginBottom: 4 }}>
             {t('tenant.runtimes.title')}
           </Title>
           <Text type="secondary">{t('tenant.runtimes.description')}</Text>
@@ -247,6 +251,7 @@ export function UnifiedRuntimes() {
         {poolStatusQuery.isError && (
           <Alert
             type="warning"
+            showIcon
             title={t('tenant.runtimes.errors.poolStatus')}
             description={poolStatusQuery.error.message}
           />
@@ -255,6 +260,7 @@ export function UnifiedRuntimes() {
         {poolInstancesQuery.isError && (
           <Alert
             type="warning"
+            showIcon
             title={t('tenant.runtimes.errors.poolInstances')}
             description={poolInstancesQuery.error.message}
           />
@@ -263,6 +269,7 @@ export function UnifiedRuntimes() {
         {sandboxesQuery.isError && (
           <Alert
             type="warning"
+            showIcon
             title={t('tenant.runtimes.errors.projectSandboxes')}
             description={sandboxesQuery.error.message}
           />
@@ -282,41 +289,43 @@ export function UnifiedRuntimes() {
         {poolStatus && (
           <Space size="large" wrap>
             <Card size="small" title={t('tenant.runtimes.cards.poolTotal')}>
-              <Title level={4} style={{ margin: 0 }}>
+              <Title level={4} style={{ margin: 0 }} className="tabular-nums">
                 {poolStatus.total_instances}
               </Title>
             </Card>
             <Card size="small" title={t('tenant.runtimes.cards.hotWarmCold')}>
-              <Text>
+              <Text className="tabular-nums">
                 {poolStatus.hot_instances} / {poolStatus.warm_instances} /{' '}
                 {poolStatus.cold_instances}
               </Text>
             </Card>
             <Card size="small" title={t('tenant.runtimes.cards.readyExecuting')}>
-              <Text>
+              <Text className="tabular-nums">
                 {poolStatus.ready_instances} / {poolStatus.executing_instances}
               </Text>
             </Card>
             <Card size="small" title={t('tenant.runtimes.cards.unhealthy')}>
               {poolStatus.unhealthy_instances > 0 ? (
-                <Text type="danger">{poolStatus.unhealthy_instances}</Text>
+                <Text type="danger" className="tabular-nums">
+                  {poolStatus.unhealthy_instances}
+                </Text>
               ) : (
-                <Text>{poolStatus.unhealthy_instances}</Text>
+                <Text className="tabular-nums">{poolStatus.unhealthy_instances}</Text>
               )}
             </Card>
             <Card size="small" title={t('tenant.runtimes.cards.memory')}>
-              <Text>
+              <Text className="tabular-nums">
                 {Math.round(poolStatus.resource_usage.used_memory_mb)} /{' '}
                 {Math.round(poolStatus.resource_usage.total_memory_mb)} MB
               </Text>
             </Card>
             <Card size="small" title={t('tenant.runtimes.cards.sandboxes')}>
-              <Title level={4} style={{ margin: 0 }}>
+              <Title level={4} style={{ margin: 0 }} className="tabular-nums">
                 {sandboxSummary.total}
               </Title>
             </Card>
             <Card size="small" title={t('tenant.runtimes.cards.sandboxHealth')}>
-              <Text>
+              <Text className="tabular-nums">
                 {t('tenant.runtimes.sandboxHealthValue', {
                   healthy: sandboxSummary.healthy,
                   attention: sandboxSummary.attention,
@@ -324,7 +333,7 @@ export function UnifiedRuntimes() {
               </Text>
             </Card>
             <Card size="small" title={t('tenant.runtimes.cards.sandboxMemory')}>
-              <Text>{Math.round(sandboxSummary.memoryMb)} MB</Text>
+              <Text className="tabular-nums">{Math.round(sandboxSummary.memoryMb)} MB</Text>
             </Card>
           </Space>
         )}

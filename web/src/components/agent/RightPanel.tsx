@@ -861,7 +861,7 @@ export const RightPanel = memo<RightPanelProps>(
                   view={taskView}
                 />
               ) : taskView === 'lanes' ? (
-                <TaskLanePanel tasks={tasks} />
+                <TaskLanePanel tasks={tasks} conversationId={conversationId ?? undefined} />
               ) : (
                 <TaskList tasks={tasks} />
               )}

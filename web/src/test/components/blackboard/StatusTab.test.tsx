@@ -593,12 +593,12 @@ describe('StatusTab', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('Phase contract')).toBeInTheDocument();
     expect(screen.getAllByText(/commit or recovery ref/).length).toBeGreaterThanOrEqual(1);
-    fireEvent.click(screen.getByRole('button', { name: 'Evidence' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Evidence' }));
     expect(screen.getAllByText('artifact.spec').length).toBeGreaterThanOrEqual(2);
-    fireEvent.click(screen.getByRole('button', { name: 'Runs' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Runs' }));
     expect(screen.getAllByText('supervisor_tick').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Verifier accepted')[0]).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Review' }));
     expect(screen.getByText('Review gate')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Open task details'));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -1001,7 +1001,7 @@ describe('StatusTab', () => {
     fireEvent.change(screen.getByLabelText('Search plan run'), {
       target: { value: 'blocked' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Review' }));
     expect(screen.getAllByText('artifact.blocked-report').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole('link', { name: 'Open attempt' })).toHaveAttribute(
       'href',
@@ -1012,7 +1012,7 @@ describe('StatusTab', () => {
       target: { value: 'operator reviewed blocked evidence' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Runs' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Runs' }));
     fireEvent.click(screen.getByText('Retry now'));
     await waitFor(() => {
       expect(workspacePlanService.retryOutboxItem).toHaveBeenCalledWith('ws-1', 'outbox-failed-1', {

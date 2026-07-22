@@ -57,6 +57,8 @@ export function SandboxTerminal({
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId || null);
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Bump to force TerminalImpl remount (full disconnect + reconnect)
+  const [reconnectNonce, setReconnectNonce] = useState(0);
 
   const handleConnect = useCallback(
     (newSessionId: string) => {
@@ -83,8 +85,10 @@ export function SandboxTerminal({
 
   const reconnect = useCallback(() => {
     setSessionId(null);
-    setStatus('disconnected');
+    setStatus('connecting');
     setError(null);
+    // Remount TerminalImpl so the existing socket is closed and a fresh one is opened
+    setReconnectNonce((n) => n + 1);
   }, []);
 
   const toggleFullscreen = useCallback(() => {
@@ -120,7 +124,7 @@ export function SandboxTerminal({
                       t('components.sandboxTerminal.unknown', { defaultValue: 'unknown' }),
                   })
                 : status === 'connecting'
-                  ? t('components.sandboxTerminal.connecting', { defaultValue: 'Connecting...' })
+                  ? t('components.sandboxTerminal.connecting', { defaultValue: 'Connecting…' })
                   : status === 'error'
                     ? t('components.sandboxTerminal.error', { defaultValue: 'Error' })
                     : t('components.sandboxTerminal.disconnected', {
@@ -172,7 +176,7 @@ export function SandboxTerminal({
             <Spin />
             <span className="text-slate-400">
               {t('components.sandboxTerminal.connectingToTerminal', {
-                defaultValue: 'Connecting to terminal...',
+                defaultValue: 'Connecting to terminal…',
               })}
             </span>
           </div>
@@ -200,12 +204,13 @@ export function SandboxTerminal({
             <div className="h-full w-full flex items-center justify-center bg-background-dark text-slate-400">
               <Spin />{' '}
               {t('components.sandboxTerminal.loadingTerminal', {
-                defaultValue: 'Loading terminal...',
+                defaultValue: 'Loading terminal…',
               })}
             </div>
           }
         >
           <TerminalImpl
+            key={reconnectNonce}
             sandboxId={sandboxId}
             projectId={projectId}
             sessionId={sessionId || undefined}

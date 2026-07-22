@@ -36,6 +36,7 @@ import {
 
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 import { confirmAction } from '@/utils/confirmAction';
+import { formatDistanceToNow } from '@/utils/date';
 
 import { ExecutionDagGraph } from '@/components/executionDag/ExecutionDagGraph';
 import {
@@ -59,7 +60,6 @@ import {
   eventSummary,
   fallbackTone,
   FILTERS,
-  formatRelative,
   formatTime,
   iterationNodeIndex,
   matchesFilter,
@@ -112,12 +112,12 @@ const DEFAULT_RETRY_ACTION_REASON = 'operator retry from central blackboard';
 type DetailTabId = 'story' | 'evidence' | 'runs' | 'review' | 'blocker';
 type DagViewMode = 'graph' | 'list' | 'iterations';
 
-const DETAIL_TABS: Array<{ id: DetailTabId; label: string }> = [
-  { id: 'story', label: 'Story' },
-  { id: 'evidence', label: 'Evidence' },
-  { id: 'runs', label: 'Runs' },
-  { id: 'review', label: 'Review' },
-  { id: 'blocker', label: 'Blocker' },
+const DETAIL_TABS: Array<{ id: DetailTabId; labelKey: string; fallback: string }> = [
+  { id: 'story', labelKey: 'blackboard.planRunTabStory', fallback: 'Story' },
+  { id: 'evidence', labelKey: 'blackboard.planRunTabEvidence', fallback: 'Evidence' },
+  { id: 'runs', labelKey: 'blackboard.planRunTabRuns', fallback: 'Runs' },
+  { id: 'review', labelKey: 'blackboard.planRunTabReview', fallback: 'Review' },
+  { id: 'blocker', labelKey: 'blackboard.planRunTabBlocker', fallback: 'Blocker' },
 ];
 
 function actionLabel(action: WorkspacePlanActionCapability | undefined, fallback: string): string {
@@ -330,7 +330,12 @@ function IterationLoopPanel({
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <div className="flex min-w-0 items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
               <Repeat2 className="h-4 w-4 shrink-0" aria-hidden />
-              <span className="truncate">Iteration {iteration.current_iteration}</span>
+              <span className="truncate">
+                {t('blackboard.planRunIteration', {
+                  current: iteration.current_iteration,
+                  defaultValue: 'Iteration {{current}}',
+                })}
+              </span>
             </div>
             <span className={`text-xs font-medium uppercase ${statusTone}`}>
               {iteration.loop_status}
@@ -350,12 +355,12 @@ function IterationLoopPanel({
         </div>
         <dl className="grid min-w-0 grid-cols-1 gap-3 rounded-md border border-border-light bg-surface-muted px-3 py-2 sm:grid-cols-3 dark:border-border-dark dark:bg-surface-dark">
           <CompactMetric
-            label="Sprint tasks"
+            label={t('blackboard.planRunSprintTasks', 'Sprint tasks')}
             value={`${String(iteration.task_count)}/${String(iteration.task_budget)}`}
           />
-          <CompactMetric label="Loop" value={iteration.loop_label} />
+          <CompactMetric label={t('blackboard.planRunLoop', 'Loop')} value={iteration.loop_label} />
           <CompactMetric
-            label="Completed"
+            label={t('blackboard.planRunCompleted', 'Completed')}
             value={`${String(iteration.completed_iterations.length)}/${String(iteration.max_iterations)}`}
           />
         </dl>
@@ -366,25 +371,31 @@ function IterationLoopPanel({
           type="button"
           className="inline-flex h-8 items-center gap-1 rounded border border-border-light bg-surface-light px-2.5 text-xs font-medium text-text-secondary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50 dark:border-border-dark dark:bg-surface-dark dark:text-text-muted dark:hover:bg-surface-dark-alt"
           disabled={isActionPending || !actionEnabled(pauseAction)}
-          title={actionDisabledReason(pauseAction, 'Pause is not available.')}
+          title={actionDisabledReason(
+            pauseAction,
+            t('blackboard.planRunPauseUnavailable', 'Pause is not available.')
+          )}
           onClick={() => {
             onAction('pause_auto_loop');
           }}
         >
           <Pause className="h-3.5 w-3.5" aria-hidden />
-          Pause
+          {t('blackboard.planRunPause', 'Pause')}
         </button>
         <button
           type="button"
           className="inline-flex h-8 items-center gap-1 rounded border border-border-light bg-surface-light px-2.5 text-xs font-medium text-text-secondary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50 dark:border-border-dark dark:bg-surface-dark dark:text-text-muted dark:hover:bg-surface-dark-alt"
           disabled={isActionPending || !actionEnabled(resumeAction)}
-          title={actionDisabledReason(resumeAction, 'Resume is not available.')}
+          title={actionDisabledReason(
+            resumeAction,
+            t('blackboard.planRunResumeUnavailable', 'Resume is not available.')
+          )}
           onClick={() => {
             onAction('resume_auto_loop');
           }}
         >
           <Play className="h-3.5 w-3.5" aria-hidden />
-          Resume
+          {t('blackboard.planRunResume', 'Resume')}
         </button>
         <button
           type="button"
@@ -422,7 +433,10 @@ function IterationLoopPanel({
         {iteration.phases.map((phase) => {
           const isActive = phase.id === iteration.active_phase;
           const gateStatus = phase.gate_status?.status ?? 'pending';
-          const missingSummary = compactList(phase.missing_artifacts, 'none');
+          const missingSummary = compactList(
+            phase.missing_artifacts,
+            t('blackboard.planRunNone', 'none')
+          );
           return (
             <div
               key={phase.id}
@@ -483,7 +497,7 @@ function IterationLoopPanel({
             <div className="min-w-0 rounded-md border border-border-light bg-surface-light p-3 dark:border-border-dark dark:bg-surface-dark">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
                 <PackageCheck className="h-4 w-4" aria-hidden />
-                Outputs
+                {t('blackboard.planRunOutputs', 'Outputs')}
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {iteration.deliverables.map((item) => (
@@ -501,7 +515,7 @@ function IterationLoopPanel({
             <div className="min-w-0 rounded-md border border-warning-border bg-warning-bg p-3 text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase">
                 <AlertTriangle className="h-4 w-4" aria-hidden />
-                Feedback
+                {t('blackboard.planRunFeedback', 'Feedback')}
               </div>
               <ul className="mt-2 space-y-2">
                 {feedbackItems.map((item) => (
@@ -537,7 +551,7 @@ function IterationLoopPanel({
       {iteration.history.length > 0 && (
         <div className="mt-4 border-t border-border-separator pt-3 dark:border-border-dark">
           <div className="text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
-            Review history
+            {t('blackboard.planRunReviewHistory', 'Review history')}
           </div>
           <div className="mt-2 space-y-2">
             {iteration.history.slice(-3).map((item) => (
@@ -613,7 +627,9 @@ function DeliveryPanel({
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <div className="flex min-w-0 items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
               <PackageCheck className="h-4 w-4 shrink-0" aria-hidden />
-              <span className="truncate">Delivery / CI/CD</span>
+              <span className="truncate">
+                {t('blackboard.planRunDeliveryTitle', 'Delivery / CI/CD')}
+              </span>
             </div>
             <span className={`text-xs font-semibold uppercase ${tone}`}>{delivery.status}</span>
           </div>
@@ -652,24 +668,36 @@ function DeliveryPanel({
           )}
         </div>
         <dl className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatBadge label="Pipeline" value={run?.status ?? 'none'} />
           <StatBadge
-            label="Assessment"
+            label={t('blackboard.planRunPipeline', 'Pipeline')}
+            value={run?.status ?? 'none'}
+          />
+          <StatBadge
+            label={t('blackboard.planRunAssessment', 'Assessment')}
             value={delivery.run_assessment?.status ?? run?.status ?? 'none'}
           />
-          <StatBadge label="Health" value={deployment?.status ?? 'none'} />
-          <StatBadge label="Restarts" value={String(deployment?.restart_count ?? 0)} />
+          <StatBadge
+            label={t('blackboard.planRunHealth', 'Health')}
+            value={deployment?.status ?? 'none'}
+          />
+          <StatBadge
+            label={t('blackboard.planRunRestarts', 'Restarts')}
+            value={String(deployment?.restart_count ?? 0)}
+          />
         </dl>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
             className="inline-flex h-8 items-center gap-1 rounded border border-border-light bg-surface-light px-2.5 text-xs font-medium text-text-secondary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50 dark:border-border-dark dark:bg-surface-dark dark:text-text-muted dark:hover:bg-surface-dark-alt"
             disabled={isActionPending || !actionEnabled(requestAction)}
-            title={actionDisabledReason(requestAction, 'Pipeline run is not available.')}
+            title={actionDisabledReason(
+              requestAction,
+              t('blackboard.planRunPipelineUnavailable', 'Pipeline run is not available.')
+            )}
             onClick={onRunPipeline}
           >
             <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-            Run pipeline
+            {t('blackboard.planRunRunPipeline', 'Run pipeline')}
           </button>
           <button
             type="button"
@@ -677,12 +705,15 @@ function DeliveryPanel({
             disabled={isActionPending || !actionEnabled(regenerateAction)}
             title={actionDisabledReason(
               regenerateAction,
-              'Contract regeneration is not available.'
+              t(
+                'blackboard.planRunRegenerateUnavailable',
+                'Contract regeneration is not available.'
+              )
             )}
             onClick={onRegenerateContract}
           >
             <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-            Regenerate
+            {t('blackboard.planRunRegenerate', 'Regenerate')}
           </button>
         </div>
       </div>
@@ -806,6 +837,7 @@ function WorkbenchStatusBar({
   lastUpdatedAt: Date | null;
   isStale: boolean;
 }) {
+  const { t } = useTranslation();
   const iteration = snapshot.iteration;
   const delivery = snapshot.delivery;
   const outbox = snapshot.outbox;
@@ -819,28 +851,36 @@ function WorkbenchStatusBar({
   return (
     <div className="border-t border-border-separator bg-surface-muted/60 px-4 py-3 dark:border-border-dark dark:bg-background-dark/30">
       <dl className="grid gap-x-5 gap-y-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-        <CompactMetric label="Code root" value={delivery?.code_root || 'not configured'} />
         <CompactMetric
-          label="Iteration"
+          label={t('blackboard.planRunCodeRoot', 'Code root')}
+          value={delivery?.code_root || t('blackboard.planRunNotConfigured', 'not configured')}
+        />
+        <CompactMetric
+          label={t('blackboard.planRunIterationLabel', 'Iteration')}
           value={
             iteration
               ? `${String(iteration.current_iteration)} · ${iteration.loop_status}`
-              : 'not started'
+              : t('blackboard.planRunNotStarted', 'not started')
           }
         />
-        <CompactMetric label="Active phase" value={iteration?.active_phase_label ?? 'n/a'} />
         <CompactMetric
-          label="Queue"
-          value={`${String(outbox.length)} jobs${failedQueue > 0 ? ` · ${String(failedQueue)} failed` : ''}`}
+          label={t('blackboard.planRunActivePhase', 'Active phase')}
+          value={iteration?.active_phase_label ?? 'n/a'}
         />
         <CompactMetric
-          label="Pipeline"
+          label={t('blackboard.planRunQueue', 'Queue')}
+          value={`${t('blackboard.planRunQueueJobs', { count: outbox.length, defaultValue: '{{count}} jobs' })}${failedQueue > 0 ? ` · ${t('blackboard.planRunQueueFailed', { count: failedQueue, defaultValue: '{{count}} failed' })}` : ''}`}
+        />
+        <CompactMetric
+          label={t('blackboard.planRunPipeline', 'Pipeline')}
           value={delivery?.run_assessment?.status ?? delivery?.latest_run?.status ?? 'none'}
         />
         <CompactMetric
-          label="Preview"
+          label={t('blackboard.planRunPreview', 'Preview')}
           value={`${String(healthyServices)} / ${String(serviceTotal)}${
-            isStale ? ` · updated ${formatRelative(lastUpdatedAt)}` : ''
+            isStale
+              ? ` · ${t('blackboard.planRunUpdatedAgo', { time: lastUpdatedAt ? formatDistanceToNow(lastUpdatedAt) : t('blackboard.planRunNever', 'never'), defaultValue: 'updated {{time}}' })}`
+              : ''
           }`}
         />
       </dl>
@@ -886,6 +926,7 @@ export function PlanRunSnapshotSection({
   const [isTaskExperienceLoading, setIsTaskExperienceLoading] = useState(false);
   const [isTaskRecoveryPending, setIsTaskRecoveryPending] = useState(false);
   const [taskExperienceError, setTaskExperienceError] = useState<string | null>(null);
+  const [taskExperienceReloadToken, setTaskExperienceReloadToken] = useState(0);
 
   const loadSnapshot = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -1005,7 +1046,7 @@ export function PlanRunSnapshotSection({
   const rootGoal = snapshot?.root_goal ?? null;
   const iteration = snapshot?.iteration ?? null;
   const delivery = snapshot?.delivery ?? null;
-  const stage = planStage(snapshot);
+  const stage = planStage(snapshot, t);
   const doneCount = countDone(runnableNodes);
   const rootUnitCount = rootGoal ? 1 : 0;
   const totalCompletionUnits = runnableNodes.length + rootUnitCount;
@@ -1229,7 +1270,7 @@ export function PlanRunSnapshotSection({
     return () => {
       cancelled = true;
     };
-  }, [selectedTask, selectedTaskId, workspaceId]);
+  }, [selectedTask, selectedTaskId, workspaceId, taskExperienceReloadToken]);
 
   const attemptHref =
     tenantId && projectId && linkedTask?.current_attempt_conversation_id
@@ -1565,9 +1606,20 @@ export function PlanRunSnapshotSection({
           </div>
           <div className="mt-2 flex flex-wrap gap-2 text-xs text-text-secondary dark:text-text-muted">
             <span>{stage}</span>
-            <span>Updated {formatRelative(lastUpdatedAt)}</span>
-            {latestEvent && <span>{eventLabel(latestEvent)}</span>}
-            {isStale && <span className="text-status-text-warning">stale snapshot</span>}
+            <span>
+              {t('blackboard.planRunUpdatedLabel', {
+                time: lastUpdatedAt
+                  ? formatDistanceToNow(lastUpdatedAt)
+                  : t('blackboard.planRunNever', 'never'),
+                defaultValue: 'Updated {{time}}',
+              })}
+            </span>
+            {latestEvent && <span>{eventLabel(latestEvent, t)}</span>}
+            {isStale && (
+              <span className="text-status-text-warning">
+                {t('blackboard.planRunStaleSnapshot', 'stale snapshot')}
+              </span>
+            )}
           </div>
           {planHistory.length > 1 && (
             <div className="mt-3 flex max-w-3xl flex-col gap-2 md:flex-row md:items-center">
@@ -1672,7 +1724,10 @@ export function PlanRunSnapshotSection({
       </div>
 
       {error && (
-        <div className="mx-4 mb-4 flex items-start gap-2 rounded-md border border-error-border bg-error-bg p-3 text-xs text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark">
+        <div
+          role="alert"
+          className="mx-4 mb-4 flex items-start gap-2 rounded-md border border-error-border bg-error-bg p-3 text-xs text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark"
+        >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           <span className="break-words">{error}</span>
         </div>
@@ -1884,12 +1939,14 @@ export function PlanRunSnapshotSection({
                   </label>
                   <div
                     className="flex min-w-0 flex-1 flex-wrap gap-2"
+                    role="group"
                     aria-label={t('blackboard.planRunFilterNodes', 'Filter plan nodes')}
                   >
                     {FILTERS.map((item) => (
                       <button
                         key={item.id}
                         type="button"
+                        aria-pressed={filter === item.id}
                         onClick={() => {
                           setFilter(item.id);
                         }}
@@ -1900,7 +1957,7 @@ export function PlanRunSnapshotSection({
                         }`}
                       >
                         <Filter className="h-3.5 w-3.5" aria-hidden />
-                        {item.label}
+                        {t(item.labelKey, item.fallback)}
                       </button>
                     ))}
                   </div>
@@ -1981,6 +2038,9 @@ export function PlanRunSnapshotSection({
                         loading={isTaskExperienceLoading}
                         recoveryActionLoading={isTaskRecoveryPending}
                         error={taskExperienceError}
+                        onRetry={() => {
+                          setTaskExperienceReloadToken((token) => token + 1);
+                        }}
                         onRecoveryAction={(action) => {
                           void runTaskRecoveryAction(action);
                         }}
@@ -2020,19 +2080,19 @@ export function PlanRunSnapshotSection({
                     <div className="mt-4 grid gap-2 text-xs text-text-secondary dark:text-text-muted sm:grid-cols-2">
                       <div>
                         <span className="font-medium text-text-primary dark:text-text-inverse">
-                          Node
+                          {t('blackboard.planRunNode', 'Node')}
                         </span>{' '}
                         <span className="font-mono">{shortId(selectedNode.id)}</span>
                       </div>
                       <div>
                         <span className="font-medium text-text-primary dark:text-text-inverse">
-                          Owner
+                          {t('blackboard.planRunOwner', 'Owner')}
                         </span>{' '}
                         <span className="font-mono">{shortId(selectedNode.assignee_agent_id)}</span>
                       </div>
                       <div>
                         <span className="font-medium text-text-primary dark:text-text-inverse">
-                          Attempt
+                          {t('blackboard.planRunAttempt', 'Attempt')}
                         </span>{' '}
                         <span className="font-mono">
                           {shortId(selectedNode.current_attempt_id)}
@@ -2040,36 +2100,39 @@ export function PlanRunSnapshotSection({
                       </div>
                       <div>
                         <span className="font-medium text-text-primary dark:text-text-inverse">
-                          Updated
+                          {t('blackboard.planRunUpdated', 'Updated')}
                         </span>{' '}
                         {formatTime(selectedNode.updated_at ?? selectedNode.created_at)}
                       </div>
                       <div>
                         <span className="font-medium text-text-primary dark:text-text-inverse">
-                          Phase
+                          {t('blackboard.planRunPhase', 'Phase')}
                         </span>{' '}
                         {nodePhaseLabel(asRecord(selectedNode.metadata))}
                       </div>
                       <div>
                         <span className="font-medium text-text-primary dark:text-text-inverse">
-                          Checks
+                          {t('blackboard.planRunChecks', 'Checks')}
                         </span>{' '}
-                        {criterionSummary(selectedNode)}
+                        {criterionSummary(selectedNode, t)}
                       </div>
                       <div>
                         <span className="font-medium text-text-primary dark:text-text-inverse">
-                          Write set
+                          {t('blackboard.planRunWriteSet', 'Write set')}
                         </span>{' '}
                         {selectedWriteSet.length > 0
-                          ? `${String(selectedWriteSet.length)} file(s)`
-                          : 'none'}
+                          ? t('blackboard.planRunFilesCount', {
+                              count: selectedWriteSet.length,
+                              defaultValue: '{{count}} file(s)',
+                            })
+                          : t('blackboard.planRunNone', 'none')}
                       </div>
                     </div>
 
                     {selectedWriteSet.length > 0 && (
                       <div className="mt-3 rounded-md border border-border-light bg-surface-muted/70 p-3 dark:border-border-dark dark:bg-background-dark/35">
                         <div className="text-[11px] font-semibold uppercase text-text-secondary dark:text-text-muted">
-                          Write-scope guard
+                          {t('blackboard.planRunWriteScopeGuard', 'Write-scope guard')}
                         </div>
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {selectedWriteSet.slice(0, 8).map((path) => (
@@ -2176,6 +2239,7 @@ export function PlanRunSnapshotSection({
 
                   <div className="min-w-0 flex-1">
                     <div
+                      role="tablist"
                       className="flex min-w-0 flex-wrap gap-2 border-b border-border-separator px-4 py-3 dark:border-border-dark"
                       aria-label={t('blackboard.planRunNodeDetails', 'Plan node details')}
                     >
@@ -2183,6 +2247,8 @@ export function PlanRunSnapshotSection({
                         <button
                           key={tab.id}
                           type="button"
+                          role="tab"
+                          aria-selected={selectedDetailTab === tab.id}
                           onClick={() => {
                             setSelectedDetailTab(tab.id);
                           }}
@@ -2192,7 +2258,7 @@ export function PlanRunSnapshotSection({
                               : 'border-border-light bg-surface-light text-text-secondary hover:bg-surface-muted dark:border-border-dark dark:bg-surface-dark dark:text-text-muted dark:hover:bg-surface-dark-alt'
                           }`}
                         >
-                          {tab.label}
+                          {t(tab.labelKey, tab.fallback)}
                         </button>
                       ))}
                     </div>
@@ -2202,7 +2268,7 @@ export function PlanRunSnapshotSection({
                         <section className="space-y-3">
                           <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
                             <ShieldCheck className="h-4 w-4" aria-hidden />
-                            Phase contract
+                            {t('blackboard.planRunPhaseContract', 'Phase contract')}
                           </div>
                           <div className="rounded-md border border-border-light bg-surface-muted p-3 text-xs leading-5 text-text-secondary dark:border-border-dark dark:bg-background-dark/35 dark:text-text-muted">
                             <div className="font-medium text-text-primary dark:text-text-inverse">
@@ -2210,22 +2276,42 @@ export function PlanRunSnapshotSection({
                                 nodePhaseLabel(asRecord(selectedNode.metadata))}
                             </div>
                             <p className="mt-2 break-words">
-                              Entry: {selectedContract?.entry_gate || 'No entry gate recorded.'}
+                              {t('blackboard.planRunEntryGate', {
+                                gate:
+                                  selectedContract?.entry_gate ||
+                                  t('blackboard.planRunNoEntryGate', 'No entry gate recorded.'),
+                                defaultValue: 'Entry: {{gate}}',
+                              })}
                             </p>
                             <p className="mt-1 break-words">
-                              Exit: {selectedContract?.exit_gate || 'No exit gate recorded.'}
+                              {t('blackboard.planRunExitGate', {
+                                gate:
+                                  selectedContract?.exit_gate ||
+                                  t('blackboard.planRunNoExitGate', 'No exit gate recorded.'),
+                                defaultValue: 'Exit: {{gate}}',
+                              })}
                             </p>
                             <p className="mt-1 break-words">
-                              Routing:{' '}
-                              {compactList(selectedContract?.allowed_routing, 'standard routing')}
+                              {t('blackboard.planRunRouting', {
+                                routing: compactList(
+                                  selectedContract?.allowed_routing,
+                                  t('blackboard.planRunStandardRouting', 'standard routing')
+                                ),
+                                defaultValue: 'Routing: {{routing}}',
+                              })}
                             </p>
                             <p className="mt-1 break-words">
-                              Blocked: {selectedContract?.blocked_semantics ?? 'Human-only stops.'}
+                              {t('blackboard.planRunBlockedSemantics', {
+                                semantics:
+                                  selectedContract?.blocked_semantics ??
+                                  t('blackboard.planRunHumanOnlyStops', 'Human-only stops.'),
+                                defaultValue: 'Blocked: {{semantics}}',
+                              })}
                             </p>
                           </div>
                           <div className="rounded-md border border-border-light bg-surface-light p-3 dark:border-border-dark dark:bg-surface-dark">
                             <div className="text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
-                              Acceptance criteria
+                              {t('blackboard.planRunAcceptanceCriteria', 'Acceptance criteria')}
                             </div>
                             {selectedNode.acceptance_criteria.length > 0 ? (
                               <ul className="mt-2 space-y-2 text-xs leading-5 text-text-secondary dark:text-text-muted">
@@ -2241,7 +2327,10 @@ export function PlanRunSnapshotSection({
                               </ul>
                             ) : (
                               <p className="mt-2 text-xs text-text-secondary dark:text-text-muted">
-                                No acceptance criteria recorded.
+                                {t(
+                                  'blackboard.planRunNoAcceptanceCriteria',
+                                  'No acceptance criteria recorded.'
+                                )}
                               </p>
                             )}
                           </div>
@@ -2252,14 +2341,26 @@ export function PlanRunSnapshotSection({
                         <section className="space-y-3">
                           <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
                             <PackageCheck className="h-4 w-4" aria-hidden />
-                            Evidence bundle
+                            {t('blackboard.planRunEvidenceBundle', 'Evidence bundle')}
                           </div>
                           <div className="grid gap-3 sm:grid-cols-2">
                             {[
-                              ['Changed files', selectedEvidence.changed_files],
-                              ['Artifacts', selectedEvidence.artifacts],
-                              ['Evidence refs', selectedEvidence.evidence_refs],
-                              ['Pipeline refs', selectedEvidence.pipeline_refs],
+                              [
+                                t('blackboard.planRunChangedFiles', 'Changed files'),
+                                selectedEvidence.changed_files,
+                              ],
+                              [
+                                t('blackboard.planRunArtifacts', 'Artifacts'),
+                                selectedEvidence.artifacts,
+                              ],
+                              [
+                                t('blackboard.planRunEvidenceRefs', 'Evidence refs'),
+                                selectedEvidence.evidence_refs,
+                              ],
+                              [
+                                t('blackboard.planRunPipelineRefs', 'Pipeline refs'),
+                                selectedEvidence.pipeline_refs,
+                              ],
                             ].map(([label, values]) => (
                               <div
                                 key={label as string}
@@ -2281,7 +2382,7 @@ export function PlanRunSnapshotSection({
                                   </div>
                                 ) : (
                                   <p className="mt-2 text-xs text-text-secondary dark:text-text-muted">
-                                    none
+                                    {t('blackboard.planRunNone', 'none')}
                                   </p>
                                 )}
                               </div>
@@ -2343,7 +2444,7 @@ export function PlanRunSnapshotSection({
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
                               <ShieldCheck className="h-4 w-4" aria-hidden />
-                              Review gate
+                              {t('blackboard.planRunReviewGate', 'Review gate')}
                             </div>
                             <span
                               className={`rounded border px-2 py-0.5 text-[11px] font-semibold uppercase ${gateTone(
@@ -2354,21 +2455,31 @@ export function PlanRunSnapshotSection({
                             </span>
                           </div>
                           <p className="break-words text-sm leading-6 text-text-secondary dark:text-text-muted">
-                            {selectedGate.summary || 'No review summary yet.'}
+                            {selectedGate.summary ||
+                              t('blackboard.planRunNoReviewSummary', 'No review summary yet.')}
                           </p>
                           {selectedGate.missing.length > 0 && (
                             <div className="rounded-md border border-warning-border bg-warning-bg p-3 text-xs text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark">
-                              Missing: {selectedGate.missing.join(', ')}
+                              {t('blackboard.planRunMissingLabel', {
+                                items: selectedGate.missing.join(', '),
+                                defaultValue: 'Missing: {{items}}',
+                              })}
                             </div>
                           )}
                           {selectedEvidence?.verification_summary && (
                             <p className="break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
-                              Verification: {selectedEvidence.verification_summary}
+                              {t('blackboard.planRunVerificationLabel', {
+                                summary: selectedEvidence.verification_summary,
+                                defaultValue: 'Verification: {{summary}}',
+                              })}
                             </p>
                           )}
                           {selectedEvidence?.review_summary && (
                             <p className="break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
-                              Review: {selectedEvidence.review_summary}
+                              {t('blackboard.planRunReviewLabel', {
+                                summary: selectedEvidence.review_summary,
+                                defaultValue: 'Review: {{summary}}',
+                              })}
                             </p>
                           )}
                           <div>
@@ -2392,22 +2503,36 @@ export function PlanRunSnapshotSection({
                         <section className="space-y-3">
                           <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
                             <AlertTriangle className="h-4 w-4" aria-hidden />
-                            Blocker analysis
+                            {t('blackboard.planRunBlockerAnalysis', 'Blocker analysis')}
                           </div>
                           <div className="rounded-md border border-border-light bg-surface-muted p-3 text-xs leading-5 text-text-secondary dark:border-border-dark dark:bg-background-dark/35 dark:text-text-muted">
                             <div className="font-medium text-text-primary dark:text-text-inverse">
                               {selectedBlocker?.blocker_type ?? 'none'}
                             </div>
                             <p className="mt-2 break-words">
-                              Root cause: {selectedBlocker?.root_cause || 'No blocker recorded.'}
+                              {t('blackboard.planRunRootCause', {
+                                cause:
+                                  selectedBlocker?.root_cause ||
+                                  t('blackboard.planRunNoBlocker', 'No blocker recorded.'),
+                                defaultValue: 'Root cause: {{cause}}',
+                              })}
                             </p>
                             <p className="mt-1 break-words">
-                              Resolution:{' '}
-                              {selectedBlocker?.resolution ||
-                                'Continue normal execution or recovery routing.'}
+                              {t('blackboard.planRunResolution', {
+                                resolution:
+                                  selectedBlocker?.resolution ||
+                                  t(
+                                    'blackboard.planRunContinueRouting',
+                                    'Continue normal execution or recovery routing.'
+                                  ),
+                                defaultValue: 'Resolution: {{resolution}}',
+                              })}
                             </p>
                             <p className="mt-1 break-words">
-                              Routing: {selectedBlocker?.routing_decision ?? 'continue'}
+                              {t('blackboard.planRunRoutingDecision', {
+                                decision: selectedBlocker?.routing_decision ?? 'continue',
+                                defaultValue: 'Routing: {{decision}}',
+                              })}
                             </p>
                           </div>
                         </section>

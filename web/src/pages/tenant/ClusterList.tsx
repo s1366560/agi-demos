@@ -2,20 +2,18 @@ import { useEffect, useState } from 'react';
 import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import {
   Table,
   Button,
   Modal,
   Form,
-  Input,
   Tag,
   Space,
   Popconfirm,
   message,
   Descriptions,
-  Select,
   Drawer,
   Card,
   Row,
@@ -34,19 +32,10 @@ import {
   useClusterActions,
 } from '../../stores/cluster';
 
+import { ClusterFormFields } from './utils/ClusterFormFields';
+import { parseProviderConfig } from './utils/clusterFormUtils';
+
 import type { ClusterResponse } from '../../services/clusterService';
-
-const { TextArea } = Input;
-const { Option } = Select;
-
-const CLUSTER_PROVIDER_OPTIONS = [
-  { value: 'docker', label: 'Docker' },
-  { value: 'vke', label: 'Volcengine VKE' },
-  { value: 'ack', label: 'Alibaba ACK' },
-  { value: 'tke', label: 'Tencent TKE' },
-  { value: 'custom', label: 'Custom Kubernetes' },
-  { value: 'self_hosted', label: 'Self-hosted' },
-] as const;
 
 interface FormValues {
   name: string;
@@ -58,6 +47,7 @@ interface FormValues {
 export const ClusterList: FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [form] = Form.useForm<FormValues>();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isHealthDrawerVisible, setIsHealthDrawerVisible] = useState(false);
@@ -83,11 +73,17 @@ export const ClusterList: FC = () => {
   } = useClusterActions();
 
   useEffect(() => {
-    void listClusters();
+    const pageParam = Number(searchParams.get('page'));
+    const pageSizeParam = Number(searchParams.get('page_size'));
+    void listClusters({
+      ...(Number.isInteger(pageParam) && pageParam > 1 ? { page: pageParam } : {}),
+      ...(Number.isInteger(pageSizeParam) && pageSizeParam > 0 ? { page_size: pageSizeParam } : {}),
+    });
     return () => {
       clearError();
       reset();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listClusters, clearError, reset]);
 
   useEffect(() => {
@@ -96,6 +92,24 @@ export const ClusterList: FC = () => {
       clearError();
     }
   }, [error, clearError]);
+
+  // Reflect page/pageSize in the URL so views survive reload and sharing
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (page > 1) {
+      next.set('page', String(page));
+    } else {
+      next.delete('page');
+    }
+    if (pageSize !== 20) {
+      next.set('page_size', String(pageSize));
+    } else {
+      next.delete('page_size');
+    }
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [page, pageSize, searchParams, setSearchParams]);
 
   const healthyCount = clusters.filter((c) => c.status === 'active').length;
   const unhealthyCount = clusters.filter(
@@ -131,8 +145,17 @@ export const ClusterList: FC = () => {
   };
 
   const handleModalOk = () => {
-    void form.validateFields().then(async (values) => {
-      try {
+    void form
+      .validateFields()
+      .then(async (values) => {
+        let providerConfig: Record<string, unknown> | undefined;
+        try {
+          providerConfig = parseProviderConfig(values.provider_config);
+        } catch {
+          message.error(t('tenant.clusters.invalidJsonError'));
+          return;
+        }
+
         const base: {
           name: string;
           compute_provider?: string;
@@ -143,22 +166,26 @@ export const ClusterList: FC = () => {
           ...(values.compute_provider != null ? { compute_provider: values.compute_provider } : {}),
           ...(values.proxy_endpoint != null ? { proxy_endpoint: values.proxy_endpoint } : {}),
         };
-        if (values.provider_config) {
-          base.provider_config = JSON.parse(values.provider_config) as Record<string, unknown>;
+        if (providerConfig) {
+          base.provider_config = providerConfig;
         }
 
-        if (editingCluster) {
-          await updateCluster(editingCluster.id, base);
-          message.success(t('tenant.clusters.updatedSuccess'));
-        } else {
-          await createCluster(base);
-          message.success(t('tenant.clusters.createdSuccess'));
+        try {
+          if (editingCluster) {
+            await updateCluster(editingCluster.id, base);
+            message.success(t('tenant.clusters.updatedSuccess'));
+          } else {
+            await createCluster(base);
+            message.success(t('tenant.clusters.createdSuccess'));
+          }
+          setIsModalVisible(false);
+        } catch {
+          // The store error effect surfaces API failures
         }
-        setIsModalVisible(false);
-      } catch {
-        message.error(t('tenant.clusters.invalidJsonError'));
-      }
-    });
+      })
+      .catch(() => {
+        // antd validation errors are shown inline on the form
+      });
   };
 
   const handleModalCancel = () => {
@@ -269,13 +296,19 @@ export const ClusterList: FC = () => {
         </Col>
         <Col xs={24} sm={8}>
           <Card>
-            <div className="text-slate-500">{t('tenant.clusters.stats.healthy')}</div>
+            <div className="text-slate-500">
+              {t('tenant.clusters.stats.healthy')}
+              <span className="ml-1 text-xs">{t('tenant.clusters.stats.pageNote')}</span>
+            </div>
             <div className="text-2xl font-bold text-green-600">{healthyCount}</div>
           </Card>
         </Col>
         <Col xs={24} sm={8}>
           <Card>
-            <div className="text-slate-500">{t('tenant.clusters.stats.unhealthy')}</div>
+            <div className="text-slate-500">
+              {t('tenant.clusters.stats.unhealthy')}
+              <span className="ml-1 text-xs">{t('tenant.clusters.stats.pageNote')}</span>
+            </div>
             <div className="text-2xl font-bold text-red-600">{unhealthyCount}</div>
           </Card>
         </Col>
@@ -307,28 +340,7 @@ export const ClusterList: FC = () => {
         destroyOnHidden
       >
         <Form form={form} layout="vertical">
-          <Form.Item
-            name="name"
-            label={t('tenant.clusters.form.name')}
-            rules={[{ required: true, message: t('tenant.clusters.form.nameRequired') }]}
-          >
-            <Input />
-          </Form.Item>
-          <Form.Item name="compute_provider" label={t('tenant.clusters.form.provider')}>
-            <Select>
-              {CLUSTER_PROVIDER_OPTIONS.map((option) => (
-                <Option key={option.value} value={option.value}>
-                  {option.label}
-                </Option>
-              ))}
-            </Select>
-          </Form.Item>
-          <Form.Item name="proxy_endpoint" label={t('tenant.clusters.form.apiEndpoint')}>
-            <Input placeholder={t('tenant.clusters.form.apiEndpointPlaceholder')} />
-          </Form.Item>
-          <Form.Item name="provider_config" label={t('tenant.clusters.form.metadata')}>
-            <TextArea rows={4} placeholder={t('tenant.clusters.form.metadataPlaceholder')} />
-          </Form.Item>
+          <ClusterFormFields />
         </Form>
       </Modal>
 

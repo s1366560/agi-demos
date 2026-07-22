@@ -3,11 +3,11 @@
  * Shows trigger description, model badge, capabilities, performance metrics, and actions.
  */
 
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Popconfirm, Switch, Tooltip } from 'antd';
+import { Dropdown, Switch, Tooltip } from 'antd';
 import {
   MoreHorizontal,
   Pencil,
@@ -26,7 +26,11 @@ import {
   Download,
 } from 'lucide-react';
 
+import { confirmAction } from '@/utils/confirmAction';
+import { formatDistanceToNow } from '@/utils/date';
+
 import type { SubAgentResponse } from '../../types/agent';
+import type { MenuProps } from 'antd';
 
 // Model color mapping
 const MODEL_BADGE_STYLES: Record<string, string> = {
@@ -50,11 +54,7 @@ const getModelBadgeStyle = (model: string): string =>
 
 const formatTimeAgo = (dateStr: string | null | undefined): string => {
   if (!dateStr) return '-';
-  const diff = Date.now() - new Date(dateStr).getTime();
-  if (diff < 60000) return '<1m';
-  if (diff < 3600000) return `${Math.floor(diff / 60000).toString()}m`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000).toString()}h`;
-  return `${Math.floor(diff / 86400000).toString()}d`;
+  return formatDistanceToNow(dateStr) || '-';
 };
 
 interface SubAgentCardProps {
@@ -70,7 +70,6 @@ interface SubAgentCardProps {
 export const SubAgentCard = memo<SubAgentCardProps>(
   ({ subagent, onToggle, onEdit, onDelete, onExport, onImport, getScopeLabel }) => {
     const { t } = useTranslation();
-    const [menuOpen, setMenuOpen] = useState(false);
 
     const isFilesystem = subagent.source === 'filesystem';
     const isReadonly = isFilesystem;
@@ -82,15 +81,24 @@ export const SubAgentCard = memo<SubAgentCardProps>(
       [subagent.id, onToggle]
     );
 
-    const handleEdit = useCallback(() => {
-      onEdit(subagent);
-      setMenuOpen(false);
-    }, [subagent, onEdit]);
-
-    const handleExport = useCallback(() => {
-      onExport?.(subagent);
-      setMenuOpen(false);
-    }, [subagent, onExport]);
+    const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
+      if (key === 'edit') {
+        onEdit(subagent);
+      } else if (key === 'export') {
+        onExport?.(subagent);
+      } else if (key === 'import' && onImport) {
+        onImport(subagent.name);
+      } else if (key === 'delete') {
+        void confirmAction({
+          title: t('tenant.subagents.card.deleteConfirm', 'Delete this SubAgent?'),
+          okText: t('common.delete', 'Delete'),
+          cancelText: t('common.cancel', 'Cancel'),
+          danger: true,
+        }).then((confirmed) => {
+          if (confirmed) onDelete(subagent.id);
+        });
+      }
+    };
 
     const toolCount = subagent.allowed_tools.includes('*')
       ? t('tenant.subagents.card.allTools', 'All')
@@ -161,7 +169,66 @@ export const SubAgentCard = memo<SubAgentCardProps>(
                 />
               )}
               {/* More menu */}
-              <div className="relative">
+              <Dropdown
+                menu={{
+                  items: isReadonly
+                    ? [
+                        ...(onImport
+                          ? [
+                              {
+                                key: 'import',
+                                icon: <Download size={14} />,
+                                label: t('tenant.subagents.card.importToDb', 'Import to Database'),
+                              },
+                            ]
+                          : []),
+                        ...(subagent.file_path
+                          ? [
+                              {
+                                key: 'path',
+                                disabled: true,
+                                label: (
+                                  <Tooltip title={subagent.file_path}>
+                                    <span className="text-xs-plus text-slate-400 dark:text-slate-500">
+                                      {subagent.file_path}
+                                    </span>
+                                  </Tooltip>
+                                ),
+                              },
+                            ]
+                          : []),
+                      ]
+                    : [
+                        {
+                          key: 'edit',
+                          icon: <Pencil size={14} />,
+                          label: t('common.edit', 'Edit'),
+                        },
+                        ...(onExport
+                          ? [
+                              {
+                                key: 'export',
+                                icon: <Upload size={14} />,
+                                label: t(
+                                  'tenant.subagents.card.exportTemplate',
+                                  'Export as Template'
+                                ),
+                              },
+                            ]
+                          : []),
+                        { type: 'divider' as const },
+                        {
+                          key: 'delete',
+                          icon: <Trash2 size={14} />,
+                          label: t('common.delete', 'Delete'),
+                          danger: true,
+                        },
+                      ],
+                  onClick: handleMenuClick,
+                }}
+                trigger={['click']}
+                placement="bottomRight"
+              >
                 <button
                   type="button"
                   aria-label={t('tenant.subagents.card.openActions', {
@@ -172,93 +239,11 @@ export const SubAgentCard = memo<SubAgentCardProps>(
                     name: subagent.display_name,
                     defaultValue: 'Open actions for {{name}}',
                   })}
-                  onClick={() => {
-                    setMenuOpen(!menuOpen);
-                  }}
                   className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                 >
                   <MoreHorizontal size={16} />
                 </button>
-                {menuOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={() => {
-                        setMenuOpen(false);
-                      }}
-                    />
-                    <div className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-20">
-                      {isReadonly ? (
-                        <>
-                          {onImport && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onImport(subagent.name);
-                                setMenuOpen(false);
-                              }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                            >
-                              <Download size={14} className="text-slate-400" />
-                              {t('tenant.subagents.card.importToDb', 'Import to Database')}
-                            </button>
-                          )}
-                          {subagent.file_path && (
-                            <Tooltip title={subagent.file_path}>
-                              <div className="px-3 py-2 text-xs-plus text-slate-400 dark:text-slate-500 truncate">
-                                {subagent.file_path}
-                              </div>
-                            </Tooltip>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={handleEdit}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                          >
-                            <Pencil size={14} className="text-slate-400" />
-                            {t('common.edit', 'Edit')}
-                          </button>
-                          {onExport && (
-                            <button
-                              type="button"
-                              onClick={handleExport}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                            >
-                              <Upload size={14} className="text-slate-400" />
-                              {t('tenant.subagents.card.exportTemplate', 'Export as Template')}
-                            </button>
-                          )}
-                          <div className="border-t border-slate-100 dark:border-slate-700 my-1" />
-                          <Popconfirm
-                            title={t(
-                              'tenant.subagents.card.deleteConfirm',
-                              'Delete this SubAgent?'
-                            )}
-                            onConfirm={() => {
-                              onDelete(subagent.id);
-                              setMenuOpen(false);
-                            }}
-                            okText={t('common.delete', 'Delete')}
-                            cancelText={t('common.cancel', 'Cancel')}
-                            okButtonProps={{ danger: true }}
-                          >
-                            <button
-                              type="button"
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                            >
-                              <Trash2 size={14} />
-                              {t('common.delete', 'Delete')}
-                            </button>
-                          </Popconfirm>
-                        </>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
+              </Dropdown>
             </div>
           </div>
         </div>

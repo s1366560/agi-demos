@@ -102,6 +102,20 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
     >
       {query.isLoading ? (
         <Skeleton active paragraph={{ rows: 2 }} />
+      ) : query.isError ? (
+        <div role="alert" className="flex flex-col items-center gap-2 py-4">
+          <Text type="secondary">
+            {t('project.agentTeammates.loadFailed', 'Failed to load agents')}
+          </Text>
+          <Button
+            size="small"
+            onClick={() => {
+              void query.refetch();
+            }}
+          >
+            {t('common.retry', 'Retry')}
+          </Button>
+        </div>
       ) : agents.length === 0 ? (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}

@@ -9,7 +9,9 @@ import { useTenantStore } from '@/stores/tenant';
 import { genePolicyService } from '@/services/genePolicyService';
 import type { GenePolicyResponse, GenePolicyRequest } from '@/services/genePolicyService';
 
-import { useLazyMessage, LazySpin } from '@/components/ui/lazyAntd';
+import { formatDateTime } from '@/utils/date';
+
+import { useLazyMessage, LazyPopconfirm, LazySpin } from '@/components/ui/lazyAntd';
 
 interface EditingPolicy {
   policy_key: string;
@@ -185,6 +187,7 @@ export const OrgGenes: React.FC = () => {
                   setEditing({ ...editing, policy_key: e.target.value });
                 }}
                 disabled={!editing.isNew}
+                spellCheck={false}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none disabled:opacity-60 disabled:cursor-not-allowed"
                 placeholder={t('tenant.orgSettings.genes.policyKeyPlaceholder')}
               />
@@ -223,6 +226,7 @@ export const OrgGenes: React.FC = () => {
                   setEditing({ ...editing, policy_value: e.target.value });
                 }}
                 rows={6}
+                spellCheck={false}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none font-mono text-sm"
                 placeholder={t('tenant.orgSettings.genes.policyValuePlaceholder')}
               />
@@ -290,7 +294,7 @@ export const OrgGenes: React.FC = () => {
                   </pre>
                   <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
                     {t('tenant.orgSettings.genes.updatedAt')}:{' '}
-                    {new Date(policy.updated_at ?? policy.created_at).toLocaleString()}
+                    {formatDateTime(policy.updated_at ?? policy.created_at)}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -302,24 +306,30 @@ export const OrgGenes: React.FC = () => {
                     disabled={editing !== null}
                     className="p-2 rounded-lg text-slate-400 hover:text-primary hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     title={t('common.edit')}
+                    aria-label={t('common.edit')}
                   >
                     <Pencil size={20} />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void handleDelete(policy.policy_key);
-                    }}
-                    disabled={deletingKey === policy.policy_key}
-                    className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={t('common.delete')}
+                  <LazyPopconfirm
+                    title={t('tenant.orgSettings.genes.deleteConfirm')}
+                    onConfirm={() => void handleDelete(policy.policy_key)}
+                    okText={t('common.delete')}
+                    cancelText={t('common.cancel')}
                   >
-                    {deletingKey === policy.policy_key ? (
-                      <Loader2 size={20} className="animate-spin motion-reduce:animate-none" />
-                    ) : (
-                      <Trash2 size={20} />
-                    )}
-                  </button>
+                    <button
+                      type="button"
+                      disabled={deletingKey === policy.policy_key}
+                      className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={t('common.delete')}
+                      aria-label={t('common.delete')}
+                    >
+                      {deletingKey === policy.policy_key ? (
+                        <Loader2 size={20} className="animate-spin motion-reduce:animate-none" />
+                      ) : (
+                        <Trash2 size={20} />
+                      )}
+                    </button>
+                  </LazyPopconfirm>
                 </div>
               </div>
             </div>

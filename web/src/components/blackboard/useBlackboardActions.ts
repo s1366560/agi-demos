@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import { confirmAction } from '@/utils/confirmAction';
+
 import type { ObjectiveFormValues } from '@/components/workspace/objectives/ObjectiveCreateModal';
 
 import type { BlackboardPost, CyberObjectiveType } from '@/types/workspace';
-import { confirmAction } from '@/utils/confirmAction';
 
 export interface BlackboardActionCallbacks {
   onLoadReplies: (postId: string) => Promise<boolean>;
@@ -342,7 +343,9 @@ export function useBlackboardActions({
     try {
       await projectObjectiveToTask(tenantId, projectId, workspaceId, objectiveId);
     } catch {
-      message?.error(t('blackboard.errors.projectObjective', 'Failed to project objective to task'));
+      message?.error(
+        t('blackboard.errors.projectObjective', 'Failed to project objective to task')
+      );
     }
   };
 

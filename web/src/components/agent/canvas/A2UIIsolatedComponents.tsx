@@ -651,7 +651,9 @@ export const A2UIModal = memo<A2UIComponentProps>(({ node, surfaceId }) => {
             }
           }}
           style={{ cursor: 'pointer' }}
-        >          <A2UIIsolatedNode
+        >
+          {' '}
+          <A2UIIsolatedNode
             key={getNodeKey(entryPointChild, 'modal-trigger')}
             node={entryPointChild}
             surfaceId={surfaceId}
@@ -688,7 +690,7 @@ export const A2UIModal = memo<A2UIComponentProps>(({ node, surfaceId }) => {
           className={classMapToString(theme.components.Modal.element)}
           style={stylesToObject(theme.additionalStyles?.Modal)}
         >
-          <div id="controls">
+          <div>
             <button
               type="button"
               onClick={() => {

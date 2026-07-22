@@ -6,10 +6,7 @@ interface HostedProjectionBadgeProps {
   fallbackLabel: string;
 }
 
-/**
- * @deprecated Use `SurfaceBadge` with `boundary="hosted"` directly.
- * Thin wrapper kept for existing consumers.
- */
+/** Thin wrapper over `SurfaceBadge`, kept for existing consumers. */
 export function HostedProjectionBadge({ labelKey, fallbackLabel }: HostedProjectionBadgeProps) {
   return (
     <SurfaceBadge

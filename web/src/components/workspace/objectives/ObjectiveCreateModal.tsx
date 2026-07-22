@@ -54,8 +54,8 @@ export const ObjectiveCreateModal: React.FC<ObjectiveCreateModalProps> = ({
     try {
       const values = await form.validateFields();
       onSubmit(values);
-    } catch (error) {
-      console.error(error);
+    } catch {
+      // Validation failures are expected — antd Form shows inline errors.
     }
   };
 
@@ -103,7 +103,7 @@ export const ObjectiveCreateModal: React.FC<ObjectiveCreateModalProps> = ({
           <Input.TextArea
             placeholder={t(
               'workspaceDetail.objectives.descriptionPlaceholder',
-              'Add some details about this objective...'
+              'Add some details about this objective…'
             )}
             rows={3}
           />

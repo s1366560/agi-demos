@@ -60,6 +60,7 @@ import { useLayoutModeStore } from '@/stores/layoutMode';
 
 import { artifactService, fetchArtifactResource } from '@/services/artifactService';
 
+import { confirmAction } from '@/utils/confirmAction';
 import { isOfficeMimeType, isOfficeExtension } from '@/utils/filePreview';
 import {
   isSafeArtifactUrl,
@@ -172,10 +173,29 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undef
 
     const handleClose = useCallback(
       (tabId: string) => {
+        const tab = tabs.find((candidate) => candidate.id === tabId);
+        if (tab?.dirty) {
+          void (async () => {
+            const confirmed = await confirmAction({
+              title: t('agent.canvas.discardChangesTitle', 'Discard unsaved changes?'),
+              content: t('agent.canvas.discardChangesContent', {
+                title: tab.title,
+                defaultValue: '"{{title}}" has unsaved changes that will be lost.',
+              }),
+              okText: t('agent.canvas.discardChangesConfirm', 'Discard'),
+              cancelText: t('common.cancel', 'Cancel'),
+              danger: true,
+            });
+            if (!confirmed) return;
+            onBeforeCloseTab?.(tabId);
+            closeTab(tabId);
+          })();
+          return;
+        }
         onBeforeCloseTab?.(tabId);
         closeTab(tabId);
       },
-      [onBeforeCloseTab, closeTab]
+      [onBeforeCloseTab, closeTab, tabs, t]
     );
 
     if (tabs.length === 0) return null;
@@ -307,6 +327,7 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undef
             onClick={handleNewTab}
             className="flex-shrink-0 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             title={t('agent.canvas.newTab', 'New tab')}
+            aria-label={t('agent.canvas.newTab', 'New tab')}
           >
             <Plus size={14} />
           </button>
@@ -318,6 +339,7 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undef
           }}
           className="flex-shrink-0 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           title={t('agent.canvas.backToChat', 'Back to chat')}
+          aria-label={t('agent.canvas.backToChat', 'Back to chat')}
         >
           <PanelLeftClose size={16} />
         </button>
@@ -622,6 +644,7 @@ const CanvasImageViewer = memo<{ src: string; title: string }>(({ src, title }) 
           onClick={zoomOut}
           disabled={scale <= IMAGE_MIN_SCALE}
           title={t('agent.canvas.image.zoomOut', { defaultValue: 'Zoom out' })}
+          aria-label={t('agent.canvas.image.zoomOut', { defaultValue: 'Zoom out' })}
         >
           <ZoomOut size={15} />
         </button>
@@ -630,6 +653,7 @@ const CanvasImageViewer = memo<{ src: string; title: string }>(({ src, title }) 
           className="min-w-[3rem] text-center text-xs tabular-nums text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700/70 rounded-md py-1 transition-colors"
           onClick={reset}
           title={t('agent.canvas.image.resetZoom', { defaultValue: 'Reset' })}
+          aria-label={t('agent.canvas.image.resetZoom', { defaultValue: 'Reset' })}
         >
           {zoomPercent}%
         </button>
@@ -639,6 +663,7 @@ const CanvasImageViewer = memo<{ src: string; title: string }>(({ src, title }) 
           onClick={zoomIn}
           disabled={scale >= IMAGE_MAX_SCALE}
           title={t('agent.canvas.image.zoomIn', { defaultValue: 'Zoom in' })}
+          aria-label={t('agent.canvas.image.zoomIn', { defaultValue: 'Zoom in' })}
         >
           <ZoomIn size={15} />
         </button>
@@ -648,6 +673,7 @@ const CanvasImageViewer = memo<{ src: string; title: string }>(({ src, title }) 
           className={buttonClass}
           onClick={reset}
           title={t('agent.canvas.image.fit', { defaultValue: 'Fit to screen' })}
+          aria-label={t('agent.canvas.image.fit', { defaultValue: 'Fit to screen' })}
         >
           <Scan size={15} />
         </button>
@@ -656,6 +682,7 @@ const CanvasImageViewer = memo<{ src: string; title: string }>(({ src, title }) 
           className={buttonClass}
           onClick={rotateCcw}
           title={t('agent.canvas.image.rotateLeft', { defaultValue: 'Rotate left' })}
+          aria-label={t('agent.canvas.image.rotateLeft', { defaultValue: 'Rotate left' })}
         >
           <RotateCcw size={15} />
         </button>
@@ -664,6 +691,7 @@ const CanvasImageViewer = memo<{ src: string; title: string }>(({ src, title }) 
           className={buttonClass}
           onClick={rotateCw}
           title={t('agent.canvas.image.rotateRight', { defaultValue: 'Rotate right' })}
+          aria-label={t('agent.canvas.image.rotateRight', { defaultValue: 'Rotate right' })}
         >
           <RotateCw size={15} />
         </button>
@@ -673,6 +701,7 @@ const CanvasImageViewer = memo<{ src: string; title: string }>(({ src, title }) 
           className={buttonClass}
           onClick={toggleFullscreen}
           title={t('agent.canvas.image.fullscreen', { defaultValue: 'Fullscreen' })}
+          aria-label={t('agent.canvas.image.fullscreen', { defaultValue: 'Fullscreen' })}
         >
           <Maximize2 size={15} />
         </button>
@@ -681,6 +710,7 @@ const CanvasImageViewer = memo<{ src: string; title: string }>(({ src, title }) 
           className={buttonClass}
           onClick={handleDownload}
           title={t('agent.canvas.download', { defaultValue: 'Download' })}
+          aria-label={t('agent.canvas.download', { defaultValue: 'Download' })}
         >
           <Download size={15} />
         </button>
@@ -1418,8 +1448,12 @@ const CanvasFormPreview = memo<{ fields: CanvasFormField[] }>(({ fields }) => {
         {fields.map((field) => {
           const commonClasses =
             'mt-1 w-full rounded-md border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200';
+          const fieldId = `canvas-form-field-${field.name}`;
           const label = (
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+            <label
+              htmlFor={fieldId}
+              className="block text-sm font-medium text-slate-700 dark:text-slate-300"
+            >
               {field.label}
               {field.required ? <span className="ml-1 text-red-500">*</span> : null}
             </label>
@@ -1447,7 +1481,7 @@ const CanvasFormPreview = memo<{ fields: CanvasFormField[] }>(({ fields }) => {
             return (
               <div key={field.name}>
                 {label}
-                <select className={commonClasses} value={selectedValue} disabled>
+                <select id={fieldId} className={commonClasses} value={selectedValue} disabled>
                   <option value="">
                     {field.placeholder ??
                       t('agent.canvas.selectOption', { defaultValue: 'Select an option' })}
@@ -1467,6 +1501,7 @@ const CanvasFormPreview = memo<{ fields: CanvasFormField[] }>(({ fields }) => {
               <div key={field.name}>
                 {label}
                 <textarea
+                  id={fieldId}
                   className={commonClasses}
                   rows={4}
                   value={typeof field.value === 'string' ? field.value : ''}
@@ -1488,6 +1523,7 @@ const CanvasFormPreview = memo<{ fields: CanvasFormField[] }>(({ fields }) => {
             <div key={field.name}>
               {label}
               <input
+                id={fieldId}
                 type={inputType}
                 className={commonClasses}
                 value={inputValue}
@@ -1533,6 +1569,10 @@ const CanvasContent = memo<{
           }}
           className={`w-full h-full font-mono text-sm p-4 resize-none focus:outline-none ${bgClass}`}
           spellCheck={false}
+          aria-label={t('agent.canvas.editorLabel', {
+            title: tab.title,
+            defaultValue: 'Editor for {{title}}',
+          })}
         />
       </div>
     );
@@ -1818,6 +1858,7 @@ const CanvasToolbar = memo<{
           disabled={saving}
           className="p-1.5 rounded-md text-primary hover:bg-primary/10 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
           title={t('agent.canvas.save', 'Save (Ctrl+S)')}
+          aria-label={t('agent.canvas.save', 'Save (Ctrl+S)')}
         >
           {saving ? (
             <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
@@ -1834,6 +1875,7 @@ const CanvasToolbar = memo<{
         disabled={!canUndo(tab.id)}
         className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-30 disabled:cursor-not-allowed"
         title={t('agent.canvas.undo', 'Undo (Ctrl+Z)')}
+        aria-label={t('agent.canvas.undo', 'Undo (Ctrl+Z)')}
       >
         <Undo2 size={14} />
       </button>
@@ -1845,6 +1887,7 @@ const CanvasToolbar = memo<{
         disabled={!canRedo(tab.id)}
         className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-30 disabled:cursor-not-allowed"
         title={t('agent.canvas.redo', 'Redo (Ctrl+Shift+Z)')}
+        aria-label={t('agent.canvas.redo', 'Redo (Ctrl+Shift+Z)')}
       >
         <Redo2 size={14} />
       </button>
@@ -1862,6 +1905,11 @@ const CanvasToolbar = memo<{
               ? t('agent.canvas.viewMode', 'View mode')
               : t('agent.canvas.editMode', 'Edit mode')
           }
+          aria-label={
+            editMode
+              ? t('agent.canvas.viewMode', 'View mode')
+              : t('agent.canvas.editMode', 'Edit mode')
+          }
         >
           {editMode ? <Eye size={14} /> : <Pencil size={14} />}
         </button>
@@ -1873,6 +1921,7 @@ const CanvasToolbar = memo<{
         }}
         className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         title={t('agent.canvas.copy', 'Copy')}
+        aria-label={t('agent.canvas.copy', 'Copy')}
       >
         {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
       </button>
@@ -1881,6 +1930,7 @@ const CanvasToolbar = memo<{
         onClick={handleDownload}
         className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         title={t('agent.canvas.download', 'Download')}
+        aria-label={t('agent.canvas.download', 'Download')}
       >
         <Download size={14} />
       </button>
@@ -2216,7 +2266,7 @@ export const CanvasPanel = memo<{
                 <button
                   type="button"
                   onClick={handleAskRefine}
-                  className="absolute bottom-4 right-4 flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs text-white shadow-lg hover:bg-primary-600"
+                  className="absolute bottom-4 right-4 flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs text-white shadow-lg hover:bg-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
                 >
                   <Wand2 size={12} />
                   {t('agent.canvas.askRefine', 'Ask Agent to Refine')}

@@ -32,6 +32,7 @@ import {
   Download,
   RefreshCw,
   AlertCircle,
+  Loader2,
   Power,
   RotateCcw,
   Database,
@@ -43,10 +44,13 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
+import { formatDateTime } from '@/utils/date';
+
 import api, { projectAPI } from '../../services/api';
 import { projectSandboxService } from '../../services/projectSandboxService';
 import { useProjectStore } from '../../stores/project';
 import { confirmAction } from '../../utils/confirmAction';
+import { logger } from '../../utils/logger';
 
 import type {
   ProjectSettingsHeaderProps,
@@ -197,7 +201,11 @@ interface SaveButtonProps {
 
 const SaveButton: React.FC<SaveButtonProps> = ({ isSaving, label, savingLabel, onClick }) => (
   <button type="button" onClick={onClick} disabled={isSaving} className={primaryButtonClass}>
-    <Save className="h-4 w-4" />
+    {isSaving ? (
+      <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+    ) : (
+      <Save className="h-4 w-4" aria-hidden="true" />
+    )}
     {isSaving ? savingLabel : label}
   </button>
 );
@@ -232,6 +240,7 @@ const Message: React.FC<ProjectSettingsMessageProps> = ({ message, onClose }) =>
 
   return (
     <div
+      role={isSuccess ? 'status' : 'alert'}
       className={`rounded-md px-4 py-3 text-sm shadow-[0_0_0_1px_rgba(0,0,0,0.08)] ${
         isSuccess
           ? 'bg-green-50 text-green-800 dark:bg-green-950/30 dark:text-green-300'
@@ -240,7 +249,7 @@ const Message: React.FC<ProjectSettingsMessageProps> = ({ message, onClose }) =>
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <AlertCircle className="h-4 w-4" />
+          <AlertCircle className="h-4 w-4" aria-hidden="true" />
           {message.text}
         </div>
         <button
@@ -290,6 +299,7 @@ const Basic: React.FC<ProjectSettingsBasicProps> = ({
         <Field label={`${t('project.settings.basicName')} *`} span="full">
           <input
             type="text"
+            required
             aria-label={t('project.settings.basicName')}
             value={data.name}
             onChange={(e) => {
@@ -359,10 +369,13 @@ const Memory: React.FC<ProjectSettingsMemoryProps> = ({
         <Field label={t('project.settings.memoryMaxEpisodes')}>
           <input
             type="number"
+            min={1}
+            inputMode="numeric"
             aria-label={t('project.settings.memoryMaxEpisodes')}
             value={data.maxEpisodes}
             onChange={(e) => {
-              onMaxEpisodesChange(Number(e.target.value));
+              const next = e.target.valueAsNumber;
+              if (!Number.isNaN(next)) onMaxEpisodesChange(next);
             }}
             className={fieldClass}
           />
@@ -370,10 +383,13 @@ const Memory: React.FC<ProjectSettingsMemoryProps> = ({
         <Field label={t('project.settings.memoryRetention')}>
           <input
             type="number"
+            min={1}
+            inputMode="numeric"
             aria-label={t('project.settings.memoryRetention')}
             value={data.retentionDays}
             onChange={(e) => {
-              onRetentionDaysChange(Number(e.target.value));
+              const next = e.target.valueAsNumber;
+              if (!Number.isNaN(next)) onRetentionDaysChange(next);
             }}
             className={fieldClass}
           />
@@ -392,10 +408,13 @@ const Memory: React.FC<ProjectSettingsMemoryProps> = ({
           <Field label={t('project.settings.memoryInterval')} span="full">
             <input
               type="number"
+              min={1}
+              inputMode="numeric"
               aria-label={t('project.settings.memoryInterval')}
               value={data.refreshInterval}
               onChange={(e) => {
-                onRefreshIntervalChange(Number(e.target.value));
+                const next = e.target.valueAsNumber;
+                if (!Number.isNaN(next)) onRefreshIntervalChange(next);
               }}
               className={fieldClass}
             />
@@ -441,10 +460,13 @@ const Graph: React.FC<ProjectSettingsGraphProps> = ({
         <Field label={t('project.settings.graphMaxNodes')}>
           <input
             type="number"
+            min={1}
+            inputMode="numeric"
             aria-label={t('project.settings.graphMaxNodes')}
             value={data.maxNodes}
             onChange={(e) => {
-              onMaxNodesChange(Number(e.target.value));
+              const next = e.target.valueAsNumber;
+              if (!Number.isNaN(next)) onMaxNodesChange(next);
             }}
             className={fieldClass}
           />
@@ -452,10 +474,13 @@ const Graph: React.FC<ProjectSettingsGraphProps> = ({
         <Field label={t('project.settings.graphMaxEdges')}>
           <input
             type="number"
+            min={1}
+            inputMode="numeric"
             aria-label={t('project.settings.graphMaxEdges')}
             value={data.maxEdges}
             onChange={(e) => {
-              onMaxEdgesChange(Number(e.target.value));
+              const next = e.target.valueAsNumber;
+              if (!Number.isNaN(next)) onMaxEdgesChange(next);
             }}
             className={fieldClass}
           />
@@ -638,21 +663,41 @@ const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => {
     setActionLoading(true);
     try {
       await projectSandboxService.restartSandbox(projectId);
+      void antdMessage.success(t('project.settings.sandboxRestartSuccess', 'Sandbox restarted'));
       await fetchSandboxInfo();
+    } catch (error) {
+      logger.error('[ProjectSettings] Failed to restart sandbox:', error);
+      void antdMessage.error(t('project.settings.sandboxActionFailed', 'Sandbox action failed'));
     } finally {
       setActionLoading(false);
     }
-  }, [projectId, fetchSandboxInfo]);
+  }, [projectId, fetchSandboxInfo, t]);
 
   const handleTerminate = useCallback(async () => {
+    if (
+      !(await confirmAction({
+        title: t('project.settings.sandboxTerminateConfirm', 'Terminate sandbox?'),
+        content: t(
+          'project.settings.sandboxTerminateConfirmDesc',
+          'This stops the running sandbox environment. Unsaved work inside it may be lost.'
+        ),
+        danger: true,
+      }))
+    ) {
+      return;
+    }
     setActionLoading(true);
     try {
       await projectSandboxService.terminateSandbox(projectId);
+      void antdMessage.success(t('project.settings.sandboxTerminateSuccess', 'Sandbox terminated'));
       await fetchSandboxInfo();
+    } catch (error) {
+      logger.error('[ProjectSettings] Failed to terminate sandbox:', error);
+      void antdMessage.error(t('project.settings.sandboxActionFailed', 'Sandbox action failed'));
     } finally {
       setActionLoading(false);
     }
-  }, [projectId, fetchSandboxInfo]);
+  }, [projectId, fetchSandboxInfo, t]);
 
   const statusColor =
     sandboxInfo?.status === 'running'
@@ -690,7 +735,7 @@ const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => {
                 {t('project.settings.sandboxIdLabel')}:
               </span>
               <span className="break-all font-mono text-xs text-gray-600 dark:text-slate-300">
-                {sandboxInfo.sandbox_id ? sandboxInfo.sandbox_id.slice(0, 12) + '...' : '-'}
+                {sandboxInfo.sandbox_id ? sandboxInfo.sandbox_id.slice(0, 12) + '…' : '-'}
               </span>
             </div>
           </div>
@@ -702,7 +747,7 @@ const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => {
                 {t('project.settings.sandboxLastAccessed')}:
               </span>{' '}
               <span className="text-gray-700 dark:text-slate-300">
-                {new Date(sandboxInfo.last_accessed_at).toLocaleString()}
+                {formatDateTime(sandboxInfo.last_accessed_at)}
               </span>
             </div>
           )}
@@ -796,8 +841,9 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
       updateProject: state.updateProject,
     }))
   );
-  const [isSaving, setIsSaving] = useState(false);
+  const [savingSection, setSavingSection] = useState<'basic' | 'memory' | 'graph' | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [activeSection, setActiveSection] = useState('basic');
 
   // Basic settings
   const [name, setName] = useState('');
@@ -837,34 +883,39 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
 
   // Handlers
   const handleSaveBasicSettings = useCallback(async () => {
-    if (!currentProject) return;
+    if (!currentProject || savingSection) return;
 
-    setIsSaving(true);
+    if (!name.trim()) {
+      setMessage({ type: 'error', text: t('project.settings.nameRequired', 'Name is required.') });
+      return;
+    }
+
+    setSavingSection('basic');
     setMessage(null);
 
     try {
       await updateProject(currentProject.tenant_id, currentProject.id, {
-        name,
+        name: name.trim(),
         description,
         is_public: isPublic,
       });
       setMessage({ type: 'success', text: t('project.settings.saved') });
     } catch (error) {
-      console.error('Failed to save settings:', error);
+      logger.error('[ProjectSettings] Failed to save settings:', error);
       const fallback = t('project.settings.failed');
       setMessage({
         type: 'error',
         text: `${fallback}: ${getProjectSettingsErrorMessage(error, fallback)}`,
       });
     } finally {
-      setIsSaving(false);
+      setSavingSection(null);
     }
-  }, [currentProject, updateProject, name, description, isPublic, t]);
+  }, [currentProject, updateProject, name, description, isPublic, savingSection, t]);
 
   const handleSaveMemoryRules = useCallback(async () => {
-    if (!currentProject) return;
+    if (!currentProject || savingSection) return;
 
-    setIsSaving(true);
+    setSavingSection('memory');
     setMessage(null);
 
     try {
@@ -878,21 +929,21 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
       });
       setMessage({ type: 'success', text: t('project.settings.saved') });
     } catch (error) {
-      console.error('Failed to save memory rules:', error);
+      logger.error('[ProjectSettings] Failed to save memory rules:', error);
       const fallback = t('project.settings.failed');
       setMessage({
         type: 'error',
         text: `${fallback}: ${getProjectSettingsErrorMessage(error, fallback)}`,
       });
     } finally {
-      setIsSaving(false);
+      setSavingSection(null);
     }
-  }, [currentProject, maxEpisodes, retentionDays, autoRefresh, refreshInterval, t]);
+  }, [currentProject, maxEpisodes, retentionDays, autoRefresh, refreshInterval, savingSection, t]);
 
   const handleSaveGraphConfig = useCallback(async () => {
-    if (!currentProject) return;
+    if (!currentProject || savingSection) return;
 
-    setIsSaving(true);
+    setSavingSection('graph');
     setMessage(null);
 
     try {
@@ -906,16 +957,24 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
       });
       setMessage({ type: 'success', text: t('project.settings.saved') });
     } catch (error) {
-      console.error('Failed to save graph config:', error);
+      logger.error('[ProjectSettings] Failed to save graph config:', error);
       const fallback = t('project.settings.failed');
       setMessage({
         type: 'error',
         text: `${fallback}: ${getProjectSettingsErrorMessage(error, fallback)}`,
       });
     } finally {
-      setIsSaving(false);
+      setSavingSection(null);
     }
-  }, [currentProject, maxNodes, maxEdges, similarityThreshold, communityDetection, t]);
+  }, [
+    currentProject,
+    maxNodes,
+    maxEdges,
+    similarityThreshold,
+    communityDetection,
+    savingSection,
+    t,
+  ]);
 
   const handleClearCache = useCallback(async () => {
     if (!currentProject) return;
@@ -934,7 +993,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
       });
       setMessage({ type: 'success', text: t('project.settings.advancedClearCacheSuccess') });
     } catch (error) {
-      console.error('Failed to clear cache:', error);
+      logger.error('[ProjectSettings] Failed to clear cache:', error);
       setMessage({ type: 'error', text: t('project.settings.advancedClearCacheError') });
     }
   }, [currentProject, t]);
@@ -955,7 +1014,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
       );
       setMessage({ type: 'success', text: t('project.settings.advancedRebuildSuccess') });
     } catch (error) {
-      console.error('Failed to rebuild communities:', error);
+      logger.error('[ProjectSettings] Failed to rebuild communities:', error);
       setMessage({ type: 'error', text: t('project.settings.advancedRebuildError') });
     }
   }, [currentProject, t]);
@@ -988,7 +1047,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
 
       setMessage({ type: 'success', text: t('project.settings.advancedExportSuccess') });
     } catch (error) {
-      console.error('Failed to export data:', error);
+      logger.error('[ProjectSettings] Failed to export data:', error);
       setMessage({ type: 'error', text: t('project.settings.advancedExportError') });
     }
   }, [currentProject, t]);
@@ -1034,7 +1093,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
       void antdMessage.success(t('project.settings.dangerSuccess'));
       void navigate('/tenant');
     } catch (error) {
-      console.error('Failed to delete project:', error);
+      logger.error('[ProjectSettings] Failed to delete project:', error);
       void antdMessage.error(t('project.settings.dangerFail'));
     }
   }, [currentProject, navigate, t]);
@@ -1071,16 +1130,28 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
               </p>
             </div>
             <nav className="p-2">
-              {sectionLinks.map(({ href, label, icon: Icon }) => (
-                <a
-                  key={href}
-                  href={href}
-                  className="flex min-h-9 items-center gap-2 rounded px-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-950 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white"
-                >
-                  <Icon className="h-4 w-4" />
-                  <span className="truncate">{label}</span>
-                </a>
-              ))}
+              {sectionLinks.map(({ href, label, icon: Icon }) => {
+                const sectionId = href.slice(1);
+                const isActive = activeSection === sectionId;
+                return (
+                  <a
+                    key={href}
+                    href={href}
+                    aria-current={isActive ? 'location' : undefined}
+                    onClick={() => {
+                      setActiveSection(sectionId);
+                    }}
+                    className={`flex min-h-9 items-center gap-2 rounded px-2 text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-gray-100 text-gray-950 dark:bg-slate-900 dark:text-white'
+                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-950 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" aria-hidden="true" />
+                    <span className="truncate">{label}</span>
+                  </a>
+                );
+              })}
             </nav>
           </div>
         </aside>
@@ -1088,7 +1159,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
         <div className="space-y-5">
           <Basic
             data={{ name, description, isPublic }}
-            isSaving={isSaving}
+            isSaving={savingSection === 'basic'}
             onNameChange={setName}
             onDescriptionChange={setDescription}
             onIsPublicChange={setIsPublic}
@@ -1096,7 +1167,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
           />
           <Memory
             data={{ maxEpisodes, retentionDays, autoRefresh, refreshInterval }}
-            isSaving={isSaving}
+            isSaving={savingSection === 'memory'}
             onMaxEpisodesChange={setMaxEpisodes}
             onRetentionDaysChange={setRetentionDays}
             onAutoRefreshChange={setAutoRefresh}
@@ -1105,7 +1176,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
           />
           <Graph
             data={{ maxNodes, maxEdges, similarityThreshold, communityDetection }}
-            isSaving={isSaving}
+            isSaving={savingSection === 'graph'}
             onMaxNodesChange={setMaxNodes}
             onMaxEdgesChange={setMaxEdges}
             onSimilarityThresholdChange={setSimilarityThreshold}

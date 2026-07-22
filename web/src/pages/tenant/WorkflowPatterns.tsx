@@ -84,8 +84,6 @@ export function WorkflowPatterns() {
   const [adminNotes, setAdminNotes] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'usage' | 'success'>('usage');
-  const [deleting, setDeleting] = useState(false);
-  void deleting; // Used in handleDeprecatePattern
 
   // Fetch patterns from API
   const fetchPatterns = useCallback(async () => {
@@ -156,7 +154,6 @@ export function WorkflowPatterns() {
       okType: 'danger',
       cancelText: t('common.cancel'),
       onOk: async () => {
-        setDeleting(true);
         try {
           await patternService.deletePattern(patternId, tenantId);
           message?.success(t('tenant.workflowPatterns.deleteSuccess'));
@@ -174,8 +171,6 @@ export function WorkflowPatterns() {
               ? err.message
               : t('tenant.workflowPatterns.deleteError');
           message?.error(errorMessage);
-        } finally {
-          setDeleting(false);
         }
       },
     });
@@ -187,7 +182,7 @@ export function WorkflowPatterns() {
       <div className="max-w-full mx-auto">
         <div className="flex flex-col items-center justify-center py-16">
           <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
-            <AlertCircle size={32} className="text-red-500" />
+            <AlertCircle size={32} className="text-red-500" aria-hidden="true" />
           </div>
           <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
             {t('tenant.workflowPatterns.loadErrorTitle')}
@@ -212,9 +207,9 @@ export function WorkflowPatterns() {
       {/* Page Heading & Actions */}
       <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+          <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
             {t('tenant.workflowPatterns.title')}
-          </h2>
+          </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1 max-w-2xl">
             {t('tenant.workflowPatterns.description')}
           </p>
@@ -228,7 +223,7 @@ export function WorkflowPatterns() {
             disabled={loading}
             className="px-4 py-2.5 rounded-lg text-sm font-medium border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
           >
-            <RefreshCw size={16} className="align-middle mr-1" />
+            <RefreshCw size={16} className="align-middle mr-1" aria-hidden="true" />
             {t('common.refresh')}
           </button>
         </div>
@@ -256,7 +251,11 @@ export function WorkflowPatterns() {
       <div className="flex items-center gap-3 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-lg px-4 py-2 my-6">
         {/* Search */}
         <div className="relative flex-1">
-          <Search size={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search
+            size={20}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            aria-hidden="true"
+          />
           <input
             type="text"
             value={searchQuery}
@@ -264,7 +263,8 @@ export function WorkflowPatterns() {
               setSearchQuery(e.target.value);
             }}
             placeholder={t('tenant.workflowPatterns.searchPlaceholder')}
-            className="w-full pl-10 pr-4 py-2 rounded-lg border-0 focus:outline-none focus:ring-0 text-sm bg-transparent text-slate-900 dark:text-white placeholder:text-slate-400"
+            aria-label={t('tenant.workflowPatterns.searchPlaceholder')}
+            className="w-full pl-10 pr-4 py-2 rounded-lg border-0 text-sm bg-transparent text-slate-900 dark:text-white placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           />
         </div>
 

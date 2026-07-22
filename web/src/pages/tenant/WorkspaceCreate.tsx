@@ -1,7 +1,14 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import { Button, Input, message, Tag } from 'antd';
 import {
@@ -23,6 +30,9 @@ import { useWorkspaceActions } from '@/stores/workspace';
 
 import { ApiError } from '@/services/client/ApiError';
 
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning';
+
+import { confirmAction } from '@/utils/confirmAction';
 import {
   buildWorkspaceCreateRequest,
   isIsolatedSandboxCodeRoot,
@@ -42,6 +52,41 @@ interface CreationOption<T extends string> {
 }
 
 const PROJECT_CONTEXT_PAGE_SIZE = 25;
+
+/** ARIA radio-group keyboard support: arrow keys + Home/End move selection and focus. */
+function handleRadioGroupKeyDown<T extends string>(
+  event: ReactKeyboardEvent<HTMLDivElement>,
+  options: readonly T[],
+  current: T | null,
+  onChange: (value: T) => void
+): void {
+  const lastIndex = options.length - 1;
+  const currentIndex = current === null ? -1 : options.indexOf(current);
+  let nextIndex: number | null = null;
+  switch (event.key) {
+    case 'ArrowRight':
+    case 'ArrowDown':
+      nextIndex = currentIndex < 0 || currentIndex === lastIndex ? 0 : currentIndex + 1;
+      break;
+    case 'ArrowLeft':
+    case 'ArrowUp':
+      nextIndex = currentIndex <= 0 ? lastIndex : currentIndex - 1;
+      break;
+    case 'Home':
+      nextIndex = 0;
+      break;
+    case 'End':
+      nextIndex = lastIndex;
+      break;
+    default:
+      return;
+  }
+  event.preventDefault();
+  const next = options[nextIndex];
+  if (next === undefined) return;
+  onChange(next);
+  event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')[nextIndex]?.focus();
+}
 
 export function WorkspaceCreate() {
   const { t } = useTranslation();
@@ -175,6 +220,26 @@ export function WorkspaceCreate() {
   const needsCodeRoot = workspaceUseCase === 'programming';
   const hasValidCodeRoot = !needsCodeRoot || isIsolatedSandboxCodeRoot(normalizedCodeRoot);
   const descriptionReady = trimmedDescription.length >= MIN_WORKSPACE_DESCRIPTION_LENGTH;
+  const isDirty =
+    name.trim() !== '' ||
+    trimmedDescription !== '' ||
+    workspaceUseCase !== null ||
+    collaborationMode !== null ||
+    sandboxCodeRoot.trim() !== '';
+  useUnsavedChangesWarning(isDirty && !submitting);
+
+  const handleBackNavigation = async () => {
+    if (
+      isDirty &&
+      !(await confirmAction({
+        title: t('tenant.workspaceList.discardConfirm', 'Discard unsaved changes?'),
+        danger: true,
+      }))
+    ) {
+      return;
+    }
+    void navigate(listPath);
+  };
   const canCreate =
     !!tenantId &&
     !!projectId &&
@@ -247,13 +312,16 @@ export function WorkspaceCreate() {
     <div className="flex h-full min-h-0 w-full flex-col px-6 py-8 sm:px-8">
       <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <Link
-            to={listPath}
+          <button
+            type="button"
+            onClick={() => {
+              void handleBackNavigation();
+            }}
             className="inline-flex min-h-9 items-center gap-2 rounded-md px-1 text-sm font-medium text-text-secondary transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:text-text-muted"
           >
             <ArrowLeft size={15} aria-hidden />
             {t('tenant.workspaceList.backToWorkspaces', 'Back to workspaces')}
-          </Link>
+          </button>
           <h1 className="mt-3 text-2xl font-semibold tracking-tight text-text-primary dark:text-text-inverse">
             {t('tenant.workspaceList.createPanelTitle', 'New workspace')}
           </h1>
@@ -351,8 +419,11 @@ export function WorkspaceCreate() {
                   <Input
                     id="workspace-code-root-input"
                     aria-label={t('tenant.workspaceList.codeRootPlaceholder', 'Sandbox code root')}
+                    aria-invalid={sandboxCodeRoot !== '' && !hasValidCodeRoot}
+                    aria-describedby="workspace-code-root-hint"
                     prefix={<Code2 size={14} className="text-text-muted" />}
                     placeholder={t('tenant.workspaceList.codeRootPlaceholder', '/workspace/my-evo')}
+                    spellCheck={false}
                     value={sandboxCodeRoot}
                     onChange={(event) => {
                       setSandboxCodeRoot(event.target.value);
@@ -361,6 +432,7 @@ export function WorkspaceCreate() {
                     disabled={submitting}
                   />
                   <div
+                    id="workspace-code-root-hint"
                     className={[
                       'mt-1 text-[11px]',
                       hasValidCodeRoot
@@ -393,8 +465,16 @@ export function WorkspaceCreate() {
                   role="radiogroup"
                   aria-label={t('tenant.workspaceList.typeSelector', 'Use case')}
                   className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-5"
+                  onKeyDown={(event) => {
+                    handleRadioGroupKeyDown(
+                      event,
+                      useCaseOptions.map((option) => option.value),
+                      workspaceUseCase,
+                      setWorkspaceUseCase
+                    );
+                  }}
                 >
-                  {useCaseOptions.map((option) => {
+                  {useCaseOptions.map((option, index) => {
                     const selected = workspaceUseCase === option.value;
                     return (
                       <button
@@ -402,6 +482,7 @@ export function WorkspaceCreate() {
                         type="button"
                         role="radio"
                         aria-checked={selected}
+                        tabIndex={selected || (workspaceUseCase === null && index === 0) ? 0 : -1}
                         disabled={submitting}
                         onClick={() => {
                           setWorkspaceUseCase(option.value);
@@ -441,8 +522,16 @@ export function WorkspaceCreate() {
                   role="radiogroup"
                   aria-label={t('tenant.workspaceList.modeSelector', 'Collaboration mode')}
                   className="grid gap-2 sm:grid-cols-2"
+                  onKeyDown={(event) => {
+                    handleRadioGroupKeyDown(
+                      event,
+                      collaborationModeOptions.map((option) => option.value),
+                      collaborationMode,
+                      setCollaborationMode
+                    );
+                  }}
                 >
-                  {collaborationModeOptions.map((option) => {
+                  {collaborationModeOptions.map((option, index) => {
                     const selected = collaborationMode === option.value;
                     return (
                       <button
@@ -450,6 +539,7 @@ export function WorkspaceCreate() {
                         type="button"
                         role="radio"
                         aria-checked={selected}
+                        tabIndex={selected || (collaborationMode === null && index === 0) ? 0 : -1}
                         disabled={submitting}
                         onClick={() => {
                           setCollaborationMode(option.value);

@@ -5,6 +5,8 @@
 
 import React from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Drawer, Empty } from 'antd';
 import { Wrench } from 'lucide-react';
 
@@ -17,27 +19,37 @@ export interface McpToolsDrawerProps {
 }
 
 export const McpToolsDrawer: React.FC<McpToolsDrawerProps> = ({ open, server, onClose }) => {
+  const { t } = useTranslation();
   const tools = server?.discovered_tools ?? [];
 
   return (
     <Drawer
-      title={server ? `${server.name} - Tools` : 'Server Tools'}
+      title={
+        server
+          ? t('mcp.toolsDrawer.serverTools', {
+              name: server.name,
+              defaultValue: '{{name}} - Tools',
+            })
+          : t('mcp.toolsDrawer.title', 'Server Tools')
+      }
       open={open}
       onClose={onClose}
       size="large"
       destroyOnHidden
     >
       {tools.length === 0 ? (
-        <Empty description="No tools discovered. Try syncing the server." />
+        <Empty
+          description={t('mcp.toolsDrawer.empty', 'No tools discovered. Try syncing the server.')}
+        />
       ) : (
         <div className="space-y-3">
-          {tools.map((tool: MCPToolInfo, idx: number) => (
+          {tools.map((tool: MCPToolInfo) => (
             <div
-              key={idx}
+              key={`${server?.id ?? 'server'}-${tool.name}`}
               className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700"
             >
               <div className="flex items-center gap-2 mb-2">
-                <Wrench size={16} className="text-primary-500" />
+                <Wrench size={16} aria-hidden="true" className="text-primary-500" />
                 <span className="font-medium text-slate-900 dark:text-white">{tool.name}</span>
               </div>
               {tool.description && (
@@ -48,7 +60,7 @@ export const McpToolsDrawer: React.FC<McpToolsDrawerProps> = ({ open, server, on
               {tool.input_schema && (
                 <details className="mt-2">
                   <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-700 dark:hover:text-slate-300">
-                    Input Schema
+                    {t('mcp.toolsDrawer.inputSchema', 'Input Schema')}
                   </summary>
                   <pre className="mt-1 p-2 bg-slate-100 dark:bg-slate-900 rounded text-xs text-slate-700 dark:text-slate-300 overflow-auto max-h-40">
                     {JSON.stringify(tool.input_schema, null, 2)}

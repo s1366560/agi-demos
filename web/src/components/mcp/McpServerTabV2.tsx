@@ -138,7 +138,7 @@ export const McpServerTabV2: React.FC = () => {
         await toggleEnabled(server.id, enabled);
         message.success(enabled ? t('mcp.servers.enableSuccess') : t('mcp.servers.disableSuccess'));
       } catch {
-        /* store handles error */
+        message.error(t('mcp.servers.toggleFailed', 'Failed to update server status'));
       }
     },
     [toggleEnabled, t]
@@ -150,7 +150,7 @@ export const McpServerTabV2: React.FC = () => {
         await syncServer(server.id);
         message.success(t('mcp.servers.syncSuccess'));
       } catch {
-        /* store handles error */
+        message.error(t('mcp.servers.syncFailed'));
       }
     },
     [syncServer, t]
@@ -175,7 +175,7 @@ export const McpServerTabV2: React.FC = () => {
           message.error(t('mcp.servers.connectFailed', { message: result.message }));
         }
       } catch {
-        /* store handles error */
+        message.error(t('mcp.servers.testFailed'));
       }
     },
     [testServer, t]
@@ -187,7 +187,7 @@ export const McpServerTabV2: React.FC = () => {
         await deleteServer(id);
         message.success(t('mcp.servers.deleteSuccess'));
       } catch {
-        /* store handles error */
+        message.error(t('mcp.servers.deleteFailed', 'Failed to delete MCP server'));
       }
     },
     [deleteServer, t]
@@ -374,7 +374,7 @@ export const McpServerTabV2: React.FC = () => {
             <button
               type="button"
               onClick={clearFilters}
-              className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 font-medium"
+              className="rounded text-xs font-medium text-primary-600 transition-colors hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:text-primary-400"
             >
               {t('mcp.servers.clearFilters')}
             </button>
@@ -425,7 +425,7 @@ export const McpServerTabV2: React.FC = () => {
           <button
             type="button"
             onClick={clearFilters}
-            className="mt-2 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 font-medium"
+            className="mt-2 rounded text-sm font-medium text-primary-600 transition-colors hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:text-primary-400"
           >
             {t('mcp.servers.clearAllFilters')}
           </button>

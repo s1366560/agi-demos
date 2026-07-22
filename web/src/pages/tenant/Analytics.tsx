@@ -1,4 +1,14 @@
-import { useEffect, useState, lazy, Suspense, memo, useMemo, useRef, useCallback, type FC } from 'react';
+import {
+  useEffect,
+  useState,
+  lazy,
+  Suspense,
+  memo,
+  useMemo,
+  useRef,
+  useCallback,
+  type FC,
+} from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';

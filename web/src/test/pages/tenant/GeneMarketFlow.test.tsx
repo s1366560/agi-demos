@@ -8,12 +8,15 @@ import { GeneDetail } from '@/pages/tenant/GeneDetail';
 import { GeneMarket } from '@/pages/tenant/GeneMarket';
 import { GenomeDetail } from '@/pages/tenant/GenomeDetail';
 
+import { instanceService } from '@/services/instanceService';
+
 import type {
   EvolutionEventResponse,
   GeneResponse,
   GeneReview,
   GenomeResponse,
 } from '@/services/geneMarketService';
+import type { InstanceResponse } from '@/services/instanceService';
 
 const navigateMock = vi.hoisted(() => vi.fn());
 const paramsMock = vi.hoisted(() => ({
@@ -83,6 +86,63 @@ vi.mock('react-router-dom', async () => {
 vi.mock('@/stores/tenant', () => ({
   useCurrentTenant: () => ({ id: 'tenant-1' }),
 }));
+
+vi.mock('@/services/instanceService', () => ({
+  instanceService: {
+    list: vi.fn(),
+  },
+}));
+
+const instance = (overrides: Partial<InstanceResponse> = {}): InstanceResponse => ({
+  id: 'instance-1',
+  name: 'Instance One',
+  slug: 'instance-one',
+  description: null,
+  tenant_id: 'tenant-1',
+  cluster_id: null,
+  namespace: null,
+  image_version: 'v1',
+  replicas: 1,
+  cpu_request: '100m',
+  cpu_limit: '1',
+  mem_request: '256Mi',
+  mem_limit: '1Gi',
+  service_type: 'ClusterIP',
+  ingress_domain: null,
+  env_vars: {},
+  quota_cpu: null,
+  quota_memory: null,
+  quota_max_pods: null,
+  storage_class: null,
+  storage_size: null,
+  advanced_config: {},
+  llm_providers: {},
+  compute_provider: null,
+  runtime: 'docker',
+  workspace_id: null,
+  hex_position_q: null,
+  hex_position_r: null,
+  agent_display_name: null,
+  agent_label: null,
+  theme_color: null,
+  status: 'running',
+  health_status: 'healthy',
+  current_revision: null,
+  available_replicas: null,
+  proxy_token: null,
+  pending_config: null,
+  created_by: null,
+  created_at: '2026-06-17T00:00:00Z',
+  updated_at: null,
+  ...overrides,
+});
+
+/** Open the install modal's instance picker and choose the first option. */
+const pickInstanceInInstallModal = async (label: string): Promise<void> => {
+  const combobox = await screen.findByLabelText(label);
+  fireEvent.mouseDown(combobox);
+  fireEvent.click(await screen.findByText('Instance One (instance-one)'));
+};
 
 vi.mock('@/stores/geneMarket', () => ({
   useActiveTab: () => stateMock.activeTab,
@@ -191,6 +251,12 @@ const genome = (overrides: Partial<GenomeResponse> = {}): GenomeResponse => ({
 describe('Gene marketplace rating flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(instanceService.list).mockResolvedValue({
+      instances: [instance()],
+      total: 1,
+      page: 1,
+      page_size: 100,
+    });
     paramsMock.geneId = 'gene-1';
     paramsMock.genomeId = 'genome-1';
     paramsMock.tenantId = 'tenant-1';
@@ -508,9 +574,7 @@ describe('Gene marketplace rating flow', () => {
     );
 
     fireEvent.click(await screen.findByRole('button', { name: 'tenant.genes.installAction' }));
-    fireEvent.change(screen.getByLabelText('tenant.genes.instanceId'), {
-      target: { value: 'instance-1' },
-    });
+    await pickInstanceInInstallModal('tenant.genes.instanceId');
     fireEvent.click(screen.getByRole('button', { name: 'OK' }));
 
     await waitFor(() => {
@@ -534,9 +598,7 @@ describe('Gene marketplace rating flow', () => {
     );
 
     fireEvent.click(await screen.findByRole('button', { name: 'tenant.genes.installAction' }));
-    fireEvent.change(screen.getByLabelText('tenant.genes.instanceId'), {
-      target: { value: 'instance-1' },
-    });
+    await pickInstanceInInstallModal('tenant.genes.instanceId');
     fireEvent.change(screen.getByLabelText('tenant.genes.configOverride'), {
       target: { value: '{not-json' },
     });
@@ -855,9 +917,7 @@ describe('Gene marketplace rating flow', () => {
     );
 
     fireEvent.click(await screen.findByRole('button', { name: 'Install' }));
-    fireEvent.change(screen.getByLabelText('Instance ID'), {
-      target: { value: 'instance-1' },
-    });
+    await pickInstanceInInstallModal('Instance ID');
     fireEvent.change(screen.getByLabelText('Config Override (JSON)'), {
       target: { value: '{"code-review":{"mode":"strict"}}' },
     });

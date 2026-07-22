@@ -187,7 +187,7 @@ describe('MemoryList', () => {
 
     await waitFor(() => {
       // Component should render - check for search input which is always present
-      expect(screen.getByRole('textbox')).toBeInTheDocument();
+      expect(screen.getByRole('searchbox')).toBeInTheDocument();
     });
   });
 
@@ -234,7 +234,7 @@ describe('MemoryList', () => {
     });
 
     // Find search input and type
-    const searchInput = screen.getByRole('textbox');
+    const searchInput = screen.getByRole('searchbox');
     fireEvent.change(searchInput, { target: { value: 'Apple' } });
 
     // After filtering, only Apple should be visible

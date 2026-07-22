@@ -134,8 +134,10 @@ export const SkillModal: FC<SkillModalProps> = ({
       message.success(t('tenant.skills.updateSuccess'));
 
       onSuccess();
-    } catch {
-      // API errors handled by store
+    } catch (error: unknown) {
+      if (!(error !== null && typeof error === 'object' && 'errorFields' in error)) {
+        message.error(t('tenant.skills.saveFailed', 'Failed to save skill'));
+      }
     }
   }, [form, skill, tenantId, updateSkill, onSuccess, t]);
 
@@ -312,7 +314,11 @@ export const SkillModal: FC<SkillModalProps> = ({
                     {t('tenant.skills.modal.advancedHint')}
                   </div>
                 </div>
-                <Switch checked={showAdvanced} onChange={setShowAdvanced} />
+                <Switch
+                  checked={showAdvanced}
+                  onChange={setShowAdvanced}
+                  aria-label={t('tenant.skills.modal.advanced')}
+                />
               </div>
 
               {showAdvanced ? (

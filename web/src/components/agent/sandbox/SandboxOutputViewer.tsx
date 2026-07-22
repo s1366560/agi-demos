@@ -140,7 +140,7 @@ function ToolExecutionCard({
     }
     if (execution.toolName === 'bash') {
       const cmd = stringInput(input.command);
-      return cmd.length > 50 ? cmd.slice(0, 50) + '...' : cmd;
+      return cmd.length > 50 ? cmd.slice(0, 50) + '…' : cmd;
     }
     return JSON.stringify(input);
   }, [execution, t]);
@@ -170,8 +170,9 @@ function ToolExecutionCard({
           >
             {execution.toolName}
           </Tag>
-          <Text
-            className="text-sm text-slate-600 cursor-pointer hover:text-blue-600"
+          <button
+            type="button"
+            className="text-sm text-slate-600 cursor-pointer hover:text-blue-600 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded"
             onClick={() => {
               const filePath =
                 stringInput(execution.input.file_path) || stringInput(execution.input.path);
@@ -181,7 +182,7 @@ function ToolExecutionCard({
             }}
           >
             {formattedInput}
-          </Text>
+          </button>
         </div>
         <div className="flex items-center gap-2">
           {execution.durationMs && (
@@ -202,6 +203,11 @@ function ToolExecutionCard({
                 void handleCopy();
               }}
               className="text-slate-400 hover:text-slate-600"
+              aria-label={
+                copied
+                  ? t('components.sandboxOutput.copied', { defaultValue: 'Copied!' })
+                  : t('components.sandboxOutput.copyOutput', { defaultValue: 'Copy output' })
+              }
             />
           </Tooltip>
         </div>

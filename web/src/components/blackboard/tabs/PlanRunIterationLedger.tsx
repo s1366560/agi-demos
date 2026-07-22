@@ -87,7 +87,7 @@ export function PlanRunIterationLedger({
 
       <div
         className="mt-3 flex gap-2 overflow-x-auto pb-1"
-        role="tablist"
+        role="group"
         aria-label={t('blackboard.iterationLedgerAria', 'Iteration ledger')}
       >
         {runs.map((run) => {
@@ -96,8 +96,7 @@ export function PlanRunIterationLedger({
             <button
               key={run.index}
               type="button"
-              role="tab"
-              aria-selected={selected}
+              aria-pressed={selected}
               onClick={() => {
                 onSelectIteration(run.index);
               }}

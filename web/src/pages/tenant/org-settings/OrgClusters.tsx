@@ -21,42 +21,47 @@ import {
   Wrench,
 } from 'lucide-react';
 
-import { useClusters, useClusterLoading, useClusterActions } from '@/stores/cluster';
+import {
+  useClusters,
+  useClusterLoading,
+  useClusterError,
+  useClusterActions,
+} from '@/stores/cluster';
 import { useTenantStore } from '@/stores/tenant';
 
 import type { ClusterResponse } from '@/services/clusterService';
 
-const getStatusConfig = (status: string): { color: string; bgColor: string; label: string } => {
+const getStatusConfig = (status: string): { color: string; bgColor: string; labelKey: string } => {
   switch (status) {
     case 'active':
       return {
         color: 'text-green-600 dark:text-green-400',
         bgColor: 'bg-green-50 dark:bg-green-950/40',
-        label: 'Active',
+        labelKey: 'tenant.orgSettings.clusters.statusLabels.active',
       };
     case 'maintenance':
       return {
         color: 'text-orange-600 dark:text-orange-400',
         bgColor: 'bg-orange-50 dark:bg-orange-950/40',
-        label: 'Maintenance',
+        labelKey: 'tenant.orgSettings.clusters.statusLabels.maintenance',
       };
     case 'error':
       return {
         color: 'text-red-600 dark:text-red-400',
         bgColor: 'bg-red-50 dark:bg-red-950/40',
-        label: 'Error',
+        labelKey: 'tenant.orgSettings.clusters.statusLabels.error',
       };
     case 'inactive':
       return {
         color: 'text-slate-600 dark:text-slate-400',
         bgColor: 'bg-slate-100 dark:bg-slate-800',
-        label: 'Inactive',
+        labelKey: 'tenant.orgSettings.clusters.statusLabels.inactive',
       };
     default:
       return {
         color: 'text-slate-600 dark:text-slate-400',
         bgColor: 'bg-slate-100 dark:bg-slate-800',
-        label: 'Unknown',
+        labelKey: 'tenant.orgSettings.clusters.statusLabels.unknown',
       };
   }
 };
@@ -101,7 +106,7 @@ const ClusterCard: React.FC<ClusterCardProps> = ({ cluster, onViewDetails }) => 
         <span
           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusConfig.bgColor} ${statusConfig.color}`}
         >
-          {statusConfig.label}
+          {t(statusConfig.labelKey)}
         </span>
       </div>
 
@@ -115,7 +120,9 @@ const ClusterCard: React.FC<ClusterCardProps> = ({ cluster, onViewDetails }) => 
           </p>
         </div>
         <div className="rounded-lg bg-slate-100 p-2 text-center dark:bg-slate-800">
-          <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{cluster.status}</p>
+          <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
+            {t(statusConfig.labelKey)}
+          </p>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {t('tenant.orgSettings.clusters.status')}
           </p>
@@ -157,6 +164,7 @@ export const OrgClusters: React.FC = () => {
   const currentTenant = useTenantStore((s) => s.currentTenant);
   const clusters = useClusters();
   const isLoading = useClusterLoading();
+  const loadError = useClusterError();
   const { listClusters } = useClusterActions();
 
   useEffect(() => {
@@ -277,7 +285,27 @@ export const OrgClusters: React.FC = () => {
       {/* Clusters grid */}
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 size={32} className="animate-spin text-primary" />
+          <Loader2 size={32} className="animate-spin motion-reduce:animate-none text-primary" />
+        </div>
+      ) : loadError ? (
+        <div
+          role="alert"
+          className="rounded-lg border border-red-200 bg-red-50 p-12 text-center dark:border-red-900/60 dark:bg-red-950/40"
+        >
+          <AlertCircle size={48} className="mx-auto text-red-400 dark:text-red-500" />
+          <p className="text-slate-700 dark:text-slate-300 mt-4">
+            {t('tenant.orgSettings.clusters.loadFailed')}
+          </p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => {
+              void listClusters();
+            }}
+            className="mt-4 inline-flex items-center gap-2 rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 dark:border-red-800 dark:text-red-200 dark:hover:bg-red-900/40"
+          >
+            {t('common.retry', 'Retry')}
+          </button>
         </div>
       ) : clusters.length === 0 ? (
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-12 text-center dark:border-slate-700 dark:bg-slate-900">

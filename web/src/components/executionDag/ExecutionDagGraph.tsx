@@ -421,6 +421,8 @@ export const ExecutionDagGraph = memo<ExecutionDagGraphProps>(
         style={{ minHeight }}
         data-fit-to-width={viewMode === 'fit' ? 'true' : undefined}
         data-testid="execution-dag-graph"
+        role="group"
+        aria-label={t('executionDag.ariaLabel', { defaultValue: 'Execution graph' })}
         tabIndex={0}
         onKeyDown={handleKeyboard}
       >
@@ -438,6 +440,7 @@ export const ExecutionDagGraph = memo<ExecutionDagGraphProps>(
             </span>
           </div>
           <div
+            role="toolbar"
             className="flex min-w-0 flex-wrap items-center gap-1.5"
             aria-label={t('executionDag.tools', { defaultValue: 'Graph tools' })}
           >

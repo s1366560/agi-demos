@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 
 import { Timeline, Badge, Card, Typography, Alert, Collapse, Space } from 'antd';
 
@@ -17,6 +17,7 @@ import {
   useDeploys,
   useCurrentDeploy,
   useDeployLoading,
+  useDeploySubmitting,
   useDeployError,
   useDeployActions,
 } from '../../stores/deploy';
@@ -36,11 +37,15 @@ export const DeployProgress: React.FC = () => {
   const deploys = Array.isArray(deploysFromStore) ? deploysFromStore : [];
   const currentDeploy = useCurrentDeploy();
   const loading = useDeployLoading();
+  const isSubmitting = useDeploySubmitting();
   const error = useDeployError();
   const { listDeploys, getDeploy, createDeploy, markSuccess, markFailed, cancelDeploy } =
     useDeployActions();
 
-  useEffect(() => {
+  const [streamFailed, setStreamFailed] = useState(false);
+  const [streamRetryKey, setStreamRetryKey] = useState(0);
+
+  const reloadList = () => {
     if (deployId) {
       getDeploy(deployId).catch((err: unknown) => {
         console.error('Failed to get deploy:', err);
@@ -52,6 +57,11 @@ export const DeployProgress: React.FC = () => {
         messageApi?.error(t('tenant.deploy.errors.listFailed', 'Failed to fetch deploy history'));
       });
     }
+  };
+
+  useEffect(() => {
+    reloadList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceId, deployId, getDeploy, listDeploys, messageApi, t]);
 
   useEffect(() => {
@@ -71,6 +81,7 @@ export const DeployProgress: React.FC = () => {
       });
     };
 
+    setStreamFailed(false);
     void streamDeployProgress({
       deployId,
       signal: controller.signal,
@@ -86,21 +97,21 @@ export const DeployProgress: React.FC = () => {
       if (controller.signal.aborted) {
         return;
       }
-      try {
-        console.error('Deploy progress stream error:', err);
-      } catch {
-        // Ignore logger failures.
-      }
+      console.error('Deploy progress stream error:', err);
+      setStreamFailed(true);
     });
 
     return () => {
       controller.abort();
     };
-  }, [deployId, currentDeploy, getDeploy]);
+  }, [deployId, currentDeploy, getDeploy, streamRetryKey]);
 
   const handleNewDeploy = () => {
     if (!instanceId) return;
-    void createDeploy({ instance_id: instanceId, description: 'Manual deploy' })
+    void createDeploy({
+      instance_id: instanceId,
+      description: t('tenant.deploy.manualDescription', 'Manual deploy'),
+    })
       .then((res) => {
         void navigate(`../deploy/${res.id}`);
       })
@@ -196,7 +207,39 @@ export const DeployProgress: React.FC = () => {
           />
         </div>
 
-        {error && <Alert type="error" title={error} />}
+        {error && (
+          <Alert
+            type="error"
+            title={error}
+            closable
+            action={
+              <LazyButton size="small" onClick={reloadList}>
+                {t('common.retry', 'Retry')}
+              </LazyButton>
+            }
+          />
+        )}
+
+        {streamFailed && (
+          <Alert
+            type="warning"
+            showIcon
+            title={t(
+              'tenant.deploy.streamFailed',
+              'Live progress updates were interrupted. The page may be out of date.'
+            )}
+            action={
+              <LazyButton
+                size="small"
+                onClick={() => {
+                  setStreamRetryKey((key) => key + 1);
+                }}
+              >
+                {t('tenant.deploy.reconnect', 'Reconnect')}
+              </LazyButton>
+            }
+          />
+        )}
 
         <Card className="bg-surface-light dark:bg-surface-dark rounded-lg p-6 border border-border-light dark:border-border-dark">
           <div className="grid grid-cols-2 gap-8 mb-8">
@@ -210,7 +253,7 @@ export const DeployProgress: React.FC = () => {
               <Text type="secondary">{t('tenant.deploy.fields.triggeredBy', 'Triggered By')}</Text>
               <Paragraph>{currentDeploy.triggered_by || '-'}</Paragraph>
             </div>
-            <div>
+            <div aria-live="polite">
               <Timeline items={timelineItems} />
             </div>
           </div>
@@ -309,40 +352,53 @@ export const DeployProgress: React.FC = () => {
         <Title level={3} className="!mb-0">
           {t('tenant.deploy.listTitle', 'Deployment History')}
         </Title>
-        <LazyButton type="primary" onClick={handleNewDeploy}>
+        <LazyButton type="primary" loading={isSubmitting} onClick={handleNewDeploy}>
           {t('tenant.deploy.actions.new', 'New Deploy')}
         </LazyButton>
       </div>
 
-      {error && <Alert type="error" title={error} />}
+      {error && (
+        <Alert
+          type="error"
+          title={error}
+          closable
+          action={
+            <LazyButton size="small" onClick={reloadList}>
+              {t('common.retry', 'Retry')}
+            </LazyButton>
+          }
+        />
+      )}
 
       <Card className="bg-surface-light dark:bg-surface-dark rounded-lg p-6 border border-border-light dark:border-border-dark">
         <Timeline
           items={deploys.map((d) => ({
             color: getStatusColor(d.status),
             children: (
-              <Card
-                size="small"
-                hoverable
-                className="w-full cursor-pointer -ml-2"
-                onClick={() => {
-                  void navigate(`../deploy/${d.id}`);
-                }}
-              >
-                <div className="flex justify-between items-start mb-1">
-                  <Text strong>
-                    {d.description || t('tenant.deploy.defaultDescription', 'System Update')}
-                  </Text>
-                  <Text type="secondary" className="text-xs">
-                    {formatDate(d.created_at)}
-                  </Text>
-                </div>
-                <div className="flex gap-4 text-sm">
-                  <Badge color={getStatusColor(d.status)} text={d.status} />
-                  <Text type="secondary">{d.image_version}</Text>
-                  {d.triggered_by && <Text type="secondary">by {d.triggered_by}</Text>}
-                </div>
-              </Card>
+              <Link to={`../deploy/${d.id}`} className="block">
+                <Card size="small" hoverable className="w-full -ml-2">
+                  <div className="flex justify-between items-start mb-1">
+                    <Text strong>
+                      {d.description || t('tenant.deploy.defaultDescription', 'System Update')}
+                    </Text>
+                    <Text type="secondary" className="text-xs">
+                      {formatDate(d.created_at)}
+                    </Text>
+                  </div>
+                  <div className="flex gap-4 text-sm">
+                    <Badge color={getStatusColor(d.status)} text={d.status} />
+                    <Text type="secondary">{d.image_version}</Text>
+                    {d.triggered_by && (
+                      <Text type="secondary">
+                        {t('tenant.deploy.triggeredByName', {
+                          name: d.triggered_by,
+                          defaultValue: 'by {{name}}',
+                        })}
+                      </Text>
+                    )}
+                  </div>
+                </Card>
+              </Link>
             ),
           }))}
         />

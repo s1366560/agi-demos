@@ -170,6 +170,7 @@ export const McpServerDrawer: React.FC<McpServerDrawerProps> = ({
     } catch (error: unknown) {
       if (!hasValidationErrors(error)) {
         console.error('Submit error:', error);
+        message.error(t('mcp.serverDrawer.saveFailed'));
       }
     }
   }, [form, jsonConfig, parseTransportConfig, server, updateServer, createServer, onSuccess, t]);
@@ -246,8 +247,9 @@ export const McpServerDrawer: React.FC<McpServerDrawerProps> = ({
           <Switch />
         </Form.Item>
 
-        <Form.Item label={t('mcp.serverDrawer.transportConfig')}>
+        <Form.Item label={t('mcp.serverDrawer.transportConfig')} htmlFor="mcp-transport-config">
           <TextArea
+            id="mcp-transport-config"
             value={jsonConfig}
             onChange={(e) => {
               setJsonConfig(e.target.value);

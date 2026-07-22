@@ -123,7 +123,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
             <Bot size={18} className="text-slate-400" />
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-slate-900 dark:text-white">
+            <span className="text-2xl font-bold tabular-nums text-slate-900 dark:text-white">
               {totalProviders}
             </span>
             <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
@@ -144,7 +144,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
             <CheckCircle size={18} className="text-emerald-500" />
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">
+            <span className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
               {healthyProviders}
             </span>
             <span className="text-xs text-emerald-600 dark:text-emerald-500">
@@ -187,7 +187,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
           </div>
           <div className="flex items-baseline gap-2">
             <span
-              className={`text-2xl font-bold ${
+              className={`text-2xl font-bold tabular-nums ${
                 unhealthyProviders > 0
                   ? 'text-red-700 dark:text-red-400'
                   : degradedProviders > 0
@@ -238,7 +238,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
           </div>
           <div className="flex items-baseline gap-2">
             <span
-              className={`text-2xl font-bold ${
+              className={`text-2xl font-bold tabular-nums ${
                 openCircuitBreakers > 0
                   ? 'text-amber-700 dark:text-amber-400'
                   : 'text-slate-500 dark:text-slate-400'
@@ -268,7 +268,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
                   defaultValue: 'Avg Response Time',
                 })}
               </p>
-              <p className="text-lg font-bold text-slate-900 dark:text-white">
+              <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-white">
                 {avgResponseTime > 0
                   ? `${String(avgResponseTime)}ms`
                   : t('components.provider.health.notAvailable', { defaultValue: 'N/A' })}
@@ -284,7 +284,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
                     defaultValue: 'Active Providers',
                   })}
                 </p>
-                <p className="text-lg font-bold text-slate-900 dark:text-white">
+                <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-white">
                   {Object.keys(systemStatus.providers).length}
                 </p>
               </div>

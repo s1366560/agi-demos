@@ -463,7 +463,9 @@ export const AgentDefinitionDetail: React.FC = () => {
               value={String(definition.discoverable)}
             />
             <InfoRow
-              label={t('tenant.agentDefinitions.detail.labels.enabled', { defaultValue: 'Enabled' })}
+              label={t('tenant.agentDefinitions.detail.labels.enabled', {
+                defaultValue: 'Enabled',
+              })}
               value={String(definition.enabled)}
             />
           </Section>

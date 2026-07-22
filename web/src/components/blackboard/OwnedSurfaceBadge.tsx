@@ -6,10 +6,7 @@ interface OwnedSurfaceBadgeProps {
   fallbackLabel: string;
 }
 
-/**
- * @deprecated Use `SurfaceBadge` with `boundary="owned"` directly.
- * Thin wrapper kept for existing consumers.
- */
+/** Thin wrapper over `SurfaceBadge`, kept for existing consumers. */
 export function OwnedSurfaceBadge({ labelKey, fallbackLabel }: OwnedSurfaceBadgeProps) {
   return (
     <SurfaceBadge

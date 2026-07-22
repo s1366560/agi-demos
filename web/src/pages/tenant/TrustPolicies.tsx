@@ -3,8 +3,10 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
-import { Input, Button, Form, Select } from 'antd';
+import { Input, Button, Form, Pagination, Select } from 'antd';
 import { Plus, RefreshCw, Search as SearchIcon } from 'lucide-react';
+
+import { formatDateTime } from '@/utils/date';
 
 import {
   useLazyMessage,
@@ -47,6 +49,8 @@ export const TrustPolicies: React.FC = () => {
 
   const [workspaceFilter, setWorkspaceFilter] = useState('');
   const [agentFilter, setAgentFilter] = useState('');
+  const [appliedFilters, setAppliedFilters] = useState({ workspace: '', agent: '' });
+  const [page, setPage] = useState(1);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [selectedPolicy, setSelectedPolicy] = useState<TrustPolicy | null>(null);
@@ -57,11 +61,11 @@ export const TrustPolicies: React.FC = () => {
 
   const buildParams = useCallback(() => {
     const params: { workspace_id: string; agent_instance_id?: string } = {
-      workspace_id: workspaceFilter || 'default', // Requires a workspace_id usually, fallback to 'default' if empty for now
+      workspace_id: appliedFilters.workspace || 'default', // Requires a workspace_id; backend treats empty as the default workspace
     };
-    if (agentFilter) params.agent_instance_id = agentFilter;
+    if (appliedFilters.agent) params.agent_instance_id = appliedFilters.agent;
     return params;
-  }, [workspaceFilter, agentFilter]);
+  }, [appliedFilters]);
 
   const loadPolicies = useCallback(async () => {
     if (!tenantId) return;
@@ -91,6 +95,11 @@ export const TrustPolicies: React.FC = () => {
     void loadPolicies();
   }, [loadPolicies]);
 
+  const handleSearch = useCallback(() => {
+    setPage(1);
+    setAppliedFilters({ workspace: workspaceFilter.trim(), agent: agentFilter.trim() });
+  }, [workspaceFilter, agentFilter]);
+
   const handleCreateSubmit = async (values: TrustPolicyCreate) => {
     if (!tenantId) return;
     setIsCreating(true);
@@ -106,16 +115,18 @@ export const TrustPolicies: React.FC = () => {
     }
   };
 
-  const formatTimestamp = (ts: string) => {
-    try {
-      return new Date(ts).toLocaleString();
-    } catch {
-      return ts;
-    }
-  };
+  const formatTimestamp = (ts: string) => formatDateTime(ts) || ts;
 
   const getGrantTypeLabel = (grantType: string) =>
     t(`tenant.trustPolicies.grantTypes.${grantType}`, grantType);
+
+  const POLICIES_PAGE_SIZE = 20;
+  const totalPolicyPages = Math.max(1, Math.ceil(policies.length / POLICIES_PAGE_SIZE));
+  const safePolicyPage = Math.min(page, totalPolicyPages);
+  const pagedPolicies = policies.slice(
+    (safePolicyPage - 1) * POLICIES_PAGE_SIZE,
+    safePolicyPage * POLICIES_PAGE_SIZE
+  );
 
   if (!tenantId) {
     return (
@@ -165,10 +176,12 @@ export const TrustPolicies: React.FC = () => {
           <div className="flex-1 max-w-xs">
             <Search
               placeholder={t('tenant.trustPolicies.filters.workspaceId')}
+              aria-label={t('tenant.trustPolicies.filters.workspaceId')}
               value={workspaceFilter}
               onChange={(e) => {
                 setWorkspaceFilter(e.target.value);
               }}
+              onSearch={handleSearch}
               allowClear
               enterButton={
                 <>
@@ -181,10 +194,12 @@ export const TrustPolicies: React.FC = () => {
           <div className="flex-1 max-w-xs">
             <Search
               placeholder={t('tenant.trustPolicies.filters.agentInstanceId')}
+              aria-label={t('tenant.trustPolicies.filters.agentInstanceId')}
               value={agentFilter}
               onChange={(e) => {
                 setAgentFilter(e.target.value);
               }}
+              onSearch={handleSearch}
               allowClear
               enterButton={
                 <>
@@ -195,6 +210,11 @@ export const TrustPolicies: React.FC = () => {
             />
           </div>
         </div>
+        {!appliedFilters.workspace ? (
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+            {t('tenant.trustPolicies.filters.defaultWorkspaceHint')}
+          </p>
+        ) : null}
       </div>
 
       {loadError && (
@@ -252,7 +272,7 @@ export const TrustPolicies: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                {policies.map((policy) => (
+                {pagedPolicies.map((policy) => (
                   <tr
                     key={policy.id}
                     className="hover:bg-slate-50 dark:hover:bg-slate-900/30 transition-colors"
@@ -286,7 +306,7 @@ export const TrustPolicies: React.FC = () => {
                         onClick={() => {
                           setSelectedPolicy(policy);
                         }}
-                        className="text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 text-sm font-medium"
+                        className="rounded-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       >
                         {t('tenant.trustPolicies.actions.viewDetails')}
                       </button>
@@ -296,6 +316,19 @@ export const TrustPolicies: React.FC = () => {
               </tbody>
             </table>
           </div>
+          {policies.length > POLICIES_PAGE_SIZE ? (
+            <div className="flex justify-end border-t border-slate-200 px-4 py-3 dark:border-slate-700">
+              <Pagination
+                current={safePolicyPage}
+                pageSize={POLICIES_PAGE_SIZE}
+                total={policies.length}
+                showSizeChanger={false}
+                onChange={(nextPage) => {
+                  setPage(nextPage);
+                }}
+              />
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -411,7 +444,11 @@ export const TrustPolicies: React.FC = () => {
               },
             ]}
           >
-            <Input placeholder={t('tenant.trustPolicies.create.workspaceIdPlaceholder')} />
+            <Input
+              placeholder={t('tenant.trustPolicies.create.workspaceIdPlaceholder')}
+              spellCheck={false}
+              autoComplete="off"
+            />
           </Form.Item>
 
           <Form.Item
@@ -424,7 +461,11 @@ export const TrustPolicies: React.FC = () => {
               },
             ]}
           >
-            <Input placeholder={t('tenant.trustPolicies.create.agentInstanceIdPlaceholder')} />
+            <Input
+              placeholder={t('tenant.trustPolicies.create.agentInstanceIdPlaceholder')}
+              spellCheck={false}
+              autoComplete="off"
+            />
           </Form.Item>
 
           <Form.Item
@@ -438,7 +479,11 @@ export const TrustPolicies: React.FC = () => {
             ]}
             tooltip={t('tenant.trustPolicies.create.actionTypeTooltip')}
           >
-            <Input placeholder={t('tenant.trustPolicies.create.actionTypePlaceholder')} />
+            <Input
+              placeholder={t('tenant.trustPolicies.create.actionTypePlaceholder')}
+              spellCheck={false}
+              autoComplete="off"
+            />
           </Form.Item>
 
           <Form.Item

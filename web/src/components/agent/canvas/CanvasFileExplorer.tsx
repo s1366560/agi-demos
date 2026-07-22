@@ -784,7 +784,7 @@ export const CanvasFileExplorer = memo<CanvasFileExplorerProps>(({ projectId }) 
         {activeState.loading ? (
           <div className="flex h-full min-h-32 items-center justify-center gap-2 px-4 text-xs text-slate-500 dark:text-slate-400">
             <Loader2 size={14} className="animate-spin" />
-            {t('agent.canvas.fileExplorer.loading', { defaultValue: 'Loading files...' })}
+            {t('agent.canvas.fileExplorer.loading', { defaultValue: 'Loading files…' })}
           </div>
         ) : activeState.error ? (
           <div className="flex min-h-32 flex-col items-center justify-center gap-2 px-4 text-center text-xs text-slate-500 dark:text-slate-400">
@@ -793,6 +793,15 @@ export const CanvasFileExplorer = memo<CanvasFileExplorerProps>(({ projectId }) 
               {t('agent.canvas.fileExplorer.loadFailed', { defaultValue: 'Failed to load files' })}
             </div>
             <div className="max-w-full break-words">{activeState.error}</div>
+            <button
+              type="button"
+              onClick={() => {
+                void loadSource(activeSource, true);
+              }}
+              className="mt-1 rounded-md border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              {t('common.retry', { defaultValue: 'Retry' })}
+            </button>
           </div>
         ) : activeState.nodes.length === 0 ? (
           <div className="flex h-full min-h-32 items-center justify-center px-4 text-center text-xs text-slate-500 dark:text-slate-400">
