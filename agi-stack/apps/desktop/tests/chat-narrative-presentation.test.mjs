@@ -136,6 +136,7 @@ test('chat copy and diagnostics are localized in both supported locales', () => 
     'chat.sandboxEvent',
     'chat.desktopEvent',
     'chat.terminalEvent',
+    'chat.httpServiceEvent',
     'chat.suggestedFollowUps',
     'chat.sendSuggestion',
     'chat.memoriesCount',

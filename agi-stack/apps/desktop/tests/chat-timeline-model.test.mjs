@@ -1264,6 +1264,105 @@ test('runtime infrastructure events expose sandbox, desktop, and terminal state'
   );
 });
 
+test('HTTP preview service events expose service identity, preview URL, and status', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'http-service-started-1',
+      type: 'http_service_started',
+      eventTimeUs: 64_000_000,
+      eventCounter: 1,
+      payload: {
+        sandbox_id: 'sandbox-release-1',
+        service_id: 'service-preview-1',
+        service_name: 'Vite preview',
+        source_type: 'sandbox_internal',
+        service_url: 'http://172.17.0.2:5173',
+        proxy_url: '/api/v1/projects/project-1/sandbox/http-services/service-preview-1/proxy/',
+        auto_open: true,
+      },
+    }),
+    {
+      family: 'httpService',
+      state: 'ready',
+      subject: 'Vite preview',
+      detail:
+        'service-preview-1 · /api/v1/projects/project-1/sandbox/http-services/service-preview-1/proxy/',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'http-service-updated-1',
+      type: 'http_service_updated',
+      eventTimeUs: 65_000_000,
+      eventCounter: 2,
+      payload: {
+        sandbox_id: 'sandbox-release-1',
+        service_id: 'service-preview-1',
+        service_name: 'Vite preview',
+        source_type: 'sandbox_internal',
+        service_url: 'http://172.17.0.2:4173',
+        proxy_url: '/api/v1/projects/project-1/sandbox/http-services/service-preview-1/proxy/',
+        status: 'running',
+      },
+    }),
+    {
+      family: 'httpService',
+      state: 'ready',
+      subject: 'Vite preview',
+      detail:
+        'service-preview-1 · /api/v1/projects/project-1/sandbox/http-services/service-preview-1/proxy/',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'http-service-stopped-1',
+      type: 'http_service_stopped',
+      eventTimeUs: 66_000_000,
+      eventCounter: 3,
+      payload: {
+        sandbox_id: 'sandbox-release-1',
+        service_id: 'service-preview-1',
+        service_name: 'Vite preview',
+        status: 'stopped',
+      },
+    }),
+    {
+      family: 'httpService',
+      state: 'stopped',
+      subject: 'Vite preview',
+      detail: 'service-preview-1',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'http-service-error-1',
+      type: 'http_service_error',
+      eventTimeUs: 67_000_000,
+      eventCounter: 4,
+      payload: {
+        sandbox_id: 'sandbox-release-1',
+        service_id: 'service-preview-1',
+        service_name: 'Vite preview',
+        status: 'error',
+        error_message: 'Preview port is not reachable',
+      },
+    }),
+    {
+      family: 'httpService',
+      state: 'failed',
+      subject: 'Vite preview',
+      detail: 'Preview port is not reachable',
+      isError: true,
+    },
+  );
+});
+
 test('artifact ready and error stream events settle the original created row', () => {
   const created = {
     id: 'artifact-created-1',

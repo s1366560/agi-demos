@@ -22,6 +22,7 @@ export type AgentLifecycleFamily =
   | 'sandbox'
   | 'desktop'
   | 'terminal'
+  | 'httpService'
   | 'graphRun'
   | 'graphNode'
   | 'graphHandoff';
@@ -303,6 +304,10 @@ const lifecycleEventDefinitions: Record<
   terminal_started: { family: 'terminal', state: 'ready' },
   terminal_status: { family: 'terminal', state: 'running' },
   terminal_stopped: { family: 'terminal', state: 'stopped' },
+  http_service_started: { family: 'httpService', state: 'ready' },
+  http_service_updated: { family: 'httpService', state: 'running' },
+  http_service_stopped: { family: 'httpService', state: 'stopped' },
+  http_service_error: { family: 'httpService', state: 'failed' },
   graph_run_started: {
     family: 'graphRun',
     state: 'running',
@@ -407,6 +412,13 @@ export function agentLifecyclePresentation(
 
 function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily): string {
   if (isRuntimeInfrastructureFamily(family)) {
+    if (family === 'httpService') {
+      return (
+        timelineEventString(item, ['service_name', 'serviceName']) ??
+        timelineEventString(item, ['service_id', 'serviceId']) ??
+        ''
+      );
+    }
     if (family === 'terminal') {
       return (
         timelineEventString(item, ['session_id', 'sessionId']) ??
@@ -572,6 +584,23 @@ function lifecycleDetail(item: AgentTimelineItem, detailFields: string[]): strin
         ].flatMap((value) => (value ? [value] : [])),
       ).join(' · ');
     }
+    if (lifecycle.family === 'httpService') {
+      const subject = lifecycleSubject(item, 'httpService');
+      const serviceId = timelineEventString(item, ['service_id', 'serviceId']);
+      const previewUrl = timelineEventString(item, [
+        'proxy_url',
+        'proxyUrl',
+        'preview_url',
+        'previewUrl',
+        'service_url',
+        'serviceUrl',
+      ]);
+      return uniqueStrings(
+        [serviceId === subject ? null : serviceId, previewUrl].flatMap((value) =>
+          value ? [value] : [],
+        ),
+      ).join(' · ');
+    }
     const subject = lifecycleSubject(item, 'terminal');
     const sandbox = timelineEventString(item, ['sandbox_id', 'sandboxId']);
     return uniqueStrings(
@@ -631,7 +660,12 @@ function lifecycleDetail(item: AgentTimelineItem, detailFields: string[]): strin
 }
 
 function isRuntimeInfrastructureFamily(family: AgentLifecycleFamily): boolean {
-  return family === 'sandbox' || family === 'desktop' || family === 'terminal';
+  return (
+    family === 'sandbox' ||
+    family === 'desktop' ||
+    family === 'terminal' ||
+    family === 'httpService'
+  );
 }
 
 function lifecycleProgress(

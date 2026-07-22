@@ -300,11 +300,70 @@ const runtimeInfrastructureTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
+const httpServiceTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'http-service-preview-started',
+    type: 'http_service_started',
+    eventTimeUs: 1_784_282_050_000_000,
+    eventCounter: 10,
+    payload: {
+      sandbox_id: 'sandbox-release-1',
+      service_id: 'service-preview-1',
+      service_name: 'Vite preview',
+      source_type: 'sandbox_internal',
+      service_url: 'http://172.17.0.2:5173',
+      proxy_url: '/api/v1/projects/project-1/sandbox/http-services/service-preview-1/proxy/',
+      auto_open: true,
+    },
+  },
+  {
+    id: 'http-service-preview-updated',
+    type: 'http_service_updated',
+    eventTimeUs: 1_784_282_051_000_000,
+    eventCounter: 11,
+    payload: {
+      sandbox_id: 'sandbox-release-1',
+      service_id: 'service-preview-1',
+      service_name: 'Vite preview',
+      source_type: 'sandbox_internal',
+      service_url: 'http://172.17.0.2:4173',
+      proxy_url: '/api/v1/projects/project-1/sandbox/http-services/service-preview-1/proxy/',
+      status: 'running',
+    },
+  },
+  {
+    id: 'http-service-preview-stopped',
+    type: 'http_service_stopped',
+    eventTimeUs: 1_784_282_052_000_000,
+    eventCounter: 12,
+    payload: {
+      sandbox_id: 'sandbox-release-1',
+      service_id: 'service-preview-1',
+      service_name: 'Vite preview',
+      status: 'stopped',
+    },
+  },
+  {
+    id: 'http-service-preview-error',
+    type: 'http_service_error',
+    eventTimeUs: 1_784_282_053_000_000,
+    eventCounter: 13,
+    payload: {
+      sandbox_id: 'sandbox-release-1',
+      service_id: 'service-preview-1',
+      service_name: 'Vite preview',
+      status: 'error',
+      error_message: 'Preview port is not reachable',
+    },
+  },
+];
+
 function SessionSteeringQa() {
   const searchParams = new URLSearchParams(window.location.search);
   const historyMode = searchParams.get('history');
   const suggestionsMode = searchParams.get('suggestions') === '1';
   const runtimeEventsMode = searchParams.get('runtime-events') === '1';
+  const httpServiceEventsMode = searchParams.get('http-service-events') === '1';
   const [delivery, setDelivery] = useState<RunInputDelivery>('steer_now');
   const [references, setReferences] = useState<CodeRangeReference[]>([]);
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([queuedInput]);
@@ -319,6 +378,8 @@ function SessionSteeringQa() {
           ? [...timelineState.items, suggestionTimelineItem]
           : runtimeEventsMode
             ? [...timelineState.items, ...runtimeInfrastructureTimelineItems]
+            : httpServiceEventsMode
+              ? [...timelineState.items, ...httpServiceTimelineItems]
             : timelineState.items;
     return {
       ...timelineState,
@@ -437,7 +498,11 @@ function SessionSteeringQa() {
               initialInput={
                 suggestionsMode ? '' : 'Keep the public API stable and add the missing revision test.'
               }
-              activityPresence={suggestionsMode || runtimeEventsMode ? 'recorded' : 'live'}
+              activityPresence={
+                suggestionsMode || runtimeEventsMode || httpServiceEventsMode
+                  ? 'recorded'
+                  : 'live'
+              }
               activityStructuredEvidence={null}
               sending={false}
               disabledReason={null}
