@@ -26,6 +26,7 @@ import {
   readConversationTitleStreamEvent,
 } from '../features/chat/conversationTitleEventModel';
 import { applyHitlResponseStreamEvent } from '../features/chat/hitlResponseEventModel';
+import { applyWorkspaceMessageStreamEvent } from '../features/chat/workspaceMessageEventModel';
 import {
   applyMCPAppCanvasStreamEvent,
   closeMCPAppCanvasTab,
@@ -169,6 +170,21 @@ const messages: WorkspaceMessage[] = [
     created_at: '2026-07-13T12:21:00Z',
   },
 ];
+
+const workspaceMessageCreatedEvent = {
+  type: 'workspace_message_created',
+  data: {
+    message: {
+      id: 'message-live-workspace',
+      workspace_id: 'workspace-desktop',
+      sender_id: 'agent-release',
+      sender_type: 'agent',
+      content: 'Cloud workspace message arrived without a manual refresh.',
+      mentions: [],
+      created_at: '2026-07-22T09:00:00Z',
+    },
+  },
+};
 
 const timelineState: ConversationTimelineState = {
   conversationId: 'conversation-desktop-session',
@@ -1399,6 +1415,7 @@ function SessionSteeringQa() {
     searchParams.get('workspace-orchestration-events') === '1';
   const taskRecoveryEventsMode = searchParams.get('task-recovery-events') === '1';
   const toolProgressEventMode = searchParams.get('tool-progress-event') === '1';
+  const workspaceMessageEventMode = searchParams.get('workspace-message-event') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
@@ -1406,6 +1423,7 @@ function SessionSteeringQa() {
   const [references, setReferences] = useState<CodeRangeReference[]>([]);
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([queuedInput]);
   const [model, setModel] = useState('gpt-5.5');
+  const [qaMessages, setQaMessages] = useState(messages);
   const [switchingModel, setSwitchingModel] = useState(false);
   const [artifactCanvas, setArtifactCanvas] = useState(() =>
     artifactCanvasEventsMode
@@ -1524,6 +1542,20 @@ function SessionSteeringQa() {
       },
     };
   });
+
+  useEffect(() => {
+    if (!workspaceMessageEventMode) return;
+    const timer = window.setTimeout(() => {
+      setQaMessages((current) =>
+        applyWorkspaceMessageStreamEvent(
+          current,
+          workspaceMessageCreatedEvent,
+          'workspace-desktop',
+        ).messages,
+      );
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [workspaceMessageEventMode]);
 
   useEffect(() => {
     if (!hitlResponseEventsMode) return;
@@ -1673,9 +1705,11 @@ function SessionSteeringQa() {
             <ChatPanel
               api={qaApi}
               conversations={qaConversations}
-              selectedConversationId="conversation-desktop-session"
-              messages={messages}
-              timelineState={timeline}
+              selectedConversationId={
+                workspaceMessageEventMode ? null : 'conversation-desktop-session'
+              }
+              messages={qaMessages}
+              timelineState={workspaceMessageEventMode ? null : timeline}
               agentTaskSignals={[]}
               workflowCounts={{ changes: 2, plan: 'ready' }}
               sessionTitle={qaConversationTitle}
@@ -1708,6 +1742,7 @@ function SessionSteeringQa() {
                 agentAuditEventsMode ||
                 workspaceOrchestrationEventsMode ||
                 taskRecoveryEventsMode ||
+                workspaceMessageEventMode ||
                 artifactCanvasEventsMode ||
                 mcpAppEventsMode ||
                 titleEventsMode
