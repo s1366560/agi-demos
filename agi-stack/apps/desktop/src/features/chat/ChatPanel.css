@@ -68,6 +68,68 @@
   margin: 18px 0 0;
 }
 
+.agent-suggestion-list {
+  display: grid;
+  max-width: min(760px, 86%);
+  gap: 8px;
+  margin: 18px 0 2px 24px;
+}
+
+.agent-suggestion-list > p {
+  margin: 0;
+  color: var(--desktop-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.agent-suggestion-list > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.agent-suggestion-chip {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  color: #a8bac6;
+  border: 1px solid #30404f;
+  border-radius: 999px;
+  background: #111923;
+  font: 600 10px/1.35 inherit;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.agent-suggestion-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-suggestion-chip svg {
+  flex: 0 0 auto;
+}
+
+.agent-suggestion-chip:hover,
+.agent-suggestion-chip:focus-visible {
+  color: #c8eff8;
+  border-color: #34748a;
+  background: #12242d;
+  outline: none;
+}
+
+.agent-suggestion-chip:focus-visible {
+  box-shadow: 0 0 0 2px rgba(83, 208, 239, 0.24);
+}
+
 .session-chat-narrative .timeline-working-indicator.timeline-worklog-row {
   display: grid;
   align-items: center;

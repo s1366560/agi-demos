@@ -32,6 +32,7 @@ import {
   detectPayloadLanguage,
   formatToolCallDuration,
   shouldShowAgentWorkingIndicator,
+  timelineItemsForDisplay,
   timelineWorkingStartedAtUs,
   timelineDayKey,
   timelineDayLabel,
@@ -128,17 +129,18 @@ export function AgentTimeline({
       ),
     [state.items],
   );
+  const displayItems = useMemo(() => timelineItemsForDisplay(state.items), [state.items]);
   const narrative = useMemo(
-    () => annotateTimelineGroups(groupNarrativeActivity(buildSessionNarrative(state.items))),
-    [state.items],
+    () => annotateTimelineGroups(groupNarrativeActivity(buildSessionNarrative(displayItems))),
+    [displayItems],
   );
   const renderWindow = useMemo(
-    () => resolveTimelineRenderWindow(narrative, state.items.length, earlierRenderAllowance),
-    [narrative, state.items.length, earlierRenderAllowance],
+    () => resolveTimelineRenderWindow(narrative, displayItems.length, earlierRenderAllowance),
+    [narrative, displayItems.length, earlierRenderAllowance],
   );
   const [expandedGroupItems, setExpandedGroupItems] = useState<Record<string, boolean>>({});
   const showWorkingIndicator = shouldShowAgentWorkingIndicator({
-    items: state.items,
+    items: displayItems,
     presence: activityPresence,
     awaitingHitl: respondableHitlRequestIdSet.size > 0,
   });
@@ -223,7 +225,7 @@ export function AgentTimeline({
           </Button>
         </div>
       ) : null}
-      {state.items.length === 0 && !state.error ? (
+      {displayItems.length === 0 && !state.error ? (
         <SessionEmptyState />
       ) : (
         narrative.map((node, index) => {

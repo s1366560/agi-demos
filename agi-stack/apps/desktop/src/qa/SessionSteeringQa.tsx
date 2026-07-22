@@ -228,8 +228,24 @@ const concurrentTailItem: ConversationTimelineState['items'][number] = {
   content: 'A concurrent live update arrived while earlier history was loading.',
 };
 
+const suggestionTimelineItem: ConversationTimelineState['items'][number] = {
+  id: 'agent-follow-up-suggestions',
+  type: 'suggestions',
+  eventTimeUs: 1_784_282_045_000_000,
+  eventCounter: 5,
+  payload: {
+    suggestions: [
+      'Open the verification report',
+      'Run the compatibility matrix',
+      'Prepare the migration checklist',
+    ],
+  },
+};
+
 function SessionSteeringQa() {
-  const historyMode = new URLSearchParams(window.location.search).get('history');
+  const searchParams = new URLSearchParams(window.location.search);
+  const historyMode = searchParams.get('history');
+  const suggestionsMode = searchParams.get('suggestions') === '1';
   const [delivery, setDelivery] = useState<RunInputDelivery>('steer_now');
   const [references, setReferences] = useState<CodeRangeReference[]>([]);
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([queuedInput]);
@@ -237,7 +253,12 @@ function SessionSteeringQa() {
   const [switchingModel, setSwitchingModel] = useState(false);
   const [historyAttempt, setHistoryAttempt] = useState(0);
   const [timeline, setTimeline] = useState<ConversationTimelineState>(() => {
-    const items = historyMode === 'anchor' ? anchorTimelineItems : timelineState.items;
+    const items =
+      historyMode === 'anchor'
+        ? anchorTimelineItems
+        : suggestionsMode
+          ? [...timelineState.items, suggestionTimelineItem]
+          : timelineState.items;
     return {
       ...timelineState,
       items,
@@ -293,6 +314,27 @@ function SessionSteeringQa() {
     }, historyMode === 'anchor' ? 2000 : 180);
   };
 
+  const sendQaMessage = (content: string) => {
+    if (!suggestionsMode) return;
+    setTimeline((current) => {
+      const eventTimeUs = (current.items[current.items.length - 1]?.eventTimeUs ?? 0) + 1_000_000;
+      const eventCounter = (current.items[current.items.length - 1]?.eventCounter ?? 0) + 1;
+      const nextItem: ConversationTimelineState['items'][number] = {
+        id: `suggestion-user-message-${eventCounter}`,
+        type: 'user_message',
+        eventTimeUs,
+        eventCounter,
+        role: 'user',
+        content,
+      };
+      return {
+        ...current,
+        items: [...current.items, nextItem],
+        lastCursor: { timeUs: eventTimeUs, counter: eventCounter },
+      };
+    });
+  };
+
   return (
     <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
       <div className="session-steering-qa-shell">
@@ -331,8 +373,10 @@ function SessionSteeringQa() {
               scopeLabel="Current run narrative"
               composerVariant="session"
               composerResetKey="qa-session-steering"
-              initialInput="Keep the public API stable and add the missing revision test."
-              activityPresence="live"
+              initialInput={
+                suggestionsMode ? '' : 'Keep the public API stable and add the missing revision test.'
+              }
+              activityPresence={suggestionsMode ? 'recorded' : 'live'}
               activityStructuredEvidence={null}
               sending={false}
               disabledReason={null}
@@ -365,7 +409,7 @@ function SessionSteeringQa() {
               onRemoveReference={(reference) =>
                 setReferences((current) => toggleRunInputReference(current, reference))
               }
-              onSend={() => undefined}
+              onSend={sendQaMessage}
               onRefresh={() => undefined}
               onLoadEarlier={loadEarlierHistory}
               onRespondToHitl={async () => undefined}

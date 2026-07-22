@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { Badge, Button, Flex, Heading, ScrollArea, Text, TextArea } from '@radix-ui/themes';
 import {
   ActivityLogIcon,
+  ArrowTopRightIcon,
   ArrowUpIcon,
   ChevronDownIcon,
   CodeIcon,
@@ -53,6 +54,7 @@ import {
   composerHasSendableAttachment,
 } from './chatComposerModel';
 import type { ChatComposerVariant } from './chatComposerModel';
+import { latestAgentSuggestions } from './chatTimelineModel';
 import './ChatPanel.css';
 import './ComposerMenus.css';
 
@@ -218,6 +220,10 @@ export const ChatPanel = memo(function ChatPanel({
   const timelineItemCount = timelineState?.items.length ?? 0;
   const timelineConversationId = timelineState?.conversationId ?? '';
   const timelineFirstId = timelineState?.items[0]?.id ?? '';
+  const agentSuggestions = useMemo(
+    () => latestAgentSuggestions(timelineState?.items ?? []),
+    [timelineState?.items],
+  );
   const timelineTailItem = timelineState?.items[timelineItemCount - 1];
   const timelineLastId = timelineTailItem?.id ?? '';
   const timelineTailRevision =
@@ -491,6 +497,10 @@ export const ChatPanel = memo(function ChatPanel({
     },
     [onSend, scrollToLatest],
   );
+  const handleSuggestionSelect = useCallback(
+    (suggestion: string) => handleComposerSend(suggestion, []),
+    [handleComposerSend],
+  );
   const toggleTimelineItem = useCallback((item: AgentTimelineItem) => {
     setExpandedTimelineItems((current) => {
       const currentValue = current[item.id] ?? isImportantTimelineItem(item);
@@ -630,6 +640,15 @@ export const ChatPanel = memo(function ChatPanel({
               ))}
             </div>
           ) : null}
+          {agentSuggestions.length > 0 &&
+          activityPresence === 'recorded' &&
+          !sending &&
+          !disabled ? (
+            <AgentSuggestionChips
+              suggestions={agentSuggestions}
+              onSelect={handleSuggestionSelect}
+            />
+          ) : null}
           <div ref={scrollAnchorRef} aria-hidden="true" />
         </div>
       </ScrollArea>
@@ -682,6 +701,35 @@ export const ChatPanel = memo(function ChatPanel({
         onOpenCommands={onOpenCommands}
         onSend={handleComposerSend}
       />
+    </section>
+  );
+});
+
+const AgentSuggestionChips = memo(function AgentSuggestionChips({
+  suggestions,
+  onSelect,
+}: {
+  suggestions: string[];
+  onSelect: (suggestion: string) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <section className="agent-suggestion-list" aria-label={t('chat.suggestedFollowUps')}>
+      <p>{t('chat.suggestedFollowUps')}</p>
+      <div>
+        {suggestions.map((suggestion, index) => (
+          <button
+            type="button"
+            className="agent-suggestion-chip"
+            aria-label={t('chat.sendSuggestion', { suggestion })}
+            onClick={() => onSelect(suggestion)}
+            key={`${index}:${suggestion}`}
+          >
+            <span>{suggestion}</span>
+            <ArrowTopRightIcon aria-hidden="true" />
+          </button>
+        ))}
+      </div>
     </section>
   );
 });

@@ -76,6 +76,34 @@ export type AgentExecutionSummary = {
 export type ToolStreamEventKind = 'delta' | 'act' | 'observe';
 
 /**
+ * Return follow-up suggestions for the latest Agent turn. A new user message
+ * starts a new turn and therefore invalidates every earlier suggestion event.
+ */
+export function latestAgentSuggestions(items: AgentTimelineItem[]): string[] {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item.role === 'user' || item.type === 'user_message') return [];
+    if (item.type !== 'suggestions') continue;
+    const payload = isRecord(item.payload) ? item.payload : null;
+    const source = Array.isArray(item.suggestions)
+      ? item.suggestions
+      : payload && Array.isArray(payload.suggestions)
+        ? payload.suggestions
+        : [];
+    return source.filter(
+      (suggestion): suggestion is string =>
+        typeof suggestion === 'string' && suggestion.trim().length > 0,
+    );
+  }
+  return [];
+}
+
+/** Suggestion events drive UI affordances and are not conversation log rows. */
+export function timelineItemsForDisplay(items: AgentTimelineItem[]): AgentTimelineItem[] {
+  return items.filter((item) => item.type !== 'suggestions');
+}
+
+/**
  * Apply artifact lifecycle updates to one stable timeline row. The Web client
  * treats ready/error as updates to artifact_created; preserving that identity
  * avoids duplicate rows while an upload settles.

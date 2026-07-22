@@ -26,7 +26,7 @@ test('session messages use the mission-control narrative hierarchy', () => {
 });
 
 test('debug activity collapses by structural event kind without text routing', () => {
-  assert.match(chatSource, /groupNarrativeActivity\(buildSessionNarrative\(state\.items\)\)/);
+  assert.match(chatSource, /groupNarrativeActivity\(buildSessionNarrative\(displayItems\)\)/);
   assert.match(
     chatSource,
     /return timelineKind\(item\) === 'runtime' && !isImportantTimelineItem\(item\)/,
@@ -61,6 +61,16 @@ test('artifact batch events use artifact presentation instead of generic runtime
   assert.match(chatSource, /item\.type === 'artifact_ready'[\s\S]*chat\.artifactReady/);
   assert.match(chatSource, /item\.type === 'artifact_error'[\s\S]*chat\.artifactFailed/);
   assert.match(chatSource, /item\.type === 'artifacts_batch'[\s\S]*chat\.artifactsBatch/);
+});
+
+test('agent suggestions render as actionable follow-ups without becoming timeline log rows', () => {
+  assert.match(chatSource, /latestAgentSuggestions\(/);
+  assert.match(chatSource, /timelineItemsForDisplay\(/);
+  assert.match(chatSource, /<AgentSuggestionChips/);
+  assert.match(chatSource, /activityPresence === 'recorded'/);
+  assert.match(chatSource, /handleComposerSend\(suggestion, \[\]\)/);
+  assert.match(chatStyles, /\.agent-suggestion-list/);
+  assert.match(chatStyles, /\.agent-suggestion-chip/);
 });
 
 test('session composer exposes localized context actions and compact delivery controls', () => {
@@ -116,6 +126,8 @@ test('chat copy and diagnostics are localized in both supported locales', () => 
     'chat.artifactFailed',
     'chat.artifactsBatch',
     'chat.artifactsCount',
+    'chat.suggestedFollowUps',
+    'chat.sendSuggestion',
     'chat.memoriesCount',
     'chat.tokensCount',
     'chat.tokensProgress',

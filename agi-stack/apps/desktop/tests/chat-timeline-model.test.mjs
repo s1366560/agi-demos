@@ -11,6 +11,7 @@ const {
   assistantExecutionSummary,
   detectPayloadLanguage,
   formatToolCallDuration,
+  latestAgentSuggestions,
   mergeArtifactStreamItem,
   mergeAssistantTextStreamChunk,
   mergeAssistantCompletionEvent,
@@ -20,6 +21,7 @@ const {
   toolActivityRows,
   shouldShowAgentWorkingIndicator,
   timelineWorkingStartedAtUs,
+  timelineItemsForDisplay,
   timelineDayKey,
   timelineDayLabel,
   toolCallDiffStat,
@@ -1244,6 +1246,99 @@ test('artifact ready and error stream events settle the original created row', (
   assert.equal(orphanReady.length, 1);
   assert.equal(orphanReady[0].type, 'artifact_ready');
   assert.equal(orphanReady[0].filename, 'recovered.zip');
+});
+
+test('suggestions stay scoped to the latest unanswered agent turn and out of the timeline', () => {
+  const items = [
+    {
+      id: 'user-message-1',
+      type: 'user_message',
+      role: 'user',
+      content: 'Prepare the release.',
+      eventTimeUs: 51_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'assistant-message-1',
+      type: 'assistant_message',
+      role: 'assistant',
+      content: 'The release is ready for review.',
+      eventTimeUs: 52_000_000,
+      eventCounter: 2,
+    },
+    {
+      id: 'suggestions-1',
+      type: 'suggestions',
+      payload: {
+        suggestions: [
+          'Open the verification report',
+          '',
+          'Run the compatibility matrix',
+          42,
+        ],
+      },
+      eventTimeUs: 53_000_000,
+      eventCounter: 3,
+    },
+    {
+      id: 'context-status-1',
+      type: 'context_status',
+      payload: { current_tokens: 1200, token_budget: 8000 },
+      eventTimeUs: 54_000_000,
+      eventCounter: 4,
+    },
+  ];
+
+  assert.deepEqual(latestAgentSuggestions(items), [
+    'Open the verification report',
+    'Run the compatibility matrix',
+  ]);
+  assert.deepEqual(
+    timelineItemsForDisplay(items).map((item) => item.id),
+    ['user-message-1', 'assistant-message-1', 'context-status-1'],
+  );
+
+  assert.deepEqual(
+    latestAgentSuggestions([
+      ...items,
+      {
+        id: 'user-message-2',
+        type: 'user_message',
+        role: 'user',
+        content: 'Run the compatibility matrix',
+        eventTimeUs: 55_000_000,
+        eventCounter: 5,
+      },
+    ]),
+    [],
+  );
+
+  assert.deepEqual(
+    latestAgentSuggestions([
+      ...items,
+      {
+        id: 'suggestions-cleared',
+        type: 'suggestions',
+        suggestions: [],
+        eventTimeUs: 55_000_000,
+        eventCounter: 5,
+      },
+    ]),
+    [],
+  );
+
+  assert.deepEqual(
+    latestAgentSuggestions([
+      {
+        id: 'suggestions-history-1',
+        type: 'suggestions',
+        suggestions: ['Inspect the generated patch'],
+        eventTimeUs: 56_000_000,
+        eventCounter: 6,
+      },
+    ]),
+    ['Inspect the generated patch'],
+  );
 });
 
 test('streaming thought chunks merge into one readable timeline item and then settle', () => {
