@@ -103,6 +103,22 @@
   gap: 18px;
 }
 
+.agent-definition-form-section {
+  grid-column: 1 / -1;
+  margin: 6px 0 -4px;
+  padding-top: 14px;
+  color: #d4dee8;
+  font-size: 12px;
+  font-weight: 700;
+  border-top: 1px solid #253140;
+}
+
+.agent-definition-form-section:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
 .agent-definition-field {
   display: flex;
   min-width: 0;

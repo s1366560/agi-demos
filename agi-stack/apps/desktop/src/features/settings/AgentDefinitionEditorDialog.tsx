@@ -328,6 +328,9 @@ export function AgentDefinitionEditorDialog({
 
           {activeTab === 'coordination' ? (
             <div className="agent-definition-form-grid">
+              <h3 className="agent-definition-form-section">
+                {t('settings.agentEditor.spawnPolicy')}
+              </h3>
               <ToggleField
                 label={t('settings.agentEditor.canSpawn')}
                 checked={draft.canSpawn}
@@ -394,6 +397,122 @@ export function AgentDefinitionEditorDialog({
                 disabled={busy}
                 error={fieldError(errors, 'maxRetries', t)}
                 onChange={(value) => update('maxRetries', value)}
+              />
+              <h3 className="agent-definition-form-section">
+                {t('settings.agentEditor.sessionPolicy')}
+              </h3>
+              <EditorField label={t('settings.agentEditor.sessionDmScope')}>
+                <select
+                  value={draft.sessionPolicyDmScope}
+                  disabled={busy}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    update(
+                      'sessionPolicyDmScope',
+                      value === 'per_user' || value === 'per_chat' || value === 'global'
+                        ? value
+                        : '',
+                    );
+                  }}
+                >
+                  <option value="">{t('settings.agentEditor.useDefault')}</option>
+                  <option value="per_user">{t('settings.agentEditor.dmScopePerUser')}</option>
+                  <option value="per_chat">{t('settings.agentEditor.dmScopePerChat')}</option>
+                  <option value="global">{t('settings.agentEditor.dmScopeGlobal')}</option>
+                </select>
+              </EditorField>
+              <OptionalNumberField
+                label={t('settings.agentEditor.sessionMaxMessages')}
+                value={draft.sessionPolicyMaxMessages}
+                min={1}
+                step={1}
+                disabled={busy}
+                error={fieldError(errors, 'sessionPolicyMaxMessages', t)}
+                onChange={(value) => update('sessionPolicyMaxMessages', value)}
+              />
+              <OptionalNumberField
+                label={t('settings.agentEditor.sessionIdleResetMinutes')}
+                value={draft.sessionPolicyIdleResetMinutes}
+                min={1}
+                step={1}
+                disabled={busy}
+                error={fieldError(errors, 'sessionPolicyIdleResetMinutes', t)}
+                onChange={(value) => update('sessionPolicyIdleResetMinutes', value)}
+              />
+              <OptionalNumberField
+                label={t('settings.agentEditor.sessionDailyResetHour')}
+                value={draft.sessionPolicyDailyResetHour}
+                min={0}
+                max={23}
+                step={1}
+                disabled={busy}
+                error={fieldError(errors, 'sessionPolicyDailyResetHour', t)}
+                onChange={(value) => update('sessionPolicyDailyResetHour', value)}
+              />
+              <OptionalNumberField
+                label={t('settings.agentEditor.sessionTtlHours')}
+                value={draft.sessionPolicyTtlHours}
+                min={1}
+                step={1}
+                disabled={busy}
+                error={fieldError(errors, 'sessionPolicyTtlHours', t)}
+                onChange={(value) => update('sessionPolicyTtlHours', value)}
+              />
+              <h3 className="agent-definition-form-section">
+                {t('settings.agentEditor.delegateConfig')}
+              </h3>
+              <EditorField label={t('settings.agentEditor.delegateCapabilityTier')}>
+                <select
+                  value={draft.delegateCapabilityTier}
+                  disabled={busy}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    update(
+                      'delegateCapabilityTier',
+                      value === 'full' ||
+                        value === 'read_write' ||
+                        value === 'read_only' ||
+                        value === 'none'
+                        ? value
+                        : '',
+                    );
+                  }}
+                >
+                  <option value="">{t('settings.agentEditor.useDefault')}</option>
+                  <option value="full">{t('settings.agentEditor.capabilityFull')}</option>
+                  <option value="read_write">
+                    {t('settings.agentEditor.capabilityReadWrite')}
+                  </option>
+                  <option value="read_only">
+                    {t('settings.agentEditor.capabilityReadOnly')}
+                  </option>
+                  <option value="none">{t('settings.agentEditor.capabilityNone')}</option>
+                </select>
+              </EditorField>
+              <OptionalNumberField
+                label={t('settings.agentEditor.delegateMaxDepth')}
+                value={draft.delegateMaxDelegationDepth}
+                min={0}
+                step={1}
+                disabled={busy}
+                error={fieldError(errors, 'delegateMaxDelegationDepth', t)}
+                onChange={(value) => update('delegateMaxDelegationDepth', value)}
+              />
+              <OptionalNumberField
+                label={t('settings.agentEditor.delegateBudgetTokens')}
+                value={draft.delegateBudgetLimitTokens}
+                min={1}
+                step={1}
+                disabled={busy}
+                error={fieldError(errors, 'delegateBudgetLimitTokens', t)}
+                onChange={(value) => update('delegateBudgetLimitTokens', value)}
+              />
+              <ListField
+                className="wide"
+                label={t('settings.agentEditor.delegateAllowedTools')}
+                value={draft.delegateAllowedTools}
+                disabled={busy}
+                onChange={(value) => update('delegateAllowedTools', value)}
               />
             </div>
           ) : null}
@@ -555,6 +674,7 @@ function OptionalNumberField({
   label,
   value,
   min,
+  max,
   step,
   disabled,
   error,
@@ -563,6 +683,7 @@ function OptionalNumberField({
   label: string;
   value: number | null;
   min: number;
+  max?: number;
   step: number;
   disabled: boolean;
   error?: string;
@@ -574,6 +695,7 @@ function OptionalNumberField({
         type="number"
         value={value ?? ''}
         min={min}
+        max={max}
         step={step}
         disabled={disabled}
         onChange={(event) =>

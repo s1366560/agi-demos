@@ -55,6 +55,19 @@ const definition = {
     deny: ['terminal'],
     precedence: 'allow_first',
   },
+  session_policy: {
+    dm_scope: 'per_chat',
+    max_messages: 200,
+    idle_reset_minutes: 30,
+    daily_reset_hour: 4,
+    session_ttl_hours: 72,
+  },
+  delegate_config: {
+    capability_tier: 'read_write',
+    max_delegation_depth: 2,
+    allowed_tools: ['read', 'git_diff'],
+    budget_limit_tokens: 12000,
+  },
 };
 
 test('new Agent definition drafts inherit the selected project and safe runtime defaults', () => {
@@ -86,8 +99,19 @@ test('new Agent definition drafts inherit the selected project and safe runtime 
     toolPolicyPrecedence: 'deny_first',
     toolPolicyAllow: '',
     toolPolicyDeny: '',
+    sessionPolicyDmScope: '',
+    sessionPolicyMaxMessages: null,
+    sessionPolicyIdleResetMinutes: null,
+    sessionPolicyDailyResetHour: null,
+    sessionPolicyTtlHours: null,
+    delegateCapabilityTier: '',
+    delegateMaxDelegationDepth: null,
+    delegateAllowedTools: '',
+    delegateBudgetLimitTokens: null,
     hadSpawnPolicy: false,
     hadToolPolicy: false,
+    hadSessionPolicy: false,
+    hadDelegateConfig: false,
   });
 });
 
@@ -120,8 +144,19 @@ test('editing an Agent definition preserves authoritative identity, runtime, and
     toolPolicyPrecedence: 'allow_first',
     toolPolicyAllow: 'read\ngit_diff',
     toolPolicyDeny: 'terminal',
+    sessionPolicyDmScope: 'per_chat',
+    sessionPolicyMaxMessages: 200,
+    sessionPolicyIdleResetMinutes: 30,
+    sessionPolicyDailyResetHour: 4,
+    sessionPolicyTtlHours: 72,
+    delegateCapabilityTier: 'read_write',
+    delegateMaxDelegationDepth: 2,
+    delegateAllowedTools: 'read\ngit_diff',
+    delegateBudgetLimitTokens: 12000,
     hadSpawnPolicy: true,
     hadToolPolicy: true,
+    hadSessionPolicy: true,
+    hadDelegateConfig: true,
   });
 });
 
@@ -135,6 +170,7 @@ test('Agent definition mutations normalize list fields and fail closed for empty
     spawnAllowedSubagents: 'agent-planner, agent-researcher, agent-planner',
     toolPolicyAllow: 'read, git_diff, read',
     toolPolicyDeny: 'terminal, terminal',
+    delegateAllowedTools: 'read, git_diff, read',
   };
 
   assert.deepEqual(agentDefinitionMutationFromDraft(draft), {
@@ -170,6 +206,19 @@ test('Agent definition mutations normalize list fields and fail closed for empty
       deny: ['terminal'],
       precedence: 'allow_first',
     },
+    session_policy: {
+      dm_scope: 'per_chat',
+      max_messages: 200,
+      idle_reset_minutes: 30,
+      daily_reset_hour: 4,
+      session_ttl_hours: 72,
+    },
+    delegate_config: {
+      capability_tier: 'read_write',
+      max_delegation_depth: 2,
+      allowed_tools: ['read', 'git_diff'],
+      budget_limit_tokens: 12000,
+    },
   });
 
   assert.deepEqual(
@@ -187,9 +236,20 @@ test('Agent definition mutations normalize list fields and fail closed for empty
     toolPolicyPrecedence: 'deny_first',
     toolPolicyAllow: '',
     toolPolicyDeny: '',
+    sessionPolicyDmScope: '',
+    sessionPolicyMaxMessages: null,
+    sessionPolicyIdleResetMinutes: null,
+    sessionPolicyDailyResetHour: null,
+    sessionPolicyTtlHours: null,
+    delegateCapabilityTier: '',
+    delegateMaxDelegationDepth: null,
+    delegateAllowedTools: '',
+    delegateBudgetLimitTokens: null,
   });
   assert.equal(clearedPolicies.spawn_policy, null);
   assert.equal(clearedPolicies.tool_policy, null);
+  assert.equal(clearedPolicies.session_policy, null);
+  assert.equal(clearedPolicies.delegate_config, null);
 });
 
 test('Agent definition validation covers Web naming and backend runtime constraints', () => {
@@ -207,6 +267,12 @@ test('Agent definition validation covers Web naming and backend runtime constrai
       maxSpawnDepth: -1,
       spawnMaxActiveRuns: 0,
       spawnMaxChildrenPerRequester: 0,
+      sessionPolicyMaxMessages: 0,
+      sessionPolicyIdleResetMinutes: 0,
+      sessionPolicyDailyResetHour: 24,
+      sessionPolicyTtlHours: 0,
+      delegateMaxDelegationDepth: -1,
+      delegateBudgetLimitTokens: 0,
       maxRetries: -1,
     }),
     {
@@ -219,6 +285,12 @@ test('Agent definition validation covers Web naming and backend runtime constrai
       maxSpawnDepth: 'non_negative_integer',
       spawnMaxActiveRuns: 'positive_integer',
       spawnMaxChildrenPerRequester: 'positive_integer',
+      sessionPolicyMaxMessages: 'positive_integer',
+      sessionPolicyIdleResetMinutes: 'positive_integer',
+      sessionPolicyDailyResetHour: 'hour_range',
+      sessionPolicyTtlHours: 'positive_integer',
+      delegateMaxDelegationDepth: 'non_negative_integer',
+      delegateBudgetLimitTokens: 'positive_integer',
       maxRetries: 'non_negative_integer',
     },
   );
@@ -231,6 +303,15 @@ test('Agent definition editor exposes structured spawn and tool policy controls'
   assert.match(editorSource, /draft\.toolPolicyPrecedence/);
   assert.match(editorSource, /draft\.toolPolicyAllow/);
   assert.match(editorSource, /draft\.toolPolicyDeny/);
+  assert.match(editorSource, /draft\.sessionPolicyDmScope/);
+  assert.match(editorSource, /draft\.sessionPolicyMaxMessages/);
+  assert.match(editorSource, /draft\.sessionPolicyIdleResetMinutes/);
+  assert.match(editorSource, /draft\.sessionPolicyDailyResetHour/);
+  assert.match(editorSource, /draft\.sessionPolicyTtlHours/);
+  assert.match(editorSource, /draft\.delegateCapabilityTier/);
+  assert.match(editorSource, /draft\.delegateMaxDelegationDepth/);
+  assert.match(editorSource, /draft\.delegateAllowedTools/);
+  assert.match(editorSource, /draft\.delegateBudgetLimitTokens/);
 });
 
 test('provider settings QA round-trips structured Agent policies', () => {
@@ -238,4 +319,8 @@ test('provider settings QA round-trips structured Agent policies', () => {
   assert.match(providerQaSource, /current\?\.spawn_policy/);
   assert.match(providerQaSource, /body\.tool_policy/);
   assert.match(providerQaSource, /current\?\.tool_policy/);
+  assert.match(providerQaSource, /body\.session_policy/);
+  assert.match(providerQaSource, /current\?\.session_policy/);
+  assert.match(providerQaSource, /body\.delegate_config/);
+  assert.match(providerQaSource, /current\?\.delegate_config/);
 });

@@ -916,6 +916,18 @@ function agentFromBody(
         : body.tool_policy !== undefined
           ? (recordValue(body.tool_policy) as ManagedAgentDefinition['tool_policy'])
           : (current?.tool_policy ?? null),
+    session_policy:
+      body.session_policy === null
+        ? null
+        : body.session_policy !== undefined
+          ? (recordValue(body.session_policy) as ManagedAgentDefinition['session_policy'])
+          : (current?.session_policy ?? null),
+    delegate_config:
+      body.delegate_config === null
+        ? null
+        : body.delegate_config !== undefined
+          ? (recordValue(body.delegate_config) as ManagedAgentDefinition['delegate_config'])
+          : (current?.delegate_config ?? null),
     can_spawn: booleanValue(body.can_spawn, booleanValue(current?.can_spawn, false)),
     max_spawn_depth: numberValue(body.max_spawn_depth, numberValue(current?.max_spawn_depth, 3)),
     agent_to_agent_enabled: booleanValue(

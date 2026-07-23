@@ -28,8 +28,19 @@ export type AgentDefinitionEditorDraft = {
   toolPolicyPrecedence: 'allow_first' | 'deny_first';
   toolPolicyAllow: string;
   toolPolicyDeny: string;
+  sessionPolicyDmScope: '' | 'per_user' | 'per_chat' | 'global';
+  sessionPolicyMaxMessages: number | null;
+  sessionPolicyIdleResetMinutes: number | null;
+  sessionPolicyDailyResetHour: number | null;
+  sessionPolicyTtlHours: number | null;
+  delegateCapabilityTier: '' | 'full' | 'read_write' | 'read_only' | 'none';
+  delegateMaxDelegationDepth: number | null;
+  delegateAllowedTools: string;
+  delegateBudgetLimitTokens: number | null;
   hadSpawnPolicy: boolean;
   hadToolPolicy: boolean;
+  hadSessionPolicy: boolean;
+  hadDelegateConfig: boolean;
 };
 
 export type AgentDefinitionDraftField = keyof AgentDefinitionEditorDraft;
@@ -38,7 +49,8 @@ export type AgentDefinitionDraftError =
   | 'invalid_name'
   | 'temperature_range'
   | 'positive_integer'
-  | 'non_negative_integer';
+  | 'non_negative_integer'
+  | 'hour_range';
 
 export type AgentDefinitionDraftErrors = Partial<
   Record<AgentDefinitionDraftField, AgentDefinitionDraftError>
@@ -79,14 +91,27 @@ export function agentDefinitionDraftFrom(
       toolPolicyPrecedence: 'deny_first',
       toolPolicyAllow: '',
       toolPolicyDeny: '',
+      sessionPolicyDmScope: '',
+      sessionPolicyMaxMessages: null,
+      sessionPolicyIdleResetMinutes: null,
+      sessionPolicyDailyResetHour: null,
+      sessionPolicyTtlHours: null,
+      delegateCapabilityTier: '',
+      delegateMaxDelegationDepth: null,
+      delegateAllowedTools: '',
+      delegateBudgetLimitTokens: null,
       hadSpawnPolicy: false,
       hadToolPolicy: false,
+      hadSessionPolicy: false,
+      hadDelegateConfig: false,
     };
   }
 
   const trigger = recordValue(definition.trigger);
   const spawnPolicy = recordValue(definition.spawn_policy);
   const toolPolicy = recordValue(definition.tool_policy);
+  const sessionPolicy = recordValue(definition.session_policy);
+  const delegateConfig = recordValue(definition.delegate_config);
   return {
     name: definition.name,
     displayName: definition.display_name ?? '',
@@ -118,8 +143,19 @@ export function agentDefinitionDraftFrom(
       toolPolicy?.precedence === 'allow_first' ? 'allow_first' : 'deny_first',
     toolPolicyAllow: stringList(toolPolicy?.allow).join('\n'),
     toolPolicyDeny: stringList(toolPolicy?.deny).join('\n'),
+    sessionPolicyDmScope: dmScopeValue(sessionPolicy?.dm_scope),
+    sessionPolicyMaxMessages: optionalNumberValue(sessionPolicy?.max_messages),
+    sessionPolicyIdleResetMinutes: optionalNumberValue(sessionPolicy?.idle_reset_minutes),
+    sessionPolicyDailyResetHour: optionalNumberValue(sessionPolicy?.daily_reset_hour),
+    sessionPolicyTtlHours: optionalNumberValue(sessionPolicy?.session_ttl_hours),
+    delegateCapabilityTier: delegateCapabilityTierValue(delegateConfig?.capability_tier),
+    delegateMaxDelegationDepth: optionalNumberValue(delegateConfig?.max_delegation_depth),
+    delegateAllowedTools: stringList(delegateConfig?.allowed_tools).join('\n'),
+    delegateBudgetLimitTokens: optionalNumberValue(delegateConfig?.budget_limit_tokens),
     hadSpawnPolicy: spawnPolicy !== null,
     hadToolPolicy: toolPolicy !== null,
+    hadSessionPolicy: sessionPolicy !== null,
+    hadDelegateConfig: delegateConfig !== null,
   };
 }
 
@@ -157,6 +193,55 @@ export function agentDefinitionMutationFromDraft(
     : draft.hadToolPolicy
       ? null
       : undefined;
+  const hasSessionPolicyFields =
+    draft.sessionPolicyDmScope !== '' ||
+    draft.sessionPolicyMaxMessages !== null ||
+    draft.sessionPolicyIdleResetMinutes !== null ||
+    draft.sessionPolicyDailyResetHour !== null ||
+    draft.sessionPolicyTtlHours !== null;
+  const sessionPolicy = hasSessionPolicyFields
+    ? {
+        ...(draft.sessionPolicyDmScope
+          ? { dm_scope: draft.sessionPolicyDmScope }
+          : {}),
+        ...(draft.sessionPolicyMaxMessages !== null
+          ? { max_messages: draft.sessionPolicyMaxMessages }
+          : {}),
+        ...(draft.sessionPolicyIdleResetMinutes !== null
+          ? { idle_reset_minutes: draft.sessionPolicyIdleResetMinutes }
+          : {}),
+        ...(draft.sessionPolicyDailyResetHour !== null
+          ? { daily_reset_hour: draft.sessionPolicyDailyResetHour }
+          : {}),
+        ...(draft.sessionPolicyTtlHours !== null
+          ? { session_ttl_hours: draft.sessionPolicyTtlHours }
+          : {}),
+      }
+    : draft.hadSessionPolicy
+      ? null
+      : undefined;
+  const delegateAllowedTools = normalizedList(draft.delegateAllowedTools);
+  const hasDelegateConfigFields =
+    draft.delegateCapabilityTier !== '' ||
+    draft.delegateMaxDelegationDepth !== null ||
+    delegateAllowedTools.length > 0 ||
+    draft.delegateBudgetLimitTokens !== null;
+  const delegateConfig = hasDelegateConfigFields
+    ? {
+        ...(draft.delegateCapabilityTier
+          ? { capability_tier: draft.delegateCapabilityTier }
+          : {}),
+        ...(draft.delegateMaxDelegationDepth !== null
+          ? { max_delegation_depth: draft.delegateMaxDelegationDepth }
+          : {}),
+        ...(delegateAllowedTools.length > 0 ? { allowed_tools: delegateAllowedTools } : {}),
+        ...(draft.delegateBudgetLimitTokens !== null
+          ? { budget_limit_tokens: draft.delegateBudgetLimitTokens }
+          : {}),
+      }
+    : draft.hadDelegateConfig
+      ? null
+      : undefined;
   return {
     name: draft.name.trim(),
     display_name: draft.displayName.trim(),
@@ -183,6 +268,8 @@ export function agentDefinitionMutationFromDraft(
     max_retries: draft.maxRetries,
     ...(spawnPolicy !== undefined ? { spawn_policy: spawnPolicy } : {}),
     ...(toolPolicy !== undefined ? { tool_policy: toolPolicy } : {}),
+    ...(sessionPolicy !== undefined ? { session_policy: sessionPolicy } : {}),
+    ...(delegateConfig !== undefined ? { delegate_config: delegateConfig } : {}),
   };
 }
 
@@ -215,6 +302,44 @@ export function validateAgentDefinitionDraft(
     !isPositiveInteger(draft.spawnMaxChildrenPerRequester)
   ) {
     errors.spawnMaxChildrenPerRequester = 'positive_integer';
+  }
+  if (
+    draft.sessionPolicyMaxMessages !== null &&
+    !isPositiveInteger(draft.sessionPolicyMaxMessages)
+  ) {
+    errors.sessionPolicyMaxMessages = 'positive_integer';
+  }
+  if (
+    draft.sessionPolicyIdleResetMinutes !== null &&
+    !isPositiveInteger(draft.sessionPolicyIdleResetMinutes)
+  ) {
+    errors.sessionPolicyIdleResetMinutes = 'positive_integer';
+  }
+  if (
+    draft.sessionPolicyDailyResetHour !== null &&
+    (!Number.isInteger(draft.sessionPolicyDailyResetHour) ||
+      draft.sessionPolicyDailyResetHour < 0 ||
+      draft.sessionPolicyDailyResetHour > 23)
+  ) {
+    errors.sessionPolicyDailyResetHour = 'hour_range';
+  }
+  if (
+    draft.sessionPolicyTtlHours !== null &&
+    !isPositiveInteger(draft.sessionPolicyTtlHours)
+  ) {
+    errors.sessionPolicyTtlHours = 'positive_integer';
+  }
+  if (
+    draft.delegateMaxDelegationDepth !== null &&
+    !isNonNegativeInteger(draft.delegateMaxDelegationDepth)
+  ) {
+    errors.delegateMaxDelegationDepth = 'non_negative_integer';
+  }
+  if (
+    draft.delegateBudgetLimitTokens !== null &&
+    !isPositiveInteger(draft.delegateBudgetLimitTokens)
+  ) {
+    errors.delegateBudgetLimitTokens = 'positive_integer';
   }
   if (!isNonNegativeInteger(draft.maxRetries)) errors.maxRetries = 'non_negative_integer';
   return errors;
@@ -250,6 +375,21 @@ function numberValue(value: unknown, fallback: number): number {
 
 function optionalNumberValue(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function dmScopeValue(value: unknown): AgentDefinitionEditorDraft['sessionPolicyDmScope'] {
+  return value === 'per_user' || value === 'per_chat' || value === 'global' ? value : '';
+}
+
+function delegateCapabilityTierValue(
+  value: unknown,
+): AgentDefinitionEditorDraft['delegateCapabilityTier'] {
+  return value === 'full' ||
+    value === 'read_write' ||
+    value === 'read_only' ||
+    value === 'none'
+    ? value
+    : '';
 }
 
 function booleanValue(value: unknown, fallback: boolean): boolean {

@@ -1265,6 +1265,21 @@ export type ManagedAgentToolPolicy = {
   precedence: 'allow_first' | 'deny_first';
 };
 
+export type ManagedAgentSessionPolicy = {
+  dm_scope?: 'per_user' | 'per_chat' | 'global';
+  max_messages?: number | null;
+  idle_reset_minutes?: number | null;
+  daily_reset_hour?: number | null;
+  session_ttl_hours?: number | null;
+};
+
+export type ManagedAgentDelegateConfig = {
+  capability_tier?: 'full' | 'read_write' | 'read_only' | 'none';
+  max_delegation_depth?: number;
+  allowed_tools?: string[] | null;
+  budget_limit_tokens?: number | null;
+};
+
 export type ManagedAgentDefinition = {
   id: string;
   name: string;
@@ -1278,6 +1293,8 @@ export type ManagedAgentDefinition = {
   allowed_mcp_servers?: string[];
   spawn_policy?: ManagedAgentSpawnPolicy | null;
   tool_policy?: ManagedAgentToolPolicy | null;
+  session_policy?: ManagedAgentSessionPolicy | null;
+  delegate_config?: ManagedAgentDelegateConfig | null;
   updated_at?: string | null;
   [key: string]: unknown;
 };
@@ -1306,6 +1323,8 @@ export type ManagedAgentDefinitionMutation = {
   fallback_models: string[];
   spawn_policy?: ManagedAgentSpawnPolicy | null;
   tool_policy?: ManagedAgentToolPolicy | null;
+  session_policy?: ManagedAgentSessionPolicy | null;
+  delegate_config?: ManagedAgentDelegateConfig | null;
 };
 
 export type ManagedSubAgent = {
