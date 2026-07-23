@@ -1009,6 +1009,11 @@ def _build_runtime_infrastructure_event(data: dict[str, Any], **_kwargs: Any) ->
     return {"payload": dict(data)}
 
 
+def _build_execution_graph_event(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    """Preserve graph topology and execution evidence for Desktop history replay."""
+    return {"payload": dict(data)}
+
+
 def _build_agent_spawned(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {
         "agentId": data.get("agent_id", ""),
@@ -1144,6 +1149,15 @@ _EVENT_BUILDERS: dict[str, Any] = {
     "http_service_updated": _build_runtime_infrastructure_event,
     "http_service_stopped": _build_runtime_infrastructure_event,
     "http_service_error": _build_runtime_infrastructure_event,
+    "graph_run_started": _build_execution_graph_event,
+    "graph_run_completed": _build_execution_graph_event,
+    "graph_run_failed": _build_execution_graph_event,
+    "graph_run_cancelled": _build_execution_graph_event,
+    "graph_node_started": _build_execution_graph_event,
+    "graph_node_completed": _build_execution_graph_event,
+    "graph_node_failed": _build_execution_graph_event,
+    "graph_node_skipped": _build_execution_graph_event,
+    "graph_handoff": _build_execution_graph_event,
     "agent_spawned": _build_agent_spawned,
     "agent_completed": _build_agent_completed,
     "agent_message_sent": _build_agent_message_sent,

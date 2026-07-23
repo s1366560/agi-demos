@@ -1213,6 +1213,115 @@ def test_build_timeline_replays_runtime_infrastructure_events_for_desktop_histor
     assert [item["payload"] for item in timeline] == [data for _, data in runtime_events]
 
 
+def test_build_timeline_replays_execution_graph_events_for_desktop_history() -> None:
+    graph_events = [
+        (
+            "graph_run_started",
+            {
+                "graph_run_id": "graph-run-release",
+                "graph_id": "graph-release",
+                "graph_name": "Release verification",
+                "pattern": "supervisor",
+                "entry_node_ids": ["plan-release"],
+            },
+        ),
+        (
+            "graph_node_started",
+            {
+                "graph_run_id": "graph-run-release",
+                "node_id": "plan-release",
+                "node_label": "Plan release checks",
+                "agent_definition_id": "release-planner",
+                "agent_session_id": "conversation-plan-release",
+            },
+        ),
+        (
+            "graph_handoff",
+            {
+                "graph_run_id": "graph-run-release",
+                "from_node_id": "plan-release",
+                "to_node_id": "review-release",
+                "from_label": "Plan release checks",
+                "to_label": "Review release evidence",
+                "context_summary": "The release plan is ready for independent review.",
+            },
+        ),
+        (
+            "graph_node_completed",
+            {
+                "graph_run_id": "graph-run-release",
+                "node_id": "plan-release",
+                "node_label": "Plan release checks",
+                "output_keys": ["release-plan.md"],
+                "duration_seconds": 2.4,
+            },
+        ),
+        (
+            "graph_node_failed",
+            {
+                "graph_run_id": "graph-run-release",
+                "node_id": "review-release",
+                "node_label": "Review release evidence",
+                "error_message": "The verification report is incomplete",
+            },
+        ),
+        (
+            "graph_node_skipped",
+            {
+                "graph_run_id": "graph-run-release",
+                "node_id": "publish-release",
+                "node_label": "Publish release",
+                "reason": "Review failed",
+            },
+        ),
+        (
+            "graph_run_completed",
+            {
+                "graph_run_id": "graph-run-completed",
+                "graph_id": "graph-completed",
+                "graph_name": "Completed verification",
+                "total_steps": 3,
+                "duration_seconds": 9.8,
+            },
+        ),
+        (
+            "graph_run_failed",
+            {
+                "graph_run_id": "graph-run-release",
+                "graph_id": "graph-release",
+                "graph_name": "Release verification",
+                "error_message": "Release verification failed",
+                "failed_node_id": "review-release",
+            },
+        ),
+        (
+            "graph_run_cancelled",
+            {
+                "graph_run_id": "graph-run-cancelled",
+                "graph_id": "graph-cancelled",
+                "graph_name": "Cancelled verification",
+                "reason": "Stopped by reviewer",
+            },
+        ),
+    ]
+    assert {event_type for event_type, _ in graph_events} <= _DISPLAYABLE_EVENTS
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(event_type=event_type, event_data=data, event_time_us=index * 1_000)
+            for index, (event_type, data) in enumerate(graph_events, start=1)
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert [item["type"] for item in timeline] == [event_type for event_type, _ in graph_events]
+    assert [item["payload"] for item in timeline] == [data for _, data in graph_events]
+
+
 def test_build_timeline_replays_complete_skill_execution_for_desktop_history() -> None:
     skill_events = [
         (
