@@ -157,6 +157,10 @@ _DISPLAYABLE_EVENTS.update(
         # Contract-agent tool calls can persist only streaming act_delta rows
         # when the final tool call terminates the session before a full act row.
         "act_delta",
+        # Per-tool skill progress is part of the WebSocket contract but predates
+        # the canonical AgentEventType registry.
+        "skill_tool_start",
+        "skill_tool_result",
         "permission_requested",  # legacy alias for permission_asked
         "permission_granted",  # legacy alias for permission_replied
         # Sessionized / chained SubAgent events predate AgentEventType but the
@@ -980,6 +984,11 @@ def _build_background_launched(data: dict[str, Any], **_kwargs: Any) -> dict[str
     }
 
 
+def _build_skill_event(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    """Preserve the authoritative skill payload for Desktop history replay."""
+    return {"payload": dict(data)}
+
+
 def _build_agent_spawned(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {
         "agentId": data.get("agent_id", ""),
@@ -1081,6 +1090,12 @@ _EVENT_BUILDERS: dict[str, Any] = {
     "chain_step_completed": _build_chain_step_completed,
     "chain_completed": _build_chain_completed,
     "background_launched": _build_background_launched,
+    "skill_matched": _build_skill_event,
+    "skill_execution_start": _build_skill_event,
+    "skill_tool_start": _build_skill_event,
+    "skill_tool_result": _build_skill_event,
+    "skill_execution_complete": _build_skill_event,
+    "skill_fallback": _build_skill_event,
     "agent_spawned": _build_agent_spawned,
     "agent_completed": _build_agent_completed,
     "agent_message_sent": _build_agent_message_sent,

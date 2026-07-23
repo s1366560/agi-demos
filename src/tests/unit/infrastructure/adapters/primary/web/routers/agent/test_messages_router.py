@@ -899,6 +899,94 @@ def test_build_timeline_replays_orchestration_events() -> None:
     assert timeline[2]["subagentName"] == "Worker"
 
 
+def test_build_timeline_replays_complete_skill_execution_for_desktop_history() -> None:
+    skill_events = [
+        (
+            "skill_matched",
+            {
+                "skill_id": "release-guard",
+                "skill_name": "Release guard",
+                "tools": ["read_file", "shell_command"],
+                "match_score": 0.96,
+                "execution_mode": "direct",
+            },
+        ),
+        (
+            "skill_execution_start",
+            {
+                "skill_id": "release-guard",
+                "skill_name": "Release guard",
+                "tools": ["read_file", "shell_command"],
+                "query": "Run release checks",
+                "total_steps": 2,
+            },
+        ),
+        (
+            "skill_tool_start",
+            {
+                "skill_id": "release-guard",
+                "skill_name": "Release guard",
+                "tool_name": "shell_command",
+                "tool_input": {"command": "pnpm test"},
+                "step_index": 1,
+                "total_steps": 2,
+                "status": "running",
+            },
+        ),
+        (
+            "skill_tool_result",
+            {
+                "skill_id": "release-guard",
+                "skill_name": "Release guard",
+                "tool_name": "shell_command",
+                "result": "All release checks passed",
+                "duration_ms": 812,
+                "step_index": 1,
+                "total_steps": 2,
+                "status": "completed",
+            },
+        ),
+        (
+            "skill_execution_complete",
+            {
+                "skill_id": "release-guard",
+                "skill_name": "Release guard",
+                "success": True,
+                "summary": "Release checks passed with complete evidence.",
+                "tool_results": [
+                    {"tool_name": "read_file", "status": "completed"},
+                    {"tool_name": "shell_command", "status": "completed"},
+                ],
+                "execution_time_ms": 1240,
+            },
+        ),
+        (
+            "skill_fallback",
+            {
+                "skill_id": "dependency-auditor",
+                "skill_name": "Dependency auditor",
+                "reason": "runtime_unavailable",
+            },
+        ),
+    ]
+    assert {event_type for event_type, _ in skill_events} <= _DISPLAYABLE_EVENTS
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(event_type=event_type, event_data=data, event_time_us=index * 1_000)
+            for index, (event_type, data) in enumerate(skill_events, start=1)
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert [item["type"] for item in timeline] == [event_type for event_type, _ in skill_events]
+    assert [item["payload"] for item in timeline] == [data for _, data in skill_events]
+
+
 def test_build_timeline_does_not_attach_completion_to_earlier_visible_assistant() -> None:
     first_assistant = _StubEvent(
         event_type="assistant_message",
