@@ -1,0 +1,4 @@
+interface:
+  display_name: "MemStack Commit All"
+  short_description: "Commit the full agi-demos worktree safely"
+  default_prompt: "Use $agi-demos-commit-all to inspect, group, validate, and commit all current agi-demos changes; push only when explicitly requested."
