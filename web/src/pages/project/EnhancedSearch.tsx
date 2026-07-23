@@ -100,6 +100,7 @@ interface SearchParamsRef {
   includeEpisodes: boolean;
   timeRange: string;
   customTimeRange: { since?: string | undefined; until?: string | undefined };
+  tenantId: string | undefined;
   projectId: string | undefined;
   resultLimit: number;
 }
@@ -341,7 +342,9 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
     const [selectedSubgraphIds, setSelectedSubgraphIds] = useState<string[]>([]);
 
     // Graph Traversal State
-    const [startEntityUuid, setStartEntityUuid] = useState(() => urlSearchParams.get('start') ?? '');
+    const [startEntityUuid, setStartEntityUuid] = useState(
+      () => urlSearchParams.get('start') ?? ''
+    );
     const [maxDepth, setMaxDepth] = useState(2);
     const [relationshipTypes, setRelationshipTypes] = useState<string[]>([]);
 
@@ -384,6 +387,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
       includeEpisodes,
       timeRange,
       customTimeRange,
+      tenantId,
       projectId,
       resultLimit,
     });
@@ -406,6 +410,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
         includeEpisodes,
         timeRange,
         customTimeRange,
+        tenantId,
         projectId,
         resultLimit,
       };
@@ -425,6 +430,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
       includeEpisodes,
       timeRange,
       customTimeRange,
+      tenantId,
       projectId,
       resultLimit,
     ]);
@@ -520,6 +526,8 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
               community_uuid: params.communityUuid,
               limit: params.resultLimit,
               include_episodes: params.includeEpisodes,
+              tenant_id: params.tenantId,
+              project_id: params.projectId,
             });
             break;
         }

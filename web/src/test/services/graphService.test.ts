@@ -15,6 +15,7 @@ describe('graphService', () => {
   const mockHttpClient = httpClient as unknown as {
     delete: ReturnType<typeof vi.fn>;
     get: ReturnType<typeof vi.fn>;
+    post: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -45,5 +46,25 @@ describe('graphService', () => {
     expect(mockHttpClient.get).toHaveBeenCalledWith(
       '/graph/entities/types?tenant_id=tenant-1&project_id=project-1'
     );
+  });
+
+  it('keeps community search inside the selected tenant and project', async () => {
+    mockHttpClient.post.mockResolvedValue({ results: [], total: 0, search_type: 'community' });
+
+    await graphService.searchByCommunity({
+      community_uuid: 'community-1',
+      include_episodes: true,
+      limit: 50,
+      tenant_id: 'tenant-1',
+      project_id: 'project-1',
+    });
+
+    expect(mockHttpClient.post).toHaveBeenCalledWith('/search-enhanced/community', {
+      community_uuid: 'community-1',
+      include_episodes: true,
+      limit: 50,
+      tenant_id: 'tenant-1',
+      project_id: 'project-1',
+    });
   });
 });

@@ -423,6 +423,8 @@ export const graphService = {
     community_uuid: string;
     limit?: number | undefined;
     include_episodes?: boolean | undefined;
+    tenant_id?: string | undefined;
+    project_id?: string | undefined;
   }): Promise<SearchResults> {
     return await apiClient.post<SearchResults>('/search-enhanced/community', params);
   },

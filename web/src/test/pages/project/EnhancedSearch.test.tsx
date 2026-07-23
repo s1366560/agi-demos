@@ -4,10 +4,11 @@
  * TDD: Tests written first for the new compound component API.
  */
 
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { EnhancedSearch } from '../../../pages/project/EnhancedSearch';
+import { graphService } from '../../../services/graphService';
 
 const { mockUseParams, mockUseProjectStore, mockUseSearchParams } = vi.hoisted(() => ({
   mockUseParams: vi.fn(() => ({ tenantId: 'tenant-1', projectId: 'test-project-1' })),
@@ -52,8 +53,14 @@ vi.mock('@/components/graph/CytoscapeGraph', () => ({
 }));
 
 vi.mock('../../../pages/project/search', () => ({
-  SearchForm: ({ onSearch, isConfigOpen }: any) => (
+  SearchForm: ({ onSearch, isConfigOpen, onCommunityUuidChange }: any) => (
     <div data-testid="search-form">
+      <button
+        onClick={() => onCommunityUuidChange('community-1')}
+        data-testid="set-community-button"
+      >
+        Set community
+      </button>
       <button onClick={onSearch} data-testid="search-button">
         Search
       </button>
@@ -158,6 +165,28 @@ describe('EnhancedSearch Compound Component', () => {
       fireEvent.click(searchButton);
 
       expect(screen.getByTestId('results-count')).toBeInTheDocument();
+    });
+
+    it('keeps community search inside the route tenant and project', async () => {
+      render(
+        <EnhancedSearch defaultSearchMode="community">
+          <EnhancedSearch.Form />
+          <EnhancedSearch.Results />
+        </EnhancedSearch>
+      );
+
+      fireEvent.click(screen.getByTestId('set-community-button'));
+      fireEvent.click(screen.getByTestId('search-button'));
+
+      await waitFor(() => {
+        expect(graphService.searchByCommunity).toHaveBeenCalledWith({
+          community_uuid: 'community-1',
+          include_episodes: true,
+          limit: 50,
+          tenant_id: 'tenant-1',
+          project_id: 'test-project-1',
+        });
+      });
     });
   });
 

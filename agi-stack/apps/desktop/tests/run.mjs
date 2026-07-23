@@ -39,6 +39,13 @@ copyFileSync(
   join(compiledMyWorkDirectory, 'MyWorkQueue.css'),
 );
 
+const compiledSearchDirectory = join(compiledRoot, 'src', 'features', 'search');
+mkdirSync(compiledSearchDirectory, { recursive: true });
+copyFileSync(
+  join(desktopRoot, 'src', 'features', 'search', 'DesktopSearch.css'),
+  join(compiledSearchDirectory, 'DesktopSearch.css'),
+);
+
 const compiledWorkspaceDirectory = join(compiledRoot, 'src', 'features', 'workspace');
 mkdirSync(compiledWorkspaceDirectory, { recursive: true });
 copyFileSync(
@@ -75,6 +82,8 @@ const testFiles = [
   'cloud-session-queue-qa.test.mjs',
   'conversation-title-events.test.mjs',
   'desktop-shell-fidelity.test.mjs',
+  'desktop-search-model.test.mjs',
+  'desktop-search.test.mjs',
   'desktop-a11y-i18n.test.mjs',
   'electron-vite-integration.test.mjs',
   'hitl-response-events.test.mjs',
@@ -90,6 +99,7 @@ const testFiles = [
   'updater-policy.test.mjs',
   'release-artifact-verifier.test.mjs',
   'runtime-config-model.test.mjs',
+  'search-contract.test.mjs',
   'real-sidecar-integration.test.mjs',
   'sidecar-supervisor.test.mjs',
   'trusted-session-broker.test.mjs',

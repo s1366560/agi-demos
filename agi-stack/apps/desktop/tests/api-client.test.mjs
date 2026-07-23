@@ -3690,3 +3690,221 @@ test('managed subagent APIs preserve tenant scope and enabled mutation contracts
     globalThis.fetch = originalFetch;
   }
 });
+
+test('project search uses the selected Web search contract and rejects response drift', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    return new Response(
+      JSON.stringify({
+        results: [
+          {
+            content: 'Runtime policy evidence',
+            score: 0.97,
+            source: 'Knowledge Graph',
+            metadata: {
+              uuid: 'entity-1',
+              name: 'Runtime policy',
+              type: 'Concept',
+            },
+          },
+        ],
+        total: 1,
+        search_type: 'advanced',
+        strategy: 'COMBINED_HYBRID_SEARCH_RRF',
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'https://api.memstack.test',
+      apiKey: 'cloud-session-token',
+      tenantId: 'tenant 1',
+      projectId: 'project/1',
+      mode: 'cloud',
+    });
+
+    const response = await client.searchProject({
+      mode: 'semantic',
+      query: 'runtime policy',
+      strategy: 'COMBINED_HYBRID_SEARCH_RRF',
+      focalNodeUuid: null,
+      reranker: 'bge',
+      limit: 50,
+    });
+
+    assert.equal(response.results[0].title, 'Runtime policy');
+    assert.deepEqual(
+      calls.map((call) => [String(call.input), call.init?.method, call.init?.body]),
+      [
+        [
+          'https://api.memstack.test/api/v1/search-enhanced/advanced',
+          'POST',
+          JSON.stringify({
+            query: 'runtime policy',
+            strategy: 'COMBINED_HYBRID_SEARCH_RRF',
+            focal_node_uuid: null,
+            reranker: 'bge',
+            limit: 50,
+            tenant_id: 'tenant 1',
+            project_id: 'project/1',
+          }),
+        ],
+      ],
+    );
+
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ results: [], total: 0, search_type: 'temporal' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+
+    await assert.rejects(
+      () =>
+        client.searchProject({
+          mode: 'semantic',
+          query: 'runtime policy',
+          strategy: 'COMBINED_HYBRID_SEARCH_RRF',
+          focalNodeUuid: null,
+          reranker: null,
+          limit: 50,
+        }),
+      (error) => error instanceof DesktopApiError && error.status === 502,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('project search transports every Web mode with the caller abort signal', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    const searchType = String(input).endsWith('/graph-traversal')
+      ? 'graph_traversal'
+      : String(input).endsWith('/temporal')
+        ? 'temporal'
+        : String(input).endsWith('/faceted')
+          ? 'faceted'
+          : 'community';
+    return new Response(
+      JSON.stringify({
+        results: [],
+        total: 0,
+        search_type: searchType,
+        ...(searchType === 'faceted' ? { limit: 50, offset: 0 } : {}),
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'https://api.memstack.test',
+      apiKey: 'cloud-session-token',
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
+      mode: 'cloud',
+    });
+    const controller = new AbortController();
+
+    await client.searchProject(
+      {
+        mode: 'graphTraversal',
+        startEntityUuid: 'entity-1',
+        maxDepth: 3,
+        relationshipTypes: ['RELATES_TO'],
+        limit: 50,
+      },
+      { signal: controller.signal },
+    );
+    await client.searchProject(
+      {
+        mode: 'temporal',
+        query: 'release',
+        since: null,
+        until: null,
+        limit: 50,
+      },
+      { signal: controller.signal },
+    );
+    await client.searchProject(
+      {
+        mode: 'faceted',
+        query: 'agent',
+        entityTypes: ['Concept'],
+        tags: ['verified'],
+        since: null,
+        limit: 50,
+        offset: 0,
+      },
+      { signal: controller.signal },
+    );
+    await client.searchProject(
+      {
+        mode: 'community',
+        communityUuid: 'community-1',
+        includeEpisodes: true,
+        limit: 50,
+      },
+      { signal: controller.signal },
+    );
+
+    assert.deepEqual(
+      calls.map((call) => String(call.input)),
+      [
+        'https://api.memstack.test/api/v1/search-enhanced/graph-traversal',
+        'https://api.memstack.test/api/v1/search-enhanced/temporal',
+        'https://api.memstack.test/api/v1/search-enhanced/faceted',
+        'https://api.memstack.test/api/v1/search-enhanced/community',
+      ],
+    );
+    assert.deepEqual(
+      calls.map((call) => JSON.parse(String(call.init.body))),
+      [
+        {
+          start_entity_uuid: 'entity-1',
+          max_depth: 3,
+          relationship_types: ['RELATES_TO'],
+          limit: 50,
+          tenant_id: 'tenant-1',
+          project_id: 'project-1',
+        },
+        {
+          query: 'release',
+          since: null,
+          until: null,
+          limit: 50,
+          tenant_id: 'tenant-1',
+          project_id: 'project-1',
+        },
+        {
+          query: 'agent',
+          entity_types: ['Concept'],
+          tags: ['verified'],
+          since: null,
+          limit: 50,
+          offset: 0,
+          tenant_id: 'tenant-1',
+          project_id: 'project-1',
+        },
+        {
+          community_uuid: 'community-1',
+          include_episodes: true,
+          limit: 50,
+          tenant_id: 'tenant-1',
+          project_id: 'project-1',
+        },
+      ],
+    );
+    assert.equal(calls.every((call) => call.init.signal === controller.signal), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

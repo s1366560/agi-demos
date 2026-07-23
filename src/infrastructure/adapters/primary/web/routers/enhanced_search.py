@@ -22,7 +22,6 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_retrieval_store,
 )
 from src.infrastructure.adapters.primary.web.routers.graph import (
-    _ensure_graph_project_access,
     _entity_type_from_props_or_labels,
     _graph_project_scope,
     _sanitize_graph_value,
@@ -340,6 +339,8 @@ async def search_by_community(
     community_uuid: str = Body(..., description="Community UUID"),
     limit: int = Body(50, ge=1, le=200, description="Maximum results"),
     include_episodes: bool = Body(True, description="Include episodes in results"),
+    tenant_id: str | None = Body(None, description="Tenant filter"),
+    project_id: str | None = Body(None, description="Project filter"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     graph_store: GraphStorePort | None = Depends(get_graph_store),
@@ -356,11 +357,19 @@ async def search_by_community(
         community_project_id = await graph_store.get_community_project_id(community_uuid)
         if community_project_id is None:
             raise HTTPException(status_code=404, detail=_("Community not found"))
-        await _ensure_graph_project_access(community_project_id, current_user, db)
+        effective_project_id = project_id or community_project_id
+        await _graph_project_scope(
+            effective_project_id,
+            current_user,
+            db,
+            tenant_id=tenant_id,
+        )
+        if project_id and community_project_id != project_id:
+            return {"results": [], "total": 0, "search_type": "community"}
 
         items = await graph_store.community_search(
             community_uuid=community_uuid,
-            project_id=community_project_id,
+            project_id=effective_project_id,
             include_episodes=include_episodes,
             limit=limit,
         )
@@ -572,6 +581,8 @@ async def get_search_capabilities(current_user: User = Depends(get_current_user)
                     "community_uuid": "string (required)",
                     "limit": "integer (1-200)",
                     "include_episodes": "boolean",
+                    "tenant_id": "string (optional)",
+                    "project_id": "string (optional)",
                 },
             },
             "temporal": {

@@ -237,6 +237,8 @@ class TestEnhancedSearchRouter:
             community_uuid="community-1",
             limit=50,
             include_episodes=True,
+            tenant_id=None,
+            project_id=None,
             current_user=test_user,
             db=test_db,
             graph_store=store,
@@ -247,6 +249,29 @@ class TestEnhancedSearchRouter:
         kwargs = store.community_search.await_args.kwargs
         assert kwargs["project_id"] == test_project_db.id
         assert kwargs["include_episodes"] is True
+
+    @pytest.mark.asyncio
+    async def test_community_search_rejects_explicit_project_mismatch(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        store = _store_with_community_project("another-project")
+
+        response = await search_by_community(
+            community_uuid="community-1",
+            limit=50,
+            include_episodes=True,
+            tenant_id=test_project_db.tenant_id,
+            project_id=test_project_db.id,
+            current_user=test_user,
+            db=test_db,
+            graph_store=store,
+        )
+
+        assert response == {"results": [], "total": 0, "search_type": "community"}
+        store.community_search.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_temporal_search_without_project_is_scoped_to_user_projects(
@@ -615,6 +640,8 @@ class TestEnhancedSearchRouter:
                 community_uuid="community-1",
                 limit=50,
                 include_episodes=False,
+                tenant_id=None,
+                project_id=None,
                 current_user=test_user,
                 db=test_db,
                 graph_store=store,

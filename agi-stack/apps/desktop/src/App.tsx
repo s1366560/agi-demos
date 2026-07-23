@@ -246,6 +246,7 @@ import {
 } from './features/my-work/myWorkModel';
 import { AuxiliaryView } from './features/navigation/AuxiliaryView';
 import { DesktopSidebar } from './features/navigation/DesktopSidebar';
+import { DesktopSearch } from './features/search/DesktopSearch';
 import {
   settingsSectionForEntry,
   type SettingsEntry,
@@ -6766,9 +6767,9 @@ export function App() {
     );
   };
 
-  const renderAuxiliaryView = (section: 'home' | 'search') => (
+  const renderAuxiliaryView = () => (
     <AuxiliaryView
-      section={section}
+      section="home"
       userName={auxiliaryUserName}
       runningCount={myWorkCounts.running}
       needsInputCount={myWorkCounts.needs_input + myWorkCounts.needs_approval}
@@ -6776,6 +6777,17 @@ export function App() {
       metricStatus={myWorkMetricStatus}
       onOpenMyWork={() => switchSection('board')}
       onRetryMyWork={() => void refreshMyWork()}
+    />
+  );
+
+  const renderSearchPage = () => (
+    <DesktopSearch
+      key={`${config.tenantId || 'no-tenant'}:${config.projectId || 'no-project'}`}
+      api={api}
+      tenantId={config.tenantId}
+      projectId={config.projectId}
+      projectName={selectedProject?.name ?? selectedProject?.id ?? null}
+      onOpenProjectSettings={openWorkspaceSettings}
     />
   );
 
@@ -6881,7 +6893,7 @@ export function App() {
     if (activeSection === 'board') return renderBoardPanel();
     if (activeSection === 'automations') return renderAutomationsPage();
     if (activeSection === 'home') return renderNewThreadComposer();
-    if (activeSection === 'search') return renderAuxiliaryView('search');
+    if (activeSection === 'search') return renderSearchPage();
     return renderWorkspaceOverview();
   };
 

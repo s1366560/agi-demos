@@ -44,8 +44,10 @@ test('primary navigation opens section-based auxiliary views', () => {
   assert.match(renderWorkbench, /activeSection === 'search'/);
   assert.match(appSource, /from '\.\/features\/automations\/AutomationsPage'/);
   assert.match(appSource, /<AutomationsPage/);
+  assert.match(appSource, /from '\.\/features\/search\/DesktopSearch'/);
+  assert.match(appSource, /<DesktopSearch/);
+  assert.match(renderWorkbench, /renderSearchPage/);
   assert.match(appSource, /<AuxiliaryView/);
-  assert.match(renderWorkbench, /(?:<AuxiliaryView|renderAuxiliaryView)/);
   assert.match(renderWorkbench, /renderAutomationsPage/);
 });
 

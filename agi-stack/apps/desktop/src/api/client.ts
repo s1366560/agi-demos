@@ -102,6 +102,11 @@ import type {
   CreateManagedChannelConfigRequest,
   UpdateManagedChannelConfigRequest,
 } from '../types';
+import {
+  desktopSearchRequestContract,
+  normalizeDesktopSearchResponse,
+} from './searchContract';
+import type { DesktopSearchRequest, DesktopSearchResponse } from './searchContract';
 
 type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -831,6 +836,30 @@ export class DesktopApiClient {
       )}?project_id=${encodeURIComponent(requiredProjectId)}`,
       { method: 'DELETE' },
     );
+  }
+
+  async searchProject(
+    request: DesktopSearchRequest,
+    scope: {
+      tenantId?: string;
+      projectId?: string;
+      signal?: AbortSignal;
+    } = {},
+  ): Promise<DesktopSearchResponse> {
+    const contract = desktopSearchRequestContract(request, {
+      tenantId: scope.tenantId ?? this.config.tenantId,
+      projectId: scope.projectId ?? this.config.projectId,
+    });
+    const payload = await this.request<unknown>(contract.path, {
+      method: 'POST',
+      body: contract.body,
+      signal: scope.signal,
+    });
+    const response = normalizeDesktopSearchResponse(payload, contract.expectedSearchType);
+    if (!response) {
+      throw new DesktopApiError('Invalid project search response', 502, payload);
+    }
+    return response;
   }
 
   async listConversations(
