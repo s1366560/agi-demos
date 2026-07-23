@@ -60,6 +60,115 @@ function conversationRecord(index, overrides = {}) {
   };
 }
 
+test('workspace creation sends an explicit project-scoped contract and validates the response', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const controller = new AbortController();
+  const input = {
+    name: 'Programming workspace',
+    description: 'Build and verify the desktop client.',
+    useCase: 'programming',
+    collaborationMode: 'multi_agent_isolated',
+    sandboxCodeRoot: '/workspace/desktop-client',
+    metadata: {
+      source: 'desktop',
+      workspace_use_case: 'programming',
+      workspace_type: 'software_development',
+      collaboration_mode: 'multi_agent_isolated',
+      agent_conversation_mode: 'multi_agent_isolated',
+      autonomy_profile: { workspace_type: 'software_development' },
+      sandbox_code_root: '/workspace/desktop-client',
+      code_context: { sandbox_code_root: '/workspace/desktop-client' },
+    },
+  };
+  globalThis.fetch = async (request, init) => {
+    calls.push({ request: String(request), init });
+    return new Response(
+      JSON.stringify(
+        workspaceRecord('created', {
+          id: 'workspace-created',
+          tenant_id: 'tenant / one',
+          project_id: 'project / one',
+          name: input.name,
+          description: input.description,
+          metadata: input.metadata,
+        }),
+      ),
+      { status: 201, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'cloud',
+      apiBaseUrl: 'https://api.memstack.test',
+      apiKey: 'cloud-session',
+      tenantId: 'tenant / one',
+      projectId: 'project / one',
+    });
+    const created = await client.createWorkspaceForProject(
+      'project / one',
+      input,
+      'tenant / one',
+      controller.signal,
+    );
+    assert.equal(created.id, 'workspace-created');
+    assert.equal(calls.length, 1);
+    assert.equal(
+      calls[0].request,
+      'https://api.memstack.test/api/v1/tenants/tenant%20%2F%20one/projects/project%20%2F%20one/workspaces',
+    );
+    assert.equal(calls[0].init.method, 'POST');
+    assert.equal(calls[0].init.signal, controller.signal);
+    assert.equal(calls[0].init.headers.get('Authorization'), 'Bearer cloud-session');
+    assert.deepEqual(JSON.parse(calls[0].init.body), {
+      name: input.name,
+      description: input.description,
+      metadata: input.metadata,
+      use_case: input.useCase,
+      collaboration_mode: input.collaborationMode,
+      sandbox_code_root: input.sandboxCodeRoot,
+    });
+
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify(
+          workspaceRecord('wrong-scope', {
+            tenant_id: 'tenant / one',
+            project_id: 'project-other',
+            name: input.name,
+          }),
+        ),
+        { status: 201, headers: { 'content-type': 'application/json' } },
+      );
+    await assert.rejects(
+      client.createWorkspaceForProject('project / one', input, 'tenant / one'),
+      (error) => {
+        assert.equal(error instanceof DesktopApiError, true);
+        assert.equal(error.status, 502);
+        return true;
+      },
+    );
+
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ detail: 'Workspace already exists' }), {
+        status: 409,
+        headers: { 'content-type': 'application/json' },
+      });
+    await assert.rejects(
+      client.createWorkspaceForProject('project / one', input, 'tenant / one'),
+      (error) => {
+        assert.equal(error instanceof DesktopApiError, true);
+        assert.equal(error.status, 409);
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('workspace context unavailable detection requires the structured server code', () => {
   assert.equal(
     isWorkspaceContextUnavailableError(

@@ -153,6 +153,8 @@ const testFiles = [
   'use-agent-socket.test.mjs',
   'use-terminal-proxy.test.mjs',
   'workspace-tree-model.test.mjs',
+  'workspace-create-model.test.mjs',
+  'workspace-create-dialog.test.mjs',
   'workspace-overview-model.test.mjs',
   'workspace-overview-style.test.mjs',
   'workspace-execution-model.test.mjs',

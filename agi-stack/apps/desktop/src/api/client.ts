@@ -116,6 +116,19 @@ type RequestOptions = {
   skipAuth?: boolean;
 };
 
+export type WorkspaceCreateInput = {
+  name: string;
+  description: string;
+  useCase: 'general' | 'programming' | 'conversation' | 'research' | 'operations';
+  collaborationMode:
+    | 'single_agent'
+    | 'multi_agent_shared'
+    | 'multi_agent_isolated'
+    | 'autonomous';
+  sandboxCodeRoot?: string;
+  metadata: Record<string, unknown>;
+};
+
 export type DesktopMCPAppSummary = {
   id: string;
   server_name?: string | null;
@@ -550,7 +563,24 @@ export class DesktopApiClient {
   async createWorkspace(name: string, description?: string): Promise<WorkspaceSummary> {
     const tenantId = requireValue(this.config.tenantId, 'tenant id');
     const projectId = requireValue(this.config.projectId, 'project id');
-    return this.createWorkspaceForProject(projectId, name, description, tenantId);
+    return this.createWorkspaceForProject(
+      projectId,
+      {
+        name: name.trim(),
+        description: description?.trim() ?? '',
+        useCase: 'conversation',
+        collaborationMode: 'multi_agent_shared',
+        metadata: {
+          source: 'desktop',
+          workspace_use_case: 'conversation',
+          workspace_type: 'general',
+          collaboration_mode: 'multi_agent_shared',
+          agent_conversation_mode: 'multi_agent_shared',
+          autonomy_profile: { workspace_type: 'general' },
+        },
+      },
+      tenantId,
+    );
   }
 
   async createTaskSession(input: CreateTaskSessionRequest): Promise<CreateTaskSessionResponse> {
@@ -651,39 +681,34 @@ export class DesktopApiClient {
 
   async createWorkspaceForProject(
     projectId: string,
-    name: string,
-    description?: string,
+    input: WorkspaceCreateInput,
     tenantId = this.config.tenantId,
-    options: {
-      useCase?: 'general' | 'programming' | 'conversation' | 'research' | 'operations';
-      collaborationMode?:
-        | 'single_agent'
-        | 'multi_agent_shared'
-        | 'multi_agent_isolated'
-        | 'autonomous';
-      sandboxCodeRoot?: string;
-    } = {},
+    signal?: AbortSignal,
   ): Promise<WorkspaceSummary> {
     const requiredTenantId = requireValue(tenantId, 'tenant id');
     const requiredProjectId = requireValue(projectId, 'project id');
-    return this.request<WorkspaceSummary>(
+    const payload = await this.request<unknown>(
       `/api/v1/tenants/${encodeURIComponent(requiredTenantId)}/projects/${encodeURIComponent(
         requiredProjectId,
       )}/workspaces`,
       {
         method: 'POST',
         body: {
-          name,
-          description,
-          metadata: {
-            source: 'desktop',
-          },
-          use_case: options.useCase ?? 'conversation',
-          collaboration_mode: options.collaborationMode ?? 'multi_agent_shared',
-          sandbox_code_root: options.sandboxCodeRoot || undefined,
+          name: input.name,
+          description: input.description,
+          metadata: input.metadata,
+          use_case: input.useCase,
+          collaboration_mode: input.collaborationMode,
+          sandbox_code_root: input.sandboxCodeRoot,
         },
+        signal,
       },
     );
+    const workspace = normalizeWorkspaceSummary(payload, requiredTenantId, requiredProjectId);
+    if (!workspace || workspace.name !== input.name) {
+      throw new DesktopApiError('Invalid workspace response', 502, payload);
+    }
+    return workspace;
   }
 
   async listMessages(signal?: AbortSignal): Promise<WorkspaceMessage[]> {

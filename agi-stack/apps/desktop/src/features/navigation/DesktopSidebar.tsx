@@ -62,6 +62,8 @@ type DesktopSidebarProps = {
     workspaceId: string,
     conversation: AgentConversation,
   ) => Promise<void>;
+  workspaceCreateDisabledReason?: string | null;
+  onCreateWorkspace?: () => void;
   onNewTask: () => void;
   onOpenAccountSettings: () => void;
   onSwitchWorkspace: () => void;
@@ -96,6 +98,8 @@ export function DesktopSidebar({
   onSelectConversation,
   onRenameConversation,
   onDeleteConversation,
+  workspaceCreateDisabledReason,
+  onCreateWorkspace,
   onNewTask,
   onOpenAccountSettings,
   onSwitchWorkspace,
@@ -142,7 +146,20 @@ export function DesktopSidebar({
       <section className="desktop-design-workspaces">
         <header>
           <strong>{projectName}</strong>
-          <span>{t('workspaceTree.workspaces')}</span>
+          <div className="desktop-workspace-heading-actions">
+            <span>{t('workspaceTree.workspaces')}</span>
+            {onCreateWorkspace ? (
+              <button
+                type="button"
+                aria-label={t('workspaceCreate.open')}
+                title={workspaceCreateDisabledReason ?? t('workspaceCreate.open')}
+                disabled={Boolean(workspaceCreateDisabledReason)}
+                onClick={onCreateWorkspace}
+              >
+                <PlusIcon aria-hidden="true" />
+              </button>
+            ) : null}
+          </div>
         </header>
         <WorkspaceDock
           workspaces={workspaces}
@@ -160,6 +177,9 @@ export function DesktopSidebar({
           onSelectConversation={onSelectConversation}
           onRenameConversation={onRenameConversation}
           onDeleteConversation={onDeleteConversation}
+          onCreateWorkspace={
+            workspaceCreateDisabledReason ? undefined : onCreateWorkspace
+          }
         />
       </section>
 

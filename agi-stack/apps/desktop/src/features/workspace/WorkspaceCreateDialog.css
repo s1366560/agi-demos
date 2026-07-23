@@ -1,0 +1,196 @@
+.workspace-create-dialog {
+  border: 1px solid rgba(71, 113, 135, 0.7);
+  background:
+    radial-gradient(circle at top right, rgba(34, 211, 238, 0.08), transparent 28rem),
+    #0b1119;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.56);
+}
+
+.workspace-create-dialog .rt-DialogTitle {
+  margin: 0;
+  color: var(--desktop-text, #edf6fb);
+  font-size: 19px;
+}
+
+.workspace-create-dialog .rt-DialogDescription {
+  margin-top: 7px;
+  color: var(--desktop-muted, #8ca0af);
+  line-height: 1.55;
+}
+
+.workspace-create-form {
+  display: grid;
+  gap: 18px;
+  margin-top: 22px;
+}
+
+.workspace-create-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);
+  gap: 14px;
+}
+
+.workspace-create-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--desktop-muted, #8ca0af);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.workspace-create-form .rt-TextFieldRoot,
+.workspace-create-form .rt-TextAreaRoot {
+  border-color: rgba(71, 113, 135, 0.58);
+  background: rgba(8, 15, 23, 0.8);
+}
+
+.workspace-create-form .rt-TextFieldInput,
+.workspace-create-form .rt-TextAreaInput {
+  color: var(--desktop-text, #edf6fb);
+}
+
+.workspace-create-field-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.workspace-create-field-heading small {
+  color: var(--desktop-faint, #637786);
+  font-variant-numeric: tabular-nums;
+}
+
+.workspace-create-field-heading small.ready {
+  color: #4cd6a3;
+}
+
+.workspace-create-option-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.workspace-create-option-fieldset legend {
+  margin-bottom: 8px;
+  color: var(--desktop-muted, #8ca0af);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.workspace-create-option-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.workspace-create-option-grid button {
+  display: grid;
+  min-width: 0;
+  min-height: 82px;
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 12px 10px;
+  border: 1px solid rgba(71, 113, 135, 0.42);
+  border-radius: 9px;
+  background: rgba(13, 24, 34, 0.72);
+  color: var(--desktop-muted, #8ca0af);
+  text-align: left;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    transform 120ms ease;
+}
+
+.workspace-create-option-grid button:hover:not(:disabled) {
+  border-color: rgba(56, 214, 255, 0.6);
+  background: rgba(24, 47, 60, 0.72);
+  transform: translateY(-1px);
+}
+
+.workspace-create-option-grid button:focus-visible {
+  outline: 2px solid var(--desktop-cyan, #38d6ff);
+  outline-offset: 2px;
+}
+
+.workspace-create-option-grid button.selected {
+  border-color: rgba(56, 214, 255, 0.86);
+  background: rgba(30, 108, 133, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(56, 214, 255, 0.12);
+}
+
+.workspace-create-option-grid button > span:first-child {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 7px;
+  background: rgba(56, 214, 255, 0.1);
+  color: var(--desktop-cyan, #38d6ff);
+}
+
+.workspace-create-option-grid button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.workspace-create-option-grid button > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.workspace-create-option-grid strong {
+  overflow: hidden;
+  color: var(--desktop-text, #edf6fb);
+  font-size: 11px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+}
+
+.workspace-create-option-grid small {
+  color: var(--desktop-faint, #637786);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.workspace-create-code-root small {
+  color: var(--desktop-faint, #637786);
+  font-weight: 500;
+}
+
+.workspace-create-code-root small.error {
+  color: #e58b95;
+}
+
+.workspace-create-feedback {
+  min-height: 18px;
+  color: var(--desktop-muted, #8ca0af);
+  font-size: 11px;
+}
+
+.workspace-create-feedback.error {
+  color: #e58b95;
+}
+
+.workspace-create-feedback.success {
+  color: #4cd6a3;
+}
+
+.workspace-create-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+@media (max-width: 760px) {
+  .workspace-create-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-create-option-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

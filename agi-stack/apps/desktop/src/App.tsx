@@ -46,6 +46,7 @@ import {
   DesktopApiClient,
   isWorkspaceContextUnavailableError,
 } from './api/client';
+import type { WorkspaceCreateInput } from './api/client';
 import {
   clearLocalTrustedSession,
   clearNativeTrustedSession,
@@ -294,10 +295,17 @@ import {
   writeTaskSessionCreationAttempt,
 } from './features/task/newTaskSessionModel';
 import { WorkspaceOverview } from './features/workspace/WorkspaceOverview';
+import { WorkspaceCreateDialog } from './features/workspace/WorkspaceCreateDialog';
 import {
   applyWorkspaceActivityStreamEvent,
   type WorkspaceLiveActivity,
 } from './features/workspace/workspaceActivityEventModel';
+import {
+  WorkspaceCreateScopeChangedError,
+  mergeWorkspaceIntoProjectCatalog,
+  workspaceCreateScopeIsCurrent,
+} from './features/workspace/workspaceCreateModel';
+import type { WorkspaceCreateScope } from './features/workspace/workspaceCreateModel';
 import { beginDesktopRuntimeScopeTransition } from './features/workspace/workspaceOverviewModel';
 import {
   UNBOUND_CONVERSATIONS_KEY,
@@ -1589,6 +1597,7 @@ export function App() {
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [workspaceCreateOpen, setWorkspaceCreateOpen] = useState(false);
   const [newTaskPreferredWorkspaceId, setNewTaskPreferredWorkspaceId] = useState('');
   const [newTaskResumeDraft, setNewTaskResumeDraft] =
     useState<NewTaskResumeDraft | null>(null);
@@ -2885,10 +2894,17 @@ export function App() {
     ? t('task.disabledSignIn')
     : !showRuntimeConfig
       ? t('task.disabledProjectRequired')
+      : !config.apiKey.trim()
+        ? t('task.disabledAuthRequired')
+        : !config.tenantId.trim() || !config.projectId.trim()
+          ? t('task.disabledProjectRequired')
+          : null;
+  const workspaceCreateDisabledReason = !identityAuthenticated
+    ? t('workspaceCreate.disabledSignIn')
     : !config.apiKey.trim()
-      ? t('task.disabledAuthRequired')
+      ? t('workspaceCreate.disabledAuth')
       : !config.tenantId.trim() || !config.projectId.trim()
-        ? t('task.disabledProjectRequired')
+        ? t('workspaceCreate.disabledProject')
         : null;
   const chatDisabledReason = !identityAuthenticated
     ? 'Sign in or enter an API key before sending messages.'
@@ -4353,6 +4369,56 @@ export function App() {
     setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
     applySectionSideEffects('workspace');
     void refreshRuntime(nextConfig);
+  };
+
+  const createWorkspaceFromDialog = async (
+    input: WorkspaceCreateInput,
+    submittedScope: WorkspaceCreateScope,
+    signal: AbortSignal,
+  ) => {
+    const currentScope = {
+      tenantId: configRef.current.tenantId,
+      projectId: configRef.current.projectId,
+      epoch: configScopeEpochRef.current,
+      contextRevision: contextRevisionRef.current,
+    };
+    if (!workspaceCreateScopeIsCurrent(submittedScope, currentScope)) {
+      throw new WorkspaceCreateScopeChangedError();
+    }
+    const creationClient = new DesktopApiClient({
+      ...configRef.current,
+      tenantId: submittedScope.tenantId,
+      projectId: submittedScope.projectId,
+      workspaceId: '',
+    });
+    const created = await creationClient.createWorkspaceForProject(
+      submittedScope.projectId,
+      input,
+      submittedScope.tenantId,
+      signal,
+    );
+    const committedScope = {
+      tenantId: configRef.current.tenantId,
+      projectId: configRef.current.projectId,
+      epoch: configScopeEpochRef.current,
+      contextRevision: contextRevisionRef.current,
+    };
+    if (!workspaceCreateScopeIsCurrent(submittedScope, committedScope)) {
+      throw new WorkspaceCreateScopeChangedError();
+    }
+    updateDataset((current) => ({
+      ...current,
+      workspaces: [
+        created,
+        ...current.workspaces.filter((candidate) => candidate.id !== created.id),
+      ],
+      workspacesByProject: mergeWorkspaceIntoProjectCatalog(
+        current.workspacesByProject,
+        created,
+      ),
+    }));
+    setExpandedWorkspaceIds((current) => new Set([...current, created.id]));
+    selectWorkspace(created.id, submittedScope.projectId);
   };
 
   const renameConversation = async (
@@ -6984,6 +7050,8 @@ export function App() {
             onSelectConversation={selectConversation}
             onRenameConversation={renameConversation}
             onDeleteConversation={deleteConversation}
+            workspaceCreateDisabledReason={workspaceCreateDisabledReason}
+            onCreateWorkspace={() => setWorkspaceCreateOpen(true)}
             onNewTask={startNewSession}
             onOpenAccountSettings={openSidebarSettings}
             onSwitchWorkspace={openProfileWorkspaceSettings}
@@ -7108,6 +7176,20 @@ export function App() {
             openConnectionSettings();
           }}
           onError={setError}
+        />
+        <WorkspaceCreateDialog
+          open={workspaceCreateOpen}
+          projectName={
+            selectedProject?.name ?? selectedProject?.id ?? t('settings.noProjectSelected')
+          }
+          scope={{
+            tenantId: config.tenantId,
+            projectId: config.projectId,
+            epoch: configScopeEpochRef.current,
+            contextRevision: contextRevisionRef.current,
+          }}
+          onOpenChange={setWorkspaceCreateOpen}
+          onCreate={createWorkspaceFromDialog}
         />
         <SettingsWindow
           open={settingsWindowOpen}

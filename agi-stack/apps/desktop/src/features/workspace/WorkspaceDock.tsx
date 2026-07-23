@@ -77,6 +77,7 @@ type WorkspaceDockProps = {
     workspaceId: string,
     conversation: AgentConversation,
   ) => Promise<void>;
+  onCreateWorkspace?: () => void;
 };
 
 export function WorkspaceDock({
@@ -95,6 +96,7 @@ export function WorkspaceDock({
   onSelectConversation,
   onRenameConversation,
   onDeleteConversation,
+  onCreateWorkspace,
 }: WorkspaceDockProps) {
   const { t } = useI18n();
   const navigationRef = useRef<HTMLElement>(null);
@@ -305,6 +307,8 @@ export function WorkspaceDock({
             <WorkspaceTreeState
               title={t('workspaceTree.empty')}
               detail={t('workspaceTree.emptyDescription')}
+              actionLabel={onCreateWorkspace ? t('workspaceCreate.open') : undefined}
+              onAction={onCreateWorkspace}
             />
           ) : (
             tree.map(({ workspace, conversations }) => {

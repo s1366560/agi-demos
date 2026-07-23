@@ -273,8 +273,9 @@ test('workspace settings freeze and expose selection semantics while a switch is
   );
 });
 
-test('workspace and session creation remain inside the new task flow', () => {
-  assert.doesNotMatch(appSource, /const createWorkspace = async/);
+test('workspace creation uses its dedicated surface while session creation stays in new task', () => {
+  assert.match(appSource, /import \{ WorkspaceCreateDialog \}/);
+  assert.match(appSource, /const createWorkspaceFromDialog = async/);
   assert.doesNotMatch(appSource, /const createSessionForWorkspace = async/);
   assert.doesNotMatch(appSource, /newWorkspaceName|creatingWorkspace|creatingSessionWorkspaceId/);
 });
