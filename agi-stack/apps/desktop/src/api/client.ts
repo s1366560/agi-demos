@@ -549,15 +549,21 @@ export class DesktopApiClient {
   async createTaskSession(input: CreateTaskSessionRequest): Promise<CreateTaskSessionResponse> {
     const tenantId = requireValue(this.config.tenantId, 'tenant id');
     const projectId = requireValue(this.config.projectId, 'project id');
-    const payload = await this.request<unknown>(
-      `/api/v1/tenants/${encodeURIComponent(tenantId)}/projects/${encodeURIComponent(
-        projectId,
-      )}/task-sessions`,
-      {
+    const path = `/api/v1/tenants/${encodeURIComponent(
+      tenantId,
+    )}/projects/${encodeURIComponent(projectId)}/task-sessions`;
+    const createSession = () =>
+      this.request<unknown>(path, {
         method: 'POST',
         body: input,
-      },
-    );
+      });
+    let payload: unknown;
+    try {
+      payload = await createSession();
+    } catch (error) {
+      if (error instanceof DesktopApiError) throw error;
+      payload = await createSession();
+    }
     return requireCreateTaskSessionResponse(payload, tenantId, projectId, input);
   }
 

@@ -78,11 +78,24 @@ test('QA route exercises and diagnoses the production task authority boundary', 
     qaSource,
     /url\.pathname ===[\s\S]*?\/api\/v1\/tenants\/northstar\/projects\/product-strategy\/task-sessions[\s\S]*?method === 'POST'/,
   );
-  assert.match(qaSource, /taskSessionPostCount !== 1/);
+  assert.match(qaSource, /taskSessionPostCount === 1[\s\S]*?throw new TypeError\('Failed to fetch'\)/);
+  assert.match(qaSource, /taskSessionPostCount !== 2 \|\| serializedBody !== firstTaskSessionBody/);
   assert.match(qaSource, /qaSessionPersisted/);
   assert.match(qaSource, /qaSessionReady/);
   assert.match(qaSource, /qaAgentTurns/);
   assert.match(qaSource, /\/api\/v1\/agent\/plans\/approve-and-start/);
   assert.match(qaSource, /qaApprovalPosts/);
   assert.match(qaSource, /qaContractErrors/);
+});
+
+test('QA task-session fixture mirrors the strict production response contract', () => {
+  assert.match(qaSource, /is_archived:\s*false/);
+  assert.match(qaSource, /conversation_mode:\s*'workspace'/);
+  assert.match(
+    qaSource,
+    /metadata:\s*\{[\s\S]*?source:\s*'task_session',[\s\S]*?conversation_id:\s*conversation\.id/,
+  );
+  assert.match(qaSource, /title:\s*body\.conversation\.title/);
+  assert.match(qaSource, /capability_mode:\s*body\.conversation\.capability_mode/);
+  assert.match(qaSource, /content:\s*body\.initial_message\.content/);
 });

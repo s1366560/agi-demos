@@ -32,6 +32,7 @@ const workspace: WorkspaceSummary = {
   description:
     'Create a leadership-ready brief that recommends three measurable retention experiments for Q4.',
   status: 'active',
+  is_archived: false,
   created_at: now,
   updated_at: now,
   metadata: {
@@ -52,7 +53,7 @@ const conversation: AgentConversation = {
   message_count: 1,
   created_at: now,
   updated_at: now,
-  conversation_mode: 'work',
+  conversation_mode: 'workspace',
   current_mode: 'plan',
   agent_config: {
     selected_agent_id: 'builtin:all-access',
@@ -124,6 +125,10 @@ const initialMessage: WorkspaceMessage = {
   sender_id: 'alex',
   parent_message_id: null,
   mentions: [],
+  metadata: {
+    source: 'task_session',
+    conversation_id: conversation.id,
+  },
   created_at: now,
 };
 
@@ -140,6 +145,7 @@ const config: DesktopRuntimeConfig = {
 
 let planningTurnAcceptedAt = 0;
 let taskSessionPostCount = 0;
+let firstTaskSessionBody: string | null = null;
 let approvalPostCount = 0;
 let persistedSessionCount = 0;
 let readySessionCount = 0;
@@ -163,7 +169,14 @@ function hasExpectedAuth(init?: RequestInit): boolean {
   );
 }
 
-function validTaskSessionBody(body: unknown): boolean {
+type QaTaskSessionBody = {
+  idempotency_key: string;
+  workspace: { kind: 'create'; name: string; description?: string };
+  conversation: { title: string; capability_mode: 'work' | 'code' };
+  initial_message: { content: string };
+};
+
+function validTaskSessionBody(body: unknown): body is QaTaskSessionBody {
   if (!isRecord(body)) return false;
   const workspaceBody = body.workspace;
   const conversationBody = body.conversation;
@@ -225,18 +238,37 @@ window.fetch = async (input, init) => {
   ) {
     taskSessionPostCount += 1;
     document.documentElement.dataset.qaTaskSessionPosts = String(taskSessionPostCount);
-    if (taskSessionPostCount !== 1) {
-      return contractFailure('The task session mutation was submitted more than once.');
-    }
     if (!hasExpectedAuth(init) || !validTaskSessionBody(body)) {
       return contractFailure('The task session request did not match the production contract.');
+    }
+    const serializedBody = JSON.stringify(body);
+    if (taskSessionPostCount === 1) {
+      firstTaskSessionBody = serializedBody;
+      throw new TypeError('Failed to fetch');
+    }
+    if (taskSessionPostCount !== 2 || serializedBody !== firstTaskSessionBody) {
+      return contractFailure('The task session retry changed its idempotent request.');
     }
     await new Promise((resolve) => window.setTimeout(resolve, 600));
     return json({
       replayed: false,
-      workspace,
-      conversation,
-      initial_message: initialMessage,
+      workspace: {
+        ...workspace,
+        name: body.workspace.name,
+        description: body.workspace.description,
+      },
+      conversation: {
+        ...conversation,
+        title: body.conversation.title,
+        agent_config: {
+          ...conversation.agent_config,
+          capability_mode: body.conversation.capability_mode,
+        },
+      },
+      initial_message: {
+        ...initialMessage,
+        content: body.initial_message.content,
+      },
     });
   }
 

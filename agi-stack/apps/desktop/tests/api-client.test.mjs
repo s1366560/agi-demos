@@ -2384,6 +2384,72 @@ test('createTaskSession posts one strictly scoped atomic task-session contract',
   }
 });
 
+test('createTaskSession retries one transport failure with the identical idempotent request', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const request = {
+    idempotency_key: 'desktop-task-session-retry-1',
+    workspace: { kind: 'existing', workspace_id: 'workspace-1' },
+    conversation: { title: 'Retry atomic task', capability_mode: 'work' },
+    initial_message: { content: 'Create the reviewable plan' },
+  };
+  const payload = {
+    replayed: false,
+    workspace: workspaceRecord(1),
+    conversation: conversationRecord(1, {
+      title: request.conversation.title,
+      conversation_mode: 'workspace',
+      current_mode: 'plan',
+      workspace_id: 'workspace-1',
+      agent_config: {
+        selected_agent_id: 'builtin:all-access',
+        capability_mode: 'work',
+      },
+    }),
+    initial_message: {
+      id: 'message-retry-1',
+      workspace_id: 'workspace-1',
+      sender_id: 'user-1',
+      sender_type: 'human',
+      content: request.initial_message.content,
+      mentions: [],
+      parent_message_id: null,
+      metadata: {
+        source: 'task_session',
+        conversation_id: 'conversation-1',
+      },
+      created_at: '2026-07-19T00:00:00Z',
+    },
+  };
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    if (calls.length === 1) throw new TypeError('Failed to fetch');
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
+    });
+
+    const result = await client.createTaskSession(request);
+
+    assert.equal(result.conversation.id, 'conversation-1');
+    assert.equal(calls.length, 2);
+    assert.equal(String(calls[0]?.input), String(calls[1]?.input));
+    assert.equal(calls[0]?.init?.body, calls[1]?.init?.body);
+    assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), request);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('createTaskSession rejects malformed, cross-scope, unbound, or non-Plan success payloads', async () => {
   const request = {
     idempotency_key: 'desktop-task-session-1',
