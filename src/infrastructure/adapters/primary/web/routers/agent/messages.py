@@ -989,6 +989,11 @@ def _build_skill_event(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {"payload": dict(data)}
 
 
+def _build_extended_subagent_event(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    """Preserve the authoritative extended SubAgent payload for Desktop history replay."""
+    return {"payload": dict(data)}
+
+
 def _build_agent_spawned(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {
         "agentId": data.get("agent_id", ""),
@@ -1083,6 +1088,15 @@ _EVENT_BUILDERS: dict[str, Any] = {
     "subagent_steered": _build_subagent_steered,
     "subagent_depth_limited": _build_subagent_depth_limited,
     "subagent_session_update": _build_subagent_session_update,
+    "subagent_spawning": _build_extended_subagent_event,
+    "subagent_delegation": _build_extended_subagent_event,
+    "subagent_retry": _build_extended_subagent_event,
+    "subagent_doom_loop": _build_extended_subagent_event,
+    "subagent_spawn_rejected": _build_extended_subagent_event,
+    "subagent_orphan_detected": _build_extended_subagent_event,
+    "subagent_announce_sent": _build_extended_subagent_event,
+    "subagent_announce_received": _build_extended_subagent_event,
+    "subagent_announce_expired": _build_extended_subagent_event,
     "parallel_started": _build_parallel_started,
     "parallel_completed": _build_parallel_completed,
     "chain_started": _build_chain_started,

@@ -850,6 +850,72 @@ def test_build_timeline_replays_sessionized_subagent_events() -> None:
     assert timeline[2]["error"] == "Parent unavailable"
 
 
+def test_build_timeline_replays_extended_subagent_lifecycle_for_desktop_history() -> None:
+    subagent_events = [
+        (
+            "subagent_spawning",
+            {"run_id": "run-1", "subagent_name": "Verifier", "spawn_mode": "run"},
+        ),
+        (
+            "subagent_delegation",
+            {
+                "to_subagent_id": "verifier",
+                "to_subagent_name": "Verifier",
+                "trigger_type": "semantic",
+                "task_description": "Verify the release evidence",
+            },
+        ),
+        (
+            "subagent_retry",
+            {"subagent_id": "verifier", "subagent_name": "Verifier", "attempt": 2},
+        ),
+        (
+            "subagent_doom_loop",
+            {
+                "subagent_id": "verifier",
+                "subagent_name": "Verifier",
+                "reason": "Repeated terminal invocation",
+            },
+        ),
+        (
+            "subagent_spawn_rejected",
+            {"subagent_name": "Verifier", "rejection_reason": "Concurrency limit"},
+        ),
+        (
+            "subagent_orphan_detected",
+            {"run_id": "run-1", "subagent_name": "Verifier", "reason": "parent_gone"},
+        ),
+        (
+            "subagent_announce_sent",
+            {"agent_id": "verifier", "session_id": "session-1", "parent_agent_id": "main"},
+        ),
+        (
+            "subagent_announce_received",
+            {"agent_id": "main", "session_id": "session-1", "from_agent_id": "verifier"},
+        ),
+        (
+            "subagent_announce_expired",
+            {"agent_id": "verifier", "session_id": "session-1", "attempts": 3},
+        ),
+    ]
+    assert {event_type for event_type, _ in subagent_events} <= _DISPLAYABLE_EVENTS
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(event_type=event_type, event_data=data, event_time_us=index * 1_000)
+            for index, (event_type, data) in enumerate(subagent_events, start=1)
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert [item["type"] for item in timeline] == [event_type for event_type, _ in subagent_events]
+    assert [item["payload"] for item in timeline] == [data for _, data in subagent_events]
+
+
 def test_build_timeline_replays_orchestration_events() -> None:
     timeline = _build_timeline(
         events=[
