@@ -290,11 +290,19 @@ export const InputToolbar = memo<InputToolbarProps>(
           )}
 
           {charCount > 0 && (
-            <span
-              className={`text-xs font-medium transition-colors ${charCount > 4000 ? 'text-amber-500' : 'text-slate-400'}`}
+            <LazyTooltip
+              title={t('agent.inputBar.charLimitHint', {
+                count: 4000,
+                defaultValue:
+                  'Messages over {{count}} characters may be truncated by the model',
+              })}
             >
-              {charCount.toLocaleString()}
-            </span>
+              <span
+                className={`text-xs font-medium transition-colors tabular-nums ${charCount > 4000 ? 'text-amber-500' : 'text-slate-400'}`}
+              >
+                {charCount.toLocaleString()}
+              </span>
+            </LazyTooltip>
           )}
 
           {isStreaming ? (

@@ -1,5 +1,4 @@
 export { MarkdownContent } from './MarkdownContent';
-export { TimelineEventRenderer } from './TimelineEventRenderer';
 export { MessageActionBar } from './MessageActionBar';
 export { ThinkingBlock } from './ThinkingBlock';
 export { SuggestionChips } from './SuggestionChips';

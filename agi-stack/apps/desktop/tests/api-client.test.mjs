@@ -1043,6 +1043,17 @@ test('device token error classification rejects message and malformed payload gu
   );
 });
 
+test('device token error classification accepts protocol errors from another JavaScript realm', () => {
+  assert.deepEqual(
+    classifyDeviceTokenError({
+      name: 'DesktopApiError',
+      status: 428,
+      payload: { detail: { error: 'authorization_pending', interval: 5 } },
+    }),
+    { code: 'authorization_pending', interval: 5 },
+  );
+});
+
 test('conversation history requests preserve forward and backward cursor pairs', async () => {
   let requestUrl = null;
   const originalFetch = globalThis.fetch;

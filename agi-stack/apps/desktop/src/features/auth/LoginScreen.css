@@ -145,6 +145,45 @@
   width: min(430px, 100%);
 }
 
+.desktop-login-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  padding: 3px;
+  margin-bottom: 24px;
+  background: #0b1119;
+  border: 1px solid #283545;
+  border-radius: 8px;
+}
+
+.desktop-login-mode button {
+  height: 34px;
+  padding: 0 12px;
+  color: #748396;
+  font-size: 9px;
+  font-weight: 650;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.desktop-login-mode button[aria-pressed='true'] {
+  color: #dce7ef;
+  background: #14232d;
+  border-color: #31677a;
+  box-shadow: 0 1px 8px rgb(0 0 0 / 24%);
+}
+
+.desktop-login-mode button:focus-visible {
+  border-color: #38d6ff;
+  outline: 0;
+}
+
+.desktop-login-mode button:disabled {
+  cursor: wait;
+  opacity: 0.56;
+}
+
 .desktop-login-card > header h2 {
   margin: 8px 0 7px;
   font-size: 28px;
@@ -177,6 +216,10 @@
 .desktop-login-sso:hover {
   background: #13212b;
   border-color: #477086;
+}
+
+.desktop-login-local {
+  margin-top: 24px;
 }
 
 .desktop-login-sso img {

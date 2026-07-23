@@ -19,6 +19,8 @@ import { useTranslation } from 'react-i18next';
 
 import { ChevronDown, ChevronRight, Brain } from 'lucide-react';
 
+import { formatDurationSeconds } from '@/utils/format';
+
 import type { TFunction } from 'i18next';
 
 export interface ThinkingBlockProps {
@@ -80,13 +82,6 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
       },
       [expanded]
     );
-
-    const formatDuration = (seconds: number): string => {
-      if (seconds < 60) return `${String(seconds)}s`;
-      const mins = Math.floor(seconds / 60);
-      const secs = seconds % 60;
-      return `${String(mins)}m ${String(secs)}s`;
-    };
 
     // Truncate content for collapsed preview
     const previewText = content
@@ -168,10 +163,10 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
                 </span>
               )}
 
-              {/* Duration badge */}
-              {(duration > 0 || !isStreaming) && (
+              {/* Duration badge (hidden when no timing data is available) */}
+              {(duration > 0 || isStreaming) && (
                 <span className="ml-auto text-xs text-slate-400 dark:text-slate-500 flex-shrink-0 tabular-nums">
-                  {formatDuration(duration || 0)}
+                  {formatDurationSeconds(duration || 0)}
                 </span>
               )}
             </button>
@@ -248,6 +243,7 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
     return (
       prevProps.content === nextProps.content &&
       prevProps.isStreaming === nextProps.isStreaming &&
+      prevProps.startTime === nextProps.startTime &&
       prevProps.steps === nextProps.steps &&
       prevProps.currentStep === nextProps.currentStep
     );

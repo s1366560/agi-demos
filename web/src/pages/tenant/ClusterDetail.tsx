@@ -27,6 +27,7 @@ import {
   Switch,
   Table,
   Alert,
+  theme,
 } from 'antd';
 import { Copy, Server, Network, HardDrive } from 'lucide-react';
 
@@ -41,6 +42,7 @@ import {
 
 import { ClusterFormFields } from './utils/ClusterFormFields';
 import { parseProviderConfig } from './utils/clusterFormUtils';
+import { formatDate, getStatusColor } from './utils/instanceUtils';
 
 import type { ACPRunnerPool, ACPRunnerTokenResponse } from '@/types/acp';
 
@@ -77,20 +79,11 @@ const parseJsonObject = (value: string | undefined): Record<string, unknown> => 
   return parsed as Record<string, unknown>;
 };
 
-const usageColor = (usage: number) => {
-  if (usage > 80) {
-    return '#ff4d4f';
-  }
-  if (usage > 60) {
-    return '#faad14';
-  }
-  return '#3f8600';
-};
-
 export const ClusterDetail: React.FC = () => {
   const { clusterId } = useParams<{ clusterId: string }>();
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { token } = theme.useToken();
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [runnerModalVisible, setRunnerModalVisible] = useState(false);
   const [runnerPools, setRunnerPools] = useState<ACPRunnerPool[]>([]);
@@ -135,7 +128,8 @@ export const ClusterDetail: React.FC = () => {
   }, [clusterId, getCluster, getClusterHealth, loadRunnerPools, clearError, reset]);
 
   const handleBack = () => {
-    void navigate('/clusters');
+    // Relative navigation: works under both /tenant/clusters/:id and /tenant/:tenantId/clusters/:id
+    void navigate('..');
   };
 
   const handleEdit = () => {
@@ -198,7 +192,7 @@ export const ClusterDetail: React.FC = () => {
     if (clusterId) {
       await deleteCluster(clusterId);
       message.success(t('tenant.clusters.deletedSuccess'));
-      void navigate('/clusters');
+      void navigate('..');
     }
   };
 
@@ -225,17 +219,36 @@ export const ClusterDetail: React.FC = () => {
 
   const handleRunnerPoolSubmit = async () => {
     if (!clusterId) return;
+
+    let values: RunnerPoolFormValues;
     try {
-      const values = await runnerForm.validateFields();
-      const labels = parseJsonObject(values.labelsText) as Record<string, string>;
+      values = await runnerForm.validateFields();
+    } catch {
+      // antd validation errors are shown inline on the form
+      return;
+    }
+
+    let labels: Record<string, string>;
+    let capacityPolicy: Record<string, unknown>;
+    let schedulingPolicy: Record<string, unknown>;
+    try {
+      labels = parseJsonObject(values.labelsText) as Record<string, string>;
+      capacityPolicy = parseJsonObject(values.capacityPolicyText);
+      schedulingPolicy = parseJsonObject(values.schedulingPolicyText);
+    } catch {
+      message.error(t('tenant.clusters.invalidJsonError'));
+      return;
+    }
+
+    try {
       const created = await clusterService.createAcpRunnerPool(clusterId, {
         poolKey: values.poolKey,
         name: values.name,
         mode: values.mode,
         enabled: values.enabled,
         labels,
-        capacityPolicy: parseJsonObject(values.capacityPolicyText),
-        schedulingPolicy: parseJsonObject(values.schedulingPolicyText),
+        capacityPolicy,
+        schedulingPolicy,
       });
       message.success(
         t('tenant.clusters.acpRunners.created', { defaultValue: 'Runner pool created' })
@@ -246,7 +259,11 @@ export const ClusterDetail: React.FC = () => {
       });
       setRunnerToken(token);
     } catch {
-      message.error(t('tenant.clusters.invalidJsonError'));
+      message.error(
+        t('tenant.clusters.acpRunners.createFailed', {
+          defaultValue: 'Failed to create the runner pool',
+        })
+      );
     }
   };
 
@@ -276,25 +293,14 @@ export const ClusterDetail: React.FC = () => {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'active':
-      case 'connected':
-      case 'healthy':
-        return 'green';
-      case 'pending':
-      case 'provisioning':
-        return 'blue';
-      case 'warning':
-      case 'maintenance':
-        return 'orange';
-      case 'error':
-      case 'disconnected':
-      case 'unhealthy':
-        return 'red';
-      default:
-        return 'default';
+  const usageColor = (usage: number) => {
+    if (usage > 80) {
+      return token.colorError;
     }
+    if (usage > 60) {
+      return token.colorWarning;
+    }
+    return token.colorSuccess;
   };
 
   const renderUsage = (usage: number | null | undefined) => {
@@ -406,7 +412,7 @@ export const ClusterDetail: React.FC = () => {
           <Card>
             <Statistic
               title={t('common.stats.nodes')}
-              value={clusterHealth?.node_count ?? 0}
+              value={clusterHealth ? clusterHealth.node_count : '-'}
               prefix={<Network size={20} />}
             />
           </Card>
@@ -415,14 +421,14 @@ export const ClusterDetail: React.FC = () => {
           <Card>
             <Statistic
               title={t('tenant.clusters.detail.cpuUsage')}
-              value={clusterHealth?.cpu_usage ?? 0}
-              suffix="%"
+              value={clusterHealth?.cpu_usage ?? '-'}
               prefix={<HardDrive size={20} />}
-              styles={{
-                content: {
-                  color: usageColor(clusterHealth?.cpu_usage ?? 0),
-                },
-              }}
+              {...(clusterHealth?.cpu_usage != null
+                ? {
+                    suffix: '%',
+                    styles: { content: { color: usageColor(clusterHealth.cpu_usage) } },
+                  }
+                : {})}
             />
           </Card>
         </Col>
@@ -430,14 +436,14 @@ export const ClusterDetail: React.FC = () => {
           <Card>
             <Statistic
               title={t('tenant.clusters.detail.memoryUsage')}
-              value={clusterHealth?.memory_usage ?? 0}
-              suffix="%"
+              value={clusterHealth?.memory_usage ?? '-'}
               prefix={<HardDrive size={20} />}
-              styles={{
-                content: {
-                  color: usageColor(clusterHealth?.memory_usage ?? 0),
-                },
-              }}
+              {...(clusterHealth?.memory_usage != null
+                ? {
+                    suffix: '%',
+                    styles: { content: { color: usageColor(clusterHealth.memory_usage) } },
+                  }
+                : {})}
             />
           </Card>
         </Col>
@@ -450,11 +456,17 @@ export const ClusterDetail: React.FC = () => {
             {cluster.name}
           </Descriptions.Item>
           <Descriptions.Item label={t('tenant.clusters.detail.status')}>
-            <Tag color={getStatusColor(cluster.status)}>{cluster.status}</Tag>
+            <Tag color={getStatusColor(cluster.status)}>
+              {t(`tenant.clusters.status.${cluster.status}`, { defaultValue: cluster.status })}
+            </Tag>
           </Descriptions.Item>
           <Descriptions.Item label={t('tenant.clusters.detail.healthStatus')}>
             {cluster.health_status ? (
-              <Tag color={getStatusColor(cluster.health_status)}>{cluster.health_status}</Tag>
+              <Tag color={getStatusColor(cluster.health_status)}>
+                {t(`tenant.clusters.status.${cluster.health_status}`, {
+                  defaultValue: cluster.health_status,
+                })}
+              </Tag>
             ) : (
               <Text type="secondary">
                 {t('tenant.clusters.detail.notAvailable', { defaultValue: 'N/A' })}
@@ -471,16 +483,14 @@ export const ClusterDetail: React.FC = () => {
           </Descriptions.Item>
           <Descriptions.Item label={t('tenant.clusters.detail.lastHealthCheck')}>
             {cluster.last_health_check
-              ? new Date(cluster.last_health_check).toLocaleString()
+              ? formatDate(cluster.last_health_check)
               : t('common.time.never')}
           </Descriptions.Item>
           <Descriptions.Item label={t('tenant.clusters.detail.createdAt')}>
-            {new Date(cluster.created_at).toLocaleString()}
+            {formatDate(cluster.created_at)}
           </Descriptions.Item>
           <Descriptions.Item label={t('tenant.clusters.detail.updatedAt')}>
-            {cluster.updated_at
-              ? new Date(cluster.updated_at).toLocaleString()
-              : t('common.time.never')}
+            {cluster.updated_at ? formatDate(cluster.updated_at) : t('common.time.never')}
           </Descriptions.Item>
           <Descriptions.Item label={t('tenant.clusters.detail.createdBy')}>
             {cluster.created_by || (
@@ -555,11 +565,15 @@ export const ClusterDetail: React.FC = () => {
       <Card title={t('tenant.clusters.detail.nodes.title')}>
         <Descriptions column={{ xs: 1, md: 2 }} bordered size="small">
           <Descriptions.Item label={t('tenant.clusters.healthDrawer.nodeCount')}>
-            {clusterHealth?.node_count ?? 0}
+            {clusterHealth?.node_count ?? (
+              <Text type="secondary">
+                {t('tenant.clusters.detail.notAvailable', { defaultValue: 'N/A' })}
+              </Text>
+            )}
           </Descriptions.Item>
           <Descriptions.Item label={t('tenant.clusters.healthDrawer.checkedAt')}>
             {clusterHealth?.checked_at
-              ? new Date(clusterHealth.checked_at).toLocaleString()
+              ? formatDate(clusterHealth.checked_at)
               : t('common.time.never')}
           </Descriptions.Item>
           <Descriptions.Item label={t('tenant.clusters.healthDrawer.cpuUsage')}>
@@ -576,14 +590,6 @@ export const ClusterDetail: React.FC = () => {
             className="mt-4"
           />
         ) : null}
-      </Card>
-
-      {/* Recent Events */}
-      <Card title={t('tenant.clusters.detail.events.title')}>
-        <Empty
-          description={t('tenant.clusters.detail.noEvents')}
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-        />
       </Card>
 
       {/* Edit Modal */}
@@ -741,7 +747,7 @@ export const ClusterDetail: React.FC = () => {
                   {t('tenant.clusters.acpRunners.expiresAt', {
                     defaultValue: 'Expires at',
                   })}
-                  : {runnerToken.expiresAt ? new Date(runnerToken.expiresAt).toLocaleString() : '-'}
+                  : {runnerToken.expiresAt ? formatDate(runnerToken.expiresAt) : '-'}
                 </Text>
               </Space>
             }

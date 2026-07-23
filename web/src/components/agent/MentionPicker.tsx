@@ -22,7 +22,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent,
 } from 'react';
 
 import { useTranslation } from 'react-i18next';
@@ -51,7 +50,8 @@ export const MentionPicker = memo(
         query,
         open,
         onMentionSelected,
-        onDismiss,
+        // onDismiss is part of the public props (keyboard dismissal is driven
+        // by the host textarea, not this non-focusable listbox).
         className,
         selectedIndex,
         onSelectedIndexChange,
@@ -133,27 +133,6 @@ export const MentionPicker = memo(
         item?.scrollIntoView({ block: 'nearest' });
       }, [activeIndex]);
 
-      const handleKey = useCallback(
-        (event: KeyboardEvent<HTMLDivElement>) => {
-          if (!open || candidates.length === 0) return;
-          if (event.key === 'ArrowDown') {
-            event.preventDefault();
-            setActiveIndex((i) => (i + 1) % candidates.length);
-          } else if (event.key === 'ArrowUp') {
-            event.preventDefault();
-            setActiveIndex((i) => (i - 1 + candidates.length) % candidates.length);
-          } else if (event.key === 'Enter' || event.key === 'Tab') {
-            event.preventDefault();
-            const selected = candidates[activeIndex];
-            if (selected) onMentionSelected(selected.agent_id);
-          } else if (event.key === 'Escape') {
-            event.preventDefault();
-            onDismiss();
-          }
-        },
-        [candidates, activeIndex, open, onMentionSelected, onDismiss, setActiveIndex]
-      );
-
       if (!open || !conversationId || candidates.length === 0) {
         return null;
       }
@@ -164,8 +143,6 @@ export const MentionPicker = memo(
           data-testid="mention-picker"
           aria-label={t('agent.mention.label', { defaultValue: 'Mention an agent' })}
           aria-activedescendant={`${listboxId}-option-${String(activeIndex)}`}
-          tabIndex={-1}
-          onKeyDown={handleKey}
           className={
             className ??
             'absolute bottom-full left-0 z-20 mb-1 w-60 overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900'

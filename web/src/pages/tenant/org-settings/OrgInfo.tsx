@@ -1,27 +1,17 @@
 /**
  * Organization Info Page
  *
- * Displays and allows editing of organization name, logo, description.
- * Shows organization statistics.
+ * Read-only organization overview (name, description, statistics).
+ * Editing is consolidated into the Tenant Settings page, which has
+ * dirty tracking, unsaved-changes warning, and the danger zone.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 
-import {
-  AlertCircle,
-  BarChart3,
-  Building2,
-  CheckCircle,
-  Cloud,
-  Database,
-  FolderOpen,
-  Loader2,
-  Settings,
-  Users,
-} from 'lucide-react';
-import { useShallow } from 'zustand/react/shallow';
+import { ArrowRight, BarChart3, Building2, Cloud, Database, FolderOpen, Users } from 'lucide-react';
 
 import { useTenantStore } from '@/stores/tenant';
 
@@ -30,12 +20,9 @@ import { tenantAPI } from '@/services/api';
 import { formatStorage } from '@/hooks/useDateFormatter';
 
 import { formatDateOnly } from '@/utils/date';
+import { logger } from '@/utils/logger';
 
 import type { Tenant } from '@/types/memory';
-
-interface OrgInfoFormProps {
-  tenant: Tenant;
-}
 
 interface OrgStatsResponse {
   storage?: {
@@ -53,138 +40,45 @@ interface OrgStatsResponse {
   };
 }
 
-const OrgInfoForm: React.FC<OrgInfoFormProps> = ({ tenant }) => {
+const OrgInfoSummary: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
   const { t } = useTranslation();
-  const { updateTenant, isLoading } = useTenantStore(
-    useShallow((state) => ({
-      updateTenant: state.updateTenant,
-      isLoading: state.isLoading,
-    }))
-  );
-  const [name, setName] = useState(tenant.name);
-  const [description, setDescription] = useState(tenant.description || '');
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  const handleSave = useCallback(async () => {
-    setMessage(null);
-    try {
-      await updateTenant(tenant.id, { name, description });
-      setMessage({ type: 'success', text: t('tenant.settings.success') });
-    } catch (error) {
-      console.error('Failed to update organization:', error);
-      setMessage({ type: 'error', text: t('tenant.settings.error') });
-    }
-  }, [tenant.id, name, description, updateTenant, t]);
 
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900 p-6">
-      <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-6 flex items-center gap-2">
-        <Settings size={16} className="text-primary" />
-        {t('tenant.orgSettings.info.general')}
-      </h2>
-
-      <form
-        className="flex flex-col gap-6 max-w-2xl"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void handleSave();
-        }}
-      >
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-            {t('tenant.orgSettings.info.logo')}
-          </label>
-          <div className="flex items-center gap-4">
-            <div className="flex h-20 w-20 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
-              {tenant.name ? (
-                <span className="text-2xl font-bold text-primary-600 dark:text-primary-400">
-                  {tenant.name.charAt(0).toUpperCase()}
-                </span>
-              ) : (
-                <Building2 size={16} className="text-slate-400 text-3xl" />
-              )}
-            </div>
-            <div>
-              <button
-                className="cursor-not-allowed rounded-lg border border-slate-300 bg-slate-100 px-4 py-2 text-sm font-medium text-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400"
-                disabled
-                title={t('tenant.orgSettings.info.logoUnavailable')}
-                type="button"
-              >
-                {t('tenant.orgSettings.info.uploadLogo')}
-              </button>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                {t('tenant.orgSettings.info.logoUnavailable')}
-              </p>
-            </div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
+            {tenant.name ? (
+              <span className="text-2xl font-bold text-primary-600 dark:text-primary-400">
+                {tenant.name.charAt(0).toUpperCase()}
+              </span>
+            ) : (
+              <Building2 size={24} className="text-slate-400" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 break-words">
+              {tenant.name}
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 break-words">
+              {tenant.description?.trim()
+                ? tenant.description
+                : t('tenant.orgSettings.info.noDescription', {
+                    defaultValue: 'No description provided.',
+                  })}
+            </p>
           </div>
         </div>
-
-        <div>
-          <label
-            className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
-            htmlFor="org-name"
-          >
-            {t('tenant.orgSettings.info.name')}
-          </label>
-          <input
-            className="w-full rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 text-slate-900 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-            id="org-name"
-            type="text"
-            autoComplete="organization"
-            spellCheck={false}
-            value={name}
-            onChange={(event) => {
-              setName(event.target.value);
-            }}
-          />
-        </div>
-
-        <div>
-          <label
-            className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
-            htmlFor="org-description"
-          >
-            {t('tenant.orgSettings.info.description')}
-          </label>
-          <textarea
-            className="w-full resize-none rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 text-slate-900 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-            id="org-description"
-            rows={3}
-            value={description}
-            onChange={(event) => {
-              setDescription(event.target.value);
-            }}
-          />
-        </div>
-
-        {message ? (
-          <div
-            className={`p-4 rounded-lg flex items-center gap-3 ${
-              message.type === 'success'
-                ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300'
-                : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'
-            }`}
-            role="status"
-          >
-            {message.type === 'success' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
-            {message.text}
-          </div>
-        ) : null}
-
-        <div>
-          <button
-            className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 font-medium text-slate-50 transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-70"
-            disabled={isLoading}
-            type="submit"
-          >
-            {isLoading ? (
-              <Loader2 size={20} className="animate-spin motion-reduce:animate-none" />
-            ) : null}
-            {t('common.save')}
-          </button>
-        </div>
-      </form>
+        <Link
+          to="../../settings"
+          className="inline-flex shrink-0 items-center gap-2 px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-sm font-medium"
+        >
+          {t('tenant.orgSettings.info.editInSettings', {
+            defaultValue: 'Edit in Tenant Settings',
+          })}
+          <ArrowRight size={16} aria-hidden="true" />
+        </Link>
+      </div>
     </div>
   );
 };
@@ -205,7 +99,7 @@ const OrgStatistics: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
           setStats(response);
         }
       } catch (error) {
-        console.error('Failed to fetch organization statistics:', error);
+        logger.error('Failed to fetch organization statistics', error);
         if (isCurrent) {
           setStats(null);
         }
@@ -336,7 +230,7 @@ export const OrgInfo: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <OrgInfoForm tenant={currentTenant} />
+      <OrgInfoSummary tenant={currentTenant} />
       <OrgStatistics tenant={currentTenant} />
     </div>
   );

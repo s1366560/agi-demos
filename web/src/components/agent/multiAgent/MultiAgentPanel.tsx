@@ -78,75 +78,70 @@ const AgentNodeItem: FC<AgentNodeItemProps> = memo(
       }
     }, [node.sessionId, onSessionSelect]);
 
-    const rowClassName = `flex items-start gap-2 rounded-lg p-2 transition-colors
-      hover:bg-slate-50 dark:hover:bg-slate-800/50 ${
-        canOpenSession
-          ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50'
-          : ''
-      }`;
+    const rowClassName =
+      'flex items-start gap-2 rounded-lg p-2 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50';
+    const interactiveClassName =
+      'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50';
     const rowStyle = { paddingLeft: `${String(depth * 16 + 8)}px` };
-    const rowContent = (
-      <>
-        {hasChildren ? (
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              toggleExpand();
-            }}
-            aria-expanded={expanded}
-            aria-label={t('agent.multiAgent.toggleChildren', {
-              name: node.name ?? node.agentId.slice(0, 8),
-              defaultValue: 'Toggle child agents of {{name}}',
-            })}
-            className="mt-0.5 flex-shrink-0 p-0.5 rounded hover:bg-slate-200
-                dark:hover:bg-slate-700 transition-colors"
-          >
-            {expanded ? (
-              <ChevronDown size={14} className="text-slate-500" />
-            ) : (
-              <ChevronRight size={14} className="text-slate-500" />
-            )}
-          </button>
+    const toggleControl = hasChildren ? (
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          toggleExpand();
+        }}
+        aria-expanded={expanded}
+        aria-label={t('agent.multiAgent.toggleChildren', {
+          name: node.name ?? node.agentId.slice(0, 8),
+          defaultValue: 'Toggle child agents of {{name}}',
+        })}
+        className="mt-0.5 flex-shrink-0 p-0.5 rounded hover:bg-slate-200
+            dark:hover:bg-slate-700 transition-colors"
+      >
+        {expanded ? (
+          <ChevronDown size={14} className="text-slate-500" />
         ) : (
-          <span className="mt-0.5 flex-shrink-0 w-5 flex items-center justify-center">
-            <Circle size={6} className="text-slate-300 dark:text-slate-600" />
-          </span>
+          <ChevronRight size={14} className="text-slate-500" />
         )}
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <Bot size={14} className={style.color} />
-            <span className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
-              {node.name ?? node.agentId.slice(0, 8)}
-            </span>
-            <span
-              className={`inline-flex items-center px-1.5 py-0.5 rounded text-2xs
-                  font-medium ${style.color} ${style.bg}`}
-            >
-              {t(style.labelKey, { defaultValue: style.defaultLabel })}
-            </span>
-          </div>
-
-          {node.taskSummary ? (
-            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
-              {node.taskSummary}
-            </p>
-          ) : null}
-
-          {node.result && node.status === 'completed' ? (
-            <p className="mt-0.5 text-xs text-green-600 dark:text-green-400 line-clamp-1">
-              {node.result}
-            </p>
-          ) : null}
-
-          {node.result && node.status === 'failed' ? (
-            <p className="mt-0.5 text-xs text-red-600 dark:text-red-400 line-clamp-1">
-              {node.result}
-            </p>
-          ) : null}
+      </button>
+    ) : (
+      <span className="mt-0.5 flex-shrink-0 w-5 flex items-center justify-center">
+        <Circle size={6} className="text-slate-300 dark:text-slate-600" />
+      </span>
+    );
+    const rowBody = (
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <Bot size={14} className={style.color} />
+          <span className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
+            {node.name ?? node.agentId.slice(0, 8)}
+          </span>
+          <span
+            className={`inline-flex items-center px-1.5 py-0.5 rounded text-2xs
+                font-medium ${style.color} ${style.bg}`}
+          >
+            {t(style.labelKey, { defaultValue: style.defaultLabel })}
+          </span>
         </div>
-      </>
+
+        {node.taskSummary ? (
+          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+            {node.taskSummary}
+          </p>
+        ) : null}
+
+        {node.result && node.status === 'completed' ? (
+          <p className="mt-0.5 text-xs text-green-600 dark:text-green-400 line-clamp-1">
+            {node.result}
+          </p>
+        ) : null}
+
+        {node.result && node.status === 'failed' ? (
+          <p className="mt-0.5 text-xs text-red-600 dark:text-red-400 line-clamp-1">
+            {node.result}
+          </p>
+        ) : null}
+      </div>
     );
 
     return (
@@ -155,30 +150,33 @@ const AgentNodeItem: FC<AgentNodeItemProps> = memo(
           <Link
             to={sessionHref}
             data-session-id={node.sessionId}
-            className={`${rowClassName} w-full text-left`}
+            className={`${rowClassName} ${interactiveClassName} w-full text-left`}
             style={rowStyle}
           >
-            {rowContent}
+            {toggleControl}
+            {rowBody}
           </Link>
         ) : (
-          <div
-            role={canOpenSession ? 'button' : undefined}
-            tabIndex={canOpenSession ? 0 : undefined}
-            onClick={canOpenSession ? openSession : undefined}
-            onKeyDown={
-              canOpenSession
-                ? (event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      openSession();
-                    }
+          <div className={rowClassName} style={rowStyle}>
+            {toggleControl}
+            {canOpenSession ? (
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={openSession}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    openSession();
                   }
-                : undefined
-            }
-            className={rowClassName}
-            style={rowStyle}
-          >
-            {rowContent}
+                }}
+                className={`flex-1 min-w-0 rounded ${interactiveClassName}`}
+              >
+                {rowBody}
+              </div>
+            ) : (
+              rowBody
+            )}
           </div>
         )}
 

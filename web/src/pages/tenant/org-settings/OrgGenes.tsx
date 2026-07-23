@@ -27,6 +27,7 @@ export const OrgGenes: React.FC = () => {
 
   const [policies, setPolicies] = useState<GenePolicyResponse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editing, setEditing] = useState<EditingPolicy | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
@@ -37,7 +38,9 @@ export const OrgGenes: React.FC = () => {
     try {
       const data = await genePolicyService.list(currentTenant.id);
       setPolicies(data);
+      setLoadError(false);
     } catch (_err) {
+      setLoadError(true);
       message?.error(t('tenant.orgSettings.genes.fetchError'));
     } finally {
       setIsLoading(false);
@@ -259,7 +262,25 @@ export const OrgGenes: React.FC = () => {
       )}
 
       {/* Policy List */}
-      {policies.length === 0 && !editing ? (
+      {loadError && policies.length === 0 && !editing ? (
+        <div
+          role="alert"
+          className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-red-200 dark:border-red-800 p-12 text-center"
+        >
+          <p className="text-slate-700 dark:text-slate-300 mb-4">
+            {t('tenant.orgSettings.genes.fetchError')}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              void fetchPolicies();
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition-colors text-sm hover:bg-slate-50 dark:hover:bg-slate-700"
+          >
+            {t('common.retry')}
+          </button>
+        </div>
+      ) : policies.length === 0 && !editing ? (
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-12 text-center">
           <Dna size={16} className="text-slate-300 dark:text-slate-600 mb-4 block" />
           <p className="text-slate-500 dark:text-slate-400 mb-2">
@@ -311,7 +332,7 @@ export const OrgGenes: React.FC = () => {
                     <Pencil size={20} />
                   </button>
                   <LazyPopconfirm
-                    title={t('tenant.orgSettings.genes.deleteConfirm')}
+                    title={t('tenant.orgSettings.genes.deleteConfirm', { key: policy.policy_key })}
                     onConfirm={() => void handleDelete(policy.policy_key)}
                     okText={t('common.delete')}
                     cancelText={t('common.cancel')}

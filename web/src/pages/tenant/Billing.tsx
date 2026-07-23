@@ -10,6 +10,7 @@ import { billingService } from '../../services/billingService';
 import { useTenantStore } from '../../stores/tenant';
 import { confirmAction } from '../../utils/confirmAction';
 import { formatDateTime } from '../../utils/date';
+import { logger } from '../../utils/logger';
 
 import { LoadingState } from './utils/LoadingState';
 
@@ -38,7 +39,7 @@ export const Billing: FC = memo(() => {
         const data = await billingService.getBillingInfo(currentTenant.id);
         setBillingInfo(data);
       } catch (error) {
-        console.error('Failed to fetch billing info:', error);
+        logger.error('Failed to fetch billing info:', error);
         setLoadError(true);
       } finally {
         setLoading(false);
@@ -84,7 +85,7 @@ export const Billing: FC = memo(() => {
         });
         await fetchBillingInfo();
       } catch (error) {
-        console.error('Failed to upgrade plan:', error);
+        logger.error('Failed to upgrade plan:', error);
         setActionMessage({ type: 'error', text: t('tenant.billing.upgrade_error') });
       } finally {
         setActionLoading(null);
@@ -239,7 +240,7 @@ export const Billing: FC = memo(() => {
                 ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300'
                 : 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-300'
           }`}
-          role="status"
+          role={actionMessage.type === 'error' ? 'alert' : 'status'}
         >
           {actionMessage.text}
         </div>

@@ -31,31 +31,31 @@ export function resolveWorkspaceContinueLabelKey(mode: RuntimeMode): WorkspaceCo
 }
 
 export function resolveDeviceAuthorizationUrl(
-  apiBaseUrl: string,
+  deviceAuthorizationBaseUrl: string,
   verificationUriComplete: string,
   expectedUserCode: string,
 ): string | null {
   try {
     if (
       !expectedUserCode ||
-      /\s/u.test(apiBaseUrl) ||
+      /\s/u.test(deviceAuthorizationBaseUrl) ||
       /\s/u.test(verificationUriComplete)
     ) {
       return null;
     }
-    const apiBase = new URL(apiBaseUrl);
-    const resolved = new URL(verificationUriComplete, apiBaseUrl);
-    if (!isAllowedDeviceAuthorizationTransport(apiBase)) return null;
+    const authorizationBase = new URL(deviceAuthorizationBaseUrl);
+    const resolved = new URL(verificationUriComplete, authorizationBase);
+    if (!isAllowedDeviceAuthorizationTransport(authorizationBase)) return null;
     if (
-      rawAuthorityHasUserInfo(apiBaseUrl) ||
-      apiBase.username ||
-      apiBase.password ||
-      apiBase.hash
+      rawAuthorityHasUserInfo(deviceAuthorizationBaseUrl) ||
+      authorizationBase.username ||
+      authorizationBase.password ||
+      authorizationBase.hash
     ) {
       return null;
     }
     if (!isAllowedDeviceAuthorizationTransport(resolved)) return null;
-    if (resolved.origin !== apiBase.origin) return null;
+    if (resolved.origin !== authorizationBase.origin) return null;
     if (
       rawAuthorityHasUserInfo(verificationUriComplete) ||
       resolved.username ||

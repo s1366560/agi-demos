@@ -52,6 +52,7 @@ import { useLocaleNumberFormat } from '@/i18n/formatters';
 import { formatDateTime, formatTimeOnly } from '@/utils/date';
 import { normalizeExecutionSummary } from '@/utils/executionSummary';
 import { isOfficeMimeType, isOfficeExtension } from '@/utils/filePreview';
+import { formatFileSize, formatDurationMs } from '@/utils/format';
 import {
   findArtifactForSandboxPath,
   isSafeArtifactUrl,
@@ -724,12 +725,6 @@ const findMatchingObserve = (
 // Sub-Components - Modern Design
 // ========================================
 
-function formatBytesSize(bytes: number): string {
-  if (bytes < 1024) return `${String(bytes)} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 function getFileIconForMime(
   mimeType: string
 ): React.ComponentType<{ size?: number; className?: string }> {
@@ -799,7 +794,7 @@ const ArtifactReferenceList: React.FC<{
             <span className="truncate">{getArtifactLabel(artifact)}</span>
             {typeof artifact.size_bytes === 'number' ? (
               <span className="text-2xs whitespace-nowrap text-slate-400 dark:text-slate-500">
-                {formatBytesSize(artifact.size_bytes)}
+                {formatFileSize(artifact.size_bytes)}
               </span>
             ) : null}
             <Download
@@ -879,7 +874,7 @@ const SandboxAwareInlineCode: Components['code'] = ({ children, className, ...pr
 
 // User Message Component - Modern floating style with action bar
 const UserMessage: React.FC<UserMessageProps> = memo(
-  ({ content, timestamp, onReply, forcedSkillName, forcedSubAgentName, fileMetadata }) => {
+  ({ content, timestamp, onReply, onEdit, onDelete, forcedSkillName, forcedSubAgentName, fileMetadata }) => {
     const { t } = useTranslation();
 
     if (!content) return null;
@@ -959,7 +954,13 @@ const UserMessage: React.FC<UserMessageProps> = memo(
               </div>
               {/* Action bar - appears on hover at top-right */}
               <div className="absolute -top-3 right-2 z-10">
-                <MessageActionBar role="user" content={content} onReply={onReply} />
+                <MessageActionBar
+                  role="user"
+                  content={content}
+                  onReply={onReply}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                />
               </div>
 
               {/* Badge Label */}
@@ -992,7 +993,7 @@ const UserMessage: React.FC<UserMessageProps> = memo(
                   {file.filename}
                 </span>
                 <span className="text-2xs text-slate-400 dark:text-slate-500 whitespace-nowrap">
-                  {formatBytesSize(file.size_bytes)}
+                  {formatFileSize(file.size_bytes)}
                 </span>
               </div>
             ))}
@@ -1014,7 +1015,7 @@ const ASSISTANT_COMPONENTS: Components = {
 
 // Assistant Message Component - Modern card style with action bar
 const AssistantMessage: React.FC<AssistantMessageProps> = memo(
-  ({ content, timestamp, metadata, artifacts, isStreaming, isPinned, onPin, onReply }) => {
+  ({ content, timestamp, metadata, artifacts, isStreaming, isPinned, onPin, onReply, onRetry }) => {
     const [showSaveTemplate, setShowSaveTemplate] = useState(false);
     const handleSaveTemplate = useSaveTemplate(content || '');
     const markdownContent = useMemo(() => linkifySandboxPaths(content), [content]);
@@ -1061,6 +1062,7 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(
                   isPinned={isPinned}
                   onPin={onPin}
                   onReply={onReply}
+                  onRetry={onRetry}
                   onSaveAsTemplate={() => {
                     setShowSaveTemplate(true);
                   }}
@@ -1225,7 +1227,7 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
               {duration && duration > 0 && (
                 <span className="text-xs text-slate-400 flex items-center gap-1">
                   <Clock size={12} />
-                  {duration}ms
+                  {formatDurationMs(duration)}
                 </span>
               )}
               {expanded ? (
@@ -1378,7 +1380,7 @@ const WorkPlan: React.FC<WorkPlanProps> = memo(({ event }) => {
 WorkPlan.displayName = 'MessageBubble.WorkPlan';
 
 // Text End Component with action bar
-const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply }) => {
+const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply, onRetry }) => {
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const fullText = 'fullText' in event ? (event.fullText as string) : '';
   const handleSaveTemplate = useSaveTemplate(fullText);
@@ -1428,6 +1430,7 @@ const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply 
                 isPinned={isPinned}
                 onPin={onPin}
                 onReply={onReply}
+                onRetry={onRetry}
                 onSaveAsTemplate={() => {
                   setShowSaveTemplate(true);
                 }}
@@ -1693,7 +1696,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
               </span>
             </div>
             <span className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
-              {formatBytesSize(event.sizeBytes)}
+              {formatFileSize(event.sizeBytes)}
             </span>
             {url && (
               <a
@@ -1783,7 +1786,7 @@ const getContent = (event: TimelineEvent): string => {
 };
 
 const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
-  ({ event, isStreaming, allEvents, isPinned, onPin, onReply }) => {
+  ({ event, isStreaming, allEvents, isPinned, onPin, onReply, onRetry, onEdit, onDelete }) => {
     const { t } = useTranslation();
     switch (event.type) {
       case 'user_message': {
@@ -1807,6 +1810,8 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
             content={content}
             timestamp={event.timestamp}
             onReply={onReply}
+            onEdit={onEdit}
+            onDelete={onDelete}
             forcedSkillName={event.metadata?.forcedSkillName as string | undefined}
             forcedSubAgentName={forcedSubAgentName}
             fileMetadata={
@@ -1834,6 +1839,7 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
             isPinned={isPinned}
             onPin={onPin}
             onReply={onReply}
+            onRetry={onRetry}
           />
         );
 
@@ -1860,7 +1866,15 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
         return <WorkPlan event={event} />;
 
       case 'text_end':
-        return <TextEnd event={event} isPinned={isPinned} onPin={onPin} onReply={onReply} />;
+        return (
+          <TextEnd
+            event={event}
+            isPinned={isPinned}
+            onPin={onPin}
+            onReply={onReply}
+            onRetry={onRetry}
+          />
+        );
 
       case 'text_start':
         // Control event, no visual output needed
@@ -2131,6 +2145,9 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
     prev.isPinned === next.isPinned &&
     prev.onPin === next.onPin &&
     prev.onReply === next.onReply &&
+    prev.onRetry === next.onRetry &&
+    prev.onEdit === next.onEdit &&
+    prev.onDelete === next.onDelete &&
     prev.allEvents?.length === next.allEvents?.length
 );
 

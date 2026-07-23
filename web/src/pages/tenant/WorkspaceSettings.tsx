@@ -1885,7 +1885,7 @@ export const WorkspaceSettingsPanel: React.FC<{
                 </p>
               </div>
               <LazyPopconfirm
-                title={t('workspaceSettings.dangerZone.deleteConfirm')}
+                title={t('workspaceSettings.dangerZone.deleteConfirm', { name: draft.name })}
                 onConfirm={() => {
                   void handleDelete();
                 }}

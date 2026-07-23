@@ -27,8 +27,11 @@ import { useActiveModelCapabilities } from '@/hooks/useActiveModelCapabilities';
 import { useConversationParticipants } from '@/hooks/useConversationParticipants';
 import { useVoiceTranscribe } from '@/hooks/useVoiceTranscribe';
 
+import { formatFileSize } from '@/utils/format';
+
 import { LazyTooltip } from '@/components/ui/lazyAntd';
 
+import { subscribeToComposerRefill } from './chat/composerEvents';
 import { MentionPopover } from './chat/MentionPopover';
 import { PromptTemplateLibrary } from './chat/PromptTemplateLibrary';
 import { VoiceCallPanel } from './chat/VoiceCallPanel';
@@ -82,12 +85,6 @@ const getFileIcon = (mimeType: string) => {
   return <File size={14} className="text-blue-500" />;
 };
 
-const formatSize = (bytes: number) => {
-  if (bytes < 1024) return `${String(bytes)} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-};
-
 export const InputBar = memo<InputBarProps>(
   ({
     onSend,
@@ -121,6 +118,20 @@ export const InputBar = memo<InputBarProps>(
     useEffect(() => {
       contentRef.current = content;
     }, [content]);
+
+    // Composer refill: message-level Edit / Reply actions inject text here.
+    useEffect(() => {
+      return subscribeToComposerRefill((text) => {
+        setContent(text);
+        setTimeout(() => {
+          const el = textareaRef.current;
+          if (el) {
+            el.focus();
+            el.setSelectionRange(el.value.length, el.value.length);
+          }
+        }, 50);
+      });
+    }, []);
 
     const activeConversationId = useAgentV3Store((state) => state.activeConversationId);
     const activeModelOverride = useAgentV3Store((state) => {
@@ -436,9 +447,29 @@ export const InputBar = memo<InputBarProps>(
             dt.items.add(f);
           }
           addFiles(dt.files);
+        } else if (files.length > 0) {
+          // Negative feedback: pasting files when the model cannot take them
+          // must not be silently swallowed.
+          void message.warning(
+            t('agent.inputBar.attachNotSupported', 'Current model does not support file attachments')
+          );
         }
       },
-      [disabled, addFiles, capabilities.supportsAttachment]
+      [disabled, addFiles, capabilities.supportsAttachment, t]
+    );
+
+    // Drop negative feedback: the drag-drop hook ignores drops when the model
+    // does not support attachments; surface that instead of a silent no-op.
+    const handleDropWithFeedback = useCallback(
+      (e: React.DragEvent) => {
+        if (!disabled && !capabilities.supportsAttachment && e.dataTransfer.files.length > 0) {
+          void message.warning(
+            t('agent.inputBar.attachNotSupported', 'Current model does not support file attachments')
+          );
+        }
+        handleDrop(e);
+      },
+      [disabled, capabilities.supportsAttachment, handleDrop, t]
     );
 
     // --- File input change ---
@@ -490,7 +521,7 @@ export const InputBar = memo<InputBarProps>(
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
+          onDrop={handleDropWithFeedback}
           className={`
             flex-1 flex flex-col min-h-0 min-w-0 rounded-md border relative
             bg-white dark:bg-slate-800
@@ -760,7 +791,7 @@ const AttachmentChip = memo<{
       <span className="max-w-[120px] truncate text-slate-700 dark:text-slate-300">
         {file.filename}
       </span>
-      <span className="text-slate-400">{formatSize(file.sizeBytes)}</span>
+      <span className="text-slate-400">{formatFileSize(file.sizeBytes)}</span>
       {file.status === 'uploading' && (
         <span className="text-blue-500 font-medium">{file.progress}%</span>
       )}

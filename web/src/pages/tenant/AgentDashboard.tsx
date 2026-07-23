@@ -3,14 +3,15 @@ import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router-dom';
 
+import { Skeleton } from 'antd';
 import {
   Activity,
   ArrowUpRight,
   Brain,
   Cable,
   Link2,
-  Loader2,
   Puzzle,
+  RefreshCw,
   Wrench,
   X,
 } from 'lucide-react';
@@ -22,12 +23,15 @@ import { TenantAgentConfigView } from '../../components/agent/TenantAgentConfigV
 import { agentConfigService } from '../../services/agentConfigService';
 import { traceAPI } from '../../services/traceService';
 import { useTenantStore } from '../../stores/tenant';
+import { formatTimeOnly } from '../../utils/date';
 
 import type { SubAgentRunDTO, TraceChainDTO, UntracedRunDetailsDTO } from '../../types/multiAgent';
 import type { TFunction } from 'i18next';
 import type { LucideIcon } from 'lucide-react';
 
 type AgentDashboardProps = Record<string, never>;
+
+const TRACE_POLL_INTERVAL = 30_000;
 
 interface RelatedSurfaceLink {
   title: string;
@@ -131,7 +135,9 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
   const [hasLoadedTraces, setHasLoadedTraces] = useState(false);
   const [traceLoadError, setTraceLoadError] = useState(false);
   const [traceRefreshKey, setTraceRefreshKey] = useState(0);
+  const [tracesLastUpdatedAt, setTracesLastUpdatedAt] = useState<Date | null>(null);
   const traceRequestRef = useRef(0);
+  const hasLoadedTracesRef = useRef(false);
 
   useEffect(() => {
     if (!tenantId) {
@@ -157,14 +163,13 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
     };
   }, [tenantId]);
 
+  // Reset trace state when the tenant changes; data loading lives in the
+  // fetch effect below so manual/auto refreshes do not clear the selection.
   useEffect(() => {
     traceRequestRef.current += 1;
-    let cancelled = false;
+    hasLoadedTracesRef.current = false;
 
     queueMicrotask(() => {
-      if (cancelled) {
-        return;
-      }
       setSelectedRun(null);
       setTraceChain(null);
       setIsChainLoading(false);
@@ -173,14 +178,23 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
       setActiveRunCount(0);
       setTraceLoadError(false);
       setHasLoadedTraces(false);
+      setTracesLastUpdatedAt(null);
       setIsTraceLoading(Boolean(tenantId));
     });
+  }, [tenantId]);
 
+  useEffect(() => {
     if (!tenantId) {
-      return () => {
-        cancelled = true;
-      };
+      return;
     }
+
+    let cancelled = false;
+
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setIsTraceLoading(true);
+      }
+    });
 
     void Promise.allSettled([
       traceAPI.listTenantRuns(tenantId, { limit: 20 }),
@@ -194,18 +208,21 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
         if (runsResult.status === 'fulfilled') {
           setRuns(runsResult.value.runs);
           setTraceLoadError(false);
-        } else {
+          setTracesLastUpdatedAt(new Date());
+          hasLoadedTracesRef.current = true;
+          setHasLoadedTraces(true);
+        } else if (!hasLoadedTracesRef.current) {
+          // Only surface the blocking error panel on first load; a failed
+          // background refresh keeps the last good data on screen.
           setRuns([]);
           setTraceLoadError(true);
         }
 
         if (activeRunResult.status === 'fulfilled') {
           setActiveRunCount(activeRunResult.value.active_count);
-        } else {
+        } else if (!hasLoadedTracesRef.current) {
           setActiveRunCount(0);
         }
-
-        setHasLoadedTraces(true);
       })
       .finally(() => {
         if (!cancelled) {
@@ -217,6 +234,22 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
       cancelled = true;
     };
   }, [tenantId, traceRefreshKey]);
+
+  // Auto-refresh traces; pause while the page is hidden.
+  useEffect(() => {
+    if (!tenantId) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      if (document.hidden) {
+        return;
+      }
+      setTraceRefreshKey((current) => current + 1);
+    }, TRACE_POLL_INTERVAL);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [tenantId]);
 
   const handleSelectRun = useCallback((run: SubAgentRunDTO) => {
     setSelectedRun(run);
@@ -286,6 +319,14 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
           <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-400">
             {t('tenant.agentDashboard.scopeDescription')}
           </p>
+          {tenantId ? (
+            <p className="mt-3 font-mono text-xs break-all text-slate-400 dark:text-slate-500">
+              {t('tenant.agentDashboard.scopeTenant', {
+                id: tenantId,
+                defaultValue: 'Tenant: {{id}}',
+              })}
+            </p>
+          ) : null}
         </div>
       </header>
 
@@ -332,12 +373,32 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
                     {t('tenant.agentDashboard.feedbackTitle')}
                   </h2>
                 </div>
-                {isTraceLoading ? (
-                  <Loader2
-                    size={16}
-                    className="text-slate-400 animate-spin motion-reduce:animate-none"
-                  />
-                ) : null}
+                <div className="flex items-center gap-3">
+                  {tracesLastUpdatedAt ? (
+                    <span className="text-xs tabular-nums text-slate-400 dark:text-slate-500">
+                      {t('tenant.agentDashboard.lastUpdated', {
+                        time: formatTimeOnly(tracesLastUpdatedAt),
+                        defaultValue: 'Updated {{time}}',
+                      })}
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTraceRefreshKey((current) => current + 1);
+                    }}
+                    disabled={isTraceLoading}
+                    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition-colors duration-150 hover:border-slate-300 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:opacity-50 dark:border-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200"
+                    aria-label={t('tenant.agentDashboard.refreshTraces', 'Refresh traces')}
+                  >
+                    <RefreshCw
+                      size={16}
+                      className={
+                        isTraceLoading ? 'animate-spin motion-reduce:animate-none' : undefined
+                      }
+                    />
+                  </button>
+                </div>
               </div>
 
               {traceLoadError ? (
@@ -366,6 +427,7 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
                     {t('tenant.agentDashboard.loadingTracesDescription')}
                   </p>
+                  <Skeleton active title={false} paragraph={{ rows: 3 }} className="mt-5" />
                 </div>
               ) : runs.length === 0 ? (
                 <div className="rounded-[28px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-8 dark:border-slate-700 dark:bg-slate-900/60">

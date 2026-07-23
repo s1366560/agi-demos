@@ -72,7 +72,7 @@ describe('UserProfile', () => {
     expect(securityTab).toHaveAttribute('aria-controls', 'profile-section-security');
     expect(
       screen.getByRole('link', { name: 'user_profile.security.change_password' })
-    ).toHaveAttribute('href', '/force-change-password');
+    ).toHaveAttribute('href', '/force-change-password?redirect=%2F');
   });
 
   it('resets unsaved edits after confirming the discard dialog', async () => {
@@ -107,7 +107,7 @@ describe('UserProfile', () => {
   it('focuses the avatar URL field from the avatar action', () => {
     renderProfile();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Change avatar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit avatar URL' }));
 
     expect(screen.getByLabelText('user_profile.basic.avatar_url')).toHaveFocus();
   });

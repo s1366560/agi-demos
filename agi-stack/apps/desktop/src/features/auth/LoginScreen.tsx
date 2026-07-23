@@ -30,6 +30,7 @@ type LoginScreenProps = {
   localReady: boolean;
   email: string;
   password: string;
+  onModeChange: (mode: RuntimeMode) => void;
   onEmailChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
   onEmailLogin: (trustedDevice: boolean) => void;
@@ -77,6 +78,7 @@ export function LoginScreen({
   localReady,
   email,
   password,
+  onModeChange,
   onEmailChange,
   onPasswordChange,
   onEmailLogin,
@@ -203,64 +205,105 @@ export function LoginScreen({
             onEmailLogin(trustedDevice);
           }}
         >
+          <div className="desktop-login-mode" role="group" aria-label={t('login.modeLabel')}>
+            <button
+              type="button"
+              aria-pressed={mode === 'local'}
+              disabled={busy}
+              onClick={() => {
+                setInteractionError(null);
+                onModeChange('local');
+              }}
+            >
+              {t('login.modeLocal')}
+            </button>
+            <button
+              type="button"
+              aria-pressed={mode === 'cloud'}
+              disabled={busy}
+              onClick={() => {
+                setInteractionError(null);
+                onModeChange('cloud');
+              }}
+            >
+              {t('login.modeCloud')}
+            </button>
+          </div>
+
           <header>
             <span>{t('login.welcome')}</span>
             <h2>{t('login.signInTitle')}</h2>
             <p>{t('login.organizationDescription')}</p>
           </header>
 
-          <button
-            className="desktop-login-sso"
-            type="button"
-            onClick={continueWithWorkspace}
-            disabled={busy}
-          >
-            <img src="/icon-192.png" alt="" />
-            {t(resolveWorkspaceContinueLabelKey(mode))}
-            <ArrowRightIcon />
-          </button>
-
-          <div className="desktop-login-divider">
-            <span>{t('login.emailDivider')}</span>
-          </div>
-
-          <label>
-            <span>{t('login.workEmail')}</span>
-            <input
-              autoFocus
-              required
-              type="email"
-              value={email}
-              onChange={(event) => {
-                setInteractionError(null);
-                onEmailChange(event.target.value);
-              }}
-              autoComplete="username"
-            />
-          </label>
-          <label>
-            <span>{t('login.password')}</span>
-            <div className="desktop-login-password">
-              <input
-                required
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(event) => {
-                  setInteractionError(null);
-                  onPasswordChange(event.target.value);
-                }}
-                autoComplete="current-password"
-                placeholder={t('login.passwordPlaceholder')}
-              />
+          {mode === 'cloud' ? (
+            <>
               <button
+                className="desktop-login-sso"
                 type="button"
-                onClick={() => setShowPassword((value) => !value)}
-                aria-label={t(showPassword ? 'login.hidePassword' : 'login.showPassword')}
+                onClick={continueWithWorkspace}
+                disabled={busy}
               >
-                {showPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
+                <img src="/icon-192.png" alt="" />
+                {t(resolveWorkspaceContinueLabelKey(mode))}
+                <ArrowRightIcon />
               </button>
-            </div>
-          </label>
+
+              <div className="desktop-login-divider">
+                <span>{t('login.emailDivider')}</span>
+              </div>
+
+              <label>
+                <span>{t('login.workEmail')}</span>
+                <input
+                  autoFocus
+                  required
+                  type="email"
+                  value={email}
+                  onChange={(event) => {
+                    setInteractionError(null);
+                    onEmailChange(event.target.value);
+                  }}
+                  autoComplete="username"
+                />
+              </label>
+              <label>
+                <span>{t('login.password')}</span>
+                <div className="desktop-login-password">
+                  <input
+                    required
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => {
+                      setInteractionError(null);
+                      onPasswordChange(event.target.value);
+                    }}
+                    autoComplete="current-password"
+                    placeholder={t('login.passwordPlaceholder')}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((value) => !value)}
+                    aria-label={t(showPassword ? 'login.hidePassword' : 'login.showPassword')}
+                  >
+                    {showPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
+                  </button>
+                </div>
+              </label>
+            </>
+          ) : (
+            <button
+              className="desktop-login-sso desktop-login-local"
+              type="button"
+              onClick={continueWithWorkspace}
+              disabled={busy}
+              autoFocus
+            >
+              <img src="/icon-192.png" alt="" />
+              {t(resolveWorkspaceContinueLabelKey(mode))}
+              <ArrowRightIcon />
+            </button>
+          )}
 
           <div className="desktop-login-options">
             <label>
@@ -274,7 +317,9 @@ export function LoginScreen({
                 {t('login.keepSignedIn')}
               </span>
             </label>
-            <button type="button">{t('login.forgotPassword')}</button>
+            {mode === 'cloud' ? (
+              <button type="button">{t('login.forgotPassword')}</button>
+            ) : null}
           </div>
 
           {visibleError ? (
@@ -283,10 +328,12 @@ export function LoginScreen({
             </div>
           ) : null}
 
-          <button className="desktop-login-submit" type="submit" disabled={busy}>
-            {busy ? t('login.signingIn') : t('login.signIn')}
-            <ArrowRightIcon />
-          </button>
+          {mode === 'cloud' ? (
+            <button className="desktop-login-submit" type="submit" disabled={busy}>
+              {busy ? t('login.signingIn') : t('login.signIn')}
+              <ArrowRightIcon />
+            </button>
+          ) : null}
           <p className="desktop-login-legal">{t('login.legal')}</p>
         </form>
         <div className="desktop-login-help">
@@ -360,6 +407,15 @@ export function LoginScreen({
               </div>
             ) : null}
             <div className="desktop-device-auth-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  setInteractionError(null);
+                  onModeChange('local');
+                }}
+              >
+                {t('login.switchToLocal')}
+              </button>
               <button type="button" onClick={onCancelWorkspaceSso}>
                 {t('login.deviceCancel')}
               </button>

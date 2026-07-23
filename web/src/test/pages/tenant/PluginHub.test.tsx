@@ -69,6 +69,24 @@ const createChannelConfig = (id: string, projectId: string, name: string) =>
     created_at: '2026-01-01T00:00:00Z',
   }) as any;
 
+const messageMock = vi.hoisted(() => ({
+  error: vi.fn(),
+  success: vi.fn(),
+  warning: vi.fn(),
+  info: vi.fn(),
+}));
+
+vi.mock('antd', async () => {
+  const actual = await vi.importActual<typeof import('antd')>('antd');
+  return {
+    ...actual,
+    App: {
+      ...actual.App,
+      useApp: () => ({ message: messageMock }),
+    },
+  };
+});
+
 vi.mock('@/stores/project');
 vi.mock('@/stores/tenant');
 vi.mock('@/services/channelService', () => ({

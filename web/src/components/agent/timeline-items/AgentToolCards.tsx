@@ -78,7 +78,7 @@ function parseResult(raw: unknown): Record<string, unknown> | unknown[] | null {
 }
 
 function truncate(s: string, max: number): string {
-  return s.length > max ? s.slice(0, max) + '...' : s;
+  return s.length > max ? s.slice(0, max) + '…' : s;
 }
 
 interface AgentSpawnCardProps {
@@ -129,7 +129,7 @@ function AgentSpawnCard({ params, result, status, error, duration }: AgentSpawnC
               {t('agent.agentToolCards.session')}
             </span>
             <code className="text-2xs text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-              {sessionId.slice(0, 12)}...
+              {sessionId.slice(0, 12)}…
             </code>
           </div>
         )}
@@ -191,7 +191,7 @@ function AgentStopCard({ params, result, status, error, duration }: AgentStopCar
               {t('agent.agentToolCards.session')}
             </span>
             <code className="text-2xs text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-              {sessionId.slice(0, 12)}...
+              {sessionId.slice(0, 12)}…
             </code>
           </div>
         )}
@@ -258,7 +258,7 @@ function AgentSendCard({ params, result, status, error, duration }: AgentSendCar
               {t('agent.agentToolCards.sessionShort')}
             </span>
             <code className="text-2xs text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-              {targetSession.slice(0, 12)}...
+              {targetSession.slice(0, 12)}…
             </code>
           </div>
         )}
@@ -402,7 +402,7 @@ function AgentSessionsCard({ result, status, error, duration }: AgentSessionsCar
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <code className="text-2xs text-slate-500 dark:text-slate-400 font-mono">
-                      {childId.slice(0, 12)}...
+                      {childId.slice(0, 12)}…
                     </code>
                     {agentId && (
                       <span className="text-2xs text-slate-600 dark:text-slate-300">
@@ -472,7 +472,7 @@ function AgentHistoryCard({ params, result, status, error, duration }: AgentHist
         </span>
         {sessionId && (
           <code className="text-2xs text-slate-500 dark:text-slate-400 font-mono bg-slate-200/60 dark:bg-slate-700/40 px-1.5 py-0.5 rounded">
-            {sessionId.slice(0, 12)}...
+            {sessionId.slice(0, 12)}…
           </code>
         )}
         {messages.length > 0 && (
@@ -594,6 +594,7 @@ export const AgentToolStepCard = memo(function AgentToolStepCard({
   duration,
   onAgentSessionSelect,
 }: AgentToolStepCardProps) {
+  const { t } = useTranslation();
   const errorMsg = isError && typeof output === 'string' ? output : undefined;
   const parsed = output ? parseResult(output) : null;
   const params = input ?? {};
@@ -660,21 +661,17 @@ export const AgentToolStepCard = memo(function AgentToolStepCard({
 
   if (selectedSessionId && onAgentSessionSelect) {
     return (
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => {
-          onAgentSessionSelect(selectedSessionId);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            onAgentSessionSelect(selectedSessionId);
-          }
-        }}
-        className="block w-full cursor-pointer rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
-      >
+      <div className="flex flex-col gap-1">
         {card}
+        <button
+          type="button"
+          onClick={() => {
+            onAgentSessionSelect(selectedSessionId);
+          }}
+          className="self-start rounded px-1 text-2xs text-blue-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:text-blue-400"
+        >
+          {t('agent.agentToolCards.viewSession', 'View agent session')}
+        </button>
       </div>
     );
   }

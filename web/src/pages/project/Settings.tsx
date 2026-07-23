@@ -5,7 +5,7 @@
  * - Basic settings (name, description, visibility)
  * - Memory rules (retention, auto-refresh)
  * - Graph configuration (nodes, edges, similarity)
- * - Advanced operations (export, cache, rebuild)
+ * - Advanced section (link to the Maintenance page)
  * - Danger zone (delete project)
  *
  * Compound component pattern with sub-components:
@@ -14,7 +14,7 @@
  * - Basic: Basic settings section
  * - Memory: Memory rules section
  * - Graph: Graph configuration section
- * - Advanced: Advanced operations section
+ * - Advanced: Link to the Maintenance page (single maintenance entry point)
  * - Danger: Danger zone section
  * - NoProject: Empty state when no project
  */
@@ -29,7 +29,6 @@ import {
   Settings as SettingsIcon,
   Save,
   Trash2,
-  Download,
   RefreshCw,
   AlertCircle,
   Loader2,
@@ -46,7 +45,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { formatDateTime } from '@/utils/date';
 
-import api, { projectAPI } from '../../services/api';
+import { projectAPI } from '../../services/api';
 import { projectSandboxService } from '../../services/projectSandboxService';
 import { useProjectStore } from '../../stores/project';
 import { confirmAction } from '../../utils/confirmAction';
@@ -58,7 +57,6 @@ import type {
   ProjectSettingsBasicProps,
   ProjectSettingsMemoryProps,
   ProjectSettingsGraphProps,
-  ProjectSettingsAdvancedProps,
   ProjectSettingsDangerProps,
   ProjectSettingsSandboxProps,
   ProjectSettingsNoProjectProps,
@@ -524,24 +522,13 @@ const Graph: React.FC<ProjectSettingsGraphProps> = ({
 Graph.displayName = 'ProjectSettings.Graph';
 
 // Advanced Sub-Component
-const Advanced: React.FC<ProjectSettingsAdvancedProps> = ({
-  onExportData,
-  onClearCache,
-  onRebuildCommunities,
-}) => {
+const Advanced: React.FC = () => {
   const { t } = useTranslation();
-
-  const handleExport = useCallback(() => {
-    void onExportData();
-  }, [onExportData]);
-
-  const handleClearCache = useCallback(() => {
-    void onClearCache();
-  }, [onClearCache]);
-
-  const handleRebuild = useCallback(() => {
-    void onRebuildCommunities();
-  }, [onRebuildCommunities]);
+  const navigate = useNavigate();
+  const currentProject = useProjectStore((state) => state.currentProject);
+  const maintenancePath = currentProject
+    ? `/tenant/${currentProject.tenant_id}/project/${currentProject.id}/maintenance`
+    : '/tenant';
 
   return (
     <SettingsSection
@@ -549,18 +536,22 @@ const Advanced: React.FC<ProjectSettingsAdvancedProps> = ({
       icon={<Wrench className="h-4 w-4" />}
       title={t('project.settings.advancedTitle')}
     >
-      <div className="grid gap-3 sm:grid-cols-3">
-        <button type="button" onClick={handleExport} className={secondaryButtonClass}>
-          <Download className="h-4 w-4" />
-          {t('project.settings.advancedExport')}
-        </button>
-        <button type="button" onClick={handleClearCache} className={secondaryButtonClass}>
-          <RefreshCw className="h-4 w-4" />
-          {t('project.settings.advancedClearCache')}
-        </button>
-        <button type="button" onClick={handleRebuild} className={secondaryButtonClass}>
-          <RefreshCw className="h-4 w-4" />
-          {t('project.settings.advancedRebuild')}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="min-w-0 text-sm text-gray-500 dark:text-slate-400">
+          {t(
+            'project.settings.advancedMaintenanceDesc',
+            'Graph maintenance operations (export, refresh, rebuild) are managed on the Maintenance page.'
+          )}
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            void navigate(maintenancePath);
+          }}
+          className={`${secondaryButtonClass} sm:flex-none`}
+        >
+          <Wrench className="h-4 w-4" />
+          {t('project.settings.advancedGotoMaintenance', 'Go to Maintenance')}
         </button>
       </div>
     </SettingsSection>
@@ -976,82 +967,6 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
     t,
   ]);
 
-  const handleClearCache = useCallback(async () => {
-    if (!currentProject) return;
-
-    if (
-      !(await confirmAction({ title: t('project.settings.advancedConfirmClear'), danger: true }))
-    ) {
-      return;
-    }
-
-    setMessage(null);
-    try {
-      await api.post('/maintenance/refresh/incremental', {
-        project_id: currentProject.id,
-        rebuild_communities: true,
-      });
-      setMessage({ type: 'success', text: t('project.settings.advancedClearCacheSuccess') });
-    } catch (error) {
-      logger.error('[ProjectSettings] Failed to clear cache:', error);
-      setMessage({ type: 'error', text: t('project.settings.advancedClearCacheError') });
-    }
-  }, [currentProject, t]);
-
-  const handleRebuildCommunities = useCallback(async () => {
-    if (!currentProject) return;
-
-    if (
-      !(await confirmAction({ title: t('project.settings.advancedConfirmRebuild'), danger: true }))
-    ) {
-      return;
-    }
-
-    setMessage(null);
-    try {
-      await api.post(
-        `/graph/communities/rebuild?project_id=${encodeURIComponent(currentProject.id)}`
-      );
-      setMessage({ type: 'success', text: t('project.settings.advancedRebuildSuccess') });
-    } catch (error) {
-      logger.error('[ProjectSettings] Failed to rebuild communities:', error);
-      setMessage({ type: 'error', text: t('project.settings.advancedRebuildError') });
-    }
-  }, [currentProject, t]);
-
-  const handleExportData = useCallback(async () => {
-    if (!currentProject) return;
-
-    setMessage(null);
-    try {
-      const data = await api.post('/data/export', {
-        tenant_id: currentProject.tenant_id,
-        project_id: currentProject.id,
-        include_episodes: true,
-        include_entities: true,
-        include_relationships: true,
-        include_communities: true,
-      });
-
-      const jsonString = JSON.stringify(data, null, 2);
-      const blob = new Blob([jsonString], { type: 'application/json' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      const exportDate = new Date().toISOString().slice(0, 10);
-      link.href = url;
-      link.download = `project-${currentProject.id}-export-${exportDate}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-
-      setMessage({ type: 'success', text: t('project.settings.advancedExportSuccess') });
-    } catch (error) {
-      logger.error('[ProjectSettings] Failed to export data:', error);
-      setMessage({ type: 'error', text: t('project.settings.advancedExportError') });
-    }
-  }, [currentProject, t]);
-
   const handleDeleteProject = useCallback(async () => {
     if (!currentProject) return;
 
@@ -1183,11 +1098,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
             onCommunityDetectionChange={setCommunityDetection}
             onSave={handleSaveGraphConfig}
           />
-          <Advanced
-            onExportData={handleExportData}
-            onClearCache={handleClearCache}
-            onRebuildCommunities={handleRebuildCommunities}
-          />
+          <Advanced />
           <Sandbox projectId={currentProject.id} />
           <Danger projectName={currentProject.name} onDelete={handleDeleteProject} />
         </div>

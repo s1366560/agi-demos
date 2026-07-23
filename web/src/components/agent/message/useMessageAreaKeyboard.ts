@@ -68,7 +68,8 @@ export function useMessageAreaKeyboard(
 
         const el = containerRef.current?.querySelector(`[data-msg-index="${String(nextIndex)}"]`);
         if (el) {
-          el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          el.scrollIntoView({ block: 'center', behavior: reducedMotion ? 'auto' : 'smooth' });
         }
       }
 

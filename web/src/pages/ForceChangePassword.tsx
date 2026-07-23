@@ -2,7 +2,7 @@ import type React from 'react';
 import { useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Button, Form, Input, message, Typography } from 'antd';
 import { Lock, LogOut } from 'lucide-react';
@@ -24,11 +24,22 @@ interface ChangePasswordFormValues {
 export const ForceChangePassword: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const setUser = useAuthStore((s) => s.setUser);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm<ChangePasswordFormValues>();
+
+  // Two scenarios share this page: forced (must_change_password, route guard)
+  // and voluntary (entered from the profile page). The subtitle reflects the
+  // scenario; `?redirect=` controls where the user lands after success.
+  const isForced = user?.must_change_password === true;
+  const rawRedirect = searchParams.get('redirect');
+  const successRedirect =
+    rawRedirect && rawRedirect.startsWith('/') && !rawRedirect.startsWith('//')
+      ? rawRedirect
+      : '/tenant';
 
   const handleSubmit = async (values: ChangePasswordFormValues) => {
     setLoading(true);
@@ -40,7 +51,7 @@ export const ForceChangePassword: React.FC = () => {
         setUser({ ...user, must_change_password: false });
       }
 
-      void navigate('/tenant', { replace: true });
+      void navigate(successRedirect, { replace: true });
     } catch (error) {
       const hasDetail = isUnknownError(error) && (error.response?.data?.detail || error.message);
       void message.error(hasDetail ? getErrorMessage(error) : t('forceChangePassword.failed'));
@@ -64,7 +75,14 @@ export const ForceChangePassword: React.FC = () => {
           <Title level={3} className="!mb-1">
             {t('forceChangePassword.title')}
           </Title>
-          <Text type="secondary">{t('forceChangePassword.subtitle')}</Text>
+          <Text type="secondary">
+            {isForced
+              ? t('forceChangePassword.subtitle')
+              : t(
+                  'forceChangePassword.subtitleVoluntary',
+                  'Choose a new password for your account.'
+                )}
+          </Text>
         </div>
 
         <Form<ChangePasswordFormValues>
@@ -92,6 +110,7 @@ export const ForceChangePassword: React.FC = () => {
           <Form.Item
             name="newPassword"
             label={t('forceChangePassword.newPassword')}
+            dependencies={['currentPassword']}
             rules={[
               {
                 required: true,
@@ -101,6 +120,21 @@ export const ForceChangePassword: React.FC = () => {
                 min: 8,
                 message: t('forceChangePassword.passwordMinLength'),
               },
+              ({ getFieldValue }) => ({
+                validator(_, value: string) {
+                  if (!value || getFieldValue('currentPassword') !== value) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject(
+                    new Error(
+                      t(
+                        'forceChangePassword.passwordSameAsCurrent',
+                        'New password must be different from your current password.'
+                      )
+                    )
+                  );
+                },
+              }),
             ]}
           >
             <Input.Password

@@ -25,8 +25,9 @@ import { skillAPI } from '@/services/skillService';
 
 import { formatDateTime } from '@/utils/date';
 
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import { EvolutionJobRow } from '@/components/skill/EvolutionJobRow';
-import { LazyEmpty, LazySpin, useLazyMessage } from '@/components/ui/lazyAntd';
+import { LazyEmpty, useLazyMessage } from '@/components/ui/lazyAntd';
 
 import type {
   SkillEvolutionConfigResponse,
@@ -136,7 +137,9 @@ function StatCard({
           <div className={`text-[11px] font-medium uppercase tracking-normal ${mutedText}`}>
             {label}
           </div>
-          <div className={`mt-2 text-2xl font-semibold leading-none tracking-normal ${pageText}`}>
+          <div
+            className={`mt-2 text-2xl font-semibold leading-none tracking-normal tabular-nums ${pageText}`}
+          >
             {value}
           </div>
         </div>
@@ -374,14 +377,20 @@ function SkillRow({
           {getSkillScopeText(t, summary.project_id)}
         </div>
       </td>
-      <td className={`px-4 py-3 text-sm ${pageText}`}>{formatNumber(summary.session_count)}</td>
+      <td className={`px-4 py-3 text-sm tabular-nums ${pageText}`}>
+        {formatNumber(summary.session_count)}
+      </td>
       <td className="px-4 py-3">
-        <div className={`mb-1 text-xs ${mutedText}`}>{successRate}%</div>
+        <div className={`mb-1 text-xs tabular-nums ${mutedText}`}>{successRate}%</div>
         <ProgressMeter value={successRate} />
       </td>
-      <td className={`px-4 py-3 text-sm ${pageText}`}>{formatScore(summary.avg_score)}</td>
-      <td className={`px-4 py-3 text-sm ${pageText}`}>{formatNumber(summary.unprocessed_count)}</td>
-      <td className="px-4 py-3">
+      <td className={`px-4 py-3 text-sm tabular-nums ${pageText}`}>
+        {formatScore(summary.avg_score)}
+      </td>
+      <td className={`px-4 py-3 text-sm tabular-nums ${pageText}`}>
+        {formatNumber(summary.unprocessed_count)}
+      </td>
+      <td className="px-4 py-3 tabular-nums">
         <div className="flex min-w-[140px] flex-wrap gap-1.5">
           <StatusPill>{summary.job_count}</StatusPill>
           {summary.pending_job_count > 0 ? (
@@ -476,6 +485,7 @@ export const SkillEvolution: FC = () => {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [policyDraft, setPolicyDraft] = useState<SkillEvolutionConfigResponse | null>(null);
+  const [savedPolicy, setSavedPolicy] = useState<SkillEvolutionConfigResponse | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadOverview = useCallback(async () => {
@@ -497,6 +507,7 @@ export const SkillEvolution: FC = () => {
       ]);
       setOverview(data);
       setPolicyDraft(config);
+      setSavedPolicy(config);
       setLastUpdatedAt(new Date());
       setLoadError(null);
     } catch {
@@ -556,6 +567,7 @@ export const SkillEvolution: FC = () => {
     try {
       const saved = await skillAPI.updateEvolutionConfig(policyDraft, { tenant_id: tenantId });
       setPolicyDraft(saved);
+      setSavedPolicy(saved);
       message?.success(t('tenant.skillEvolution.policy.saveSuccess'));
       await loadOverview();
     } catch {
@@ -568,6 +580,28 @@ export const SkillEvolution: FC = () => {
   const updatePolicyDraft = useCallback((patch: Partial<SkillEvolutionConfigResponse>) => {
     setPolicyDraft((current) => (current ? { ...current, ...patch } : current));
   }, []);
+
+  const isPolicyDirty = useMemo(
+    () =>
+      savedPolicy !== null &&
+      policyDraft !== null &&
+      JSON.stringify(policyDraft) !== JSON.stringify(savedPolicy),
+    [policyDraft, savedPolicy]
+  );
+
+  // Warn before closing/reloading the tab with unsaved policy changes
+  useEffect(() => {
+    if (!isPolicyDirty) {
+      return undefined;
+    }
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isPolicyDirty]);
 
   const handleApplyJob = useCallback(
     async (jobId: string) => {
@@ -672,8 +706,10 @@ export const SkillEvolution: FC = () => {
 
   if (isLoading && !overview) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <LazySpin size="large" />
+      <div className="min-h-full bg-[oklch(0.985_0.003_255)] px-4 py-6 dark:bg-[oklch(0.13_0.006_255)] sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl">
+          <SkeletonLoader type="table" rows={8} />
+        </div>
       </div>
     );
   }
@@ -980,7 +1016,7 @@ export const SkillEvolution: FC = () => {
                     onChange={(event) => {
                       updatePolicyDraft({ publish_mode: event.currentTarget.value });
                     }}
-                    className="h-9 rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-transparent px-2 text-sm"
+                    className="h-9 rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-transparent px-2 text-sm text-[oklch(0.34_0.01_255)] dark:border-[oklch(0.34_0.006_255)] dark:bg-[oklch(0.16_0.006_255)] dark:text-[oklch(0.82_0.006_255)]"
                   >
                     <option value="review">{t('tenant.skillEvolution.policy.reviewMode')}</option>
                     <option value="direct">{t('tenant.skillEvolution.policy.directMode')}</option>
@@ -1006,7 +1042,7 @@ export const SkillEvolution: FC = () => {
                         ),
                       });
                     }}
-                    className="h-9 rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-transparent px-2 text-sm"
+                    className="h-9 rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-transparent px-2 text-sm text-[oklch(0.34_0.01_255)] dark:border-[oklch(0.34_0.006_255)] dark:bg-[oklch(0.16_0.006_255)] dark:text-[oklch(0.82_0.006_255)]"
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-xs font-medium">
@@ -1029,7 +1065,7 @@ export const SkillEvolution: FC = () => {
                         ),
                       });
                     }}
-                    className="h-9 rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-transparent px-2 text-sm"
+                    className="h-9 rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-transparent px-2 text-sm text-[oklch(0.34_0.01_255)] dark:border-[oklch(0.34_0.006_255)] dark:bg-[oklch(0.16_0.006_255)] dark:text-[oklch(0.82_0.006_255)]"
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-xs font-medium">
@@ -1051,7 +1087,7 @@ export const SkillEvolution: FC = () => {
                         ),
                       });
                     }}
-                    className="h-9 rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-transparent px-2 text-sm"
+                    className="h-9 rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-transparent px-2 text-sm text-[oklch(0.34_0.01_255)] dark:border-[oklch(0.34_0.006_255)] dark:bg-[oklch(0.16_0.006_255)] dark:text-[oklch(0.82_0.006_255)]"
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-xs font-medium">
@@ -1072,7 +1108,7 @@ export const SkillEvolution: FC = () => {
                         ),
                       });
                     }}
-                    className="h-9 rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-transparent px-2 text-sm"
+                    className="h-9 rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-transparent px-2 text-sm text-[oklch(0.34_0.01_255)] dark:border-[oklch(0.34_0.006_255)] dark:bg-[oklch(0.16_0.006_255)] dark:text-[oklch(0.82_0.006_255)]"
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-xs font-medium">
@@ -1093,7 +1129,7 @@ export const SkillEvolution: FC = () => {
                         ),
                       });
                     }}
-                    className="h-9 rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-transparent px-2 text-sm"
+                    className="h-9 rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-transparent px-2 text-sm text-[oklch(0.34_0.01_255)] dark:border-[oklch(0.34_0.006_255)] dark:bg-[oklch(0.16_0.006_255)] dark:text-[oklch(0.82_0.006_255)]"
                   />
                 </label>
               </div>
@@ -1145,7 +1181,7 @@ export const SkillEvolution: FC = () => {
                     }`}
                   >
                     {tab.label}
-                    <span className="rounded-full border border-[oklch(0.86_0.006_255)] px-1.5 text-[11px] font-medium dark:border-[oklch(0.34_0.006_255)]">
+                    <span className="rounded-full border border-[oklch(0.86_0.006_255)] px-1.5 text-[11px] font-medium tabular-nums dark:border-[oklch(0.34_0.006_255)]">
                       {formatNumber(tab.count)}
                     </span>
                   </button>

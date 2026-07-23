@@ -4,12 +4,13 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import {
+  Alert,
+  App,
   Badge,
   Button,
   Empty,
   Form,
   Input,
-  InputNumber,
   Modal,
   Popconfirm,
   Select,
@@ -18,7 +19,6 @@ import {
   Table,
   Tag,
   Typography,
-  message,
 } from 'antd';
 import { Eye, Package, Trash2, Pencil, Plus, RefreshCw, Settings } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
@@ -37,6 +37,10 @@ import {
 } from '@/utils/channelConfigSanitizers';
 import { formatDateTime } from '@/utils/date';
 import { formatPluginCapabilityCounts } from '@/utils/pluginCapabilityCounts';
+
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
+
+import { renderSchemaFormFields, sanitizePluginConfigValues } from './pluginSchemaForm';
 
 import type {
   ChannelConfig,
@@ -61,35 +65,8 @@ const humanizeChannelType = (channelType: string): string =>
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(' ');
 
-const humanizeFieldName = (fieldName: string): string =>
-  fieldName
-    .split(/[-_]/g)
-    .filter(Boolean)
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(' ');
-
 const contractCount = (plugin: RuntimePlugin, key: string): number =>
   plugin.contracts?.[key]?.length ?? 0;
-
-const sanitizePluginConfigValues = (
-  values: Record<string, unknown>,
-  secretPaths: Set<string>,
-  allowedFields?: Set<string>
-): Record<string, unknown> =>
-  Object.fromEntries(
-    Object.entries(values).filter(([key, value]) => {
-      if (allowedFields && !allowedFields.has(key)) {
-        return false;
-      }
-      if (value === undefined || value === SECRET_UNCHANGED_SENTINEL) {
-        return false;
-      }
-      if (secretPaths.has(key) && value === '') {
-        return false;
-      }
-      return true;
-    })
-  );
 
 interface PluginActionTimelineEntry {
   id: string;
@@ -105,6 +82,7 @@ const PROJECT_PICKER_PAGE_SIZE = 100;
 export const PluginHub: React.FC = () => {
   const { tenantId: urlTenantId } = useParams<{ tenantId?: string | undefined }>();
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const projectIdFromQuery = searchParams.get('projectId');
@@ -146,6 +124,7 @@ export const PluginHub: React.FC = () => {
   >({});
 
   const [pluginsLoading, setPluginsLoading] = useState(false);
+  const [pluginsError, setPluginsError] = useState<string | null>(null);
   const [configsLoading, setConfigsLoading] = useState(false);
   const [schemaLoading, setSchemaLoading] = useState(false);
   const [pluginConfigLoading, setPluginConfigLoading] = useState(false);
@@ -224,7 +203,7 @@ export const PluginHub: React.FC = () => {
     listProjects(tenantId, { page: 1, page_size: PROJECT_PICKER_PAGE_SIZE }).catch(() => {
       message.error(t('tenant.pluginHub.messages.loadProjectsFailed'));
     });
-  }, [listProjects, tenantId, t]);
+  }, [listProjects, message, tenantId, t]);
 
   useEffect(() => {
     pluginRuntimeRequestRef.current += 1;
@@ -241,6 +220,7 @@ export const PluginHub: React.FC = () => {
     setLastPluginActionDetails(null);
     setPluginActionTimeline([]);
     setPluginsLoading(false);
+    setPluginsError(null);
     setConfigsLoading(false);
     setSchemaLoading(false);
     setPluginConfigLoading(false);
@@ -289,9 +269,10 @@ export const PluginHub: React.FC = () => {
       setPlugins(pluginRes.items);
       setPluginDiagnostics(pluginRes.diagnostics);
       setChannelPluginCatalog(catalogRes.items);
+      setPluginsError(null);
     } catch (error) {
       if (!isPluginRuntimeRequestCurrent(requestId, requestTenantId)) return;
-      message.error(
+      setPluginsError(
         error instanceof Error ? error.message : t('tenant.pluginHub.messages.loadPluginsFailed')
       );
     } finally {
@@ -325,7 +306,7 @@ export const PluginHub: React.FC = () => {
         setConfigsLoading(false);
       }
     }
-  }, [isChannelConfigsRequestCurrent, selectedProjectId, t]);
+  }, [isChannelConfigsRequestCurrent, message, selectedProjectId, t]);
 
   const loadChannelSchema = useCallback(
     async (channelType: string) => {
@@ -356,7 +337,7 @@ export const PluginHub: React.FC = () => {
         }
       }
     },
-    [channelPluginCatalog, channelSchemas, isChannelSchemaRequestCurrent, tenantId, t]
+    [channelPluginCatalog, channelSchemas, isChannelSchemaRequestCurrent, message, tenantId, t]
   );
 
   useEffect(() => {
@@ -476,7 +457,15 @@ export const PluginHub: React.FC = () => {
     } finally {
       setPluginActionKey(null);
     }
-  }, [installRequirement, loadChannelConfigs, loadPluginRuntime, recordPluginAction, tenantId, t]);
+  }, [
+    installRequirement,
+    loadChannelConfigs,
+    loadPluginRuntime,
+    message,
+    recordPluginAction,
+    tenantId,
+    t,
+  ]);
 
   const handleTogglePlugin = useCallback(
     async (plugin: RuntimePlugin, enabled: boolean) => {
@@ -502,7 +491,7 @@ export const PluginHub: React.FC = () => {
         setPluginActionKey(null);
       }
     },
-    [loadChannelConfigs, loadPluginRuntime, recordPluginAction, tenantId, t]
+    [loadChannelConfigs, loadPluginRuntime, message, recordPluginAction, tenantId, t]
   );
 
   const handleReloadPlugins = useCallback(async () => {
@@ -521,7 +510,7 @@ export const PluginHub: React.FC = () => {
     } finally {
       setPluginActionKey(null);
     }
-  }, [loadChannelConfigs, loadPluginRuntime, recordPluginAction, tenantId, t]);
+  }, [loadChannelConfigs, loadPluginRuntime, message, recordPluginAction, tenantId, t]);
 
   const openPluginDetail = useCallback(
     (pluginName: string) => {
@@ -553,7 +542,7 @@ export const PluginHub: React.FC = () => {
         setPluginActionKey(null);
       }
     },
-    [loadChannelConfigs, loadPluginRuntime, recordPluginAction, tenantId, t]
+    [loadChannelConfigs, loadPluginRuntime, message, recordPluginAction, tenantId, t]
   );
 
   const handleConfigurePlugin = useCallback(
@@ -593,7 +582,7 @@ export const PluginHub: React.FC = () => {
         }
       }
     },
-    [isPluginConfigRequestCurrent, pluginConfigForm, tenantId, t]
+    [isPluginConfigRequestCurrent, message, pluginConfigForm, tenantId, t]
   );
 
   const handleSavePluginConfig = useCallback(async () => {
@@ -625,6 +614,7 @@ export const PluginHub: React.FC = () => {
     activePluginConfigSchema,
     configuringPlugin,
     loadPluginRuntime,
+    message,
     pluginConfigForm,
     tenantId,
     t,
@@ -645,7 +635,7 @@ export const PluginHub: React.FC = () => {
     });
     setConfigModalVisible(true);
     void loadChannelSchema(defaultChannelType);
-  }, [channelTypeOptions, form, loadChannelSchema, selectedProjectId, t]);
+  }, [channelTypeOptions, form, loadChannelSchema, message, selectedProjectId, t]);
 
   const handleEditConfig = useCallback(
     (config: ChannelConfig) => {
@@ -675,7 +665,7 @@ export const PluginHub: React.FC = () => {
         setConfigActionKey(null);
       }
     },
-    [loadChannelConfigs, t]
+    [loadChannelConfigs, message, t]
   );
 
   const handleTestConfig = useCallback(
@@ -697,7 +687,7 @@ export const PluginHub: React.FC = () => {
         setConfigActionKey(null);
       }
     },
-    [loadChannelConfigs, t]
+    [loadChannelConfigs, message, t]
   );
 
   const handleSaveConfig = useCallback(async () => {
@@ -750,198 +740,49 @@ export const PluginHub: React.FC = () => {
     } finally {
       setConfigActionKey((current) => (current === 'save' ? null : current));
     }
-  }, [activeChannelSchema, editingConfig, form, loadChannelConfigs, selectedProjectId, t]);
+  }, [activeChannelSchema, editingConfig, form, loadChannelConfigs, message, selectedProjectId, t]);
 
-  const dynamicSchemaFields = useMemo(() => {
-    if (!activeChannelSchema?.schema_supported) return [];
-    const properties = activeChannelSchema.config_schema?.properties || {};
-    const required = new Set(activeChannelSchema.config_schema?.required || []);
-    const hints = activeChannelSchema.config_ui_hints || {};
-    const secretPaths = new Set(activeChannelSchema.secret_paths);
+  const dynamicSchemaFields = useMemo(
+    () =>
+      renderSchemaFormFields({
+        schemaSupported: activeChannelSchema?.schema_supported ?? false,
+        properties: activeChannelSchema?.config_schema?.properties ?? {},
+        requiredFields: activeChannelSchema?.config_schema?.required ?? [],
+        uiHints: activeChannelSchema?.config_ui_hints ?? {},
+        secretPaths: activeChannelSchema?.secret_paths ?? [],
+        excludeFields: ['channel_type', 'name', 'enabled'],
+        resolveFormName: (fieldName) =>
+          CHANNEL_SETTING_FIELDS.has(fieldName) ? fieldName : ['extra_settings', fieldName],
+        isRequiredField: (sensitive) => !(editingConfig && sensitive),
+        resolveSecretPlaceholder: (placeholder) =>
+          editingConfig
+            ? t('tenant.pluginHub.configModal.leaveUnchanged', {
+                sentinel: SECRET_UNCHANGED_SENTINEL,
+              })
+            : placeholder,
+        t,
+      }),
+    [activeChannelSchema, editingConfig, t]
+  );
 
-    return Object.entries(properties)
-      .map(([fieldName, schema]) => {
-        if (['channel_type', 'name', 'enabled'].includes(fieldName)) {
-          return null;
-        }
-        const hint = hints[fieldName] || {};
-        const sensitive = Boolean(hint.sensitive) || secretPaths.has(fieldName);
-        const requiredField = required.has(fieldName) && !(editingConfig && sensitive);
-        const formName = CHANNEL_SETTING_FIELDS.has(fieldName)
-          ? fieldName
-          : ['extra_settings', fieldName];
-        const label = hint.label || schema.title || humanizeFieldName(fieldName);
-        const placeholder = hint.placeholder || schema.description;
-        const rules = requiredField
-          ? [
-              {
-                required: true,
-                message: t('tenant.pluginHub.configModal.pleaseEnter', { field: label }),
-              },
-            ]
-          : undefined;
-
-        if (schema.type === 'boolean') {
-          return (
-            <Form.Item key={fieldName} name={formName} label={label} valuePropName="checked">
-              <Switch />
-            </Form.Item>
-          );
-        }
-
-        if (schema.enum && schema.enum.length > 0) {
-          return (
-            <Form.Item
-              key={fieldName}
-              name={formName}
-              label={label}
-              {...(rules != null ? { rules } : {})}
-            >
-              <Select
-                aria-label={label}
-                options={schema.enum.map((value) => ({
-                  value,
-                  label: String(value),
-                }))}
-              />
-            </Form.Item>
-          );
-        }
-
-        if (schema.type === 'integer' || schema.type === 'number') {
-          return (
-            <Form.Item
-              key={fieldName}
-              name={formName}
-              label={label}
-              {...(rules != null ? { rules } : {})}
-            >
-              <InputNumber
-                style={{ width: '100%' }}
-                {...(schema.minimum != null ? { min: schema.minimum } : {})}
-                {...(schema.maximum != null ? { max: schema.maximum } : {})}
-                placeholder={placeholder}
-              />
-            </Form.Item>
-          );
-        }
-
-        return (
-          <Form.Item
-            key={fieldName}
-            name={formName}
-            label={label}
-            {...(rules != null ? { rules } : {})}
-          >
-            {sensitive ? (
-              <Input.Password
-                placeholder={
-                  editingConfig
-                    ? t('tenant.pluginHub.configModal.leaveUnchanged', {
-                        sentinel: SECRET_UNCHANGED_SENTINEL,
-                      })
-                    : placeholder
-                }
-              />
-            ) : (
-              <Input placeholder={placeholder} />
-            )}
-          </Form.Item>
-        );
-      })
-      .filter(Boolean);
-  }, [activeChannelSchema, editingConfig, t]);
-
-  const pluginConfigDynamicFields = useMemo(() => {
-    if (!activePluginConfigSchema?.schema_supported) return [];
-    const properties = activePluginConfigSchema.config_schema?.properties || {};
-    const required = new Set(activePluginConfigSchema.config_schema?.required || []);
-    const hints = activePluginConfigSchema.config_ui_hints || {};
-    const secretPaths = new Set(activePluginConfigSchema.secret_paths);
-
-    return Object.entries(properties)
-      .map(([fieldName, schema]) => {
-        const hint = hints[fieldName] || {};
-        const sensitive = Boolean(hint.sensitive) || secretPaths.has(fieldName);
-        const requiredField = required.has(fieldName) && !sensitive;
-        const formName = ['config', fieldName];
-        const label = hint.label || schema.title || humanizeFieldName(fieldName);
-        const placeholder = hint.placeholder || schema.description;
-        const rules = requiredField
-          ? [
-              {
-                required: true,
-                message: t('tenant.pluginHub.configModal.pleaseEnter', { field: label }),
-              },
-            ]
-          : undefined;
-
-        if (schema.type === 'boolean') {
-          return (
-            <Form.Item key={fieldName} name={formName} label={label} valuePropName="checked">
-              <Switch />
-            </Form.Item>
-          );
-        }
-
-        if (schema.enum && schema.enum.length > 0) {
-          return (
-            <Form.Item
-              key={fieldName}
-              name={formName}
-              label={label}
-              {...(rules != null ? { rules } : {})}
-            >
-              <Select
-                aria-label={label}
-                options={schema.enum.map((value) => ({
-                  value,
-                  label: String(value),
-                }))}
-              />
-            </Form.Item>
-          );
-        }
-
-        if (schema.type === 'integer' || schema.type === 'number') {
-          return (
-            <Form.Item
-              key={fieldName}
-              name={formName}
-              label={label}
-              {...(rules != null ? { rules } : {})}
-            >
-              <InputNumber
-                style={{ width: '100%' }}
-                {...(schema.minimum != null ? { min: schema.minimum } : {})}
-                {...(schema.maximum != null ? { max: schema.maximum } : {})}
-                placeholder={placeholder}
-              />
-            </Form.Item>
-          );
-        }
-
-        return (
-          <Form.Item
-            key={fieldName}
-            name={formName}
-            label={label}
-            {...(rules != null ? { rules } : {})}
-          >
-            {sensitive ? (
-              <Input.Password
-                placeholder={t('tenant.pluginHub.configModal.leaveUnchanged', {
-                  sentinel: SECRET_UNCHANGED_SENTINEL,
-                })}
-              />
-            ) : (
-              <Input placeholder={placeholder} />
-            )}
-          </Form.Item>
-        );
-      })
-      .filter(Boolean);
-  }, [activePluginConfigSchema, t]);
+  const pluginConfigDynamicFields = useMemo(
+    () =>
+      renderSchemaFormFields({
+        schemaSupported: activePluginConfigSchema?.schema_supported ?? false,
+        properties: activePluginConfigSchema?.config_schema?.properties ?? {},
+        requiredFields: activePluginConfigSchema?.config_schema?.required ?? [],
+        uiHints: activePluginConfigSchema?.config_ui_hints ?? {},
+        secretPaths: activePluginConfigSchema?.secret_paths ?? [],
+        resolveFormName: (fieldName) => ['config', fieldName],
+        isRequiredField: (sensitive) => !sensitive,
+        resolveSecretPlaceholder: () =>
+          t('tenant.pluginHub.configModal.leaveUnchanged', {
+            sentinel: SECRET_UNCHANGED_SENTINEL,
+          }),
+        t,
+      }),
+    [activePluginConfigSchema, t]
+  );
 
   const renderPaginationItem = useCallback(
     (_page: number, type: string, originalElement: React.ReactNode) => {
@@ -1081,7 +922,7 @@ export const PluginHub: React.FC = () => {
       key: 'status',
       render: (_: unknown, record: RuntimePlugin) =>
         record.enabled ? (
-          <Badge status="success" text={t('tenant.pluginHub.pluginsList.enable')} />
+          <Badge status="success" text={t('common.status.enabled')} />
         ) : (
           <Badge status="default" text={t('tenant.pluginHub.pluginsList.disabled')} />
         ),
@@ -1167,7 +1008,7 @@ export const PluginHub: React.FC = () => {
         <Space>
           <Text strong>{name}</Text>
           {record.enabled ? (
-            <Tag color="success">{t('tenant.pluginHub.pluginsList.enable')}</Tag>
+            <Tag color="success">{t('common.status.enabled')}</Tag>
           ) : (
             <Tag>{t('tenant.pluginHub.pluginsList.disabled')}</Tag>
           )}
@@ -1377,6 +1218,24 @@ export const PluginHub: React.FC = () => {
               </div>
             </div>
           )}
+          {pluginsError ? (
+            <Alert
+              type="error"
+              showIcon
+              className="mb-4"
+              title={t('tenant.pluginHub.messages.loadPluginsFailed')}
+              description={pluginsError}
+              action={
+                <Button
+                  onClick={() => {
+                    void loadPluginRuntime();
+                  }}
+                >
+                  {t('common.retry')}
+                </Button>
+              }
+            />
+          ) : null}
           <Table
             dataSource={plugins}
             columns={pluginColumns}
@@ -1489,7 +1348,7 @@ export const PluginHub: React.FC = () => {
       >
         <Form form={pluginConfigForm} layout="vertical">
           {pluginConfigLoading ? (
-            <Text type="secondary">{t('tenant.pluginHub.configModal.loadingSchema')}</Text>
+            <SkeletonLoader type="form" />
           ) : activePluginConfigSchema?.schema_supported ? (
             pluginConfigDynamicFields
           ) : (
@@ -1550,11 +1409,7 @@ export const PluginHub: React.FC = () => {
 
           {activeChannelSchema?.schema_supported ? (
             <>
-              {schemaLoading && (
-                <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                  {t('tenant.pluginHub.configModal.loadingSchema')}
-                </Text>
-              )}
+              {schemaLoading && <SkeletonLoader type="form" />}
               {dynamicSchemaFields}
             </>
           ) : (

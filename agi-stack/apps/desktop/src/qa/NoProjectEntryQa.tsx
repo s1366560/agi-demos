@@ -78,6 +78,7 @@ const projectsByTenant: Record<string, ProjectSummary[]> = {
 
 const initialConfig: DesktopRuntimeConfig = {
   apiBaseUrl: QA_API_ORIGIN,
+  deviceAuthorizationBaseUrl: QA_API_ORIGIN,
   apiKey: 'qa-authenticated-session',
   localApiToken: '',
   tenantId: '',

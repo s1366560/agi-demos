@@ -106,6 +106,7 @@ export const EvidenceBundleDrawer: React.FC<EvidenceBundleDrawerProps> = ({
     return EVIDENCE_TAB_ORDER.find((tab) => bundle[tab].length > 0) ?? 'testRuns';
   }, [bundle]);
   const [activeKey, setActiveKey] = useState<EvidenceTab>(initialTab);
+  const visibleActiveKey = bundle[activeKey].length > 0 ? activeKey : initialTab;
 
   const drawerTitle = title ?? t('agent.evidence.bundleTitle', { defaultValue: 'Evidence bundle' });
 
@@ -125,7 +126,7 @@ export const EvidenceBundleDrawer: React.FC<EvidenceBundleDrawerProps> = ({
       placement="right"
     >
       <LazyTabs
-        activeKey={activeKey}
+        activeKey={visibleActiveKey}
         onChange={(key: string) => {
           setActiveKey(key as EvidenceTab);
         }}

@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 
-import { Input, Pagination, Progress, Spin, Tag } from 'antd';
+import { Input, Pagination, Progress, Tag } from 'antd';
 import { FolderKanban, LayoutGrid, Plus, Search, Target } from 'lucide-react';
 
 import { useCurrentProject, useProjectStore } from '@/stores/project';
@@ -32,6 +32,7 @@ import {
   calculateWorkspacePlanCompletionRatio,
   getWorkspacePlanCompletionCounts,
 } from '@/components/blackboard/blackboardUtils';
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import { EmptyStateSimple } from '@/components/shared/ui/EmptyStateVariant';
 
 import type {
@@ -51,6 +52,8 @@ interface ObjectiveSummary {
   avgProgress: number;
   completed: number;
   loading: boolean;
+  /** True when every summary source failed to load (distinct from genuinely empty). */
+  failed?: boolean;
 }
 
 const EMPTY_SUMMARY: ObjectiveSummary = {
@@ -133,40 +136,53 @@ async function loadWorkspaceSummary(
   projectId: string,
   workspaceId: string
 ): Promise<ObjectiveSummary> {
+  const [objectivesResult, planResult] = await Promise.allSettled([
+    workspaceObjectiveService.list(tenantId, projectId, workspaceId),
+    workspacePlanService.getSnapshot(workspaceId, {
+      outboxLimit: 0,
+      eventLimit: 0,
+      includeDetails: false,
+      recoverStaleAttempts: false,
+    }),
+  ]);
+  const items = objectivesResult.status === 'fulfilled' ? objectivesResult.value : [];
+  const planSnapshot = planResult.status === 'fulfilled' ? planResult.value : null;
+  const fromObjectives = summarizeObjectives(items);
+  const fromPlan = summarizePlanSnapshot(planSnapshot);
+  // Prefer objectives when they exist AND have any progress. Otherwise use
+  // current plan nodes before falling back to historical task projections.
+  const useObjectives = fromObjectives !== null && fromObjectives.avgProgress > 0;
+  const resolved = useObjectives ? fromObjectives : (fromPlan ?? fromObjectives);
+  if (resolved) return resolved;
+
+  let tasks: WorkspaceTask[] | null = null;
   try {
-    const [items, planSnapshot] = await Promise.all([
-      workspaceObjectiveService.list(tenantId, projectId, workspaceId).catch(() => []),
-      workspacePlanService
-        .getSnapshot(workspaceId, {
-          outboxLimit: 0,
-          eventLimit: 0,
-          includeDetails: false,
-          recoverStaleAttempts: false,
-        })
-        .catch(() => null),
-    ]);
-    const fromObjectives = summarizeObjectives(items);
-    const fromPlan = summarizePlanSnapshot(planSnapshot);
-    // Prefer objectives when they exist AND have any progress. Otherwise use
-    // current plan nodes before falling back to historical task projections.
-    const useObjectives = fromObjectives !== null && fromObjectives.avgProgress > 0;
-    return useObjectives
-      ? fromObjectives
-      : fromPlan
-        ? fromPlan
-        : fromObjectives
-          ? fromObjectives
-          : summarizeTasks(await workspaceTaskService.list(workspaceId).catch(() => []));
+    tasks = await workspaceTaskService.list(workspaceId);
   } catch {
-    return {
-      source: 'empty',
-      total: 0,
-      objectives: 0,
-      avgProgress: 0,
-      completed: 0,
-      loading: false,
-    };
+    tasks = null;
   }
+  if (tasks !== null) {
+    const summary = summarizeTasks(tasks);
+    // Objectives and plan both failed and there are no tasks to fall back to:
+    // surface a failure instead of pretending the workspace has no objectives.
+    if (
+      summary.source === 'empty' &&
+      objectivesResult.status === 'rejected' &&
+      planResult.status === 'rejected'
+    ) {
+      return { ...summary, failed: true };
+    }
+    return summary;
+  }
+  return {
+    source: 'empty',
+    total: 0,
+    objectives: 0,
+    avgProgress: 0,
+    completed: 0,
+    loading: false,
+    failed: true,
+  };
 }
 
 export function WorkspaceList() {
@@ -181,9 +197,32 @@ export function WorkspaceList() {
   const workspaceError = useWorkspaceError();
   const { loadWorkspaces } = useWorkspaceActions();
 
-  const [query, setQuery] = useState('');
-  const [page, setPage] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [query, setQuery] = useState(() => searchParams.get('q') ?? '');
+  const [page, setPage] = useState(() => {
+    const p = Number(searchParams.get('page'));
+    return Number.isInteger(p) && p > 0 ? p : 1;
+  });
   const [summaries, setSummaries] = useState<Record<string, ObjectiveSummary>>({});
+
+  // Reflect search/pagination in the URL so views survive reload and sharing
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    const trimmedQuery = query.trim();
+    if (trimmedQuery) {
+      next.set('q', trimmedQuery);
+    } else {
+      next.delete('q');
+    }
+    if (page > 1) {
+      next.set('page', String(page));
+    } else {
+      next.delete('page');
+    }
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [query, page, searchParams, setSearchParams]);
 
   const tenantId = params.tenantId ?? currentTenant?.id ?? null;
   const tenantCurrentProject =
@@ -267,6 +306,18 @@ export function WorkspaceList() {
     };
   }, [tenantId, projectId, workspaces]);
 
+  // Reload a single workspace summary after a failure (per-card retry)
+  const retrySummary = useCallback(
+    (workspaceId: string) => {
+      if (!tenantId || !projectId) return;
+      setSummaries((prev) => ({ ...prev, [workspaceId]: EMPTY_SUMMARY }));
+      void loadWorkspaceSummary(tenantId, projectId, workspaceId).then((summary) => {
+        setSummaries((prev) => ({ ...prev, [workspaceId]: summary }));
+      });
+    },
+    [tenantId, projectId]
+  );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return workspaces;
@@ -311,6 +362,11 @@ export function WorkspaceList() {
     <div className="flex h-full min-h-0 w-full flex-col px-6 py-8 sm:px-8">
       {/* Header */}
       <header className="mb-6 flex flex-col gap-1">
+        {currentTenant?.name ? (
+          <p className="text-xs font-medium uppercase tracking-wider text-text-muted dark:text-text-muted">
+            {[currentTenant.name, tenantCurrentProject?.name].filter(Boolean).join(' / ')}
+          </p>
+        ) : null}
         <div className="flex items-baseline gap-3">
           <h1 className="text-2xl font-semibold tracking-tight text-text-primary dark:text-text-inverse">
             {t('tenant.workspaceList.title', 'Workspaces')}
@@ -356,9 +412,7 @@ export function WorkspaceList() {
       {/* Content */}
       <div className="-mx-2 min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {isLoading && workspaces.length === 0 ? (
-          <div className="flex min-h-[240px] items-center justify-center">
-            <Spin />
-          </div>
+          <SkeletonLoader type="card" count={6} />
         ) : workspaceError && workspaces.length === 0 ? (
           <div
             className="flex min-h-[240px] flex-col items-center justify-center gap-3"
@@ -461,27 +515,52 @@ export function WorkspaceList() {
                         <div className="mb-1 flex items-center justify-between gap-2 text-xs">
                           <span className="flex min-w-0 items-center gap-1.5 text-text-secondary dark:text-text-muted">
                             <Target size={12} aria-hidden />
-                            <span className="truncate">
+                            <span
+                              className={`truncate ${
+                                summary?.failed ? 'text-amber-600 dark:text-amber-400' : ''
+                              }`}
+                            >
                               {!summary || summary.loading
                                 ? t('tenant.workspaceList.loadingObjectives', 'Loading…')
-                                : summary.source === 'objectives'
-                                  ? t('tenant.workspaceList.objectivesCount', {
-                                      count:
-                                        summary.objectives > 0 ? summary.objectives : summary.total,
-                                      defaultValue: `${String(summary.objectives > 0 ? summary.objectives : summary.total)} objectives`,
-                                    })
-                                  : summary.source === 'plan' || summary.source === 'tasks'
-                                    ? t('tenant.workspaceList.tasksCount', {
-                                        count: summary.total,
-                                        defaultValue: `${String(summary.total)} tasks`,
+                                : summary.failed
+                                  ? t(
+                                      'tenant.workspaceList.progressLoadFailed',
+                                      'Progress unavailable'
+                                    )
+                                  : summary.source === 'objectives'
+                                    ? t('tenant.workspaceList.objectivesCount', {
+                                        count:
+                                          summary.objectives > 0
+                                            ? summary.objectives
+                                            : summary.total,
+                                        defaultValue: `${String(summary.objectives > 0 ? summary.objectives : summary.total)} objectives`,
                                       })
-                                    : t('tenant.workspaceList.noObjectives', 'No objectives yet')}
+                                    : summary.source === 'plan' || summary.source === 'tasks'
+                                      ? t('tenant.workspaceList.tasksCount', {
+                                          count: summary.total,
+                                          defaultValue: `${String(summary.total)} tasks`,
+                                        })
+                                      : t('tenant.workspaceList.noObjectives', 'No objectives yet')}
                             </span>
                           </span>
                           <span className="shrink-0 font-medium tabular-nums text-text-primary dark:text-text-inverse">
-                            {summary && !summary.loading && summary.source !== 'empty'
-                              ? `${String(summary.avgProgress)}%`
-                              : '—'}
+                            {summary?.failed ? (
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  retrySummary(workspace.id);
+                                }}
+                                className="rounded text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                              >
+                                {t('common.retry')}
+                              </button>
+                            ) : summary && !summary.loading && summary.source !== 'empty' ? (
+                              `${String(summary.avgProgress)}%`
+                            ) : (
+                              '—'
+                            )}
                           </span>
                         </div>
                         <Progress
@@ -524,7 +603,10 @@ export function WorkspaceList() {
                         </span>
                         {workspace.office_status ? (
                           <Tag color="default" className="!m-0 shrink-0">
-                            {workspace.office_status}
+                            {t(
+                              `tenant.workspaceList.officeStatus.${workspace.office_status}`,
+                              workspace.office_status
+                            )}
                           </Tag>
                         ) : null}
                       </div>

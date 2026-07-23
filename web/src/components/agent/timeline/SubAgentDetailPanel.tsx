@@ -99,7 +99,7 @@ export const SubAgentDetailPanel = memo<SubAgentDetailPanelProps>(({ group, onCl
             </h3>
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               <span className="text-2xs px-1.5 py-0.5 rounded bg-slate-200/50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400 font-mono">
-                {group.subagentId.slice(0, 8)}...
+                {group.subagentId.slice(0, 8)}…
               </span>
               {'modelName' in group && Boolean((group as Record<string, unknown>).modelName) ? (
                 <span className="text-2xs px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 break-all">

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
@@ -6,6 +6,7 @@ import { useParams } from 'react-router-dom';
 import {
   Alert,
   Button,
+  Input,
   Table,
   Switch,
   Tag,
@@ -16,6 +17,8 @@ import {
   Tooltip,
   Typography,
 } from 'antd';
+
+import { RefreshCw } from 'lucide-react';
 
 import {
   useCronJobs,
@@ -38,6 +41,7 @@ import type {
   CronJobUpdate,
   CronRunStatus,
   CronJobRunResponse,
+  TriggerType,
 } from '@/types/cron';
 
 import type { TableProps } from 'antd/es/table';
@@ -74,6 +78,14 @@ export const CronJobs: React.FC = () => {
   const [runsJobId, setRunsJobId] = useState<string | null>(null);
   const [runsPage, setRunsPage] = useState(1);
   const [jobsError, setJobsError] = useState<string | null>(null);
+  const [nameSearch, setNameSearch] = useState('');
+
+  // Client-side name filter for the currently loaded page of jobs.
+  const visibleJobs = useMemo(() => {
+    const needle = nameSearch.trim().toLowerCase();
+    if (!needle) return jobs;
+    return jobs.filter((job) => job.name.toLowerCase().includes(needle));
+  }, [jobs, nameSearch]);
 
   // The cron store rethrows on failure; catch here so rejections are handled
   // and the page can show an error state with a retry action.
@@ -308,7 +320,10 @@ export const CronJobs: React.FC = () => {
             {t('project.cronJobs.runNow')}
           </Button>
           <Popconfirm
-            title={t('project.cronJobs.deleteConfirm')}
+            title={t('project.cronJobs.deleteConfirmNamed', {
+              defaultValue: 'Delete job "{{name}}"?',
+              name: record.name,
+            })}
             onConfirm={() => {
               void handleDelete(record.id);
             }}
@@ -328,12 +343,18 @@ export const CronJobs: React.FC = () => {
       title: t('project.cronJobs.runStatus'),
       dataIndex: 'status',
       key: 'status',
-      render: (status: CronRunStatus) => <Tag color={getStatusColor(status)}>{status}</Tag>,
+      render: (status: CronRunStatus) => (
+        <Tag color={getStatusColor(status)}>
+          {t(`project.cronJobs.runStatusValue.${status}`, status)}
+        </Tag>
+      ),
     },
     {
       title: t('project.cronJobs.runTrigger'),
       dataIndex: 'trigger_type',
       key: 'trigger_type',
+      render: (triggerType: TriggerType) =>
+        t(`project.cronJobs.triggerType.${triggerType}`, triggerType),
     },
     {
       title: t('project.cronJobs.runStartedAt'),
@@ -396,9 +417,30 @@ export const CronJobs: React.FC = () => {
           </Typography.Title>
           <Typography.Text type="secondary">{t('project.cronJobs.description')}</Typography.Text>
         </div>
-        <Button type="primary" onClick={handleCreateNew}>
-          {t('project.cronJobs.createJob')}
-        </Button>
+        <Space wrap>
+          <Input
+            allowClear
+            value={nameSearch}
+            onChange={(event) => {
+              setNameSearch(event.target.value);
+            }}
+            placeholder={t('project.cronJobs.searchPlaceholder', 'Search by name')}
+            aria-label={t('project.cronJobs.searchPlaceholder', 'Search by name')}
+            className="w-56"
+          />
+          <Button
+            icon={<RefreshCw size={14} aria-hidden="true" />}
+            onClick={() => {
+              void loadJobs();
+            }}
+            loading={loading && !submitting}
+          >
+            {t('common.refresh', 'Refresh')}
+          </Button>
+          <Button type="primary" onClick={handleCreateNew}>
+            {t('project.cronJobs.createJob')}
+          </Button>
+        </Space>
       </div>
 
       <div className="min-w-0 overflow-hidden">
@@ -421,7 +463,7 @@ export const CronJobs: React.FC = () => {
           />
         )}
         <Table
-          dataSource={jobs}
+          dataSource={visibleJobs}
           columns={columns}
           rowKey="id"
           loading={loading && !submitting}

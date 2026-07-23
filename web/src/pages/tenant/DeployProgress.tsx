@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 
-import { Timeline, Badge, Card, Typography, Alert, Collapse, Space } from 'antd';
+import { Timeline, Badge, Card, Typography, Alert, Collapse, Space, Pagination } from 'antd';
 
 import {
   LazyButton,
@@ -19,13 +19,23 @@ import {
   useDeployLoading,
   useDeploySubmitting,
   useDeployError,
+  useDeployTotal,
   useDeployActions,
 } from '../../stores/deploy';
 
 import { streamDeployProgress } from './deployProgressStream';
 import { getStatusColor, formatDate } from './utils/instanceUtils';
 
+import type { TFunction } from 'i18next';
+
 const { Title, Text, Paragraph } = Typography;
+
+const HISTORY_PAGE_SIZE = 10;
+
+const deployStatusLabel = (t: TFunction, status: string) => {
+  const stateKey = status === 'in_progress' ? 'inProgress' : status;
+  return t(`tenant.deploy.states.${stateKey}`, status);
+};
 
 export const DeployProgress: React.FC = () => {
   const { t } = useTranslation();
@@ -39,11 +49,13 @@ export const DeployProgress: React.FC = () => {
   const loading = useDeployLoading();
   const isSubmitting = useDeploySubmitting();
   const error = useDeployError();
+  const deployTotal = useDeployTotal();
   const { listDeploys, getDeploy, createDeploy, markSuccess, markFailed, cancelDeploy } =
     useDeployActions();
 
   const [streamFailed, setStreamFailed] = useState(false);
   const [streamRetryKey, setStreamRetryKey] = useState(0);
+  const [historyPage, setHistoryPage] = useState(1);
 
   const reloadList = () => {
     if (deployId) {
@@ -52,7 +64,11 @@ export const DeployProgress: React.FC = () => {
         messageApi?.error(t('tenant.deploy.errors.getFailed', 'Failed to fetch deploy details'));
       });
     } else if (instanceId) {
-      listDeploys({ instance_id: instanceId }).catch((err: unknown) => {
+      listDeploys({
+        instance_id: instanceId,
+        page: historyPage,
+        page_size: HISTORY_PAGE_SIZE,
+      }).catch((err: unknown) => {
         console.error('Failed to list deploys:', err);
         messageApi?.error(t('tenant.deploy.errors.listFailed', 'Failed to fetch deploy history'));
       });
@@ -62,7 +78,7 @@ export const DeployProgress: React.FC = () => {
   useEffect(() => {
     reloadList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [instanceId, deployId, getDeploy, listDeploys, messageApi, t]);
+  }, [instanceId, deployId, historyPage, getDeploy, listDeploys, messageApi, t]);
 
   useEffect(() => {
     if (
@@ -180,7 +196,23 @@ export const DeployProgress: React.FC = () => {
               </>
             )}
             {currentDeploy.error_message && (
-              <Alert type="error" title={currentDeploy.error_message} className="mt-2" />
+              <Alert
+                type="error"
+                title={t('tenant.deploy.errors.deployFailed', 'Deployment failed')}
+                description={
+                  <Paragraph
+                    ellipsis={{
+                      rows: 2,
+                      expandable: true,
+                      symbol: t('common.more', 'More'),
+                    }}
+                    className="!mb-0"
+                  >
+                    {currentDeploy.error_message}
+                  </Paragraph>
+                }
+                className="mt-2"
+              />
             )}
           </>
         ),
@@ -202,7 +234,7 @@ export const DeployProgress: React.FC = () => {
           </Title>
           <Badge
             color={getStatusColor(currentDeploy.status)}
-            text={currentDeploy.status.toUpperCase()}
+            text={deployStatusLabel(t, currentDeploy.status)}
             className="ml-auto scale-125"
           />
         </div>
@@ -386,7 +418,7 @@ export const DeployProgress: React.FC = () => {
                     </Text>
                   </div>
                   <div className="flex gap-4 text-sm">
-                    <Badge color={getStatusColor(d.status)} text={d.status} />
+                    <Badge color={getStatusColor(d.status)} text={deployStatusLabel(t, d.status)} />
                     <Text type="secondary">{d.image_version}</Text>
                     {d.triggered_by && (
                       <Text type="secondary">
@@ -405,6 +437,17 @@ export const DeployProgress: React.FC = () => {
         {deploys.length === 0 && !loading && (
           <div className="text-center text-text-muted py-8">
             <LazyEmpty description={t('tenant.deploy.empty', 'No deployments found')} />
+          </div>
+        )}
+        {deployTotal > HISTORY_PAGE_SIZE && (
+          <div className="mt-4 flex justify-end">
+            <Pagination
+              current={historyPage}
+              pageSize={HISTORY_PAGE_SIZE}
+              total={deployTotal}
+              showSizeChanger={false}
+              onChange={setHistoryPage}
+            />
           </div>
         )}
       </Card>

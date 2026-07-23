@@ -168,7 +168,7 @@ describe('TenantHeader', () => {
       'overflow-hidden',
       'mr-2'
     );
-    expect(screen.getByRole('link', { name: 'Search' }).parentElement).toHaveClass('flex-none');
+    expect(screen.getByRole('button', { name: 'Search' }).closest('.flex-none')).not.toBeNull();
   });
 
   it('keeps contextual navigation reachable in the tablet header range', () => {
@@ -236,7 +236,7 @@ describe('TenantHeader', () => {
     expect(trigger).toHaveFocus();
   });
 
-  it('routes tenant-level search to the project discovery view', () => {
+  it('disables tenant-level search with an explanation (no search surface outside projects)', () => {
     render(
       <TenantHeader
         tenantId="tenant-1"
@@ -246,9 +246,12 @@ describe('TenantHeader', () => {
       />
     );
 
-    expect(screen.getByRole('link', { name: 'Search' })).toHaveAttribute(
-      'href',
-      '/tenant/tenant-1/projects'
+    expect(screen.queryByRole('link', { name: 'Search' })).not.toBeInTheDocument();
+    const searchButton = screen.getByRole('button', { name: 'Search' });
+    expect(searchButton).toBeDisabled();
+    expect(searchButton.parentElement).toHaveAttribute(
+      'title',
+      'Search is available inside a project'
     );
   });
 
@@ -288,10 +291,8 @@ describe('TenantHeader', () => {
 
     expect(screen.queryByRole('button', { name: 'Knowledge Base' })).not.toBeInTheDocument();
 
-    expect(screen.getByRole('link', { name: 'Search' })).toHaveAttribute(
-      'href',
-      '/tenant/tenant-1/projects'
-    );
+    expect(screen.queryByRole('link', { name: 'Search' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled();
   });
 
   it('opens the background tasks panel from the header action', () => {

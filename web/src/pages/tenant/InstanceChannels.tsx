@@ -15,11 +15,13 @@ import {
   MessageCircle,
   MessageSquare,
   Mail,
+  RefreshCw,
   Search as SearchIcon,
 } from 'lucide-react';
 
 import { instanceChannelService } from '@/services/instanceChannelService';
 
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import {
   useLazyMessage,
   LazyAlert,
@@ -27,7 +29,6 @@ import {
   LazySelect,
   LazyPopconfirm,
   LazyEmpty,
-  LazySpin,
   LazyModal,
 } from '@/components/ui/lazyAntd';
 
@@ -57,22 +58,51 @@ interface ChannelTypeOption {
   value: ChannelType;
   labelKey: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
+  // Types without a config form (renderConfigFields default branch) are not
+  // creatable yet — offering them would save a zero-config channel.
+  implemented: boolean;
 }
 
 const DEFAULT_CHANNEL_TYPE_OPTION: ChannelTypeOption = {
   value: 'mcp',
   labelKey: 'tenant.instances.channels.types.mcp',
   icon: Network,
+  implemented: true,
 };
 
 const CHANNEL_TYPE_OPTIONS: ChannelTypeOption[] = [
   DEFAULT_CHANNEL_TYPE_OPTION,
-  { value: 'webhook', labelKey: 'tenant.instances.channels.types.webhook', icon: Webhook },
-  { value: 'websocket', labelKey: 'tenant.instances.channels.types.websocket', icon: Link },
-  { value: 'api', labelKey: 'tenant.instances.channels.types.api', icon: Plug },
-  { value: 'slack', labelKey: 'tenant.instances.channels.types.slack', icon: MessageCircle },
-  { value: 'discord', labelKey: 'tenant.instances.channels.types.discord', icon: MessageSquare },
-  { value: 'email', labelKey: 'tenant.instances.channels.types.email', icon: Mail },
+  {
+    value: 'webhook',
+    labelKey: 'tenant.instances.channels.types.webhook',
+    icon: Webhook,
+    implemented: true,
+  },
+  {
+    value: 'websocket',
+    labelKey: 'tenant.instances.channels.types.websocket',
+    icon: Link,
+    implemented: false,
+  },
+  { value: 'api', labelKey: 'tenant.instances.channels.types.api', icon: Plug, implemented: true },
+  {
+    value: 'slack',
+    labelKey: 'tenant.instances.channels.types.slack',
+    icon: MessageCircle,
+    implemented: false,
+  },
+  {
+    value: 'discord',
+    labelKey: 'tenant.instances.channels.types.discord',
+    icon: MessageSquare,
+    implemented: false,
+  },
+  {
+    value: 'email',
+    labelKey: 'tenant.instances.channels.types.email',
+    icon: Mail,
+    implemented: false,
+  },
 ];
 
 const STATUS_COLORS: Record<ChannelStatus, string> = {
@@ -153,6 +183,13 @@ export const InstanceChannels: React.FC = () => {
 
   const handleSaveChannel = useCallback(async () => {
     if (!instanceId || !formName.trim()) return;
+    const typeOption = CHANNEL_TYPE_OPTIONS.find((o) => o.value === formChannelType);
+    if (!editingChannel && typeOption && !typeOption.implemented) {
+      messageApi?.error(
+        t('tenant.instances.channels.typeNotSupported', 'Channel type not supported yet')
+      );
+      return;
+    }
     setIsSubmitting(true);
     try {
       if (editingChannel) {
@@ -477,15 +514,27 @@ export const InstanceChannels: React.FC = () => {
           </h2>
           <p className="text-sm text-text-muted">{t('tenant.instances.channels.description')}</p>
         </div>
-        <LazyButton
-          type="primary"
-          icon={<Plus size={16} />}
-          onClick={() => {
-            handleOpenModal();
-          }}
-        >
-          {t('tenant.instances.channels.addChannel')}
-        </LazyButton>
+        <div className="flex flex-wrap items-center gap-2">
+          <LazyButton
+            icon={<RefreshCw size={16} />}
+            onClick={() => {
+              void fetchChannels();
+            }}
+            loading={isLoading}
+            aria-label={t('common.refresh', 'Refresh')}
+          >
+            {t('common.refresh', 'Refresh')}
+          </LazyButton>
+          <LazyButton
+            type="primary"
+            icon={<Plus size={16} />}
+            onClick={() => {
+              handleOpenModal();
+            }}
+          >
+            {t('tenant.instances.channels.addChannel')}
+          </LazyButton>
+        </div>
       </div>
 
       {/* Stats */}
@@ -577,9 +626,7 @@ export const InstanceChannels: React.FC = () => {
       {/* Channels Table */}
       <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark overflow-hidden">
         {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <LazySpin size="large" />
-          </div>
+          <SkeletonLoader type="table" rows={5} />
         ) : loadError ? (
           <div className="py-20 flex flex-col items-center gap-4">
             <LazyAlert
@@ -661,10 +708,16 @@ export const InstanceChannels: React.FC = () => {
               }}
               options={CHANNEL_TYPE_OPTIONS.map((o) => ({
                 value: o.value,
+                disabled: !o.implemented,
                 label: (
                   <span className="flex items-center gap-2">
                     <o.icon size={16} />
                     {t(o.labelKey)}
+                    {!o.implemented && (
+                      <span className="text-xs text-text-muted">
+                        {t('tenant.instances.channels.typeComingSoon', 'Coming soon')}
+                      </span>
+                    )}
                   </span>
                 ),
               }))}

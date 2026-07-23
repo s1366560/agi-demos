@@ -27,7 +27,6 @@ export { InlineHITLCard } from './InlineHITLCard';
 export { AgentProgressBar } from './AgentProgressBar';
 
 // Timeline Components
-export { TimelineEventItem } from './TimelineEventItem';
 export { PatternStats, PatternList, PatternInspector } from './patterns';
 
 // Types

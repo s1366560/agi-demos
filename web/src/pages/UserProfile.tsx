@@ -1,38 +1,30 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
-import {
-  AlertCircle,
-  Building2,
-  Calendar,
-  Camera,
-  CheckCircle,
-  KeyRound,
-  MapPin,
-  X,
-} from 'lucide-react';
+import { message, Skeleton } from 'antd';
+import { Building2, Calendar, KeyRound, MapPin, Pencil } from 'lucide-react';
 
-import { formatDateOnly } from '@/utils/date';
 import { confirmAction } from '@/utils/confirmAction';
+import { formatDateOnly } from '@/utils/date';
 
 import { authAPI } from '../services/api';
 import { useAuthStore } from '../stores/auth';
+import { getErrorMessage } from '../types/common';
 
 import type { User, UserProfile as UserProfileType, UserUpdate } from '../types/memory';
 
 type UserProfileFormData = UserUpdate & { email: string };
 type ProfileSectionId = 'basic' | 'contact' | 'preferences' | 'security';
-type ProfileToast = { type: 'success' | 'error' };
 
 const DEFAULT_PROFILE: UserProfileType = {
   job_title: '',
-  department: 'Engineering',
+  department: '',
   bio: '',
   phone: '',
   location: '',
-  timezone: 'Pacific Time (US & Canada)',
+  timezone: '',
   avatar_url: '',
 };
 
@@ -80,11 +72,14 @@ const getScrollBehavior = (): ScrollBehavior =>
 export const UserProfile: React.FC = () => {
   const { i18n, t } = useTranslation();
   const { user, setUser } = useAuthStore();
+  const location = useLocation();
+  const navigate = useNavigate();
   const avatarUrlInputRef = useRef<HTMLInputElement>(null);
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [toast, setToast] = useState<ProfileToast | null>(null);
   const [activeSection, setActiveSection] = useState<ProfileSectionId>('basic');
+  // Remember which avatar URL failed to load so a broken avatar_url falls
+  // back to a local initial instead of an external avatar service.
+  const [avatarFailedFor, setAvatarFailedFor] = useState<string | null>(null);
   const [formData, setFormData] = useState<UserProfileFormData>({
     name: '',
     email: '',
@@ -96,25 +91,6 @@ export const UserProfile: React.FC = () => {
       setFormData(buildUserFormData(user));
     }
   }, [user]);
-
-  useEffect(
-    () => () => {
-      if (toastTimerRef.current) {
-        clearTimeout(toastTimerRef.current);
-      }
-    },
-    []
-  );
-
-  const showToast = (next: ProfileToast) => {
-    setToast(next);
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-    }
-    toastTimerRef.current = setTimeout(() => {
-      setToast(null);
-    }, 3000);
-  };
 
   const handleSectionClick = (sectionId: ProfileSectionId) => {
     setActiveSection(sectionId);
@@ -167,10 +143,9 @@ export const UserProfile: React.FC = () => {
       if (updatedUser.preferred_language) {
         void i18n.changeLanguage(updatedUser.preferred_language);
       }
-      showToast({ type: 'success' });
+      void message.success(t('user_profile.toast.success_title'));
     } catch (error) {
-      console.error('Failed to update profile:', error);
-      showToast({ type: 'error' });
+      void message.error(getErrorMessage(error) || t('user_profile.toast.error_desc'));
     } finally {
       setIsLoading(false);
     }
@@ -179,6 +154,20 @@ export const UserProfile: React.FC = () => {
   const isDirty = user
     ? JSON.stringify(formData) !== JSON.stringify(buildUserFormData(user))
     : false;
+
+  // Warn before the tab/browser is closed with unsaved changes.
+  useEffect(() => {
+    if (!isDirty) {
+      return;
+    }
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isDirty]);
 
   const handleCancel = () => {
     if (!user) return;
@@ -201,7 +190,37 @@ export const UserProfile: React.FC = () => {
 
   const profileCompletion = computeProfileCompletion(formData);
 
-  if (!user) return <div className="p-8 text-center">{t('common.loading')}</div>;
+  // Voluntary password change: return here after success (see
+  // ForceChangePassword's ?redirect= handling).
+  const changePasswordTarget = `/force-change-password?redirect=${encodeURIComponent(
+    location.pathname
+  )}`;
+
+  const handleChangePasswordClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!isDirty) {
+      return;
+    }
+    e.preventDefault();
+    void confirmAction({
+      title: t('user_profile.confirm.discard_title'),
+      content: t('user_profile.confirm.discard_content'),
+      okText: t('user_profile.confirm.discard_ok'),
+      cancelText: t('user_profile.buttons.cancel'),
+      danger: true,
+    }).then((confirmed) => {
+      if (confirmed) {
+        void navigate(changePasswordTarget);
+      }
+    });
+  };
+
+  if (!user) {
+    return (
+      <div className="mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8">
+        <Skeleton active avatar paragraph={{ rows: 6 }} />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8">
@@ -230,23 +249,33 @@ export const UserProfile: React.FC = () => {
             <div className="relative flex flex-col items-center px-6 pb-8">
               <div className="relative -mt-16 mb-4">
                 <div className="h-32 w-32 overflow-hidden rounded-full border-4 border-white bg-white shadow-md dark:border-surface-dark">
-                  <img
-                    alt={user.name}
-                    className="h-full w-full object-cover"
-                    src={
-                      formData.profile?.avatar_url ||
-                      `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=random`
-                    }
-                  />
+                  {formData.profile?.avatar_url &&
+                  avatarFailedFor !== formData.profile.avatar_url ? (
+                    <img
+                      alt={user.name}
+                      className="h-full w-full object-cover"
+                      src={formData.profile.avatar_url}
+                      onError={() => {
+                        setAvatarFailedFor(formData.profile?.avatar_url ?? null);
+                      }}
+                    />
+                  ) : (
+                    <div
+                      aria-hidden="true"
+                      className="flex h-full w-full items-center justify-center bg-primary/10 text-4xl font-semibold text-primary"
+                    >
+                      {user.name.trim().charAt(0).toUpperCase() || '?'}
+                    </div>
+                  )}
                 </div>
                 <button
                   type="button"
-                  aria-label={t('user_profile.avatar.change', 'Change avatar')}
-                  title={t('user_profile.avatar.change', 'Change avatar')}
+                  aria-label={t('user_profile.avatar.edit', 'Edit avatar URL')}
+                  title={t('user_profile.avatar.edit', 'Edit avatar URL')}
                   className="absolute bottom-1 right-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary text-white shadow-lg transition-colors hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                   onClick={focusAvatarUrlInput}
                 >
-                  <Camera size={14} />
+                  <Pencil size={14} />
                 </button>
               </div>
               <h2 className="text-xl font-bold text-slate-900 dark:text-white">{user.name}</h2>
@@ -314,6 +343,7 @@ export const UserProfile: React.FC = () => {
                       key={section.id}
                       type="button"
                       aria-controls={`profile-section-${section.id}`}
+                      aria-current={isActive ? 'location' : undefined}
                       className={
                         isActive
                           ? 'border-b-2 border-primary px-1 py-4 text-sm font-medium text-primary dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50'
@@ -374,6 +404,7 @@ export const UserProfile: React.FC = () => {
                           name="name"
                           type="text"
                           autoComplete="name"
+                          required
                           value={formData.name}
                           onChange={handleChange}
                         />
@@ -412,6 +443,7 @@ export const UserProfile: React.FC = () => {
                           value={formData.profile?.department}
                           onChange={handleChange}
                         >
+                          <option value="">{t('user_profile.form.not_set', 'Not set')}</option>
                           <option value="Engineering">
                             {t('user_profile.basic.departments.engineering', 'Engineering')}
                           </option>
@@ -571,6 +603,7 @@ export const UserProfile: React.FC = () => {
                           value={formData.profile?.timezone}
                           onChange={handleChange}
                         >
+                          <option value="">{t('user_profile.form.not_set', 'Not set')}</option>
                           <option value="Pacific Time (US & Canada)">
                             {t(
                               'user_profile.preferences.timezones.pacific',
@@ -612,7 +645,8 @@ export const UserProfile: React.FC = () => {
                       </div>
                     </div>
                     <Link
-                      to="/force-change-password"
+                      to={changePasswordTarget}
+                      onClick={handleChangePasswordClick}
                       className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                     >
                       {t('user_profile.security.change_password')}
@@ -643,55 +677,6 @@ export const UserProfile: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* Toast Notification */}
-      {toast && (
-        <div className="pointer-events-none fixed inset-0 flex items-end px-4 py-6 sm:items-start sm:p-6 z-50">
-          <div className="flex w-full flex-col items-center space-y-4 sm:items-end">
-            <div
-              role={toast.type === 'error' ? 'alert' : 'status'}
-              aria-live={toast.type === 'error' ? 'assertive' : 'polite'}
-              className="pointer-events-auto w-full max-w-sm overflow-hidden rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-surface-dark dark:ring-white dark:ring-opacity-10 transform transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 ease-out translate-y-0 opacity-100 motion-reduce:transition-none"
-            >
-              <div className="p-4">
-                <div className="flex items-start">
-                  <div className="flex-shrink-0">
-                    {toast.type === 'error' ? (
-                      <AlertCircle size={16} className="text-red-400" />
-                    ) : (
-                      <CheckCircle size={16} className="text-green-400" />
-                    )}
-                  </div>
-                  <div className="ml-3 w-0 flex-1 pt-0.5">
-                    <p className="text-sm font-medium text-slate-900 dark:text-white">
-                      {toast.type === 'error'
-                        ? t('user_profile.toast.error_title')
-                        : t('user_profile.toast.success_title')}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                      {toast.type === 'error'
-                        ? t('user_profile.toast.error_desc')
-                        : t('user_profile.toast.success_desc')}
-                    </p>
-                  </div>
-                  <div className="ml-4 flex flex-shrink-0">
-                    <button
-                      type="button"
-                      className="inline-flex rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 dark:bg-surface-dark dark:hover:text-gray-300"
-                      onClick={() => {
-                        setToast(null);
-                      }}
-                    >
-                      <span className="sr-only">{t('common.close', 'Close')}</span>
-                      <X size={14} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

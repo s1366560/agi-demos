@@ -96,6 +96,16 @@ export interface MessageAreaRootProps {
   onSuggestionSelect?: ((suggestion: string) => void) | undefined;
   /** Callback when an agent tool card selects a child session */
   onAgentSessionSelect?: ((sessionId: string) => void) | undefined;
+  /** Callback when user clicks Retry on an assistant message */
+  onRetryMessage?: ((event: TimelineEvent) => void) | undefined;
+  /** Callback when user clicks Edit on a user message */
+  onEditMessage?: ((event: TimelineEvent) => void) | undefined;
+  /** Callback when user clicks Delete on a user message */
+  onDeleteMessage?: ((event: TimelineEvent) => void) | undefined;
+  /** Callback when user clicks Reply on a message */
+  onReplyMessage?: ((event: TimelineEvent) => void) | undefined;
+  /** Whether loading earlier messages failed (shows inline retry) */
+  loadEarlierError?: boolean | undefined;
   /** Children for compound component pattern */
   children?: React.ReactNode | undefined;
 }

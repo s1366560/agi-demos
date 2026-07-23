@@ -16,7 +16,4 @@ export type { RemoteDesktopViewerProps } from './RemoteDesktopViewer';
 export { KasmVNCViewer } from './KasmVNCViewer';
 export type { KasmVNCViewerProps } from './KasmVNCViewer';
 
-export { SandboxControlPanel } from './SandboxControlPanel';
-export type { SandboxControlPanelProps } from './SandboxControlPanel';
-
 export { SandboxStatusIndicator } from './SandboxStatusIndicator';

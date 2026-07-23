@@ -3,7 +3,14 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, Link } from 'react-router-dom';
 
-import { AlertCircle, ArrowRight, Brain, Building2, Loader2 } from 'lucide-react';
+import { ArrowRight, Brain, Loader2 } from 'lucide-react';
+
+import {
+  DEFAULT_TENANT_CREATE_VALUES,
+  TenantCreateForm,
+} from '@/components/tenant/TenantCreateForm';
+import type { TenantCreateFormValues } from '@/components/tenant/TenantCreateForm';
+import { useLazyMessage } from '@/components/ui/lazyAntd';
 
 import { useTenantStore } from '../../stores/tenant';
 import { confirmAction } from '../../utils/confirmAction';
@@ -12,13 +19,10 @@ import { logger } from '../../utils/logger';
 export const NewTenant: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const message = useLazyMessage();
   const { createTenant, isLoading, error } = useTenantStore();
 
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    plan: 'free',
-  });
+  const [formData, setFormData] = useState<TenantCreateFormValues>(DEFAULT_TENANT_CREATE_VALUES);
 
   const isDirty = formData.name.trim() !== '' || formData.description.trim() !== '';
 
@@ -33,14 +37,14 @@ export const NewTenant: React.FC = () => {
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (values: TenantCreateFormValues) => {
     try {
       await createTenant({
-        name: formData.name,
-        description: formData.description,
-        plan: formData.plan,
+        name: values.name,
+        description: values.description,
+        plan: values.plan,
       });
+      message?.success(t('tenant.create_page.success', { defaultValue: 'Organization created' }));
       void navigate('/tenant');
     } catch (err) {
       logger.error('Failed to create tenant', err);
@@ -85,118 +89,35 @@ export const NewTenant: React.FC = () => {
               </div>
             </div>
 
-            {error && (
-              <div
-                role="alert"
-                className="mx-8 mb-4 p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm border border-red-200 dark:border-red-800 flex items-center gap-2"
+            <div className="p-8 pt-2">
+              <TenantCreateForm
+                values={formData}
+                onChange={setFormData}
+                onSubmit={(values) => {
+                  void handleSubmit(values);
+                }}
+                showPlan
+                isLoading={isLoading}
+                error={error}
               >
-                <AlertCircle size={16} aria-hidden="true" />
-                {error}
-              </div>
-            )}
-
-            <form
-              onSubmit={(event) => {
-                void handleSubmit(event);
-              }}
-              className="p-8 pt-2 flex flex-col gap-6"
-            >
-              <div className="space-y-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                  {t('tenant.create_page.org_details')}
-                </h3>
-
-                <label className="flex flex-col w-full">
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">
-                    {t('tenant.create_page.name')} <span className="text-red-500">*</span>
-                  </span>
-                  <div className="relative group">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                      <Building2 size={20} />
-                    </div>
-                    <input
-                      required
-                      name="name"
-                      autoComplete="organization"
-                      spellCheck={false}
-                      value={formData.name}
-                      onChange={(e) => {
-                        setFormData({ ...formData, name: e.target.value });
-                      }}
-                      className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary pl-10 h-12 text-sm placeholder:text-slate-400 transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none"
-                      placeholder={t('tenant.create_page.name_placeholder', {
-                        defaultValue: 'e.g. Acme Corp',
-                      })}
-                      type="text"
-                    />
-                  </div>
-                </label>
-
-                <label className="flex flex-col w-full">
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">
-                    {t('tenant.create_page.description', { defaultValue: 'Description' })}
-                  </span>
-                  <textarea
-                    rows={3}
-                    value={formData.description}
-                    onChange={(e) => {
-                      setFormData({ ...formData, description: e.target.value });
-                    }}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary p-3 text-sm placeholder:text-slate-400 transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none resize-none"
-                    placeholder={t('tenant.create_page.description_placeholder', {
-                      defaultValue: 'Briefly describe your organization…',
-                    })}
-                  />
-                </label>
-
-                <label className="flex flex-col w-full">
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">
-                    {t('tenant.create_page.plan', { defaultValue: 'Plan' })}
-                  </span>
-                  <select
-                    value={formData.plan}
-                    onChange={(e) => {
-                      setFormData({ ...formData, plan: e.target.value });
-                    }}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary h-12 px-3 text-sm outline-none"
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={isLoading || !formData.name.trim()}
+                    className="w-full flex items-center justify-center h-12 px-6 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold text-sm tracking-wide shadow-lg shadow-primary/25 transition-[color,background-color,border-color,box-shadow,opacity] disabled:opacity-70 disabled:cursor-not-allowed"
                   >
-                    <option value="free">
-                      {t('tenant.create_page.plan_options.free', { defaultValue: 'Free Starter' })}
-                    </option>
-                    <option value="basic">
-                      {t('tenant.create_page.plan_options.basic', { defaultValue: 'Basic Team' })}
-                    </option>
-                    <option value="premium">
-                      {t('tenant.create_page.plan_options.premium', {
-                        defaultValue: 'Premium Business',
-                      })}
-                    </option>
-                    <option value="enterprise">
-                      {t('tenant.create_page.plan_options.enterprise', {
-                        defaultValue: 'Enterprise',
-                      })}
-                    </option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={isLoading || !formData.name.trim()}
-                  className="w-full flex items-center justify-center h-12 px-6 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold text-sm tracking-wide shadow-lg shadow-primary/25 transition-[color,background-color,border-color,box-shadow,opacity] disabled:opacity-70 disabled:cursor-not-allowed"
-                >
-                  {isLoading ? (
-                    <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />
-                  ) : (
-                    <>
-                      {t('tenant.create_page.submit')}
-                      <ArrowRight size={16} className="ml-2" />
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
+                    {isLoading ? (
+                      <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />
+                    ) : (
+                      <>
+                        {t('tenant.create_page.submit')}
+                        <ArrowRight size={16} className="ml-2" />
+                      </>
+                    )}
+                  </button>
+                </div>
+              </TenantCreateForm>
+            </div>
           </div>
         </div>
       </main>

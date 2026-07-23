@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Table, Input, Tag, Space } from 'antd';
 import { Plus, RefreshCw, Search as SearchIcon } from 'lucide-react';
 
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import {
   LazyAlert,
   LazyButton,
@@ -35,10 +36,15 @@ const PAGE_SIZE = 20;
 export const InstanceList: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const messageApi = useLazyMessage();
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [page, setPage] = useState(1);
+  // Restore search/status/page from the URL so shared or reloaded links keep the view
+  const [search, setSearch] = useState(searchParams.get('search') ?? '');
+  const [statusFilter, setStatusFilter] = useState<string>(searchParams.get('status') ?? 'all');
+  const [page, setPage] = useState(() => {
+    const pageParam = Number(searchParams.get('page'));
+    return Number.isInteger(pageParam) && pageParam > 0 ? pageParam : 1;
+  });
 
   // Debounce search and filter server-side so results cover all pages
   const debouncedSearch = useDebounce(search, 400);
@@ -74,6 +80,29 @@ export const InstanceList: React.FC = () => {
   useEffect(() => {
     void loadPage(page);
   }, [loadPage, page]);
+
+  // Reflect search/status/page in the URL so views survive reload and sharing
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (page > 1) {
+      next.set('page', String(page));
+    } else {
+      next.delete('page');
+    }
+    if (search) {
+      next.set('search', search);
+    } else {
+      next.delete('search');
+    }
+    if (statusFilter !== 'all') {
+      next.set('status', statusFilter);
+    } else {
+      next.delete('status');
+    }
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [page, search, statusFilter, searchParams, setSearchParams]);
 
   useEffect(() => {
     return () => {
@@ -304,11 +333,13 @@ export const InstanceList: React.FC = () => {
             <span className="flex items-center gap-1">
               {t('tenant.instances.stats.running')}:{' '}
               <span className="font-semibold text-success">{runningCount}</span>
+              <span className="text-xs">{t('tenant.instances.stats.pageNote', '(this page)')}</span>
             </span>
             <span className="hidden text-border-light dark:text-border-dark sm:inline">|</span>
             <span className="flex items-center gap-1">
               {t('tenant.instances.stats.stopped')}:{' '}
               <span className="font-semibold text-text-muted">{stoppedCount}</span>
+              <span className="text-xs">{t('tenant.instances.stats.pageNote', '(this page)')}</span>
             </span>
           </section>
         </div>
@@ -329,6 +360,7 @@ export const InstanceList: React.FC = () => {
             <Search
               placeholder={t('tenant.instances.searchPlaceholder')}
               aria-label={t('tenant.instances.searchPlaceholder')}
+              value={search}
               allowClear
               enterButton={
                 <>
@@ -389,16 +421,20 @@ export const InstanceList: React.FC = () => {
           </div>
         )}
 
-        <Table
-          columns={columns}
-          dataSource={instances}
-          rowKey="id"
-          loading={isLoading}
-          scroll={{ x: 'max-content' }}
-          className="max-w-full"
-          locale={{ emptyText: t('tenant.instances.emptyText', 'No instances found') }}
-          pagination={tablePagination}
-        />
+        {isLoading && instances.length === 0 ? (
+          <SkeletonLoader type="table" rows={8} />
+        ) : (
+          <Table
+            columns={columns}
+            dataSource={instances}
+            rowKey="id"
+            loading={isLoading}
+            scroll={{ x: 'max-content' }}
+            className="max-w-full"
+            locale={{ emptyText: t('tenant.instances.emptyText', 'No instances found') }}
+            pagination={tablePagination}
+          />
+        )}
       </div>
     </div>
   );

@@ -16,12 +16,15 @@ import { providerAPI } from '@/services/api';
 import { instanceService } from '@/services/instanceService';
 import type { InstanceLlmConfigUpdate } from '@/services/instanceService';
 
+import { setUnsavedChanges } from '@/utils/unsavedChanges';
+
 import {
   useLazyMessage,
   LazyPopconfirm,
   LazySpin,
   LazyButton,
   LazySelect,
+  LazyAlert,
 } from '@/components/ui/lazyAntd';
 
 import {
@@ -54,6 +57,8 @@ export const InstanceSettings: React.FC = () => {
   const [isDirty, setIsDirty] = useState(false);
   const lastSyncedId = useRef<string | null>(null);
   const detailRequestId = useRef(0);
+  const [detailLoadError, setDetailLoadError] = useState(false);
+  const [detailRetryKey, setDetailRetryKey] = useState(0);
 
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [llmProviderId, setLlmProviderId] = useState<string | undefined>(undefined);
@@ -63,6 +68,10 @@ export const InstanceSettings: React.FC = () => {
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [llmConfigLoading, setLlmConfigLoading] = useState(false);
   const [llmConfigSaving, setLlmConfigSaving] = useState(false);
+  const [providersLoadError, setProvidersLoadError] = useState(false);
+  const [providersRetryKey, setProvidersRetryKey] = useState(0);
+  const [modelsLoadError, setModelsLoadError] = useState(false);
+  const [modelsRetryKey, setModelsRetryKey] = useState(0);
   const providersRequestId = useRef(0);
   const llmConfigRequestId = useRef(0);
   const modelsRequestId = useRef(0);
@@ -75,6 +84,7 @@ export const InstanceSettings: React.FC = () => {
     }
 
     const requestId = ++detailRequestId.current;
+    setDetailLoadError(false);
     getInstance(instanceId)
       .then((inst) => {
         if (detailRequestId.current !== requestId) return;
@@ -90,12 +100,13 @@ export const InstanceSettings: React.FC = () => {
       .catch((err: unknown) => {
         if (detailRequestId.current !== requestId) return;
         console.error('Failed to get instance details:', err);
+        setDetailLoadError(true);
       });
 
     return () => {
       detailRequestId.current += 1;
     };
-  }, [instanceId, getInstance, setCurrentInstance]);
+  }, [instanceId, getInstance, setCurrentInstance, detailRetryKey]);
 
   useEffect(() => {
     return () => {
@@ -122,8 +133,17 @@ export const InstanceSettings: React.FC = () => {
     };
   }, [isDirty]);
 
+  // Publish dirty state so the instance layout can warn before in-app navigation
+  useEffect(() => {
+    setUnsavedChanges(isDirty);
+    return () => {
+      setUnsavedChanges(false);
+    };
+  }, [isDirty]);
+
   useEffect(() => {
     const requestId = ++providersRequestId.current;
+    setProvidersLoadError(false);
     providerAPI
       .list({ include_inactive: false })
       .then((result) => {
@@ -133,12 +153,13 @@ export const InstanceSettings: React.FC = () => {
       .catch((err: unknown) => {
         if (providersRequestId.current !== requestId) return;
         console.error('Failed to list providers:', err);
+        setProvidersLoadError(true);
       });
 
     return () => {
       providersRequestId.current += 1;
     };
-  }, []);
+  }, [providersRetryKey]);
 
   useEffect(() => {
     if (!instanceId) {
@@ -179,6 +200,7 @@ export const InstanceSettings: React.FC = () => {
     if (!llmProviderId) {
       modelsRequestId.current += 1;
       setAvailableModels([]);
+      setModelsLoadError(false);
       return;
     }
     const selectedProvider = providers.find((p) => p.id === llmProviderId);
@@ -189,6 +211,7 @@ export const InstanceSettings: React.FC = () => {
     }
 
     const requestId = ++modelsRequestId.current;
+    setModelsLoadError(false);
     providerAPI
       .listModels(selectedProvider.provider_type)
       .then((res) => {
@@ -199,12 +222,13 @@ export const InstanceSettings: React.FC = () => {
         if (modelsRequestId.current !== requestId) return;
         console.error('Failed to list models:', err);
         setAvailableModels([]);
+        setModelsLoadError(true);
       });
 
     return () => {
       modelsRequestId.current += 1;
     };
-  }, [llmProviderId, providers]);
+  }, [llmProviderId, providers, modelsRetryKey]);
 
   const handleNameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setName(e.target.value);
@@ -289,6 +313,25 @@ export const InstanceSettings: React.FC = () => {
   }
 
   if (!detail) {
+    if (detailLoadError) {
+      return (
+        <div className="flex flex-col items-center justify-center gap-4 h-64">
+          <LazyAlert
+            type="error"
+            showIcon
+            message={t('tenant.instances.loadFailed', 'Failed to load instances')}
+            className="max-w-md"
+          />
+          <LazyButton
+            onClick={() => {
+              setDetailRetryKey((key) => key + 1);
+            }}
+          >
+            {t('common.retry', 'Retry')}
+          </LazyButton>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center justify-center h-64">
         <p className="text-text-muted">{t('common.notFound')}</p>
@@ -375,6 +418,26 @@ export const InstanceSettings: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-5">
+            {providersLoadError && (
+              <LazyAlert
+                type="error"
+                showIcon
+                message={t(
+                  'tenant.instances.settings.providersLoadError',
+                  'Failed to load providers'
+                )}
+                action={
+                  <LazyButton
+                    size="small"
+                    onClick={() => {
+                      setProvidersRetryKey((key) => key + 1);
+                    }}
+                  >
+                    {t('common.retry', 'Retry')}
+                  </LazyButton>
+                }
+              />
+            )}
             <div>
               <label
                 htmlFor="llm-provider"
@@ -416,6 +479,28 @@ export const InstanceSettings: React.FC = () => {
                   value: m,
                 }))}
               />
+              {modelsLoadError && (
+                <div className="mt-2">
+                  <LazyAlert
+                    type="error"
+                    showIcon
+                    message={t(
+                      'tenant.instances.settings.modelsLoadError',
+                      'Failed to load models'
+                    )}
+                    action={
+                      <LazyButton
+                        size="small"
+                        onClick={() => {
+                          setModelsRetryKey((key) => key + 1);
+                        }}
+                      >
+                        {t('common.retry', 'Retry')}
+                      </LazyButton>
+                    }
+                  />
+                </div>
+              )}
             </div>
 
             <div>
@@ -427,6 +512,7 @@ export const InstanceSettings: React.FC = () => {
               </label>
               <Input.Password
                 id="llm-api-key"
+                autoComplete="new-password"
                 value={llmApiKeyOverride}
                 onChange={(e) => {
                   setLlmApiKeyOverride(e.target.value);

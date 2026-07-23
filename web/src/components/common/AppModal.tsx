@@ -16,7 +16,6 @@
 import React, { useCallback, useEffect, useId, useRef } from 'react';
 
 import { createPortal } from 'react-dom';
-
 import { useTranslation } from 'react-i18next';
 
 import { X } from 'lucide-react';
@@ -148,6 +147,16 @@ export const AppModal: React.FC<AppModalProps> = ({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (!closeOnEscape) return;
+        // Let an open AntD overlay (Select/DatePicker/Dropdown/...) consume the
+        // Escape first so it closes the overlay instead of the whole modal.
+        const overlayOpen = document.querySelector(
+          '.ant-select-dropdown:not(.ant-select-dropdown-hidden), ' +
+            '.ant-picker-dropdown:not(.ant-picker-dropdown-hidden), ' +
+            '.ant-dropdown:not(.ant-dropdown-hidden), ' +
+            '.ant-cascader-menus, ' +
+            '.ant-popover:not(.ant-popover-hidden)'
+        );
+        if (overlayOpen) return;
         e.stopPropagation();
         attemptClose();
         return;

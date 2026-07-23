@@ -134,6 +134,7 @@ const initialMessage: WorkspaceMessage = {
 
 const config: DesktopRuntimeConfig = {
   apiBaseUrl: 'http://qa.memstack.local',
+  deviceAuthorizationBaseUrl: 'http://qa.memstack.local',
   apiKey: 'qa-session',
   localApiToken: 'qa-launch-capability',
   tenantId: 'northstar',

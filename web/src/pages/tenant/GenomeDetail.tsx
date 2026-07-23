@@ -20,9 +20,15 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { ArchiveX, ArrowLeft, Download, Edit2, Star, Trash2, UploadCloud } from 'lucide-react';
+import { ArrowLeft, Download, Edit2, Star, Trash2 } from 'lucide-react';
 
 import { formatDateTime } from '@/utils/date';
+
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
+import { InstallEntityModal } from '@/components/marketplace/InstallEntityModal';
+import { PublishToggleButton } from '@/components/marketplace/PublishToggleButton';
+import { RateEntityModal } from '@/components/marketplace/RateEntityModal';
+import { useDeleteEntityConfirm } from '@/components/marketplace/useDeleteEntityConfirm';
 
 import {
   useCurrentGenome,
@@ -41,21 +47,10 @@ import {
   showGeneActionError,
   splitCsv,
 } from './utils/geneFormUtils';
-import { InstanceSelect } from './utils/InstanceSelect';
 
 import type { ContentVisibilityValue, GenomeUpdate } from '../../services/geneMarketService';
 
 const { Title, Text, Paragraph } = Typography;
-
-interface RateFormValues {
-  score: number;
-  comment?: string;
-}
-
-interface InstallGenomeFormValues {
-  instance_id: string;
-  config_override?: string;
-}
 
 interface EditGenomeFormValues {
   name: string;
@@ -94,16 +89,10 @@ export const GenomeDetail: React.FC = () => {
     updateGenome,
     installGenome,
   } = useGeneMarketActions();
-  const [isPublishSubmitting, setIsPublishSubmitting] = useState(false);
   const [isInstallModalVisible, setIsInstallModalVisible] = useState(false);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [isRateModalVisible, setIsRateModalVisible] = useState(false);
-  const [isInstallSubmitting, setIsInstallSubmitting] = useState(false);
   const [isEditSubmitting, setIsEditSubmitting] = useState(false);
-  const [isRateSubmitting, setIsRateSubmitting] = useState(false);
-  const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
-  const [installForm] = Form.useForm<InstallGenomeFormValues>();
-  const [rateForm] = Form.useForm<RateFormValues>();
   const [editForm] = Form.useForm<EditGenomeFormValues>();
   const genomeGeneSlugKey = genome ? genome.gene_slugs.join('\n') : null;
   const genomeGeneSlugs = useMemo(() => {
@@ -114,6 +103,14 @@ export const GenomeDetail: React.FC = () => {
   }, [genomeGeneSlugKey]);
 
   const [reloadKey, setReloadKey] = useState(0);
+
+  const { isDeleting, confirmDelete } = useDeleteEntityConfirm({
+    entityKind: 'genome',
+    deleteEntity: deleteGenome,
+    onDeleted: () => {
+      void navigate(-1);
+    },
+  });
 
   useEffect(() => {
     if (genomeId && tenantId) {
@@ -141,147 +138,11 @@ export const GenomeDetail: React.FC = () => {
     return genomeGeneSlugs.filter((slug) => !availableSlugs.has(slug));
   }, [genomeGeneSlugKey, genomeGeneSlugs, genomeGenes]);
 
-  const handleInstallSubmit = async () => {
-    const values = await installForm.validateFields();
+  const handleInstall = async (instanceId: string, config: Record<string, unknown>) => {
     if (!genomeId || !tenantId) {
       return;
     }
-
-    let configOverride: Record<string, unknown> = {};
-    if (values.config_override) {
-      try {
-        configOverride = JSON.parse(values.config_override) as Record<string, unknown>;
-      } catch {
-        message.error(t('tenant.genes.invalidJson', 'Invalid JSON format'));
-        return;
-      }
-    }
-
-    setIsInstallSubmitting(true);
-    try {
-      await installGenome(
-        values.instance_id,
-        genomeId,
-        { config: configOverride },
-        { tenant_id: tenantId }
-      );
-      message.success(t('tenant.genomeDetail.installSuccess', 'Genome installed successfully'));
-      setIsInstallModalVisible(false);
-      installForm.resetFields();
-    } catch {
-      showGeneActionError(t('tenant.genomeDetail.installError', 'Failed to install genome'));
-    } finally {
-      setIsInstallSubmitting(false);
-    }
-  };
-
-  const runPublishToggle = async () => {
-    if (!genomeId || !tenantId || !genome) {
-      return;
-    }
-    setIsPublishSubmitting(true);
-    try {
-      if (genome.is_published) {
-        await unpublishGenome(genomeId, { tenant_id: tenantId });
-        message.success(
-          t('tenant.genomeDetail.unpublishSuccess', 'Genome unpublished successfully')
-        );
-      } else {
-        await publishGenome(genomeId, { tenant_id: tenantId });
-        message.success(t('tenant.genomeDetail.publishSuccess', 'Genome published successfully'));
-      }
-    } catch {
-      showGeneActionError(
-        genome.is_published
-          ? t('tenant.genomeDetail.unpublishError', 'Failed to unpublish genome')
-          : t('tenant.genomeDetail.publishError', 'Failed to publish genome')
-      );
-    } finally {
-      setIsPublishSubmitting(false);
-    }
-  };
-
-  const handlePublishToggle = () => {
-    if (!genome) {
-      return;
-    }
-    if (!genome.is_published) {
-      void runPublishToggle();
-      return;
-    }
-    // Unpublishing removes marketplace visibility — confirm first
-    Modal.confirm({
-      title: t('tenant.genomeDetail.unpublishConfirmTitle', {
-        name: genome.name,
-        defaultValue: 'Unpublish {{name}}?',
-      }),
-      content: t(
-        'tenant.genomeDetail.unpublishConfirmContent',
-        'This removes the genome from the public marketplace. Installed copies keep working.'
-      ),
-      okText: t('tenant.genes.unpublishAction', 'Unpublish'),
-      okType: 'danger',
-      cancelText: t('common.cancel', 'Cancel'),
-      onOk: runPublishToggle,
-    });
-  };
-
-  const handleRateSubmit = async () => {
-    const values = await rateForm.validateFields();
-    if (!genomeId || !tenantId) {
-      return;
-    }
-
-    setIsRateSubmitting(true);
-    try {
-      await rateGenome(
-        genomeId,
-        {
-          rating: values.score,
-          comment: values.comment ?? null,
-        },
-        { tenant_id: tenantId }
-      );
-      message.success(t('tenant.genomeDetail.rateSuccess', 'Genome rating submitted successfully'));
-      setIsRateModalVisible(false);
-      rateForm.resetFields();
-    } catch {
-      showGeneActionError(t('tenant.genomeDetail.rateError', 'Failed to submit genome rating'));
-    } finally {
-      setIsRateSubmitting(false);
-    }
-  };
-
-  const handleDeleteGenome = () => {
-    if (!genomeId || !tenantId || !genome) {
-      return;
-    }
-
-    Modal.confirm({
-      title: t('tenant.genomeDetail.deleteConfirmTitle', {
-        name: genome.name,
-        defaultValue: 'Delete {{name}}?',
-      }),
-      content: t(
-        'tenant.genomeDetail.deleteConfirmContent',
-        'This removes the genome from the marketplace and cannot be undone.'
-      ),
-      okText: t('common.delete', 'Delete'),
-      okType: 'danger',
-      cancelText: t('common.cancel', 'Cancel'),
-      onOk: async () => {
-        setIsDeleteSubmitting(true);
-        try {
-          await deleteGenome(genomeId, { tenant_id: tenantId });
-          message.success(t('tenant.genomeDetail.deleteSuccess', 'Genome deleted successfully'));
-          setIsDeleteSubmitting(false);
-          void navigate(-1);
-        } catch {
-          showGeneActionError(t('tenant.genomeDetail.deleteError', 'Failed to delete genome'));
-          setIsDeleteSubmitting(false);
-        }
-      },
-    });
+    await installGenome(instanceId, genomeId, { config }, { tenant_id: tenantId });
   };
 
   const openEditModal = () => {
@@ -351,8 +212,8 @@ export const GenomeDetail: React.FC = () => {
 
   if (loading && !genome) {
     return (
-      <div className="flex justify-center p-12">
-        <Spin size="large" />
+      <div className="max-w-4xl mx-auto w-full">
+        <SkeletonLoader type="form" />
       </div>
     );
   }
@@ -394,28 +255,37 @@ export const GenomeDetail: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto w-full flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            icon={<ArrowLeft size={16} />}
-            onClick={() => {
-              void navigate(-1);
-            }}
-          >
-            {t('common.back', 'Back')}
-          </Button>
-          <Title level={3} className="!mb-0">
-            {genome.name}
-          </Title>
-          <Space size={[4, 4]} wrap>
-            <Tag color={genome.is_published ? 'green' : 'default'}>
-              {genome.is_published
-                ? t('tenant.genes.statusPublished', 'Published')
-                : t('tenant.genes.statusDraft', 'Draft')}
-            </Tag>
-            <Tag color={visibilityTagColor(genome.visibility)}>
-              {visibilityLabel(genome.visibility, t)}
-            </Tag>
-          </Space>
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              icon={<ArrowLeft size={16} />}
+              onClick={() => {
+                void navigate(-1);
+              }}
+            >
+              {t('common.back', 'Back')}
+            </Button>
+            <Title level={3} className="!mb-0">
+              {genome.name}
+            </Title>
+            <Space size={[4, 4]} wrap>
+              <Tag color={genome.is_published ? 'green' : 'default'}>
+                {genome.is_published
+                  ? t('tenant.genes.statusPublished', 'Published')
+                  : t('tenant.genes.statusDraft', 'Draft')}
+              </Tag>
+              <Tag color={visibilityTagColor(genome.visibility)}>
+                {visibilityLabel(genome.visibility, t)}
+              </Tag>
+            </Space>
+          </div>
+          {genome.updated_at ? (
+            <Text type="secondary" className="text-xs">
+              {t('tenant.genes.lastUpdated', 'Last updated {{time}}', {
+                time: formatDateTime(genome.updated_at),
+              })}
+            </Text>
+          ) : null}
         </div>
         <Space wrap>
           <Button onClick={openEditModal} icon={<Edit2 className="w-4 h-4" />}>
@@ -430,22 +300,14 @@ export const GenomeDetail: React.FC = () => {
           >
             {t('tenant.genomeDetail.installAction', 'Install')}
           </Button>
-          <Button
-            onClick={handlePublishToggle}
-            loading={isPublishSubmitting}
-            danger={genome.is_published}
-            icon={
-              genome.is_published ? (
-                <ArchiveX className="w-4 h-4" />
-              ) : (
-                <UploadCloud className="w-4 h-4" />
-              )
-            }
-          >
-            {genome.is_published
-              ? t('tenant.genes.unpublishAction', 'Unpublish')
-              : t('tenant.genes.publishAction', 'Publish')}
-          </Button>
+          <PublishToggleButton
+            entityKind="genome"
+            entityId={genomeId}
+            tenantId={tenantId}
+            entityName={genome.name}
+            isPublished={genome.is_published}
+            actions={{ publish: publishGenome, unpublish: unpublishGenome }}
+          />
           <Button
             onClick={() => {
               setIsRateModalVisible(true);
@@ -456,8 +318,10 @@ export const GenomeDetail: React.FC = () => {
           </Button>
           <Button
             danger
-            loading={isDeleteSubmitting}
-            onClick={handleDeleteGenome}
+            loading={isDeleting}
+            onClick={() => {
+              confirmDelete({ entityId: genomeId, tenantId, entityName: genome.name });
+            }}
             icon={<Trash2 className="w-4 h-4" />}
           >
             {t('tenant.genomeDetail.deleteAction', 'Delete')}
@@ -485,6 +349,11 @@ export const GenomeDetail: React.FC = () => {
           <Descriptions.Item label={t('tenant.genomeDetail.fields.createdAt', 'Created At')}>
             {formatDateTime(genome.created_at)}
           </Descriptions.Item>
+          {genome.updated_at ? (
+            <Descriptions.Item label={t('tenant.genomeDetail.fields.updatedAt', 'Updated At')}>
+              {formatDateTime(genome.updated_at)}
+            </Descriptions.Item>
+          ) : null}
           <Descriptions.Item
             label={t('tenant.genomeDetail.fields.description', 'Description')}
             span={2}
@@ -570,50 +439,14 @@ export const GenomeDetail: React.FC = () => {
         </Card>
       )}
 
-      <Modal
-        title={t('tenant.genomeDetail.installGenome', 'Install Genome')}
+      <InstallEntityModal
         open={isInstallModalVisible}
-        onOk={() => {
-          void handleInstallSubmit();
-        }}
-        onCancel={() => {
+        onClose={() => {
           setIsInstallModalVisible(false);
-          installForm.resetFields();
         }}
-        confirmLoading={isInstallSubmitting}
-        destroyOnHidden
-      >
-        <Form form={installForm} layout="vertical" className="mt-4">
-          <Form.Item
-            name="instance_id"
-            label={t('tenant.genes.instanceId', 'Instance ID')}
-            rules={[
-              {
-                required: true,
-                message: t('tenant.genes.instanceIdRequired', 'Instance ID is required'),
-              },
-            ]}
-          >
-            <InstanceSelect
-              placeholder={t('tenant.genes.instanceIdPlaceholder', 'Enter instance ID')}
-            />
-          </Form.Item>
-          <Form.Item
-            name="config_override"
-            label={t('tenant.genes.configOverride', 'Config Override (JSON)')}
-            tooltip={t(
-              'tenant.genomeDetail.installConfigTooltip',
-              'Optional JSON config applied to the genome install. Use gene slugs as keys for per-gene config.'
-            )}
-          >
-            <Input.TextArea
-              rows={4}
-              className="font-mono text-sm"
-              placeholder={t('tenant.genomeDetail.configOverridePlaceholder', '{"key": "value"}')}
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
+        entityKind="genome"
+        installEntity={handleInstall}
+      />
 
       <Modal
         title={t('tenant.genomeDetail.editGenome', 'Edit Genome')}
@@ -680,32 +513,16 @@ export const GenomeDetail: React.FC = () => {
         </Form>
       </Modal>
 
-      <Modal
-        title={t('tenant.genomeDetail.rateGenome', 'Rate Genome')}
+      <RateEntityModal
         open={isRateModalVisible}
-        onOk={() => {
-          void handleRateSubmit();
-        }}
-        onCancel={() => {
+        onClose={() => {
           setIsRateModalVisible(false);
-          rateForm.resetFields();
         }}
-        confirmLoading={isRateSubmitting}
-      >
-        <Form form={rateForm} layout="vertical" className="mt-4" initialValues={{ score: 5 }}>
-          <Form.Item
-            name="score"
-            label={t('tenant.genes.rating')}
-            rules={[{ required: true, message: t('tenant.genes.ratingRequired') }]}
-          >
-            <Rate allowHalf />
-          </Form.Item>
-
-          <Form.Item name="comment" label={t('tenant.genes.comment')}>
-            <Input.TextArea rows={4} placeholder={t('tenant.genes.commentPlaceholder')} />
-          </Form.Item>
-        </Form>
-      </Modal>
+        entityKind="genome"
+        entityId={genomeId}
+        tenantId={tenantId}
+        rateEntity={rateGenome}
+      />
     </div>
   );
 };

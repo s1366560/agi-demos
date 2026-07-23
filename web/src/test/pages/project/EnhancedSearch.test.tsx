@@ -9,11 +9,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { EnhancedSearch } from '../../../pages/project/EnhancedSearch';
 
-const { mockUseParams, mockUseProjectStore } = vi.hoisted(() => ({
+const { mockUseParams, mockUseProjectStore, mockUseSearchParams } = vi.hoisted(() => ({
   mockUseParams: vi.fn(() => ({ tenantId: 'tenant-1', projectId: 'test-project-1' })),
   mockUseProjectStore: vi.fn(() => ({
     currentProject: { tenant_id: 'tenant-1' },
   })),
+  mockUseSearchParams: vi.fn(() => [new URLSearchParams(), vi.fn()]),
 }));
 
 // Mock the dependencies
@@ -29,6 +30,7 @@ vi.mock('../../../services/graphService', () => ({
 
 vi.mock('react-router-dom', () => ({
   useParams: mockUseParams,
+  useSearchParams: mockUseSearchParams,
 }));
 
 vi.mock('react-i18next', () => ({

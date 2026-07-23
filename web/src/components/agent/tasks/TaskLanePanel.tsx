@@ -174,6 +174,11 @@ const LaneTaskRow = memo<{ task: AgentTask }>(({ task }) => {
       {task.priority !== 'medium' ? (
         <span
           className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${PRIORITY_DOT[task.priority] ?? ''}`}
+          role="img"
+          aria-label={t('agent.taskLanePanel.priorityTitle', {
+            defaultValue: '{{priority}} priority',
+            priority: task.priority,
+          })}
           title={t('agent.taskLanePanel.priorityTitle', {
             defaultValue: '{{priority}} priority',
             priority: task.priority,
@@ -269,7 +274,14 @@ export const TaskLanePanel = memo<TaskLanePanelProps>(({ tasks, conversationId }
           </span>
           <span>{pct}%</span>
         </div>
-        <div className="h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+        <div
+          className="h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"
+          role="progressbar"
+          aria-valuenow={pct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={t('agent.taskLanePanel.progressAria', 'Task completion progress')}
+        >
           <div
             className="h-full rounded-full bg-emerald-500 transition-[width] duration-500 dark:bg-emerald-400"
             style={{ width: `${String(pct)}%` }}

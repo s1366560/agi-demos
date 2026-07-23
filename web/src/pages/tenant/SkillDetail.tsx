@@ -9,7 +9,7 @@ import type { FC, ReactNode } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { Alert, Tag } from 'antd';
 import {
@@ -28,23 +28,30 @@ import {
   History,
   KeyRound,
   Pencil,
-  Play,
   RefreshCw,
   ShieldCheck,
   Wrench,
   XCircle,
 } from 'lucide-react';
 
+import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
 
 import { skillAPI } from '@/services/skillService';
 
 import { formatDateTime } from '@/utils/date';
+import {
+  downloadSkillPackage,
+  getSkillExportId,
+  getSkillSource,
+  isManagedSkill,
+  useSkillRollback,
+} from '@/utils/skillExport';
 
-import { EvolutionJobRow } from '@/components/skill/EvolutionJobRow';
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import { SkillModal } from '@/components/skill/SkillModal';
 import { SkillVersionList } from '@/components/skill/SkillVersionList';
-import { LazyEmpty, LazySpin, useLazyMessage } from '@/components/ui/lazyAntd';
+import { LazyEmpty, useLazyMessage } from '@/components/ui/lazyAntd';
 
 import { useMarkdownPlugins } from '../../components/agent/chat/markdownPlugins';
 import { safeMarkdownComponents } from '../../components/agent/chat/safeMarkdownComponents';
@@ -56,7 +63,6 @@ import type {
   SkillVersionResponse,
 } from '@/types/agent';
 
-type SkillSource = NonNullable<SkillResponse['source']>;
 type SkillContentMode = 'preview' | 'raw';
 type SkillDetailMode = 'preview' | 'manage' | 'report';
 type SkillPreviewFileKind = 'markdown' | 'text';
@@ -384,15 +390,6 @@ function InfoRow({
   );
 }
 
-function getSkillSource(skill: SkillResponse): SkillSource {
-  return skill.source ?? 'database';
-}
-
-function isManagedSkill(skill: SkillResponse): boolean {
-  const source = getSkillSource(skill);
-  return !skill.is_system_skill && (source === 'database' || source === 'hybrid');
-}
-
 function getSkillListPath(pathname: string): string {
   const segments = pathname.split('/').filter(Boolean);
   const skillsIndex = segments.lastIndexOf('skills');
@@ -402,6 +399,17 @@ function getSkillListPath(pathname: string): string {
   }
 
   return `/${segments.slice(0, skillsIndex + 1).join('/')}`;
+}
+
+function getSkillEvolutionPath(pathname: string): string {
+  const segments = pathname.split('/').filter(Boolean);
+  const skillsIndex = segments.lastIndexOf('skills');
+
+  if (skillsIndex === -1) {
+    return '/tenant/evolution';
+  }
+
+  return `/${segments.slice(0, skillsIndex).concat('evolution').join('/')}`;
 }
 
 function SkillContentViewer({
@@ -552,10 +560,8 @@ export const SkillDetail: FC = () => {
   const [versions, setVersions] = useState<SkillVersionResponse[]>([]);
   const [evolution, setEvolution] = useState<SkillEvolutionDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isEvolutionRunning, setIsEvolutionRunning] = useState(false);
-  const [processingEvolutionJobId, setProcessingEvolutionJobId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [rollbackVersion, setRollbackVersion] = useState<number | null>(null);
   const [contentMode, setContentMode] = useState<SkillContentMode>('preview');
   const [detailMode, setDetailMode] = useState<SkillDetailMode>('preview');
   const [resourceFiles, setResourceFiles] = useState<Record<string, string>>({});
@@ -570,6 +576,18 @@ export const SkillDetail: FC = () => {
   const skillSource = skill ? getSkillSource(skill) : 'database';
   const managed = skill ? isManagedSkill(skill) : false;
   const skillListPath = useMemo(() => getSkillListPath(location.pathname), [location.pathname]);
+  const skillEvolutionPath = useMemo(
+    () => getSkillEvolutionPath(location.pathname),
+    [location.pathname]
+  );
+  const projects = useProjectStore((state) => state.projects);
+  const listProjects = useProjectStore((state) => state.listProjects);
+  const projectNameById = useMemo(() => {
+    const tenantProjects = tenantId
+      ? projects.filter((project) => project.tenant_id === tenantId)
+      : [];
+    return new Map(tenantProjects.map((project) => [project.id, project.name]));
+  }, [projects, tenantId]);
   const previewFiles = useMemo<SkillPreviewFile[]>(() => {
     const skillContent = packageSkillContent || skill?.full_content || '';
     return [
@@ -614,6 +632,7 @@ export const SkillDetail: FC = () => {
 
     setIsLoading(true);
     setIsLoadingPackageFiles(true);
+    setLoadError(null);
     try {
       const nextSkill = await skillAPI.get(skillId, { tenant_id: tenantId });
       setSkill(nextSkill);
@@ -622,8 +641,9 @@ export const SkillDetail: FC = () => {
       setSelectedFilePath('SKILL.md');
 
       try {
-        const exportId = getSkillSource(nextSkill) === 'filesystem' ? nextSkill.name : nextSkill.id;
-        const exported = await skillAPI.exportPackage(exportId, { tenant_id: tenantId });
+        const exported = await skillAPI.exportPackage(getSkillExportId(nextSkill), {
+          tenant_id: tenantId,
+        });
         setPackageSkillContent(exported.skill_md_content);
         setResourceFiles(
           Object.fromEntries(
@@ -635,6 +655,9 @@ export const SkillDetail: FC = () => {
         );
       } catch {
         setResourceFiles({});
+        message?.warning(
+          t('tenant.skills.detail.packageFilesLoadFailed', 'Failed to load package files')
+        );
       } finally {
         setIsLoadingPackageFiles(false);
       }
@@ -660,6 +683,7 @@ export const SkillDetail: FC = () => {
       setSkill(null);
       setPackageSkillContent('');
       setResourceFiles({});
+      setLoadError(t('tenant.skills.detail.loadFailed'));
       message?.error(t('tenant.skills.detail.loadFailed'));
     } finally {
       setIsLoading(false);
@@ -670,6 +694,14 @@ export const SkillDetail: FC = () => {
   useEffect(() => {
     void loadSkill();
   }, [loadSkill]);
+
+  useEffect(() => {
+    if (!tenantId) {
+      return;
+    }
+
+    void listProjects(tenantId, { page_size: 100 }).catch(() => undefined);
+  }, [listProjects, tenantId]);
 
   useEffect(() => {
     setExpandedPreviewFolders(new Set(getPreviewDirectoryPaths(previewFileTree)));
@@ -692,17 +724,7 @@ export const SkillDetail: FC = () => {
       return;
     }
     try {
-      const exportId = getSkillSource(skill) === 'filesystem' ? skill.name : skill.id;
-      const exported = await skillAPI.exportPackage(exportId, { tenant_id: tenantId });
-      const blob = new Blob([JSON.stringify(exported, null, 2)], {
-        type: 'application/json',
-      });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${skill.name}.agentskill.json`;
-      link.click();
-      URL.revokeObjectURL(url);
+      await downloadSkillPackage(skill, tenantId);
       message?.success(t('tenant.skills.detail.exportSuccess'));
     } catch {
       message?.error(t('tenant.skills.detail.exportFailed'));
@@ -721,83 +743,27 @@ export const SkillDetail: FC = () => {
     }
   }, [assessmentReport, message, t]);
 
+  const handleRolledBack = useCallback(async () => {
+    await loadSkill();
+  }, [loadSkill]);
+
+  const { rollbackVersion, rollback } = useSkillRollback({
+    tenantId,
+    onRolledBack: handleRolledBack,
+  });
+
   const handleRollback = useCallback(
-    async (versionNumber: number) => {
-      if (!skill || !tenantId) {
+    (versionNumber: number) => {
+      if (!skill) {
         return;
       }
       if (!isManagedSkill(skill)) {
         message?.info(t('tenant.skills.detail.readOnlySource'));
         return;
       }
-      setRollbackVersion(versionNumber);
-      try {
-        await skillAPI.rollback(skill.id, versionNumber, { tenant_id: tenantId });
-        message?.success(t('tenant.skills.detail.rollbackSuccess'));
-        await loadSkill();
-      } catch {
-        message?.error(t('tenant.skills.detail.rollbackFailed'));
-      } finally {
-        setRollbackVersion(null);
-      }
+      void rollback(skill, versionNumber);
     },
-    [loadSkill, message, skill, tenantId, t]
-  );
-
-  const handleRunEvolution = useCallback(async () => {
-    if (!skill || !managed || !tenantId) {
-      return;
-    }
-    setIsEvolutionRunning(true);
-    try {
-      await skillAPI.runEvolution(skill.id, { tenant_id: tenantId });
-      message?.success(t('tenant.skills.detail.evolutionRunSuccess'));
-      await loadSkill();
-    } catch {
-      message?.error(t('tenant.skills.detail.evolutionRunFailed'));
-    } finally {
-      setIsEvolutionRunning(false);
-    }
-  }, [loadSkill, managed, message, skill, tenantId, t]);
-
-  const handleApplyEvolutionJob = useCallback(
-    async (jobId: string) => {
-      if (!tenantId) {
-        return;
-      }
-
-      setProcessingEvolutionJobId(jobId);
-      try {
-        await skillAPI.applyEvolutionJob(jobId, { tenant_id: tenantId });
-        message?.success(t('tenant.skillEvolution.jobs.applySuccess'));
-        await loadSkill();
-      } catch {
-        message?.error(t('tenant.skillEvolution.jobs.applyFailed'));
-      } finally {
-        setProcessingEvolutionJobId(null);
-      }
-    },
-    [loadSkill, message, tenantId, t]
-  );
-
-  const handleRejectEvolutionJob = useCallback(
-    async (jobId: string) => {
-      if (!tenantId) {
-        return;
-      }
-
-      setProcessingEvolutionJobId(jobId);
-      try {
-        await skillAPI.rejectEvolutionJob(jobId, { tenant_id: tenantId });
-        message?.success(t('tenant.skillEvolution.jobs.rejectSuccess'));
-        await loadSkill();
-      } catch {
-        message?.error(t('tenant.skillEvolution.jobs.rejectFailed'));
-      } finally {
-        setProcessingEvolutionJobId(null);
-      }
-    },
-    [loadSkill, message, tenantId, t]
+    [message, rollback, skill, t]
   );
 
   const handleModalSuccess = useCallback(() => {
@@ -807,10 +773,8 @@ export const SkillDetail: FC = () => {
 
   if (isLoading) {
     return (
-      <div
-        className={`mx-auto flex w-full max-w-7xl justify-center rounded-[6px] py-16 ${surface}`}
-      >
-        <LazySpin size="large" />
+      <div className={`mx-auto w-full max-w-7xl rounded-[6px] ${surface}`}>
+        <SkeletonLoader type="list" count={4} />
       </div>
     );
   }
@@ -828,7 +792,27 @@ export const SkillDetail: FC = () => {
           <ArrowLeft size={16} />
           {t('tenant.skills.detail.back')}
         </button>
-        <Alert type="warning" title={t('tenant.skills.detail.notFound')} showIcon />
+        {loadError ? (
+          <Alert
+            type="error"
+            title={loadError}
+            showIcon
+            action={
+              <button
+                type="button"
+                onClick={() => {
+                  void loadSkill();
+                }}
+                className={actionButton}
+              >
+                <RefreshCw size={16} />
+                {t('common.retry')}
+              </button>
+            }
+          />
+        ) : (
+          <Alert type="warning" title={t('tenant.skills.detail.notFound')} showIcon />
+        )}
       </div>
     );
   }
@@ -1030,9 +1014,7 @@ export const SkillDetail: FC = () => {
                   </div>
                 </div>
                 {isLoadingPackageFiles ? (
-                  <div className="mt-4 flex justify-center py-10">
-                    <LazySpin />
-                  </div>
+                  <SkeletonLoader type="list" count={2} />
                 ) : selectedPreviewFile ? (
                   <div className="grid h-[760px] items-stretch lg:grid-cols-[310px_minmax(0,1fr)]">
                     <div className="flex min-h-0 flex-col border-r border-[oklch(0.9_0.006_255)] bg-white p-4 dark:border-[oklch(0.28_0.006_255)] dark:bg-[oklch(0.14_0.006_255)]">
@@ -1105,19 +1087,9 @@ export const SkillDetail: FC = () => {
                       {t('tenant.skills.detail.evolutionRoute')}
                     </h2>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void handleRunEvolution();
-                    }}
-                    className={actionButton}
-                    disabled={!managed || isEvolutionRunning}
-                  >
-                    <Play size={16} />
-                    {isEvolutionRunning
-                      ? t('tenant.skills.detail.evolutionRunning')
-                      : t('tenant.skills.detail.runEvolution')}
-                  </button>
+                  <Link to={skillEvolutionPath} className={actionButton}>
+                    {t('tenant.skills.detail.viewInEvolution', 'View in Evolution')}
+                  </Link>
                 </div>
                 {evolution ? (
                   <div className="mt-4 grid gap-4">
@@ -1143,25 +1115,6 @@ export const SkillDetail: FC = () => {
                       <br />
                       {evolution.trigger.scheduled_timing}
                     </div>
-                    {evolution.route.length === 0 ? (
-                      <LazyEmpty description={t('tenant.skills.detail.emptyEvolutionRoute')} />
-                    ) : (
-                      <div className="divide-y divide-[oklch(0.9_0.006_255)] dark:divide-[oklch(0.28_0.006_255)]">
-                        {evolution.route.map((entry) => (
-                          <EvolutionJobRow
-                            key={`${entry.kind}-${entry.id}`}
-                            entry={entry}
-                            isProcessing={processingEvolutionJobId === entry.id}
-                            onApply={(jobId) => {
-                              void handleApplyEvolutionJob(jobId);
-                            }}
-                            onReject={(jobId) => {
-                              void handleRejectEvolutionJob(jobId);
-                            }}
-                          />
-                        ))}
-                      </div>
-                    )}
                   </div>
                 ) : (
                   <div className="mt-4 py-8">
@@ -1309,7 +1262,11 @@ export const SkillDetail: FC = () => {
               <InfoRow label={t('tenant.skills.detail.scope')} value={skillScope} />
               <InfoRow
                 label={t('tenant.skills.detail.project')}
-                value={skill.project_id || t('tenant.skills.detail.notSet')}
+                value={
+                  skill.project_id
+                    ? (projectNameById.get(skill.project_id) ?? skill.project_id)
+                    : t('tenant.skills.detail.notSet')
+                }
                 mono={Boolean(skill.project_id)}
               />
               <InfoRow
@@ -1341,7 +1298,7 @@ export const SkillDetail: FC = () => {
                     : t('tenant.skills.detail.notVersioned')
                 }
                 onRollback={(versionNumber) => {
-                  void handleRollback(versionNumber);
+                  handleRollback(versionNumber);
                 }}
               />
             </div>

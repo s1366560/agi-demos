@@ -68,6 +68,9 @@ export const trustService = {
   createPolicy: (tenantId: string, data: TrustPolicyCreate) =>
     httpClient.post<TrustPolicy>(`/tenants/${tenantId}/trust/policies`, data),
 
+  revokePolicy: (tenantId: string, policyId: string, params: { workspace_id: string }) =>
+    httpClient.delete<TrustPolicy>(`/tenants/${tenantId}/trust/policies/${policyId}`, { params }),
+
   checkTrust: (
     tenantId: string,
     params: { workspace_id: string; agent_instance_id: string; action_type: string }

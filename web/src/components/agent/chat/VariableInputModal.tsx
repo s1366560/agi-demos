@@ -69,6 +69,8 @@ export const VariableInputModal = memo<VariableInputModalProps>(
       values: initialValues,
     }));
     const values = valueState.templateKey === templateKey ? valueState.values : initialValues;
+    // Names of required variables that failed validation on the last submit attempt.
+    const [errors, setErrors] = useState<ReadonlySet<string>>(new Set());
     const autoSubmittedKeyRef = useRef<string | null>(null);
 
     useEffect(() => {
@@ -86,6 +88,7 @@ export const VariableInputModal = memo<VariableInputModalProps>(
 
     const resetValues = useCallback(() => {
       setValueState({ templateKey, values: initialValues });
+      setErrors(new Set());
     }, [initialValues, templateKey]);
 
     const handleClose = useCallback(() => {
@@ -94,6 +97,15 @@ export const VariableInputModal = memo<VariableInputModalProps>(
     }, [onClose, resetValues]);
 
     const handleSubmit = useCallback(() => {
+      // Block submission while required variables are empty so raw
+      // {{placeholder}} tokens never leak into the outgoing prompt.
+      const missing = detectedVars
+        .filter((v) => v.required && !(values[v.name] ?? '').trim())
+        .map((v) => v.name);
+      if (missing.length > 0) {
+        setErrors(new Set(missing));
+        return;
+      }
       let result = template.content;
       for (const [key, val] of Object.entries(values)) {
         result = result.split(`{{${key}}}`).join(val || `{{${key}}}`);
@@ -101,7 +113,7 @@ export const VariableInputModal = memo<VariableInputModalProps>(
       onSubmit(result);
       resetValues();
       onClose();
-    }, [template.content, values, onSubmit, resetValues, onClose]);
+    }, [detectedVars, template.content, values, onSubmit, resetValues, onClose]);
 
     if (!visible) return null;
 
@@ -139,6 +151,8 @@ export const VariableInputModal = memo<VariableInputModalProps>(
           {detectedVars.map((v, index) => {
             const inputId = `${titleId}-${v.name}`;
             const descriptionInputId = v.description ? `${inputId}-description` : undefined;
+            const hasError = errors.has(v.name);
+            const errorId = hasError ? `${inputId}-error` : undefined;
             return (
               <div key={v.name}>
                 <label
@@ -169,13 +183,33 @@ export const VariableInputModal = memo<VariableInputModalProps>(
                         values: { ...baseValues, [v.name]: e.target.value },
                       };
                     });
+                    if (hasError) {
+                      setErrors((prev) => {
+                        const next = new Set(prev);
+                        next.delete(v.name);
+                        return next;
+                      });
+                    }
                   }}
                   placeholder={v.default_value || v.name}
-                  className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-800 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200"
-                  aria-describedby={descriptionInputId}
+                  className={`w-full rounded-lg border bg-slate-100 px-3 py-2 text-sm text-slate-800 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:bg-slate-950 dark:text-slate-200 ${
+                    hasError
+                      ? 'border-red-400 dark:border-red-500/70'
+                      : 'border-slate-300 dark:border-slate-600'
+                  }`}
+                  aria-describedby={[descriptionInputId, errorId].filter(Boolean).join(' ') || undefined}
                   aria-required={v.required}
+                  aria-invalid={hasError}
                   autoFocus={index === 0}
                 />
+                {hasError && (
+                  <p id={errorId} className="mt-1 text-xs text-red-500" role="alert">
+                    {t('agent.templates.variableRequired', {
+                      name: v.name,
+                      defaultValue: '{{name}} is required',
+                    })}
+                  </p>
+                )}
               </div>
             );
           })}

@@ -6,12 +6,10 @@ import { useParams } from 'react-router-dom';
 import { message } from 'antd';
 import {
   Search,
-  Download,
   RotateCcw,
   ArrowRight,
   ArrowDown,
   EyeOff,
-  AlertTriangle,
   Plus,
   X,
   Loader2,
@@ -95,34 +93,19 @@ export default function EdgeMapList() {
     }
   };
 
-  const handleExport = () => {
-    const blob = new Blob(
-      [
-        JSON.stringify(
-          {
-            project_id: projectId,
-            mappings,
-            exported_at: new Date().toISOString(),
-          },
-          null,
-          2
-        ),
-      ],
-      { type: 'application/json;charset=utf-8' }
-    );
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `edge-mappings-${projectId ?? 'project'}.json`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-  };
-
   const handleDelete = async (id: string) => {
+    const mapping = mappings.find((item) => item.id === id);
+    const mappingLabel = mapping
+      ? `${mapping.source_type} → ${mapping.edge_type} → ${mapping.target_type}`
+      : id;
     if (
-      !(await confirmAction({ title: t('project.schema.mappings.delete_confirm'), danger: true }))
+      !(await confirmAction({
+        title: t('project.schema.mappings.delete_confirm_named', {
+          defaultValue: 'Delete mapping "{{name}}"? This cannot be undone.',
+          name: mappingLabel,
+        }),
+        danger: true,
+      }))
     )
       return;
     if (!projectId) return;
@@ -263,15 +246,6 @@ export default function EdgeMapList() {
                   />
                 </div>
                 <div className="hidden h-6 w-px bg-slate-200 dark:bg-border-dark sm:block"></div>
-                <button
-                  type="button"
-                  onClick={handleExport}
-                  aria-label={t('project.schema.overview.export_schema')}
-                  className="p-2 text-slate-400 dark:text-text-muted hover:text-slate-900 dark:hover:text-slate-100 rounded hover:bg-slate-100 dark:hover:bg-border-dark transition-colors"
-                  title={t('project.schema.overview.export_schema')}
-                >
-                  <Download className="w-5 h-5" />
-                </button>
               </div>
               <button
                 type="button"
@@ -392,10 +366,6 @@ export default function EdgeMapList() {
                 <span className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-slate-200 dark:bg-border-dark"></span>{' '}
                   {t('project.schema.mappings.legend.empty')}
-                </span>
-                <span className="flex items-center gap-1">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />{' '}
-                  {t('project.schema.mappings.legend.conflict')}
                 </span>
               </div>
               <span>

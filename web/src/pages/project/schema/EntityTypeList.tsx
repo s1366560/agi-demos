@@ -410,6 +410,22 @@ const EntityTypeListInternal: React.FC<EntityTypeListProps> = ({ className = '' 
   const handleSave = useCallback(async () => {
     if (!projectId || isSaving) return;
 
+    const trimmedName = formData.name.trim();
+    if (!trimmedName) {
+      void message.error(entityText(t, 'nameRequired', 'Name is required'));
+      return;
+    }
+    const isDuplicate = entities.some(
+      (entity) =>
+        entity.name.toLowerCase() === trimmedName.toLowerCase() && entity.id !== editingEntity?.id
+    );
+    if (isDuplicate) {
+      void message.error(
+        entityText(t, 'nameDuplicate', 'An entity type with this name already exists')
+      );
+      return;
+    }
+
     const schemaDict: EntitySchema = {};
     attributes.forEach((attr) => {
       if (attr.name) {
@@ -424,6 +440,7 @@ const EntityTypeListInternal: React.FC<EntityTypeListProps> = ({ className = '' 
 
     const payload = {
       ...formData,
+      name: trimmedName,
       schema: schemaDict,
     };
 
@@ -443,13 +460,19 @@ const EntityTypeListInternal: React.FC<EntityTypeListProps> = ({ className = '' 
     } finally {
       setIsSaving(false);
     }
-  }, [projectId, editingEntity, formData, attributes, isSaving, loadData, t]);
+  }, [projectId, editingEntity, entities, formData, attributes, isSaving, loadData, t]);
 
   const handleDelete = useCallback(
     async (id: string) => {
+      const target = entities.find((entity) => entity.id === id);
       if (
         !(await confirmAction({
-          title: entityText(t, 'deleteConfirm', TEXTS.deleteConfirm),
+          title: entityText(
+            t,
+            'deleteConfirmNamed',
+            'Delete entity type "{{name}}"? This cannot be undone.',
+            { name: target?.name ?? id }
+          ),
           danger: true,
         }))
       ) {
@@ -464,7 +487,7 @@ const EntityTypeListInternal: React.FC<EntityTypeListProps> = ({ className = '' 
         void message.error(entityText(t, 'deleteError', 'Failed to delete entity type'));
       }
     },
-    [projectId, loadData, t]
+    [projectId, entities, loadData, t]
   );
 
   const addAttribute = useCallback(() => {
@@ -812,7 +835,7 @@ const TableRowInternal: React.FC<TableRowProps> = React.memo(({ entity, onEdit, 
       </div>
       <div className="col-span-2 flex flex-col justify-start pt-1">
         <span className="text-sm text-slate-700 dark:text-white">
-          {formatDateOnly(entity.created_at)}
+          {formatDateOnly(entity.updated_at)}
         </span>
       </div>
       <div className="col-span-1 flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">

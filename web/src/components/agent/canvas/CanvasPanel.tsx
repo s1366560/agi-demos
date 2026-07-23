@@ -295,7 +295,7 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undef
                 className={`ml-0.5 p-0.5 rounded transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
                   tab.pinned
                     ? 'text-primary opacity-100'
-                    : 'opacity-0 group-hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700'
+                    : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700'
                 }`}
               >
                 <Pin size={12} fill={tab.pinned ? 'currentColor' : 'none'} />
@@ -315,7 +315,7 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undef
                     title: tab.title,
                     defaultValue: 'Close {{title}}',
                   })}
-                  className="ml-0.5 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  className="ml-0.5 p-0.5 rounded opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 >
                   <X size={12} />
                 </button>
@@ -468,7 +468,7 @@ ${htmlContent}
   if (!blobUrl) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-white rounded-b-lg">
-        <div className="text-slate-400">{t('common.loading', { defaultValue: 'Loading...' })}</div>
+        <div className="text-slate-400">{t('common.loading', { defaultValue: 'Loading…' })}</div>
       </div>
     );
   }
@@ -2049,7 +2049,7 @@ const CanvasEmptyState = memo(() => {
           onClick={() => {
             handleNew('code', 'untitled.py');
           }}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-primary text-white hover:bg-primary-600 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         >
           <FileCode2 size={14} />
           {t('agent.canvas.newCode', 'New Code')}
@@ -2171,11 +2171,14 @@ export const CanvasPanel = memo<{
   const handleAskRefine = useCallback(() => {
     if (onSendPrompt && activeTab) {
       onSendPrompt(
-        `I've edited the content below. Please review and improve it:\n\n${activeTab.content}`
+        t('agent.canvas.askRefinePrompt', {
+          defaultValue: "I've edited the content below. Please review and improve it:\n\n{{content}}",
+          content: activeTab.content,
+        })
       );
       setEditMode(false);
     }
-  }, [onSendPrompt, activeTab]);
+  }, [onSendPrompt, activeTab, t]);
 
   return (
     <div className="flex h-full overflow-hidden bg-slate-50 dark:bg-slate-950">

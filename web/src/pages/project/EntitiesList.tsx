@@ -30,10 +30,12 @@
 import React, { useState, useEffect, useCallback, memo, Children, useMemo, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 
+import { Dropdown } from 'antd';
 import {
   AlertCircle,
+  ChevronDown,
   Filter,
   LayoutGrid,
   Loader2,
@@ -50,6 +52,7 @@ import { formatDateOnly, formatDateTime } from '@/utils/date';
 
 import { VirtualGrid } from '../../components/common';
 import { getEntityTypeColor } from '../../components/graph';
+import { Pagination } from '../../components/shared/Pagination';
 import { graphService } from '../../services/graphService';
 import { logger } from '../../utils/logger';
 
@@ -73,6 +76,15 @@ const ENTITY_CARD_ESTIMATE_SIZE = 116;
 const ENTITY_TYPE_PREVIEW_LIMIT = 6;
 
 const formatEntityCount = (count: number): string => count.toLocaleString();
+
+const parsePositiveIntParam = (value: string | null): number | null => {
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const parseSortParam = (value: string | null, fallback: SortOption): SortOption =>
+  value === 'name' || value === 'created_at' ? value : fallback;
 
 interface EntityListItemProps {
   entity: Entity;
@@ -196,6 +208,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
   }) => {
     const { t } = useTranslation();
     const { tenantId: routeTenantId, projectId: routeProjectId } = useParams();
+    const [searchParams, setSearchParams] = useSearchParams();
     const tenantId = propTenantId || routeTenantId;
     const projectId = propProjectId || routeProjectId;
 
@@ -235,22 +248,59 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
     const [entityTypes, setEntityTypes] = useState<EntityType[]>([]);
     const [loading, setLoading] = useState(shouldLoadEntities);
     const [loadingTypes, setLoadingTypes] = useState(shouldLoadEntityTypes);
+    const [entityTypesError, setEntityTypesError] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [relationshipsLoading, setRelationshipsLoading] = useState(false);
     const [relationshipsError, setRelationshipsError] = useState<string | null>(null);
-    const [page, setPage] = useState(0);
+    const [page, setPage] = useState(() => {
+      const parsed = parsePositiveIntParam(searchParams.get('page'));
+      return parsed !== null ? parsed - 1 : 0;
+    });
     const [totalCount, setTotalCount] = useState(0);
 
-    // Filters
-    const [entityTypeFilter, setEntityTypeFilter] = useState<string>('');
-    const [searchInput, setSearchInput] = useState<string>('');
-    const [sortBy, setSortBy] = useState<SortOption>(defaultSortBy);
+    // Filters (seeded from the URL query so views survive reload and sharing)
+    const [entityTypeFilter, setEntityTypeFilter] = useState<string>(
+      () => searchParams.get('type') ?? ''
+    );
+    const [searchInput, setSearchInput] = useState<string>(() => searchParams.get('q') ?? '');
+    const [sortBy, setSortBy] = useState<SortOption>(() =>
+      parseSortParam(searchParams.get('sort'), defaultSortBy)
+    );
 
     // Debounced search value for filtering (300ms delay)
     const [searchQuery] = useDebounce(searchInput, 300);
     const entityTypesRequestRef = useRef(0);
     const entitiesRequestRef = useRef(0);
     const relationshipsRequestRef = useRef(0);
+
+    // Reflect search/filter/sort/pagination in the URL so views survive reload and sharing.
+    useEffect(() => {
+      const next = new URLSearchParams(searchParams);
+      const trimmedSearch = searchQuery.trim();
+      if (trimmedSearch) {
+        next.set('q', trimmedSearch);
+      } else {
+        next.delete('q');
+      }
+      if (entityTypeFilter) {
+        next.set('type', entityTypeFilter);
+      } else {
+        next.delete('type');
+      }
+      if (sortBy !== defaultSortBy) {
+        next.set('sort', sortBy);
+      } else {
+        next.delete('sort');
+      }
+      if (page > 0) {
+        next.set('page', String(page + 1));
+      } else {
+        next.delete('page');
+      }
+      if (next.toString() !== searchParams.toString()) {
+        setSearchParams(next, { replace: true });
+      }
+    }, [searchQuery, entityTypeFilter, sortBy, defaultSortBy, page, searchParams, setSearchParams]);
 
     useEffect(() => {
       entityTypesRequestRef.current += 1;
@@ -270,6 +320,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
       const requestId = entityTypesRequestRef.current + 1;
       entityTypesRequestRef.current = requestId;
       setLoadingTypes(true);
+      setEntityTypesError(null);
       try {
         const result = await graphService.getEntityTypes({
           tenant_id: tenantId,
@@ -280,12 +331,15 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
       } catch (err) {
         if (entityTypesRequestRef.current !== requestId) return;
         logger.error('[EntitiesList] Failed to load entity types:', err);
+        setEntityTypesError(t('project.graph.entities.filter.types_load_failed', {
+          defaultValue: 'Failed to load entity types.',
+        }));
       } finally {
         if (entityTypesRequestRef.current === requestId) {
           setLoadingTypes(false);
         }
       }
-    }, [tenantId, projectId]);
+    }, [tenantId, projectId, t]);
 
     // Load entities
     const loadEntities = useCallback(async () => {
@@ -393,6 +447,13 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
         })),
       ],
       [entityTypes, t, totalCount]
+    );
+    const overflowEntityTypes = useMemo(
+      () => entityTypes.slice(ENTITY_TYPE_PREVIEW_LIMIT),
+      [entityTypes]
+    );
+    const isOverflowTypeActive = overflowEntityTypes.some(
+      (entityType) => entityType.entity_type === entityTypeFilter
     );
     const selectedTypeLabel = entityTypeFilter || t('project.graph.entities.filter.all_types');
     const activeFilterCount = [entityTypeFilter, searchQuery].filter(Boolean).length;
@@ -536,26 +597,94 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                       </button>
                     );
                   })}
+                  {overflowEntityTypes.length > 0 && (
+                    <Dropdown
+                      menu={{
+                        items: overflowEntityTypes.map((entityType) => ({
+                          key: entityType.entity_type,
+                          label: `${entityType.entity_type} (${formatEntityCount(entityType.count)})`,
+                        })),
+                        selectedKeys: isOverflowTypeActive ? [entityTypeFilter] : [],
+                        onClick: ({ key }) => {
+                          setEntityTypeFilter(key);
+                          setPage(0);
+                        },
+                      }}
+                      trigger={['click']}
+                    >
+                      <button
+                        type="button"
+                        disabled={loadingTypes}
+                        aria-haspopup="menu"
+                        aria-pressed={isOverflowTypeActive}
+                        className={`inline-flex h-8 shrink-0 items-center gap-1 rounded px-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus:ring-slate-950/10 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-slate-50/10 ${
+                          isOverflowTypeActive
+                            ? 'bg-white text-slate-950 shadow-[0_0_0_1px_rgba(15,23,42,0.10)] dark:bg-slate-800 dark:text-slate-50 dark:shadow-[0_0_0_1px_rgba(148,163,184,0.16)]'
+                            : 'text-slate-500 hover:bg-white hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-slate-100'
+                        }`}
+                      >
+                        <span>
+                          {isOverflowTypeActive
+                            ? entityTypeFilter
+                            : t('project.graph.entities.filter.more_types', {
+                                count: overflowEntityTypes.length,
+                                defaultValue: `+${String(overflowEntityTypes.length)} more`,
+                              })}
+                        </span>
+                        <ChevronDown size={14} aria-hidden="true" />
+                      </button>
+                    </Dropdown>
+                  )}
                 </div>
+                {entityTypesError && (
+                  <p
+                    role="alert"
+                    className="flex items-center gap-2 text-xs text-status-text-error dark:text-status-text-error-dark"
+                  >
+                    <AlertCircle size={14} aria-hidden="true" />
+                    {entityTypesError}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void loadEntityTypes();
+                      }}
+                      className="font-medium underline underline-offset-2 transition-colors hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/10 dark:hover:text-slate-50 dark:focus-visible:ring-slate-50/10"
+                    >
+                      {t('common.actions.retry', 'Retry')}
+                    </button>
+                  </p>
+                )}
               </div>
 
               <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
-                <div className="relative">
-                  <Search
-                    size={16}
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                    aria-hidden="true"
-                  />
-                  <input
-                    type="text"
-                    placeholder={t('project.graph.entities.filter.search_placeholder')}
-                    aria-label={t('project.graph.entities.filter.search_placeholder')}
-                    value={searchInput}
-                    onChange={(e) => {
-                      setSearchInput(e.target.value);
-                    }}
-                    className="block h-9 w-full rounded-md border border-slate-200 bg-white pl-10 pr-3 text-sm text-slate-950 outline-none transition-colors placeholder:text-slate-400 hover:border-slate-300 focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10 dark:border-slate-800 dark:bg-slate-900/30 dark:text-slate-50 dark:hover:border-slate-700 dark:focus:border-slate-400 dark:focus:ring-slate-50/10"
-                  />
+                <div>
+                  <div className="relative">
+                    <Search
+                      size={16}
+                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                      aria-hidden="true"
+                    />
+                    <input
+                      type="text"
+                      placeholder={t('project.graph.entities.filter.search_placeholder')}
+                      aria-label={t('project.graph.entities.filter.search_placeholder')}
+                      aria-describedby="entity-search-scope-hint"
+                      value={searchInput}
+                      onChange={(e) => {
+                        setSearchInput(e.target.value);
+                      }}
+                      className="block h-9 w-full rounded-md border border-slate-200 bg-white pl-10 pr-3 text-sm text-slate-950 outline-none transition-colors placeholder:text-slate-400 hover:border-slate-300 focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10 dark:border-slate-800 dark:bg-slate-900/30 dark:text-slate-50 dark:hover:border-slate-700 dark:focus:border-slate-400 dark:focus:ring-slate-50/10"
+                    />
+                  </div>
+                  <p
+                    id="entity-search-scope-hint"
+                    className="mt-1 text-xs text-slate-400 dark:text-slate-500"
+                  >
+                    {t(
+                      'project.graph.entities.filter.search_scope_hint',
+                      'Search only filters entities on the current page.'
+                    )}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <label
@@ -707,38 +836,15 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
 
                   {/* Pagination */}
                   {includePagination && totalCount > limit && (
-                    <div
-                      className="flex items-center justify-between rounded-md bg-white p-3 shadow-[0_0_0_1px_rgba(15,23,42,0.10)] dark:bg-surface-dark dark:shadow-[0_0_0_1px_rgba(148,163,184,0.16)]"
+                    <Pagination
+                      page={page}
+                      totalPages={totalPages}
+                      onPageChange={setPage}
+                      totalItems={totalCount}
+                      pageSize={limit}
+                      className="rounded-md bg-white p-3 shadow-[0_0_0_1px_rgba(15,23,42,0.10)] dark:bg-surface-dark dark:shadow-[0_0_0_1px_rgba(148,163,184,0.16)]"
                       data-testid="entities-pagination"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPage((p) => Math.max(0, p - 1));
-                        }}
-                        disabled={page === 0}
-                        className="inline-flex h-9 items-center rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-                      >
-                        {t('common.actions.previous', 'Previous')}
-                      </button>
-                      <span className="text-sm text-slate-500 dark:text-slate-400">
-                        {t('common.pagination.page_info', {
-                          page: page + 1,
-                          total: totalPages,
-                          defaultValue: `Page ${String(page + 1)} of ${String(totalPages)}`,
-                        })}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPage((p) => p + 1);
-                        }}
-                        disabled={(page + 1) * limit >= totalCount}
-                        className="inline-flex h-9 items-center rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-                      >
-                        {t('common.actions.next', 'Next')}
-                      </button>
-                    </div>
+                    />
                   )}
                 </>
               )}

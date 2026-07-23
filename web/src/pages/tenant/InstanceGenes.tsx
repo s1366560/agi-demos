@@ -19,13 +19,13 @@ import type { GeneResponse, InstanceGeneResponse } from '@/services/geneMarketSe
 
 import { useDebounce } from '@/hooks/useDebounce';
 
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import {
   useLazyMessage,
   LazyAlert,
   LazyButton,
   LazyPopconfirm,
   LazyEmpty,
-  LazySpin,
   LazyModal,
 } from '@/components/ui/lazyAntd';
 
@@ -174,13 +174,14 @@ export const InstanceGenes: React.FC = () => {
         },
         { tenant_id: tenantId }
       );
-      messageApi?.success(t('tenant.instances.genes.installSuccess'));
+      // Feedback copy matches the shared InstallEntityModal used by GeneDetail
+      messageApi?.success(t('tenant.genes.installSuccess', 'Gene installed successfully'));
       setIsAddModalOpen(false);
       setSelectedGeneId(null);
       void fetchInstanceGenes(1);
     } catch (err) {
       console.error('Failed to install gene:', err);
-      messageApi?.error(t('tenant.instances.genes.installError'));
+      messageApi?.error(t('tenant.genes.installError', 'Failed to install gene'));
     } finally {
       setIsSubmitting(false);
     }
@@ -408,9 +409,7 @@ export const InstanceGenes: React.FC = () => {
       {/* Genes Table */}
       <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark overflow-hidden">
         {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <LazySpin size="large" />
-          </div>
+          <SkeletonLoader type="table" rows={6} />
         ) : loadError ? (
           <div className="py-20 flex flex-col items-center gap-4">
             <LazyAlert
@@ -458,9 +457,9 @@ export const InstanceGenes: React.FC = () => {
         )}
       </div>
 
-      {/* Install Gene Modal */}
+      {/* Install Gene Modal — title matches the shared InstallEntityModal */}
       <LazyModal
-        title={t('tenant.instances.genes.installGene')}
+        title={t('tenant.genes.installGene', 'Install Gene')}
         open={isAddModalOpen}
         onOk={handleInstallGene}
         onCancel={() => {
@@ -490,9 +489,7 @@ export const InstanceGenes: React.FC = () => {
             }
           />
           {isGenesLoading ? (
-            <div className="flex justify-center py-8">
-              <LazySpin />
-            </div>
+            <SkeletonLoader type="list" count={3} />
           ) : availableGenesError ? (
             <div className="text-center py-8">
               <p className="text-sm text-danger dark:text-danger-light">{availableGenesError}</p>

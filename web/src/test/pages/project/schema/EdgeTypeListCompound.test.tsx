@@ -230,10 +230,10 @@ describe('EdgeTypeList Compound Component', () => {
       ).toBeInTheDocument();
     });
 
-    it('should render system active badge', async () => {
+    it('should not render a fake system status badge', async () => {
       const { EdgeTypeList } = await import('../../../../pages/project/schema/EdgeTypeList');
       render(<EdgeTypeList.Header onCreate={vi.fn()} />);
-      expect(screen.getByText('System Active')).toBeInTheDocument();
+      expect(screen.queryByText('System Active')).not.toBeInTheDocument();
     });
   });
 
@@ -476,6 +476,9 @@ describe('EdgeTypeList Compound Component', () => {
       await waitFor(() => {
         expect(screen.getByText('New Edge Type')).toBeInTheDocument();
       });
+      fireEvent.change(screen.getByPlaceholderText('e.g. KNOWS, WORKS_FOR, LOCATED_IN'), {
+        target: { value: 'LIKES' },
+      });
       fireEvent.click(screen.getByText('Save'));
 
       await waitFor(() => {
@@ -483,6 +486,53 @@ describe('EdgeTypeList Compound Component', () => {
       });
       expect(alertSpy).not.toHaveBeenCalled();
       alertSpy.mockRestore();
+    });
+
+    it('blocks saving when the name is empty', async () => {
+      const { schemaAPI } = await import('../../../../services/api');
+
+      const { EdgeTypeList } = await import('../../../../pages/project/schema/EdgeTypeList');
+      render(<EdgeTypeList />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create Edge Type')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Create Edge Type'));
+      await waitFor(() => {
+        expect(screen.getByText('New Edge Type')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Save'));
+
+      await waitFor(() => {
+        expect(antdMessage.error).toHaveBeenCalledWith('Name is required');
+      });
+      expect(schemaAPI.createEdgeType).not.toHaveBeenCalled();
+    });
+
+    it('blocks saving when the name duplicates an existing edge type', async () => {
+      const { schemaAPI } = await import('../../../../services/api');
+
+      const { EdgeTypeList } = await import('../../../../pages/project/schema/EdgeTypeList');
+      render(<EdgeTypeList />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create Edge Type')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Create Edge Type'));
+      await waitFor(() => {
+        expect(screen.getByText('New Edge Type')).toBeInTheDocument();
+      });
+      fireEvent.change(screen.getByPlaceholderText('e.g. KNOWS, WORKS_FOR, LOCATED_IN'), {
+        target: { value: 'knows' },
+      });
+      fireEvent.click(screen.getByText('Save'));
+
+      await waitFor(() => {
+        expect(antdMessage.error).toHaveBeenCalledWith(
+          'An edge type with this name already exists'
+        );
+      });
+      expect(schemaAPI.createEdgeType).not.toHaveBeenCalled();
     });
 
     it('should select edge and show detail pane', async () => {

@@ -19,10 +19,12 @@ import {
   Rate,
   Empty,
   Pagination,
-  Spin,
 } from 'antd';
 import { Download, Search as SearchIcon } from 'lucide-react';
 
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
+
+import { geneMarketService } from '../../services/geneMarketService';
 import {
   useGenes,
   useGenomes,
@@ -53,6 +55,33 @@ const { Search } = Input;
 const { Option } = Select;
 type PublishStatusFilter = 'all' | 'published' | 'draft';
 type VisibilityFilter = 'all' | ContentVisibilityValue;
+
+const PAGE_SIZE_OPTIONS = [20, 50, 100];
+const DEFAULT_PAGE_SIZE = 20;
+
+const parseVisibilityParam = (value: string | null): VisibilityFilter => {
+  if (value === 'public' || value === 'org_private' || value === 'unlisted') {
+    return value;
+  }
+  return 'all';
+};
+
+const parseStatusParam = (value: string | null): PublishStatusFilter => {
+  if (value === 'published' || value === 'draft') {
+    return value;
+  }
+  return 'all';
+};
+
+const parsePageParam = (value: string | null): number => {
+  const parsed = Number.parseInt(value ?? '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+};
+
+const parsePageSizeParam = (value: string | null): number => {
+  const parsed = Number.parseInt(value ?? '', 10);
+  return PAGE_SIZE_OPTIONS.includes(parsed) ? parsed : DEFAULT_PAGE_SIZE;
+};
 
 interface PublishGeneFormValues {
   name: string;
@@ -85,19 +114,53 @@ export const GeneMarket: FC = () => {
   const { listGenes, listGenomes, createGene, createGenome, setActiveTab, clearError, reset } =
     useGeneMarketActions();
 
-  const [geneSearchInput, setGeneSearchInput] = useState('');
-  const [genomeSearchInput, setGenomeSearchInput] = useState('');
-  const [geneSearch, setGeneSearch] = useState('');
-  const [genomeSearch, setGenomeSearch] = useState('');
-  const [geneCategory, setGeneCategory] = useState('all');
-  const [geneVisibility, setGeneVisibility] = useState<VisibilityFilter>('all');
-  const [genomeVisibility, setGenomeVisibility] = useState<VisibilityFilter>('all');
-  const [genePublishStatus, setGenePublishStatus] = useState<PublishStatusFilter>('all');
-  const [genomePublishStatus, setGenomePublishStatus] = useState<PublishStatusFilter>('all');
-  const [genePage, setGenePage] = useState(1);
-  const [genePageSize, setGenePageSize] = useState(20);
-  const [genomePage, setGenomePage] = useState(1);
-  const [genomePageSize, setGenomePageSize] = useState(20);
+  // Restore filters/pagination from the URL for the tab named by ?tab= so
+  // marketplace views are shareable; the other tab keeps its defaults.
+  const initialTabParam = searchParams.get('tab') === 'genomes' ? 'genomes' : 'genes';
+  const [geneSearchInput, setGeneSearchInput] = useState(() =>
+    initialTabParam === 'genes' ? (searchParams.get('q') ?? '') : ''
+  );
+  const [genomeSearchInput, setGenomeSearchInput] = useState(() =>
+    initialTabParam === 'genomes' ? (searchParams.get('q') ?? '') : ''
+  );
+  const [geneSearch, setGeneSearch] = useState(() =>
+    initialTabParam === 'genes' ? (searchParams.get('q') ?? '').trim() : ''
+  );
+  const [genomeSearch, setGenomeSearch] = useState(() =>
+    initialTabParam === 'genomes' ? (searchParams.get('q') ?? '').trim() : ''
+  );
+  const [geneCategory, setGeneCategory] = useState(() =>
+    initialTabParam === 'genes' ? (searchParams.get('category') ?? 'all') : 'all'
+  );
+  const [geneVisibility, setGeneVisibility] = useState<VisibilityFilter>(() =>
+    initialTabParam === 'genes' ? parseVisibilityParam(searchParams.get('visibility')) : 'all'
+  );
+  const [genomeVisibility, setGenomeVisibility] = useState<VisibilityFilter>(() =>
+    initialTabParam === 'genomes' ? parseVisibilityParam(searchParams.get('visibility')) : 'all'
+  );
+  const [genePublishStatus, setGenePublishStatus] = useState<PublishStatusFilter>(() =>
+    initialTabParam === 'genes' ? parseStatusParam(searchParams.get('status')) : 'all'
+  );
+  const [genomePublishStatus, setGenomePublishStatus] = useState<PublishStatusFilter>(() =>
+    initialTabParam === 'genomes' ? parseStatusParam(searchParams.get('status')) : 'all'
+  );
+  const [genePage, setGenePage] = useState(() =>
+    initialTabParam === 'genes' ? parsePageParam(searchParams.get('page')) : 1
+  );
+  const [genePageSize, setGenePageSize] = useState(() =>
+    initialTabParam === 'genes'
+      ? parsePageSizeParam(searchParams.get('page_size'))
+      : DEFAULT_PAGE_SIZE
+  );
+  const [genomePage, setGenomePage] = useState(() =>
+    initialTabParam === 'genomes' ? parsePageParam(searchParams.get('page')) : 1
+  );
+  const [genomePageSize, setGenomePageSize] = useState(() =>
+    initialTabParam === 'genomes'
+      ? parsePageSizeParam(searchParams.get('page_size'))
+      : DEFAULT_PAGE_SIZE
+  );
+  const [geneCategories, setGeneCategories] = useState<string[]>([]);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [isPublishSubmitting, setIsPublishSubmitting] = useState(false);
   const [publishForm] = Form.useForm<PublishGeneFormValues>();
@@ -172,6 +235,56 @@ export const GeneMarket: FC = () => {
     };
   }, [clearError, reset]);
 
+  // Populate the category filter from live data (gene.category is free text, so
+  // hardcoded options silently hide genes of any other category).
+  useEffect(() => {
+    if (!tenantId) {
+      return;
+    }
+    let cancelled = false;
+    geneMarketService
+      .listGenes({ page: 1, page_size: 100, tenant_id: tenantId })
+      .then((response) => {
+        if (cancelled) {
+          return;
+        }
+        const categories = Array.from(
+          new Set(
+            response.genes
+              .map((gene) => gene.category?.trim())
+              .filter((category): category is string => Boolean(category))
+          )
+        ).sort();
+        setGeneCategories(categories);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId]);
+
+  const geneCategoryOptions = useMemo(() => {
+    const options = [...geneCategories];
+    if (geneCategory !== 'all' && !options.includes(geneCategory)) {
+      options.push(geneCategory);
+    }
+    return options;
+  }, [geneCategories, geneCategory]);
+
+  const geneCategoryLabel = useCallback(
+    (category: string) => {
+      // Keep translated labels for the two well-known built-in categories
+      if (category === 'ai') {
+        return t('tenant.genes.filters.catAi');
+      }
+      if (category === 'tool') {
+        return t('tenant.genes.filters.catTool');
+      }
+      return category;
+    },
+    [t]
+  );
+
   // Deep-link the active tab via ?tab= (e.g. ?tab=genomes)
   useEffect(() => {
     const tabParam = searchParams.get('tab');
@@ -182,6 +295,52 @@ export const GeneMarket: FC = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
+
+  // Mirror the active tab's filters/pagination into the URL query so a
+  // filtered marketplace view can be shared or restored after navigation.
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    const apply = (key: string, value: string | null) => {
+      if (value === null) {
+        next.delete(key);
+      } else {
+        next.set(key, value);
+      }
+    };
+    if (activeTab === 'genes') {
+      apply('q', geneSearch || null);
+      apply('category', geneCategory === 'all' ? null : geneCategory);
+      apply('visibility', geneVisibility === 'all' ? null : geneVisibility);
+      apply('status', genePublishStatus === 'all' ? null : genePublishStatus);
+      apply('page', genePage > 1 ? String(genePage) : null);
+      apply('page_size', genePageSize === DEFAULT_PAGE_SIZE ? null : String(genePageSize));
+    } else {
+      apply('q', genomeSearch || null);
+      apply('category', null);
+      apply('visibility', genomeVisibility === 'all' ? null : genomeVisibility);
+      apply('status', genomePublishStatus === 'all' ? null : genomePublishStatus);
+      apply('page', genomePage > 1 ? String(genomePage) : null);
+      apply('page_size', genomePageSize === DEFAULT_PAGE_SIZE ? null : String(genomePageSize));
+    }
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [
+    activeTab,
+    geneCategory,
+    genePage,
+    genePageSize,
+    genePublishStatus,
+    geneSearch,
+    geneVisibility,
+    genomePage,
+    genomePageSize,
+    genomePublishStatus,
+    genomeSearch,
+    genomeVisibility,
+    searchParams,
+    setSearchParams,
+  ]);
 
   const handleTabChange = (key: string) => {
     setActiveTab(key as 'genes' | 'genomes');
@@ -529,8 +688,11 @@ export const GeneMarket: FC = () => {
                 className="w-full sm:w-36"
               >
                 <Option value="all">{t('tenant.genes.filters.allCategories')}</Option>
-                <Option value="ai">{t('tenant.genes.filters.catAi')}</Option>
-                <Option value="tool">{t('tenant.genes.filters.catTool')}</Option>
+                {geneCategoryOptions.map((category) => (
+                  <Option key={category} value={category}>
+                    {geneCategoryLabel(category)}
+                  </Option>
+                ))}
               </Select>
               <Select
                 aria-label={t('tenant.genes.filters.visibilityLabel')}
@@ -608,24 +770,12 @@ export const GeneMarket: FC = () => {
           {
             key: 'genes',
             label: `${t('tenant.genes.tabs.genes')} (${String(geneTotal)})`,
-            children: loading ? (
-              <div className="flex min-h-48 items-center justify-center">
-                <Spin size="large" />
-              </div>
-            ) : (
-              renderGenesGrid()
-            ),
+            children: loading ? <SkeletonLoader type="card" count={6} /> : renderGenesGrid(),
           },
           {
             key: 'genomes',
             label: `${t('tenant.genes.tabs.genomes')} (${String(genomeTotal)})`,
-            children: loading ? (
-              <div className="flex min-h-48 items-center justify-center">
-                <Spin size="large" />
-              </div>
-            ) : (
-              renderGenomesGrid()
-            ),
+            children: loading ? <SkeletonLoader type="card" count={6} /> : renderGenomesGrid(),
           },
         ]}
       />

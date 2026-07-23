@@ -34,13 +34,13 @@ export const ShortcutOverlay = memo(() => {
       title: t('agent.shortcuts.layout', 'Layout'),
       items: [
         { keys: [`${mod}+1`], description: t('agent.shortcuts.chatMode', 'Chat mode') },
-        { keys: [`${mod}+2`], description: t('agent.shortcuts.codeMode', 'Code mode (split)') },
+        { keys: [`${mod}+2`], description: t('agent.shortcuts.taskMode', 'Task mode (split)') },
+        { keys: [`${mod}+3`], description: t('agent.shortcuts.codeMode', 'Code mode (split)') },
         {
-          keys: [`${mod}+3`],
-          description: t('agent.shortcuts.desktopMode', 'Desktop mode (split)'),
+          keys: [`${mod}+4`],
+          description: t('agent.shortcuts.canvasMode', 'Canvas mode (split)'),
         },
-        { keys: [`${mod}+4`], description: t('agent.shortcuts.focusMode', 'Focus mode') },
-        { keys: [`${mod}+5`], description: t('agent.shortcuts.canvasMode', 'Canvas mode (split)') },
+        { keys: [`${mod}+5`], description: t('agent.shortcuts.collabMode', 'Collab mode (split)') },
       ],
     },
     {
@@ -57,8 +57,16 @@ export const ShortcutOverlay = memo(() => {
         },
         { keys: ['j / k'], description: t('agent.shortcuts.navMessages', 'Navigate messages') },
         {
+          keys: ['c'],
+          description: t('agent.shortcuts.copyMessage', 'Copy focused message'),
+        },
+        {
           keys: [`${mod}+F`],
           description: t('agent.shortcuts.searchChat', 'Search in conversation'),
+        },
+        {
+          keys: ['Shift+Tab'],
+          description: t('agent.shortcuts.planMode', 'Toggle Plan Mode'),
         },
         { keys: ['Esc'], description: t('agent.shortcuts.cancelCommand', 'Cancel / close') },
       ],

@@ -6,13 +6,13 @@ import { useParams } from 'react-router-dom';
 import { Input, Table } from 'antd';
 import { CheckCircle, Eye, Search as SearchIcon, Shield, UserPlus, Users } from 'lucide-react';
 
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import {
   useLazyMessage,
   LazyButton,
   LazyPopconfirm,
   LazySelect,
   LazyEmpty,
-  LazySpin,
   LazyModal,
 } from '@/components/ui/lazyAntd';
 
@@ -61,6 +61,7 @@ export const InstanceMembers: React.FC = () => {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState('user');
   const [isSearching, setIsSearching] = useState(false);
+  const [userSearchError, setUserSearchError] = useState(false);
 
   const loadMembersPage = useCallback(
     (page: number) => {
@@ -93,16 +94,20 @@ export const InstanceMembers: React.FC = () => {
   useEffect(() => {
     if (!userSearchQuery || userSearchQuery.length < 2 || !instanceId) {
       setUserSearchResults([]);
+      setUserSearchError(false);
       return;
     }
     const timer = setTimeout(() => {
       void (async () => {
         setIsSearching(true);
+        setUserSearchError(false);
         try {
           const results = await searchUsers(instanceId, userSearchQuery);
           setUserSearchResults(results);
         } catch (err) {
           console.error('Failed to search users:', err);
+          setUserSearchResults([]);
+          setUserSearchError(true);
         } finally {
           setIsSearching(false);
         }
@@ -347,9 +352,7 @@ export const InstanceMembers: React.FC = () => {
       {/* Members Table */}
       <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark overflow-hidden">
         {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <LazySpin size="large" />
-          </div>
+          <SkeletonLoader type="table" rows={6} />
         ) : filteredMembers.length === 0 ? (
           <div className="py-20">
             <LazyEmpty description={t('tenant.instances.members.noMembers')} />
@@ -424,6 +427,11 @@ export const InstanceMembers: React.FC = () => {
                 </>
               }
             />
+            {userSearchError && (
+              <p role="alert" className="mt-1 text-xs text-danger dark:text-danger-light">
+                {t('tenant.instances.members.searchError', 'Failed to search users')}
+              </p>
+            )}
             {userSearchResults.length > 0 && (
               <div className="mt-2 border border-border-light dark:border-border-separator rounded-lg max-h-48 overflow-y-auto">
                 {userSearchResults.map((user) => (

@@ -31,6 +31,7 @@ import { useTenantStore } from '@/stores/tenant';
 
 import { acpService } from '@/services/acpService';
 
+import { confirmAction } from '@/utils/confirmAction';
 import { formatDateTime } from '@/utils/date';
 
 import {
@@ -162,10 +163,15 @@ export const AcpDashboard: React.FC = () => {
   const [statusData, setStatusData] = useState<TenantACPStatus | null>(null);
   const [runnerPools, setRunnerPools] = useState<ACPRunnerPool[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [testDrawerOpen, setTestDrawerOpen] = useState(false);
+  const [agentSearch, setAgentSearch] = useState('');
+  const [sessionSearch, setSessionSearch] = useState('');
+  const [eventSearch, setEventSearch] = useState('');
+  const [eventStatusFilter, setEventStatusFilter] = useState<string | undefined>(undefined);
   const [editingAgent, setEditingAgent] = useState<TenantExternalACPAgent | null>(null);
   const [testingAgent, setTestingAgent] = useState<TenantExternalACPAgent | null>(null);
   const [testResult, setTestResult] = useState<TenantACPTestResponse | null>(null);
@@ -175,9 +181,50 @@ export const AcpDashboard: React.FC = () => {
   // the background without flashing table spinners every interval.
   const hasLoadedRef = useRef(false);
 
-  const agents = statusData?.agents ?? [];
-  const sessions = statusData?.sessions ?? [];
-  const recentEvents = statusData?.recentEvents ?? [];
+  const agents = useMemo(() => statusData?.agents ?? [], [statusData]);
+  const sessions = useMemo(() => statusData?.sessions ?? [], [statusData]);
+  const recentEvents = useMemo(() => statusData?.recentEvents ?? [], [statusData]);
+
+  const filteredAgents = useMemo(() => {
+    const query = agentSearch.trim().toLowerCase();
+    if (!query) return agents;
+    return agents.filter(
+      (agent) =>
+        agent.name.toLowerCase().includes(query) || agent.agentKey.toLowerCase().includes(query)
+    );
+  }, [agents, agentSearch]);
+
+  const filteredSessions = useMemo(() => {
+    const query = sessionSearch.trim().toLowerCase();
+    if (!query) return sessions;
+    return sessions.filter(
+      (session) =>
+        session.session_id.toLowerCase().includes(query) ||
+        session.agent_id.toLowerCase().includes(query)
+    );
+  }, [sessions, sessionSearch]);
+
+  const filteredEvents = useMemo(() => {
+    const query = eventSearch.trim().toLowerCase();
+    return recentEvents.filter((event) => {
+      if (eventStatusFilter && event.status !== eventStatusFilter) return false;
+      if (!query) return true;
+      return (
+        event.agent_id.toLowerCase().includes(query) ||
+        event.action.toLowerCase().includes(query) ||
+        (event.error ?? '').toLowerCase().includes(query)
+      );
+    });
+  }, [recentEvents, eventSearch, eventStatusFilter]);
+
+  const eventStatusOptions = useMemo(
+    () =>
+      Array.from(new Set(recentEvents.map((event) => event.status))).map((status) => ({
+        value: status,
+        label: t(`tenant.acp.eventStatus.${status}`, status),
+      })),
+    [recentEvents, t]
+  );
 
   const loadStatus = useCallback(async () => {
     if (!tenantId) return;
@@ -190,8 +237,12 @@ export const AcpDashboard: React.FC = () => {
       setStatusData(response);
       setRunnerPools(pools);
       hasLoadedRef.current = true;
+      setLoadError(null);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : t('tenant.acp.errors.loadFailed'));
+      const errorMessage =
+        error instanceof Error ? error.message : t('tenant.acp.errors.loadFailed');
+      setLoadError(errorMessage);
+      message.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -204,6 +255,7 @@ export const AcpDashboard: React.FC = () => {
   useEffect(() => {
     if (!tenantId) return;
     const timer = window.setInterval(() => {
+      if (document.hidden) return;
       void loadStatus();
     }, STATUS_REFRESH_INTERVAL);
     return () => {
@@ -244,6 +296,21 @@ export const AcpDashboard: React.FC = () => {
     },
     [testForm, t]
   );
+
+  const handleDrawerClose = useCallback(() => {
+    if (!form.isFieldsTouched()) {
+      setDrawerOpen(false);
+      return;
+    }
+    void confirmAction({
+      title: t('common.unsavedChanges'),
+      okText: t('common.discard'),
+      cancelText: t('common.cancel'),
+      danger: true,
+    }).then((confirmed) => {
+      if (confirmed) setDrawerOpen(false);
+    });
+  }, [form, t]);
 
   const submitAgent = useCallback(async () => {
     if (!tenantId) return;
@@ -351,7 +418,8 @@ export const AcpDashboard: React.FC = () => {
         dataIndex: 'runnerPoolKey',
         key: 'runnerPoolKey',
         width: 150,
-        render: (value?: string | null) => value || <Tag>direct</Tag>,
+        render: (value?: string | null) =>
+          value || <Tag>{t('tenant.acp.form.directRunner', 'Direct transport')}</Tag>,
       },
       {
         title: t('tenant.acp.columns.status'),
@@ -410,6 +478,9 @@ export const AcpDashboard: React.FC = () => {
             />
             <Popconfirm
               title={t('tenant.acp.deleteConfirm')}
+              okText={t('common.delete')}
+              okButtonProps={{ danger: true }}
+              cancelText={t('common.cancel')}
               onConfirm={() => void deleteAgent(agent)}
             >
               <Button danger icon={<Trash2 size={16} />} aria-label={t('common.delete')} />
@@ -449,7 +520,11 @@ export const AcpDashboard: React.FC = () => {
         title: t('tenant.acp.columns.status'),
         dataIndex: 'status',
         key: 'status',
-        render: (value: string) => <Tag color={value === 'success' ? 'green' : 'red'}>{value}</Tag>,
+        render: (value: string) => (
+          <Tag color={value === 'success' ? 'green' : 'red'}>
+            {t(`tenant.acp.eventStatus.${value}`, value)}
+          </Tag>
+        ),
       },
       {
         title: t('tenant.acp.columns.duration'),
@@ -576,33 +651,73 @@ export const AcpDashboard: React.FC = () => {
         </Space>
       </div>
 
+      {loadError && !statusData ? (
+        <Alert
+          type="error"
+          showIcon
+          title={t('tenant.acp.errors.loadFailed')}
+          description={loadError}
+          action={
+            <Button
+              size="small"
+              icon={<RefreshCw size={14} />}
+              loading={loading}
+              onClick={() => void loadStatus()}
+            >
+              {t('common.retry')}
+            </Button>
+          }
+        />
+      ) : null}
+      {loadError && statusData ? (
+        <Alert
+          type="warning"
+          showIcon
+          title={t('tenant.acp.errors.loadFailed')}
+          description={loadError}
+          action={
+            <Button
+              size="small"
+              icon={<RefreshCw size={14} />}
+              loading={loading}
+              onClick={() => void loadStatus()}
+            >
+              {t('common.retry')}
+            </Button>
+          }
+        />
+      ) : null}
+
       <Row gutter={[16, 16]}>
         <Col xs={24} md={6}>
-          <Card>
-            <Statistic title={t('tenant.acp.stats.agents')} value={statusData?.agentCount ?? 0} />
+          <Card loading={!statusData && loading}>
+            <Statistic
+              title={t('tenant.acp.stats.agents')}
+              value={statusData ? statusData.agentCount : '-'}
+            />
           </Card>
         </Col>
         <Col xs={24} md={6}>
-          <Card>
+          <Card loading={!statusData && loading}>
             <Statistic
               title={t('tenant.acp.stats.available')}
-              value={statusData?.availableCount ?? 0}
+              value={statusData ? statusData.availableCount : '-'}
             />
           </Card>
         </Col>
         <Col xs={24} md={6}>
-          <Card>
+          <Card loading={!statusData && loading}>
             <Statistic
               title={t('tenant.acp.stats.activeSessions')}
-              value={statusData?.activeSessionCount ?? 0}
+              value={statusData ? statusData.activeSessionCount : '-'}
             />
           </Card>
         </Col>
         <Col xs={24} md={6}>
-          <Card>
+          <Card loading={!statusData && loading}>
             <Statistic
               title={t('tenant.acp.stats.missingEnv')}
-              value={statusData?.missingEnvCount ?? 0}
+              value={statusData ? statusData.missingEnvCount : '-'}
             />
           </Card>
         </Col>
@@ -619,11 +734,21 @@ export const AcpDashboard: React.FC = () => {
             label: t('tenant.acp.tabs.agents'),
             children: (
               <Card>
+                <Input.Search
+                  allowClear
+                  value={agentSearch}
+                  onChange={(event) => {
+                    setAgentSearch(event.target.value);
+                  }}
+                  placeholder={t('tenant.acp.filters.searchAgents', 'Search agents…')}
+                  aria-label={t('tenant.acp.filters.searchAgents', 'Search agents…')}
+                  style={{ maxWidth: 320, marginBottom: 12 }}
+                />
                 <Table
                   rowKey="agentKey"
                   loading={loading}
                   columns={agentColumns}
-                  dataSource={agents}
+                  dataSource={filteredAgents}
                   pagination={{ pageSize: 10 }}
                 />
               </Card>
@@ -634,11 +759,21 @@ export const AcpDashboard: React.FC = () => {
             label: t('tenant.acp.tabs.sessions'),
             children: (
               <Card>
+                <Input.Search
+                  allowClear
+                  value={sessionSearch}
+                  onChange={(event) => {
+                    setSessionSearch(event.target.value);
+                  }}
+                  placeholder={t('tenant.acp.filters.searchSessions', 'Search sessions…')}
+                  aria-label={t('tenant.acp.filters.searchSessions', 'Search sessions…')}
+                  style={{ maxWidth: 320, marginBottom: 12 }}
+                />
                 <Table
                   rowKey="session_id"
                   loading={loading}
                   columns={sessionColumns}
-                  dataSource={sessions}
+                  dataSource={filteredSessions}
                   pagination={{ pageSize: 8 }}
                 />
               </Card>
@@ -649,11 +784,34 @@ export const AcpDashboard: React.FC = () => {
             label: t('tenant.acp.tabs.events'),
             children: (
               <Card>
+                <Space wrap style={{ marginBottom: 12 }}>
+                  <Input.Search
+                    allowClear
+                    value={eventSearch}
+                    onChange={(event) => {
+                      setEventSearch(event.target.value);
+                    }}
+                    placeholder={t('tenant.acp.filters.searchEvents', 'Search events…')}
+                    aria-label={t('tenant.acp.filters.searchEvents', 'Search events…')}
+                    style={{ maxWidth: 320 }}
+                  />
+                  <Select
+                    allowClear
+                    value={eventStatusFilter}
+                    onChange={(value) => {
+                      setEventStatusFilter(value);
+                    }}
+                    placeholder={t('tenant.acp.filters.status', 'Status')}
+                    aria-label={t('tenant.acp.filters.status', 'Status')}
+                    style={{ minWidth: 140 }}
+                    options={eventStatusOptions}
+                  />
+                </Space>
                 <Table
                   rowKey={(event) => `${event.agent_id}-${event.action}-${event.timestamp}`}
                   loading={loading}
                   columns={eventColumns}
-                  dataSource={recentEvents}
+                  dataSource={filteredEvents}
                   pagination={{ pageSize: 8 }}
                 />
               </Card>
@@ -665,9 +823,7 @@ export const AcpDashboard: React.FC = () => {
       <Drawer
         title={editingAgent ? t('tenant.acp.form.editTitle') : t('tenant.acp.form.createTitle')}
         open={drawerOpen}
-        onClose={() => {
-          setDrawerOpen(false);
-        }}
+        onClose={handleDrawerClose}
         size={720}
         extra={
           <Button type="primary" loading={saving} onClick={() => void submitAgent()}>

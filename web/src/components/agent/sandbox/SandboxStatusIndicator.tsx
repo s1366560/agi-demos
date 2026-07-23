@@ -13,7 +13,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type FC } from
 
 import { useTranslation } from 'react-i18next';
 
-import { Popover, message } from 'antd';
+import { Modal, Popover, message } from 'antd';
 import {
   Terminal,
   Power,
@@ -375,7 +375,17 @@ const MetricsPopover: FC<{
             <button
               type="button"
               onClick={() => {
-                void onStop();
+                Modal.confirm({
+                  title: t('agent.sandbox.action.stopConfirmTitle', 'Stop sandbox container?'),
+                  content: t(
+                    'agent.sandbox.action.stopConfirmDesc',
+                    'This destroys the sandbox container. Unsaved work inside it will be lost.'
+                  ),
+                  okText: t('agent.sandbox.action.stopConfirmOk', 'Stop container'),
+                  cancelText: t('common.cancel', 'Cancel'),
+                  okButtonProps: { danger: true },
+                  onOk: () => onStop(),
+                });
               }}
               className="px-2.5 py-1 text-xs rounded-md border border-red-200 dark:border-red-800 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer"
             >

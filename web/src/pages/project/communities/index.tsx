@@ -17,18 +17,17 @@ import React, {
 } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 
 import { message } from 'antd';
 import {
   AlertCircle,
   CheckCircle,
-  ChevronLeft,
-  ChevronRight,
   Clock,
   Info as InfoIcon,
   Loader2,
   RefreshCw,
+  RotateCcw,
   Users,
   X,
 } from 'lucide-react';
@@ -36,6 +35,7 @@ import {
 import { formatDateOnly, formatDateTime } from '@/utils/date';
 
 import { VirtualGrid } from '../../../components/common';
+import { Pagination as SharedPagination } from '../../../components/shared/Pagination';
 import { TaskList } from '../../../components/tasks/TaskList';
 import { graphService } from '../../../services/graphService';
 import { subscribeToTaskEvents } from '../../../services/taskStream';
@@ -54,6 +54,7 @@ interface CommunitiesListContextValue {
   selectedCommunity: Community | null;
   members: Entity[];
   membersLoading: boolean;
+  membersError: string | null;
   loading: boolean;
   error: string | null;
   errorSource: ErrorSource | null;
@@ -69,6 +70,7 @@ interface CommunitiesListContextValue {
   closeDetail: () => void;
   rebuildCommunities: () => Promise<void>;
   cancelTask: () => Promise<void>;
+  reloadMembers: () => void;
   setPage: (page: number) => void;
   clearError: () => void;
   dismissTask: () => void;
@@ -222,6 +224,12 @@ function formatPercent(value: number): string {
   return `${String(Math.max(0, Math.min(100, value)))}%`;
 }
 
+function parsePositiveIntParam(value: string | null): number | null {
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 // ========================================
 // Root Component
 // ========================================
@@ -237,6 +245,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
   ({ children, projectId: propProjectId, tenantId: propTenantId, limit: propLimit = 20 }) => {
     const { t } = useTranslation();
     const { tenantId: urlTenantId, projectId: urlProjectId } = useParams();
+    const [searchParams, setSearchParams] = useSearchParams();
     const tenantId = propTenantId || urlTenantId;
     const projectId = propProjectId || urlProjectId;
 
@@ -245,13 +254,31 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
     const [selectedCommunity, setSelectedCommunity] = useState<Community | null>(null);
     const [members, setMembers] = useState<Entity[]>([]);
     const [membersLoading, setMembersLoading] = useState(false);
+    const [membersError, setMembersError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [errorState, setErrorState] = useState<ErrorState | null>(null);
     const [rebuilding, setRebuilding] = useState(false);
     const [totalCount, setTotalCount] = useState(0);
-    const [page, setPage] = useState(0);
+    // Page seeds from the URL query (1-based in the URL, 0-based in state).
+    const [page, setPage] = useState(() => {
+      const parsed = parsePositiveIntParam(searchParams.get('page'));
+      return parsed !== null ? parsed - 1 : 0;
+    });
     const [currentTask, setCurrentTask] = useState<BackgroundTask | null>(null);
     const taskUnsubscribeRef = useRef<(() => void) | null>(null);
+
+    // Reflect pagination in the URL so views survive reload and sharing.
+    useEffect(() => {
+      const next = new URLSearchParams(searchParams);
+      if (page > 0) {
+        next.set('page', String(page + 1));
+      } else {
+        next.delete('page');
+      }
+      if (next.toString() !== searchParams.toString()) {
+        setSearchParams(next, { replace: true });
+      }
+    }, [page, searchParams, setSearchParams]);
 
     // Load communities
     const loadCommunities = useCallback(async () => {
@@ -296,12 +323,14 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
     const loadMembers = useCallback(
       async (communityUuid: string) => {
         setMembersLoading(true);
+        setMembersError(null);
         try {
           const result = await graphService.getCommunityMembers(communityUuid, 100);
           setMembers(result.members);
         } catch (err) {
           logger.error('Failed to load members:', err);
-          void message.error(t('project.graph.communities.messages.members_load_failed'));
+          setMembers([]);
+          setMembersError(t('project.graph.communities.messages.members_load_failed'));
         } finally {
           setMembersLoading(false);
         }
@@ -455,15 +484,23 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
       (community: Community) => {
         setSelectedCommunity(community);
         setMembers([]);
+        setMembersError(null);
         void loadMembers(community.uuid);
       },
       [loadMembers]
     );
 
+    // Retry loading members for the currently selected community
+    const reloadMembers = useCallback(() => {
+      if (!selectedCommunity) return;
+      void loadMembers(selectedCommunity.uuid);
+    }, [loadMembers, selectedCommunity]);
+
     // Close detail
     const closeDetail = useCallback(() => {
       setSelectedCommunity(null);
       setMembers([]);
+      setMembersError(null);
     }, []);
 
     // Clear error
@@ -503,6 +540,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
         selectedCommunity,
         members,
         membersLoading,
+        membersError,
         loading,
         error: errorState?.message ?? null,
         errorSource: errorState?.source ?? null,
@@ -516,6 +554,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
         closeDetail,
         rebuildCommunities,
         cancelTask,
+        reloadMembers,
         setPage,
         clearError,
         dismissTask,
@@ -528,6 +567,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
         selectedCommunity,
         members,
         membersLoading,
+        membersError,
         loading,
         errorState,
         rebuilding,
@@ -540,6 +580,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
         closeDetail,
         rebuildCommunities,
         cancelTask,
+        reloadMembers,
         clearError,
         dismissTask,
         totalPages,
@@ -587,7 +628,7 @@ const Header: React.FC = memo(() => {
           disabled={rebuilding}
           className="flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2 text-white transition-colors hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/30 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-slate-200 dark:focus-visible:ring-slate-50/30"
         >
-          <AlertCircle size={16} aria-hidden="true" />
+          <RotateCcw size={16} aria-hidden="true" />
           {rebuilding
             ? t('project.graph.communities.rebuilding')
             : t('project.graph.communities.rebuild')}
@@ -644,13 +685,27 @@ const List: React.FC = memo(() => {
 
   if (loading) {
     return (
-      <div data-testid="loading-indicator" className="text-center py-12" role="status">
-        <Loader2
-          size={32}
-          className="text-slate-400 animate-spin motion-reduce:animate-none"
-          aria-hidden="true"
-        />
-        <p className="text-slate-500 mt-2">{t('project.graph.communities.empty.loading')}</p>
+      <div
+        data-testid="loading-indicator"
+        role="status"
+        aria-label={t('project.graph.communities.empty.loading')}
+        className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+      >
+        {Array.from({ length: 6 }, (_, index) => (
+          <div
+            key={`community-skeleton-${String(index)}`}
+            className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-800"
+          >
+            <div className="mb-3 flex items-start justify-between">
+              <div className="h-10 w-10 animate-pulse rounded-md bg-slate-100 motion-reduce:animate-none dark:bg-slate-700"></div>
+              <div className="h-6 w-16 animate-pulse rounded-full bg-slate-100 motion-reduce:animate-none dark:bg-slate-700"></div>
+            </div>
+            <div className="mb-2 h-4 w-2/3 animate-pulse rounded bg-slate-100 motion-reduce:animate-none dark:bg-slate-700"></div>
+            <div className="h-3 w-full animate-pulse rounded bg-slate-100 motion-reduce:animate-none dark:bg-slate-700"></div>
+            <div className="mt-1 h-3 w-4/5 animate-pulse rounded bg-slate-100 motion-reduce:animate-none dark:bg-slate-700"></div>
+          </div>
+        ))}
+        <span className="sr-only">{t('project.graph.communities.empty.loading')}</span>
       </div>
     );
   }
@@ -713,46 +768,25 @@ const List: React.FC = memo(() => {
 List.displayName = 'CommunitiesList.List';
 
 const Pagination: React.FC = memo(() => {
-  const { t } = useTranslation();
-  const { page, totalPages, hasNextPage, hasPrevPage, setPage } = useCommunitiesListContext();
+  const { page, totalPages, setPage } = useCommunitiesListContext();
 
   if (totalPages <= 1) return null;
 
   return (
-    <div className="flex items-center justify-center gap-4 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
-      <button
-        type="button"
-        onClick={() => {
-          setPage(Math.max(0, page - 1));
-        }}
-        disabled={!hasPrevPage}
-        className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/20 dark:focus-visible:ring-slate-50/20"
-      >
-        <ChevronLeft size={14} aria-hidden="true" />
-        {t('common.previous')}
-      </button>
-      <span className="text-sm text-slate-600 dark:text-slate-400">
-        {t('project.graph.communities.stats.page', { current: page + 1, total: totalPages })}
-      </span>
-      <button
-        type="button"
-        onClick={() => {
-          setPage(page + 1);
-        }}
-        disabled={!hasNextPage}
-        className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/20 dark:focus-visible:ring-slate-50/20"
-      >
-        {t('common.next')}
-        <ChevronRight size={14} aria-hidden="true" />
-      </button>
-    </div>
+    <SharedPagination
+      page={page}
+      totalPages={totalPages}
+      onPageChange={setPage}
+      className="justify-center rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800 sm:justify-center"
+    />
   );
 });
 Pagination.displayName = 'CommunitiesList.Pagination';
 
 const Detail: React.FC = memo(() => {
   const { t } = useTranslation();
-  const { selectedCommunity, members, membersLoading, closeDetail } = useCommunitiesListContext();
+  const { selectedCommunity, members, membersLoading, membersError, reloadMembers, closeDetail } =
+    useCommunitiesListContext();
 
   if (!selectedCommunity) {
     return (
@@ -854,6 +888,20 @@ const Detail: React.FC = memo(() => {
               />
               {t('project.graph.communities.empty.loading')}
             </p>
+          ) : membersError ? (
+            <div role="alert" className="flex items-center gap-3 text-sm">
+              <p className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                <AlertCircle size={16} aria-hidden="true" />
+                {membersError}
+              </p>
+              <button
+                type="button"
+                onClick={reloadMembers}
+                className="shrink-0 rounded px-3 py-1 text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600/40"
+              >
+                {t('common.actions.retry', 'Retry')}
+              </button>
+            </div>
           ) : members.length > 0 ? (
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {members.slice(0, 20).map((member) => (

@@ -50,6 +50,7 @@ vi.mock('@/components/ui/lazyAntd', () => ({
   LazyEmpty: ({ description }: { description?: React.ReactNode }) => <div>{description}</div>,
   LazyModal: ({ children, open }: { children?: React.ReactNode; open?: boolean }) =>
     open ? <div>{children}</div> : null,
+  LazyPopconfirm: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
   LazySpin: () => <div>Loading</div>,
   useLazyMessage: () => lazyMessageMocks,
 }));

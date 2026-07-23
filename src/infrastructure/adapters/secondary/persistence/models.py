@@ -12,6 +12,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -164,6 +165,78 @@ class APIKey(Base):
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="api_keys")
+
+
+class DesktopWorkspaceContext(Base):
+    """Authoritative tenant/project selection for one desktop user."""
+
+    __tablename__ = "agistack_desktop_workspace_contexts"
+    __table_args__ = (
+        CheckConstraint("revision >= 0", name="ck_desktop_workspace_context_revision"),
+        Index("ix_desktop_workspace_context_scope", "tenant_id", "project_id"),
+    )
+
+    user_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+    project_id: Mapped[str] = mapped_column(String, nullable=False)
+    revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+
+class DesktopWorkspaceContextEvent(Base):
+    """Immutable audit record for a desktop workspace-context transition."""
+
+    __tablename__ = "agistack_desktop_workspace_context_events"
+    __table_args__ = (
+        CheckConstraint("revision > 0", name="ck_desktop_workspace_context_event_revision"),
+        UniqueConstraint(
+            "user_id",
+            "idempotency_key",
+            name="uq_desktop_workspace_context_event_intent",
+        ),
+        UniqueConstraint(
+            "user_id",
+            "revision",
+            name="uq_desktop_workspace_context_event_revision",
+        ),
+        Index(
+            "ix_desktop_workspace_context_events_user_revision",
+            "user_id",
+            text("revision DESC"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    actor_api_key_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    from_tenant_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    from_project_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    to_tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+    to_project_id: Mapped[str] = mapped_column(String, nullable=False)
+    revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    value_json: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        server_default=text("'{}'"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
 
 
 class Tenant(Base):

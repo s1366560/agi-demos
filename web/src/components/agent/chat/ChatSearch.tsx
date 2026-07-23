@@ -116,29 +116,44 @@ export const ChatSearch = memo<ChatSearchProps>(({ timeline, onClose, visible })
     const container = document.querySelector(`[data-testid="message-container"]`);
     if (!container) return;
 
-    // Find the message element by data-msg-index or by iterating event keys
-    const allMsgEls = container.querySelectorAll('[data-msg-index]');
-    for (const el of allMsgEls) {
-      const key = el.getAttribute('key') || '';
-      // Match by searching through child message bubble content
-      if (key === match.eventId) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        el.classList.add('chat-search-highlight');
-        return;
-      }
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const behavior: ScrollBehavior = reducedMotion ? 'auto' : 'smooth';
+
+    // Timeline order per event id, used to locate the nearest mounted row
+    // when the exact match is virtualized away or inside a folded turn.
+    const orderById = new Map<string, number>();
+    timeline.forEach((event, idx) => {
+      if (event.id) orderById.set(event.id, idx);
+    });
+
+    const mountedEls = Array.from(container.querySelectorAll('[data-msg-id]'));
+
+    // Primary: exact match by event id (React keys never reach the DOM, but
+    // MessageArea renders data-msg-id on every message row).
+    const exact = mountedEls.find((el) => el.getAttribute('data-msg-id') === match.eventId);
+    if (exact) {
+      exact.scrollIntoView({ behavior, block: 'center' });
+      exact.classList.add('chat-search-highlight');
+      return;
     }
 
-    // Fallback: scroll by index in the grouped list. The eventIndex maps to timeline,
-    // but data-msg-index maps to grouped items. Find by scanning text content.
-    for (const el of allMsgEls) {
-      const text = el.textContent || '';
-      if (query && text.toLowerCase().includes(query.toLowerCase())) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        el.classList.add('chat-search-highlight');
-        return;
+    // Fallback: the matched row is not mounted (virtualized list or folded
+    // turn). Jump to the mounted message nearest in timeline order so
+    // next/prev still moves instead of sticking on the first text match.
+    let nearest: Element | undefined;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const el of mountedEls) {
+      const id = el.getAttribute('data-msg-id');
+      const idx = id ? orderById.get(id) : undefined;
+      if (idx === undefined) continue;
+      const distance = Math.abs(idx - match.eventIndex);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = el;
       }
     }
-  }, [currentIndex, matches, query, visible]);
+    nearest?.scrollIntoView({ behavior, block: 'center' });
+  }, [currentIndex, matches, visible, timeline]);
 
   const goNext = useCallback(() => {
     setCurrentIndex((i) => (i + 1) % Math.max(matches.length, 1));

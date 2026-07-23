@@ -2,6 +2,8 @@ import React, { useEffect } from 'react';
 
 import { useNavigate, useLocation } from 'react-router-dom';
 
+import { Spin } from 'antd';
+
 import { useAuthStore } from '@/stores/auth';
 import { useTenantStore } from '@/stores/tenant';
 
@@ -24,9 +26,21 @@ export const OrgSetupGuard: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [redirectTarget, navigate]);
 
-  // Render nothing while the redirect is pending to avoid flashing gated content.
+  // Show a loading indicator (not a blank flash) while the redirect is pending.
   if (redirectTarget) {
-    return null;
+    return (
+      <div
+        role="status"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: 200,
+        }}
+      >
+        <Spin size="large" />
+      </div>
+    );
   }
 
   return <>{children}</>;

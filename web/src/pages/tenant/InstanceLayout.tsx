@@ -3,16 +3,13 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useLocation, Outlet } from 'react-router-dom';
 
-import { Tag, Space, InputNumber } from 'antd';
+import { Tag, Space, InputNumber, Modal } from 'antd';
 import { ArrowLeft, FileText, Network, Users, Dna, Settings, LayoutDashboard } from 'lucide-react';
 
-import {
-  LazyModal,
-  LazySpin,
-  LazyButton,
-  LazyPopconfirm,
-  useLazyMessage,
-} from '@/components/ui/lazyAntd';
+import { hasUnsavedChanges } from '@/utils/unsavedChanges';
+
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
+import { LazyModal, LazyButton, LazyPopconfirm, useLazyMessage } from '@/components/ui/lazyAntd';
 
 import { useCurrentInstance, useInstanceLoading, useInstanceActions } from '../../stores/instance';
 
@@ -40,8 +37,27 @@ export const InstanceLayout: React.FC = () => {
     }
   }, [id, getInstance]);
 
+  // Child pages (e.g. Settings) register dirty form state; warn before navigating away
+  const confirmLeaveIfDirty = (action: () => void) => {
+    if (!hasUnsavedChanges()) {
+      action();
+      return;
+    }
+    Modal.confirm({
+      title: t('tenant.instances.settings.unsavedChangesTitle', 'Unsaved changes'),
+      content: t(
+        'tenant.instances.settings.unsavedChangesLeave',
+        'You have unsaved changes. Leave this page and discard them?'
+      ),
+      okText: t('common.discard', 'Discard'),
+      cancelText: t('common.cancel'),
+      okButtonProps: { danger: true },
+      onOk: action,
+    });
+  };
+
   const handleBack = () => {
-    void navigate('..');
+    confirmLeaveIfDirty(() => void navigate('..'));
   };
 
   const handleRestart = async () => {
@@ -164,11 +180,7 @@ export const InstanceLayout: React.FC = () => {
   };
 
   if (!instance && isLoading) {
-    return (
-      <div className="p-8 text-center flex justify-center">
-        <LazySpin size="large" />
-      </div>
-    );
+    return <SkeletonLoader type="list" count={3} />;
   }
 
   if (!instance && !isLoading) {
@@ -257,7 +269,8 @@ export const InstanceLayout: React.FC = () => {
                 handleTabKeyDown(e, index);
               }}
               onClick={() => {
-                void navigate(tab.path);
+                if (isActive) return;
+                confirmLeaveIfDirty(() => void navigate(tab.path));
               }}
               className={`-mb-px flex h-auto shrink-0 cursor-pointer items-center gap-1.5 rounded-none border-b-2 bg-transparent px-4 py-2.5 text-sm font-medium transition-colors ${
                 isActive

@@ -47,10 +47,12 @@ interface SearchResultsProps {
   viewMode: 'grid' | 'list';
   copiedId: string | null;
   selectedSubgraphIds: string[];
+  hasMore?: boolean | undefined;
   onResultsCollapseToggle: () => void;
   onViewModeChange: (mode: 'grid' | 'list') => void;
   onResultClick: (result: SearchResult) => void;
   onCopyId: (id: string, e: React.MouseEvent) => void;
+  onLoadMore?: (() => void) | undefined;
 }
 
 export const SearchResults = memo<SearchResultsProps>(
@@ -61,10 +63,12 @@ export const SearchResults = memo<SearchResultsProps>(
     viewMode,
     copiedId,
     selectedSubgraphIds,
+    hasMore = false,
     onResultsCollapseToggle,
     onViewModeChange,
     onResultClick,
     onCopyId,
+    onLoadMore,
   }) => {
     const { t } = useTranslation();
 
@@ -211,6 +215,22 @@ export const SearchResults = memo<SearchResultsProps>(
               );
             })}
           </div>
+
+          {/* Load more: the backend caps each search, offer another page when the cap is hit */}
+          {hasMore && results.length > 0 && onLoadMore && (
+            <div className="flex justify-center pb-4">
+              <button
+                type="button"
+                onClick={onLoadMore}
+                disabled={loading}
+                className="inline-flex min-h-9 items-center rounded-md border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-surface-dark dark:text-slate-300 dark:hover:bg-slate-900 dark:focus-visible:ring-slate-50/20"
+              >
+                {loading
+                  ? t('common.loading', 'Loading…')
+                  : t('project.search.results.loadMore', 'Load more results')}
+              </button>
+            </div>
+          )}
         </div>
       </section>
     );
@@ -335,9 +355,9 @@ const SearchResultCard = memo<SearchResultCardProps>(
             <div className="flex gap-2">
               {result.metadata.tags &&
                 Array.isArray(result.metadata.tags) &&
-                result.metadata.tags.map((tag: string, i: number) => (
+                result.metadata.tags.map((tag: string) => (
                   <span
-                    key={i}
+                    key={tag}
                     className="rounded bg-slate-100 px-1.5 py-0.5 text-2xs font-medium text-slate-400 dark:bg-slate-900"
                   >
                     #{tag}

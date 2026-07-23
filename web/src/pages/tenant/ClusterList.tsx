@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
@@ -18,7 +18,11 @@ import {
   Card,
   Row,
   Col,
+  Input,
+  Select,
+  Alert,
 } from 'antd';
+import { RefreshCw, Search as SearchIcon } from 'lucide-react';
 
 import {
   useClusters,
@@ -34,6 +38,7 @@ import {
 
 import { ClusterFormFields } from './utils/ClusterFormFields';
 import { parseProviderConfig } from './utils/clusterFormUtils';
+import { formatDate, getStatusColor } from './utils/instanceUtils';
 
 import type { ClusterResponse } from '../../services/clusterService';
 
@@ -52,6 +57,10 @@ export const ClusterList: FC = () => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isHealthDrawerVisible, setIsHealthDrawerVisible] = useState(false);
   const [editingCluster, setEditingCluster] = useState<ClusterResponse | null>(null);
+  // The cluster list API has no search/status params, so filtering is client-side
+  // over the loaded page and mirrored into the URL for shareability.
+  const [search, setSearch] = useState(searchParams.get('search') ?? '');
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') ?? 'all');
 
   const clusters = useClusters();
   const clusterHealth = useClusterHealth();
@@ -86,14 +95,7 @@ export const ClusterList: FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listClusters, clearError, reset]);
 
-  useEffect(() => {
-    if (error) {
-      message.error(error);
-      clearError();
-    }
-  }, [error, clearError]);
-
-  // Reflect page/pageSize in the URL so views survive reload and sharing
+  // Reflect page/pageSize/search/status in the URL so views survive reload and sharing
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
     if (page > 1) {
@@ -106,10 +108,32 @@ export const ClusterList: FC = () => {
     } else {
       next.delete('page_size');
     }
+    if (search) {
+      next.set('search', search);
+    } else {
+      next.delete('search');
+    }
+    if (statusFilter !== 'all') {
+      next.set('status', statusFilter);
+    } else {
+      next.delete('status');
+    }
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true });
     }
-  }, [page, pageSize, searchParams, setSearchParams]);
+  }, [page, pageSize, search, statusFilter, searchParams, setSearchParams]);
+
+  const filteredClusters = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return clusters.filter((cluster) => {
+      if (statusFilter !== 'all' && cluster.status !== statusFilter) return false;
+      if (!term) return true;
+      return (
+        cluster.name.toLowerCase().includes(term) ||
+        cluster.compute_provider.toLowerCase().includes(term)
+      );
+    });
+  }, [clusters, search, statusFilter]);
 
   const healthyCount = clusters.filter((c) => c.status === 'active').length;
   const unhealthyCount = clusters.filter(
@@ -134,14 +158,22 @@ export const ClusterList: FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    await deleteCluster(id);
-    message.success(t('tenant.clusters.deletedSuccess'));
+    try {
+      await deleteCluster(id);
+      message.success(t('tenant.clusters.deletedSuccess'));
+    } catch {
+      // The inline error alert surfaces API failures
+    }
   };
 
   const handleHealthCheck = async (id: string) => {
     setCurrentCluster(clusters.find((c) => c.id === id) || null);
-    await getClusterHealth(id);
-    setIsHealthDrawerVisible(true);
+    try {
+      await getClusterHealth(id);
+      setIsHealthDrawerVisible(true);
+    } catch {
+      // The inline error alert surfaces the failure; keep stale health data hidden
+    }
   };
 
   const handleModalOk = () => {
@@ -152,7 +184,9 @@ export const ClusterList: FC = () => {
         try {
           providerConfig = parseProviderConfig(values.provider_config);
         } catch {
-          message.error(t('tenant.clusters.invalidJsonError'));
+          form.setFields([
+            { name: 'provider_config', errors: [t('tenant.clusters.invalidJsonError')] },
+          ]);
           return;
         }
 
@@ -180,7 +214,7 @@ export const ClusterList: FC = () => {
           }
           setIsModalVisible(false);
         } catch {
-          // The store error effect surfaces API failures
+          // The inline error alert surfaces API failures
         }
       })
       .catch(() => {
@@ -198,17 +232,16 @@ export const ClusterList: FC = () => {
   };
 
   const getStatusTag = (status: string) => {
-    let color = 'default';
-    if (status === 'active') color = 'green';
-    else if (status === 'maintenance') color = 'orange';
-    else if (status === 'error') color = 'red';
-
-    return <Tag color={color}>{t(`tenant.clusters.status.${status}`)}</Tag>;
+    return (
+      <Tag color={getStatusColor(status)}>
+        {t(`tenant.clusters.status.${status}`, { defaultValue: status })}
+      </Tag>
+    );
   };
 
   const handleViewCluster = (id: string): void => {
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    navigate(`/clusters/${id}`);
+    // Relative navigation: works under both /tenant/clusters and /tenant/:tenantId/clusters
+    void navigate(`./${id}`);
   };
 
   const columns = [
@@ -265,6 +298,7 @@ export const ClusterList: FC = () => {
           <Popconfirm
             title={t('tenant.clusters.deleteConfirm')}
             onConfirm={() => void handleDelete(record.id)}
+            okButtonProps={{ danger: true }}
           >
             <Button type="link" danger>
               {t('tenant.clusters.actions.delete')}
@@ -314,9 +348,60 @@ export const ClusterList: FC = () => {
         </Col>
       </Row>
 
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <Input
+          placeholder={t('tenant.clusters.searchPlaceholder', 'Search clusters')}
+          aria-label={t('tenant.clusters.searchPlaceholder', 'Search clusters')}
+          allowClear
+          prefix={<SearchIcon size={14} aria-hidden="true" />}
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+          }}
+          className="w-full sm:max-w-75"
+        />
+        <Select
+          aria-label={t('tenant.clusters.columns.status')}
+          value={statusFilter}
+          onChange={setStatusFilter}
+          className="w-full sm:w-40"
+          options={[
+            { value: 'all', label: t('tenant.clusters.status.all', { defaultValue: 'All' }) },
+            ...['active', 'pending', 'provisioning', 'maintenance', 'error', 'inactive'].map(
+              (status) => ({
+                value: status,
+                label: t(`tenant.clusters.status.${status}`, { defaultValue: status }),
+              })
+            ),
+          ]}
+        />
+        <Button
+          icon={<RefreshCw size={14} aria-hidden="true" />}
+          onClick={() => void listClusters({})}
+          loading={loading}
+          aria-label={t('common.refresh')}
+        >
+          {t('common.refresh')}
+        </Button>
+      </div>
+
+      {error && (
+        <Alert
+          type="error"
+          showIcon
+          closable={{ onClose: clearError }}
+          title={error}
+          action={
+            <Button size="small" onClick={() => void listClusters({})}>
+              {t('common.retry')}
+            </Button>
+          }
+        />
+      )}
+
       <Table
         columns={columns}
-        dataSource={clusters}
+        dataSource={filteredClusters}
         rowKey="id"
         loading={loading}
         scroll={{ x: 'max-content' }}
@@ -373,7 +458,7 @@ export const ClusterList: FC = () => {
             </Descriptions.Item>
             <Descriptions.Item label={t('tenant.clusters.healthDrawer.checkedAt')}>
               {clusterHealth.checked_at
-                ? new Date(clusterHealth.checked_at).toLocaleString()
+                ? formatDate(clusterHealth.checked_at)
                 : t('tenant.clusters.detail.notAvailable')}
             </Descriptions.Item>
           </Descriptions>

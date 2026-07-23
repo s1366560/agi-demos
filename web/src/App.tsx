@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react';
 
+import { useTranslation } from 'react-i18next';
 import { Routes, Route, Navigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
 
 import { ErrorBoundary } from './components/common/ErrorBoundary';
@@ -38,6 +39,7 @@ const InviteAccept = lazy(() =>
 const DeviceApprove = lazy(() =>
   import('./pages/DeviceApprove').then((m) => ({ default: m.DeviceApprove }))
 );
+const NotFound = lazy(() => import('./pages/NotFound').then((m) => ({ default: m.NotFound })));
 
 // Tenant pages
 const TenantOverview = lazy(() =>
@@ -328,11 +330,15 @@ const EdgeMapList = lazy(() => import('./pages/project/schema/EdgeMapList'));
 
 // Loading fallback for lazy-loaded components
 // Hoisted outside component to avoid recreation on each render
-const PageLoader: React.FC = () => (
-  <div className="flex items-center justify-center h-50">
-    <LazySpin size="large" />
-  </div>
-);
+const PageLoader: React.FC = () => {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center justify-center h-50" role="status">
+      <LazySpin size="large" />
+      <span className="sr-only">{t('common.loading', 'Loading…')}</span>
+    </div>
+  );
+};
 
 const ProjectChannelsRedirect: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -591,12 +597,24 @@ export const LegacyTenantConversationRedirect: React.FC = () => {
   );
 };
 
-// Redirect after successful login: honour ?redirect= param when it is a
-// same-origin path. Falls back to '/'. Exists so that deep links such as
-// /device?user_code=X can be preserved through the login round-trip.
+// Redirect after successful login: honour location.state.from (react-router
+// convention) or the ?redirect= query param when it is a same-origin path.
+// Falls back to '/'. Exists so that deep links such as /device?user_code=X
+// can be preserved through the login round-trip.
 const LoginRedirect = () => {
   const [params] = useSearchParams();
-  const raw = params.get('redirect');
+  const location = useLocation();
+  const stateFrom = (location.state as { from?: unknown } | null)?.from;
+  let statePath: string | null = null;
+  if (typeof stateFrom === 'string') {
+    statePath = stateFrom;
+  } else if (stateFrom && typeof stateFrom === 'object') {
+    const { pathname, search } = stateFrom as { pathname?: unknown; search?: unknown };
+    if (typeof pathname === 'string') {
+      statePath = pathname + (typeof search === 'string' ? search : '');
+    }
+  }
+  const raw = statePath ?? params.get('redirect');
   const safe = raw && raw.startsWith('/') && !raw.startsWith('//') ? raw : '/';
   return <Navigate to={safe} replace />;
 };
@@ -643,9 +661,13 @@ function App() {
             <Route
               path="/device"
               element={
-                <Suspense fallback={<PageLoader />}>
-                  <DeviceApprove />
-                </Suspense>
+                isAuthenticated ? (
+                  <Suspense fallback={<PageLoader />}>
+                    <DeviceApprove />
+                  </Suspense>
+                ) : (
+                  <RedirectToLogin />
+                )
               }
             />
 
@@ -1999,7 +2021,14 @@ function App() {
             />
 
             {/* Fallback */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route
+              path="*"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <NotFound />
+                </Suspense>
+              }
+            />
           </Routes>
         </Suspense>
       </ThemeProvider>

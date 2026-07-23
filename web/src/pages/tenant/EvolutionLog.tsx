@@ -6,6 +6,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Typography, Alert, Pagination } from 'antd';
 import { ArrowLeft } from 'lucide-react';
 
+import { logger } from '@/utils/logger';
+
 import { LazyButton, LazySpin, LazyEmpty, LazySelect } from '@/components/ui/lazyAntd';
 
 import {
@@ -51,7 +53,7 @@ export const EvolutionLog: React.FC = () => {
       params.event_type = eventTypeFilter;
     }
     listEvolutionEvents(instanceId, params).catch((err: unknown) => {
-      console.error('Failed to list evolution events:', err);
+      logger.error('Failed to list evolution events:', err);
     });
   }, [instanceId, page, pageSize, eventTypeFilter, listEvolutionEvents, tenantId]);
 
@@ -100,13 +102,29 @@ export const EvolutionLog: React.FC = () => {
         />
       </div>
 
-      {error && <Alert type="error" title={error} closable={{ onClose: clearError }} />}
+      {error && (
+        <Alert
+          type="error"
+          title={error}
+          closable={{ onClose: clearError }}
+          action={
+            <LazyButton
+              size="small"
+              onClick={() => {
+                fetchEvents();
+              }}
+            >
+              {t('common.retry', 'Retry')}
+            </LazyButton>
+          }
+        />
+      )}
 
       {loading && evolutionEvents.length === 0 ? (
         <div className="flex justify-center p-12">
           <LazySpin size="large" />
         </div>
-      ) : evolutionEvents.length === 0 ? (
+      ) : evolutionEvents.length === 0 && error ? null : evolutionEvents.length === 0 ? (
         <Card>
           <LazyEmpty description={t('tenant.evolution.empty', 'No evolution events found')} />
         </Card>

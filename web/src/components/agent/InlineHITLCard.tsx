@@ -603,9 +603,7 @@ const DecisionContent: React.FC<{
             ? t('agent.hitl.multiselect.limit', 'You may select up to {{max}} items', {
                 max: data.max_selections,
               })
-            : t('agent.hitl.multiselect.limit', 'You may select up to {{max}} items', {
-                max: '∞',
-              })}
+            : t('agent.hitl.multiselect.unlimited', 'Select one or more options')}
         </p>
       )}
 
@@ -939,6 +937,7 @@ const EnvVarContent: React.FC<{
                         })
                       }
                       rows={3}
+                      autoComplete="off"
                       className="rounded-md"
                     />
                   ) : (
@@ -949,6 +948,7 @@ const EnvVarContent: React.FC<{
                           field: label,
                         })
                       }
+                      autoComplete="off"
                       className="rounded-md"
                     />
                   )}
@@ -1325,7 +1325,15 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
                     {t('agent.hitl.status.completed', 'Completed')}
                   </LazyTag>
                 ) : (
-                  <span className={`h-1.5 w-1.5 rounded-full ${iconColorClass} bg-current`} />
+                  <span className="inline-flex items-center gap-1.5">
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${iconColorClass} bg-current`}
+                      aria-hidden="true"
+                    />
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      {t('agent.hitl.status.pending', 'Pending')}
+                    </span>
+                  </span>
                 )}
               </div>
               {isAnswered ? (

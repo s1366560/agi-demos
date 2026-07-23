@@ -20,7 +20,7 @@ import { Suspense, lazy, useEffect, useCallback, useMemo, useRef, useState } fro
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 
-import { Dropdown, message } from 'antd';
+import { Dropdown, Modal, message } from 'antd';
 import {
   GripHorizontal,
   Download,
@@ -34,13 +34,14 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { useConversationsStore } from '@/stores/agent/conversationsStore';
 import { useIsPlanMode, useExecutionStore } from '@/stores/agent/executionStore';
-import { useDoomLoopDetected, useSuggestions } from '@/stores/agent/hitlStore';
+import { useAgentHITLStore, useDoomLoopDetected, useSuggestions } from '@/stores/agent/hitlStore';
 import { useIsStreaming, useAgentError, useStreamingStore } from '@/stores/agent/streamingStore';
 import {
   useTimeline,
   useIsLoadingHistory,
   useIsLoadingEarlier,
   useHasEarlier,
+  useTimelineStore,
 } from '@/stores/agent/timelineStore';
 import { useDefinitions } from '@/stores/agentDefinitions';
 import { useAgentV3Store } from '@/stores/agentV3';
@@ -71,6 +72,7 @@ import { WorkspaceStatusBar } from '../workspace/WorkspaceStatusBar';
 
 import { deriveAgentChatTenantId } from './agentChatScope';
 import { ChatSearch } from './chat/ChatSearch';
+import { requestComposerRefill } from './chat/composerEvents';
 import { OnboardingTour } from './chat/OnboardingTour';
 import { subscribeToAgentChatSearchRequests } from './chat/searchEvents';
 import { ShortcutOverlay } from './chat/ShortcutOverlay';
@@ -94,6 +96,7 @@ import type {
   ExecutionPathDecidedEventData,
   PolicyFilteredEventData,
   SelectionTraceEventData,
+  TimelineEvent,
   ToolsetChangedEventData,
 } from '../../types/agent';
 
@@ -122,6 +125,16 @@ const INPUT_DEFAULT_HEIGHT = 160;
 function metadataString(metadata: Record<string, unknown> | undefined, key: string): string | null {
   const value = metadata?.[key];
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+// Matches the prefix injected by handleSend for forced SubAgent delegation;
+// stripped back out when a user message is edited or retried.
+const SUBAGENT_DELEGATION_PREFIX_RE =
+  /^\[System Instruction: Delegate this task strictly to SubAgent "[^"]+"\]\n/;
+
+function stripSubAgentDelegationPrefix(content: string): string {
+  const match = content.match(SUBAGENT_DELEGATION_PREFIX_RE);
+  return match ? content.slice(match[0].length) : content;
 }
 
 function workspaceNodeIdFromConversationId(
@@ -431,6 +444,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     // Local UI state
     const [inputHeight, setInputHeight] = useState(INPUT_DEFAULT_HEIGHT);
     const [chatSearchVisible, setChatSearchVisible] = useState(false);
+    const [loadEarlierFailed, setLoadEarlierFailed] = useState(false);
     const [selectedAgentSessionId, setSelectedAgentSessionId] = useState<string | null>(null);
     const [showOnboarding, setShowOnboarding] = useState(
       () => !localStorage.getItem('memstack_onboarding_complete')
@@ -678,6 +692,109 @@ ${content}`;
       ]
     );
 
+    // --- Message-level actions (MessageActionBar wiring) ---
+
+    // Reset the earlier-messages error banner when switching conversations.
+    useEffect(() => {
+      setLoadEarlierFailed(false);
+    }, [activeConversationId]);
+
+    const handleLoadEarlier = useCallback(() => {
+      if (!activeConversationId || !projectId) return;
+      setLoadEarlierFailed(false);
+      void loadEarlierMessages(activeConversationId, projectId).then((ok) => {
+        // Guard against stale failures surfacing on a different conversation.
+        if (!ok && useAgentV3Store.getState().activeConversationId === activeConversationId) {
+          setLoadEarlierFailed(true);
+        }
+      });
+    }, [activeConversationId, projectId, loadEarlierMessages]);
+
+    // Edit: refill the composer with the user message so it can be adjusted
+    // and re-sent (the composer owns its own state, hence the event bus).
+    const handleEditMessage = useCallback((event: TimelineEvent) => {
+      if (event.type !== 'user_message') return;
+      requestComposerRefill(stripSubAgentDelegationPrefix(event.content));
+    }, []);
+
+    // Reply: quote the target message into the composer.
+    const handleReplyMessage = useCallback((event: TimelineEvent) => {
+      const raw =
+        'content' in event && typeof event.content === 'string'
+          ? event.content
+          : 'fullText' in event && typeof event.fullText === 'string'
+            ? event.fullText
+            : '';
+      const trimmed = raw.trim();
+      if (!trimmed) return;
+      const excerpt = trimmed.length > 500 ? `${trimmed.slice(0, 500)}…` : trimmed;
+      const quoted = excerpt
+        .split('\n')
+        .map((line) => `> ${line}`)
+        .join('\n');
+      requestComposerRefill(`${quoted}\n\n`);
+    }, []);
+
+    // Retry: resend the nearest preceding user message.
+    const handleRetryMessage = useCallback(
+      (event: TimelineEvent) => {
+        const eventIndex = timeline.findIndex((e) => e === event || (e.id && e.id === event.id));
+        for (let i = (eventIndex === -1 ? timeline.length : eventIndex) - 1; i >= 0; i -= 1) {
+          const candidate = timeline[i];
+          if (candidate?.type === 'user_message') {
+            void handleSend(stripSubAgentDelegationPrefix(candidate.content));
+            return;
+          }
+        }
+        void message.warning(
+          t('agent.actions.retryNoUserMessage', {
+            defaultValue: 'No earlier user message to retry',
+          })
+        );
+      },
+      [timeline, handleSend, t]
+    );
+
+    // Delete: remove the message from the local timeline/messages stores.
+    // There is no server-side message delete API, so this is a local-only
+    // removal for the current view.
+    const handleDeleteMessage = useCallback(
+      (event: TimelineEvent) => {
+        if (!event.id || !activeConversationId) return;
+        const rawContent =
+          'content' in event && typeof event.content === 'string' ? event.content : '';
+        const excerpt = rawContent.length > 80 ? `${rawContent.slice(0, 80)}…` : rawContent;
+        Modal.confirm({
+          title: t('agent.actions.deleteMessageTitle', { defaultValue: 'Delete this message?' }),
+          content: excerpt
+            ? t('agent.actions.deleteMessageBody', {
+                excerpt,
+                defaultValue: 'Remove "{{excerpt}}" from this conversation view.',
+              })
+            : t('agent.actions.deleteMessageBodyEmpty', {
+                defaultValue: 'Remove this message from this conversation view.',
+              }),
+          okText: t('common.delete', { defaultValue: 'Delete' }),
+          okButtonProps: { danger: true },
+          cancelText: t('common.cancel', { defaultValue: 'Cancel' }),
+          onOk: () => {
+            const tls = useTimelineStore.getState();
+            const remaining = tls.agentTimeline.filter((e) => e.id !== event.id);
+            tls.setAgentTimeline(remaining);
+            tls.setAgentMessages(tls.agentMessages.filter((m) => m.id !== event.id));
+            useAgentV3Store
+              .getState()
+              .updateConversationState(activeConversationId, { timeline: remaining });
+            const hitl = useAgentHITLStore.getState();
+            if (event.id && hitl.pinnedEventIds.has(event.id)) {
+              hitl.togglePinEvent(event.id);
+            }
+          },
+        });
+      },
+      [activeConversationId, t]
+    );
+
     // Memoized components
     const messageArea = useMemo(
       () =>
@@ -699,18 +816,19 @@ ${content}`;
             isStreaming={isStreaming}
             isLoading={isLoadingHistory}
             hasEarlierMessages={hasEarlier}
-            onLoadEarlier={() => {
-              if (activeConversationId && projectId) {
-                void loadEarlierMessages(activeConversationId, projectId);
-              }
-            }}
+            onLoadEarlier={handleLoadEarlier}
             isLoadingEarlier={isLoadingEarlier}
+            loadEarlierError={loadEarlierFailed}
             conversationId={activeConversationId}
             suggestions={suggestions}
             onSuggestionSelect={(...args) => {
               void handleSend(...args);
             }}
             onAgentSessionSelect={handleAgentSessionSelect}
+            onRetryMessage={handleRetryMessage}
+            onEditMessage={handleEditMessage}
+            onDeleteMessage={handleDeleteMessage}
+            onReplyMessage={handleReplyMessage}
           />
         ),
       [
@@ -725,9 +843,14 @@ ${content}`;
         lastConversation,
         hasEarlier,
         suggestions,
-        loadEarlierMessages,
+        handleLoadEarlier,
+        loadEarlierFailed,
         projectId,
         handleAgentSessionSelect,
+        handleRetryMessage,
+        handleEditMessage,
+        handleDeleteMessage,
+        handleReplyMessage,
       ]
     );
 

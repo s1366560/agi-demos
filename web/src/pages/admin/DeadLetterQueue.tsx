@@ -31,6 +31,8 @@ import {
   Descriptions,
   Badge,
   Progress,
+  Switch,
+  Empty,
 } from 'antd';
 import {
   RefreshCw,
@@ -52,6 +54,8 @@ import { useThemeColor } from '@/hooks/useThemeColor';
 
 import { formatDateTime } from '@/utils/date';
 
+import { StatusTag } from '@/components/common/StatusTag';
+
 import type { ColumnsType } from 'antd/es/table';
 
 const { Title, Text } = Typography;
@@ -61,7 +65,7 @@ const { TextArea } = Input;
 // Helper Components
 // ============================================================================
 
-const StatusTag: React.FC<{ status: DLQMessageStatus }> = ({ status }) => {
+const DLQStatusTag: React.FC<{ status: DLQMessageStatus }> = ({ status }) => {
   const { t } = useTranslation();
   const config: Record<DLQMessageStatus, { color: string; icon: React.ReactNode; label: string }> =
     {
@@ -92,20 +96,17 @@ const StatusTag: React.FC<{ status: DLQMessageStatus }> = ({ status }) => {
       },
     };
 
-  const { color, icon, label } = config[status];
-
-  return (
-    <Tag color={color} icon={icon}>
-      {label}
-    </Tag>
-  );
+  return <StatusTag {...config[status]} />;
 };
 
-const formatAge = (seconds: number): string => {
-  if (seconds < 60) return `${String(Math.round(seconds))}s`;
-  if (seconds < 3600) return `${String(Math.round(seconds / 60))}m`;
-  if (seconds < 86400) return `${String(Math.round(seconds / 3600))}h`;
-  return `${String(Math.round(seconds / 86400))}d`;
+const formatAge = (seconds: number, t: (key: string, defaultValue: string) => string): string => {
+  if (seconds < 60)
+    return `${String(Math.round(seconds))}${t('admin.deadLetterQueue.ageUnits.second', 's')}`;
+  if (seconds < 3600)
+    return `${String(Math.round(seconds / 60))}${t('admin.deadLetterQueue.ageUnits.minute', 'm')}`;
+  if (seconds < 86400)
+    return `${String(Math.round(seconds / 3600))}${t('admin.deadLetterQueue.ageUnits.hour', 'h')}`;
+  return `${String(Math.round(seconds / 86400))}${t('admin.deadLetterQueue.ageUnits.day', 'd')}`;
 };
 
 /** Pretty-print the event payload; fall back to raw text when it is not valid JSON. */
@@ -143,6 +144,9 @@ const DeadLetterQueue: React.FC = () => {
   const [totalMessages, setTotalMessages] = useState(0);
   const [loading, setLoading] = useState(false);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [messagesError, setMessagesError] = useState<string | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
   const [batchActionLoading, setBatchActionLoading] = useState(false);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [statusFilter, setStatusFilter] = useState<DLQMessageStatus | undefined>(undefined);
@@ -175,8 +179,11 @@ const DeadLetterQueue: React.FC = () => {
     try {
       const data = await dlqService.getStats();
       setStats(data);
-    } catch (_error) {
-      message.error(t('admin.deadLetterQueue.errors.failedToLoadStats'));
+      setStatsError(null);
+    } catch (error) {
+      setStatsError(
+        error instanceof Error ? error.message : t('admin.deadLetterQueue.errors.failedToLoadStats')
+      );
     } finally {
       setStatsLoading(false);
     }
@@ -195,8 +202,13 @@ const DeadLetterQueue: React.FC = () => {
       });
       setMessages(data.messages);
       setTotalMessages(data.total);
-    } catch (_error) {
-      message.error(t('admin.deadLetterQueue.errors.failedToLoadMessages'));
+      setMessagesError(null);
+    } catch (error) {
+      setMessagesError(
+        error instanceof Error
+          ? error.message
+          : t('admin.deadLetterQueue.errors.failedToLoadMessages')
+      );
     } finally {
       setLoading(false);
     }
@@ -207,6 +219,19 @@ const DeadLetterQueue: React.FC = () => {
     void fetchStats();
     void fetchMessages();
   }, [fetchStats, fetchMessages]);
+
+  // Auto-refresh (skipped while the tab is hidden), aligned with PoolDashboard
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      void fetchStats();
+      void fetchMessages();
+    }, 30 * 1000);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [autoRefresh, fetchStats, fetchMessages]);
 
   // Refresh all
   const handleRefresh = (): void => {
@@ -371,7 +396,7 @@ const DeadLetterQueue: React.FC = () => {
       dataIndex: 'status',
       key: 'status',
       width: 100,
-      render: (status: DLQMessageStatus) => <StatusTag status={status} />,
+      render: (status: DLQMessageStatus) => <DLQStatusTag status={status} />,
     },
     {
       title: t('admin.deadLetterQueue.columns.retries'),
@@ -391,7 +416,7 @@ const DeadLetterQueue: React.FC = () => {
       dataIndex: 'age_seconds',
       key: 'age',
       width: 80,
-      render: (age: number) => <span className="tabular-nums">{formatAge(age)}</span>,
+      render: (age: number) => <span className="tabular-nums">{formatAge(age, t)}</span>,
     },
     {
       title: t('admin.deadLetterQueue.columns.actions'),
@@ -468,10 +493,19 @@ const DeadLetterQueue: React.FC = () => {
         </Col>
         <Col>
           <Space>
+            <Text type="secondary">{t('admin.deadLetterQueue.autoRefresh', 'Auto Refresh')}</Text>
+            <Switch
+              checked={autoRefresh}
+              onChange={setAutoRefresh}
+              size="small"
+              aria-label={t('admin.deadLetterQueue.autoRefresh', 'Auto Refresh')}
+            />
             <Popconfirm
               title={t('admin.deadLetterQueue.confirm.cleanupExpired')}
               description={t('admin.deadLetterQueue.confirm.cleanupExpiredDesc')}
               onConfirm={() => void handleCleanupExpired()}
+              okText={t('admin.deadLetterQueue.actions.cleanupExpired')}
+              cancelText={t('common.cancel')}
             >
               <Button icon={<Eraser size={16} />}>
                 {t('admin.deadLetterQueue.actions.cleanupExpired')}
@@ -481,6 +515,8 @@ const DeadLetterQueue: React.FC = () => {
               title={t('admin.deadLetterQueue.confirm.cleanupResolved')}
               description={t('admin.deadLetterQueue.confirm.cleanupResolvedDesc')}
               onConfirm={() => void handleCleanupResolved()}
+              okText={t('admin.deadLetterQueue.actions.cleanupResolved')}
+              cancelText={t('common.cancel')}
             >
               <Button icon={<Eraser size={16} />}>
                 {t('admin.deadLetterQueue.actions.cleanupResolved')}
@@ -497,6 +533,22 @@ const DeadLetterQueue: React.FC = () => {
           </Space>
         </Col>
       </Row>
+
+      {/* Statistics load error (inline, with retry — never masquerade as an empty queue) */}
+      {statsError && (
+        <Alert
+          type="error"
+          showIcon
+          style={{ marginBottom: 16 }}
+          title={t('admin.deadLetterQueue.errors.failedToLoadStats')}
+          description={statsError}
+          action={
+            <Button size="small" onClick={() => void fetchStats()}>
+              {t('common.retry')}
+            </Button>
+          }
+        />
+      )}
 
       {/* Statistics Cards */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
@@ -553,7 +605,7 @@ const DeadLetterQueue: React.FC = () => {
           <Card loading={statsLoading}>
             <Statistic
               title={t('admin.deadLetterQueue.stats.oldestAge')}
-              value={stats ? formatAge(stats.oldest_message_age_seconds) : '-'}
+              value={stats ? formatAge(stats.oldest_message_age_seconds, t) : '-'}
               prefix={<Clock size={20} />}
             />
           </Card>
@@ -675,12 +727,43 @@ const DeadLetterQueue: React.FC = () => {
 
       {/* Messages Table */}
       <Card>
+        {messagesError && (
+          <Alert
+            type="error"
+            showIcon
+            style={{ marginBottom: 16 }}
+            title={t('admin.deadLetterQueue.errors.failedToLoadMessages')}
+            description={messagesError}
+            action={
+              <Button size="small" onClick={() => void fetchMessages()}>
+                {t('common.retry')}
+              </Button>
+            }
+          />
+        )}
         <Table<DLQMessage>
           rowKey="id"
           columns={columns}
           dataSource={messages}
           loading={loading}
           rowSelection={rowSelection}
+          locale={{
+            emptyText: messagesError ? (
+              ' '
+            ) : (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={t(
+                  'admin.deadLetterQueue.empty.description',
+                  'No failed messages. The queue is healthy and nothing needs attention.'
+                )}
+              >
+                <Button icon={<RefreshCw size={16} />} onClick={handleRefresh}>
+                  {t('common.refresh')}
+                </Button>
+              </Empty>
+            ),
+          }}
           pagination={{
             current: pagination.current,
             pageSize: pagination.pageSize,
@@ -739,7 +822,7 @@ const DeadLetterQueue: React.FC = () => {
               <Tag color="blue">{selectedMessage.event_type}</Tag>
             </Descriptions.Item>
             <Descriptions.Item label={t('admin.deadLetterQueue.columns.status')}>
-              <StatusTag status={selectedMessage.status} />
+              <DLQStatusTag status={selectedMessage.status} />
             </Descriptions.Item>
             <Descriptions.Item label={t('admin.deadLetterQueue.detail.routingKey')} span={2}>
               <Text code>{selectedMessage.routing_key}</Text>
@@ -754,7 +837,7 @@ const DeadLetterQueue: React.FC = () => {
               {selectedMessage.retry_count}/{selectedMessage.max_retries}
             </Descriptions.Item>
             <Descriptions.Item label={t('admin.deadLetterQueue.columns.age')}>
-              {formatAge(selectedMessage.age_seconds)}
+              {formatAge(selectedMessage.age_seconds, t)}
             </Descriptions.Item>
             <Descriptions.Item label={t('admin.deadLetterQueue.detail.firstFailed')}>
               {formatDateTime(selectedMessage.first_failed_at)}
@@ -783,19 +866,24 @@ const DeadLetterQueue: React.FC = () => {
             </Descriptions.Item>
             {selectedMessage.error_traceback && (
               <Descriptions.Item label={t('admin.deadLetterQueue.detail.stackTrace')} span={2}>
-                <pre
-                  style={{
-                    maxHeight: 200,
-                    overflow: 'auto',
-                    backgroundColor: codeBgColor,
-                    padding: 8,
-                    borderRadius: 4,
-                    fontSize: 11,
-                    color: errorColor,
-                  }}
-                >
-                  {selectedMessage.error_traceback}
-                </pre>
+                <details>
+                  <summary style={{ cursor: 'pointer', marginBottom: 8 }}>
+                    {t('admin.deadLetterQueue.detail.showStackTrace', 'Show stack trace')}
+                  </summary>
+                  <pre
+                    style={{
+                      maxHeight: 200,
+                      overflow: 'auto',
+                      backgroundColor: codeBgColor,
+                      padding: 8,
+                      borderRadius: 4,
+                      fontSize: 11,
+                      color: errorColor,
+                    }}
+                  >
+                    {selectedMessage.error_traceback}
+                  </pre>
+                </details>
               </Descriptions.Item>
             )}
           </Descriptions>
@@ -811,7 +899,10 @@ const DeadLetterQueue: React.FC = () => {
         }}
         onOk={() => void handleDiscardConfirm()}
         confirmLoading={batchActionLoading}
-        okText={t('admin.deadLetterQueue.actions.discard')}
+        okText={t('admin.deadLetterQueue.actions.discardWithCount', {
+          count: messagesForDiscard.length,
+          defaultValue: 'Discard {{count}} message(s)',
+        })}
         cancelText={t('common.cancel')}
         okButtonProps={{ danger: true }}
       >

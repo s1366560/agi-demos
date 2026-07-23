@@ -19,6 +19,8 @@ interface NotificationState {
   notifications: Notification[];
   unreadCount: number;
   isLoading: boolean;
+  /** True when the last fetch failed; cleared on the next successful fetch. */
+  error: boolean;
 
   fetchNotifications: (unreadOnly?: boolean) => Promise<void>;
   markAsRead: (id: string) => Promise<void>;
@@ -38,6 +40,7 @@ export const useNotificationStore = create<NotificationState>()(
       notifications: [],
       unreadCount: 0,
       isLoading: false,
+      error: false,
 
       fetchNotifications: async (unreadOnly = false) => {
         const requestId = latestFetchNotificationsRequest + 1;
@@ -54,11 +57,12 @@ export const useNotificationStore = create<NotificationState>()(
             notifications: notificationsList,
             unreadCount: notificationsList.filter((n: Notification) => !n.is_read).length,
             isLoading: false,
+            error: false,
           });
         } catch (error) {
           if (requestId !== latestFetchNotificationsRequest) return;
           console.error('Failed to fetch notifications:', error);
-          set({ isLoading: false });
+          set({ isLoading: false, error: true });
         }
       },
 

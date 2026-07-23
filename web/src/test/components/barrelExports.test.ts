@@ -24,7 +24,7 @@ vi.mock('../../components/agent/chat/safeMarkdownComponents', () => ({
   safeMarkdownComponents: {},
 }));
 
-// Mock agent barrel -- importing from it triggers katex CSS via TimelineEventItem -> shared.tsx
+// Mock agent barrel -- importing from it triggers katex CSS via shared.tsx
 // vi.mock intercepts sub-module mocks too late for barrel re-exports in vitest 4.x
 vi.mock('../../components/agent', () => ({
   MessageArea: () => null,
@@ -39,7 +39,6 @@ vi.mock('../../components/agent', () => ({
   TenantAgentConfigView: () => null,
   InlineHITLCard: () => null,
   AgentProgressBar: () => null,
-  TimelineEventItem: () => null,
   PatternStats: () => null,
   PatternList: () => null,
   PatternInspector: () => null,
@@ -79,11 +78,6 @@ import {
   InputBar as AgentInputBar,
 } from '../../components/agent';
 import { MarkdownContent } from '../../components/agent/chat';
-import {
-  ActivityTimeline,
-  TokenUsageChart,
-  ToolCallVisualization,
-} from '../../components/agent/execution';
 import { PatternStats, PatternList, PatternInspector } from '../../components/agent/patterns';
 import { SandboxTerminal, SandboxOutputViewer } from '../../components/agent/sandbox';
 import { ErrorBoundary, SkeletonLoader } from '../../components/common';
@@ -125,20 +119,6 @@ describe('Barrel Exports', () => {
 
     it('exports PatternInspector component', () => {
       expect(PatternInspector).toBeDefined();
-    });
-  });
-
-  describe('Agent Execution Barrel', () => {
-    it('exports ActivityTimeline component', () => {
-      expect(ActivityTimeline).toBeDefined();
-    });
-
-    it('exports TokenUsageChart component', () => {
-      expect(TokenUsageChart).toBeDefined();
-    });
-
-    it('exports ToolCallVisualization component', () => {
-      expect(ToolCallVisualization).toBeDefined();
     });
   });
 

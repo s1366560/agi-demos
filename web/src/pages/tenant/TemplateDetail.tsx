@@ -3,10 +3,23 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import { Alert, Button, Card, Descriptions, Empty, message, Spin, Tag, Typography } from 'antd';
-import { ArrowLeft, Copy, Rocket } from 'lucide-react';
+import {
+  Alert,
+  Button,
+  Card,
+  Descriptions,
+  Empty,
+  message,
+  Modal,
+  Space,
+  Tag,
+  Typography,
+} from 'antd';
+import { ArrowLeft, Copy, Rocket, Trash2, Upload } from 'lucide-react';
 
 import { formatDateTime } from '@/utils/date';
+
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 
 import { instanceTemplateService } from '../../services/instanceTemplateService';
 import { useGeneMarketActions, useGenes } from '../../stores/geneMarket';
@@ -33,6 +46,7 @@ export const TemplateDetail: React.FC = () => {
   const [items, setItems] = useState<TemplateItemResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [isCloning, setIsCloning] = useState(false);
+  const [isLifecycleSubmitting, setIsLifecycleSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const genes = useGenes();
@@ -73,7 +87,10 @@ export const TemplateDetail: React.FC = () => {
     try {
       const cloned = await instanceTemplateService.clone(
         templateId,
-        `Copy of ${template.name}`.slice(0, 200)
+        t('tenant.templates.cloneName', {
+          name: template.name,
+          defaultValue: 'Copy of {{name}}',
+        }).slice(0, 200)
       );
       message.success(t('tenant.templateDetail.cloneSuccess', 'Template cloned successfully'));
       void navigate(`../instance-templates/${cloned.id}`);
@@ -82,6 +99,67 @@ export const TemplateDetail: React.FC = () => {
     } finally {
       setIsCloning(false);
     }
+  };
+
+  const handlePublish = () => {
+    if (!templateId || !template) return;
+    Modal.confirm({
+      title: t('tenant.templateDetail.publishConfirmTitle', {
+        name: template.name,
+        defaultValue: 'Publish {{name}}?',
+      }),
+      content: t(
+        'tenant.templateDetail.publishConfirmContent',
+        'Publishing makes this template visible in the marketplace.'
+      ),
+      okText: t('tenant.templateDetail.publishAction', 'Publish'),
+      cancelText: t('common.cancel', 'Cancel'),
+      onOk: async () => {
+        setIsLifecycleSubmitting(true);
+        try {
+          const updated = await instanceTemplateService.publish(templateId);
+          setTemplate(updated);
+          message.success(
+            t('tenant.templateDetail.publishSuccess', 'Template published successfully')
+          );
+        } catch {
+          message.error(t('tenant.templateDetail.publishError', 'Failed to publish template'));
+        } finally {
+          setIsLifecycleSubmitting(false);
+        }
+      },
+    });
+  };
+
+  const handleDelete = () => {
+    if (!templateId || !template) return;
+    Modal.confirm({
+      title: t('tenant.templateDetail.deleteConfirmTitle', {
+        name: template.name,
+        defaultValue: 'Delete {{name}}?',
+      }),
+      content: t(
+        'tenant.templateDetail.deleteConfirmContent',
+        'This removes the template and cannot be undone.'
+      ),
+      okText: t('common.delete', 'Delete'),
+      okType: 'danger',
+      cancelText: t('common.cancel', 'Cancel'),
+      onOk: async () => {
+        setIsLifecycleSubmitting(true);
+        try {
+          await instanceTemplateService.delete(templateId);
+          message.success(
+            t('tenant.templateDetail.deleteSuccess', 'Template deleted successfully')
+          );
+          setIsLifecycleSubmitting(false);
+          void navigate(-1);
+        } catch {
+          message.error(t('tenant.templateDetail.deleteError', 'Failed to delete template'));
+          setIsLifecycleSubmitting(false);
+        }
+      },
+    });
   };
 
   const getGeneName = (geneId: string): string => {
@@ -96,13 +174,34 @@ export const TemplateDetail: React.FC = () => {
 
   if (loading && !template) {
     return (
-      <div className="flex justify-center p-12">
-        <Spin size="large" />
+      <div className="max-w-4xl mx-auto w-full">
+        <SkeletonLoader type="form" />
       </div>
     );
   }
 
   if (!template && !loading) {
+    // A load failure shows an error with retry; only genuine 404s get "not found"
+    if (error) {
+      return (
+        <Alert
+          type="error"
+          title={t('tenant.templateDetail.loadFailed', 'Failed to load template')}
+          description={error}
+          showIcon
+          action={
+            <Button
+              size="small"
+              onClick={() => {
+                void fetchData();
+              }}
+            >
+              {t('common.retry', 'Retry')}
+            </Button>
+          }
+        />
+      );
+    }
     return (
       <Alert
         type="warning"
@@ -125,12 +224,23 @@ export const TemplateDetail: React.FC = () => {
         >
           {t('common.back', 'Back')}
         </Button>
-        <Title level={1} className="!mb-0">
-          {template.name}
-        </Title>
-        {template.is_published && (
-          <Tag color="green">{t('tenant.templateDetail.published', 'Published')}</Tag>
-        )}
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Title level={1} className="!mb-0">
+              {template.name}
+            </Title>
+            {template.is_published && (
+              <Tag color="green">{t('tenant.templateDetail.published', 'Published')}</Tag>
+            )}
+          </div>
+          {template.updated_at ? (
+            <Text type="secondary" className="text-xs">
+              {t('tenant.genes.lastUpdated', 'Last updated {{time}}', {
+                time: formatDateTime(template.updated_at),
+              })}
+            </Text>
+          ) : null}
+        </div>
       </div>
 
       {error && (
@@ -146,7 +256,7 @@ export const TemplateDetail: React.FC = () => {
       )}
 
       <Card className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-        <Descriptions column={2} bordered>
+        <Descriptions column={{ xs: 1, sm: 2 }} bordered>
           <Descriptions.Item label={t('tenant.templateDetail.fields.id', 'ID')}>
             <Paragraph copyable className="!mb-0">
               {template.id}
@@ -174,6 +284,11 @@ export const TemplateDetail: React.FC = () => {
           <Descriptions.Item label={t('tenant.templateDetail.fields.createdAt', 'Created At')}>
             {formatDateTime(template.created_at)}
           </Descriptions.Item>
+          {template.updated_at ? (
+            <Descriptions.Item label={t('tenant.templateDetail.fields.updatedAt', 'Updated At')}>
+              {formatDateTime(template.updated_at)}
+            </Descriptions.Item>
+          ) : null}
         </Descriptions>
       </Card>
 
@@ -214,7 +329,7 @@ export const TemplateDetail: React.FC = () => {
         </Card>
       )}
 
-      <div className="flex gap-4">
+      <Space wrap>
         <Button type="primary" icon={<Rocket size={16} />} onClick={handleDeploy}>
           {t('tenant.templateDetail.deployFromTemplate', 'Deploy from Template')}
         </Button>
@@ -228,7 +343,24 @@ export const TemplateDetail: React.FC = () => {
         >
           {t('tenant.templateDetail.clone', 'Clone Template')}
         </Button>
-      </div>
+        {!template.is_published && (
+          <Button
+            icon={<Upload size={16} />}
+            loading={isLifecycleSubmitting}
+            onClick={handlePublish}
+          >
+            {t('tenant.templateDetail.publishAction', 'Publish')}
+          </Button>
+        )}
+        <Button
+          danger
+          icon={<Trash2 size={16} />}
+          loading={isLifecycleSubmitting}
+          onClick={handleDelete}
+        >
+          {t('tenant.templateDetail.deleteAction', 'Delete Template')}
+        </Button>
+      </Space>
     </div>
   );
 };

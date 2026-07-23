@@ -12,11 +12,13 @@ import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
-import { Brain, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 
 import { useAuthStore } from '@/stores/auth';
 
 import { httpClient } from '@/services/client/httpClient';
+
+import { AuthSplitLayout } from '@/components/auth/AuthSplitLayout';
 
 interface OAuthTokenResponse {
   access_token: string;
@@ -163,106 +165,74 @@ export const OAuthCallback: React.FC = () => {
   const providerName = provider ? provider.charAt(0).toUpperCase() + provider.slice(1) : '';
 
   return (
-    <div className="min-h-screen flex bg-gray-50 dark:bg-slate-950">
-      {/* Left Side - Hero Section (same as Login page) */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-slate-950">
-        <div className="relative flex w-full flex-col justify-between border-r border-slate-800 p-12 text-white">
-          <div className="flex items-center space-x-3">
-            <div className="rounded-md border border-slate-700 bg-slate-900 p-2">
-              <Brain className="h-8 w-8 text-blue-400" />
+    <AuthSplitLayout
+      heroTitle={t('login.hero.title', 'Enterprise AI Memory Cloud')}
+      heroSubtitle={t(
+        'login.hero.subtitle',
+        'Build intelligent applications with persistent memory'
+      )}
+      copyright={t('login.footer.rights', { year: new Date().getFullYear() })}
+      mobileTitle="MemStack"
+    >
+      {/* Status Content */}
+      <div className="text-center" aria-live="polite">
+        {status === 'loading' && (
+          <>
+            <div className="mx-auto w-16 h-16 flex items-center justify-center mb-6 bg-blue-100 dark:bg-blue-900/30 rounded-full">
+              <Loader2 className="h-8 w-8 text-blue-600 dark:text-blue-400 animate-spin motion-reduce:animate-none" />
             </div>
-            <span className="text-2xl font-bold tracking-tight">MemStack</span>
-          </div>
-
-          <div className="space-y-8">
-            <h1 className="text-4xl font-bold leading-tight">
-              {t('login.hero.title', 'Enterprise AI Memory Cloud')}
-            </h1>
-            <p className="text-lg text-slate-300 max-w-md">
-              {t('login.hero.subtitle', 'Build intelligent applications with persistent memory')}
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              {t('login.oauth.processing', 'Completing sign in…')}
+            </h2>
+            <p className="text-gray-600 dark:text-slate-400">
+              {providerName
+                ? t('login.oauth.authenticatingWith', {
+                    provider: providerName,
+                    defaultValue: `Authenticating with ${providerName}…`,
+                  })
+                : t('login.oauth.authenticating', 'Authenticating…')}
             </p>
-          </div>
+          </>
+        )}
 
-          <div className="text-sm text-slate-400 flex justify-between items-center">
-            <span>{t('login.footer.rights', { year: new Date().getFullYear() })}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Right Side - Callback Status */}
-      <div className="flex-1 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-20 xl:px-24 bg-white dark:bg-slate-900">
-        <div className="mx-auto w-full max-w-sm lg:w-96">
-          {/* Mobile Logo */}
-          <div className="lg:hidden mb-8 text-center">
-            <div className="flex items-center justify-center space-x-2 mb-2">
-              <div className="p-2 bg-blue-600 rounded-lg">
-                <Brain className="h-8 w-8 text-white" />
-              </div>
-              <span className="text-2xl font-bold text-gray-900 dark:text-white">MemStack</span>
+        {status === 'success' && (
+          <>
+            <div className="mx-auto w-16 h-16 flex items-center justify-center mb-6 bg-green-100 dark:bg-green-900/30 rounded-full">
+              <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
             </div>
-          </div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              {t('login.oauth.success', 'Sign in successful!')}
+            </h2>
+            <p className="text-gray-600 dark:text-slate-400">
+              {t('login.oauth.redirecting', 'Redirecting you now…')}
+            </p>
+          </>
+        )}
 
-          {/* Status Content */}
-          <div className="text-center" aria-live="polite">
-            {status === 'loading' && (
-              <>
-                <div className="mx-auto w-16 h-16 flex items-center justify-center mb-6 bg-blue-100 dark:bg-blue-900/30 rounded-full">
-                  <Loader2 className="h-8 w-8 text-blue-600 dark:text-blue-400 animate-spin motion-reduce:animate-none" />
-                </div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                  {t('login.oauth.processing', 'Completing sign in…')}
-                </h2>
-                <p className="text-gray-600 dark:text-slate-400">
-                  {providerName
-                    ? t('login.oauth.authenticatingWith', {
-                        provider: providerName,
-                        defaultValue: `Authenticating with ${providerName}…`,
-                      })
-                    : t('login.oauth.authenticating', 'Authenticating…')}
-                </p>
-              </>
+        {status === 'error' && (
+          <>
+            <div className="mx-auto w-16 h-16 flex items-center justify-center mb-6 bg-red-100 dark:bg-red-900/30 rounded-full">
+              <AlertCircle className="h-8 w-8 text-red-600 dark:text-red-400" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              {t('login.oauth.failed', 'Sign in failed')}
+            </h2>
+            {errorMessage && (
+              <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-lg">
+                <p className="text-sm text-red-700 dark:text-red-300">{errorMessage}</p>
+              </div>
             )}
-
-            {status === 'success' && (
-              <>
-                <div className="mx-auto w-16 h-16 flex items-center justify-center mb-6 bg-green-100 dark:bg-green-900/30 rounded-full">
-                  <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
-                </div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                  {t('login.oauth.success', 'Sign in successful!')}
-                </h2>
-                <p className="text-gray-600 dark:text-slate-400">
-                  {t('login.oauth.redirecting', 'Redirecting you now…')}
-                </p>
-              </>
-            )}
-
-            {status === 'error' && (
-              <>
-                <div className="mx-auto w-16 h-16 flex items-center justify-center mb-6 bg-red-100 dark:bg-red-900/30 rounded-full">
-                  <AlertCircle className="h-8 w-8 text-red-600 dark:text-red-400" />
-                </div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                  {t('login.oauth.failed', 'Sign in failed')}
-                </h2>
-                {errorMessage && (
-                  <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-lg">
-                    <p className="text-sm text-red-700 dark:text-red-300">{errorMessage}</p>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={handleRetry}
-                  className="mt-6 inline-flex items-center px-6 py-3 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 transition-colors"
-                >
-                  {t('login.oauth.tryAgain', 'Try again')}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+            <button
+              type="button"
+              onClick={handleRetry}
+              className="mt-6 inline-flex items-center px-6 py-3 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 transition-colors"
+            >
+              {t('login.oauth.tryAgain', 'Try again')}
+            </button>
+          </>
+        )}
       </div>
-    </div>
+    </AuthSplitLayout>
   );
 };
 

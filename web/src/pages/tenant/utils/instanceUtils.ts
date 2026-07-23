@@ -1,22 +1,36 @@
+// Shared status -> tag color mapping for instances, clusters, deploys and runtimes.
 export const getStatusColor = (status: string) => {
-  switch (status) {
+  switch (status.toLowerCase()) {
     case 'creating':
     case 'provisioning':
     case 'pending':
+    case 'initializing':
       return 'blue';
     case 'deploying':
     case 'restarting':
     case 'scaling':
     case 'learning':
     case 'in_progress':
+    case 'warning':
+    case 'maintenance':
+    case 'degraded':
+    case 'paused':
       return 'orange';
     case 'running':
     case 'success':
+    case 'active':
+    case 'connected':
+    case 'healthy':
+    case 'ready':
+    case 'executing':
       return 'green';
     case 'stopped':
+    case 'inactive':
       return 'default';
     case 'error':
     case 'failed':
+    case 'unhealthy':
+    case 'disconnected':
       return 'red';
     case 'deleting':
     case 'terminated':

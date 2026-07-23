@@ -170,19 +170,24 @@ function ToolExecutionCard({
           >
             {execution.toolName}
           </Tag>
-          <button
-            type="button"
-            className="text-sm text-slate-600 cursor-pointer hover:text-blue-600 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded"
-            onClick={() => {
-              const filePath =
-                stringInput(execution.input.file_path) || stringInput(execution.input.path);
-              if (filePath && onFileClick) {
-                onFileClick(filePath);
-              }
-            }}
-          >
-            {formattedInput}
-          </button>
+          {(() => {
+            const filePath =
+              stringInput(execution.input.file_path) || stringInput(execution.input.path);
+            if (filePath && onFileClick) {
+              return (
+                <button
+                  type="button"
+                  className="text-sm text-slate-600 cursor-pointer hover:text-blue-600 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded"
+                  onClick={() => {
+                    onFileClick(filePath);
+                  }}
+                >
+                  {formattedInput}
+                </button>
+              );
+            }
+            return <span className="text-sm text-slate-600">{formattedInput}</span>;
+          })()}
         </div>
         <div className="flex items-center gap-2">
           {execution.durationMs && (

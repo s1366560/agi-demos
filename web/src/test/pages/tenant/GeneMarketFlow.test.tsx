@@ -1,4 +1,4 @@
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 
 import { message, Modal } from 'antd';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -85,6 +85,17 @@ vi.mock('react-router-dom', async () => {
 
 vi.mock('@/stores/tenant', () => ({
   useCurrentTenant: () => ({ id: 'tenant-1' }),
+}));
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: (selector: (state: { user: { id: string } | null }) => unknown) =>
+    selector({ user: { id: 'user-1' } }),
+}));
+
+vi.mock('@/services/geneMarketService', () => ({
+  geneMarketService: {
+    listGenes: vi.fn().mockResolvedValue({ genes: [], total: 0, page: 1, page_size: 100 }),
+  },
 }));
 
 vi.mock('@/services/instanceService', () => ({
@@ -526,7 +537,7 @@ describe('Gene marketplace rating flow', () => {
     expect(screen.queryByText('unlisted')).not.toBeInTheDocument();
   });
 
-  it('opens the rating modal from the rate query parameter', async () => {
+  it('opens the review dialog from the rate query parameter', async () => {
     stateMock.currentGene = gene();
 
     render(
@@ -535,29 +546,12 @@ describe('Gene marketplace rating flow', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText('tenant.genes.rateGene')).toBeInTheDocument();
+    // The standalone header Rate action was removed; ?rate=1 now converges on
+    // the single Write Review flow (button + open dialog title).
+    expect((await screen.findAllByText('gene.writeReview')).length).toBeGreaterThan(1);
     expect(actionsMock.rateGene).not.toHaveBeenCalled();
     await waitFor(() => {
       expect(actionsMock.getGene).toHaveBeenCalledWith('gene-1', { tenant_id: 'tenant-1' });
-    });
-  });
-
-  it('surfaces rating submission failures from the gene store', async () => {
-    const messageErrorSpy = vi.spyOn(message, 'error').mockImplementation(vi.fn());
-    stateMock.currentGene = gene();
-    stateMock.error = 'Rating API failed';
-    actionsMock.rateGene.mockRejectedValue(new Error('Network Error'));
-
-    render(
-      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/gene-1?rate=1']}>
-        <GeneDetail />
-      </MemoryRouter>
-    );
-
-    fireEvent.click(await screen.findByRole('button', { name: 'OK' }));
-
-    await waitFor(() => {
-      expect(messageErrorSpy).toHaveBeenCalledWith('Rating API failed');
     });
   });
 
@@ -574,7 +568,7 @@ describe('Gene marketplace rating flow', () => {
     );
 
     fireEvent.click(await screen.findByRole('button', { name: 'tenant.genes.installAction' }));
-    await pickInstanceInInstallModal('tenant.genes.instanceId');
+    await pickInstanceInInstallModal('Instance ID');
     fireEvent.click(screen.getByRole('button', { name: 'OK' }));
 
     await waitFor(() => {
@@ -598,8 +592,8 @@ describe('Gene marketplace rating flow', () => {
     );
 
     fireEvent.click(await screen.findByRole('button', { name: 'tenant.genes.installAction' }));
-    await pickInstanceInInstallModal('tenant.genes.instanceId');
-    fireEvent.change(screen.getByLabelText('tenant.genes.configOverride'), {
+    await pickInstanceInInstallModal('Instance ID');
+    fireEvent.change(screen.getByLabelText('Config Override (JSON)'), {
       target: { value: '{not-json' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'OK' }));
@@ -736,6 +730,21 @@ describe('Gene marketplace rating flow', () => {
       tenant_id: 'tenant-1',
     });
     expect(messageSuccessSpy).toHaveBeenCalledWith('gene.reviewDeleteSuccess');
+  });
+
+  it('hides the delete action on reviews owned by other users', async () => {
+    stateMock.currentGene = gene();
+    stateMock.reviews = [review({ user_id: 'user-2' })];
+    stateMock.reviewsTotal = 1;
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/gene-1']}>
+        <GeneDetail />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('user-2')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'gene.deleteReview' })).not.toBeInTheDocument();
   });
 
   it('paginates reviews without refetching gene detail or resetting state', async () => {
@@ -1099,5 +1108,86 @@ describe('Gene marketplace rating flow', () => {
       tenant_id: 'tenant-1',
     });
     expect(actionsMock.listGenes).not.toHaveBeenCalled();
+  });
+
+  it('restores gene filters and pagination from the URL query', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/tenant/tenant-1/genes?q=review&category=tool&visibility=public&status=published&page=2&page_size=50',
+        ]}
+      >
+        <GeneMarket />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(actionsMock.listGenes).toHaveBeenCalledWith({
+        page: 2,
+        page_size: 50,
+        tenant_id: 'tenant-1',
+        search: 'review',
+        category: 'tool',
+        visibility: 'public',
+        is_published: true,
+      });
+    });
+  });
+
+  it('restores genome filters from the URL query on the genomes tab', async () => {
+    stateMock.activeTab = 'genomes';
+    stateMock.genomes = [genome()];
+    stateMock.genomeTotal = 1;
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/tenant/tenant-1/genes?tab=genomes&q=pack&visibility=unlisted&status=draft&page=3',
+        ]}
+      >
+        <GeneMarket />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(actionsMock.listGenomes).toHaveBeenCalledWith({
+        page: 3,
+        page_size: 20,
+        tenant_id: 'tenant-1',
+        is_published: false,
+        search: 'pack',
+        visibility: 'unlisted',
+      });
+    });
+  });
+
+  it('mirrors filter changes into the URL query', async () => {
+    const LocationProbe = () => {
+      const location = useLocation();
+      return <output data-testid="location-search">{location.search}</output>;
+    };
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes']}>
+        <GeneMarket />
+        <LocationProbe />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(actionsMock.listGenes).toHaveBeenCalledWith({
+        page: 1,
+        page_size: 20,
+        tenant_id: 'tenant-1',
+      });
+    });
+
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Filter by publish status' }));
+    const publishedOptions = screen.getAllByText('Published');
+    fireEvent.click(publishedOptions[publishedOptions.length - 1] as HTMLElement);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location-search')).toHaveTextContent('status=published');
+    });
   });
 });

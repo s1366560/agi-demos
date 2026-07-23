@@ -25,6 +25,10 @@ import { useCurrentTenant } from '@/stores/tenant';
 import { eventService } from '@/services/eventService';
 import { webhookService, type Webhook } from '@/services/webhookService';
 
+import { logger } from '@/utils/logger';
+
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
+
 const { Title } = Typography;
 
 interface WebhookFormValues {
@@ -130,7 +134,7 @@ export const Webhooks: React.FC = () => {
       setWebhooks(data);
     } catch (err) {
       if (!isCurrentRequest()) return;
-      console.error(err);
+      logger.error('Request failed', err);
       const errorMessage = t('webhooks.fetchError', 'Failed to fetch webhooks');
       setWebhooks([]);
       setLoadError(errorMessage);
@@ -152,7 +156,7 @@ export const Webhooks: React.FC = () => {
     setIsModalVisible(false);
   }, [selectedTenantId]);
 
-  useEffect(() => {
+  const fetchEventTypes = React.useCallback(() => {
     const requestId = eventTypesRequestIdRef.current + 1;
     eventTypesRequestIdRef.current = requestId;
     const requestTenantId = selectedTenantId;
@@ -169,11 +173,15 @@ export const Webhooks: React.FC = () => {
       })
       .catch((err: unknown) => {
         if (!isCurrentRequest()) return;
-        console.error(err);
+        logger.error('Request failed', err);
         setEventTypes([]);
         setEventTypesError(t('webhooks.eventTypesError', 'Failed to load webhook event types'));
       });
   }, [selectedTenantId, t]);
+
+  useEffect(() => {
+    fetchEventTypes();
+  }, [fetchEventTypes]);
 
   const handleDelete = async (id: string) => {
     try {
@@ -181,7 +189,7 @@ export const Webhooks: React.FC = () => {
       message.success(t('webhooks.deleteSuccess', 'Webhook deleted'));
       void fetchWebhooks();
     } catch (err) {
-      console.error(err);
+      logger.error('Request failed', err);
       message.error(t('webhooks.deleteError', 'Failed to delete webhook'));
     }
   };
@@ -223,7 +231,7 @@ export const Webhooks: React.FC = () => {
       void fetchWebhooks();
     } catch (err) {
       if (isFormValidationError(err)) return;
-      console.error(err);
+      logger.error('Request failed', err);
       message.error(
         editingWebhook
           ? t('webhooks.updateError', 'Failed to update webhook')
@@ -240,7 +248,7 @@ export const Webhooks: React.FC = () => {
       await navigator.clipboard.writeText(createdSecret);
       message.success(t('webhooks.secretCopied', 'Secret copied'));
     } catch (err) {
-      console.error(err);
+      logger.error('Request failed', err);
       message.error(t('webhooks.secretCopyError', 'Failed to copy secret'));
     }
   };
@@ -291,7 +299,10 @@ export const Webhooks: React.FC = () => {
             {t('common.edit', 'Edit')}
           </Button>
           <Popconfirm
-            title={t('webhooks.deleteConfirm', 'Are you sure you want to delete this webhook?')}
+            title={t('webhooks.deleteConfirm', {
+              name: record.name,
+              defaultValue: 'Delete webhook "{{name}}"?',
+            })}
             onConfirm={() => {
               void handleDelete(record.id);
             }}
@@ -320,7 +331,17 @@ export const Webhooks: React.FC = () => {
       </div>
 
       {eventTypesError ? (
-        <Alert title={eventTypesError} type="warning" showIcon style={{ marginBottom: 16 }} />
+        <Alert
+          title={eventTypesError}
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          action={
+            <Button size="small" onClick={fetchEventTypes}>
+              {t('common.retry', 'Retry')}
+            </Button>
+          }
+        />
       ) : null}
       {loadError ? (
         <Alert
@@ -341,13 +362,17 @@ export const Webhooks: React.FC = () => {
         />
       ) : null}
 
-      <Table
-        rowKey="id"
-        columns={columns}
-        dataSource={webhooks}
-        loading={loading}
-        pagination={{ pageSize: 20 }}
-      />
+      {loading && webhooks.length === 0 ? (
+        <SkeletonLoader type="table" rows={5} />
+      ) : (
+        <Table
+          rowKey="id"
+          columns={columns}
+          dataSource={webhooks}
+          loading={loading}
+          pagination={{ pageSize: 20 }}
+        />
+      )}
 
       <Modal
         title={

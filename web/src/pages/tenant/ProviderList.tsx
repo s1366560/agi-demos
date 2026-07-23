@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 
 import { App } from 'antd';
 import {
@@ -18,12 +18,14 @@ import {
   Loader2,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
   Star,
   Trash2,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import {
   ProviderCard,
   ProviderHealthPanel,
@@ -40,58 +42,23 @@ import { useTenantStore } from '../../stores/tenant';
 import { ProviderConfig, ProviderType, SystemResilienceStatus } from '../../types/memory';
 import { confirmAction } from '../../utils/confirmAction';
 
-const PROVIDER_TYPE_LABELS: Record<ProviderType, string> = {
-  openai: 'OpenAI',
-  openrouter: 'OpenRouter',
-  dashscope: 'Dashscope',
-  dashscope_coding: 'Dashscope Coding',
-  dashscope_embedding: 'Dashscope Embedding',
-  dashscope_reranker: 'Dashscope Reranker',
-  kimi: 'Moonshot Kimi',
-  kimi_coding: 'Kimi Coding',
-  kimi_embedding: 'Kimi Embedding',
-  kimi_reranker: 'Kimi Reranker',
-  gemini: 'Google Gemini',
-  anthropic: 'Anthropic',
-  groq: 'Groq',
-  azure_openai: 'Azure OpenAI',
-  cohere: 'Cohere',
-  mistral: 'Mistral',
-  bedrock: 'AWS Bedrock',
-  vertex: 'Google Vertex AI',
-  deepseek: 'DeepSeek',
-  minimax: 'MiniMax',
-  minimax_coding: 'MiniMax Coding',
-  minimax_embedding: 'MiniMax Embedding',
-  minimax_reranker: 'MiniMax Reranker',
-  zai: 'ZhipuAI',
-  zai_coding: 'Z.AI Coding',
-  zai_embedding: 'Z.AI Embedding',
-  zai_reranker: 'Z.AI Reranker',
-  ollama: 'Ollama',
-  lmstudio: 'LM Studio',
-  volcengine: 'Volcengine \u706B\u5C71\u5F15\u64CE',
-  volcengine_coding: 'Volcengine Coding',
-  volcengine_embedding: 'Volcengine Embedding',
-  volcengine_reranker: 'Volcengine Reranker',
-};
-
-const PROVIDER_TYPE_FILTER_OPTIONS: Array<{ value: ProviderType; label: string }> = [
-  { value: 'openai', label: PROVIDER_TYPE_LABELS.openai },
-  { value: 'anthropic', label: PROVIDER_TYPE_LABELS.anthropic },
-  { value: 'gemini', label: PROVIDER_TYPE_LABELS.gemini },
-  { value: 'dashscope', label: PROVIDER_TYPE_LABELS.dashscope },
-  { value: 'deepseek', label: PROVIDER_TYPE_LABELS.deepseek },
-  { value: 'minimax', label: PROVIDER_TYPE_LABELS.minimax },
-  { value: 'zai', label: PROVIDER_TYPE_LABELS.zai },
-  { value: 'groq', label: PROVIDER_TYPE_LABELS.groq },
-  { value: 'cohere', label: PROVIDER_TYPE_LABELS.cohere },
-  { value: 'mistral', label: PROVIDER_TYPE_LABELS.mistral },
-];
-
 type ViewMode = 'cards' | 'table';
 type SortField = 'name' | 'health' | 'responseTime';
 type SortOrder = 'asc' | 'desc';
+type ProviderTab = 'my-providers' | 'marketplace' | 'assignments';
+
+const PROVIDER_STATUS_FILTERS = ['active', 'inactive', 'healthy', 'unhealthy'] as const;
+
+const parseProviderTabParam = (value: string | null): ProviderTab =>
+  value === 'marketplace' || value === 'assignments' ? value : 'my-providers';
+
+const parseProviderStatusParam = (value: string | null): string =>
+  value !== null && (PROVIDER_STATUS_FILTERS as readonly string[]).includes(value)
+    ? value
+    : 'all';
+
+const parseProviderTypeParam = (value: string | null): string =>
+  value !== null && PROVIDERS.some((meta) => meta.value === value) ? value : 'all';
 
 interface SortableThProps {
   field: SortField;
@@ -159,9 +126,14 @@ export const ProviderList: React.FC = () => {
     }))
   );
 
-  const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
+  const [typeFilter, setTypeFilter] = useState<string>(() =>
+    parseProviderTypeParam(searchParams.get('type'))
+  );
+  const [statusFilter, setStatusFilter] = useState<string>(() =>
+    parseProviderStatusParam(searchParams.get('status'))
+  );
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<ProviderConfig | null>(null);
   const [checkingHealth, setCheckingHealth] = useState<string | null>(null);
@@ -172,11 +144,30 @@ export const ProviderList: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [viewingStats, setViewingStats] = useState<ProviderConfig | null>(null);
   const [assigningProvider, setAssigningProvider] = useState<ProviderConfig | null>(null);
-  const [activeTab, setActiveTab] = useState<'my-providers' | 'marketplace' | 'assignments'>(
-    'my-providers'
+  const [activeTab, setActiveTab] = useState<ProviderTab>(() =>
+    parseProviderTabParam(searchParams.get('tab'))
   );
   const [selectedProviderType, setSelectedProviderType] = useState<ProviderType | undefined>(
     undefined
+  );
+
+  // Provider type labels come from the canonical PROVIDERS metadata and go
+  // through i18n so locales can override brand display names.
+  const getProviderTypeLabel = useCallback(
+    (providerType: string): string => {
+      const fallback = PROVIDERS.find((meta) => meta.value === providerType)?.label ?? providerType;
+      return t(`tenant.providers.types.${providerType}`, fallback);
+    },
+    [t]
+  );
+
+  const providerTypeFilterOptions = useMemo(
+    () =>
+      PROVIDERS.map((meta) => ({
+        value: meta.value,
+        label: getProviderTypeLabel(meta.value),
+      })),
+    [getProviderTypeLabel]
   );
 
   const loadProviders = useCallback(async () => {
@@ -197,6 +188,40 @@ export const ProviderList: React.FC = () => {
     void loadProviders();
     void loadSystemStatus();
   }, [loadProviders, loadSystemStatus]);
+
+  const handleRefresh = useCallback(() => {
+    void loadProviders();
+    void loadSystemStatus();
+  }, [loadProviders, loadSystemStatus]);
+
+  // Reflect tab/filter state in the URL so refreshes and shared links restore it
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    const trimmedSearch = search.trim();
+    if (activeTab !== 'my-providers') {
+      next.set('tab', activeTab);
+    } else {
+      next.delete('tab');
+    }
+    if (trimmedSearch) {
+      next.set('q', trimmedSearch);
+    } else {
+      next.delete('q');
+    }
+    if (typeFilter !== 'all') {
+      next.set('type', typeFilter);
+    } else {
+      next.delete('type');
+    }
+    if (statusFilter !== 'all') {
+      next.set('status', statusFilter);
+    } else {
+      next.delete('status');
+    }
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [activeTab, search, typeFilter, statusFilter, searchParams, setSearchParams]);
 
   const handleCheckHealth = async (providerId: string) => {
     setCheckingHealth(providerId);
@@ -234,7 +259,18 @@ export const ProviderList: React.FC = () => {
   };
 
   const handleDelete = async (providerId: string) => {
-    if (!(await confirmAction({ title: t('tenant.providers.deleteConfirm'), danger: true })))
+    const providerName =
+      providers.find((provider) => provider.id === providerId)?.name ?? providerId;
+    if (
+      !(await confirmAction({
+        title: t('tenant.providers.deleteConfirmNamed', {
+          name: providerName,
+          defaultValue: 'Delete provider "{{name}}"?',
+        }),
+        okText: t('common.delete'),
+        danger: true,
+      }))
+    )
       return;
     try {
       await deleteProvider(providerId);
@@ -456,7 +492,7 @@ export const ProviderList: React.FC = () => {
                     }}
                   >
                     <option value="all">{t('tenant.providers.allTypes')}</option>
-                    {PROVIDER_TYPE_FILTER_OPTIONS.map((option) => (
+                    {providerTypeFilterOptions.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
@@ -485,6 +521,21 @@ export const ProviderList: React.FC = () => {
                     <ChevronDown size={16} />
                   </div>
                 </div>
+
+                {/* Refresh */}
+                <button
+                  type="button"
+                  onClick={handleRefresh}
+                  disabled={isLoading}
+                  aria-label={t('common.refresh')}
+                  title={t('common.refresh')}
+                  className="shrink-0 p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <RefreshCw
+                    size={18}
+                    className={isLoading ? 'animate-spin motion-reduce:animate-none' : undefined}
+                  />
+                </button>
 
                 {/* View Mode Toggle */}
                 <div className="flex items-center bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg overflow-hidden shrink-0">
@@ -516,13 +567,11 @@ export const ProviderList: React.FC = () => {
 
             {/* Content Area */}
             {isLoading ? (
-              <div className="p-12 text-center">
-                <Loader2
-                  size={32}
-                  className="animate-spin motion-reduce:animate-none text-primary mx-auto"
-                />
-                <p className="mt-4 text-slate-500 dark:text-slate-400">{t('common.loading')}</p>
-              </div>
+              viewMode === 'cards' ? (
+                <SkeletonLoader type="card" count={6} />
+              ) : (
+                <SkeletonLoader type="table" rows={6} />
+              )
             ) : filteredAndSortedProviders.length === 0 ? (
               <div className="p-12 text-center">
                 <div className="flex flex-col items-center gap-4">
@@ -655,7 +704,7 @@ export const ProviderList: React.FC = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                            {PROVIDER_TYPE_LABELS[provider.provider_type] || provider.provider_type}
+                            {getProviderTypeLabel(provider.provider_type)}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -780,8 +829,8 @@ export const ProviderList: React.FC = () => {
               key={providerMeta.value}
               className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 flex flex-col items-center text-center hover:shadow-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
             >
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-lg bg-slate-50 text-4xl dark:bg-slate-800">
-                {providerMeta.icon}
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-lg bg-slate-50 dark:bg-slate-800">
+                <Bot size={32} className="text-primary" aria-hidden="true" />
               </div>
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">
                 {providerMeta.label}

@@ -162,7 +162,9 @@ export type DeviceTokenErrorClassification =
 export function classifyDeviceTokenError(
   error: unknown,
 ): DeviceTokenErrorClassification | null {
-  if (!(error instanceof DesktopApiError) || !isRecord(error.payload)) return null;
+  if (!isRecord(error) || !isUnsignedSafeInteger(error.status) || !isRecord(error.payload)) {
+    return null;
+  }
   const detail = error.payload.detail;
   if (
     error.status === 428 &&

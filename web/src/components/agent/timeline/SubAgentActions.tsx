@@ -3,6 +3,7 @@ import { useState, useCallback } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { message, Popconfirm } from 'antd';
 import { StopCircle, RotateCcw, Send, X } from 'lucide-react';
 
 import { agentService } from '@/services/agentService';
@@ -18,29 +19,47 @@ export const SubAgentActions: React.FC<SubAgentActionsProps> = ({ subagentId, co
   const [instruction, setInstruction] = useState('');
 
   const handleStop = useCallback(() => {
-    agentService.killSubAgent(conversationId, subagentId);
-  }, [conversationId, subagentId]);
+    const sent = agentService.killSubAgent(conversationId, subagentId);
+    if (!sent) {
+      message.error(t('agent.subagent.stopFailed', 'Failed to stop sub-agent'));
+    }
+  }, [conversationId, subagentId, t]);
 
   const handleRedirect = useCallback(() => {
     if (instruction.trim()) {
-      agentService.steerSubAgent(conversationId, subagentId, instruction.trim());
+      const sent = agentService.steerSubAgent(conversationId, subagentId, instruction.trim());
+      if (!sent) {
+        message.error(t('agent.subagent.steerFailed', 'Failed to send redirect'));
+        return;
+      }
       setInstruction('');
       setShowRedirect(false);
     }
-  }, [conversationId, subagentId, instruction]);
+  }, [conversationId, subagentId, instruction, t]);
 
   return (
     <div className="mt-2 flex flex-col gap-2 animate-fade-in">
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={handleStop}
-          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
-          title={t('agent.subagent.action_stop')}
+        <Popconfirm
+          title={t('agent.subagent.stopConfirmTitle', 'Stop this sub-agent?')}
+          description={t(
+            'agent.subagent.stopConfirmDescription',
+            'The running sub-agent will be terminated.'
+          )}
+          onConfirm={handleStop}
+          okText={t('agent.subagent.action_stop')}
+          cancelText={t('common.cancel', 'Cancel')}
+          okButtonProps={{ danger: true }}
         >
-          <StopCircle className="w-3.5 h-3.5" />
-          {t('agent.subagent.action_stop')}
-        </button>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
+            title={t('agent.subagent.action_stop')}
+          >
+            <StopCircle className="w-3.5 h-3.5" />
+            {t('agent.subagent.action_stop')}
+          </button>
+        </Popconfirm>
         <button
           type="button"
           onClick={() => {

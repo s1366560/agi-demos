@@ -40,6 +40,8 @@ import {
 
 import { projectAPI } from '@/services/api';
 
+import { useLocalStorage } from '@/hooks/useLocalStorage';
+
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 import { formatDistanceToNow } from '@/utils/date';
 import {
@@ -99,6 +101,13 @@ const PROJECT_SWITCHER_PAGE_SIZE = 25;
 const PROJECT_SEARCH_PAGE_SIZE = 100;
 const PROJECT_SEARCH_DEBOUNCE_MS = 250;
 const CONVERSATION_AUTO_FILL_PAGE_LIMIT = 2;
+
+function clampSidebarWidth(width: number): number {
+  if (!Number.isFinite(width)) {
+    return SIDEBAR_DEFAULT_WIDTH;
+  }
+  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width));
+}
 
 function projectBelongsToTenant(
   project: Project | null | undefined,
@@ -429,7 +438,12 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
               )}
               <div className="flex shrink-0 items-center gap-1">
                 {conversation.status === 'active' ? (
-                  <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+                  <LazyTooltip title={t('agent.sidebar.active', 'Active')}>
+                    <span className="inline-flex items-center">
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+                      <span className="sr-only">{t('agent.sidebar.active', 'Active')}</span>
+                    </span>
+                  </LazyTooltip>
                 ) : null}
                 <span>{display.timeAgo}</span>
               </div>
@@ -542,14 +556,18 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const { t } = useTranslation();
 
   // Use ref for width during drag to avoid re-renders
-  const widthRef = useRef(SIDEBAR_DEFAULT_WIDTH);
+  const { value: persistedWidth, setValue: setPersistedWidth } = useLocalStorage<number>(
+    'memstack:tenantChatSidebarWidth',
+    SIDEBAR_DEFAULT_WIDTH
+  );
+  const widthRef = useRef(clampSidebarWidth(persistedWidth));
   const sidebarRef = useRef<HTMLElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const activeConversationItemRef = useRef<HTMLAnchorElement | null>(null);
 
   // Internal state for uncontrolled mode
   const [internalCollapsed, setInternalCollapsed] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
+  const [sidebarWidth, setSidebarWidth] = useState(() => clampSidebarWidth(persistedWidth));
   const [isDragging, setIsDragging] = useState(false);
 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -560,6 +578,11 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const [projectSearchQuery, setProjectSearchQuery] = useState('');
   const [isProjectSearchLoading, setIsProjectSearchLoading] = useState(false);
   const [isProjectSearchLoadingMore, setIsProjectSearchLoadingMore] = useState(false);
+  const [projectsLoadError, setProjectsLoadError] = useState(false);
+  const [projectSearchError, setProjectSearchError] = useState(false);
+  const [conversationsLoadError, setConversationsLoadError] = useState(false);
+  const [conversationsRetryToken, setConversationsRetryToken] = useState(0);
+  const [conversationFilter, setConversationFilter] = useState('');
   const loadedProjectIdRef = useRef<string | null>(null);
   const loadedSidebarWorkspaceSurfaceRef = useRef<string | null>(null);
   const autoSelectedProjectIdRef = useRef<string | null>(null);
@@ -865,15 +888,24 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   }, [sidebarWidth, isDragging]);
 
   // Keep the project switcher usable on every tenant page without loading the full project list.
+  const loadProjectsForSwitcher = useCallback(() => {
+    if (!resolvedTenantId) {
+      return;
+    }
+    setProjectsLoadError(false);
+    void Promise.resolve(
+      listProjects(resolvedTenantId, { page: 1, page_size: PROJECT_SWITCHER_PAGE_SIZE })
+    ).catch((error: unknown) => {
+      console.error('Failed to load projects:', error);
+      setProjectsLoadError(true);
+    });
+  }, [listProjects, resolvedTenantId]);
+
   useEffect(() => {
     if (resolvedTenantId && tenantScopedProjects.length === 0) {
-      void Promise.resolve(
-        listProjects(resolvedTenantId, { page: 1, page_size: PROJECT_SWITCHER_PAGE_SIZE })
-      ).catch((error: unknown) => {
-        console.error('Failed to load projects:', error);
-      });
+      loadProjectsForSwitcher();
     }
-  }, [listProjects, resolvedTenantId, tenantScopedProjects.length]);
+  }, [loadProjectsForSwitcher, resolvedTenantId, tenantScopedProjects.length]);
 
   // Set default selected project
   useEffect(() => {
@@ -941,6 +973,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         setActiveConversation(null);
       }
       loadedProjectIdRef.current = selectedProjectId;
+      setConversationsLoadError(false);
       // Use ref to call latest function without triggering effect re-run
       void Promise.resolve(
         loadConversationsRef.current(selectedProjectId, controller.signal)
@@ -949,6 +982,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
           return;
         }
         console.error('Failed to load conversations:', error);
+        setConversationsLoadError(true);
       });
       return () => {
         controller.abort();
@@ -956,7 +990,19 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     }
     // ONLY depend on selectedProjectId, NOT loadConversations
     return undefined;
-  }, [isAgentWorkspaceRoute, resetConversations, selectedProjectId, setActiveConversation]);
+  }, [
+    conversationsRetryToken,
+    isAgentWorkspaceRoute,
+    resetConversations,
+    selectedProjectId,
+    setActiveConversation,
+  ]);
+
+  const handleRetryLoadConversations = useCallback(() => {
+    loadedProjectIdRef.current = null;
+    setConversationsLoadError(false);
+    setConversationsRetryToken((token) => token + 1);
+  }, []);
 
   useEffect(() => {
     if (!isAgentWorkspaceRoute || !tenantId || !selectedProjectId || !workspaceIdFromQuery) {
@@ -1010,11 +1056,13 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       t('agent.sidebar.unknownProject', 'Unknown Project'),
     [projectById, selectedProjectId, t]
   );
-  const emptyProjectOptionLabel = isProjectSearchLoading
-    ? t('agent.sidebar.searchingProjects', 'Searching projects…')
-    : isAgentWorkspaceRoute || projectSearchQuery.trim()
-      ? t('agent.sidebar.noProjectsFound', 'No projects found')
-      : t('agent.sidebar.searchProjectsToSelect', 'Search to select a project');
+  const emptyProjectOptionLabel = projectsLoadError
+    ? t('agent.sidebar.projectsLoadFailed', 'Failed to load projects')
+    : isProjectSearchLoading
+      ? t('agent.sidebar.searchingProjects', 'Searching projects…')
+      : isAgentWorkspaceRoute || projectSearchQuery.trim()
+        ? t('agent.sidebar.noProjectsFound', 'No projects found')
+        : t('agent.sidebar.searchProjectsToSelect', 'Search to select a project');
 
   const enrichedConversations: ConversationWithProject[] = useMemo(() => {
     const workspaceNameById = new Map(
@@ -1050,9 +1098,16 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     workspaceTasks,
     workspaces,
   ]);
+  const filteredConversations: ConversationWithProject[] = useMemo(() => {
+    const query = conversationFilter.trim().toLowerCase();
+    if (!query) {
+      return enrichedConversations;
+    }
+    return enrichedConversations.filter((conv) => conv.title.toLowerCase().includes(query));
+  }, [conversationFilter, enrichedConversations]);
   const conversationSections = useMemo(
-    () => buildConversationSections(enrichedConversations, t),
-    [enrichedConversations, t]
+    () => buildConversationSections(filteredConversations, t),
+    [filteredConversations, t]
   );
   const workspaceGroupIdsKey = useMemo(
     () =>
@@ -1119,6 +1174,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   useEffect(() => {
     autoFillProjectIdRef.current = selectedProjectId;
     autoFillLoadCountRef.current = 0;
+    setConversationFilter('');
   }, [selectedProjectId]);
 
   // Keep route-driven or distant conversation switches anchored to the selected item.
@@ -1370,10 +1426,12 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
       if (!resolvedTenantId || !search) {
         setIsProjectSearchLoading(false);
+        setProjectSearchError(false);
         return;
       }
 
       setIsProjectSearchLoading(true);
+      setProjectSearchError(false);
       projectSearchDebounceRef.current = window.setTimeout(() => {
         void projectAPI
           .list(resolvedTenantId, {
@@ -1397,6 +1455,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             setProjectSearchResults([]);
             setProjectSearchTotal(0);
             setProjectSearchPage(0);
+            setProjectSearchError(true);
           })
           .finally(() => {
             if (projectSearchRequestRef.current === requestId) {
@@ -1500,6 +1559,17 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     'Authorized project search results'
   );
   const selectedProjectBadge = t('agent.sidebar.selectedProjectBadge', 'Selected');
+  const newChatDisabledReason = !isAgentWorkspaceRoute
+    ? t('agent.sidebar.newChatOpenWorkspace', 'Open the agent workspace to start a new chat')
+    : !selectedProjectId
+      ? t('agent.sidebar.newChatSelectProject', 'Select a project to start a new chat')
+      : null;
+  const projectSwitcherDisabled = !resolvedTenantId || selectableProjects.length === 0;
+  const projectSwitcherDisabledReason = !resolvedTenantId
+    ? t('agent.sidebar.projectSwitcherNoTenant', 'No tenant selected')
+    : projectsLoadError
+      ? t('agent.sidebar.projectsLoadFailed', 'Failed to load projects')
+      : t('agent.sidebar.noProjectsAvailable', 'No projects available in this tenant');
 
   return (
     <aside
@@ -1531,6 +1601,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             if (finalSize < COLLAPSE_THRESHOLD) {
               setCollapsed(true);
               setSidebarWidth(SIDEBAR_DEFAULT_WIDTH);
+              setPersistedWidth(SIDEBAR_DEFAULT_WIDTH);
               widthRef.current = SIDEBAR_DEFAULT_WIDTH;
               if (sidebarRef.current) {
                 sidebarRef.current.style.width = `${String(SIDEBAR_COLLAPSED_WIDTH)}px`;
@@ -1538,6 +1609,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             } else {
               setCollapsed(false);
               setSidebarWidth(finalSize);
+              setPersistedWidth(finalSize);
               widthRef.current = finalSize;
             }
             setIsDragging(false);
@@ -1575,7 +1647,10 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       {/* Project Selector */}
       {!collapsed && (
         <div className="space-y-2 border-b border-slate-100 p-3 dark:border-slate-800/50">
-          <div className="relative">
+          <div
+            className="relative"
+            title={projectSwitcherDisabled ? projectSwitcherDisabledReason : undefined}
+          >
             <select
               aria-label={t('agent.sidebar.projectSwitcher', 'Project switcher')}
               value={selectedProjectId ?? ''}
@@ -1584,7 +1659,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                   handleProjectChange(event.target.value);
                 }
               }}
-              disabled={!resolvedTenantId || selectableProjects.length === 0}
+              disabled={projectSwitcherDisabled}
               className="h-9 w-full appearance-none rounded-md border border-slate-200 bg-white px-3 pr-8 text-sm text-slate-900 outline-none transition-colors hover:border-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600"
             >
               {selectableProjects.length === 0 ? (
@@ -1609,6 +1684,18 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
               className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400"
             />
           </div>
+          {projectsLoadError && tenantScopedProjects.length === 0 ? (
+            <div className="flex items-center justify-between gap-2 rounded-md border border-dashed border-rose-200 px-3 py-2 text-xs text-rose-600 dark:border-rose-900/50 dark:text-rose-400">
+              <span>{t('agent.sidebar.projectsLoadFailed', 'Failed to load projects')}</span>
+              <button
+                type="button"
+                onClick={loadProjectsForSwitcher}
+                className="shrink-0 font-medium underline hover:no-underline"
+              >
+                {t('common.retry', 'Retry')}
+              </button>
+            </div>
+          ) : null}
           <div className="relative">
             <LazyInput
               aria-label={t('agent.sidebar.searchProjects', 'Search projects')}
@@ -1665,7 +1752,23 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
               })}
             </div>
           ) : null}
-          {showProjectSearchEmpty ? (
+          {projectSearchError && hasProjectSearchQuery ? (
+            <div className="flex items-center justify-between gap-2 rounded-md border border-dashed border-rose-200 px-3 py-2 text-xs text-rose-600 dark:border-rose-900/50 dark:text-rose-400">
+              <span>
+                {t('agent.sidebar.projectSearchFailed', 'Project search failed')}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  handleProjectSearch(projectSearchQuery);
+                }}
+                className="shrink-0 font-medium underline hover:no-underline"
+              >
+                {t('common.retry', 'Retry')}
+              </button>
+            </div>
+          ) : null}
+          {showProjectSearchEmpty && !projectSearchError ? (
             <div className="rounded-md border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
               {t('agent.sidebar.noProjectsFound', 'No projects found')}
             </div>
@@ -1728,21 +1831,43 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
       {/* New Chat Button */}
       <div className={collapsed ? 'px-2 flex justify-center' : 'p-3'}>
-        <LazyButton
-          type="primary"
-          icon={<Plus size={collapsed ? 20 : 18} />}
-          onClick={handleNewConversation}
-          disabled={!isAgentWorkspaceRoute || !selectedProjectId}
-          aria-label={t('agent.sidebar.newChat', 'New Chat')}
-          className={`
-            ${collapsed ? 'w-10 h-10 p-0' : 'w-full h-10'}
-            bg-primary hover:bg-primary-600 shadow-sm
-            rounded-xl flex items-center justify-center gap-2
-          `}
+        <LazyTooltip
+          title={newChatDisabledReason ?? ''}
+          placement={collapsed ? 'right' : 'top'}
         >
-          {!collapsed && <span>{t('agent.sidebar.newChat', 'New Chat')}</span>}
-        </LazyButton>
+          <span className={collapsed ? 'inline-flex' : 'block w-full'}>
+            <LazyButton
+              type="primary"
+              icon={<Plus size={collapsed ? 20 : 18} />}
+              onClick={handleNewConversation}
+              disabled={!isAgentWorkspaceRoute || !selectedProjectId}
+              aria-label={t('agent.sidebar.newChat', 'New Chat')}
+              className={`
+                ${collapsed ? 'w-10 h-10 p-0' : 'w-full h-10'}
+                bg-primary hover:bg-primary-600 shadow-sm
+                rounded-xl flex items-center justify-center gap-2
+              `}
+            >
+              {!collapsed && <span>{t('agent.sidebar.newChat', 'New Chat')}</span>}
+            </LazyButton>
+          </span>
+        </LazyTooltip>
       </div>
+
+      {/* Conversation filter */}
+      {!collapsed && isAgentWorkspaceRoute && (
+        <div className="px-3 pb-2">
+          <LazyInput
+            aria-label={t('agent.sidebar.filterConversations', 'Filter conversations by title')}
+            placeholder={t('agent.sidebar.filterConversations', 'Filter conversations by title')}
+            value={conversationFilter}
+            onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+              setConversationFilter(event.target.value);
+            }}
+            className="w-full"
+          />
+        </div>
+      )}
 
       {/* Conversation List */}
       <div
@@ -1762,16 +1887,38 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
               </div>
             ) : (
               <>
-                {enrichedConversations.length === 0 ? (
+                {conversationsLoadError && isAgentWorkspaceRoute && selectedProjectId ? (
+                  <div className="text-center py-8">
+                    <MessageSquare size={32} className="mx-auto mb-2 text-rose-400" />
+                    <p className="text-xs text-rose-600 dark:text-rose-400">
+                      {t(
+                        'agent.sidebar.conversationsLoadFailed',
+                        'Failed to load conversations'
+                      )}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleRetryLoadConversations}
+                      className="mt-2 rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      {t('common.retry', 'Retry')}
+                    </button>
+                  </div>
+                ) : filteredConversations.length === 0 ? (
                   <div className="text-center py-8 text-slate-400">
                     <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
                     <p className="text-xs">
-                      {selectedProjectId
-                        ? t('agent.sidebar.noConversations', 'No conversations yet')
-                        : t(
-                            'agent.sidebar.selectProjectToViewConversations',
-                            'Select a project to view conversations'
-                          )}
+                      {conversationFilter.trim()
+                        ? t(
+                            'agent.sidebar.noMatchingConversations',
+                            'No conversations match your filter'
+                          )
+                        : selectedProjectId
+                          ? t('agent.sidebar.noConversations', 'No conversations yet')
+                          : t(
+                              'agent.sidebar.selectProjectToViewConversations',
+                              'Select a project to view conversations'
+                            )}
                     </p>
                   </div>
                 ) : (
@@ -1969,7 +2116,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                 void confirmDeleteConversation();
               }}
             >
-              {t('agent.sidebar.delete', 'Delete')}
+              {t('agent.sidebar.deleteConversation', 'Delete conversation')}
             </LazyButton>
           </div>
         }

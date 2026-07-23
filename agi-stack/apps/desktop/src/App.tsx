@@ -77,6 +77,11 @@ import {
   resolveDeviceAuthorizationUrl,
 } from './features/auth/loginScreenModel';
 import {
+  initialDesktopRuntimeConfig,
+  runtimeConfigForLoginMode,
+  writeLoginModePreference,
+} from './features/auth/loginRuntimeModel';
+import {
   ChatPanel,
   type AgentTaskSignal,
   type AgentTaskSignalStatus,
@@ -318,6 +323,7 @@ import type {
   PlanSnapshot,
   ProjectSummary,
   ProjectWorkItem,
+  RuntimeMode,
   RuntimeNodeLoadState,
   RuntimeDataset,
   RunInputDelivery,
@@ -1593,7 +1599,7 @@ class WorkspaceSsoFlowError extends Error {
 export function App() {
   const runsInTauri = detectTauriShell();
   const { t } = useI18n();
-  const [config, setConfig] = useState<DesktopRuntimeConfig>(DEFAULT_CONFIG);
+  const [config, setConfig] = useState<DesktopRuntimeConfig>(() => initialDesktopRuntimeConfig());
   const [auth, setAuth] = useState<AuthState>(emptyAuthState);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -1844,7 +1850,10 @@ export function App() {
     selectModel: selectRuntimeModel,
   } = useWorkspaceRuntimeProvider(
     config,
-    identityAuthenticated && localRuntimeMode && localRuntimeAuthorityReady,
+    identityAuthenticated &&
+      showRuntimeConfig &&
+      connection === 'ready' &&
+      (config.mode === 'cloud' || (localRuntimeMode && localRuntimeAuthorityReady)),
     runtimeProjectionRefreshRevision,
     runtimeModelRole,
   );
@@ -3727,7 +3736,7 @@ export function App() {
   const openWorkspaceSsoUrl = async (
     authorizationUrl: string,
     expectedUserCode: string,
-    apiBaseUrl: string,
+    deviceAuthorizationBaseUrl: string,
     attemptId: number,
     authRevision: number,
   ): Promise<void> => {
@@ -3747,7 +3756,7 @@ export function App() {
       if (runsInTauri && invoke) {
         await invoke('open_device_authorization_url', {
           url: authorizationUrl,
-          apiBaseUrl,
+          deviceAuthorizationBaseUrl,
           expectedUserCode,
         });
       } else {
@@ -3786,7 +3795,7 @@ export function App() {
     void openWorkspaceSsoUrl(
       current.authorizationUrl,
       current.userCode,
-      configRef.current.apiBaseUrl,
+      configRef.current.deviceAuthorizationBaseUrl,
       current.attemptId,
       current.authRevision,
     );
@@ -3848,7 +3857,7 @@ export function App() {
       if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) return;
 
       const authorizationUrl = resolveDeviceAuthorizationUrl(
-        runtimeConfig.apiBaseUrl,
+        runtimeConfig.deviceAuthorizationBaseUrl,
         deviceAuthorization.verification_uri_complete,
         deviceAuthorization.user_code,
       );
@@ -3868,7 +3877,7 @@ export function App() {
       void openWorkspaceSsoUrl(
         authorizationUrl,
         deviceAuthorization.user_code,
-        runtimeConfig.apiBaseUrl,
+        runtimeConfig.deviceAuthorizationBaseUrl,
         attemptId,
         authRevision,
       );
@@ -3999,6 +4008,8 @@ export function App() {
     setConnection('loading');
     setError(null);
     let persistenceWarning: string | null = null;
+    let issuedAccessToken = '';
+    let tokenAdopted = false;
     try {
       if (hasNativeTrustedSessionBroker()) {
         try {
@@ -4011,6 +4022,7 @@ export function App() {
       }
       const loginClient = new DesktopApiClient({ ...config, apiKey: '' });
       const outcome = await loginClient.login(username, loginPassword);
+      issuedAccessToken = outcome.access_token;
       if (authAttemptRevisionRef.current !== authAttemptRevision) return;
       if (outcome.must_change_password) {
         throw new Error(t('login.passwordChangeRequired'));
@@ -4033,6 +4045,7 @@ export function App() {
       }
       const hydrated = await hydrateCloudSession(outcome, config, authAttemptRevision);
       if (!hydrated) return;
+      tokenAdopted = true;
       if (persistenceWarning) setError(persistenceWarning);
     } catch (caught) {
       if (authAttemptRevisionRef.current !== authAttemptRevision) return;
@@ -4047,6 +4060,10 @@ export function App() {
       setAuth({ ...emptyAuthState, error: message });
       setConnection('error');
       setError(message);
+    } finally {
+      if (issuedAccessToken && !tokenAdopted) {
+        await revokeUnadoptedDeviceToken(issuedAccessToken, config);
+      }
     }
   };
 
@@ -4190,6 +4207,9 @@ export function App() {
           }
         : transportSafeConfig;
     const requestScopeChanged = !isSameDesktopRequestScope(previousConfig, resolvedConfig);
+    if (previousConfig.mode !== resolvedConfig.mode) {
+      writeLoginModePreference(resolvedConfig.mode);
+    }
     if (transportIdentityChanged) {
       supersedeWorkspaceSsoAttempt();
       const authAttemptRevision = ++authAttemptRevisionRef.current;
@@ -4216,6 +4236,13 @@ export function App() {
     setAgentConversationSession(null);
     resetConversationTimeline();
     setAgentTaskSignals([]);
+  };
+
+  const changeLoginMode = (mode: RuntimeMode) => {
+    if (mode === configRef.current.mode) return;
+    setLoginEmail('');
+    setLoginPassword('');
+    handleConfigChange(runtimeConfigForLoginMode(configRef.current, mode));
   };
 
   const useApiKeyManually = () => {
@@ -4267,6 +4294,7 @@ export function App() {
     commitRuntimeConfig({
       ...DEFAULT_CONFIG,
       apiBaseUrl: config.apiBaseUrl,
+      deviceAuthorizationBaseUrl: config.deviceAuthorizationBaseUrl,
       localApiToken: config.localApiToken,
       mode: config.mode,
       workspaceRoot: config.workspaceRoot,
@@ -6469,6 +6497,7 @@ export function App() {
           localReady={localRuntimeAuthorityReady}
           email={loginEmail}
           password={loginPassword}
+          onModeChange={changeLoginMode}
           onEmailChange={setLoginEmail}
           onPasswordChange={setLoginPassword}
           onEmailLogin={(trustedDevice) => void login(trustedDevice)}

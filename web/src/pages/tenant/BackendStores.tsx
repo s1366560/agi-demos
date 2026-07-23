@@ -11,6 +11,7 @@ import {
   Network,
   Pencil,
   Plus,
+  RefreshCw,
   Save,
   Trash2,
   XCircle,
@@ -110,6 +111,7 @@ export const BackendStores: React.FC = () => {
   const [editForm, setEditForm] = useState<StoreFormState>(defaultFormState('graph'));
   const [message, setMessage] = useState<StoreMessage | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isTestingDraft, setIsTestingDraft] = useState(false);
   const [testingStoreId, setTestingStoreId] = useState<string | null>(null);
@@ -133,7 +135,9 @@ export const BackendStores: React.FC = () => {
           setRetrievalStores(stores);
           setRetrievalTypes(types);
         }
+        setLoadFailed(false);
       } catch (loadError) {
+        setLoadFailed(true);
         setMessage({
           kind: 'error',
           text: getErrorMessage(
@@ -382,7 +386,8 @@ export const BackendStores: React.FC = () => {
     if (
       !(await confirmAction({
         title: t('tenant.backendStores.deleteConfirm', {
-          defaultValue: 'Delete this backend store?',
+          name: store.name,
+          defaultValue: 'Delete backend store "{{name}}"?',
         }),
         danger: true,
       }))
@@ -431,37 +436,51 @@ export const BackendStores: React.FC = () => {
             })}
           </p>
         </div>
-        <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-surface-dark">
+        <div className="flex items-center gap-3">
           <button
             type="button"
-            aria-pressed={activePlane === 'graph'}
             onClick={() => {
-              setActivePlane('graph');
+              void loadStores(activePlane);
             }}
-            className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-              activePlane === 'graph'
-                ? 'bg-primary text-white'
-                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-            }`}
+            disabled={isLoading}
+            aria-label={t('common.refresh')}
+            title={t('common.refresh')}
+            className="flex h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
-            <Network size={15} />
-            {t('tenant.backendStores.graph', { defaultValue: 'Graph' })}
+            <RefreshCw size={15} />
           </button>
-          <button
-            type="button"
-            aria-pressed={activePlane === 'retrieval'}
-            onClick={() => {
-              setActivePlane('retrieval');
-            }}
-            className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-              activePlane === 'retrieval'
-                ? 'bg-primary text-white'
-                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Database size={15} />
-            {t('tenant.backendStores.retrieval', { defaultValue: 'Retrieval' })}
-          </button>
+          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-surface-dark">
+            <button
+              type="button"
+              aria-pressed={activePlane === 'graph'}
+              onClick={() => {
+                setActivePlane('graph');
+              }}
+              className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                activePlane === 'graph'
+                  ? 'bg-primary text-white'
+                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Network size={15} />
+              {t('tenant.backendStores.graph', { defaultValue: 'Graph' })}
+            </button>
+            <button
+              type="button"
+              aria-pressed={activePlane === 'retrieval'}
+              onClick={() => {
+                setActivePlane('retrieval');
+              }}
+              className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                activePlane === 'retrieval'
+                  ? 'bg-primary text-white'
+                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Database size={15} />
+              {t('tenant.backendStores.retrieval', { defaultValue: 'Retrieval' })}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -620,8 +639,15 @@ export const BackendStores: React.FC = () => {
                       </span>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
-                      <span>{store.status}</span>
-                      <span>{store.health_status ?? '-'}</span>
+                      <span>{t(`tenant.backendStores.status.${store.status}`, store.status)}</span>
+                      <span>
+                        {store.health_status
+                          ? t(
+                              `tenant.backendStores.healthStatus.${store.health_status}`,
+                              store.health_status
+                            )
+                          : '-'}
+                      </span>
                       <span>{store.detected_version ?? '-'}</span>
                     </div>
                   </div>
@@ -688,7 +714,29 @@ export const BackendStores: React.FC = () => {
               </article>
             ))}
 
-          {!isLoading && currentStores.length === 0 && (
+          {!isLoading && loadFailed && currentStores.length === 0 && (
+            <div
+              role="alert"
+              className="flex flex-col items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-8 text-center dark:border-red-800 dark:bg-red-900/20"
+            >
+              <p className="text-sm text-red-700 dark:text-red-300">
+                {t('tenant.backendStores.loadFailed', {
+                  defaultValue: 'Failed to load backend stores.',
+                })}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  void loadStores(activePlane);
+                }}
+                className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900/40"
+              >
+                {t('common.retry')}
+              </button>
+            </div>
+          )}
+
+          {!isLoading && !loadFailed && currentStores.length === 0 && (
             <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-500 dark:border-slate-800 dark:bg-surface-dark">
               {t('tenant.backendStores.empty', { defaultValue: 'No backend stores found.' })}
             </div>

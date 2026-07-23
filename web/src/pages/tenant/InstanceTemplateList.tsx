@@ -9,11 +9,12 @@ import { Copy, Upload, Trash2, Eye, Plus, Search } from 'lucide-react';
 
 import { formatDateOnly } from '@/utils/date';
 
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import {
   useLazyMessage,
+  LazyAlert,
   LazyPopconfirm,
   LazyEmpty,
-  LazySpin,
   LazyModal,
   LazyButton,
   LazySelect,
@@ -23,6 +24,7 @@ import {
   useTemplates,
   useTemplateLoading,
   useTemplateSubmitting,
+  useTemplateError,
   useTemplateActions,
   useTemplatePagination,
 } from '../../stores/instanceTemplate';
@@ -65,6 +67,7 @@ export const InstanceTemplateList: FC = () => {
   const templates = useTemplates();
   const isLoading = useTemplateLoading();
   const isSubmitting = useTemplateSubmitting();
+  const storeError = useTemplateError();
   const { total, page, pageSize } = useTemplatePagination();
   const {
     listTemplates,
@@ -145,8 +148,8 @@ export const InstanceTemplateList: FC = () => {
       }
       if (err instanceof SyntaxError) {
         messageApi?.error(t('tenant.templates.invalidJson'));
-      } else if (err instanceof Error) {
-        messageApi?.error(err.message);
+      } else {
+        messageApi?.error(t('tenant.templates.createError', 'Failed to create template'));
       }
     }
   };
@@ -167,10 +170,8 @@ export const InstanceTemplateList: FC = () => {
       await cloneTemplate(id, cloneName);
       messageApi?.success(t('tenant.templates.cloneSuccess'));
       void loadTemplates({ page });
-    } catch (err) {
-      if (err instanceof Error) {
-        messageApi?.error(err.message);
-      }
+    } catch {
+      messageApi?.error(t('tenant.templates.cloneError', 'Failed to clone template'));
     }
   };
 
@@ -179,10 +180,8 @@ export const InstanceTemplateList: FC = () => {
       await publishTemplate(id);
       messageApi?.success(t('tenant.templates.publishSuccess'));
       void loadTemplates({ page });
-    } catch (err) {
-      if (err instanceof Error) {
-        messageApi?.error(err.message);
-      }
+    } catch {
+      messageApi?.error(t('tenant.templates.publishError', 'Failed to publish template'));
     }
   };
 
@@ -191,10 +190,8 @@ export const InstanceTemplateList: FC = () => {
       await deleteTemplate(id);
       messageApi?.success(t('tenant.templates.deleteSuccess'));
       void loadTemplates({ page });
-    } catch (err) {
-      if (err instanceof Error) {
-        messageApi?.error(err.message);
-      }
+    } catch {
+      messageApi?.error(t('tenant.templates.deleteError', 'Failed to delete template'));
     }
   };
 
@@ -253,9 +250,27 @@ export const InstanceTemplateList: FC = () => {
       </div>
 
       {isLoading && templates.length === 0 ? (
-        <div className="flex justify-center items-center h-64">
-          <LazySpin size="large" />
-        </div>
+        <SkeletonLoader type="card" count={6} />
+      ) : storeError && templates.length === 0 ? (
+        <LazyAlert
+          type="error"
+          showIcon
+          title={t('tenant.templates.fetchError')}
+          description={storeError}
+          action={
+            <LazyButton
+              size="small"
+              onClick={() => {
+                clearError();
+                loadTemplates({ page }).catch(() =>
+                  messageApi?.error(t('tenant.templates.fetchError'))
+                );
+              }}
+            >
+              {t('common.retry', 'Retry')}
+            </LazyButton>
+          }
+        />
       ) : filteredTemplates.length === 0 ? (
         <div className="bg-surface-light dark:bg-surface-dark p-12 rounded-lg border border-border-light dark:border-border-dark">
           <LazyEmpty description={t('tenant.templates.empty')} />

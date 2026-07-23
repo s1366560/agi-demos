@@ -59,6 +59,7 @@ function LoginSsoQa() {
         localReady={false}
         email={email}
         password={password}
+        onModeChange={() => undefined}
         onEmailChange={setEmail}
         onPasswordChange={setPassword}
         onEmailLogin={() => undefined}

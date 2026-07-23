@@ -4,7 +4,7 @@ import { tenantAPI } from '@/services/api';
 import { useTenantStore } from '@/stores/tenant';
 
 import { OrgInfo } from '../../../../pages/tenant/org-settings/OrgInfo';
-import { fireEvent, render, screen, waitFor } from '../../../utils';
+import { render, screen } from '../../../utils';
 
 vi.mock('@/stores/tenant');
 vi.mock('@/services/api');
@@ -21,13 +21,10 @@ const tenant = {
   created_at: '2026-01-01T00:00:00',
 };
 
-let updateTenant: ReturnType<typeof vi.fn>;
-
 function mockTenantStore() {
   vi.mocked(useTenantStore).mockImplementation((selector: unknown) => {
     const state = {
       currentTenant: tenant,
-      updateTenant,
       isLoading: false,
     };
     return typeof selector === 'function'
@@ -39,7 +36,6 @@ function mockTenantStore() {
 describe('OrgInfo', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    updateTenant = vi.fn().mockResolvedValue(undefined);
     mockTenantStore();
     vi.mocked(tenantAPI.getStats).mockResolvedValue({
       storage: { used: 1024 * 1024, total: 1024 * 1024 * 10, percentage: 10 },
@@ -64,29 +60,15 @@ describe('OrgInfo', () => {
     expect(screen.queryByText('2.4 GB')).not.toBeInTheDocument();
   });
 
-  it('disables logo upload when no upload API exists', async () => {
+  it('shows read-only organization identity with a link to tenant settings', async () => {
     render(<OrgInfo />);
 
-    const uploadButton = screen.getByRole('button', { name: 'Upload Logo' });
-    expect(uploadButton).toBeDisabled();
-    expect(screen.getByText('Logo upload is not available in this build.')).toBeInTheDocument();
-    expect(await screen.findByText('1 MB')).toBeInTheDocument();
-  });
-
-  it('saves organization name and description through the tenant store', async () => {
-    render(<OrgInfo />);
-
-    fireEvent.change(screen.getByDisplayValue('Test Tenant'), {
-      target: { value: 'Renamed Tenant' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-
-    await waitFor(() => {
-      expect(updateTenant).toHaveBeenCalledWith('t1', {
-        name: 'Renamed Tenant',
-        description: 'Memory org',
-      });
-    });
+    expect(screen.getByText('Test Tenant')).toBeInTheDocument();
+    expect(screen.getByText('Memory org')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Edit in Tenant Settings/ })).toBeInTheDocument();
+    // Editing was consolidated into TenantSettings; no inline form remains.
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
     expect(await screen.findByText('1 MB')).toBeInTheDocument();
   });
 

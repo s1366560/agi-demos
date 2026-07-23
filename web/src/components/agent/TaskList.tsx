@@ -147,7 +147,14 @@ export const TaskList = memo<TaskListProps>(({ tasks }) => {
           </span>
           <span>{stats.pct}%</span>
         </div>
-        <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+        <div
+          className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"
+          role="progressbar"
+          aria-valuenow={stats.pct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={t('agent.taskList.progressAria', 'Task completion progress')}
+        >
           <div
             className="h-full bg-emerald-500 dark:bg-emerald-400 rounded-full transition-[width] duration-500"
             style={{ width: `${String(stats.pct)}%` }}

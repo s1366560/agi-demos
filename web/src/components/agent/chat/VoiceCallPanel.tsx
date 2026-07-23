@@ -35,6 +35,8 @@ import { type DeviceInfo, useVoiceCallStore } from '@/stores/voiceCallStore';
 import { useAudioQueue } from '@/hooks/useAudioQueue';
 import { useVoiceChat } from '@/hooks/useVoiceChat';
 
+import { formatCallDuration } from '@/utils/format';
+
 import { VoiceWaveform } from './VoiceWaveform';
 
 // ---- Drag Hook --------------------------------------------------------------
@@ -456,14 +458,6 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
     onClose();
   }, [disconnect, stopAudio, clearAudio, endCall, onClose]);
 
-  const formatDuration = (seconds: number) => {
-    const m = Math.floor(seconds / 60)
-      .toString()
-      .padStart(2, '0');
-    const s = (seconds % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
-  };
-
   // ---- Minimized view -------------------------------------------------------
 
   if (isMinimized) {
@@ -474,9 +468,25 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
           data-drag-handle
         >
           <div
+            role="status"
+            aria-label={
+              aiSpeaking
+                ? t('agent.voiceCall.aiSpeaking', 'AI is speaking')
+                : t('agent.voiceCall.connected', 'Connected')
+            }
+            title={
+              aiSpeaking
+                ? t('agent.voiceCall.aiSpeaking', 'AI is speaking')
+                : t('agent.voiceCall.connected', 'Connected')
+            }
             className={`w-3 h-3 rounded-full ${aiSpeaking ? 'bg-blue-500 animate-pulse motion-reduce:animate-none' : 'bg-green-500'}`}
           />
-          <span className="font-mono text-sm text-slate-50">{formatDuration(duration)}</span>
+          <span className="text-xs text-slate-300">
+            {aiSpeaking
+              ? t('agent.voiceCall.aiSpeaking', 'AI is speaking')
+              : t('agent.voiceCall.connected', 'Connected')}
+          </span>
+          <span className="font-mono text-sm text-slate-50">{formatCallDuration(duration)}</span>
           {isMuted && <MicOff size={14} className="text-red-400" />}
           <button
             type="button"
@@ -527,7 +537,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
             />
             <span className="text-sm text-white font-medium">
               {status === 'connecting' && t('agent.voiceCall.connecting', 'Connecting…')}
-              {status === 'connected' && formatDuration(duration)}
+              {status === 'connected' && formatCallDuration(duration)}
               {status === 'error' && t('agent.voiceCall.error', 'Error')}
             </span>
           </div>

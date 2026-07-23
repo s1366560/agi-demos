@@ -14,10 +14,13 @@ import {
   Users,
 } from 'lucide-react';
 
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
+
 import { formatStorage } from '../../hooks/useDateFormatter';
 import { tenantAPI } from '../../services/api';
 import { useTenantStore } from '../../stores/tenant';
 import { logger } from '../../utils/logger';
+
 
 interface TenantOverviewProject {
   id: string;
@@ -167,7 +170,7 @@ export const TenantOverview: React.FC = () => {
   }
 
   if (isLoadingStats) {
-    return <div className="p-8 text-center text-slate-500">{t('common.loading')}</div>;
+    return <SkeletonLoader type="card" count={3} />;
   }
 
   if (!stats) {
@@ -220,6 +223,10 @@ export const TenantOverview: React.FC = () => {
   const regionLabel = hasValue(stats.tenant_info.region)
     ? stats.tenant_info.region
     : t('common.status.unavailable');
+  const planLabel = t(
+    `tenant.overview.plans.${stats.tenant_info.plan.trim().toLowerCase()}`,
+    stats.tenant_info.plan
+  );
   const nextBillingLabel = hasValue(stats.tenant_info.next_billing_date)
     ? stats.tenant_info.next_billing_date
     : t('common.status.unavailable');
@@ -426,9 +433,7 @@ export const TenantOverview: React.FC = () => {
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                   {t('tenant.overview.currentPlan')}
                 </p>
-                <p className="text-slate-900 dark:text-white font-medium capitalize">
-                  {stats.tenant_info.plan}
-                </p>
+                <p className="text-slate-900 dark:text-white font-medium capitalize">{planLabel}</p>
               </div>
             </div>
             <div className="flex items-center gap-4">

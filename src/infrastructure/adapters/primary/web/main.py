@@ -96,6 +96,7 @@ from src.infrastructure.adapters.primary.web.routers import (
     workspace_agent_policy,
     workspace_autonomy,
     workspace_chat,
+    workspace_context,
     workspace_plans,
     workspace_tasks,
     workspaces,
@@ -708,6 +709,7 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
 
     # Register Routers
     app.include_router(auth.router, prefix="/api/v1")
+    app.include_router(workspace_context.router)
     app.include_router(tenants.router)
     # Register project sandbox routes before the generic project routes so
     # /api/v1/projects/sandboxes is not captured as a project id.

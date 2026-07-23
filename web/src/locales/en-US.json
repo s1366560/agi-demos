@@ -79,7 +79,9 @@
     "pagination": {
       "label": "Pagination",
       "total": "Total {{total}} items",
-      "page_info": "Page {{page}} of {{total}}"
+      "page_info": "Page {{page}} of {{total}}",
+      "range": "{{start}}–{{end}} of {{total}}",
+      "rows_per_page": "Rows"
     },
     "status": {
       "active": "Active",
@@ -167,7 +169,9 @@
       "markAsRead": "Mark as read",
       "delete": "Delete",
       "close": "Close"
-    }
+    },
+    "more": "More",
+    "readOnly": "Read-only"
   },
   "error": {
     "title": "Something went wrong",
@@ -183,7 +187,10 @@
     "empty": "No notifications",
     "markAllRead": "Mark all read",
     "unread": "unread",
-    "viewAll": "View all"
+    "viewAll": "View all",
+    "loadFailed": "Failed to load notifications",
+    "loadMore": "Load more ({{count}} remaining)",
+    "titleWithUnread": "Notifications, {{count}} unread"
   },
   "evidence": {
     "open": "Open evidence"
@@ -253,7 +260,8 @@
       "or": "Or",
       "no_account": "No account?",
       "register": "Register Now",
-      "register_unavailable": "New accounts are created through tenant invitations."
+      "register_unavailable": "New accounts are created through tenant invitations.",
+      "forgot_sso_hint": "If your organization uses single sign-on (SSO), sign in with your identity provider instead."
     },
     "demo": {
       "title": "Demo Account (Click to fill)",
@@ -704,7 +712,8 @@
       "messages": "Messages",
       "activeAgents": "Active Agents",
       "commGraph": "Communication Frequency",
-      "noMessages": "No agent communication yet. Messages will appear here when agents interact."
+      "noMessages": "No agent communication yet. Messages will appear here when agents interact.",
+      "filterByAgent": "Filter by agent"
     },
     "tabs": {
       "ariaLabel": "Blackboard sections",
@@ -866,8 +875,24 @@
         "upload": "Failed to upload file",
         "download": "Failed to download file",
         "delete": "Failed to delete file",
-        "preview": "Failed to load preview"
-      }
+        "preview": "Failed to load preview",
+        "action": "Failed to update file",
+        "invalidName": "Name cannot be empty or contain slashes."
+      },
+      "copied": "Copied {{name}}",
+      "copy": "Copy",
+      "copyNamed": "Copy {{name}}",
+      "copyTitle": "Copy {{name}}",
+      "deleteDirectoryConfirm": "Delete {{name}} and all contents?",
+      "destinationPath": "Destination path",
+      "move": "Move",
+      "moveNamed": "Move {{name}}",
+      "moveTitle": "Move {{name}}",
+      "moved": "Moved {{name}}",
+      "rename": "Rename",
+      "renameNamed": "Rename {{name}}",
+      "renameTitle": "Rename {{name}}",
+      "renamed": "Renamed {{name}}"
     },
     "agentStatusTitle": "Agent status",
     "agentStatusAgent": "Agent",
@@ -1041,7 +1066,11 @@
       }
     },
     "planRunAutonomyNoop": "Autonomy did not run: {{reason}}",
-    "planRunConfirmNodeAction": "Run \"{{action}}\" for this durable plan node?"
+    "planRunConfirmNodeAction": "Run \"{{action}}\" for this durable plan node?",
+    "planRunAllIterationsGraph": "All iterations",
+    "planRunCurrentIterationGraph": "Current iteration",
+    "planRunGraphView": "Graph",
+    "planRunListView": "List"
   },
   "user": {
     "profile": "Profile",
@@ -1056,7 +1085,34 @@
   "tenant": {
     "backendStores": {
       "testSucceeded": "Connection test succeeded. Version: {{version}}",
-      "testFailed": "Connection test failed."
+      "testFailed": "Connection test failed.",
+      "connectionConfig": "Connection config",
+      "createFailed": "Failed to create store.",
+      "createTitle": "Create store",
+      "created": "Store created.",
+      "deleteFailed": "Failed to delete store.",
+      "deleted": "Store deleted.",
+      "editTitle": "Edit store",
+      "empty": "No backend stores found.",
+      "engineType": "Engine type",
+      "environmentDefault": "Environment default",
+      "graph": "Graph",
+      "graphStore": "Graph store",
+      "indexConfig": "Index config",
+      "invalidJson": "Configuration must be a JSON object.",
+      "loadFailed": "Failed to load backend stores.",
+      "projectBindings": "Backend bindings",
+      "readonly": "readonly",
+      "replaceMaskedSecrets": "Replace masked secret placeholders before saving connection config.",
+      "retrieval": "Retrieval",
+      "retrievalStore": "Retrieval store",
+      "subtitle": "Manage graph and retrieval backends for project bindings.",
+      "test": "Test",
+      "testConnection": "Test connection",
+      "title": "Backend stores",
+      "updateFailed": "Failed to update store.",
+      "updated": "Store updated.",
+      "deleteConfirm": "Delete backend store \"{{name}}\"?"
     },
     "acp": {
       "title": "ACP",
@@ -1093,7 +1149,8 @@
         "action": "Action",
         "duration": "Duration",
         "timestamp": "Timestamp",
-        "error": "Error"
+        "error": "Error",
+        "runnerPool": "Runner Pool"
       },
       "form": {
         "createTitle": "Create ACP agent",
@@ -1111,7 +1168,12 @@
         "secret": "Secret",
         "namePlaceholder": "Name",
         "envRefPlaceholder": "Environment variable name",
-        "secretPlaceholder": "Leave blank to keep the stored secret"
+        "secretPlaceholder": "Leave blank to keep the stored secret",
+        "cwdPolicy": "CWD policy JSON",
+        "directRunner": "Direct transport",
+        "requiredLabels": "Required labels JSON",
+        "runnerPool": "Runner Pool",
+        "runnerPoolHelp": "Leave empty to run this ACP agent directly in the API process."
       },
       "test": {
         "title": "Test {{name}}",
@@ -1139,7 +1201,8 @@
         "nameRequired": "Name is required.",
         "commandRequired": "Command is required for stdio transport.",
         "urlRequired": "URL is required for WebSocket transport.",
-        "cwdRequired": "Working directory is required."
+        "cwdRequired": "Working directory is required.",
+        "invalidJson": "Invalid JSON object"
       }
     },
     "create_modal": {
@@ -1263,7 +1326,9 @@
       "updateRoleFailed": "Failed to update user role.",
       "joined_at_label": "Joined At",
       "last_login_label": "Last Login",
-      "saving": "Saving…"
+      "saving": "Saving…",
+      "remove_confirm_named": "Remove {{name}} from this organization?",
+      "changeRole": "Change role for {{name}}"
     },
     "agentDefinitions": {
       "title": "Agent Definitions",
@@ -1302,7 +1367,12 @@
         },
         "binding": {
           "priority": "priority {{value}}",
-          "score": "score {{value}}"
+          "score": "score {{value}}",
+          "accountId": "Account ID",
+          "channelId": "Channel ID",
+          "channelType": "Channel type",
+          "groupId": "Group ID",
+          "peerId": "Peer ID"
         },
         "labels": {
           "discoverable": "Discoverable",
@@ -1317,7 +1387,11 @@
           "avgExecutionTime": "Avg execution time",
           "successRate": "Success rate",
           "createdAt": "Created at",
-          "updatedAt": "Updated at"
+          "updatedAt": "Updated at",
+          "id": "ID",
+          "projectId": "Project ID",
+          "source": "Source",
+          "tenantId": "Tenant ID"
         }
       },
       "stats": {
@@ -1462,7 +1536,19 @@
           "shared": "Shared",
           "isolated": "Isolated",
           "inherited": "Inherited"
-        }
+        },
+        "executionBackend": "Execution Backend",
+        "executionBackendAcp": "External ACP Agent",
+        "executionBackendMemstack": "MemStack Native",
+        "externalAcpAgent": "External ACP Agent",
+        "externalAcpAgentPlaceholder": "Select an external ACP agent",
+        "externalAcpAgentRequired": "Select an external ACP agent",
+        "fallbackModels": "Fallback Models",
+        "fallbackModelsPlaceholder": "Add fallback model IDs",
+        "fallbackModelsTooltip": "Models to try in order if the primary model cannot complete a request.",
+        "toolPolicyPrecedence": "Precedence",
+        "toolPolicyPrecedenceAllowFirst": "Allow first",
+        "toolPolicyPrecedenceDenyFirst": "Deny first"
       }
     },
     "overview": {
@@ -1537,6 +1623,42 @@
         "returned": "{{prefix}} returned {{status}}{{responseTime}}{{detail}}.",
         "apiKeyRequired": "API key is required",
         "failed": "Connection failed. Please check the provider configuration."
+      },
+      "deleteConfirmNamed": "Delete provider \"{{name}}\"?",
+      "types": {
+        "openai": "OpenAI",
+        "openrouter": "OpenRouter",
+        "anthropic": "Anthropic",
+        "gemini": "Google Gemini",
+        "dashscope": "Alibaba Dashscope",
+        "dashscope_coding": "Dashscope Coding",
+        "dashscope_embedding": "Dashscope Embedding",
+        "dashscope_reranker": "Dashscope Reranker",
+        "kimi": "Moonshot Kimi",
+        "kimi_coding": "Kimi Coding",
+        "kimi_embedding": "Kimi Embedding",
+        "kimi_reranker": "Kimi Reranker",
+        "deepseek": "DeepSeek",
+        "minimax": "MiniMax",
+        "minimax_coding": "MiniMax Coding",
+        "minimax_embedding": "MiniMax Embedding",
+        "minimax_reranker": "MiniMax Reranker",
+        "zai": "ZhipuAI 智谱",
+        "zai_coding": "Z.AI Coding",
+        "zai_embedding": "Z.AI Embedding",
+        "zai_reranker": "Z.AI Reranker",
+        "cohere": "Cohere",
+        "mistral": "Mistral AI",
+        "groq": "Groq",
+        "azure_openai": "Azure OpenAI",
+        "bedrock": "AWS Bedrock",
+        "vertex": "Google Vertex AI",
+        "ollama": "Ollama",
+        "lmstudio": "LM Studio",
+        "volcengine": "Volcengine 火山引擎",
+        "volcengine_coding": "Volcengine Coding",
+        "volcengine_embedding": "Volcengine Embedding",
+        "volcengine_reranker": "Volcengine Reranker"
       }
     },
     "skills": {
@@ -1790,7 +1912,9 @@
         "triggerHook": "Hook",
         "evolutionThreshold": "Threshold",
         "emptyEvolutionRoute": "No evolution jobs or version route yet",
-        "notSet": "Not set"
+        "notSet": "Not set",
+        "packageFilesLoadFailed": "Failed to load package files",
+        "viewInEvolution": "View in Evolution"
       },
       "modal": {
         "editTitle": "Edit Skill",
@@ -1843,7 +1967,8 @@
         "noTools": "No tools yet, please add at least one",
         "toolsHint": "Optional. Leave blank to omit allowed-tools from frontmatter; the runtime stores this as unrestricted internally."
       },
-      "statusUpdateSuccess": "Skill status updated"
+      "statusUpdateSuccess": "Skill status updated",
+      "deleteConfirmNamed": "Delete skill \"{{name}}\"?"
     },
     "skillEvolution": {
       "eyebrow": "Skill evolution",
@@ -2451,10 +2576,13 @@
       "loadError": "Failed to load trust policies",
       "actions": {
         "createPolicy": "Create Policy",
-        "viewDetails": "View Details"
+        "viewDetails": "View Details",
+        "revoke": "Revoke"
       },
       "messages": {
-        "created": "Trust policy created successfully"
+        "created": "Trust policy created successfully",
+        "revokeFailed": "Failed to revoke trust policy",
+        "revoked": "Trust policy revoked"
       },
       "filters": {
         "workspaceId": "Filter by Workspace ID",
@@ -2496,8 +2624,12 @@
         "actionTypeTooltip": "E.g., shell_execution, file_write, or * for all",
         "actionTypePlaceholder": "Enter action type",
         "grantType": "Grant Type",
-        "grantTypeRequired": "Please select a grant type"
-      }
+        "grantTypeRequired": "Please select a grant type",
+        "alwaysConfirmContent": "An \"always\" grant lets this agent run \"{{actionType}}\" without asking again until you revoke the policy.",
+        "alwaysConfirmTitle": "Grant persistent access?"
+      },
+      "revokeConfirm": "Revoke the \"{{actionType}}\" grant for {{agent}}? The agent will need approval again.",
+      "statusRevoked": "Revoked"
     },
     "analytics": {
       "title": "Analytics",
@@ -2517,7 +2649,11 @@
       "creation_trend": "Creation trend",
       "storage_distribution": "Storage distribution",
       "chart_memories": "Memories",
-      "load_error": "Failed to load analytics"
+      "load_error": "Failed to load analytics",
+      "trend_down": "Declining vs previous period",
+      "trend_flat": "Flat vs previous period",
+      "trend_unavailable": "No trend data",
+      "trend_up": "Growing vs previous period"
     },
     "billing": {
       "title": "Billing",
@@ -2599,7 +2735,10 @@
         "agentBindingsDescription": "Choose where definitions are attached across projects and workspaces.",
         "pluginsDescription": "Review runtime plugins and the hook implementations backing this policy.",
         "mcpServersDescription": "Audit connected tool surfaces that affect agent execution at runtime."
-      }
+      },
+      "refreshTraces": "Refresh traces",
+      "scopeTenant": "Tenant: {{id}}",
+      "lastUpdated": "Updated {{time}}"
     },
     "agentConfigView": {
       "loading": "Loading tenant policy",
@@ -2878,7 +3017,8 @@
       "stats": {
         "total": "Total Instances",
         "running": "Running",
-        "stopped": "Stopped"
+        "stopped": "Stopped",
+        "pageNote": "(this page)"
       },
       "status": {
         "all": "All Status",
@@ -3014,7 +3154,8 @@
         "cancelConfirmTitle": "Discard this instance?",
         "cancelConfirmContent": "You have unsaved changes. Leaving now will discard them.",
         "cancelConfirmOk": "Discard",
-        "infraLoadError": "Failed to load clusters and workspaces"
+        "infraLoadError": "Failed to load clusters and workspaces",
+        "missingTenant": "Tenant context is required"
       },
       "emptyText": "No instances found",
       "loadFailed": "Failed to load instances",
@@ -3074,7 +3215,11 @@
         "llmApiKeyClearConfirm": "Clear the stored API key override?",
         "unsavedChanges": "You have unsaved changes",
         "llmConfigUpdateSuccess": "LLM configuration updated successfully",
-        "llmConfigLoadError": "Failed to load LLM configuration"
+        "llmConfigLoadError": "Failed to load LLM configuration",
+        "modelsLoadError": "Failed to load models",
+        "providersLoadError": "Failed to load providers",
+        "unsavedChangesLeave": "You have unsaved changes. Leave this page and discard them?",
+        "unsavedChangesTitle": "Unsaved changes"
       },
       "files": {
         "title": "Instance Files",
@@ -3167,7 +3312,9 @@
           "apiBaseUrlPlaceholder": "https://api.example.com",
           "apiKey": "API Key",
           "apiKeyPlaceholder": "********"
-        }
+        },
+        "typeComingSoon": "Coming soon",
+        "typeNotSupported": "Channel type not supported yet"
       },
       "deleteError": "Failed to delete instance",
       "restartError": "Failed to restart instance",
@@ -3209,6 +3356,12 @@
         "uninstallConfirm": "Uninstall this gene?",
         "uninstallError": "Failed to uninstall gene",
         "uninstallSuccess": "Gene uninstalled"
+      },
+      "health": {
+        "healthy": "Healthy",
+        "degraded": "Degraded",
+        "unhealthy": "Unhealthy",
+        "unknown": "Unknown"
       }
     },
     "deploy": {
@@ -3227,7 +3380,8 @@
         "success": "Success",
         "failed": "Failed",
         "cancelled": "Cancelled",
-        "completed": "Completed"
+        "completed": "Completed",
+        "pending": "Pending"
       },
       "fields": {
         "id": "Deploy ID",
@@ -3251,7 +3405,8 @@
         "createFailed": "Failed to create new deploy",
         "cancelFailed": "Failed to cancel deploy",
         "markSuccessFailed": "Failed to update deploy status",
-        "markFailedFailed": "Failed to update deploy status"
+        "markFailedFailed": "Failed to update deploy status",
+        "deployFailed": "Deployment failed"
       }
     },
     "auditLogs": {
@@ -3434,7 +3589,8 @@
         "tokenReady": "Registration token created. Copy it now; it will not be shown again.",
         "expiresAt": "Expires at",
         "loadFailed": "Failed to load runner pools",
-        "tokenFailed": "Failed to generate the registration token"
+        "tokenFailed": "Failed to generate the registration token",
+        "createFailed": "Failed to create the runner pool"
       },
       "status": {
         "active": "Active",
@@ -3446,7 +3602,9 @@
         "healthy": "Healthy",
         "unhealthy": "Unhealthy",
         "provisioning": "Provisioning",
-        "warning": "Warning"
+        "warning": "Warning",
+        "all": "All",
+        "inactive": "Inactive"
       },
       "detail": {
         "backToList": "Back to Cluster List",
@@ -3479,7 +3637,8 @@
         "events": {
           "title": "Recent Events"
         }
-      }
+      },
+      "searchPlaceholder": "Search clusters"
     },
     "genes": {
       "title": "Gene Market",
@@ -3595,7 +3754,11 @@
       "actions": {
         "install": "Install",
         "rate": "Rate"
-      }
+      },
+      "empty": "No genes found",
+      "emptyGenomes": "No genomes found",
+      "lastUpdated": "Last updated {{time}}",
+      "listErrorTitle": "Could not load marketplace data"
     },
     "templates": {
       "title": "Instance Templates",
@@ -3633,7 +3796,11 @@
       "viewTemplate": "View {{name}}",
       "cloneTemplate": "Clone {{name}}",
       "publishTemplate": "Publish {{name}}",
-      "deleteTemplate": "Delete {{name}}"
+      "deleteTemplate": "Delete {{name}}",
+      "cloneError": "Failed to clone template",
+      "createError": "Failed to create template",
+      "deleteError": "Failed to delete template",
+      "publishError": "Failed to publish template"
     },
     "evolution": {
       "noInstance": "No instance ID provided",
@@ -3668,7 +3835,8 @@
         "status": "Status",
         "description": "Description",
         "rating": "Rating",
-        "createdAt": "Created At"
+        "createdAt": "Created At",
+        "updatedAt": "Updated At"
       },
       "genesTitle": "Included Genes",
       "noGenes": "No genes in this genome",
@@ -3696,7 +3864,9 @@
       "publishError": "Failed to publish genome",
       "unpublishError": "Failed to unpublish genome",
       "configOverride": "Configuration Override (JSON)",
-      "configOverridePlaceholder": "{\"key\": \"value\"}"
+      "configOverridePlaceholder": "{\"key\": \"value\"}",
+      "missingGenesTitle": "Some referenced genes are unavailable",
+      "noAvailableGenes": "No included genes are available"
     },
     "templateDetail": {
       "notFound": "Template not found",
@@ -3709,7 +3879,8 @@
         "imageVersion": "Image Version",
         "description": "Description",
         "tags": "Tags",
-        "createdAt": "Created At"
+        "createdAt": "Created At",
+        "updatedAt": "Updated At"
       },
       "itemsTitle": "Gene Assignments",
       "noItems": "No gene assignments",
@@ -3719,7 +3890,18 @@
       "deployFromTemplate": "Deploy from Template",
       "clone": "Clone Template",
       "cloneSuccess": "Template cloned successfully",
-      "cloneError": "Failed to clone template"
+      "cloneError": "Failed to clone template",
+      "deleteAction": "Delete Template",
+      "deleteConfirmContent": "This removes the template and cannot be undone.",
+      "deleteError": "Failed to delete template",
+      "deleteSuccess": "Template deleted successfully",
+      "loadFailed": "Failed to load template",
+      "publishAction": "Publish",
+      "publishConfirmContent": "Publishing makes this template visible in the marketplace.",
+      "publishError": "Failed to publish template",
+      "publishSuccess": "Template published successfully",
+      "publishConfirmTitle": "Publish {{name}}?",
+      "deleteConfirmTitle": "Delete {{name}}?"
     },
     "orgSettings": {
       "title": "Organization Settings",
@@ -3743,7 +3925,9 @@
           "clusters": "Clusters",
           "storage": "Storage",
           "unavailable": "Unavailable"
-        }
+        },
+        "editInSettings": "Edit in Tenant Settings",
+        "noDescription": "No description provided."
       },
       "members": {
         "title": "Members",
@@ -3780,7 +3964,9 @@
           "viewers": "Viewers",
           "guests": "Guests",
           "members": "Members"
-        }
+        },
+        "movedHint": "Member management now lives on the Users page: email invitations, pending invites, inline role editing, and pagination are all handled there.",
+        "openUsersPage": "Open Users page"
       },
       "clusters": {
         "title": "Clusters",
@@ -3855,7 +4041,9 @@
           "total": "Total Logs",
           "thisPage": "This Page",
           "pages": "Total Pages"
-        }
+        },
+        "movedHint": "Audit logs now live on the Audit Logs page, with full filtering, export, and per-entry details.",
+        "openAuditLogsPage": "Open Audit Logs"
       },
       "registry": {
         "title": "Container Registry",
@@ -3865,7 +4053,7 @@
         "addFirstRegistry": "Add Your First Registry",
         "noRegistries": "No registries configured",
         "default": "Default",
-        "deleteConfirm": "Are you sure you want to delete this registry?",
+        "deleteConfirm": "Are you sure you want to delete the registry \"{{name}}\"?",
         "deleteSuccess": "Registry deleted successfully",
         "createSuccess": "Registry created successfully",
         "updateSuccess": "Registry updated successfully",
@@ -3903,7 +4091,8 @@
           "passwordPlaceholderEdit": "Leave empty to keep existing",
           "passwordHint": "Leave empty to keep the current password",
           "setAsDefault": "Set as default registry"
-        }
+        },
+        "loadFailed": "Failed to load registries"
       },
       "smtp": {
         "title": "SMTP Configuration",
@@ -3958,7 +4147,7 @@
         "saveError": "Failed to save gene policy",
         "deleteSuccess": "Gene policy deleted",
         "deleteError": "Failed to delete gene policy",
-        "deleteConfirm": "Delete this gene policy? This action cannot be undone.",
+        "deleteConfirm": "Delete the gene policy \"{{key}}\"? This action cannot be undone.",
         "fetchError": "Failed to load gene policies"
       }
     },
@@ -4012,7 +4201,8 @@
         "configurePlugin": "Configure {{name}}",
         "local": "local",
         "toolOnly": "Tool-only plugin",
-        "noPluginsInstalled": "No plugins installed yet"
+        "noPluginsInstalled": "No plugins installed yet",
+        "configure": "Configure"
       },
       "pluginDetail": {
         "back": "Plugins",
@@ -4199,7 +4389,8 @@
       "completedCount": "{{completed}} of {{total}} complete",
       "count": "{{count}} workspaces",
       "objectivesCount": "{{count}} objectives",
-      "tasksCount": "{{count}} tasks"
+      "tasksCount": "{{count}} tasks",
+      "progressLoadFailed": "Progress unavailable"
     },
     "workflowPatterns": {
       "title": "Workflow Patterns",
@@ -4282,8 +4473,9 @@
         "title": "Create New Project",
         "subtitle": "Set up a new memory environment"
       },
-      "deleteConfirm": "Are you sure you want to delete this project?",
-      "deleteFailed": "Failed to delete project"
+      "deleteConfirm": "Delete project \"{{name}}\"? This cannot be undone.",
+      "deleteFailed": "Failed to delete project",
+      "loadFailed": "Failed to load projects"
     },
     "newProject": {
       "title": "Create New Project",
@@ -4357,7 +4549,8 @@
       "submit": "Create organization",
       "subtitle": "Create a tenant workspace for projects, members, and memory resources.",
       "title": "Create organization",
-      "discardConfirm": "Discard unsaved changes?"
+      "discardConfirm": "Discard unsaved changes?",
+      "success": "Organization created"
     },
     "entry": {
       "loadingTitle": "Checking tenant access",
@@ -4374,7 +4567,8 @@
         "pending_tasks": "Pending tasks",
         "queue_depth": "Queue depth",
         "queue_desc": "Queued task volume over time.",
-        "status_dist": "Status distribution"
+        "status_dist": "Status distribution",
+        "loadFailed": "Failed to load charts"
       },
       "refresh": "Refresh",
       "resumeSubmitted": "Submitted {{count}} pending tasks",
@@ -4388,7 +4582,11 @@
         "total": "Total tasks"
       },
       "subtitle": "Monitor tenant-level task execution and throughput.",
-      "title": "Task dashboard"
+      "title": "Task dashboard",
+      "resumePending": "Resume pending",
+      "resumePendingHint": "Resumes up to 5 pending tasks per run",
+      "viewDeadLetterQueue": "View dead letter queue",
+      "lastUpdated": "Updated {{time}}"
     },
     "runtimes": {
       "title": "Runtimes",
@@ -4468,7 +4666,8 @@
       },
       "discardConfirmTitle": "Discard unsaved changes?",
       "discardConfirmContent": "You have unsaved changes. Leaving now will discard them.",
-      "discardConfirmOk": "Discard"
+      "discardConfirmOk": "Discard",
+      "load_error": "Failed to load the project configuration. Retry to edit it safely; nothing was changed."
     },
     "settings": {
       "title": "Project Settings",
@@ -4570,7 +4769,9 @@
       "saving": "Saving…",
       "saveChanges": "Save Changes",
       "saveFailed": "Failed to save project settings.",
-      "deleteFailed": "Failed to delete project."
+      "deleteFailed": "Failed to delete project.",
+      "advancedGotoMaintenance": "Go to Maintenance",
+      "advancedMaintenanceDesc": "Graph maintenance operations (export, refresh, rebuild) are managed on the Maintenance page."
     },
     "search": {
       "eyebrow": "Knowledge retrieval",
@@ -4694,6 +4895,12 @@
         "voice_not_supported": "Voice search is not supported in this browser",
         "voice_failed": "Voice search failed. Please try again.",
         "search_failed": "Search failed. Please try again."
+      },
+      "graph": {
+        "expandGraph": "Expand graph",
+        "showFullGraph": "Show full graph",
+        "showResultSubgraph": "Show result subgraph",
+        "showResults": "Show results"
       }
     },
     "graph": {
@@ -4843,7 +5050,10 @@
           "sort_latest": "Latest Created",
           "sort_name": "Name",
           "filtered_by": "Filtered by",
-          "clear": "Clear filters"
+          "clear": "Clear filters",
+          "search_scope_hint": "Search only filters entities on the current page.",
+          "types_load_failed": "Failed to load entity types.",
+          "more_types": "+{{count}} more"
         },
         "stats": {
           "showing": "Showing {{count}} of {{total}} entities"
@@ -5048,7 +5258,10 @@
       "autoIndexing": "Auto-Indexing Active",
       "systemReady": "System is ready to process new memories.",
       "status": "Status",
-      "operationalStatus": "Operational"
+      "operationalStatus": "Operational",
+      "backToProjects": "Back to projects",
+      "loadFailed": "Unable to load this project.",
+      "loadFailedDescription": "The project may have moved, or your account may not have access."
     },
     "memories": {
       "eyebrow": "Project knowledge",
@@ -5130,7 +5343,8 @@
           "aiOptimizeFailed": "AI optimization failed. Please try again.",
           "createFailed": "Failed to create memory",
           "connection": "Failed to connect to task updates. Please check if the task completed.",
-          "create": "Failed to create memory"
+          "create": "Failed to create memory",
+          "draftSaveFailed": "Failed to save draft. Please try again."
         },
         "placeholders": {
           "title": "e.g. Q3 Strategy Meeting Notes",
@@ -5392,7 +5606,10 @@
           "discard": "Discard",
           "save": "Save",
           "saving": "Saving…"
-        }
+        },
+        "nameRequired": "Name is required",
+        "nameDuplicate": "An entity type with this name already exists",
+        "deleteConfirmNamed": "Delete entity type \"{{name}}\"? This cannot be undone."
       },
       "edges": {
         "title": "Relationship Type Management",
@@ -5491,7 +5708,10 @@
         "modalSave": "Save",
         "deleteConfirm": "Are you sure you want to delete this edge type?",
         "saveError": "Failed to save edge type",
-        "loading": "Loading…"
+        "loading": "Loading…",
+        "discardChanges": "Discard unsaved changes?",
+        "nameRequired": "Name is required",
+        "nameDuplicate": "An edge type with this name already exists"
       },
       "mappings": {
         "title": "Edge Type Mapping",
@@ -5539,7 +5759,8 @@
         "delete_error": "Failed to delete mapping",
         "create_success": "Mapping created",
         "no_edge_types": "Create an edge type first.",
-        "source_target": "Source \\ Target"
+        "source_target": "Source \\ Target",
+        "delete_confirm_named": "Delete mapping \"{{name}}\"? This cannot be undone."
       },
       "graph": {
         "node_detail": {
@@ -5807,7 +6028,8 @@
       "formDeliveryWebhook": "Webhook",
       "formTimeoutSeconds": "Timeout (s)",
       "formMaxRetries": "Max Retries",
-      "formDeleteAfterRun": "Delete After Run"
+      "formDeleteAfterRun": "Delete After Run",
+      "deleteConfirmNamed": "Delete job \"{{name}}\"?"
     },
     "channelConfig": {
       "title": "Channel Configuration",
@@ -6148,7 +6370,8 @@
         "completed": "Completed",
         "failed": "Failed",
         "cancelled": "Cancelled"
-      }
+      },
+      "progressAria": "Task completion progress"
     },
     "taskLanePanel": {
       "empty": "No tasks yet. The agent will create lanes when working on complex requests.",
@@ -6163,7 +6386,8 @@
         "done": "Done",
         "blocked": "Blocked",
         "other": "Other"
-      }
+      },
+      "progressAria": "Task completion progress"
     },
     "groupChat": {
       "title": "Workspace Chat",
@@ -6372,7 +6596,8 @@
       "showLess": "Show less",
       "showMore": "Show {{count}} more…",
       "spawnable": "spawnable",
-      "unknown": "Unknown"
+      "unknown": "Unknown",
+      "viewSession": "View agent session"
     },
     "contextDetail": {
       "title": "Context Monitor",
@@ -6421,7 +6646,17 @@
         "failed": "failed",
         "skipped": "skipped",
         "cancelled": "cancelled"
-      }
+      },
+      "fallbackDefinition": "Using live handoffs because the graph definition is unavailable.",
+      "loadingDefinition": "Loading graph definition",
+      "loadingWorkspaceGraph": "Loading workspace graph",
+      "refreshingWorkspaceGraph": "Refreshing workspace graph",
+      "title": "Execution Graph",
+      "unassigned": "Unassigned",
+      "workspaceFallback": "Showing the latest available workspace graph.",
+      "workspaceReadyDescription": "Execution topology will appear here when the workspace starts dispatching graph or handoff events.",
+      "workspaceReadyTitle": "Workspace graph is ready",
+      "workspaceTitle": "Workspace Execution Graph"
     },
     "patternList": {
       "status": {
@@ -6694,7 +6929,9 @@
       "expandPanel": "Expand voice call panel",
       "connecting": "Connecting…",
       "error": "Error",
-      "minimizePanel": "Minimize voice call panel"
+      "minimizePanel": "Minimize voice call panel",
+      "aiSpeaking": "AI is speaking",
+      "connected": "Connected"
     },
     "layout": {
       "resizePanels": "Resize panels",
@@ -6918,7 +7155,8 @@
         "show": "Show Panel",
         "hide": "Hide Panel",
         "right": "Right Panel"
-      }
+      },
+      "externalAcpTextOnly": "External ACP agents support text prompts only."
     },
     "notifications": {
       "planModeExitFailed": {
@@ -6943,7 +7181,11 @@
       "expandTurn": "Expand turn",
       "collapseTurn": "Collapse turn",
       "expandTurnWithCount": "Expand ({{count}})",
-      "reply": "Reply"
+      "reply": "Reply",
+      "deleteMessageBodyEmpty": "Remove this message from this conversation view.",
+      "deleteMessageTitle": "Delete this message?",
+      "retryNoUserMessage": "No earlier user message to retry",
+      "deleteMessageBody": "Remove \"{{excerpt}}\" from this conversation view."
     },
     "branch": {
       "fork": "Fork from here",
@@ -7100,7 +7342,31 @@
       "selectLabelColor": "Select {{color}} label color",
       "openConversation": "Open {{title}}",
       "expandProjectSidebar": "Expand project sidebar for {{project}}",
-      "cancelNewLabel": "Cancel new label"
+      "cancelNewLabel": "Cancel new label",
+      "conversationsLoadFailed": "Failed to load conversations",
+      "deleteConversation": "Delete conversation",
+      "filterConversations": "Filter conversations by title",
+      "newChatOpenWorkspace": "Open the agent workspace to start a new chat",
+      "newChatSelectProject": "Select a project to start a new chat",
+      "noMatchingConversations": "No conversations match your filter",
+      "noProjectsAvailable": "No projects available in this tenant",
+      "noProjectsFound": "No projects found",
+      "projectSearchFailed": "Project search failed",
+      "projectSwitcherNoTenant": "No tenant selected",
+      "projectsLoadFailed": "Failed to load projects",
+      "searchProjectsToSelect": "Search to select a project",
+      "selectProjectToViewConversations": "Select a project to view conversations",
+      "unknownWorkspace": "Unknown workspace",
+      "workspaceRole": {
+        "architect": "Architect",
+        "builder": "Builder",
+        "chat": "Chat",
+        "supervisor": "Supervisor",
+        "verifier": "Verifier",
+        "worker": "Worker",
+        "workspace": "Workspace"
+      },
+      "workspaceTaskTitleFallback": "Workspace task"
     },
     "summary": {
       "title": "Conversation Summary",
@@ -7174,7 +7440,8 @@
       "removeSelectedSubAgent": "Remove @{{name}} subagent",
       "retryAttachmentUpload": "Retry upload for {{filename}}",
       "removeAttachment": "Remove {{filename}} attachment",
-      "advancedSettings": "Advanced settings"
+      "advancedSettings": "Advanced settings",
+      "charLimitHint": "Messages over {{count}} characters may be truncated by the model"
     },
     "mention": {
       "label": "Mention an agent"
@@ -7230,7 +7497,11 @@
       "searchChat": "Search in conversation",
       "focusInput": "Focus input / Slash commands",
       "navMessages": "Navigate messages",
-      "close": "Close keyboard shortcuts"
+      "close": "Close keyboard shortcuts",
+      "collabMode": "Collab mode (split)",
+      "copyMessage": "Copy focused message",
+      "planMode": "Toggle Plan Mode",
+      "taskMode": "Task mode (split)"
     },
     "canvas": {
       "emptyTitle": "Canvas",
@@ -7313,7 +7584,8 @@
       "fileGenerated": "File generated",
       "download": "Download",
       "uploading": "Uploading…",
-      "openInCanvas": "Open in Canvas"
+      "openInCanvas": "Open in Canvas",
+      "openInCanvasFailed": "Failed to open in Canvas"
     },
     "timeline": {
       "input": "Input",
@@ -7361,7 +7633,9 @@
         "openSingle": "Opened {{names}}",
         "openMany": "Opened {{count}} links: {{names}}",
         "toolSingle": "Called {{names}}",
-        "toolMany": "Called {{count}} tools: {{names}}"
+        "toolMany": "Called {{count}} tools: {{names}}",
+        "todoMany": "{{count}} todo updates: {{names}}",
+        "todoSingle": "{{names}}"
       },
       "preview": {
         "read": "Read: {{detail}}",
@@ -7449,7 +7723,11 @@
         "error_title": "Execution Error",
         "summary_title": "Execution Summary",
         "timeline_title": "Lifecycle Events"
-      }
+      },
+      "steerFailed": "Failed to send redirect",
+      "stopConfirmDescription": "The running sub-agent will be terminated.",
+      "stopConfirmTitle": "Stop this sub-agent?",
+      "stopFailed": "Failed to stop sub-agent"
     },
     "background": {
       "title": "Background Tasks",
@@ -7529,7 +7807,26 @@
       "installError": "Failed to install template",
       "loadError": "Failed to load templates",
       "seeded": "Seeded {{count}} templates",
-      "seedError": "Failed to seed templates"
+      "seedError": "Failed to seed templates",
+      "category": "Category",
+      "detailFields": {
+        "allowedTools": "Allowed Tools",
+        "author": "Author",
+        "category": "Category",
+        "description": "Description",
+        "installCount": "Installs",
+        "model": "Model",
+        "systemPrompt": "System Prompt",
+        "tags": "Tags",
+        "templateId": "Template ID",
+        "triggerDescription": "Trigger Description",
+        "triggerKeywords": "Trigger Keywords",
+        "version": "Version"
+      },
+      "detailTitle": "Template Details",
+      "installing": "Installing…",
+      "viewDetails": "View details of {{name}}",
+      "variableRequired": "{{name}} is required"
     },
     "search": {
       "placeholder": "Search in conversation…",
@@ -7570,7 +7867,8 @@
       "next": "Next",
       "skip": "Skip tour",
       "done": "Get started",
-      "stepOf": "of"
+      "stepOf": "of",
+      "layoutDescV2": "Switch between Chat, Task, Code, Canvas, and Collab modes with Cmd+1-5."
     },
     "theme": {
       "highContrast": "High Contrast",
@@ -7594,7 +7892,8 @@
           "clarification": "Clarification",
           "decision": "Decision",
           "envVar": "Env var"
-        }
+        },
+        "dismissError": "Dismiss error"
       },
       "title": {
         "clarification": "Needs clarification",
@@ -7720,7 +8019,10 @@
       "action": {
         "refresh": "Refresh",
         "restart": "Restart",
-        "stop": "Stop"
+        "stop": "Stop",
+        "stopConfirmDesc": "This destroys the sandbox container. Unsaved work inside it will be lost.",
+        "stopConfirmOk": "Stop container",
+        "stopConfirmTitle": "Stop sandbox container?"
       },
       "metrics": {
         "cpu": "CPU",
@@ -7801,7 +8103,8 @@
     "member_since": "Member since {{date}}",
     "profile_completion": "Profile Completion",
     "avatar": {
-      "change": "Change avatar"
+      "change": "Change avatar",
+      "edit": "Edit avatar URL"
     },
     "tabs": {
       "label": "Tabs",
@@ -7868,6 +8171,9 @@
       "success_desc": "Your profile information has been updated.",
       "error_title": "Unable to save profile",
       "error_desc": "Please try again."
+    },
+    "form": {
+      "not_set": "Not set"
     }
   },
   "comparison": {
@@ -7933,7 +8239,8 @@
       "accept": "Accept Invitation",
       "decline": "Decline",
       "goHome": "Go to Home",
-      "goToWorkspace": "Go to Workspace"
+      "goToWorkspace": "Go to Workspace",
+      "notNow": "Not now"
     },
     "accepting": "Accepting invitation…"
   },
@@ -8118,7 +8425,7 @@
       "description": "Irreversible and destructive actions.",
       "deleteWorkspace": "Delete this workspace",
       "deleteDescription": "Once deleted, all data in this workspace will be permanently removed.",
-      "deleteConfirm": "Are you sure you want to delete this workspace? This action cannot be undone.",
+      "deleteConfirm": "Are you sure you want to delete the workspace \"{{name}}\"? This action cannot be undone.",
       "deleteSuccess": "Workspace deleted successfully.",
       "deleteFailed": "Failed to delete workspace."
     }
@@ -8206,7 +8513,8 @@
       "reportArtifacts": "Artifacts",
       "reportVerifications": "Checks",
       "workerLabel": "Worker",
-      "attemptNumber": "Attempt"
+      "attemptNumber": "Attempt",
+      "blockerReason": "Blocker reason"
     },
     "chat": {
       "noMessages": "No messages yet. Start the conversation!",
@@ -8482,7 +8790,9 @@
     "passwordMismatch": "Passwords do not match.",
     "passwordRequired": "Password is required.",
     "passwordMinLength": "Password must be at least 8 characters.",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "passwordSameAsCurrent": "New password must be different from your current password.",
+    "subtitleVoluntary": "Choose a new password for your account."
   },
   "admin": {
     "poolDashboard": {
@@ -8550,7 +8860,9 @@
       },
       "pagination": {
         "total": "Total {{count}} instances"
-      }
+      },
+      "emptyInstances": "No instances match the current filters. The pool scales instances up on demand.",
+      "searchInstances": "Search by instance key"
     },
     "deadLetterQueue": {
       "title": "Dead Letter Queue",
@@ -8590,7 +8902,8 @@
         "cleanupExpired": "Clean Up Expired",
         "cleanupResolved": "Clean Up Resolved",
         "retrySelected": "Retry Selected",
-        "discardSelected": "Discard Selected"
+        "discardSelected": "Discard Selected",
+        "discardWithCount": "Discard {{count}} message(s)"
       },
       "stats": {
         "totalMessages": "Total Messages",
@@ -8633,13 +8946,24 @@
         "lastFailed": "Last Failed",
         "nextRetry": "Next Retry",
         "eventData": "Event Data",
-        "stackTrace": "Stack Trace"
+        "stackTrace": "Stack Trace",
+        "showStackTrace": "Show stack trace"
       },
       "discard": {
         "title": "Discard Message(s)",
         "confirmMessage": "You are about to discard {{count}} message(s). This action cannot be undone.",
         "reasonLabel": "Please provide a reason for discarding:",
         "reasonPlaceholder": "e.g., Duplicate event, Stale data, Manual fix applied…"
+      },
+      "ageUnits": {
+        "day": "d",
+        "hour": "h",
+        "minute": "m",
+        "second": "s"
+      },
+      "autoRefresh": "Auto Refresh",
+      "empty": {
+        "description": "No failed messages. The queue is healthy and nothing needs attention."
       }
     }
   },
@@ -8695,7 +9019,7 @@
     "createError": "Failed to create webhook",
     "updateSuccess": "Webhook updated successfully",
     "updateError": "Failed to update webhook",
-    "deleteConfirm": "Are you sure you want to delete this webhook?",
+    "deleteConfirm": "Delete webhook \"{{name}}\"?",
     "deleteSuccess": "Webhook deleted successfully",
     "deleteError": "Failed to delete webhook"
   },
@@ -8723,7 +9047,11 @@
     "signInTitle": "Sign in to continue",
     "signInSubtitle": "You must be signed in to approve a CLI login. After signing in, you will be returned here automatically.",
     "copyBackLink": "Copy return link",
-    "footer": "Only approve codes you just generated yourself. A 30-day API key will be issued to the waiting CLI."
+    "footer": "Only approve codes you just generated yourself. A 30-day API key will be issued to the waiting CLI.",
+    "approveSession": "Approve CLI session",
+    "confirmContent": "Code {{code}} will receive a 30-day API key for {{email}}. Only approve if you just requested this code in your own terminal.",
+    "confirmTitle": "Approve CLI sign-in?",
+    "sessionInfo": "Approving as {{email}}. The waiting CLI will receive a 30-day API key for this account."
   },
   "mcp": {
     "toolsDrawer": {
@@ -8963,7 +9291,9 @@
       "emptyHint": "Create your first MCP server to enable powerful tools and capabilities",
       "emptyCreateButton": "Create Server",
       "noMatch": "No servers match the current filters",
-      "clearAllFilters": "Clear all filters"
+      "clearAllFilters": "Clear all filters",
+      "deleteFailed": "Failed to delete MCP server",
+      "toggleFailed": "Failed to update server status"
     }
   },
   "memory": {
@@ -9262,7 +9592,9 @@
         "backgroundTasksWithCount": "Background tasks, {{count}} running",
         "userMenu": "User menu",
         "breadcrumb": "Breadcrumb",
-        "toggleTheme": "Toggle theme"
+        "toggleTheme": "Toggle theme",
+        "searchRequiresProject": "Search is available inside a project",
+        "tenantsLoadFailed": "Failed to load tenant list"
       }
     },
     "workspace": {
@@ -9986,7 +10318,8 @@
       "emptySubtitle": "Start a conversation to see messages here",
       "loading": "Loading…",
       "copyFailed": "Failed to copy to clipboard",
-      "scrollToBottom": "Scroll to bottom"
+      "scrollToBottom": "Scroll to bottom",
+      "loadEarlierFailed": "Failed to load earlier messages"
     },
     "timelineEventRenderer": {
       "empty": "No messages yet. Start a conversation!"
@@ -10113,7 +10446,25 @@
   },
   "executionDag": {
     "graphStats": "{{nodes}} nodes · {{edges}} edges",
-    "ariaLabel": "Execution graph"
+    "ariaLabel": "Execution graph",
+    "actualSize": "Actual size",
+    "centerCurrent": "Center current or root node",
+    "centerSelected": "Center selected node",
+    "currentSession": "Current session",
+    "downloadSvg": "Download SVG",
+    "empty": "No execution graph is available.",
+    "fitView": "Fit width",
+    "fitZoom": "Fit",
+    "metrics": "{{evidence}} refs · {{artifacts}} artifacts",
+    "overviewMap": "Graph overview map",
+    "panMode": "Drag to pan",
+    "resetView": "Reset view",
+    "toggleOverview": "Toggle overview map",
+    "tools": "Graph tools",
+    "unassignedAgent": "Unassigned",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "zoomSlider": "Zoom level"
   },
   "theme": {
     "dark": "Dark",
@@ -10148,6 +10499,16 @@
     "hints": {
       "navigate": "navigate",
       "select": "select"
+    },
+    "triggerNonMac": "Command palette (Ctrl K)"
+  },
+  "schema": {
+    "navLabel": "Schema navigation",
+    "tabs": {
+      "edgeTypes": "Edge Types",
+      "entityTypes": "Entity Types",
+      "mapping": "Mapping",
+      "overview": "Overview"
     }
   }
 }

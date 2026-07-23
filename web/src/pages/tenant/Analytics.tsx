@@ -13,13 +13,15 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
-import { Database, TrendingUp } from 'lucide-react';
+import { Database, TrendingDown, TrendingUp } from 'lucide-react';
+
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 
 import { formatStorage } from '../../hooks/useDateFormatter';
 import { analyticsService } from '../../services/analyticsService';
 import { useTenantStore } from '../../stores/tenant';
+import { logger } from '../../utils/logger';
 
-import { LoadingState } from './utils/LoadingState';
 
 import type { TenantAnalytics } from '../../types/analytics';
 
@@ -125,7 +127,7 @@ export const Analytics: FC = memo(() => {
       setAnalytics(analyticsData);
     } catch (error: unknown) {
       if (isCurrentRequest()) {
-        console.error('Failed to fetch analytics data:', error);
+        logger.error('Failed to fetch analytics data:', error);
         setLoadError(true);
       }
     } finally {
@@ -221,6 +223,18 @@ export const Analytics: FC = memo(() => {
     []
   );
 
+  // Real trend from memory growth data: compare the recent half of the
+  // period against the earlier half. Null when there is not enough data.
+  const memoryTrend = useMemo((): 'up' | 'down' | 'flat' | null => {
+    const points = analytics?.memoryGrowth ?? [];
+    if (points.length < 2) return null;
+    const half = Math.floor(points.length / 2);
+    const earlier = points.slice(0, half).reduce((sum, p) => sum + p.count, 0);
+    const recent = points.slice(half).reduce((sum, p) => sum + p.count, 0);
+    if (recent === earlier) return 'flat';
+    return recent > earlier ? 'up' : 'down';
+  }, [analytics]);
+
   // Calculate average memories per project
   const avgMemoriesPerProject =
     analytics && analytics.summary.total_projects > 0
@@ -236,7 +250,11 @@ export const Analytics: FC = memo(() => {
   const storageDisplay = analytics ? formatStorage(analytics.summary.total_storage_bytes) : '0 GB';
 
   if (loading) {
-    return <LoadingState message={t('common.loading')} />;
+    return (
+      <div className="max-w-full mx-auto flex flex-col gap-8">
+        <SkeletonLoader type="card" count={4} />
+      </div>
+    );
   }
 
   if (loadError) {
@@ -284,9 +302,25 @@ export const Analytics: FC = memo(() => {
         <KPICard
           label={t('tenant.analytics.total_memories')}
           value={totalMemoriesDisplay}
-          subtext={t('tenant.analytics.growing')}
-          subtextIcon={TrendingUp}
-          subtextColorClass="text-green-600"
+          subtext={
+            memoryTrend === 'up'
+              ? t('tenant.analytics.trend_up', 'Growing vs previous period')
+              : memoryTrend === 'down'
+                ? t('tenant.analytics.trend_down', 'Declining vs previous period')
+                : memoryTrend === 'flat'
+                  ? t('tenant.analytics.trend_flat', 'Flat vs previous period')
+                  : undefined
+          }
+          subtextIcon={
+            memoryTrend === 'up' ? TrendingUp : memoryTrend === 'down' ? TrendingDown : undefined
+          }
+          subtextColorClass={
+            memoryTrend === 'up'
+              ? 'text-green-600'
+              : memoryTrend === 'down'
+                ? 'text-red-600'
+                : undefined
+          }
         />
         <KPICard
           label={t('tenant.analytics.active_projects')}

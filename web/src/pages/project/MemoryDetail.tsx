@@ -23,6 +23,7 @@ import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 
 import { formatDateOnly, formatDateTime } from '@/utils/date';
 
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import { EditMemoryModal } from '@/components/project/EditMemoryModal';
 import { DeleteConfirmationModal } from '@/components/shared/modals/DeleteConfirmationModal';
 import { useLazyMessage } from '@/components/ui/lazyAntd';
@@ -87,6 +88,7 @@ export const MemoryDetail: React.FC = () => {
   const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
   const sseCleanupRef = useRef<(() => void) | null>(null);
   const fetchRequestSeqRef = useRef(0);
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   // Subscribe to SSE for task updates
   const subscribeToMemoryTask = useCallback((taskId: string) => {
@@ -186,8 +188,8 @@ export const MemoryDetail: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="p-8 text-center text-slate-500" role="status">
-        {t('project.memories.detail.loading')}
+      <div className="p-4 md:p-6">
+        <SkeletonLoader type="form" />
       </div>
     );
   }
@@ -277,6 +279,16 @@ export const MemoryDetail: React.FC = () => {
     }
   };
 
+  const handleCopyId = async () => {
+    try {
+      await navigator.clipboard.writeText(memory.id);
+      message?.success(t('memory.detail.idCopied', 'Memory ID copied to clipboard'));
+    } catch (error) {
+      logger.error('[MemoryDetail] Failed to copy memory ID:', error);
+      message?.error(t('memory.detail.idCopyFailed', 'Failed to copy memory ID'));
+    }
+  };
+
   const handleExport = () => {
     try {
       const blob = new Blob([JSON.stringify(memory, null, 2)], {
@@ -314,12 +326,44 @@ export const MemoryDetail: React.FC = () => {
   };
 
   const metadataTags = getMemoryMetadataTags(memory.metadata);
+  const processingStatusLabel = t(
+    `project.memories.status.${memory.processing_status.toLowerCase()}`,
+    memory.processing_status
+  );
+  const contentTypeLabel = t(
+    `project.memories.contentTypes.${memory.content_type}`,
+    memory.content_type
+  );
   const tabs: Array<{ id: typeof activeTab; label: string }> = [
     { id: 'content', label: t('project.memories.detail.tabs.content') },
     { id: 'metadata', label: t('project.memories.detail.tabs.metadata') },
     { id: 'raw', label: t('project.memories.detail.tabs.raw') },
     { id: 'tasks', label: t('project.memories.detail.tabs.tasks') },
   ];
+
+  // Roving-tabindex tablist: arrow keys move focus and activate the tab.
+  const handleTabListKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const { key } = event;
+    if (key !== 'ArrowLeft' && key !== 'ArrowRight' && key !== 'Home' && key !== 'End') {
+      return;
+    }
+    event.preventDefault();
+    const currentIndex = tabs.findIndex((tab) => tab.id === activeTab);
+    let nextIndex = 0;
+    if (key === 'Home') {
+      nextIndex = 0;
+    } else if (key === 'End') {
+      nextIndex = tabs.length - 1;
+    } else if (key === 'ArrowRight') {
+      nextIndex = (currentIndex + 1) % tabs.length;
+    } else {
+      nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    }
+    const nextTab = tabs[nextIndex];
+    if (!nextTab) return;
+    handleTabChange(nextTab.id);
+    tabRefs.current[nextIndex]?.focus();
+  };
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -371,16 +415,21 @@ export const MemoryDetail: React.FC = () => {
               <span className="max-w-[18rem] truncate text-sm font-medium text-slate-950 dark:text-white">
                 {memory.title || t('common.untitled')}
               </span>
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  memory.processing_status === 'FAILED'
-                    ? 'bg-red-500'
-                    : memory.processing_status === 'COMPLETED'
-                      ? 'bg-emerald-500'
-                      : 'bg-amber-500'
-                }`}
-                title={memory.processing_status}
-              />
+              <span className="flex shrink-0 items-center gap-1.5">
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    memory.processing_status === 'FAILED'
+                      ? 'bg-red-500'
+                      : memory.processing_status === 'COMPLETED'
+                        ? 'bg-emerald-500'
+                        : 'bg-amber-500'
+                  }`}
+                  aria-hidden="true"
+                />
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  {processingStatusLabel}
+                </span>
+              </span>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -474,7 +523,7 @@ export const MemoryDetail: React.FC = () => {
                         <span
                           className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase ${getProcessingStatusClass(memory.processing_status)}`}
                         >
-                          {memory.processing_status}
+                          {processingStatusLabel}
                         </span>
                         <span
                           className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase ${
@@ -493,7 +542,7 @@ export const MemoryDetail: React.FC = () => {
                       </h1>
                       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500 dark:text-slate-400">
                         <span className="capitalize">
-                          {t('project.memories.detail.type')}: {memory.content_type}
+                          {t('project.memories.detail.type')}: {contentTypeLabel}
                         </span>
                         <span>{formatDateOnly(memory.created_at)}</span>
                         <span>
@@ -521,7 +570,7 @@ export const MemoryDetail: React.FC = () => {
                       {t('project.memories.detail.type')}
                     </div>
                     <div className="mt-2 text-sm font-semibold capitalize text-slate-950 dark:text-white">
-                      {memory.content_type}
+                      {contentTypeLabel}
                     </div>
                   </div>
                   <div className="border-r border-slate-200 p-4 dark:border-slate-800">
@@ -602,13 +651,24 @@ export const MemoryDetail: React.FC = () => {
               )}
 
               <div className="border-b border-slate-200 px-4 dark:border-slate-800 md:px-6">
-                <div className="flex gap-1 overflow-x-auto py-3" role="tablist">
-                  {tabs.map((tab) => (
+                <div
+                  className="flex gap-1 overflow-x-auto py-3"
+                  role="tablist"
+                  aria-label={t('project.memories.detail.tabs.label', 'Memory sections')}
+                  onKeyDown={handleTabListKeyDown}
+                >
+                  {tabs.map((tab, index) => (
                     <button
                       key={tab.id}
                       type="button"
                       role="tab"
+                      id={`memory-tab-${tab.id}`}
                       aria-selected={activeTab === tab.id}
+                      aria-controls={`memory-tabpanel-${tab.id}`}
+                      tabIndex={activeTab === tab.id ? 0 : -1}
+                      ref={(element) => {
+                        tabRefs.current[index] = element;
+                      }}
                       onClick={() => {
                         handleTabChange(tab.id);
                       }}
@@ -627,6 +687,8 @@ export const MemoryDetail: React.FC = () => {
               <div
                 className="min-h-[360px] p-4 text-base leading-7 text-slate-800 dark:text-slate-200 md:p-6"
                 role="tabpanel"
+                id={`memory-tabpanel-${activeTab}`}
+                aria-labelledby={`memory-tab-${activeTab}`}
               >
                 {activeTab === 'content' && (
                   <div className="max-w-4xl whitespace-pre-wrap text-[15px] leading-7">
@@ -648,7 +710,7 @@ export const MemoryDetail: React.FC = () => {
                         {t('project.memories.detail.type')}
                       </span>
                       <span className="capitalize text-slate-900 dark:text-slate-100">
-                        {memory.content_type}
+                        {contentTypeLabel}
                       </span>
                     </div>
                     <div className="rounded-md border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900 md:col-span-2">

@@ -1,18 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 
 import { Input, Modal, Pagination, Select } from 'antd';
 import { RefreshCw, Search as SearchIcon } from 'lucide-react';
 
-import {
-  useLazyMessage,
-  LazyEmpty,
-  LazySpin,
-  LazyDrawer,
-  LazyAlert,
-} from '@/components/ui/lazyAntd';
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
+import { useLazyMessage, LazyEmpty, LazyDrawer, LazyAlert } from '@/components/ui/lazyAntd';
 
 import { useDebounce } from '../../hooks/useDebounce';
 import { useTenantStore } from '../../stores/tenant';
@@ -48,14 +43,53 @@ export const DecisionRecords: React.FC = () => {
   const error = useTrustError();
   const { fetchDecisions, resolveApproval, clearError } = useTrustActions();
 
-  const [workspaceFilter, setWorkspaceFilter] = useState('');
-  const [agentFilter, setAgentFilter] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [workspaceFilter, setWorkspaceFilter] = useState(() => searchParams.get('workspace') ?? '');
+  const [agentFilter, setAgentFilter] = useState(() => searchParams.get('agent') ?? '');
+  const [typeFilter, setTypeFilter] = useState(() => searchParams.get('type') ?? '');
+  const [currentPage, setCurrentPage] = useState(() => {
+    const p = Number(searchParams.get('page'));
+    return Number.isInteger(p) && p > 0 ? p : 1;
+  });
 
   // Debounce the free-text filters so typing does not fire a request per keystroke
   const debouncedWorkspaceFilter = useDebounce(workspaceFilter, 400);
   const debouncedAgentFilter = useDebounce(agentFilter, 400);
+
+  // Reflect active filters/pagination in the URL so views survive reload and sharing
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (debouncedWorkspaceFilter.trim()) {
+      next.set('workspace', debouncedWorkspaceFilter.trim());
+    } else {
+      next.delete('workspace');
+    }
+    if (debouncedAgentFilter.trim()) {
+      next.set('agent', debouncedAgentFilter.trim());
+    } else {
+      next.delete('agent');
+    }
+    if (typeFilter) {
+      next.set('type', typeFilter);
+    } else {
+      next.delete('type');
+    }
+    if (currentPage > 1) {
+      next.set('page', String(currentPage));
+    } else {
+      next.delete('page');
+    }
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [
+    debouncedWorkspaceFilter,
+    debouncedAgentFilter,
+    typeFilter,
+    currentPage,
+    searchParams,
+    setSearchParams,
+  ]);
 
   const [selectedRecord, setSelectedRecord] = useState<DecisionRecord | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -257,9 +291,7 @@ export const DecisionRecords: React.FC = () => {
       )}
 
       {isInitialLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <LazySpin size="large" />
-        </div>
+        <SkeletonLoader type="table" rows={8} />
       ) : loadError && decisions.length === 0 ? null : decisions.length === 0 ? (
         <div className="flex items-center justify-center py-20">
           <LazyEmpty description={t('tenant.decisionRecords.empty')} />

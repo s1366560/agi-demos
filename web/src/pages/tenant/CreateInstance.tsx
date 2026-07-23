@@ -7,6 +7,7 @@ import { Alert, Steps, Form, Input, InputNumber, Space, Descriptions } from 'ant
 
 import { LazyButton, LazySelect, useLazyMessage } from '@/components/ui/lazyAntd';
 
+import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import { instanceTemplateService } from '../../services/instanceTemplateService';
 import { useClusters, useClusterActions } from '../../stores/cluster';
 import { useInstanceActions, useInstanceSubmitting } from '../../stores/instance';
@@ -79,6 +80,11 @@ export const CreateInstance: React.FC = () => {
   const [appliedTemplateId, setAppliedTemplateId] = useState<string | null>(null);
   const [infraLoadError, setInfraLoadError] = useState(false);
   const [infraReloadKey, setInfraReloadKey] = useState(0);
+  // Tracks user edits only (programmatic template defaults do not set this)
+  const [isDirty, setIsDirty] = useState(false);
+
+  // Warn before tab close / reload while the wizard has unsaved input
+  useUnsavedChangesWarning(isDirty);
 
   const { createInstance } = useInstanceActions();
   const isSubmitting = useInstanceSubmitting();
@@ -257,7 +263,16 @@ export const CreateInstance: React.FC = () => {
             <Form.Item
               name="slug"
               label={t('tenant.instances.create.basic.slug', 'Slug')}
-              rules={[{ required: true }]}
+              rules={[
+                { required: true },
+                {
+                  pattern: /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+                  message: t(
+                    'tenant.instances.create.validation.slugFormat',
+                    'Use lowercase letters, numbers, and single hyphens between segments'
+                  ),
+                },
+              ]}
             >
               <Input
                 placeholder={t('tenant.instances.create.placeholders.slug', 'e.g. my-instance')}
@@ -720,7 +735,13 @@ export const CreateInstance: React.FC = () => {
           className="mb-8"
         />
 
-        <Form form={form} layout="vertical">
+        <Form
+          form={form}
+          layout="vertical"
+          onValuesChange={() => {
+            setIsDirty(true);
+          }}
+        >
           <div aria-live="polite">
             {stepsInfo.map((step, index) => (
               <div

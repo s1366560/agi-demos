@@ -9,6 +9,7 @@ import { AlertTriangle, Info, Lightbulb, Wrench } from 'lucide-react';
 import { MaintenanceOperation } from '../../components/maintenance/MaintenanceOperation';
 import { graphService } from '../../services/graphService';
 import { confirmAction } from '../../utils/confirmAction';
+import { downloadJson } from '../../utils/downloadJson';
 import { logger } from '../../utils/logger';
 
 import type { EmbeddingStatus, GraphStats, MaintenanceStatus } from '../../services/graphService';
@@ -22,7 +23,9 @@ export const Maintenance: React.FC = () => {
   const [stats, setStats] = useState<GraphStats | null>(null);
   const [refreshLoading, setRefreshLoading] = useState(false);
   const [dedupProcessing, setDedupProcessing] = useState(false);
+  const [dedupChecking, setDedupChecking] = useState(false);
   const [cleanProcessing, setCleanProcessing] = useState(false);
+  const [cleanChecking, setCleanChecking] = useState(false);
   const [rebuildLoading, setRebuildLoading] = useState(false);
   const [embeddingLoading, setEmbeddingLoading] = useState(false);
   const [embeddingStatus, setEmbeddingStatus] = useState<EmbeddingStatus | null>(null);
@@ -58,7 +61,9 @@ export const Maintenance: React.FC = () => {
   useEffect(() => {
     setRefreshLoading(false);
     setDedupProcessing(false);
+    setDedupChecking(false);
     setCleanProcessing(false);
+    setCleanChecking(false);
     setRebuildLoading(false);
     setEmbeddingLoading(false);
     setMessage(null);
@@ -135,7 +140,8 @@ export const Maintenance: React.FC = () => {
 
   const handleDedupCheck = async () => {
     const requestProjectId = projectId;
-    if (!requestProjectId) return;
+    if (!requestProjectId || dedupChecking) return;
+    setDedupChecking(true);
     try {
       const res = await graphService.deduplicateEntities({
         dry_run: true,
@@ -151,20 +157,17 @@ export const Maintenance: React.FC = () => {
       logger.error('Failed to check duplicate entities', e);
       setMessage(t('project.maintenance.messages.dedup_failed'));
       setMessageType('error');
+    } finally {
+      if (isActiveProject(requestProjectId)) {
+        setDedupChecking(false);
+      }
     }
   };
 
   const handleDedupMerge = async () => {
     const requestProjectId = projectId;
     if (!requestProjectId) return;
-    if (
-      !(await confirmAction({
-        title: t('project.maintenance.confirm.dedup_merge'),
-        danger: true,
-      }))
-    ) {
-      return;
-    }
+    // Confirmation is handled by MaintenanceOperation (warning), keep a single confirm.
     setDedupProcessing(true);
     try {
       const res = await graphService.deduplicateEntities({
@@ -196,7 +199,8 @@ export const Maintenance: React.FC = () => {
 
   const handleCleanCheck = async () => {
     const requestProjectId = projectId;
-    if (!requestProjectId) return;
+    if (!requestProjectId || cleanChecking) return;
+    setCleanChecking(true);
     try {
       const res = await graphService.invalidateStaleEdges({
         dry_run: true,
@@ -212,20 +216,17 @@ export const Maintenance: React.FC = () => {
       logger.error('Failed to check stale edges', e);
       setMessage(t('project.maintenance.messages.clean_failed'));
       setMessageType('error');
+    } finally {
+      if (isActiveProject(requestProjectId)) {
+        setCleanChecking(false);
+      }
     }
   };
 
   const handleClean = async () => {
     const requestProjectId = projectId;
     if (!requestProjectId) return;
-    if (
-      !(await confirmAction({
-        title: t('project.maintenance.confirm.clean_stale'),
-        danger: true,
-      }))
-    ) {
-      return;
-    }
+    // Confirmation is handled by MaintenanceOperation (warning), keep a single confirm.
     setCleanProcessing(true);
     try {
       const res = await graphService.invalidateStaleEdges({
@@ -299,15 +300,7 @@ export const Maintenance: React.FC = () => {
       });
       if (!isActiveProject(requestProjectId)) return;
 
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `graph-export-${String(Date.now())}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      downloadJson(`graph-export-${String(Date.now())}.json`, data);
       setMessage(t('project.maintenance.messages.export_success'));
       setMessageType('info');
     } catch (e) {
@@ -321,14 +314,7 @@ export const Maintenance: React.FC = () => {
   const handleRebuildEmbeddings = async () => {
     const requestProjectId = projectId;
     if (!requestProjectId) return;
-    if (
-      !(await confirmAction({
-        title: t('project.maintenance.confirm.rebuild_embeddings'),
-        danger: true,
-      }))
-    ) {
-      return;
-    }
+    // Confirmation is handled by MaintenanceOperation (warning), keep a single confirm.
     setEmbeddingLoading(true);
     try {
       const res = await graphService.rebuildEmbeddings(requestProjectId);
@@ -561,7 +547,7 @@ export const Maintenance: React.FC = () => {
                 void handleRebuildEmbeddings();
               }}
               loading={embeddingLoading}
-              warning={!embeddingStatus.is_compatible}
+              warning
             />
           )}
         </div>

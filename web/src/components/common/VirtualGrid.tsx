@@ -180,7 +180,6 @@ function VirtualGridInternal<T>({
         data-testid="virtual-grid"
         className={gridClasses}
         role="list"
-        aria-rowcount={items.length}
         style={{
           position: 'relative',
           height: totalSize,
@@ -197,7 +196,6 @@ function VirtualGridInternal<T>({
               key={virtualRow.key}
               data-testid={`virtual-row-${String(virtualRow.index)}`}
               role="listitem"
-              aria-rowindex={virtualRow.index + 1}
               style={{
                 position: 'absolute',
                 top: 0,

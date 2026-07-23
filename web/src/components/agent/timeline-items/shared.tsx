@@ -24,7 +24,7 @@ export function MarkdownWithSuspense({ children }: { children: string }) {
     <Suspense
       fallback={
         <div className="text-slate-400">
-          {t('components.timelineItems.loadingMarkdown', { defaultValue: 'Loading...' })}
+          {t('components.timelineItems.loadingMarkdown', { defaultValue: 'Loading…' })}
         </div>
       }
     >

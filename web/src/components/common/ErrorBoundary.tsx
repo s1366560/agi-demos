@@ -1,8 +1,9 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
-import { Result, Button } from 'antd';
+import { Result, Button, theme } from 'antd';
 
 /**
  * Props for ErrorBoundary component
@@ -146,6 +147,11 @@ interface ErrorFallbackProps {
   onReset: () => void;
   /** Whether to show the home button */
   showHomeButton?: boolean | undefined;
+  /**
+   * Extra buttons injected between the retry and home buttons
+   * (e.g. context-aware navigation actions from RouteErrorBoundary).
+   */
+  extra?: ReactNode;
 }
 
 /**
@@ -153,20 +159,32 @@ interface ErrorFallbackProps {
  *
  * Displays a user-friendly error message with retry and home buttons.
  * Shows error stack trace in development mode for debugging.
+ * This is the single shared fallback implementation; RouteErrorBoundary
+ * only injects its navigation button group via the `extra` prop.
  */
-function ErrorFallback({ error, onReset, showHomeButton = true }: ErrorFallbackProps) {
+export function ErrorFallback({
+  error,
+  onReset,
+  showHomeButton = true,
+  extra,
+}: ErrorFallbackProps) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { token } = theme.useToken();
   const handleGoHome = () => {
     onReset();
-    window.history.pushState(null, '', '/');
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    void navigate('/');
   };
 
-  const buttons = [
+  const buttons: ReactNode[] = [
     <Button type="primary" key="retry" onClick={onReset}>
       {t('error.retry', { defaultValue: 'Try Again' })}
     </Button>,
   ];
+
+  if (extra) {
+    buttons.push(extra);
+  }
 
   if (showHomeButton) {
     buttons.push(
@@ -196,7 +214,8 @@ function ErrorFallback({ error, onReset, showHomeButton = true }: ErrorFallbackP
           </summary>
           <pre
             style={{
-              background: '#f5f5f5',
+              background: token.colorFillSecondary,
+              color: token.colorText,
               padding: '10px',
               borderRadius: '4px',
               overflow: 'auto',

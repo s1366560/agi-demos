@@ -75,6 +75,19 @@ export function RuntimeConfigPanel({
             placeholder="http://127.0.0.1:8000"
           />
         </label>
+        {config.mode === 'cloud' ? (
+          <label className="field-label">
+            <span>{t('runtime.deviceAuthorizationUrl')}</span>
+            <TextField.Root
+              aria-label={t('runtime.deviceAuthorizationUrl')}
+              value={config.deviceAuthorizationBaseUrl}
+              onChange={(event) =>
+                onChange({ ...config, deviceAuthorizationBaseUrl: event.target.value })
+              }
+              placeholder="http://127.0.0.1:3000"
+            />
+          </label>
+        ) : null}
         <div
           className="runtime-local-presets"
           aria-label={t('runtime.localDevelopmentPresets')}

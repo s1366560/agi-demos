@@ -20,6 +20,9 @@ import {
 } from 'lucide-react';
 
 import { useProjectBasePath } from '@/hooks/useProjectBasePath';
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning';
+
+import { formatTimeOnly } from '@/utils/date';
 
 import { MarkdownContent } from '../../components/agent/chat/MarkdownContent';
 import { memoryAPI } from '../../services/api';
@@ -96,7 +99,7 @@ const getResponseDetail = (error: unknown): string | undefined => {
 };
 
 export const NewMemory: React.FC = () => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const translate = useCallback(
     (key: string, fallback: string) => {
       const value = t(key, fallback);
@@ -120,6 +123,12 @@ export const NewMemory: React.FC = () => {
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
 
   const draftStorageKey = `memstack:new-memory-draft:${projectId ?? 'default'}`;
+
+  // Warn on tab close / reload / external navigation while the form has content.
+  // In-app exits go through the guarded breadcrumb link or the save flow below.
+  const hasUnsavedContent =
+    (title.trim() !== '' || content.trim() !== '') && currentTask?.status !== 'completed';
+  useUnsavedChangesWarning(hasUnsavedContent);
 
   React.useEffect(() => {
     try {
@@ -311,7 +320,9 @@ export const NewMemory: React.FC = () => {
       void message.success(t('project.memories.new.footer.draft_saved_toast', 'Draft saved'));
     } catch (error) {
       logger.error('[NewMemory] Failed to save memory draft:', error);
-      setError(t('project.memories.new.error.createFailed', 'Failed to create memory'));
+      setError(
+        t('project.memories.new.error.draftSaveFailed', 'Failed to save draft. Please try again.')
+      );
     }
   };
 
@@ -331,12 +342,7 @@ export const NewMemory: React.FC = () => {
       ? 'opacity-50 cursor-not-allowed'
       : 'hover:bg-slate-100 hover:text-primary dark:hover:bg-slate-700'
   }`;
-  const draftSavedTime = draftSavedAt
-    ? new Date(draftSavedAt).toLocaleTimeString(i18n.language, {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : null;
+  const draftSavedTime = draftSavedAt ? formatTimeOnly(draftSavedAt) : null;
 
   return (
     <div className="flex min-h-[calc(100vh-6rem)] flex-col">

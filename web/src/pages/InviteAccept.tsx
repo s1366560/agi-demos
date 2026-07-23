@@ -17,7 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { Alert, Button, Card, Result, Skeleton, Space, Typography } from 'antd';
-import { CheckCircle2, XCircle, Mail } from 'lucide-react';
+import { CheckCircle2, Mail } from 'lucide-react';
 
 import { useAuthStore } from '@/stores/auth';
 
@@ -148,20 +148,20 @@ export const InviteAccept: React.FC = () => {
   }, [token, isAuthenticated]);
 
   /**
-   * Handle invitation decline - redirect to home
+   * Leave the invitation pending and return home. There is no backend
+   * decline endpoint, so the copy must not claim the invite was declined.
    */
   const handleDecline = useCallback(() => {
     void navigate('/', { replace: true });
   }, [navigate]);
 
   /**
-   * Redirect to login with return URL
+   * Redirect to login with return URL.
+   * Uses the ?redirect= query parameter understood by App.tsx LoginRedirect,
+   * so the user lands back on this invitation page after signing in.
    */
   const redirectToLogin = useCallback(() => {
-    void navigate('/login', {
-      replace: true,
-      state: { from: currentPath },
-    });
+    void navigate(`/login?redirect=${encodeURIComponent(currentPath)}`, { replace: true });
   }, [navigate, currentPath]);
 
   /**
@@ -360,7 +360,7 @@ export const InviteAccept: React.FC = () => {
               {t('common.login', 'Login')}
             </Button>
             <Button size="large" block onClick={handleDecline}>
-              {t('inviteAccept.actions.decline', 'Decline')}
+              {t('inviteAccept.actions.goHome', 'Go to Home')}
             </Button>
           </Space>
         </Card>
@@ -377,7 +377,7 @@ export const InviteAccept: React.FC = () => {
     <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
       <Card className="w-full max-w-md mx-4">
         <div className="text-center mb-6">
-          <Mail className="text-5xl text-blue-500 mb-4" size={48} />
+          <Mail className="text-blue-500 mb-4" size={48} />
           <Title level={3}>{t('inviteAccept.authenticated.title', 'Workspace Invitation')}</Title>
         </div>
 
@@ -440,15 +440,8 @@ export const InviteAccept: React.FC = () => {
           >
             {t('inviteAccept.actions.accept', 'Accept Invitation')}
           </Button>
-          <Button
-            size="large"
-            block
-            danger
-            icon={<XCircle size={16} />}
-            disabled={pageState === 'accepting'}
-            onClick={handleDecline}
-          >
-            {t('inviteAccept.actions.decline', 'Decline')}
+          <Button size="large" block disabled={pageState === 'accepting'} onClick={handleDecline}>
+            {t('inviteAccept.actions.notNow', 'Not now')}
           </Button>
         </Space>
       </Card>

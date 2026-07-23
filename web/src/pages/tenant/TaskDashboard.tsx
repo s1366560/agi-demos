@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { Link, useParams } from 'react-router-dom';
 
-import { message } from 'antd';
+import { message, Skeleton } from 'antd';
 import { AlertCircle, Gauge, Hourglass, ListTodo, Loader2, Play, RefreshCw } from 'lucide-react';
 
 import { formatTimeOnly } from '@/utils/date';
@@ -10,6 +11,7 @@ import { logger } from '@/utils/logger';
 
 import { TaskList } from '../../components/tasks/TaskList';
 import { taskAPI } from '../../services/api';
+import { useTenantStore } from '../../stores/tenant';
 
 import type { ChartData, ChartOptions, ScriptableContext } from 'chart.js';
 
@@ -26,6 +28,33 @@ const ChartLoading: React.FC<{ height?: string | undefined }> = ({ height = '200
         <p className="text-slate-500 dark:text-slate-400 text-xs mt-1">
           {t('tenant.tasks.charts.loading', { defaultValue: 'Loading chart…' })}
         </p>
+      </div>
+    </div>
+  );
+};
+
+// Error fallback for charts when the chart.js bundle fails to load
+const ChartLoadError: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
+  const { t } = useTranslation();
+
+  return (
+    <div
+      role="alert"
+      className="w-full flex items-center justify-center bg-slate-50 dark:bg-slate-800 rounded-lg p-6"
+    >
+      <div className="text-center">
+        <AlertCircle size={24} className="text-red-500 mx-auto" aria-hidden="true" />
+        <p className="text-slate-600 dark:text-slate-300 text-sm mt-2">
+          {t('tenant.tasks.charts.loadFailed', { defaultValue: 'Failed to load charts' })}
+        </p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-3 inline-flex items-center gap-2 rounded-md border border-slate-200 dark:border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        >
+          <RefreshCw size={14} />
+          {t('common.retry')}
+        </button>
       </div>
     </div>
   );
@@ -94,6 +123,13 @@ const TaskDashboardInner: React.FC<{
 }) => {
   const { t } = useTranslation();
   const [resuming, setResuming] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const { tenantId: routeTenantId } = useParams<{ tenantId?: string | undefined }>();
+  const currentTenantId = useTenantStore((state) => state.currentTenant?.id ?? null);
+  const tenantId = routeTenantId ?? currentTenantId ?? null;
+  const deadLetterQueuePath = tenantId
+    ? `/tenant/${tenantId}/dead-letter-queue`
+    : '/tenant/dead-letter-queue';
 
   const fetchData = useCallback(async () => {
     try {
@@ -105,6 +141,7 @@ const TaskDashboardInner: React.FC<{
       setStats(statsData);
       setQueueDepth(queueData);
       setLoadError(null);
+      setLastUpdatedAt(new Date());
 
       // Update queue history for chart
       setQueueHistory((prev: { time: string; count: number }[]) => {
@@ -254,11 +291,12 @@ const TaskDashboardInner: React.FC<{
   if (loading && !stats) {
     return (
       <div
-        className="flex items-center justify-center h-full"
+        className="mx-auto max-w-full flex flex-col gap-6 py-2"
         role="status"
         aria-label={t('common.loading')}
       >
-        <div className="animate-spin motion-reduce:animate-none rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <Skeleton active title={{ width: '30%' }} paragraph={{ rows: 6 }} />
+        <Skeleton active title={false} paragraph={{ rows: 4 }} />
       </div>
     );
   }
@@ -302,31 +340,44 @@ const TaskDashboardInner: React.FC<{
             {t('tenant.tasks.subtitle')}
           </p>
         </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              void handleResumePending();
-            }}
-            disabled={resuming || refreshing || !stats?.pending}
-            className="bg-slate-900 dark:bg-white border border-slate-900 dark:border-white text-white dark:text-slate-950 px-4 py-2 rounded text-sm font-medium hover:bg-slate-700 dark:hover:bg-slate-200 flex items-center gap-2 transition-colors disabled:opacity-50"
-          >
-            <Play
-              className={`size-4 ${resuming ? 'animate-pulse motion-reduce:animate-none' : ''}`}
-            />
-            {t('tenant.tasks.resumePending', { defaultValue: 'Resume pending' })}
-          </button>
-          <button
-            type="button"
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white px-4 py-2 rounded text-sm font-medium shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw
-              className={`size-5 ${refreshing ? 'animate-spin motion-reduce:animate-none' : ''}`}
-            />
-            {t('tenant.tasks.refresh')}
-          </button>
+        <div className="flex items-center gap-3">
+          {lastUpdatedAt ? (
+            <span className="text-xs tabular-nums text-slate-400 dark:text-slate-500">
+              {t('tenant.tasks.lastUpdated', {
+                time: formatTimeOnly(lastUpdatedAt),
+                defaultValue: 'Updated {{time}}',
+              })}
+            </span>
+          ) : null}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                void handleResumePending();
+              }}
+              disabled={resuming || refreshing || !stats?.pending}
+              title={t('tenant.tasks.resumePendingHint', {
+                defaultValue: 'Resumes up to 5 pending tasks per run',
+              })}
+              className="bg-slate-900 dark:bg-white border border-slate-900 dark:border-white text-white dark:text-slate-950 px-4 py-2 rounded text-sm font-medium hover:bg-slate-700 dark:hover:bg-slate-200 flex items-center gap-2 transition-colors disabled:opacity-50"
+            >
+              <Play
+                className={`size-4 ${resuming ? 'animate-pulse motion-reduce:animate-none' : ''}`}
+              />
+              {t('tenant.tasks.resumePending', { defaultValue: 'Resume pending' })}
+            </button>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white px-4 py-2 rounded text-sm font-medium shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw
+                className={`size-5 ${refreshing ? 'animate-spin motion-reduce:animate-none' : ''}`}
+              />
+              {t('tenant.tasks.refresh')}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -415,6 +466,12 @@ const TaskDashboardInner: React.FC<{
               {stats?.error_rate?.toFixed(1) || '0.0'}% {t('tenant.tasks.stats.rate')}
             </span>
           </div>
+          <Link
+            to={deadLetterQueuePath}
+            className="mt-1 text-xs font-medium text-red-600 transition-colors hover:text-red-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 dark:text-red-400 dark:hover:text-red-300"
+          >
+            {t('tenant.tasks.viewDeadLetterQueue', { defaultValue: 'View dead letter queue' })}
+          </Link>
         </div>
       </div>
 
@@ -526,6 +583,8 @@ const ChartJSLibInner: React.FC<{ children: (props: ChartComponents) => React.Re
   children,
 }) => {
   const [chartComponents, setChartComponents] = React.useState<ChartComponents | null>(null);
+  const [chartLoadFailed, setChartLoadFailed] = React.useState(false);
+  const [chartRetryKey, setChartRetryKey] = React.useState(0);
 
   React.useEffect(() => {
     let mounted = true;
@@ -560,11 +619,26 @@ const ChartJSLibInner: React.FC<{ children: (props: ChartComponents) => React.Re
       })
       .catch((error: unknown) => {
         logger.error('Failed to load chart modules', error);
+        if (mounted) {
+          setChartLoadFailed(true);
+        }
       });
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [chartRetryKey]);
+
+  if (chartLoadFailed) {
+    return (
+      <ChartLoadError
+        onRetry={() => {
+          setChartLoadFailed(false);
+          setChartComponents(null);
+          setChartRetryKey((key) => key + 1);
+        }}
+      />
+    );
+  }
 
   if (!chartComponents) {
     return <ChartLoading />;

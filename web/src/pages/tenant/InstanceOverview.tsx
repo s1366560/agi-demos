@@ -2,14 +2,12 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Table, Tag, Card, Popconfirm, InputNumber } from 'antd';
+import { Table, Tag, Card } from 'antd';
 import {
   Eye,
   EyeOff,
   RefreshCw,
   Activity,
-  ArrowUpDown,
-  RotateCcw,
   CheckCircle2,
   XCircle,
   AlertTriangle,
@@ -72,7 +70,6 @@ export const InstanceOverview: React.FC = () => {
   const messageApi = useLazyMessage();
 
   const [showToken, setShowToken] = useState<boolean>(false);
-  const [scaleTarget, setScaleTarget] = useState<number | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [membersLoadError, setMembersLoadError] = useState<string | null>(null);
   const [isMembersLoading, setIsMembersLoading] = useState<boolean>(false);
@@ -82,8 +79,6 @@ export const InstanceOverview: React.FC = () => {
   const members = useInstanceMembers();
   const config = useInstanceConfig();
   const listMembers = useInstanceStore((s) => s.listMembers);
-  const scaleInstance = useInstanceStore((s) => s.scaleInstance);
-  const restartInstance = useInstanceStore((s) => s.restartInstance);
   const fetchInstance = useInstanceStore((s) => s.getInstance);
   const instanceId = instance?.id ?? null;
 
@@ -126,33 +121,6 @@ export const InstanceOverview: React.FC = () => {
       });
   }, [fetchInstance, instanceId, messageApi, t]);
 
-  const handleScale = useCallback(() => {
-    if (!instanceId || scaleTarget === null) return;
-    setActionLoading('scale');
-    scaleInstance(instanceId, scaleTarget)
-      .then(() => {
-        messageApi?.success(t('tenant.instances.actions.scaleSuccess', 'Scaled successfully'));
-        setScaleTarget(null);
-      })
-      .catch(() => messageApi?.error(t('tenant.instances.actions.scaleFailed', 'Scale failed')))
-      .finally(() => {
-        setActionLoading(null);
-      });
-  }, [instanceId, messageApi, scaleInstance, scaleTarget, t]);
-
-  const handleRestart = useCallback(() => {
-    if (!instanceId) return;
-    setActionLoading('restart');
-    restartInstance(instanceId)
-      .then(() =>
-        messageApi?.success(t('tenant.instances.actions.restartSuccess', 'Restart initiated'))
-      )
-      .catch(() => messageApi?.error(t('tenant.instances.actions.restartFailed', 'Restart failed')))
-      .finally(() => {
-        setActionLoading(null);
-      });
-  }, [instanceId, messageApi, restartInstance, t]);
-
   const handleCopyToken = () => {
     if (instance?.proxy_token) {
       void navigator.clipboard.writeText(instance.proxy_token);
@@ -170,7 +138,11 @@ export const InstanceOverview: React.FC = () => {
       title: t('tenant.instances.columns.role'),
       dataIndex: 'role',
       key: 'role',
-      render: (role: string) => <Tag color={role === 'admin' ? 'blue' : 'default'}>{role}</Tag>,
+      render: (role: string) => (
+        <Tag color={role === 'admin' ? 'blue' : 'default'}>
+          {t(`tenant.instances.members.roles.${role}`, role)}
+        </Tag>
+      ),
     },
     {
       title: t('tenant.instances.columns.createdAt'),
@@ -208,6 +180,7 @@ export const InstanceOverview: React.FC = () => {
 
   const healthKey = instance.health_status || 'unknown';
   const healthCfg = HEALTH_CONFIG[healthKey] ?? UNKNOWN_HEALTH_CONFIG;
+  const healthLabel = t(`tenant.instances.health.${healthKey}`, healthKey);
 
   return (
     <div className="flex flex-col gap-6">
@@ -218,10 +191,10 @@ export const InstanceOverview: React.FC = () => {
             className={`flex items-center gap-2 rounded-full px-4 py-2 ${healthCfg.bgColor} ${healthCfg.color}`}
           >
             {healthCfg.icon}
-            <span className="text-sm font-semibold capitalize">{healthKey}</span>
+            <span className="text-sm font-semibold">{healthLabel}</span>
           </div>
           <Tag color={getStatusColor(instance.status)} className="text-xs">
-            {instance.status}
+            {t(`tenant.instances.status.${instance.status}`, instance.status)}
           </Tag>
           <div className="flex items-center gap-1 text-xs text-text-secondary dark:text-text-muted">
             <Clock className="h-3.5 w-3.5" />
@@ -246,50 +219,6 @@ export const InstanceOverview: React.FC = () => {
           >
             {t('common.refresh', 'Refresh')}
           </LazyButton>
-          <Popconfirm
-            title={t('tenant.instances.actions.scaleTitle', 'Scale Instance')}
-            description={
-              <div className="flex items-center gap-2 py-2">
-                <span>{t('tenant.instances.detail.replicas', 'Replicas')}:</span>
-                <InputNumber
-                  min={0}
-                  max={10}
-                  value={scaleTarget ?? instance.replicas}
-                  onChange={(v) => {
-                    setScaleTarget(v);
-                  }}
-                  size="small"
-                  aria-label={t('tenant.instances.detail.replicas', 'Replicas')}
-                />
-              </div>
-            }
-            onConfirm={handleScale}
-            okText={t('common.confirm', 'Confirm')}
-            cancelText={t('common.cancel', 'Cancel')}
-          >
-            <LazyButton
-              icon={<ArrowUpDown size={14} />}
-              loading={actionLoading === 'scale'}
-              size="small"
-            >
-              {t('tenant.instances.actions.scale', 'Scale')}
-            </LazyButton>
-          </Popconfirm>
-          <Popconfirm
-            title={t('tenant.instances.actions.restartConfirm', 'Restart this instance?')}
-            onConfirm={handleRestart}
-            okText={t('common.confirm', 'Confirm')}
-            cancelText={t('common.cancel', 'Cancel')}
-          >
-            <LazyButton
-              icon={<RotateCcw size={14} />}
-              loading={actionLoading === 'restart'}
-              size="small"
-              danger
-            >
-              {t('tenant.instances.actions.restart', 'Restart')}
-            </LazyButton>
-          </Popconfirm>
         </div>
       </div>
 
@@ -302,7 +231,7 @@ export const InstanceOverview: React.FC = () => {
               {t('tenant.instances.detail.health', 'Health')}
             </p>
           </div>
-          <p className={`text-lg font-semibold mt-1 capitalize ${healthCfg.color}`}>{healthKey}</p>
+          <p className={`text-lg font-semibold mt-1 ${healthCfg.color}`}>{healthLabel}</p>
         </Card>
         <Card className="bg-surface-light dark:bg-surface-dark rounded-lg border border-border-light dark:border-border-dark">
           <p className="text-sm text-text-secondary dark:text-text-muted">

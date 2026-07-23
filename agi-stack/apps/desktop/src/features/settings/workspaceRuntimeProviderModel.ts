@@ -4,9 +4,13 @@ import type {
   LlmProviderRoutingPolicyMutationInput,
   LlmRoutingRole,
   ManagedLlmProvider,
+  RuntimeMode,
   WorkspaceRuntimeProvider,
 } from '../../types';
-import { localRuntimeRoutingModelIds } from './providerManagementModel';
+import {
+  localRuntimeRoutingModelIds,
+  providerEnabledModelIds,
+} from './providerManagementModel';
 
 export type WorkspaceRuntimeModelOption = {
   value: string;
@@ -113,10 +117,11 @@ export function workspaceRuntimeModelOptions(
   policy: LlmProviderRoutingPolicy,
   providers: readonly ManagedLlmProvider[],
   role: LlmRoutingRole = 'default',
+  mode: RuntimeMode = 'local',
 ): WorkspaceRuntimeModelOption[] {
   const selected = policy.roles[role] ?? policy.roles.default;
   return providers.flatMap((provider) =>
-    localRuntimeRoutingModelIds(provider).map((modelId) => {
+    workspaceRoutingModelIds(provider, mode).map((modelId) => {
       const roles = (Object.entries(policy.roles) as Array<
         [LlmRoutingRole, typeof selected]
       >)
@@ -139,6 +144,22 @@ export function workspaceRuntimeModelOptions(
       };
     }),
   );
+}
+
+function workspaceRoutingModelIds(
+  provider: ManagedLlmProvider,
+  mode: RuntimeMode,
+): string[] {
+  if (mode === 'local') return localRuntimeRoutingModelIds(provider);
+  const operationType = provider.operation_type?.trim().toLowerCase();
+  if (
+    (operationType && operationType !== 'llm') ||
+    provider.is_active === false ||
+    provider.is_enabled === false
+  ) {
+    return [];
+  }
+  return providerEnabledModelIds(provider);
 }
 
 export function workspaceRuntimeRoutingMutation(

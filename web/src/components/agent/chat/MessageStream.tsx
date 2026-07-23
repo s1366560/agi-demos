@@ -36,6 +36,7 @@ import {
   File as FileIcon,
 } from 'lucide-react';
 
+import { formatFileSize, formatDurationMs } from '../../../utils/format';
 import { foldTextWithMetadata } from '../../../utils/toolResultUtils';
 
 import { MarkdownContent } from './MarkdownContent';
@@ -99,12 +100,6 @@ export interface UserMessageProps {
   forcedSkillName?: string | undefined;
   /** Attached files metadata */
   fileMetadata?: UserMessageFileMetadata[] | undefined;
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes.toString()} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 const getFileIconComponent = (mimeType: string) => {
@@ -448,7 +443,7 @@ function truncateMiddle(value: string, maxLength = 120): string {
   if (value.length <= maxLength) return value;
   const headLength = Math.ceil((maxLength - 3) * 0.62);
   const tailLength = Math.floor((maxLength - 3) * 0.38);
-  return `${value.slice(0, headLength)}...${value.slice(value.length - tailLength)}`;
+  return `${value.slice(0, headLength)}…${value.slice(value.length - tailLength)}`;
 }
 
 function normalizePreviewText(value: string): string {
@@ -755,12 +750,6 @@ export function ToolExecutionCardDisplay({
     }
   }, [partialArguments, status]);
 
-  const formatDuration = (ms: number) => {
-    if (ms < 1000) return `${ms.toString()}ms`;
-    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-    return `${(ms / 60000).toFixed(1)}m`;
-  };
-
   // Format result to ensure it's always a string
   const formattedResult = formatToolResult(result);
   const purposeKind = inferToolPurpose(toolName, parameters);
@@ -796,7 +785,7 @@ export function ToolExecutionCardDisplay({
             <Check size={12} />
             {t('components.messageStream.status.success', { defaultValue: 'Success' })}
             {duration !== undefined && (
-              <span className="ml-1 text-emerald-500/70">({formatDuration(duration)})</span>
+              <span className="ml-1 text-emerald-500/70">({formatDurationMs(duration)})</span>
             )}
           </div>
         );
@@ -806,7 +795,7 @@ export function ToolExecutionCardDisplay({
             <X size={12} />
             {t('components.messageStream.status.failed', { defaultValue: 'Failed' })}
             {duration !== undefined && (
-              <span className="ml-1 text-red-500/70">({formatDuration(duration)})</span>
+              <span className="ml-1 text-red-500/70">({formatDurationMs(duration)})</span>
             )}
           </div>
         );

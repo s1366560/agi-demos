@@ -31,6 +31,7 @@ export interface TrustState {
     params: { workspace_id: string; agent_id?: string; decision_type?: string }
   ) => Promise<void>;
   createPolicy: (tenantId: string, data: TrustPolicyCreate) => Promise<void>;
+  revokePolicy: (tenantId: string, policyId: string, workspaceId: string) => Promise<void>;
   resolveApproval: (
     tenantId: string,
     recordId: string,
@@ -105,6 +106,24 @@ export const useTrustStore = create<TrustState>()(
         }
       },
 
+      revokePolicy: async (tenantId, policyId, workspaceId) => {
+        set({ isLoading: true, error: null });
+        try {
+          const revoked = await trustService.revokePolicy(tenantId, policyId, {
+            workspace_id: workspaceId,
+          });
+          set((state) => ({
+            policies: state.policies.map((policy) =>
+              policy.id === policyId ? { ...policy, deleted_at: revoked.deleted_at } : policy
+            ),
+            isLoading: false,
+          }));
+        } catch (error) {
+          set({ error: getErrorMessage(error), isLoading: false });
+          throw error;
+        }
+      },
+
       resolveApproval: async (tenantId, recordId, data) => {
         set({ isLoading: true, error: null });
         try {
@@ -138,6 +157,7 @@ export const useTrustActions = () =>
       fetchPolicies: s.fetchPolicies,
       fetchDecisions: s.fetchDecisions,
       createPolicy: s.createPolicy,
+      revokePolicy: s.revokePolicy,
       resolveApproval: s.resolveApproval,
       clearError: s.clearError,
       reset: s.reset,

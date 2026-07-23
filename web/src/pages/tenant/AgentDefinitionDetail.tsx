@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
-import { Alert, Badge, Dropdown, message, Modal, Spin, Switch, Tag } from 'antd';
+import { Alert, Badge, Dropdown, message, Modal, Skeleton, Switch, Tag } from 'antd';
 import {
   ArrowLeft,
   Bot,
@@ -165,12 +165,38 @@ function BindingSummary({ bindings }: { bindings: AgentBinding[] }) {
             </Tag>
           </div>
           <div className={`mt-2 grid gap-1 text-xs ${mutedText} sm:grid-cols-2`}>
-            <span>channel_type: {binding.channel_type ?? '-'}</span>
-            <span>channel_id: {binding.channel_id ?? '-'}</span>
-            <span>account_id: {binding.account_id ?? '-'}</span>
-            <span>peer_id: {binding.peer_id ?? '-'}</span>
-            <span>group_id: {binding.group_id ?? '-'}</span>
-            <span>created_at: {formatDate(binding.created_at)}</span>
+            <span>
+              {t('tenant.agentDefinitions.detail.binding.channelType', {
+                defaultValue: 'Channel type',
+              })}
+              : {binding.channel_type ?? '-'}
+            </span>
+            <span>
+              {t('tenant.agentDefinitions.detail.binding.channelId', {
+                defaultValue: 'Channel ID',
+              })}
+              : {binding.channel_id ?? '-'}
+            </span>
+            <span>
+              {t('tenant.agentDefinitions.detail.binding.accountId', {
+                defaultValue: 'Account ID',
+              })}
+              : {binding.account_id ?? '-'}
+            </span>
+            <span>
+              {t('tenant.agentDefinitions.detail.binding.peerId', { defaultValue: 'Peer ID' })}:{' '}
+              {binding.peer_id ?? '-'}
+            </span>
+            <span>
+              {t('tenant.agentDefinitions.detail.binding.groupId', { defaultValue: 'Group ID' })}:{' '}
+              {binding.group_id ?? '-'}
+            </span>
+            <span>
+              {t('tenant.agentDefinitions.detail.labels.createdAt', {
+                defaultValue: 'Created at',
+              })}
+              : {formatDate(binding.created_at)}
+            </span>
           </div>
         </div>
       ))}
@@ -317,8 +343,13 @@ export const AgentDefinitionDetail: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-[420px] items-center justify-center p-6">
-        <Spin size="large" />
+      <div
+        className="mx-auto flex w-full max-w-7xl flex-col gap-5 p-6"
+        role="status"
+        aria-label={t('common.loading', 'Loading…')}
+      >
+        <Skeleton active title={{ width: '40%' }} paragraph={{ rows: 2 }} />
+        <Skeleton active title={false} paragraph={{ rows: 8 }} />
       </div>
     );
   }
@@ -360,6 +391,9 @@ export const AgentDefinitionDetail: React.FC = () => {
           </button>
           <div className="flex flex-wrap items-center gap-2">
             <Badge status={definition.enabled ? 'success' : 'default'} />
+            <Tag color={definition.enabled ? 'success' : 'default'}>
+              {definition.enabled ? t('common.status.enabled') : t('common.status.disabled')}
+            </Tag>
             <Tag>{definition.source}</Tag>
             {definition.execution_backend?.type === 'acp_external' ? (
               <Tag color="cyan">ACP</Tag>
@@ -437,10 +471,29 @@ export const AgentDefinitionDetail: React.FC = () => {
               label={t('tenant.agentDefinitions.modal.displayName')}
               value={definition.display_name}
             />
-            <InfoRow label="ID" value={definition.id} mono />
-            <InfoRow label="Tenant ID" value={definition.tenant_id} mono />
-            <InfoRow label="Project ID" value={definition.project_id} mono />
-            <InfoRow label="Source" value={definition.source} />
+            <InfoRow
+              label={t('tenant.agentDefinitions.detail.labels.id', { defaultValue: 'ID' })}
+              value={definition.id}
+              mono
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.detail.labels.tenantId', {
+                defaultValue: 'Tenant ID',
+              })}
+              value={definition.tenant_id}
+              mono
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.detail.labels.projectId', {
+                defaultValue: 'Project ID',
+              })}
+              value={definition.project_id}
+              mono
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.detail.labels.source', { defaultValue: 'Source' })}
+              value={definition.source}
+            />
             <InfoRow
               label={t('tenant.agentDefinitions.modal.executionBackend', {
                 defaultValue: 'Execution Backend',

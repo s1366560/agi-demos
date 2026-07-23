@@ -7,6 +7,8 @@ import { Code, Copy, Download, Search, Plus, Box, Network, ArrowRight, Share2 } 
 
 import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 
+import { downloadJson } from '@/utils/downloadJson';
+
 import { message } from '@/components/ui/lazyAntd';
 
 import { useSchemaData } from '../../../hooks/useSwr';
@@ -98,18 +100,6 @@ function matchesEdge(
     .toLowerCase();
 
   return haystack.includes(query);
-}
-
-function downloadJson(filename: string, content: string): void {
-  const blob = new Blob([content], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
 }
 
 // Memoized entity card component to prevent unnecessary re-renders

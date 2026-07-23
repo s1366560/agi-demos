@@ -118,6 +118,11 @@ interface _MessageAreaRootProps {
   suggestions?: string[] | undefined;
   onSuggestionSelect?: ((suggestion: string) => void) | undefined;
   onAgentSessionSelect?: ((sessionId: string) => void) | undefined;
+  onRetryMessage?: ((event: TimelineEvent) => void) | undefined;
+  onEditMessage?: ((event: TimelineEvent) => void) | undefined;
+  onDeleteMessage?: ((event: TimelineEvent) => void) | undefined;
+  onReplyMessage?: ((event: TimelineEvent) => void) | undefined;
+  loadEarlierError?: boolean | undefined;
   children?: React.ReactNode | undefined;
 }
 
@@ -323,6 +328,11 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     suggestions,
     onSuggestionSelect,
     onAgentSessionSelect,
+    onRetryMessage,
+    onEditMessage,
+    onDeleteMessage,
+    onReplyMessage,
+    loadEarlierError = false,
     children,
   }) => {
     // NOTE: fast-changing streaming values (assistant content, thought,
@@ -810,6 +820,27 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
               aria-live="polite"
             >
               <ConversationSummaryCardWrapper conversationId={conversationId} />
+              {/* Inline error + retry for earlier-messages pagination */}
+              {loadEarlierError && (
+                <div className="flex justify-center pb-2" role="alert">
+                  <div className="flex items-center gap-2 rounded-lg border border-red-200/70 bg-red-50 px-3 py-1.5 text-xs text-red-600 dark:border-red-800/50 dark:bg-red-900/20 dark:text-red-400">
+                    <span>
+                      {t('components.messageArea.loadEarlierFailed', {
+                        defaultValue: 'Failed to load earlier messages',
+                      })}
+                    </span>
+                    {onLoadEarlier && (
+                      <button
+                        type="button"
+                        onClick={onLoadEarlier}
+                        className="rounded-sm font-medium underline underline-offset-2 transition-colors hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:hover:text-red-300"
+                      >
+                        {t('common.retry', { defaultValue: 'Retry' })}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
               {/* Virtualized message list */}
               <div
                 style={{
@@ -987,6 +1018,34 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                             event.id
                               ? () => {
                                   togglePinEvent(event.id);
+                                }
+                              : undefined
+                          }
+                          onReply={
+                            onReplyMessage
+                              ? () => {
+                                  onReplyMessage(event);
+                                }
+                              : undefined
+                          }
+                          onEdit={
+                            isUserMessage && onEditMessage
+                              ? () => {
+                                  onEditMessage(event);
+                                }
+                              : undefined
+                          }
+                          onDelete={
+                            isUserMessage && onDeleteMessage
+                              ? () => {
+                                  onDeleteMessage(event);
+                                }
+                              : undefined
+                          }
+                          onRetry={
+                            !isUserMessage && onRetryMessage
+                              ? () => {
+                                  onRetryMessage(event);
                                 }
                               : undefined
                           }

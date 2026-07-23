@@ -23,6 +23,7 @@ import {
   Braces,
   File,
   Search as SearchIcon,
+  RefreshCw,
 } from 'lucide-react';
 
 import { instanceFileService } from '@/services/instanceFileService';
@@ -81,6 +82,15 @@ const formatFileSize = (bytes: number | null): string => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+const countTreeNodes = (nodes: FileNode[], type: FileNode['type']): number =>
+  nodes.reduce(
+    (sum, node) =>
+      sum +
+      (node.type === type ? 1 : 0) +
+      (node.children ? countTreeNodes(node.children, type) : 0),
+    0
+  );
+
 export const InstanceFiles: React.FC = () => {
   const { t } = useTranslation();
   const { instanceId } = useParams<{ instanceId: string }>();
@@ -98,6 +108,8 @@ export const InstanceFiles: React.FC = () => {
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [previewContent, setPreviewContent] = useState<string>('');
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState(false);
+  const [uploadError, setUploadError] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createType, setCreateType] = useState<'file' | 'folder'>('file');
   const [createName, setCreateName] = useState('');
@@ -222,12 +234,15 @@ export const InstanceFiles: React.FC = () => {
       if (!instanceId || node.type !== 'file') return;
 
       setIsPreviewLoading(true);
+      setPreviewError(false);
+      setPreviewContent('');
       setIsPreviewModalOpen(true);
 
       try {
         const response = await instanceFileService.previewFile(instanceId, node.key);
         setPreviewContent(response.content);
       } catch {
+        setPreviewError(true);
         messageApi?.error(t('tenant.instances.files.previewError'));
       } finally {
         setIsPreviewLoading(false);
@@ -311,12 +326,14 @@ export const InstanceFiles: React.FC = () => {
       const file = input.files?.[0];
       if (!file) return;
       setIsUploading(true);
+      setUploadError(false);
       try {
         const directory = selectedNode?.type === 'folder' ? selectedNode.key : '';
         await instanceFileService.uploadFile(instanceId, file, directory);
         messageApi?.success(t('tenant.instances.files.uploadSuccess'));
         void fetchFileTree();
       } catch {
+        setUploadError(true);
         messageApi?.error(t('tenant.instances.files.uploadError'));
       } finally {
         setIsUploading(false);
@@ -420,6 +437,16 @@ export const InstanceFiles: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2">
           <LazyButton
             onClick={() => {
+              void fetchFileTree();
+            }}
+            loading={isLoading}
+            icon={<RefreshCw size={16} />}
+            aria-label={t('common.refresh', 'Refresh')}
+          >
+            {t('common.refresh', 'Refresh')}
+          </LazyButton>
+          <LazyButton
+            onClick={() => {
               setCreateType('folder');
               setCreateParentPath('');
               setCreateName('');
@@ -451,6 +478,25 @@ export const InstanceFiles: React.FC = () => {
         </div>
       </div>
 
+      {/* Upload failure feedback with retry */}
+      {uploadError && (
+        <LazyAlert
+          type="error"
+          showIcon
+          closable={{
+            onClose: () => {
+              setUploadError(false);
+            },
+          }}
+          message={t('tenant.instances.files.uploadError')}
+          action={
+            <LazyButton size="small" onClick={handleUpload} disabled={isUploading}>
+              {t('common.retry', 'Retry')}
+            </LazyButton>
+          }
+        />
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark p-4">
@@ -460,7 +506,7 @@ export const InstanceFiles: React.FC = () => {
             </div>
             <div>
               <p className="text-2xl font-semibold text-text-primary dark:text-text-inverse">
-                {fileTree.length}
+                {countTreeNodes(fileTree, 'folder')}
               </p>
               <p className="text-xs text-text-muted dark:text-text-muted">
                 {t('tenant.instances.files.totalFolders')}
@@ -475,13 +521,7 @@ export const InstanceFiles: React.FC = () => {
             </div>
             <div>
               <p className="text-2xl font-semibold text-text-primary dark:text-text-inverse">
-                {fileTree.reduce((count, node) => {
-                  const countFiles = (n: FileNode): number => {
-                    if (n.type === 'file') return 1;
-                    return (n.children || []).reduce((sum, child) => sum + countFiles(child), 0);
-                  };
-                  return count + countFiles(node);
-                }, 0)}
+                {countTreeNodes(fileTree, 'file')}
               </p>
               <p className="text-xs text-text-muted dark:text-text-muted">
                 {t('tenant.instances.files.totalFiles')}
@@ -690,6 +730,18 @@ export const InstanceFiles: React.FC = () => {
           {isPreviewLoading ? (
             <div className="flex justify-center py-8">
               <LazySpin />
+            </div>
+          ) : previewError ? (
+            <div className="flex flex-col items-center gap-3 py-8">
+              <LazyAlert type="error" showIcon message={t('tenant.instances.files.previewError')} />
+              <LazyButton
+                size="small"
+                onClick={() => {
+                  if (selectedNode) void handlePreview(selectedNode);
+                }}
+              >
+                {t('common.retry', 'Retry')}
+              </LazyButton>
             </div>
           ) : (
             <pre className="bg-surface-muted dark:bg-surface-dark-alt p-4 rounded-lg text-sm overflow-x-auto font-mono">

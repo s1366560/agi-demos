@@ -15,14 +15,12 @@
 import React, { useCallback, useEffect, useState, useMemo, useContext, useRef, memo } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { message } from 'antd';
 import {
   AlertCircle,
-  ChevronLeft,
-  ChevronRight,
   Database,
   FileImage,
   FileText,
@@ -40,6 +38,7 @@ import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 import { formatDateOnly } from '@/utils/date';
 
 import { AppModal } from '@/components/common';
+import { Pagination } from '@/components/shared/Pagination';
 
 import { memoryAPI } from '../../services/api';
 import { logger } from '../../utils/logger';
@@ -96,6 +95,8 @@ const TEXTS = {
   loading: 'Loading…',
   projectNotFound: 'Project not found',
   retry: 'Retry',
+  refresh: 'Refresh',
+  untitled: 'Untitled',
   fetchFailed: 'Failed to load memories. Please check your connection and try again.',
   deleteSuccess: 'Memory deleted',
   deleteFailed: 'Failed to delete memory',
@@ -136,18 +137,6 @@ function textFallback(t: TFunction, key: string, fallback: string): string {
 
 function formatCountSummary(template: string, shown: number, total: number): string {
   return template.replace('{{shown}}', String(shown)).replace('{{total}}', String(total));
-}
-
-function formatPaginationSummary(
-  template: string,
-  start: number,
-  end: number,
-  total: number
-): string {
-  return template
-    .replace('{{start}}', String(start))
-    .replace('{{end}}', String(end))
-    .replace('{{total}}', String(total));
 }
 
 function useMemoryListTexts(): MemoryListTexts {
@@ -204,6 +193,8 @@ function useMemoryListTexts(): MemoryListTexts {
       loading: textFallback(t, 'common.loading', TEXTS.loading),
       projectNotFound: textFallback(t, 'project.overview.not_found', TEXTS.projectNotFound),
       retry: textFallback(t, 'common.retry', TEXTS.retry),
+      refresh: textFallback(t, 'common.refresh', TEXTS.refresh),
+      untitled: textFallback(t, 'common.untitled', TEXTS.untitled),
       tableName: textFallback(t, 'project.memories.columns.name', TEXTS.tableName),
       tableType: textFallback(t, 'project.memories.columns.type', TEXTS.tableType),
       tableStatus: textFallback(t, 'project.memories.columns.status', TEXTS.tableStatus),
@@ -255,6 +246,23 @@ const MEMORY_TABLE_COLUMNS = [
   { key: 'actions', width: '110px' },
 ] as const;
 const EMPTY_MEMORIES: Memory[] = [];
+const VALID_MEMORY_TYPE_FILTERS: readonly MemoryTypeFilter[] = [
+  'text',
+  'document',
+  'image',
+  'video',
+];
+
+const parsePositiveIntParam = (value: string | null): number | null => {
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const parseMemoryTypeParam = (value: string | null): MemoryTypeFilter =>
+  value !== null && (VALID_MEMORY_TYPE_FILTERS as readonly string[]).includes(value)
+    ? (value as MemoryTypeFilter)
+    : 'all';
 
 // ============================================================================
 // Helper Functions
@@ -296,10 +304,10 @@ function MemoryTableColGroup(): React.ReactElement {
   );
 }
 
-const normalizeMemory = (memory: MemoryApiItem): Memory => ({
+const normalizeMemory = (memory: MemoryApiItem, untitled: string): Memory => ({
   id: memory.id,
   project_id: memory.project_id ?? '',
-  title: memory.title ?? 'Untitled',
+  title: memory.title ?? untitled,
   content: memory.content ?? '',
   content_type: memory.content_type ?? 'text',
   tags: memory.tags ?? [],
@@ -396,18 +404,26 @@ interface MemoryListProps {
 
 const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
   const { projectId } = useParams<{ projectId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const texts = useMemoryListTexts();
 
-  // State
+  // State (filters/pagination seed from the URL query so views survive reload and sharing)
   const [memories, setMemories] = useState<Memory[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [page, setPage] = useState(() => parsePositiveIntParam(searchParams.get('page')) ?? 1);
+  const [pageSize, setPageSize] = useState(() => {
+    const parsed = parsePositiveIntParam(searchParams.get('page_size'));
+    return parsed !== null && (PAGE_SIZE_OPTIONS as readonly number[]).includes(parsed)
+      ? parsed
+      : DEFAULT_PAGE_SIZE;
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
   const [debouncedSearch] = useDebounce(search, 300);
-  const [contentTypeFilter, setContentTypeFilter] = useState<MemoryTypeFilter>('all');
+  const [contentTypeFilter, setContentTypeFilter] = useState<MemoryTypeFilter>(() =>
+    parseMemoryTypeParam(searchParams.get('type'))
+  );
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [memoryToDelete, setMemoryToDelete] = useState<Memory | null>(null);
@@ -442,7 +458,9 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
         ...(contentTypeFilter !== 'all' ? { content_type: contentTypeFilter } : {}),
       });
       if (fetchSequenceRef.current !== sequence) return;
-      const normalizedMemories = data.memories.map(normalizeMemory);
+      const normalizedMemories = data.memories.map((memory) =>
+        normalizeMemory(memory, texts.untitled)
+      );
       if (normalizedMemories.length === 0 && data.total > 0 && data.page > 1) {
         setPage(Math.max(1, data.page - 1));
         return;
@@ -460,11 +478,40 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
         setIsLoading(false);
       }
     }
-  }, [contentTypeFilter, debouncedSearch, page, pageSize, projectId, texts.fetchFailed]);
+  }, [contentTypeFilter, debouncedSearch, page, pageSize, projectId, texts.fetchFailed, texts.untitled]);
 
   useEffect(() => {
     setPage(1);
   }, [contentTypeFilter, debouncedSearch]);
+
+  // Reflect search/filter/pagination in the URL so views survive reload and sharing.
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    const trimmedSearch = debouncedSearch.trim();
+    if (trimmedSearch) {
+      next.set('q', trimmedSearch);
+    } else {
+      next.delete('q');
+    }
+    if (contentTypeFilter !== 'all') {
+      next.set('type', contentTypeFilter);
+    } else {
+      next.delete('type');
+    }
+    if (page > 1) {
+      next.set('page', String(page));
+    } else {
+      next.delete('page');
+    }
+    if (pageSize !== DEFAULT_PAGE_SIZE) {
+      next.set('page_size', String(pageSize));
+    } else {
+      next.delete('page_size');
+    }
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [contentTypeFilter, debouncedSearch, page, pageSize, searchParams, setSearchParams]);
 
   // Delete handlers
   const confirmDelete = useCallback((memory: Memory) => {
@@ -588,7 +635,7 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
             onConfirm={() => {
               void handleDelete();
             }}
-            memoryTitle={memoryToDelete.title || 'Untitled'}
+            memoryTitle={memoryToDelete.title || texts.untitled}
             isDeleting={deletingId === memoryToDelete.id}
           />
         )}
@@ -647,13 +694,36 @@ const HeaderInternal: React.FC<HeaderProps> = ({ className = '' }) => {
           ))}
         </dl>
       </div>
-      <Link
-        to={`${projectBasePath}/memories/new`}
-        className="inline-flex h-9 items-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-medium text-slate-50 transition-colors hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-950/20 dark:bg-slate-50 dark:text-slate-950 dark:hover:bg-slate-200 dark:focus:ring-slate-50/20"
-      >
-        <Plus size={16} aria-hidden="true" />
-        <span>{texts.addMemory}</span>
-      </Link>
+      <div className="flex items-center gap-2">
+        {context && (
+          <button
+            type="button"
+            onClick={() => {
+              void context.actions.fetchMemories();
+            }}
+            disabled={context.state.isLoading}
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-950/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:focus:ring-slate-50/10"
+          >
+            {context.state.isLoading ? (
+              <Loader2
+                size={16}
+                className="animate-spin motion-reduce:animate-none"
+                aria-hidden="true"
+              />
+            ) : (
+              <RefreshCw size={16} aria-hidden="true" />
+            )}
+            <span>{texts.refresh}</span>
+          </button>
+        )}
+        <Link
+          to={`${projectBasePath}/memories/new`}
+          className="inline-flex h-9 items-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-medium text-slate-50 transition-colors hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-950/20 dark:bg-slate-50 dark:text-slate-950 dark:hover:bg-slate-200 dark:focus:ring-slate-50/20"
+        >
+          <Plus size={16} aria-hidden="true" />
+          <span>{texts.addMemory}</span>
+        </Link>
+      </div>
     </div>
   );
 };
@@ -978,7 +1048,7 @@ const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
                 to={`${projectBasePath}/memory/${memory.id}`}
                 className="block truncate font-medium text-slate-950 transition-colors hover:text-primary dark:text-slate-50 dark:hover:text-primary-light"
               >
-                {memory.title || 'Untitled'}
+                {memory.title || texts.untitled}
               </Link>
               <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                 <span className="font-mono opacity-70">{memory.id.substring(0, 8)}…</span>
@@ -1165,65 +1235,25 @@ const PaginationInternal: React.FC<{ className?: string | undefined }> = ({ clas
   const { state, actions } = useMemoryListContext();
   const texts = useMemoryListTexts();
   const totalPages = Math.max(1, Math.ceil(state.total / state.pageSize));
-  const safePage = Math.min(Math.max(state.page, 1), totalPages);
-  const start = state.total === 0 ? 0 : (safePage - 1) * state.pageSize + 1;
-  const end = Math.min(safePage * state.pageSize, state.total);
 
   return (
-    <div
-      className={`flex flex-col gap-3 border-t border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-950/20 dark:text-slate-300 sm:flex-row sm:items-center sm:justify-between ${className}`}
-    >
-      <div className="font-medium">
-        {formatPaginationSummary(texts.paginationSummary, start, end, state.total)}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-          <span>{texts.rowsPerPage}</span>
-          <select
-            value={state.pageSize}
-            onChange={(event) => {
-              actions.setPageSize(Number(event.target.value));
-              actions.setPage(1);
-            }}
-            className="h-8 rounded border border-slate-200 bg-white px-2 text-sm text-slate-950 outline-none focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-50 dark:focus:border-slate-400 dark:focus:ring-slate-50/10"
-            aria-label={texts.rowsPerPage}
-          >
-            {PAGE_SIZE_OPTIONS.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          onClick={() => {
-            actions.setPage(Math.max(1, safePage - 1));
-          }}
-          disabled={safePage <= 1}
-          className="inline-flex h-8 w-8 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-950/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:focus:ring-slate-50/10"
-          aria-label={texts.previousPage}
-          title={texts.previousPage}
-        >
-          <ChevronLeft size={16} aria-hidden="true" />
-        </button>
-        <span className="min-w-16 text-center text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">
-          {safePage} / {totalPages}
-        </span>
-        <button
-          type="button"
-          onClick={() => {
-            actions.setPage(Math.min(totalPages, safePage + 1));
-          }}
-          disabled={safePage >= totalPages}
-          className="inline-flex h-8 w-8 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-950/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:focus:ring-slate-50/10"
-          aria-label={texts.nextPage}
-          title={texts.nextPage}
-        >
-          <ChevronRight size={16} aria-hidden="true" />
-        </button>
-      </div>
-    </div>
+    <Pagination
+      page={state.page - 1}
+      totalPages={totalPages}
+      onPageChange={(nextPage) => {
+        actions.setPage(nextPage + 1);
+      }}
+      totalItems={state.total}
+      pageSize={state.pageSize}
+      pageSizeOptions={PAGE_SIZE_OPTIONS}
+      onPageSizeChange={(nextPageSize) => {
+        actions.setPageSize(nextPageSize);
+        actions.setPage(1);
+      }}
+      previousLabel={texts.previousPage}
+      nextLabel={texts.nextPage}
+      className={`border-t border-slate-200 bg-slate-50/70 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/20 ${className}`}
+    />
   );
 };
 

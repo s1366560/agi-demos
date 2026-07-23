@@ -238,7 +238,9 @@ interface CanonicalDestinationDefinition {
 const LANDING_PATH = '/tenant';
 const PROJECT_DISCOVERY_PATH = '/tenant/projects';
 const CANONICAL_ABSOLUTE_PREFIXES = ['/tenant', '/project'];
-const TENANT_AUXILIARY_CONTENT_SECTIONS = ['profile'] as const;
+// Sections with a route but no navigation entry. 'subagents' keeps its route
+// (redirect to agent-definitions) after its nav entry was removed.
+const TENANT_AUXILIARY_CONTENT_SECTIONS = ['profile', 'subagents'] as const;
 
 const NAVIGATION_GROUPS: Record<NavigationGroupId, NavigationGroupDefinition> = {
   'tenant-core-operations': {
@@ -589,16 +591,6 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     groupId: 'tenant-agent-building',
     relativePath: '/agents',
     buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/agents'),
-  },
-  {
-    id: 'subagents',
-    label: 'nav.subagents',
-    routeFamily: 'tenant',
-    contexts: ['tenant'],
-    displayRole: 'top-nav',
-    groupId: 'tenant-agent-building',
-    relativePath: '/subagents',
-    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/subagents'),
   },
   {
     id: 'agent-definitions',
@@ -1224,7 +1216,6 @@ const TENANT_SIDEBAR_CONFIG: SidebarConfig = {
           label: 'nav.agentConfiguration',
           path: '/agents',
         },
-        { id: 'subagents', icon: 'smart_toy', label: 'nav.subagents', path: '/subagents' },
         {
           id: 'agent-definitions',
           icon: 'hub',

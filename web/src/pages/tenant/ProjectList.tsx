@@ -1,7 +1,7 @@
 import React, { memo, useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 
 import {
   Brain,
@@ -15,6 +15,7 @@ import {
   Network,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
   Trash2,
   User,
@@ -25,7 +26,8 @@ import { confirmAction } from '@/utils/confirmAction';
 import { formatDateOnly } from '@/utils/date';
 import { logger } from '@/utils/logger';
 
-import { LazySpin, useLazyMessage } from '@/components/ui/lazyAntd';
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
+import { LazyAlert, useLazyMessage } from '@/components/ui/lazyAntd';
 
 import { formatStorage } from '../../hooks/useDateFormatter';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -71,48 +73,107 @@ type VisibilityFilter = 'all' | 'public' | 'private';
 const DEFAULT_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
 
+const isVisibilityFilter = (value: string | null): value is VisibilityFilter =>
+  value === 'all' || value === 'public' || value === 'private';
+
+const parsePageParam = (value: string | null, fallback: number): number => {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+
 // Use memo to prevent unnecessary re-renders (rerender-memo)
 const ProjectListInner: React.FC<ProjectListProps> = () => {
   const { t } = useTranslation();
   const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>();
   const message = useLazyMessage();
   const currentTenant = useTenantStore((state) => state.currentTenant);
-  const { listProjects, deleteProject, projects, isLoading, total, ownerIds } = useProjectStore(
-    useShallow((state) => ({
-      listProjects: state.listProjects,
-      deleteProject: state.deleteProject,
-      projects: state.projects,
-      isLoading: state.isLoading,
-      total: state.total,
-      ownerIds: state.ownerIds,
-    }))
-  );
+  const { listProjects, deleteProject, projects, isLoading, error, total, ownerIds } =
+    useProjectStore(
+      useShallow((state) => ({
+        listProjects: state.listProjects,
+        deleteProject: state.deleteProject,
+        projects: state.projects,
+        isLoading: state.isLoading,
+        error: state.error,
+        total: state.total,
+        ownerIds: state.ownerIds,
+      }))
+    );
   const tenantId = routeTenantId ?? currentTenant?.id ?? null;
   const tenantBasePath = tenantId ? `/tenant/${tenantId}` : '/tenant';
   const tenantForLimits = currentTenant?.id === tenantId ? currentTenant : null;
-  const [search, setSearch] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [visibilityFilter, setVisibilityFilter] = useState<VisibilityFilter>('all');
-  const [ownerFilter, setOwnerFilter] = useState('all');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [visibilityFilter, setVisibilityFilter] = useState<VisibilityFilter>(() =>
+    isVisibilityFilter(searchParams.get('visibility'))
+      ? (searchParams.get('visibility') as VisibilityFilter)
+      : 'all'
+  );
+  const [ownerFilter, setOwnerFilter] = useState(() => searchParams.get('owner') ?? 'all');
+  const [page, setPage] = useState(() => parsePageParam(searchParams.get('page'), 1));
+  const [pageSize, setPageSize] = useState(() =>
+    parsePageParam(searchParams.get('pageSize'), DEFAULT_PAGE_SIZE)
+  );
   const debouncedSearch = useDebounce(search, 300);
+  const trimmedDebouncedSearch = debouncedSearch.trim();
+
+  // Reflect search/filters/pagination in the URL so views survive reload and sharing
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (trimmedDebouncedSearch) {
+      next.set('q', trimmedDebouncedSearch);
+    } else {
+      next.delete('q');
+    }
+    if (visibilityFilter !== 'all') {
+      next.set('visibility', visibilityFilter);
+    } else {
+      next.delete('visibility');
+    }
+    if (ownerFilter !== 'all') {
+      next.set('owner', ownerFilter);
+    } else {
+      next.delete('owner');
+    }
+    if (page > 1) {
+      next.set('page', String(page));
+    } else {
+      next.delete('page');
+    }
+    if (pageSize !== DEFAULT_PAGE_SIZE) {
+      next.set('pageSize', String(pageSize));
+    } else {
+      next.delete('pageSize');
+    }
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [
+    trimmedDebouncedSearch,
+    visibilityFilter,
+    ownerFilter,
+    page,
+    pageSize,
+    searchParams,
+    setSearchParams,
+  ]);
 
   const projectQueryParams = React.useMemo(() => {
-    const trimmedSearch = debouncedSearch.trim();
     return {
       page,
       page_size: pageSize,
-      search: trimmedSearch || undefined,
+      search: trimmedDebouncedSearch || undefined,
       visibility: visibilityFilter,
       owner_id: ownerFilter === 'all' ? undefined : ownerFilter,
     };
-  }, [debouncedSearch, ownerFilter, page, pageSize, visibilityFilter]);
+  }, [trimmedDebouncedSearch, ownerFilter, page, pageSize, visibilityFilter]);
 
   useEffect(() => {
     if (tenantId) {
-      void listProjects(tenantId, projectQueryParams);
+      // The store records failures in `error` (surfaced below with retry)
+      void listProjects(tenantId, projectQueryParams).catch(() => {});
     }
   }, [listProjects, projectQueryParams, tenantId]);
 
@@ -163,9 +224,22 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
     setPage(1);
   };
 
-  const handleDelete = async (projectId: string) => {
+  const handleRefresh = () => {
     if (!tenantId) return;
-    if (await confirmAction({ title: t('tenant.projects.deleteConfirm'), danger: true })) {
+    void listProjects(tenantId, projectQueryParams).catch(() => {});
+  };
+
+  const handleDelete = async (projectId: string, projectName: string) => {
+    if (!tenantId) return;
+    if (
+      await confirmAction({
+        title: t('tenant.projects.deleteConfirm', {
+          name: projectName,
+          defaultValue: 'Delete project "{{name}}"? This cannot be undone.',
+        }),
+        danger: true,
+      })
+    ) {
       try {
         await deleteProject(tenantId, projectId);
         await listProjects(tenantId, projectQueryParams);
@@ -192,6 +266,16 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
           <p className="text-sm text-slate-500">{t('tenant.projects.subtitle')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={isLoading}
+            aria-label={t('common.refresh')}
+            title={t('common.refresh')}
+            className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-medium text-slate-700 transition-[color,background-color,border-color,box-shadow,opacity] hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <RefreshCw size={16} />
+          </button>
           <Link
             to={`${tenantBasePath}/backend-stores`}
             className="flex items-center gap-2 rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 transition-[color,background-color,border-color,box-shadow,opacity] hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
@@ -313,11 +397,32 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
         </div>
       </div>
 
+      {/* Load error with retry */}
+      {!isLoading && error && (
+        <LazyAlert
+          type="error"
+          showIcon
+          title={t('tenant.projects.loadFailed', 'Failed to load projects')}
+          description={error}
+          action={
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className="inline-flex items-center justify-center rounded-md border border-red-300 px-3 py-1 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950/30"
+            >
+              {t('common.retry')}
+            </button>
+          }
+        />
+      )}
+
       {/* Projects Grid/List */}
       {isLoading ? (
-        <div className="flex justify-center py-10" role="status">
-          <LazySpin size="large" />
-        </div>
+        viewMode === 'grid' ? (
+          <SkeletonLoader type="card" count={6} />
+        ) : (
+          <SkeletonLoader type="table" rows={8} />
+        )
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {projects.map((project) => (
@@ -342,8 +447,16 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                     </p>
                   </div>
                 </div>
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                  {t('common.status.active')}
+                <span
+                  className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                    project.is_public
+                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                  }`}
+                >
+                  {project.is_public
+                    ? t('tenant.projects.filters.public')
+                    : t('tenant.projects.filters.private')}
                 </span>
               </div>
               <div className="space-y-3">
@@ -426,7 +539,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                         role="menuitem"
                         onClick={(e) => {
                           e.preventDefault();
-                          void handleDelete(project.id);
+                          void handleDelete(project.id, project.name);
                         }}
                         className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
                       >
@@ -468,7 +581,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                     {t('tenant.projects.columns.project', { defaultValue: 'Project' })}
                   </th>
                   <th className="px-6 py-4 font-semibold text-slate-500 dark:text-slate-400">
-                    {t('tenant.projects.columns.status', { defaultValue: 'Status' })}
+                    {t('tenant.projects.filters.visibilityLabel')}
                   </th>
                   <th className="px-6 py-4 font-semibold text-slate-500 dark:text-slate-400">
                     {t('common.stats.usage')}
@@ -510,8 +623,16 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                        {t('common.status.active')}
+                      <span
+                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          project.is_public
+                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                        }`}
+                      >
+                        {project.is_public
+                          ? t('tenant.projects.filters.public')
+                          : t('tenant.projects.filters.private')}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -601,7 +722,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                               role="menuitem"
                               onClick={(e) => {
                                 e.preventDefault();
-                                void handleDelete(project.id);
+                                void handleDelete(project.id, project.name);
                               }}
                               className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
                             >

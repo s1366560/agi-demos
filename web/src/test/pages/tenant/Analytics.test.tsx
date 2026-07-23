@@ -69,7 +69,7 @@ describe('Analytics', () => {
     it('should render loading state when no tenant', () => {
       (useTenantStore as any).mockReturnValue({ currentTenant: null });
       renderAnalytics('/analytics', '/analytics');
-      expect(screen.getByText('common.loading')).toBeInTheDocument();
+      expect(screen.getByRole('status', { name: 'common.loading' })).toBeInTheDocument();
     });
 
     it('should render loading state when loading projects', async () => {
@@ -78,7 +78,7 @@ describe('Analytics', () => {
       });
       renderAnalytics();
       // Should show loading initially
-      expect(screen.getByText(/loading/i)).toBeInTheDocument();
+      expect(screen.getByRole('status', { name: 'common.loading' })).toBeInTheDocument();
       await screen.findByText('tenant.analytics.title');
     });
 
@@ -172,8 +172,8 @@ describe('Analytics', () => {
 
       renderAnalytics();
 
-      // Suspense fallback should be shown initially
-      expect(screen.getByText(/loading/i)).toBeInTheDocument();
+      // A loading indicator (page skeleton or Suspense fallback) is shown initially
+      expect(screen.getByRole('status', { name: 'common.loading' })).toBeInTheDocument();
       await screen.findByTestId('chart-components');
     });
   });

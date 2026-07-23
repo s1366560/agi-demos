@@ -138,7 +138,9 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
           {t('tenant.settings.title')}
         </h1>
-        <p className="text-slate-500 dark:text-slate-400 mt-1">{t('tenant.settings.subtitle')}</p>
+        <p className="text-slate-500 dark:text-slate-400 mt-1">
+          {t('tenant.settings.subtitle')} · {tenant.name}
+        </p>
       </div>
 
       <div className="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 md:p-8">
@@ -193,7 +195,7 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
                   ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300'
                   : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'
               }`}
-              role="status"
+              role={message.type === 'error' ? 'alert' : 'status'}
             >
               {message.type === 'success' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
               {message.text}
@@ -203,7 +205,7 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
           <div>
             <button
               className="bg-primary hover:bg-primary-dark text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
-              disabled={isLoading || !name.trim()}
+              disabled={isLoading || !name.trim() || !isDirty}
               type="button"
               onClick={() => {
                 void handleSave();

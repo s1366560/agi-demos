@@ -10,13 +10,20 @@
  * 4. Integrates with error reporting services
  */
 
+import type { ReactElement } from 'react';
+
 import { render, screen, fireEvent } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { describe, it, expect, vi } from 'vitest';
 
 import { ErrorBoundary } from '../../../components/common';
 
 // Helper to query by selector
 const queryBySelector = (selector: string) => document.querySelector(selector);
+
+// The default ErrorFallback navigates via react-router, so renders that can
+// hit the fallback UI need a Router context (production always provides one).
+const renderWithRouter = (ui: ReactElement) => render(<MemoryRouter>{ui}</MemoryRouter>);
 
 describe('ErrorBoundary', () => {
   /**
@@ -27,7 +34,7 @@ describe('ErrorBoundary', () => {
       return <div>Safe Content</div>;
     };
 
-    render(
+    renderWithRouter(
       <ErrorBoundary>
         <SafeComponent />
       </ErrorBoundary>
@@ -48,7 +55,7 @@ describe('ErrorBoundary', () => {
     // Suppress the actual error from being logged to console during test
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    render(
+    renderWithRouter(
       <ErrorBoundary>
         <ThrowError />
       </ErrorBoundary>
@@ -78,7 +85,7 @@ describe('ErrorBoundary', () => {
     // Suppress error logging
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    render(
+    renderWithRouter(
       <ErrorBoundary fallback={customFallback}>
         <ThrowError />
       </ErrorBoundary>
@@ -98,7 +105,7 @@ describe('ErrorBoundary', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
     // First, render the error component to trigger error boundary
-    render(
+    renderWithRouter(
       <ErrorBoundary>
         <ErrorComponent />
       </ErrorBoundary>
@@ -132,7 +139,7 @@ describe('ErrorBoundary', () => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';
 
-    render(
+    renderWithRouter(
       <ErrorBoundary>
         <ThrowError />
       </ErrorBoundary>
@@ -156,7 +163,7 @@ describe('ErrorBoundary', () => {
 
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    render(
+    renderWithRouter(
       <ErrorBoundary>
         <ThrowError />
       </ErrorBoundary>
@@ -185,7 +192,7 @@ describe('ErrorBoundary', () => {
 
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    render(
+    renderWithRouter(
       <ErrorBoundary>
         <BadComponent />
       </ErrorBoundary>
@@ -206,7 +213,7 @@ describe('ErrorBoundary Recovery', () => {
 
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    render(
+    renderWithRouter(
       <ErrorBoundary>
         <ErrorComponent />
       </ErrorBoundary>
@@ -226,31 +233,39 @@ describe('ErrorBoundary Recovery', () => {
 
 describe('ErrorBoundary Integration', () => {
   /**
-   * Test: Navigates home without forcing a browser reload
+   * Test: Navigates home via react-router without a browser reload
    */
-  it('uses history navigation when home button is clicked', () => {
+  it('uses router navigation when home button is clicked', () => {
     const ThrowError = () => {
       throw new Error('Navigation test error');
     };
 
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    const pushState = vi.spyOn(window.history, 'pushState');
-    const dispatchEvent = vi.spyOn(window, 'dispatchEvent');
+
+    let navigatedTo: string | null = null;
+    const LocationProbe = () => {
+      const location = useLocation();
+      navigatedTo = location.pathname;
+      return null;
+    };
 
     render(
-      <ErrorBoundary>
-        <ThrowError />
-      </ErrorBoundary>
+      <MemoryRouter initialEntries={['/some-page']}>
+        <LocationProbe />
+        <ErrorBoundary>
+          <ThrowError />
+        </ErrorBoundary>
+      </MemoryRouter>
     );
 
     const buttons = screen.getAllByRole('button');
     const homeButton = buttons.find(
       (btn) => btn.textContent?.includes('Home') || btn.textContent?.includes('Go')
     );
+    expect(homeButton).toBeDefined();
     if (homeButton) {
       fireEvent.click(homeButton);
-      expect(pushState).toHaveBeenCalledWith(null, '', '/');
-      expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'popstate' }));
+      expect(navigatedTo).toBe('/');
     }
   });
 });

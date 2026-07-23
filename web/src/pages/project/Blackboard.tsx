@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 
 import { useShallow } from 'zustand/react/shallow';
 
@@ -376,6 +376,14 @@ export function Blackboard() {
               'Create or attach a workspace first, then the central blackboard will aggregate its tasks, discussions, and topology.'
             )}
           </p>
+          {tenantId && projectId && (
+            <Link
+              to={`/tenant/${tenantId}/project/${projectId}/workspaces/new`}
+              className="mt-6 inline-flex min-h-10 items-center rounded-md bg-primary px-5 text-sm font-medium text-white transition-colors duration-150 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            >
+              {t('tenant.workspaceList.createButton', 'Create Workspace')}
+            </Link>
+          )}
         </div>
       </div>
     );

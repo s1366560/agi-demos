@@ -48,8 +48,8 @@ const TOUR_STEPS: TourStep[] = [
   {
     titleKey: 'agent.onboarding.layoutTip',
     titleFallback: 'Multiple layout modes',
-    descKey: 'agent.onboarding.layoutDesc',
-    descFallback: 'Switch between Chat, Code, Desktop, Focus, and Canvas modes with Cmd+1-5.',
+    descKey: 'agent.onboarding.layoutDescV2',
+    descFallback: 'Switch between Chat, Task, Code, Canvas, and Collab modes with Cmd+1-5.',
     targetSelector: '[data-tour="layout-selector"]',
   },
   {

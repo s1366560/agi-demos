@@ -92,6 +92,8 @@ describe('TemplateMarketplace', () => {
       expect(subagentTemplateService.list).toHaveBeenCalledWith({
         category: 'research',
         search: undefined,
+        page: 1,
+        page_size: 12,
       });
     });
 
@@ -100,6 +102,8 @@ describe('TemplateMarketplace', () => {
       expect(subagentTemplateService.list).toHaveBeenCalledWith({
         category: 'coding',
         search: undefined,
+        page: 1,
+        page_size: 12,
       });
     });
 

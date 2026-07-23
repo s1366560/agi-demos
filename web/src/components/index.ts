@@ -17,8 +17,6 @@
  *   - @/components/graph - CytoscapeGraph, EntityCard
  *   - @/components/agent/layout - LayoutModeSelector
  *   - @/components/agent/chat - MarkdownContent, ChatSearch
- *   - @/components/agent/execution - ActivityTimeline, ToolCallVisualization
- *   - @/components/agent/sandbox - SandboxTerminal, SandboxControlPanel
  *   - @/components/agent/patterns - PatternList, PatternInspector
  */
 

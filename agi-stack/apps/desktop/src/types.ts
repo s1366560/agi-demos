@@ -17,6 +17,7 @@ export type WorkbenchSection =
 
 export type DesktopRuntimeConfig = {
   apiBaseUrl: string;
+  deviceAuthorizationBaseUrl: string;
   apiKey: string;
   localApiToken: string;
   tenantId: string;
@@ -1884,6 +1885,7 @@ export const LOCAL_DEV_SERVER_PRESETS = [
 
 export const DEFAULT_CONFIG: DesktopRuntimeConfig = {
   apiBaseUrl: LOCAL_DEV_SERVER_PRESETS[0].apiBaseUrl,
+  deviceAuthorizationBaseUrl: 'http://127.0.0.1:3000',
   apiKey: '',
   localApiToken: '',
   tenantId: 'default',

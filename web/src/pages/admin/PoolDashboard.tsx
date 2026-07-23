@@ -6,7 +6,7 @@
  * @packageDocumentation
  */
 
-import React, { useEffect, useCallback, useRef } from 'react';
+import React, { useEffect, useCallback, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
@@ -17,7 +17,6 @@ import {
   Col,
   Statistic,
   Table,
-  Tag,
   Space,
   Button,
   Select,
@@ -28,6 +27,7 @@ import {
   Alert,
   Popconfirm,
   message,
+  Input,
 } from 'antd';
 import {
   RefreshCw,
@@ -46,6 +46,8 @@ import { useThemeColor } from '@/hooks/useThemeColor';
 
 import { formatDateTime } from '@/utils/date';
 
+import { StatusTag } from '@/components/common/StatusTag';
+
 import { usePoolStore } from '../../stores/pool';
 
 import type { PoolInstance, ProjectTier } from '../../services/poolService';
@@ -58,22 +60,26 @@ const { Title, Text } = Typography;
 // ============================================================================
 
 const TierTag: React.FC<{ tier: ProjectTier }> = ({ tier }) => {
+  const { t } = useTranslation();
   const config: Record<ProjectTier, { color: string; icon: React.ReactNode; label: string }> = {
-    hot: { color: 'red', icon: <Zap size={16} />, label: 'HOT' },
-    warm: { color: 'orange', icon: <Cloud size={16} />, label: 'WARM' },
-    cold: { color: 'blue', icon: <History size={16} />, label: 'COLD' },
+    hot: { color: 'red', icon: <Zap size={16} />, label: t('admin.poolDashboard.tiers.hot') },
+    warm: {
+      color: 'orange',
+      icon: <Cloud size={16} />,
+      label: t('admin.poolDashboard.tiers.warm'),
+    },
+    cold: {
+      color: 'blue',
+      icon: <History size={16} />,
+      label: t('admin.poolDashboard.tiers.cold'),
+    },
   };
 
-  const { color, icon, label } = config[tier];
-
-  return (
-    <Tag color={color} icon={icon}>
-      {label}
-    </Tag>
-  );
+  return <StatusTag {...config[tier]} />;
 };
 
-const StatusTag: React.FC<{ status: string }> = ({ status }) => {
+const InstanceStatusTag: React.FC<{ status: string }> = ({ status }) => {
+  const { t } = useTranslation();
   const config: Record<string, { color: string; icon: React.ReactNode }> = {
     ready: { color: 'green', icon: <CheckCircle2 size={16} /> },
     executing: { color: 'blue', icon: <Zap size={16} /> },
@@ -91,13 +97,16 @@ const StatusTag: React.FC<{ status: string }> = ({ status }) => {
   const { color, icon } = config[status] ?? { color: 'default', icon: null };
 
   return (
-    <Tag color={color} icon={icon}>
-      {status.toUpperCase()}
-    </Tag>
+    <StatusTag
+      color={color}
+      icon={icon}
+      label={t(`admin.poolDashboard.statuses.${status}`, status.toUpperCase())}
+    />
   );
 };
 
 const HealthTag: React.FC<{ health: string }> = ({ health }) => {
+  const { t } = useTranslation();
   const config: Record<string, { color: string }> = {
     healthy: { color: 'green' },
     degraded: { color: 'gold' },
@@ -107,7 +116,12 @@ const HealthTag: React.FC<{ health: string }> = ({ health }) => {
 
   const { color } = config[health] ?? { color: 'default' };
 
-  return <Tag color={color}>{health.toUpperCase()}</Tag>;
+  return (
+    <StatusTag
+      color={color}
+      label={t(`admin.poolDashboard.health.${health}`, health.toUpperCase())}
+    />
+  );
 };
 
 // ============================================================================
@@ -130,6 +144,7 @@ const PoolDashboard: React.FC = () => {
     instancesError,
     fetchInstances,
     setPage,
+    setPageSize,
     setTierFilter,
     tierFilter,
     // Operations
@@ -146,6 +161,7 @@ const PoolDashboard: React.FC = () => {
 
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
+  const [instanceSearch, setInstanceSearch] = useState('');
 
   // Initial load
   useEffect(() => {
@@ -272,7 +288,7 @@ const PoolDashboard: React.FC = () => {
       dataIndex: 'status',
       key: 'status',
       width: 140,
-      render: (status: string) => <StatusTag status={status} />,
+      render: (status: string) => <InstanceStatusTag status={status} />,
     },
     {
       title: t('admin.poolDashboard.columns.health'),
@@ -345,8 +361,8 @@ const PoolDashboard: React.FC = () => {
           <Popconfirm
             title={t('admin.poolDashboard.confirm.terminateInstance')}
             onConfirm={() => void handleTerminate(record.instance_key)}
-            okText={t('common.yes')}
-            cancelText={t('common.no')}
+            okText={t('admin.poolDashboard.actions.terminate')}
+            cancelText={t('common.cancel')}
           >
             <Tooltip title={t('admin.poolDashboard.actions.terminate')}>
               <Button
@@ -387,6 +403,12 @@ const PoolDashboard: React.FC = () => {
     const total = status.resource_usage.total_cpu_cores.toFixed(1);
     return `${used} / ${total} cores`;
   };
+
+  // Client-side filter over the currently loaded page of instances
+  const searchTerm = instanceSearch.trim().toLowerCase();
+  const visibleInstances = searchTerm
+    ? instances.filter((instance) => instance.instance_key.toLowerCase().includes(searchTerm))
+    : instances;
 
   return (
     <div className="p-4 sm:p-6">
@@ -573,6 +595,16 @@ const PoolDashboard: React.FC = () => {
         title={t('admin.poolDashboard.activeInstances')}
         extra={
           <Space>
+            <Input.Search
+              aria-label={t('admin.poolDashboard.searchInstances', 'Search by instance key')}
+              placeholder={t('admin.poolDashboard.searchInstances', 'Search by instance key')}
+              allowClear
+              style={{ width: 200 }}
+              value={instanceSearch}
+              onChange={(e) => {
+                setInstanceSearch(e.target.value);
+              }}
+            />
             <Select
               aria-label={t('admin.poolDashboard.filterByTier')}
               placeholder={t('admin.poolDashboard.filterByTier')}
@@ -590,21 +622,43 @@ const PoolDashboard: React.FC = () => {
         }
       >
         {instancesError && (
-          <Alert title={instancesError} type="error" showIcon style={{ marginBottom: 16 }} />
+          <Alert
+            title={instancesError}
+            type="error"
+            showIcon
+            style={{ marginBottom: 16 }}
+            action={
+              <Button size="small" onClick={() => void fetchInstances()}>
+                {t('common.retry')}
+              </Button>
+            }
+          />
         )}
         <Table
           columns={columns}
-          dataSource={instances}
+          dataSource={visibleInstances}
           rowKey="instance_key"
           loading={isInstancesLoading}
+          locale={{
+            emptyText: instancesError
+              ? ' '
+              : t(
+                  'admin.poolDashboard.emptyInstances',
+                  'No instances match the current filters. The pool scales instances up on demand.'
+                ),
+          }}
           pagination={{
             current: currentPage,
             pageSize: pageSize,
             total: totalInstances,
             showSizeChanger: true,
             showTotal: (total) => t('admin.poolDashboard.pagination.total', { count: total }),
-            onChange: (page) => {
-              setPage(page);
+            onChange: (page, size) => {
+              if (size !== pageSize) {
+                setPageSize(size);
+              } else {
+                setPage(page);
+              }
             },
           }}
           scroll={{ x: 1200 }}

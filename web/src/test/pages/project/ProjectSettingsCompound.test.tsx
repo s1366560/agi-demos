@@ -483,116 +483,18 @@ describe('ProjectSettings Compound Component', () => {
   // ============================================================================
 
   describe('Advanced Sub-Component', () => {
-    it('should render export data button', async () => {
+    it('should render the maintenance description and link', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
-      render(
-        <ProjectSettings.Advanced
-          onExportData={vi.fn()}
-          onClearCache={vi.fn()}
-          onRebuildCommunities={vi.fn()}
-        />
-      );
-      expect(screen.getByText('project.settings.advancedExport')).toBeInTheDocument();
+      render(<ProjectSettings.Advanced />);
+      expect(screen.getByText('project.settings.advancedMaintenanceDesc')).toBeInTheDocument();
+      expect(screen.getByText('project.settings.advancedGotoMaintenance')).toBeInTheDocument();
     });
 
-    it('should render clear cache button', async () => {
+    it('should navigate to the project maintenance page when clicked', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
-      render(
-        <ProjectSettings.Advanced
-          onExportData={vi.fn()}
-          onClearCache={vi.fn()}
-          onRebuildCommunities={vi.fn()}
-        />
-      );
-      expect(screen.getByText('project.settings.advancedClearCache')).toBeInTheDocument();
-    });
-
-    it('should render rebuild communities button', async () => {
-      const { ProjectSettings } = await import('../../../pages/project/Settings');
-      render(
-        <ProjectSettings.Advanced
-          onExportData={vi.fn()}
-          onClearCache={vi.fn()}
-          onRebuildCommunities={vi.fn()}
-        />
-      );
-      expect(screen.getByText('project.settings.advancedRebuild')).toBeInTheDocument();
-    });
-
-    it('should call onExportData when export button clicked', async () => {
-      const { ProjectSettings } = await import('../../../pages/project/Settings');
-      const onExportData = vi.fn(() => Promise.resolve());
-      render(
-        <ProjectSettings.Advanced
-          onExportData={onExportData}
-          onClearCache={vi.fn()}
-          onRebuildCommunities={vi.fn()}
-        />
-      );
-      fireEvent.click(screen.getByText('project.settings.advancedExport'));
-      await waitFor(() => {
-        expect(onExportData).toHaveBeenCalled();
-      });
-    });
-
-    it('should scope advanced export to the current project', async () => {
-      const originalCreateObjectURL = window.URL.createObjectURL;
-      const originalRevokeObjectURL = window.URL.revokeObjectURL;
-      window.URL.createObjectURL = vi.fn(() => 'blob:project-export');
-      window.URL.revokeObjectURL = vi.fn();
-      const { ProjectSettings } = await import('../../../pages/project/Settings');
-
-      try {
-        render(<ProjectSettings />);
-        fireEvent.click(screen.getByText('project.settings.advancedExport'));
-
-        await waitFor(() => {
-          expect(mockApiPost).toHaveBeenCalledWith('/data/export', {
-            tenant_id: 'tenant-1',
-            project_id: 'proj-1',
-            include_episodes: true,
-            include_entities: true,
-            include_relationships: true,
-            include_communities: true,
-          });
-        });
-      } finally {
-        window.URL.createObjectURL = originalCreateObjectURL;
-        window.URL.revokeObjectURL = originalRevokeObjectURL;
-      }
-    });
-
-    it('should scope clear cache to the current project', async () => {
-      vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
-        void config.onOk?.();
-        return { destroy: vi.fn(), update: vi.fn() } as ReturnType<typeof Modal.confirm>;
-      });
-      const { ProjectSettings } = await import('../../../pages/project/Settings');
-
-      render(<ProjectSettings />);
-      fireEvent.click(screen.getByText('project.settings.advancedClearCache'));
-
-      await waitFor(() => {
-        expect(mockApiPost).toHaveBeenCalledWith('/maintenance/refresh/incremental', {
-          project_id: 'proj-1',
-          rebuild_communities: true,
-        });
-      });
-    });
-
-    it('should scope community rebuild to the current project', async () => {
-      vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
-        void config.onOk?.();
-        return { destroy: vi.fn(), update: vi.fn() } as ReturnType<typeof Modal.confirm>;
-      });
-      const { ProjectSettings } = await import('../../../pages/project/Settings');
-
-      render(<ProjectSettings />);
-      fireEvent.click(screen.getByText('project.settings.advancedRebuild'));
-
-      await waitFor(() => {
-        expect(mockApiPost).toHaveBeenCalledWith('/graph/communities/rebuild?project_id=proj-1');
-      });
+      render(<ProjectSettings.Advanced />);
+      fireEvent.click(screen.getByText('project.settings.advancedGotoMaintenance'));
+      expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-1/project/proj-1/maintenance');
     });
   });
 

@@ -12,6 +12,108 @@ const {
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/auth/loginScreenModel.js',
 );
+const {
+  LOGIN_MODE_PREFERENCE_KEY,
+  initialDesktopRuntimeConfig,
+  readLoginModePreference,
+  runtimeConfigForLoginMode,
+  writeLoginModePreference,
+} = require(
+  '/tmp/agistack-desktop-test-dist/src/features/auth/loginRuntimeModel.js',
+);
+
+function createMemoryStorage(initialValue = null) {
+  let value = initialValue;
+  return {
+    getItem(key) {
+      assert.equal(key, LOGIN_MODE_PREFERENCE_KEY);
+      return value;
+    },
+    setItem(key, nextValue) {
+      assert.equal(key, LOGIN_MODE_PREFERENCE_KEY);
+      value = nextValue;
+    },
+    value() {
+      return value;
+    },
+  };
+}
+
+test('login mode preference persists only a versioned mode and restores it', () => {
+  const storage = createMemoryStorage();
+  writeLoginModePreference('cloud', storage);
+  assert.equal(storage.value(), '{"version":1,"mode":"cloud"}');
+  assert.equal(readLoginModePreference(storage), 'cloud');
+});
+
+test('invalid or inaccessible login mode preferences fail closed to local', () => {
+  for (const value of [
+    null,
+    '',
+    'not-json',
+    '{"version":2,"mode":"cloud"}',
+    '{"version":1,"mode":"remote"}',
+    '{"version":1,"mode":"cloud","apiKey":"secret"}',
+  ]) {
+    assert.equal(readLoginModePreference(createMemoryStorage(value)), 'local');
+  }
+
+  const inaccessibleStorage = {
+    getItem() {
+      throw new Error('storage unavailable');
+    },
+    setItem() {
+      throw new Error('storage unavailable');
+    },
+  };
+  assert.equal(readLoginModePreference(inaccessibleStorage), 'local');
+  assert.doesNotThrow(() => writeLoginModePreference('cloud', inaccessibleStorage));
+});
+
+test('login mode config mapping selects the matching API and clears cross-mode identity', () => {
+  const current = {
+    apiBaseUrl: 'http://127.0.0.1:9999',
+    deviceAuthorizationBaseUrl: 'https://signin.memstack.example',
+    apiKey: 'secret-token',
+    localApiToken: 'local-token',
+    tenantId: 'tenant-a',
+    projectId: 'project-a',
+    workspaceId: 'workspace-a',
+    mode: 'local',
+    workspaceRoot: '/workspace',
+  };
+  assert.deepEqual(runtimeConfigForLoginMode(current, 'cloud'), {
+    apiBaseUrl: 'http://127.0.0.1:8000',
+    deviceAuthorizationBaseUrl: 'https://signin.memstack.example',
+    apiKey: '',
+    localApiToken: '',
+    tenantId: 'default',
+    projectId: '',
+    workspaceId: '',
+    mode: 'cloud',
+    workspaceRoot: '/workspace',
+  });
+  assert.deepEqual(runtimeConfigForLoginMode(current, 'local'), {
+    apiBaseUrl: 'http://127.0.0.1:8088',
+    deviceAuthorizationBaseUrl: 'https://signin.memstack.example',
+    apiKey: '',
+    localApiToken: '',
+    tenantId: 'local',
+    projectId: 'local-project',
+    workspaceId: '',
+    mode: 'local',
+    workspaceRoot: '/workspace',
+  });
+});
+
+test('startup restores the preferred mode before session recovery', () => {
+  const config = initialDesktopRuntimeConfig(
+    createMemoryStorage('{"version":1,"mode":"cloud"}'),
+  );
+  assert.equal(config.mode, 'cloud');
+  assert.equal(config.apiBaseUrl, 'http://127.0.0.1:8000');
+  assert.equal(config.deviceAuthorizationBaseUrl, 'http://127.0.0.1:3000');
+});
 
 test('local workspace continue preserves the trusted-device choice when the runtime is ready', () => {
   assert.equal(resolveWorkspaceContinueLabelKey('local'), 'login.localWorkspace');
@@ -39,24 +141,24 @@ test('workspace continue starts device authorization in cloud and fails closed f
 test('device authorization URLs preserve the configured authority and reject unsafe shapes', () => {
   assert.equal(
     resolveDeviceAuthorizationUrl(
-      'https://memstack.example/api',
+      'https://app.memstack.example',
       '/device?user_code=ABCDEFGH',
       'ABCDEFGH',
     ),
-    'https://memstack.example/device?user_code=ABCDEFGH',
+    'https://app.memstack.example/device?user_code=ABCDEFGH',
   );
   assert.equal(
     resolveDeviceAuthorizationUrl(
-      'https://api.memstack.example',
-      'https://api.memstack.example/device?user_code=ABCDEFGH',
+      'https://app.memstack.example',
+      'https://app.memstack.example/device?user_code=ABCDEFGH',
       'ABCDEFGH',
     ),
-    'https://api.memstack.example/device?user_code=ABCDEFGH',
+    'https://app.memstack.example/device?user_code=ABCDEFGH',
   );
   assert.equal(
     resolveDeviceAuthorizationUrl(
-      'https://api.memstack.example',
-      'https://app.memstack.example/device?user_code=ABCDEFGH',
+      'https://app.memstack.example',
+      'https://api.memstack.example/device?user_code=ABCDEFGH',
       'ABCDEFGH',
     ),
     null,

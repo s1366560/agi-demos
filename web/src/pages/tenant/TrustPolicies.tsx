@@ -1,20 +1,22 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 
 import { Input, Button, Form, Pagination, Select } from 'antd';
 import { Plus, RefreshCw, Search as SearchIcon } from 'lucide-react';
 
+import { confirmAction } from '@/utils/confirmAction';
 import { formatDateTime } from '@/utils/date';
 
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import {
   useLazyMessage,
   LazyEmpty,
-  LazySpin,
   LazyDrawer,
   LazyModal,
   LazyAlert,
+  LazyPopconfirm,
 } from '@/components/ui/lazyAntd';
 
 import { useTenantStore } from '../../stores/tenant';
@@ -45,15 +47,46 @@ export const TrustPolicies: React.FC = () => {
   const policies = useTrustPolicies();
   const isLoading = useTrustLoading();
   const error = useTrustError();
-  const { fetchPolicies, createPolicy, clearError } = useTrustActions();
+  const { fetchPolicies, createPolicy, revokePolicy, clearError } = useTrustActions();
 
-  const [workspaceFilter, setWorkspaceFilter] = useState('');
-  const [agentFilter, setAgentFilter] = useState('');
-  const [appliedFilters, setAppliedFilters] = useState({ workspace: '', agent: '' });
-  const [page, setPage] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [workspaceFilter, setWorkspaceFilter] = useState(() => searchParams.get('workspace') ?? '');
+  const [agentFilter, setAgentFilter] = useState(() => searchParams.get('agent') ?? '');
+  const [appliedFilters, setAppliedFilters] = useState(() => ({
+    workspace: searchParams.get('workspace') ?? '',
+    agent: searchParams.get('agent') ?? '',
+  }));
+  const [page, setPage] = useState(() => {
+    const p = Number(searchParams.get('page'));
+    return Number.isInteger(p) && p > 0 ? p : 1;
+  });
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // Reflect applied filters/pagination in the URL so views survive reload and sharing
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (appliedFilters.workspace) {
+      next.set('workspace', appliedFilters.workspace);
+    } else {
+      next.delete('workspace');
+    }
+    if (appliedFilters.agent) {
+      next.set('agent', appliedFilters.agent);
+    } else {
+      next.delete('agent');
+    }
+    if (page > 1) {
+      next.set('page', String(page));
+    } else {
+      next.delete('page');
+    }
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [appliedFilters, page, searchParams, setSearchParams]);
+
   const [selectedPolicy, setSelectedPolicy] = useState<TrustPolicy | null>(null);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createForm] = Form.useForm<TrustPolicyCreate>();
@@ -102,6 +135,18 @@ export const TrustPolicies: React.FC = () => {
 
   const handleCreateSubmit = async (values: TrustPolicyCreate) => {
     if (!tenantId) return;
+    if (values.grant_type === 'always') {
+      const confirmed = await confirmAction({
+        title: t('tenant.trustPolicies.create.alwaysConfirmTitle', 'Grant persistent access?'),
+        content: t('tenant.trustPolicies.create.alwaysConfirmContent', {
+          defaultValue:
+            'An "always" grant lets this agent run "{{actionType}}" without asking again until you revoke the policy.',
+          actionType: values.action_type,
+        }),
+        okText: t('tenant.trustPolicies.actions.createPolicy'),
+      });
+      if (!confirmed) return;
+    }
     setIsCreating(true);
     try {
       await createPolicy(tenantId, values);
@@ -112,6 +157,24 @@ export const TrustPolicies: React.FC = () => {
       // handled by store
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const handleRevoke = async (policy: TrustPolicy) => {
+    if (!tenantId) return;
+    setRevokingId(policy.id);
+    try {
+      await revokePolicy(tenantId, policy.id, policy.workspace_id);
+      message?.success(t('tenant.trustPolicies.messages.revoked', 'Trust policy revoked'));
+      setSelectedPolicy((current) =>
+        current?.id === policy.id ? { ...current, deleted_at: new Date().toISOString() } : current
+      );
+    } catch {
+      message?.error(
+        t('tenant.trustPolicies.messages.revokeFailed', 'Failed to revoke trust policy')
+      );
+    } finally {
+      setRevokingId(null);
     }
   };
 
@@ -238,9 +301,7 @@ export const TrustPolicies: React.FC = () => {
 
       {/* Table */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <LazySpin size="large" />
-        </div>
+        <SkeletonLoader type="table" rows={8} />
       ) : loadError && policies.length === 0 ? null : policies.length === 0 ? (
         <div className="flex items-center justify-center py-20">
           <LazyEmpty description={t('tenant.trustPolicies.empty')} />
@@ -284,15 +345,21 @@ export const TrustPolicies: React.FC = () => {
                       {policy.agent_instance_id}
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          policy.grant_type === 'always'
-                            ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
-                            : 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
-                        }`}
-                      >
-                        {getGrantTypeLabel(policy.grant_type)}
-                      </span>
+                      {policy.deleted_at ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                          {t('tenant.trustPolicies.statusRevoked', 'Revoked')}
+                        </span>
+                      ) : (
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            policy.grant_type === 'always'
+                              ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
+                              : 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
+                          }`}
+                        >
+                          {getGrantTypeLabel(policy.grant_type)}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
                       {policy.granted_by}
@@ -301,15 +368,39 @@ export const TrustPolicies: React.FC = () => {
                       {formatTimestamp(policy.created_at)}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedPolicy(policy);
-                        }}
-                        className="rounded-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                      >
-                        {t('tenant.trustPolicies.actions.viewDetails')}
-                      </button>
+                      <div className="inline-flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedPolicy(policy);
+                          }}
+                          className="rounded-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                        >
+                          {t('tenant.trustPolicies.actions.viewDetails')}
+                        </button>
+                        {!policy.deleted_at && (
+                          <LazyPopconfirm
+                            title={t('tenant.trustPolicies.revokeConfirm', {
+                              defaultValue:
+                                'Revoke the "{{actionType}}" grant for {{agent}}? The agent will need approval again.',
+                              actionType: policy.action_type,
+                              agent: policy.agent_instance_id,
+                            })}
+                            okText={t('tenant.trustPolicies.actions.revoke', 'Revoke')}
+                            cancelText={t('common.cancel')}
+                            okButtonProps={{ danger: true, loading: revokingId === policy.id }}
+                            onConfirm={() => handleRevoke(policy)}
+                          >
+                            <button
+                              type="button"
+                              disabled={revokingId === policy.id}
+                              className="rounded-sm text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:opacity-50"
+                            >
+                              {t('tenant.trustPolicies.actions.revoke', 'Revoke')}
+                            </button>
+                          </LazyPopconfirm>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

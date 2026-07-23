@@ -54,6 +54,12 @@ export interface MessageBubbleRootProps extends MessageBubbleProps {
   children?: React.ReactNode | undefined;
   /** Callback when user clicks Reply on a message */
   onReply?: (() => void) | undefined;
+  /** Callback when user clicks Retry on an assistant message */
+  onRetry?: (() => void) | undefined;
+  /** Callback when user clicks Edit on a user message */
+  onEdit?: (() => void) | undefined;
+  /** Callback when user clicks Delete on a user message */
+  onDelete?: (() => void) | undefined;
 }
 
 /**
@@ -70,6 +76,8 @@ export interface UserMessageProps {
   content: string;
   timestamp?: number | undefined;
   onReply?: (() => void) | undefined;
+  onEdit?: (() => void) | undefined;
+  onDelete?: (() => void) | undefined;
   forcedSkillName?: string | undefined;
   forcedSubAgentName?: string | undefined;
   fileMetadata?: UserMessageFileMetadata[] | undefined;
@@ -87,6 +95,7 @@ export interface AssistantMessageProps {
   isPinned?: boolean | undefined;
   onPin?: (() => void) | undefined;
   onReply?: (() => void) | undefined;
+  onRetry?: (() => void) | undefined;
 }
 
 /**
@@ -128,6 +137,7 @@ export interface TextEndProps {
   isPinned?: boolean | undefined;
   onPin?: (() => void) | undefined;
   onReply?: (() => void) | undefined;
+  onRetry?: (() => void) | undefined;
 }
 
 /**

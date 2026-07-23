@@ -11,7 +11,7 @@
  * ```
  */
 
-import React, { useCallback, useEffect, useState, useMemo, useContext } from 'react';
+import React, { useCallback, useEffect, useState, useMemo, useContext, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
@@ -20,7 +20,6 @@ import { message } from 'antd';
 import {
   Plus,
   Search,
-  Download,
   Code,
   Info,
   Pencil,
@@ -140,7 +139,6 @@ const TEXTS = {
   subtitle: 'Define the structure of relationships in your knowledge graph',
   create: 'Create Edge Type',
   searchPlaceholder: 'Search edge types…',
-  systemActive: 'System Active',
 
   // Master Pane
   master: {
@@ -297,6 +295,8 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEdge, setEditingEdge] = useState<EdgeType | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  // Snapshot of the form when the modal opens, used for unsaved-changes check.
+  const formSnapshotRef = useRef('');
 
   // Form state
   const [formData, setFormData] = useState({
@@ -325,16 +325,15 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
         updated_at: item.updated_at ?? item.created_at ?? loadedAt,
       }));
       setEdges(edgeTypes);
-      if (edgeTypes.length > 0 && !selectedEdgeId) {
-        setSelectedEdgeId(edgeTypes[0]?.id ?? null);
-      }
+      // Keep the current selection; only auto-select the first edge on initial load.
+      setSelectedEdgeId((current) => current ?? edgeTypes[0]?.id ?? null);
     } catch (error) {
       logger.error('[EdgeTypeList] Failed to load edge types:', error);
       setLoadError(edgeText(t, 'loadError', 'Failed to load edge types.'));
     } finally {
       setLoading(false);
     }
-  }, [projectId, selectedEdgeId, t]);
+  }, [projectId, t]);
 
   useEffect(() => {
     void loadData();
@@ -342,32 +341,54 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
 
   // Handlers
   const handleOpenModal = useCallback((edge: EdgeType | null) => {
-    if (edge) {
-      setEditingEdge(edge);
-      setFormData({
-        name: edge.name,
-        description: edge.description,
-        schema: edge.schema,
-      });
-      setAttributes(schemaToAttributes(edge.schema));
-    } else {
-      setEditingEdge(null);
-      setFormData({ name: '', description: '', schema: {} });
-      setAttributes([]);
-    }
+    const nextFormData: EdgeFormData = edge
+      ? { name: edge.name, description: edge.description, schema: edge.schema }
+      : { name: '', description: '', schema: {} };
+    const nextAttributes = edge ? schemaToAttributes(edge.schema) : [];
+    setEditingEdge(edge);
+    setFormData(nextFormData);
+    setAttributes(nextAttributes);
+    formSnapshotRef.current = JSON.stringify({
+      formData: nextFormData,
+      attributes: nextAttributes,
+    });
     setIsModalOpen(true);
   }, []);
 
-  const handleCloseModal = useCallback(() => {
+  const handleCloseModal = useCallback(async () => {
+    const currentSnapshot = JSON.stringify({ formData, attributes });
+    if (currentSnapshot !== formSnapshotRef.current) {
+      const confirmed = await confirmAction({
+        title: edgeText(t, 'discardChanges', 'Discard unsaved changes?'),
+        danger: true,
+      });
+      if (!confirmed) return;
+    }
     setIsModalOpen(false);
     setEditingEdge(null);
-  }, []);
+  }, [formData, attributes, t]);
 
   const handleSave = useCallback(async () => {
     if (!projectId || isSaving) return;
 
+    const trimmedName = formData.name.trim();
+    if (!trimmedName) {
+      void message.error(edgeText(t, 'nameRequired', 'Name is required'));
+      return;
+    }
+    const isDuplicate = edges.some(
+      (edge) => edge.name.toLowerCase() === trimmedName.toLowerCase() && edge.id !== editingEdge?.id
+    );
+    if (isDuplicate) {
+      void message.error(
+        edgeText(t, 'nameDuplicate', 'An edge type with this name already exists')
+      );
+      return;
+    }
+
     const payload = {
       ...formData,
+      name: trimmedName,
       schema: attributesToSchema(attributes),
     };
 
@@ -387,7 +408,7 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
     } finally {
       setIsSaving(false);
     }
-  }, [projectId, editingEdge, formData, attributes, isSaving, loadData, t]);
+  }, [projectId, editingEdge, edges, formData, attributes, isSaving, loadData, t]);
 
   const handleDelete = useCallback(
     async (id: string) => {
@@ -466,7 +487,9 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
     setSearch,
     setSelectedEdgeId,
     handleOpenModal,
-    handleCloseModal,
+    handleCloseModal: () => {
+      void handleCloseModal();
+    },
     handleSave: () => {
       void handleSave();
     },
@@ -566,11 +589,6 @@ const HeaderInternal: React.FC<HeaderProps> = () => {
               {edgeText(t, 'subtitle', TEXTS.subtitle)}
             </p>
           </div>
-          <div className="flex gap-2">
-            <span className="px-3 py-1 rounded-full bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-medium border border-green-200 dark:border-green-500/20">
-              {edgeText(t, 'systemActive', TEXTS.systemActive)}
-            </span>
-          </div>
         </div>
       </div>
     </div>
@@ -600,18 +618,6 @@ const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
   const search = props.search ?? state?.search ?? '';
   const setSearch = props.onSearchChange ?? actions?.setSearch;
   const handleCreate = props.onCreate ?? actions?.handleOpenModal;
-  const edges = state?.edges;
-
-  const handleDownload = useCallback(() => {
-    const payload = JSON.stringify(edges ?? [], null, 2);
-    const blob = new Blob([payload], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = 'edge-types-schema.json';
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }, [edges]);
 
   return (
     <div className="flex flex-col gap-4 border-b border-slate-200 bg-slate-50 px-4 py-4 dark:border-border-dark dark:bg-background-dark sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -630,15 +636,6 @@ const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
           />
         </div>
         <div className="mx-2 hidden h-6 w-px bg-slate-200 dark:bg-border-dark sm:block"></div>
-        <button
-          className="p-2 text-slate-500 dark:text-text-muted hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/5 rounded-lg transition-colors"
-          title={edgeText(t, 'downloadSchema', 'Download Schema')}
-          aria-label={edgeText(t, 'downloadSchema', 'Download Schema')}
-          onClick={handleDownload}
-          type="button"
-        >
-          <Download className="w-5 h-5" />
-        </button>
       </div>
       <button
         type="button"
@@ -937,10 +934,23 @@ DetailPaneInternal.displayName = 'EdgeTypeList.DetailPane';
 
 const EmptyInternal: React.FC = () => {
   const { t } = useTranslation();
+  const context = useEdgeTypeListContextOptional();
 
   return (
-    <div className="w-full border-b border-slate-200 p-6 text-center text-sm text-slate-500 dark:border-border-dark dark:text-text-muted lg:w-1/3 lg:border-b-0 lg:border-r">
+    <div className="flex w-full flex-col items-center gap-4 border-b border-slate-200 p-6 text-center text-sm text-slate-500 dark:border-border-dark dark:text-text-muted lg:w-1/3 lg:border-b-0 lg:border-r">
       {edgeText(t, 'masterEmpty', TEXTS.master.empty)}
+      {context && (
+        <button
+          type="button"
+          onClick={() => {
+            context.actions.handleOpenModal(null);
+          }}
+          className="inline-flex h-9 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white transition-colors hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600/40 dark:bg-primary dark:hover:bg-primary-light"
+        >
+          <Plus className="w-4 h-4" aria-hidden="true" />
+          {edgeText(t, 'createButton', TEXTS.create)}
+        </button>
+      )}
     </div>
   );
 };

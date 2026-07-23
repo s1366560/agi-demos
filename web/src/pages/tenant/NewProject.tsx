@@ -3,9 +3,10 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
-import { AlertCircle, Brain, Loader2, Network, Settings } from 'lucide-react';
+import { AlertCircle, Loader2, Settings } from 'lucide-react';
 
 import { BackendStoreSelectors } from '@/components/project/BackendStoreSelectors';
+import { ProjectConfigForm } from '@/components/tenant/ProjectConfigForm';
 
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
@@ -22,14 +23,14 @@ export const NewProject: React.FC = () => {
     name: '',
     description: '',
     memory_rules: {
-      max_episodes: '1000',
-      retention_days: '30',
+      max_episodes: 1000,
+      retention_days: 30,
       auto_refresh: true,
-      refresh_interval: '24',
+      refresh_interval: 24,
     },
     graph_config: {
-      max_nodes: '5000',
-      max_edges: '10000',
+      max_nodes: 5000,
+      max_edges: 10000,
       similarity_threshold: 0.7,
       community_detection: true,
     },
@@ -59,17 +60,6 @@ export const NewProject: React.FC = () => {
     try {
       await createProject(currentTenant.id, {
         ...formData,
-        memory_rules: {
-          ...formData.memory_rules,
-          max_episodes: parseInt(formData.memory_rules.max_episodes, 10) || 1000,
-          retention_days: parseInt(formData.memory_rules.retention_days, 10) || 30,
-          refresh_interval: parseInt(formData.memory_rules.refresh_interval, 10) || 24,
-        },
-        graph_config: {
-          ...formData.graph_config,
-          max_nodes: parseInt(formData.graph_config.max_nodes, 10) || 5000,
-          max_edges: parseInt(formData.graph_config.max_edges, 10) || 10000,
-        },
         tenant_id: currentTenant.id,
       });
       void navigate(`/tenant/${currentTenant.id}/projects`);
@@ -173,245 +163,17 @@ export const NewProject: React.FC = () => {
           }}
         />
 
-        {/* Configuration Split */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Memory Rules */}
-          <div className="bg-surface-light dark:bg-surface-dark border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm h-full">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-lg">
-                <Brain size={16} />
-              </div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                {t('tenant.newProject.memoryRules')}
-              </h2>
-            </div>
-
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label
-                    htmlFor="new-project-max-episodes"
-                    className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
-                  >
-                    {t('tenant.newProject.maxEpisodes')}
-                  </label>
-                  <input
-                    id="new-project-max-episodes"
-                    type="number"
-                    min="100"
-                    max="10000"
-                    value={formData.memory_rules.max_episodes}
-                    onChange={(e) => {
-                      setFormData({
-                        ...formData,
-                        memory_rules: {
-                          ...formData.memory_rules,
-                          max_episodes: e.target.value,
-                        },
-                      });
-                    }}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="new-project-retention-days"
-                    className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
-                  >
-                    {t('tenant.newProject.retentionDays')}
-                  </label>
-                  <input
-                    id="new-project-retention-days"
-                    type="number"
-                    min="1"
-                    max="365"
-                    value={formData.memory_rules.retention_days}
-                    onChange={(e) => {
-                      setFormData({
-                        ...formData,
-                        memory_rules: {
-                          ...formData.memory_rules,
-                          retention_days: e.target.value,
-                        },
-                      });
-                    }}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="new-project-refresh-interval"
-                  className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
-                >
-                  {t('tenant.newProject.refreshInterval')}
-                </label>
-                <input
-                  id="new-project-refresh-interval"
-                  type="number"
-                  min="1"
-                  max="168"
-                  value={formData.memory_rules.refresh_interval}
-                  onChange={(e) => {
-                    setFormData({
-                      ...formData,
-                      memory_rules: {
-                        ...formData.memory_rules,
-                        refresh_interval: e.target.value,
-                      },
-                    });
-                  }}
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                />
-              </div>
-
-              <div className="flex items-center gap-3 pt-2">
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.memory_rules.auto_refresh}
-                    onChange={(e) => {
-                      setFormData({
-                        ...formData,
-                        memory_rules: { ...formData.memory_rules, auto_refresh: e.target.checked },
-                      });
-                    }}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-primary/20 dark:peer-focus-visible:ring-primary/40 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform dark:border-gray-600 peer-checked:bg-primary"></div>
-                </label>
-                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  {t('tenant.newProject.enableAutoRefresh')}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Graph Configuration */}
-          <div className="bg-surface-light dark:bg-surface-dark border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm h-full">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-lg">
-                <Network size={16} />
-              </div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                {t('tenant.newProject.graphConfig')}
-              </h2>
-            </div>
-
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label
-                    htmlFor="new-project-max-nodes"
-                    className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
-                  >
-                    {t('tenant.newProject.maxNodes')}
-                  </label>
-                  <input
-                    id="new-project-max-nodes"
-                    type="number"
-                    min="100"
-                    value={formData.graph_config.max_nodes}
-                    onChange={(e) => {
-                      setFormData({
-                        ...formData,
-                        graph_config: {
-                          ...formData.graph_config,
-                          max_nodes: e.target.value,
-                        },
-                      });
-                    }}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="new-project-max-edges"
-                    className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
-                  >
-                    {t('tenant.newProject.maxEdges')}
-                  </label>
-                  <input
-                    id="new-project-max-edges"
-                    type="number"
-                    min="100"
-                    value={formData.graph_config.max_edges}
-                    onChange={(e) => {
-                      setFormData({
-                        ...formData,
-                        graph_config: {
-                          ...formData.graph_config,
-                          max_edges: e.target.value,
-                        },
-                      });
-                    }}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label
-                    htmlFor="new-project-similarity-threshold"
-                    className="block text-sm font-medium text-slate-700 dark:text-slate-300"
-                  >
-                    {t('tenant.newProject.similarityThreshold')}
-                  </label>
-                  <span className="text-xs font-mono bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-600 dark:text-slate-300">
-                    {formData.graph_config.similarity_threshold}
-                  </span>
-                </div>
-                <input
-                  id="new-project-similarity-threshold"
-                  type="range"
-                  min="0.1"
-                  max="1.0"
-                  step="0.1"
-                  value={formData.graph_config.similarity_threshold}
-                  onChange={(e) => {
-                    setFormData({
-                      ...formData,
-                      graph_config: {
-                        ...formData.graph_config,
-                        similarity_threshold: parseFloat(e.target.value),
-                      },
-                    });
-                  }}
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-primary"
-                />
-                <div className="flex justify-between text-xs text-slate-400 mt-1">
-                  <span>{t('tenant.newProject.loose', { defaultValue: 'Loose (0.1)' })}</span>
-                  <span>{t('tenant.newProject.strict', { defaultValue: 'Strict (1.0)' })}</span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 pt-2">
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.graph_config.community_detection}
-                    onChange={(e) => {
-                      setFormData({
-                        ...formData,
-                        graph_config: {
-                          ...formData.graph_config,
-                          community_detection: e.target.checked,
-                        },
-                      });
-                    }}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-primary/20 dark:peer-focus-visible:ring-primary/40 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform dark:border-gray-600 peer-checked:bg-primary"></div>
-                </label>
-                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  {t('tenant.newProject.enableCommunityDetection')}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ProjectConfigForm
+          idPrefix="new-project"
+          memoryRules={formData.memory_rules}
+          graphConfig={formData.graph_config}
+          onMemoryRulesChange={(memory_rules) => {
+            setFormData({ ...formData, memory_rules });
+          }}
+          onGraphConfigChange={(graph_config) => {
+            setFormData({ ...formData, graph_config });
+          }}
+        />
 
         {/* Footer Actions */}
         <div className="flex items-center justify-end gap-4 pt-6 border-t border-slate-200 dark:border-slate-800">

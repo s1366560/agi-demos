@@ -21,7 +21,8 @@ import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Badge, Card, Empty, Space, Table, Tag, Typography } from 'antd';
+import { Alert, Badge, Button, Card, Empty, Space, Table, Tag, Typography } from 'antd';
+import { RefreshCw } from 'lucide-react';
 
 import { poolService, type PoolInstance, type PoolStatus } from '@/services/poolService';
 import {
@@ -31,6 +32,8 @@ import {
 } from '@/services/projectSandboxService';
 
 import { formatDateTime } from '@/utils/date';
+
+import { getStatusColor } from './utils/instanceUtils';
 
 const { Title, Text } = Typography;
 
@@ -51,14 +54,6 @@ interface RuntimeRow {
 interface SandboxRuntimeRecord {
   sandbox: ProjectSandbox;
   stats?: SandboxStats | undefined;
-}
-
-function statusColor(status: string): string {
-  if (/fail|error|unhealthy|terminated/i.test(status)) return 'red';
-  if (/pause|degraded|warn/i.test(status)) return 'orange';
-  if (/ready|running|execut|active/i.test(status)) return 'green';
-  if (/pending|creating|initializing/i.test(status)) return 'blue';
-  return 'default';
 }
 
 function healthStatus(health: string): 'success' | 'warning' | 'error' | 'default' {
@@ -205,7 +200,7 @@ export function UnifiedRuntimes() {
       title: t('tenant.runtimes.columns.status'),
       dataIndex: 'status',
       key: 'status',
-      render: (s: string) => <Tag color={statusColor(s)}>{s}</Tag>,
+      render: (s: string) => <Tag color={getStatusColor(s)}>{s}</Tag>,
     },
     {
       title: t('tenant.runtimes.columns.health'),
@@ -286,39 +281,43 @@ export function UnifiedRuntimes() {
           />
         )}
 
-        {poolStatus && (
+        {(poolStatus || sandboxesQuery.data) && (
           <Space size="large" wrap>
-            <Card size="small" title={t('tenant.runtimes.cards.poolTotal')}>
-              <Title level={4} style={{ margin: 0 }} className="tabular-nums">
-                {poolStatus.total_instances}
-              </Title>
-            </Card>
-            <Card size="small" title={t('tenant.runtimes.cards.hotWarmCold')}>
-              <Text className="tabular-nums">
-                {poolStatus.hot_instances} / {poolStatus.warm_instances} /{' '}
-                {poolStatus.cold_instances}
-              </Text>
-            </Card>
-            <Card size="small" title={t('tenant.runtimes.cards.readyExecuting')}>
-              <Text className="tabular-nums">
-                {poolStatus.ready_instances} / {poolStatus.executing_instances}
-              </Text>
-            </Card>
-            <Card size="small" title={t('tenant.runtimes.cards.unhealthy')}>
-              {poolStatus.unhealthy_instances > 0 ? (
-                <Text type="danger" className="tabular-nums">
-                  {poolStatus.unhealthy_instances}
-                </Text>
-              ) : (
-                <Text className="tabular-nums">{poolStatus.unhealthy_instances}</Text>
-              )}
-            </Card>
-            <Card size="small" title={t('tenant.runtimes.cards.memory')}>
-              <Text className="tabular-nums">
-                {Math.round(poolStatus.resource_usage.used_memory_mb)} /{' '}
-                {Math.round(poolStatus.resource_usage.total_memory_mb)} MB
-              </Text>
-            </Card>
+            {poolStatus && (
+              <>
+                <Card size="small" title={t('tenant.runtimes.cards.poolTotal')}>
+                  <Title level={4} style={{ margin: 0 }} className="tabular-nums">
+                    {poolStatus.total_instances}
+                  </Title>
+                </Card>
+                <Card size="small" title={t('tenant.runtimes.cards.hotWarmCold')}>
+                  <Text className="tabular-nums">
+                    {poolStatus.hot_instances} / {poolStatus.warm_instances} /{' '}
+                    {poolStatus.cold_instances}
+                  </Text>
+                </Card>
+                <Card size="small" title={t('tenant.runtimes.cards.readyExecuting')}>
+                  <Text className="tabular-nums">
+                    {poolStatus.ready_instances} / {poolStatus.executing_instances}
+                  </Text>
+                </Card>
+                <Card size="small" title={t('tenant.runtimes.cards.unhealthy')}>
+                  {poolStatus.unhealthy_instances > 0 ? (
+                    <Text type="danger" className="tabular-nums">
+                      {poolStatus.unhealthy_instances}
+                    </Text>
+                  ) : (
+                    <Text className="tabular-nums">{poolStatus.unhealthy_instances}</Text>
+                  )}
+                </Card>
+                <Card size="small" title={t('tenant.runtimes.cards.memory')}>
+                  <Text className="tabular-nums">
+                    {Math.round(poolStatus.resource_usage.used_memory_mb)} /{' '}
+                    {Math.round(poolStatus.resource_usage.total_memory_mb)} MB
+                  </Text>
+                </Card>
+              </>
+            )}
             <Card size="small" title={t('tenant.runtimes.cards.sandboxes')}>
               <Title level={4} style={{ margin: 0 }} className="tabular-nums">
                 {sandboxSummary.total}
@@ -341,9 +340,28 @@ export function UnifiedRuntimes() {
         <Card
           title={t('tenant.runtimes.instances')}
           extra={
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {t('tenant.runtimes.autoRefresh')}
-            </Text>
+            <Space size="middle">
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {t('tenant.runtimes.autoRefresh')}
+              </Text>
+              <Button
+                size="small"
+                icon={<RefreshCw size={14} aria-hidden="true" />}
+                aria-label={t('common.refresh')}
+                loading={
+                  poolStatusQuery.isFetching ||
+                  poolInstancesQuery.isFetching ||
+                  sandboxesQuery.isFetching
+                }
+                onClick={() => {
+                  void poolStatusQuery.refetch();
+                  void poolInstancesQuery.refetch();
+                  void sandboxesQuery.refetch();
+                }}
+              >
+                {t('common.refresh')}
+              </Button>
+            </Space>
           }
         >
           {rows.length === 0 && !poolInstancesQuery.isLoading && !sandboxesQuery.isLoading ? (

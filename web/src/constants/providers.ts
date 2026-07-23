@@ -3,6 +3,7 @@ import { ProviderType } from '../types/memory';
 export interface ProviderMeta {
   value: ProviderType;
   label: string;
+  /** Lucide icon key, resolved to a component by `ProviderIcon` (see ICON_MAP there). */
   icon: string;
   description: string;
   apiKeyEnvVar: string;
@@ -18,7 +19,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'openai',
     label: 'OpenAI',
-    icon: '🤖',
+    icon: 'bot',
     description: 'GPT-4, GPT-3.5, text-embedding models',
     apiKeyEnvVar: 'OPENAI_API_KEY',
     apiKeyPlaceholder: 'sk-...',
@@ -30,7 +31,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'openrouter',
     label: 'OpenRouter',
-    icon: '🧭',
+    icon: 'compass',
     description: 'Unified access to OpenAI/Anthropic/Meta and more',
     apiKeyEnvVar: 'OPENROUTER_API_KEY',
     apiKeyPlaceholder: 'sk-or-...',
@@ -42,7 +43,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'anthropic',
     label: 'Anthropic',
-    icon: '🧠',
+    icon: 'brain',
     description: 'Claude 3.5/4 Sonnet, Haiku, Opus',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
     apiKeyPlaceholder: 'sk-ant-...',
@@ -54,7 +55,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'gemini',
     label: 'Google Gemini',
-    icon: '✨',
+    icon: 'sparkles',
     description: 'Gemini Pro, Flash, text-embedding-004',
     apiKeyEnvVar: 'GEMINI_API_KEY',
     apiKeyPlaceholder: 'AIza...',
@@ -66,7 +67,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'dashscope',
     label: 'Alibaba Dashscope',
-    icon: '🌐',
+    icon: 'globe',
     description: 'Qwen-Max, Qwen-Plus, Qwen-Turbo, text-embedding-v3',
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
     apiKeyPlaceholder: 'sk-...',
@@ -78,7 +79,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'dashscope_coding',
     label: 'Dashscope Coding',
-    icon: '💻',
+    icon: 'code',
     description: 'Qwen3-Coder series with coding plan defaults',
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
     apiKeyPlaceholder: 'sk-...',
@@ -90,7 +91,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'dashscope_embedding',
     label: 'Dashscope Embedding',
-    icon: '🧬',
+    icon: 'dna',
     description: 'Dashscope embedding-focused provider (text-embedding-v3)',
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
     apiKeyPlaceholder: 'sk-...',
@@ -102,7 +103,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'dashscope_reranker',
     label: 'Dashscope Reranker',
-    icon: '📚',
+    icon: 'book-open',
     description: 'Dashscope rerank-focused provider',
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
     apiKeyPlaceholder: 'sk-...',
@@ -114,7 +115,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'kimi',
     label: 'Moonshot Kimi',
-    icon: '🌙',
+    icon: 'moon',
     description: 'Moonshot Kimi chat, embedding and rerank models',
     apiKeyEnvVar: 'KIMI_API_KEY',
     apiKeyPlaceholder: 'sk-...',
@@ -126,7 +127,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'kimi_coding',
     label: 'Kimi Coding',
-    icon: '🧑‍💻',
+    icon: 'laptop',
     description: 'Kimi Coding plan models (k2p5, kimi-k2-thinking)',
     apiKeyEnvVar: 'KIMI_API_KEY',
     apiKeyPlaceholder: 'sk-...',
@@ -138,7 +139,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'kimi_embedding',
     label: 'Kimi Embedding',
-    icon: '🧬',
+    icon: 'dna',
     description: 'Kimi embedding-focused provider (kimi-embedding-1)',
     apiKeyEnvVar: 'KIMI_API_KEY',
     apiKeyPlaceholder: 'sk-...',
@@ -150,7 +151,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'kimi_reranker',
     label: 'Kimi Reranker',
-    icon: '📚',
+    icon: 'book-open',
     description: 'Kimi rerank-focused provider (kimi-rerank-1)',
     apiKeyEnvVar: 'KIMI_API_KEY',
     apiKeyPlaceholder: 'sk-...',
@@ -162,7 +163,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'deepseek',
     label: 'DeepSeek',
-    icon: '🔍',
+    icon: 'search',
     description: 'DeepSeek Chat and DeepSeek Coder models',
     apiKeyEnvVar: 'DEEPSEEK_API_KEY',
     apiKeyPlaceholder: 'sk-...',
@@ -174,7 +175,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'minimax',
     label: 'MiniMax',
-    icon: '🧩',
+    icon: 'puzzle',
     description: 'abab6.5-chat, embo-01',
     apiKeyEnvVar: 'MINIMAX_API_KEY',
     apiKeyPlaceholder: '...',
@@ -186,7 +187,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'minimax_coding',
     label: 'MiniMax Coding',
-    icon: '🛠️',
+    icon: 'wrench',
     description: 'MiniMax Coding plan models (M2.5 family)',
     apiKeyEnvVar: 'MINIMAX_API_KEY',
     apiKeyPlaceholder: '...',
@@ -198,7 +199,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'minimax_embedding',
     label: 'MiniMax Embedding',
-    icon: '🧬',
+    icon: 'dna',
     description: 'MiniMax embedding-focused provider (embo-01)',
     apiKeyEnvVar: 'MINIMAX_API_KEY',
     apiKeyPlaceholder: '...',
@@ -210,7 +211,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'minimax_reranker',
     label: 'MiniMax Reranker',
-    icon: '📚',
+    icon: 'book-open',
     description: 'MiniMax rerank-focused provider',
     apiKeyEnvVar: 'MINIMAX_API_KEY',
     apiKeyPlaceholder: '...',
@@ -222,7 +223,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'zai',
     label: 'ZhipuAI 智谱', // i18n-ignore: brand name
-    icon: '🐲',
+    icon: 'gem',
     description: 'GLM-4-Plus, GLM-4-Flash, embedding-3',
     apiKeyEnvVar: 'ZAI_API_KEY',
     apiKeyPlaceholder: '...',
@@ -234,7 +235,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'zai_coding',
     label: 'Z.AI Coding',
-    icon: '🧠',
+    icon: 'terminal',
     description: 'Z.AI coding plan models (GLM-5/4.7 family)',
     apiKeyEnvVar: 'ZAI_API_KEY',
     apiKeyPlaceholder: '...',
@@ -246,7 +247,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'zai_embedding',
     label: 'Z.AI Embedding',
-    icon: '🧬',
+    icon: 'dna',
     description: 'Z.AI embedding-focused provider (embedding-3)',
     apiKeyEnvVar: 'ZAI_API_KEY',
     apiKeyPlaceholder: '...',
@@ -258,7 +259,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'zai_reranker',
     label: 'Z.AI Reranker',
-    icon: '📚',
+    icon: 'book-open',
     description: 'Z.AI rerank-focused provider',
     apiKeyEnvVar: 'ZAI_API_KEY',
     apiKeyPlaceholder: '...',
@@ -270,7 +271,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'cohere',
     label: 'Cohere',
-    icon: '🔮',
+    icon: 'orbit',
     description: 'Command-R, embed-english-v3, native rerank',
     apiKeyEnvVar: 'COHERE_API_KEY',
     apiKeyPlaceholder: '...',
@@ -282,7 +283,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'mistral',
     label: 'Mistral AI',
-    icon: '🌪️',
+    icon: 'wind',
     description: 'Mistral-Large, Mistral-Small, mistral-embed',
     apiKeyEnvVar: 'MISTRAL_API_KEY',
     apiKeyPlaceholder: '...',
@@ -294,7 +295,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'groq',
     label: 'Groq',
-    icon: '⚡',
+    icon: 'zap',
     description: 'LLaMA 3, Mixtral (ultra-fast inference)',
     apiKeyEnvVar: 'GROQ_API_KEY',
     apiKeyPlaceholder: 'gsk_...',
@@ -306,7 +307,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'azure_openai',
     label: 'Azure OpenAI',
-    icon: '☁️',
+    icon: 'cloud',
     description: 'Azure-hosted OpenAI models',
     apiKeyEnvVar: 'AZURE_API_KEY',
     apiKeyPlaceholder: '...',
@@ -318,7 +319,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'bedrock',
     label: 'AWS Bedrock',
-    icon: '🏔️',
+    icon: 'mountain',
     description: 'Claude, Titan, Llama on AWS',
     apiKeyEnvVar: 'AWS_ACCESS_KEY_ID',
     apiKeyPlaceholder: 'AKIA...',
@@ -330,7 +331,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'vertex',
     label: 'Google Vertex AI',
-    icon: '📊',
+    icon: 'network',
     description: 'Gemini on Google Cloud',
     apiKeyEnvVar: 'GOOGLE_APPLICATION_CREDENTIALS',
     apiKeyPlaceholder: 'JSON credentials',
@@ -342,7 +343,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'ollama',
     label: 'Ollama',
-    icon: '🦙',
+    icon: 'box',
     description: 'Local Ollama runtime (Open source models)',
     apiKeyEnvVar: 'OLLAMA_API_KEY',
     apiKeyPlaceholder: '(optional)',
@@ -354,7 +355,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'lmstudio',
     label: 'LM Studio',
-    icon: '🖥️',
+    icon: 'monitor',
     description: 'Local OpenAI-compatible endpoint from LM Studio',
     apiKeyEnvVar: 'LMSTUDIO_API_KEY',
     apiKeyPlaceholder: '(optional)',
@@ -365,8 +366,8 @@ export const PROVIDERS: ProviderMeta[] = [
   },
   {
     value: 'volcengine',
-    label: 'Volcengine \u706B\u5C71\u5F15\u64CE',
-    icon: '\uD83C\uDF0B',
+    label: 'Volcengine 火山引擎',
+    icon: 'flame',
     description: 'Doubao Seed 2.0 / 1.5 series, Vision, Embedding, Reranker, Seedream, Seedance',
     apiKeyEnvVar: 'VOLCENGINE_API_KEY',
     apiKeyPlaceholder: 'Enter your Volcengine API key',
@@ -379,7 +380,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'volcengine_coding',
     label: 'Volcengine Coding',
-    icon: '\uD83D\uDCBB',
+    icon: 'code',
     description: 'Volcengine coding-optimized models',
     apiKeyEnvVar: 'VOLCENGINE_API_KEY',
     apiKeyPlaceholder: 'Enter your Volcengine API key',
@@ -392,7 +393,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'volcengine_embedding',
     label: 'Volcengine Embedding',
-    icon: '\uD83E\uDDEC',
+    icon: 'dna',
     description: 'Volcengine embedding models (doubao-embedding)',
     apiKeyEnvVar: 'VOLCENGINE_API_KEY',
     apiKeyPlaceholder: 'Enter your Volcengine API key',
@@ -405,7 +406,7 @@ export const PROVIDERS: ProviderMeta[] = [
   {
     value: 'volcengine_reranker',
     label: 'Volcengine Reranker',
-    icon: '\uD83D\uDCDA',
+    icon: 'book-open',
     description: 'Volcengine reranking models',
     apiKeyEnvVar: 'VOLCENGINE_API_KEY',
     apiKeyPlaceholder: 'Enter your Volcengine API key',

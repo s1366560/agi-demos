@@ -99,28 +99,11 @@ describe('EdgeMapList', () => {
     ).toBeInTheDocument();
   });
 
-  it('exports the current edge mappings as JSON', async () => {
-    const createObjectURL = vi.fn(() => 'blob:edge-mappings');
-    const revokeObjectURL = vi.fn();
-    const clickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(() => undefined);
-    Object.defineProperty(URL, 'createObjectURL', {
-      configurable: true,
-      value: createObjectURL,
-    });
-    Object.defineProperty(URL, 'revokeObjectURL', {
-      configurable: true,
-      value: revokeObjectURL,
-    });
-
+  it('does not offer a dedicated export button (export lives in Schema Overview)', async () => {
     render(<EdgeMapList />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Export Schema' }));
+    await screen.findByRole('button', { name: 'Add mapping from Entity to Entity' });
 
-    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-    expect(clickSpy).toHaveBeenCalled();
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:edge-mappings');
-    clickSpy.mockRestore();
+    expect(screen.queryByRole('button', { name: 'Export Schema' })).not.toBeInTheDocument();
   });
 });

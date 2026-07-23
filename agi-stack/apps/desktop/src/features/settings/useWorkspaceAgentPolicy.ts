@@ -105,10 +105,10 @@ export function useWorkspaceAgentPolicy(
   return {
     ...current,
     workModelOptions: current.policy
-      ? workspaceRuntimeModelOptions(current.policy, current.providers, 'default')
+      ? workspaceRuntimeModelOptions(current.policy, current.providers, 'default', config.mode)
       : [],
     codeModelOptions: current.policy
-      ? workspaceRuntimeModelOptions(current.policy, current.providers, 'coding')
+      ? workspaceRuntimeModelOptions(current.policy, current.providers, 'coding', config.mode)
       : [],
     refresh,
     acceptPolicy,

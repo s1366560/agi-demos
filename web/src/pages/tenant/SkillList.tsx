@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { Input, Modal, Pagination, Switch } from 'antd';
 import {
@@ -41,25 +41,28 @@ import { useTenantStore } from '@/stores/tenant';
 import { skillAPI } from '@/services/skillService';
 import type { SkillListParams as SkillApiListParams } from '@/services/skillService';
 
+import {
+  downloadSkillPackage,
+  getSkillSource,
+  isManagedSkill,
+  useSkillRollback,
+} from '@/utils/skillExport';
+
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import { SkillModal } from '@/components/skill/SkillModal';
 import { SkillVersionList } from '@/components/skill/SkillVersionList';
-import {
-  useLazyMessage,
-  LazyPopconfirm,
-  LazySelect,
-  LazyEmpty,
-  LazySpin,
-} from '@/components/ui/lazyAntd';
+import { useLazyMessage, LazyPopconfirm, LazySelect, LazyEmpty } from '@/components/ui/lazyAntd';
 
 import { getSystemSkillConfigAction } from './skillListModel';
 
 import type { SkillResponse, SkillVersionResponse } from '@/types/agent';
 
+import type { SkillSource } from '@/utils/skillExport';
+
 const { Search } = Input;
 const { TextArea } = Input;
 
 type SkillStatus = 'active' | 'disabled' | 'deprecated';
-type SkillSource = NonNullable<SkillResponse['source']>;
 type SkillLibraryView = 'all' | 'managed' | 'readonly';
 type SkillScopeFilter = 'all' | 'system' | 'tenant' | 'project' | `project:${string}`;
 type SkillImportScope = 'tenant' | 'project';
@@ -85,6 +88,29 @@ const primaryButton =
   'inline-flex h-9 items-center justify-center gap-2 rounded-[4px] bg-[oklch(0.24_0.01_255)] px-4 text-sm font-medium text-[oklch(0.98_0.004_255)] transition-colors hover:bg-[oklch(0.31_0.012_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] dark:bg-[oklch(0.9_0.006_255)] dark:text-[oklch(0.17_0.006_255)] dark:hover:bg-[oklch(0.98_0.004_255)]';
 const secondaryButton =
   'inline-flex h-9 items-center justify-center gap-2 rounded-[4px] border border-[oklch(0.86_0.006_255)] px-3 text-sm font-medium text-[oklch(0.34_0.01_255)] transition-colors hover:bg-[oklch(0.95_0.005_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] dark:border-[oklch(0.34_0.006_255)] dark:text-[oklch(0.82_0.006_255)] dark:hover:bg-[oklch(0.24_0.006_255)]';
+
+const DEFAULT_PAGE_SIZE = 20;
+
+const parseStatusFilterParam = (value: string | null): 'all' | SkillStatus =>
+  value === 'active' || value === 'disabled' || value === 'deprecated' ? value : 'all';
+
+const parseScopeFilterParam = (value: string | null): SkillScopeFilter => {
+  if (value === 'system' || value === 'tenant' || value === 'project') {
+    return value;
+  }
+  if (value?.startsWith('project:')) {
+    return value as `project:${string}`;
+  }
+  return 'all';
+};
+
+const parseLibraryViewParam = (value: string | null): SkillLibraryView =>
+  value === 'managed' || value === 'readonly' ? value : 'all';
+
+const parsePositiveIntParam = (value: string | null, fallback: number): number => {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
 
 function StatusBadge({ status, label }: { status: SkillStatus; label: string }) {
   const config: Record<SkillStatus, { shell: string; dot: string }> = {
@@ -125,15 +151,6 @@ function SummaryStat({ label, value }: { label: string; value: number }) {
       <div className={`mt-1 text-xl font-semibold leading-none ${pageText}`}>{value}</div>
     </div>
   );
-}
-
-function getSkillSource(skill: SkillResponse): SkillSource {
-  return skill.source ?? 'database';
-}
-
-function isManagedSkill(skill: SkillResponse): boolean {
-  const source = getSkillSource(skill);
-  return !skill.is_system_skill && (source === 'database' || source === 'hybrid');
 }
 
 function getProjectFilterValue(projectId: string): `project:${string}` {
@@ -179,10 +196,17 @@ export const SkillList: FC = () => {
   const location = useLocation();
   const message = useLazyMessage();
   const { tenantId: routeTenantId } = useParams<{ tenantId?: string | undefined }>();
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | SkillStatus>('all');
-  const [scopeFilter, setScopeFilter] = useState<SkillScopeFilter>('all');
-  const [libraryView, setLibraryView] = useState<SkillLibraryView>('all');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
+  const [statusFilter, setStatusFilter] = useState<'all' | SkillStatus>(() =>
+    parseStatusFilterParam(searchParams.get('status'))
+  );
+  const [scopeFilter, setScopeFilter] = useState<SkillScopeFilter>(() =>
+    parseScopeFilterParam(searchParams.get('scope'))
+  );
+  const [libraryView, setLibraryView] = useState<SkillLibraryView>(() =>
+    parseLibraryViewParam(searchParams.get('view'))
+  );
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importContent, setImportContent] = useState('');
@@ -195,7 +219,6 @@ export const SkillList: FC = () => {
   const [versionSkill, setVersionSkill] = useState<SkillResponse | null>(null);
   const [versionRows, setVersionRows] = useState<SkillVersionResponse[]>([]);
   const [isLoadingVersions, setIsLoadingVersions] = useState(false);
-  const [rollbackVersion, setRollbackVersion] = useState<number | null>(null);
 
   // Store hooks
   const { skills, tenantConfigs, page, pageSize } = useSkillStore();
@@ -302,15 +325,69 @@ export const SkillList: FC = () => {
     enableSystemSkill,
   } = useSkillStore();
 
-  // Load data on mount
+  // Load data on mount, honoring filter/page state restored from the URL
   useEffect(() => {
     if (!tenantId) {
       return;
     }
 
-    void listSkills({ page: 1, pageSize: 20, tenant_id: tenantId });
+    void listSkills(
+      buildListParams({
+        page: parsePositiveIntParam(searchParams.get('page'), 1),
+        pageSize: parsePositiveIntParam(searchParams.get('pageSize'), DEFAULT_PAGE_SIZE),
+      })
+    );
     void listTenantConfigs({ tenant_id: tenantId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load only; later changes go through handlers
   }, [listSkills, listTenantConfigs, tenantId]);
+
+  // Reflect filter/page state in the URL so refreshes and shared links restore it
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    const trimmedSearch = search.trim();
+    if (trimmedSearch) {
+      next.set('q', trimmedSearch);
+    } else {
+      next.delete('q');
+    }
+    if (statusFilter !== 'all') {
+      next.set('status', statusFilter);
+    } else {
+      next.delete('status');
+    }
+    if (scopeFilter !== 'all') {
+      next.set('scope', scopeFilter);
+    } else {
+      next.delete('scope');
+    }
+    if (libraryView !== 'all') {
+      next.set('view', libraryView);
+    } else {
+      next.delete('view');
+    }
+    if (page > 1) {
+      next.set('page', String(page));
+    } else {
+      next.delete('page');
+    }
+    if (pageSize !== DEFAULT_PAGE_SIZE) {
+      next.set('pageSize', String(pageSize));
+    } else {
+      next.delete('pageSize');
+    }
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [
+    search,
+    statusFilter,
+    scopeFilter,
+    libraryView,
+    page,
+    pageSize,
+    searchParams,
+    setSearchParams,
+  ]);
 
   useEffect(() => {
     if (!tenantId) {
@@ -494,16 +571,7 @@ export const SkillList: FC = () => {
       }
 
       try {
-        const exported = await skillAPI.exportPackage(skill.id, { tenant_id: tenantId });
-        const blob = new Blob([JSON.stringify(exported, null, 2)], {
-          type: 'application/json',
-        });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${skill.name}.agentskill.json`;
-        link.click();
-        URL.revokeObjectURL(url);
+        await downloadSkillPackage(skill, tenantId);
         message?.success(t('tenant.skills.export.success'));
       } catch {
         message?.error(t('tenant.skills.export.failed'));
@@ -543,34 +611,21 @@ export const SkillList: FC = () => {
   const handleCloseVersions = useCallback(() => {
     setVersionSkill(null);
     setVersionRows([]);
-    setRollbackVersion(null);
   }, []);
 
-  const handleRollback = useCallback(
-    async (versionNumber: number) => {
-      if (!versionSkill) {
-        return;
-      }
-      if (!tenantId) {
-        return;
-      }
-      setRollbackVersion(versionNumber);
-      try {
-        const updated = await skillAPI.rollback(versionSkill.id, versionNumber, {
-          tenant_id: tenantId,
-        });
-        setVersionSkill(updated);
-        message?.success(t('tenant.skills.versions.rollbackSuccess'));
-        await loadVersions(updated);
-        void listSkills(buildListParams({ page }));
-      } catch {
-        message?.error(t('tenant.skills.versions.rollbackFailed'));
-      } finally {
-        setRollbackVersion(null);
-      }
+  const handleRolledBack = useCallback(
+    async (updated: SkillResponse) => {
+      setVersionSkill(updated);
+      await loadVersions(updated);
+      void listSkills(buildListParams({ page }));
     },
-    [buildListParams, listSkills, loadVersions, message, page, tenantId, t, versionSkill]
+    [buildListParams, listSkills, loadVersions, page]
   );
+
+  const { rollbackVersion, rollback } = useSkillRollback({
+    tenantId,
+    onRolledBack: handleRolledBack,
+  });
 
   const handleModalClose = useCallback(() => {
     setIsModalOpen(false);
@@ -751,8 +806,19 @@ export const SkillList: FC = () => {
       </div>
 
       {isLoading ? (
-        <div className={`flex justify-center rounded-[6px] py-12 ${surface}`}>
-          <LazySpin size="large" />
+        <div className={`rounded-[6px] ${surface}`}>
+          <SkeletonLoader type="list" count={6} />
+        </div>
+      ) : error && skills.length === 0 ? (
+        <div
+          role="alert"
+          className={`flex flex-col items-center gap-3 rounded-[6px] py-12 ${surface}`}
+        >
+          <p className={`text-sm ${mutedText}`}>{error}</p>
+          <button type="button" onClick={handleRefresh} className={secondaryButton}>
+            <RefreshCw size={16} />
+            <span>{t('common.retry')}</span>
+          </button>
         </div>
       ) : skills.length === 0 ? (
         <div className={`rounded-[6px] py-12 ${surface}`}>
@@ -879,11 +945,14 @@ export const SkillList: FC = () => {
                           <History size={16} />
                         </button>
                         <LazyPopconfirm
-                          title={t('tenant.skills.deleteConfirm')}
+                          title={t('tenant.skills.deleteConfirmNamed', {
+                            name: skill.name,
+                            defaultValue: 'Delete skill "{{name}}"?',
+                          })}
                           onConfirm={() => {
                             void handleDelete(skill.id);
                           }}
-                          okText={t('common.confirm')}
+                          okText={t('common.delete')}
                           cancelText={t('common.cancel')}
                         >
                           <button
@@ -1060,6 +1129,7 @@ export const SkillList: FC = () => {
             </label>
           </div>
           <TextArea
+            aria-label={t('tenant.skills.import.placeholder')}
             value={importContent}
             onChange={(event) => {
               setImportContent(event.target.value);
@@ -1084,9 +1154,7 @@ export const SkillList: FC = () => {
         footer={null}
       >
         {isLoadingVersions ? (
-          <div className="flex justify-center py-10">
-            <LazySpin />
-          </div>
+          <SkeletonLoader type="list" count={3} />
         ) : (
           <div className="max-h-[420px] overflow-auto">
             <SkillVersionList
@@ -1095,7 +1163,9 @@ export const SkillList: FC = () => {
               rollbackVersion={rollbackVersion}
               emptyDescription={t('tenant.skills.versions.empty')}
               onRollback={(versionNumber) => {
-                void handleRollback(versionNumber);
+                if (versionSkill) {
+                  void rollback(versionSkill, versionNumber);
+                }
               }}
             />
           </div>

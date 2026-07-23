@@ -84,7 +84,6 @@ export function useWorkspaceRuntimeProvider(
     const controller = new AbortController();
     if (
       !enabled ||
-      config.mode !== 'local' ||
       !config.tenantId.trim() ||
       !config.projectId.trim() ||
       !config.workspaceId.trim()
@@ -121,14 +120,18 @@ export function useWorkspaceRuntimeProvider(
     return () => controller.abort();
   }, [client, commitAuthority, config, enabled, refreshRevision, scopeKey]);
 
-  const activeSnapshot =
-    enabled && config.mode === 'local' && snapshot.scopeKey === scopeKey ? snapshot : null;
+  const activeSnapshot = enabled && snapshot.scopeKey === scopeKey ? snapshot : null;
   const modelOptions = useMemo(
     () =>
       activeSnapshot?.policy
-        ? workspaceRuntimeModelOptions(activeSnapshot.policy, activeSnapshot.providers, role)
+        ? workspaceRuntimeModelOptions(
+            activeSnapshot.policy,
+            activeSnapshot.providers,
+            role,
+            config.mode,
+          )
         : [],
-    [activeSnapshot, role],
+    [activeSnapshot, config.mode, role],
   );
   const selectedModelValue = modelOptions.find((option) => option.selected)?.value ?? null;
 
@@ -139,11 +142,11 @@ export function useWorkspaceRuntimeProvider(
       const current = snapshotRef.current;
       const currentPolicy = current.scopeKey === scopeKey ? current.policy : null;
       const currentOption = currentPolicy
-        ? workspaceRuntimeModelOptions(currentPolicy, current.providers, role).find(
+        ? workspaceRuntimeModelOptions(currentPolicy, current.providers, role, config.mode).find(
             (option) => option.value === value,
           )
         : null;
-      if (!enabled || config.mode !== 'local' || !currentPolicy || !currentOption) {
+      if (!enabled || !currentPolicy || !currentOption) {
         throw new Error(t('chat.selectedModelUnavailable'));
       }
       if (currentOption.selected) return;
@@ -167,6 +170,7 @@ export function useWorkspaceRuntimeProvider(
             latestPolicy,
             latestProviders,
             role,
+            config.mode,
           ).find((option) => option.value === value);
           if (!latestOption) {
             throw new Error(t('chat.selectedModelUnavailable'));

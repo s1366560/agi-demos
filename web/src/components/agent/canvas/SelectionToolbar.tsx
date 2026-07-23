@@ -130,6 +130,8 @@ export const SelectionToolbar = memo<SelectionToolbarProps>(({ containerRef, onA
   return (
     <div
       data-selection-toolbar
+      role="toolbar"
+      aria-label={t('agent.canvas.selectionToolbarLabel', 'Text selection actions')}
       className="absolute z-50 flex items-center gap-0.5 px-1 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg shadow-slate-200/40 dark:shadow-slate-950/20"
       style={{ top: position.top, left: position.left }}
     >

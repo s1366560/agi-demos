@@ -34,10 +34,13 @@ const POLL_INTERVAL_MS = 30_000;
 const EVENT_REFRESH_DEBOUNCE_MS = 1200;
 
 const VERDICT_BADGE_CLASS: Record<ReflectionVerdict['action'], string> = {
-  create: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  reinforce: 'bg-blue-50 text-blue-700 border-blue-200',
-  deprecate: 'bg-orange-50 text-orange-700 border-orange-200',
-  noop: 'bg-zinc-50 text-zinc-600 border-zinc-200',
+  create:
+    'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/30',
+  reinforce:
+    'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/30',
+  deprecate:
+    'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/10 dark:text-orange-400 dark:border-orange-500/30',
+  noop: 'bg-zinc-50 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
 };
 
 const VERDICT_LABEL_KEYS: Record<ReflectionVerdict['action'], string> = {
@@ -55,12 +58,12 @@ interface SectionProps {
 }
 
 const Section: FC<SectionProps> = ({ title, icon, count, children }) => (
-  <section className="rounded-md border border-zinc-200 bg-white">
-    <header className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
-      <div className="flex items-center gap-2 text-sm font-medium text-zinc-900">
+  <section className="rounded-md border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+    <header className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+      <div className="flex items-center gap-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
         {icon}
         <span>{title}</span>
-        <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-medium text-zinc-700">
+        <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-medium text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
           {count}
         </span>
       </div>
@@ -73,42 +76,46 @@ const PlaybookCard: FC<{ playbook: Playbook }> = ({ playbook }) => {
   const { t } = useTranslation();
 
   return (
-    <article className="rounded-md border border-zinc-200 p-4 hover:border-zinc-300">
+    <article className="rounded-md border border-zinc-200 p-4 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700">
       <header className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-sm font-medium text-zinc-900">{playbook.name}</h3>
-          <p className="mt-0.5 text-xs text-zinc-500">
+          <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{playbook.name}</h3>
+          <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
             {t('playbooks.status', 'Status')}:{' '}
-            <span className="text-zinc-700">{playbook.status}</span>
+            <span className="text-zinc-700 dark:text-zinc-300">{playbook.status}</span>
             {' · '}
             {t('playbooks.hits', 'Hits')}:{' '}
-            <span className="text-zinc-700">{playbook.hit_count}</span>
+            <span className="text-zinc-700 dark:text-zinc-300">{playbook.hit_count}</span>
             {playbook.last_used_at !== null && (
               <>
                 {' · '}
                 {t('playbooks.lastUsed', 'Last used')}:{' '}
-                <span className="text-zinc-700">{formatDateOnly(playbook.last_used_at)}</span>
+                <span className="text-zinc-700 dark:text-zinc-300">
+                  {formatDateOnly(playbook.last_used_at)}
+                </span>
               </>
             )}
           </p>
         </div>
       </header>
       {playbook.trigger.description.length > 0 && (
-        <p className="mt-2 text-xs text-zinc-600">
-          <span className="font-medium text-zinc-700">{t('playbooks.trigger', 'Trigger')}:</span>{' '}
+        <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
+          <span className="font-medium text-zinc-700 dark:text-zinc-300">
+            {t('playbooks.trigger', 'Trigger')}:
+          </span>{' '}
           {playbook.trigger.description}
         </p>
       )}
       {playbook.steps.length > 0 && (
-        <ol className="mt-3 space-y-1.5 border-l border-zinc-200 pl-4 text-xs text-zinc-700">
+        <ol className="mt-3 space-y-1.5 border-l border-zinc-200 pl-4 text-xs text-zinc-700 dark:border-zinc-800 dark:text-zinc-300">
           {playbook.steps.map((step) => (
             <li key={step.order}>
-              <span className="font-medium text-zinc-900">
+              <span className="font-medium text-zinc-900 dark:text-zinc-100">
                 {t('playbooks.step', 'Step')} {step.order}:
               </span>{' '}
               {step.instruction}
               {step.rationale !== null && step.rationale.length > 0 && (
-                <span className="block text-zinc-500">{step.rationale}</span>
+                <span className="block text-zinc-500 dark:text-zinc-400">{step.rationale}</span>
               )}
             </li>
           ))}
@@ -131,15 +138,17 @@ const VerdictRow: FC<{ verdict: ReflectionVerdict }> = ({ verdict }) => {
         </span>
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-sm text-zinc-900">
+        <p className="text-sm text-zinc-900 dark:text-zinc-100">
           {verdict.rationale || t('playbooks.noRationale', '(no rationale)')}
         </p>
-        <p className="mt-0.5 text-xs text-zinc-500">
+        <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
           {formatDateOnly(verdict.created_at)}
           {verdict.playbook_id !== null && (
             <>
               {' · '}
-              <span className="font-mono text-zinc-600">{verdict.playbook_id}</span>
+              <span className="font-mono text-zinc-600 dark:text-zinc-400" title={verdict.playbook_id}>
+                {verdict.playbook_id.slice(0, 8)}
+              </span>
             </>
           )}
         </p>
@@ -254,10 +263,10 @@ export const PlaybookLibrary: FC = () => {
     <div className="mx-auto w-full max-w-5xl space-y-6 p-6">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-zinc-900">
+          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             {t('playbooks.title', 'Playbook Library')}
           </h1>
-          <p className="mt-0.5 text-sm text-zinc-500">
+          <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
             {t(
               'playbooks.description',
               'Distilled patterns the reflector has learned from this project, with the audit trail of every verdict.'
@@ -269,7 +278,7 @@ export const PlaybookLibrary: FC = () => {
           onClick={() => {
             void load();
           }}
-          className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
           disabled={loading}
         >
           {loading ? (
@@ -286,7 +295,7 @@ export const PlaybookLibrary: FC = () => {
 
       {error !== null && (
         <div
-          className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400"
           role="alert"
         >
           <AlertCircle className="h-4 w-4" aria-hidden="true" />
@@ -296,15 +305,17 @@ export const PlaybookLibrary: FC = () => {
 
       <Section
         title={t('playbooks.section.playbooks', 'Distilled playbooks')}
-        icon={<BookOpen className="h-4 w-4 text-zinc-500" aria-hidden="true" />}
+        icon={<BookOpen className="h-4 w-4 text-zinc-500 dark:text-zinc-400" aria-hidden="true" />}
         count={playbooks.length}
       >
         {playbooks.length === 0 ? (
-          <p className="py-6 text-center text-sm text-zinc-500">
-            {t(
-              'playbooks.empty.playbooks',
-              'No playbooks yet. The reflector will distill them as friction signals accumulate.'
-            )}
+          <p className="py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+            {loading
+              ? t('common.loading', 'Loading…')
+              : t(
+                  'playbooks.empty.playbooks',
+                  'No playbooks yet. The reflector will distill them as friction signals accumulate.'
+                )}
           </p>
         ) : (
           <div className="space-y-3">
@@ -317,15 +328,17 @@ export const PlaybookLibrary: FC = () => {
 
       <Section
         title={t('playbooks.section.verdicts', 'Reflection verdicts')}
-        icon={<Sparkles className="h-4 w-4 text-zinc-500" aria-hidden="true" />}
+        icon={<Sparkles className="h-4 w-4 text-zinc-500 dark:text-zinc-400" aria-hidden="true" />}
         count={verdicts.length}
       >
         {verdicts.length === 0 ? (
-          <p className="py-6 text-center text-sm text-zinc-500">
-            {t('playbooks.empty.verdicts', 'No verdicts recorded yet.')}
+          <p className="py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+            {loading
+              ? t('common.loading', 'Loading…')
+              : t('playbooks.empty.verdicts', 'No verdicts recorded yet.')}
           </p>
         ) : (
-          <ul className="divide-y divide-zinc-100">
+          <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {verdicts.map((v) => (
               <VerdictRow key={v.id} verdict={v} />
             ))}

@@ -10,6 +10,7 @@ import {
   Modal,
   Popconfirm,
   Progress,
+  Select,
   Spin,
   Switch,
   Table,
@@ -32,6 +33,7 @@ import {
 import { useDefinitions, useListDefinitions } from '../../stores/agentDefinitions';
 import { useUser } from '../../stores/auth';
 import { useCurrentTenant } from '../../stores/tenant';
+import { formatDateTime } from '../../utils/date';
 import { canManageTenantAgents } from '../../utils/permissions';
 
 import type {
@@ -51,6 +53,9 @@ const CHANNEL_TYPES = [
   { value: 'api', labelKey: 'tenant.agentBindings.channelTypes.api' },
 ];
 
+// Sentinel for the channel filter option that matches bindings with no channel type (wildcard).
+const ANY_CHANNEL_VALUE = '__any__';
+
 const optionalString = (value: string | undefined) => {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
@@ -67,6 +72,8 @@ export const AgentBindings: React.FC = () => {
   const tenantId = routeTenantId ?? currentTenant?.id ?? null;
   const tenantForPermissions = currentTenant?.id === tenantId ? currentTenant : null;
   const [search, setSearch] = useState('');
+  const [channelFilter, setChannelFilter] = useState<string | undefined>(undefined);
+  const [statusFilter, setStatusFilter] = useState<'enabled' | 'disabled' | undefined>(undefined);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
   const [testForm] = Form.useForm<TestBindingRequest>();
@@ -96,9 +103,15 @@ export const AgentBindings: React.FC = () => {
   }, [definitions]);
 
   const filteredBindings = useMemo(() => {
-    if (!search) return bindings;
     const lower = search.toLowerCase();
     return bindings.filter((b) => {
+      if (channelFilter === ANY_CHANNEL_VALUE) {
+        if (b.channel_type !== null) return false;
+      } else if (channelFilter && b.channel_type !== channelFilter) {
+        return false;
+      }
+      if (statusFilter && b.enabled !== (statusFilter === 'enabled')) return false;
+      if (!lower) return true;
       const agentName = defNameMap.get(b.agent_id) ?? b.agent_id;
       return (
         agentName.toLowerCase().includes(lower) ||
@@ -108,7 +121,9 @@ export const AgentBindings: React.FC = () => {
         (b.peer_id ?? '').toLowerCase().includes(lower)
       );
     });
-  }, [bindings, search, defNameMap]);
+  }, [bindings, search, channelFilter, statusFilter, defNameMap]);
+
+  const hasActiveFilter = Boolean(search) || Boolean(channelFilter) || Boolean(statusFilter);
 
   useEffect(() => {
     if (!tenantId) {
@@ -253,7 +268,8 @@ export const AgentBindings: React.FC = () => {
         title: t('tenant.agentBindings.trace.channelType', 'Channel Type'),
         dataIndex: 'channel_type',
         key: 'channel_type',
-        render: (val: string | null) => val ?? '—',
+        render: (val: string | null) =>
+          val ? t(`tenant.agentBindings.channelTypes.${val}`, val) : '—',
       },
       {
         title: t('tenant.agentBindings.trace.matchCriteria', 'Match Criteria'),
@@ -323,7 +339,7 @@ export const AgentBindings: React.FC = () => {
         key: 'channel_type',
         render: (val: string | null) =>
           val ? (
-            <Tag>{val}</Tag>
+            <Tag>{t(`tenant.agentBindings.channelTypes.${val}`, val)}</Tag>
           ) : (
             <Tag color="default">{t('tenant.agentBindings.columns.any')}</Tag>
           ),
@@ -393,6 +409,16 @@ export const AgentBindings: React.FC = () => {
         ),
       },
       {
+        title: t('tenant.agentBindings.columns.createdAt', 'Created'),
+        dataIndex: 'created_at',
+        key: 'created_at',
+        width: 160,
+        sorter: (a: AgentBinding, b: AgentBinding) => a.created_at.localeCompare(b.created_at),
+        render: (val: string) => (
+          <span className="text-xs text-slate-500 dark:text-slate-400">{formatDateTime(val)}</span>
+        ),
+      },
+      {
         title: t('common.actions.label'),
         key: 'actions',
         width: 60,
@@ -408,7 +434,7 @@ export const AgentBindings: React.FC = () => {
             >
               <button
                 type="button"
-                className="text-slate-400 hover:text-red-500 transition-colors text-xs"
+                className="text-slate-400 hover:text-red-500 transition-colors text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"
               >
                 {t('common.delete', 'Delete')}
               </button>
@@ -477,6 +503,34 @@ export const AgentBindings: React.FC = () => {
             className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-text-inverse focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary outline-none"
           />
         </div>
+        <Select
+          allowClear
+          value={channelFilter}
+          onChange={(value: string | undefined) => {
+            setChannelFilter(value);
+          }}
+          placeholder={t('tenant.agentBindings.filters.channel', 'Channel')}
+          aria-label={t('tenant.agentBindings.filters.channel', 'Channel')}
+          className="w-40"
+          options={[
+            { value: ANY_CHANNEL_VALUE, label: t('tenant.agentBindings.columns.any', 'Any') },
+            ...CHANNEL_TYPES.map((ct) => ({ value: ct.value, label: t(ct.labelKey) })),
+          ]}
+        />
+        <Select
+          allowClear
+          value={statusFilter}
+          onChange={(value: 'enabled' | 'disabled' | undefined) => {
+            setStatusFilter(value);
+          }}
+          placeholder={t('tenant.agentBindings.filters.status', 'Status')}
+          aria-label={t('tenant.agentBindings.filters.status', 'Status')}
+          className="w-36"
+          options={[
+            { value: 'enabled', label: t('common.status.enabled', 'Enabled') },
+            { value: 'disabled', label: t('common.status.disabled', 'Disabled') },
+          ]}
+        />
         <button
           type="button"
           onClick={handleRefresh}
@@ -517,11 +571,11 @@ export const AgentBindings: React.FC = () => {
         <div className="flex flex-col items-center justify-center py-16 text-slate-500 dark:text-slate-400">
           <Link size={48} className="mb-4 text-slate-300 dark:text-slate-600" />
           <p className="text-lg font-medium">
-            {search
+            {hasActiveFilter
               ? t('tenant.agentBindings.noResults', 'No bindings match your search')
               : t('tenant.agentBindings.empty', 'No agent bindings yet')}
           </p>
-          {!search && canManageAgents && (
+          {!hasActiveFilter && canManageAgents && (
             <button
               type="button"
               onClick={() => {

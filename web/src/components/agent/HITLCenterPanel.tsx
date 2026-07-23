@@ -16,7 +16,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Loader2 } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { restApi } from '../../services/agent/restApi';
@@ -200,9 +200,20 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
         )}
 
         {error && (
-          <p className="text-sm text-red-600 dark:text-red-400">
-            {t('agent.hitl.center.error', { defaultValue: 'Failed to load HITL requests' })}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-red-600 dark:text-red-400">
+              {t('agent.hitl.center.error', { defaultValue: 'Failed to load HITL requests' })}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                void fetchPending();
+              }}
+              className="rounded border border-red-200 px-2 py-0.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/30"
+            >
+              {t('common.retry', 'Retry')}
+            </button>
+          </div>
         )}
 
         {!loading && !error && visible.length === 0 && (
@@ -212,13 +223,23 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
         )}
 
         {resolveError && (
-          <p
-            className="mb-2 text-xs text-red-600 dark:text-red-400"
+          <div
+            className="mb-2 flex items-start justify-between gap-2"
             role="alert"
             data-testid="hitl-resolve-error"
           >
-            {resolveError}
-          </p>
+            <p className="text-xs text-red-600 dark:text-red-400">{resolveError}</p>
+            <button
+              type="button"
+              onClick={() => {
+                setResolveError(null);
+              }}
+              aria-label={t('agent.hitl.center.dismissError', 'Dismiss error')}
+              className="shrink-0 rounded p-0.5 text-red-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50 dark:hover:bg-red-950/30 dark:hover:text-red-300"
+            >
+              <X size={12} />
+            </button>
+          </div>
         )}
 
         <ul className="space-y-2">
@@ -274,14 +295,6 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
                         type="button"
                         className={`${actionBtnBase} border-primary bg-primary text-white hover:bg-primary-600 dark:border-primary-500 dark:bg-primary-500 dark:hover:bg-primary-600`}
                         disabled={isResolving}
-                        title={
-                          acceptOptionLabel
-                            ? t('agent.hitl.center.acceptOption', {
-                                defaultValue: 'Submit: {{option}}',
-                                option: acceptOptionLabel,
-                              })
-                            : undefined
-                        }
                         onClick={(e) => {
                           e.stopPropagation();
                           void handleResolve(req, true);
@@ -294,20 +307,17 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
                             className="mr-1 animate-spin motion-reduce:animate-none"
                           />
                         ) : null}
-                        {t('agent.hitl.center.accept', { defaultValue: 'Accept' })}
+                        {acceptOptionLabel
+                          ? t('agent.hitl.center.acceptOption', {
+                              defaultValue: 'Accept: {{option}}',
+                              option: acceptOptionLabel,
+                            })
+                          : t('agent.hitl.center.accept', { defaultValue: 'Accept' })}
                       </button>
                       <button
                         type="button"
                         className={`${actionBtnBase} bg-white text-slate-900 hover:border-slate-900 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-100`}
                         disabled={isResolving}
-                        title={
-                          rejectOptionLabel
-                            ? t('agent.hitl.center.rejectOption', {
-                                defaultValue: 'Submit: {{option}}',
-                                option: rejectOptionLabel,
-                              })
-                            : undefined
-                        }
                         onClick={(e) => {
                           e.stopPropagation();
                           void handleResolve(req, false);
@@ -320,7 +330,12 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
                             className="mr-1 animate-spin motion-reduce:animate-none"
                           />
                         ) : null}
-                        {t('agent.hitl.center.reject', { defaultValue: 'Reject' })}
+                        {rejectOptionLabel
+                          ? t('agent.hitl.center.rejectOption', {
+                              defaultValue: 'Reject: {{option}}',
+                              option: rejectOptionLabel,
+                            })
+                          : t('agent.hitl.center.reject', { defaultValue: 'Reject' })}
                       </button>
                     </>
                   ) : (

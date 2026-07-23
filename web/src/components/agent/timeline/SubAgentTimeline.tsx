@@ -226,7 +226,7 @@ const ParallelDetail = memo<{ info: SubAgentGroup['parallelInfo'] }>(({ info }) 
           const isSuccess = result?.success;
 
           let borderClass = 'border-blue-200/60 dark:border-blue-800/40';
-          let statusText = t('agent.subagent.parallel_subtaskRunning', 'Running...');
+          let statusText = t('agent.subagent.parallel_subtaskRunning', 'Subagent running…');
 
           if (isDone) {
             if (isSuccess) {
@@ -369,7 +369,7 @@ const ProgressPhaseBar = memo<{ group: SubAgentGroup }>(({ group }) => {
   const events = group.events;
 
   let phase = 0;
-  let phaseLabel = t('agent.subagent.progress.initializing', 'Initializing...');
+  let phaseLabel = t('agent.subagent.progress.initializing', 'Initializing…');
 
   if (events.some((e) => e.type === 'subagent_routed')) {
     phase = 1;
@@ -738,7 +738,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
           {isStreaming && group.status === 'running' && (
             <div className="flex items-center gap-1.5 text-xs text-blue-500">
               <Loader2 size={12} className="animate-spin motion-reduce:animate-none" />
-              <span>{t('agent.subagent.executing', 'Executing...')}</span>
+              <span>{t('agent.subagent.executing', 'Subagent executing…')}</span>
             </div>
           )}
 

@@ -138,9 +138,11 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
     () => groupTenantTopNavItems(contextualNavItems),
     [contextualNavItems]
   );
-  const searchPath = projectBasePath
-    ? `${projectBasePath}/advanced-search`
-    : `${basePath}/projects`;
+  const searchPath = projectBasePath ? `${projectBasePath}/advanced-search` : null;
+  const isMacPlatform = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
+  const commandPaletteLabel = isMacPlatform
+    ? t('commandPalette.trigger', 'Command palette (⌘K)')
+    : t('commandPalette.triggerNonMac', 'Command palette (Ctrl K)');
 
   return (
     <>
@@ -174,6 +176,30 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
             >
               MemStack
             </Link>
+            {currentTenant ? (
+              <span className="hidden md:flex items-center gap-1.5 min-w-0 text-xs text-slate-500 dark:text-slate-400">
+                <span aria-hidden className="text-slate-300 dark:text-slate-600">
+                  /
+                </span>
+                <span
+                  className="max-w-36 truncate font-medium"
+                  title={currentTenant.name}
+                  data-testid="header-tenant-name"
+                >
+                  {currentTenant.name}
+                </span>
+                {effectiveProjectId && tenantCurrentProject ? (
+                  <>
+                    <span aria-hidden className="text-slate-300 dark:text-slate-600">
+                      /
+                    </span>
+                    <span className="max-w-36 truncate" title={tenantCurrentProject.name}>
+                      {tenantCurrentProject.name}
+                    </span>
+                  </>
+                ) : null}
+              </span>
+            ) : null}
           </div>
 
           {/* Center: Nav tabs */}
@@ -201,11 +227,13 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
                 type="button"
                 onClick={onCommandPaletteOpen}
                 className="hidden md:flex items-center gap-2 h-9 px-2.5 rounded-lg border border-slate-200 dark:border-border-dark text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                aria-label={t('commandPalette.trigger', 'Command palette (⌘K)')}
-                title={t('commandPalette.trigger', 'Command palette (⌘K)')}
+                aria-label={commandPaletteLabel}
+                title={commandPaletteLabel}
               >
                 <Command size={16} />
-                <kbd className="text-[10px] font-medium tracking-wide opacity-70">⌘K</kbd>
+                <kbd className="text-[10px] font-medium tracking-wide opacity-70">
+                  {isMacPlatform ? '⌘K' : 'Ctrl K'}
+                </kbd>
               </button>
             ) : null}
             <SearchButton searchPath={searchPath} />
@@ -247,6 +275,9 @@ function GroupedNavMenu({
   const ref = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  // Set when the menu is opened from the keyboard; the first/last link gets
+  // focus once the portal has rendered.
+  const focusOnOpenRef = useRef<'first' | 'last' | null>(null);
   const items = useMemo(() => groups.flatMap((group) => group.items), [groups]);
 
   const updateMenuPosition = useCallback(() => {
@@ -309,6 +340,62 @@ function GroupedNavMenu({
     };
   }, [open, updateMenuPosition]);
 
+  // Move focus into the menu when it was opened from the keyboard.
+  useEffect(() => {
+    if (!open || !menuPosition || focusOnOpenRef.current === null) return;
+
+    const links = menuRef.current?.querySelectorAll<HTMLAnchorElement>('a[href]');
+    const target = focusOnOpenRef.current === 'first' ? links?.[0] : links?.[links.length - 1];
+    focusOnOpenRef.current = null;
+    target?.focus();
+  }, [open, menuPosition]);
+
+  // Arrow/Home/End keys move focus between menu links, cycling at the edges.
+  const handleMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const menu = menuRef.current;
+    if (!menu) return;
+    const links = Array.from(menu.querySelectorAll<HTMLAnchorElement>('a[href]'));
+    if (links.length === 0) return;
+
+    const currentIndex = links.findIndex((link) => link === document.activeElement);
+    let nextIndex: number;
+    switch (event.key) {
+      case 'ArrowDown':
+        nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % links.length;
+        break;
+      case 'ArrowUp':
+        nextIndex =
+          currentIndex < 0 ? links.length - 1 : (currentIndex - 1 + links.length) % links.length;
+        break;
+      case 'Home':
+        nextIndex = 0;
+        break;
+      case 'End':
+        nextIndex = links.length - 1;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    links[nextIndex]?.focus();
+  };
+
+  // Arrow keys on the trigger open the menu and move focus into it.
+  const handleTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    event.preventDefault();
+    focusOnOpenRef.current = event.key === 'ArrowDown' ? 'first' : 'last';
+    if (!open) {
+      updateMenuPosition();
+      setOpen(true);
+    } else {
+      const links = menuRef.current?.querySelectorAll<HTMLAnchorElement>('a[href]');
+      const target = focusOnOpenRef.current === 'first' ? links?.[0] : links?.[links.length - 1];
+      focusOnOpenRef.current = null;
+      target?.focus();
+    }
+  };
+
   const isAnyActive = items.some((item) => isContextualTopNavItemActive(location.pathname, item));
   const buttonLabel = label ?? t('nav.more', 'More');
   const trailingIcon = <ChevronDown size={14} />;
@@ -317,6 +404,9 @@ function GroupedNavMenu({
       ? createPortal(
           <div
             ref={menuRef}
+            role="menu"
+            aria-label={buttonLabel}
+            onKeyDown={handleMenuKeyDown}
             className="fixed w-60 bg-white dark:bg-surface-dark rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50"
             style={{ left: menuPosition.left, top: menuPosition.top }}
           >
@@ -368,6 +458,7 @@ function GroupedNavMenu({
           updateMenuPosition();
           setOpen((currentOpen) => !currentOpen);
         }}
+        onKeyDown={handleTriggerKeyDown}
         aria-label={buttonLabel}
         aria-expanded={open}
         aria-haspopup="menu"
@@ -424,10 +515,33 @@ function BackgroundTasksButton() {
 }
 
 /**
- * Compact search button
+ * Compact search button. Only projects expose a search surface today, so at
+ * tenant level the entry renders disabled with an explanation instead of
+ * mislinking to the project list.
  */
-function SearchButton({ searchPath }: { searchPath: string }) {
+function SearchButton({ searchPath }: { searchPath: string | null }) {
   const { t } = useTranslation();
+
+  if (!searchPath) {
+    return (
+      <span
+        title={t(
+          'components.layout.header.searchRequiresProject',
+          'Search is available inside a project'
+        )}
+        className="inline-flex"
+      >
+        <button
+          type="button"
+          disabled
+          aria-label={t('common.search', 'Search')}
+          className="p-1.5 sm:p-2 rounded-lg text-slate-300 dark:text-slate-600 cursor-not-allowed"
+        >
+          <Search size={18} />
+        </button>
+      </span>
+    );
+  }
 
   return (
     <Link
@@ -460,6 +574,7 @@ function HeaderUserMenu({
   const tenants = useTenantStore((state) => state.tenants);
   const listTenants = useTenantStore((state) => state.listTenants);
   const [open, setOpen] = useState(false);
+  const [tenantsLoadError, setTenantsLoadError] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const normalizedTheme = theme as 'light' | 'dark' | 'system';
@@ -493,7 +608,13 @@ function HeaderUserMenu({
 
   useEffect(() => {
     if (open && tenants.length === 0) {
-      void listTenants().catch(() => undefined);
+      void listTenants()
+        .then(() => {
+          setTenantsLoadError(false);
+        })
+        .catch(() => {
+          setTenantsLoadError(true);
+        });
     }
   }, [listTenants, open, tenants.length]);
 
@@ -630,6 +751,26 @@ function HeaderUserMenu({
           </div>
 
           <div className="border-t border-slate-100 dark:border-slate-700 my-1" />
+
+          {tenantsLoadError && availableTenants.length === 0 && (
+            <div className="flex items-center justify-between gap-2 px-4 py-2 text-xs text-rose-600 dark:text-rose-400">
+              <span>
+                {t('components.layout.header.tenantsLoadFailed', 'Failed to load tenant list')}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setTenantsLoadError(false);
+                  void listTenants().catch(() => {
+                    setTenantsLoadError(true);
+                  });
+                }}
+                className="shrink-0 font-medium underline hover:no-underline"
+              >
+                {t('common.retry', 'Retry')}
+              </button>
+            </div>
+          )}
 
           {availableTenants.length > 0 && (
             <>

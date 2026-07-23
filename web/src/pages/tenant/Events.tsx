@@ -8,6 +8,7 @@ import { Alert, Button, DatePicker, Select, Space, Table, Tag, Typography } from
 import { eventService, EventLog } from '@/services/eventService';
 
 import { formatDateTime } from '@/utils/date';
+import { logger } from '@/utils/logger';
 
 const { Title } = Typography;
 const { RangePicker } = DatePicker;
@@ -63,7 +64,7 @@ export const Events: React.FC = () => {
         setTypes(eventTypes);
       })
       .catch((err: unknown) => {
-        console.error(err);
+        logger.error('Request failed', err);
         if (!isCurrent) return;
         setTypes([]);
         setTypesError(t('events.typesLoadError'));
@@ -91,7 +92,7 @@ export const Events: React.FC = () => {
         setData(res.items);
         setTotal(res.total);
       } catch (err) {
-        console.error(err);
+        logger.error('Request failed', err);
         if (!isCurrent) return;
         setData([]);
         setTotal(0);

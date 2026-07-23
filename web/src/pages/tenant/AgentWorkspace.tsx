@@ -11,10 +11,10 @@ import type { FC } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
-import { Empty as AntEmpty } from 'antd';
+import { Empty as AntEmpty, Skeleton } from 'antd';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 
-import { LazyEmpty, LazySpin, LazyButton } from '@/components/ui/lazyAntd';
+import { LazyEmpty, LazyButton } from '@/components/ui/lazyAntd';
 
 import { useBlackboardSSE } from '../../hooks/useBlackboardSSE';
 import { useConversationListAutoRefresh } from '../../hooks/useConversationListAutoRefresh';
@@ -49,13 +49,13 @@ function WorkspacePanelFallback() {
   const { t } = useTranslation();
 
   return (
-    <div className="max-w-full mx-auto w-full h-full flex items-center justify-center">
-      <div className="text-center">
-        <LazySpin size="large" />
-        <div className="mt-2 text-slate-500 dark:text-slate-400">
-          {t('agent.workspace.loading')}
-        </div>
-      </div>
+    <div
+      className="max-w-full mx-auto w-full h-full p-6"
+      role="status"
+      aria-label={t('agent.workspace.loading')}
+    >
+      <div className="mb-3 text-slate-500 dark:text-slate-400">{t('agent.workspace.loading')}</div>
+      <Skeleton active title={{ width: '30%' }} paragraph={{ rows: 8 }} />
     </div>
   );
 }
@@ -450,13 +450,15 @@ export const AgentWorkspace: FC = () => {
   // Show loading while initializing projects
   if (initializing || shouldResolveStoredProject || shouldResolveQueryProject) {
     return (
-      <div className="max-w-full mx-auto w-full h-full flex items-center justify-center">
-        <div className="text-center">
-          <LazySpin size="large" />
-          <div className="mt-2 text-slate-500 dark:text-slate-400">
-            {t('agent.workspace.loading')}
-          </div>
+      <div
+        className="max-w-full mx-auto w-full h-full p-6"
+        role="status"
+        aria-label={t('agent.workspace.loading')}
+      >
+        <div className="mb-3 text-slate-500 dark:text-slate-400">
+          {t('agent.workspace.loading')}
         </div>
+        <Skeleton active title={{ width: '30%' }} paragraph={{ rows: 8 }} />
       </div>
     );
   }

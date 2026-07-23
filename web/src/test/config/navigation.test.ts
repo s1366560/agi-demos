@@ -199,7 +199,7 @@ describe('Navigation Configuration', () => {
         'tasks',
         'analytics',
         'agent-configuration',
-        'subagents',
+        'agent-definitions',
       ]);
       expect(tenantItems.find((item) => item.id === 'plugins')).toMatchObject({
         groupId: 'tenant-extensions-integrations',

@@ -633,7 +633,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
               rows={6}
               placeholder={t(
                 'tenant.agentDefinitions.modal.systemPromptPlaceholder',
-                "Define the agent's role, capabilities, and behavior..."
+                "Define the agent's role, capabilities, and behavior…"
               )}
             />
           </Form.Item>
@@ -760,7 +760,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
             </span>
             <div className="flex gap-2 mb-2">
               <Input
-                placeholder={t('tenant.agentDefinitions.modal.addKeyword', 'Add keyword...')}
+                placeholder={t('tenant.agentDefinitions.modal.addKeyword', 'Add keyword…')}
                 value={keywordInput}
                 onChange={(e) => {
                   setKeywordInput(e.target.value);

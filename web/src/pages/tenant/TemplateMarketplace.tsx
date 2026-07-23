@@ -7,13 +7,18 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Input, Tag, Empty, Spin, App } from 'antd';
+import { Input, Tag, Empty, Spin, App, Pagination, Tooltip } from 'antd';
 import { Search, Download, Star, Package, Shield, Bot, RefreshCw } from 'lucide-react';
+
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
+import { SubAgentTemplateDetailDrawer } from '@/components/marketplace/SubAgentTemplateDetailDrawer';
 
 import { useDebounce } from '../../hooks/useDebounce';
 import { subagentTemplateService } from '../../services/subagentTemplateService';
 
 import type { SubAgentTemplateListItem } from '../../services/subagentTemplateService';
+
+const PAGE_SIZE = 12;
 
 const CATEGORY_COLORS: Record<string, string> = {
   research: 'blue',
@@ -34,12 +39,15 @@ export const TemplateMarketplace: React.FC = () => {
   const [retryToken, setRetryToken] = useState(0);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [detailTemplateId, setDetailTemplateId] = useState<string | null>(null);
   const [installing, setInstalling] = useState<Set<string>>(new Set());
   const [seeding, setSeeding] = useState(false);
   const loadRequestSeqRef = useRef(0);
   const debouncedSearch = useDebounce(search, 300);
 
-  // Load templates and categories (server-side search/filter)
+  // Load templates and categories (server-side search/filter/pagination)
   useEffect(() => {
     const requestSeq = loadRequestSeqRef.current + 1;
     loadRequestSeqRef.current = requestSeq;
@@ -51,6 +59,8 @@ export const TemplateMarketplace: React.FC = () => {
           subagentTemplateService.list({
             category: selectedCategory || undefined,
             search: debouncedSearch || undefined,
+            page,
+            page_size: PAGE_SIZE,
           }),
           subagentTemplateService.getCategories(),
         ]);
@@ -59,6 +69,7 @@ export const TemplateMarketplace: React.FC = () => {
         }
 
         setTemplates(listRes.templates);
+        setTotal(listRes.total);
         setCategories(cats);
         setLoadError(false);
       } catch {
@@ -79,7 +90,7 @@ export const TemplateMarketplace: React.FC = () => {
         loadRequestSeqRef.current += 1;
       }
     };
-  }, [selectedCategory, debouncedSearch, retryToken, message, t]);
+  }, [selectedCategory, debouncedSearch, page, retryToken, message, t]);
 
   const handleInstall = useCallback(
     async (templateId: string) => {
@@ -114,16 +125,25 @@ export const TemplateMarketplace: React.FC = () => {
           count: result.seeded,
         })
       );
-      // Reload
-      const listRes = await subagentTemplateService.list();
-      setTemplates(listRes.templates);
-      setLoadError(false);
+      // Reload through the normal loader so current category/search filters are kept
+      setPage(1);
+      setRetryToken((token) => token + 1);
     } catch {
       message.error(t('agent.templates.seedError', 'Failed to seed templates'));
     } finally {
       setSeeding(false);
     }
   }, [message, seeding, t]);
+
+  const handleCategoryChange = useCallback((category: string) => {
+    setSelectedCategory(category);
+    setPage(1);
+  }, []);
+
+  const handleSearchChange = useCallback((value: string) => {
+    setSearch(value);
+    setPage(1);
+  }, []);
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -165,7 +185,7 @@ export const TemplateMarketplace: React.FC = () => {
           aria-label={t('agent.templates.search', 'Search templates…')}
           value={search}
           onChange={(e) => {
-            setSearch(e.target.value);
+            handleSearchChange(e.target.value);
           }}
           className="max-w-sm"
           allowClear
@@ -179,7 +199,7 @@ export const TemplateMarketplace: React.FC = () => {
             type="button"
             aria-pressed={selectedCategory === ''}
             onClick={() => {
-              setSelectedCategory('');
+              handleCategoryChange('');
             }}
             className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${
               selectedCategory === ''
@@ -195,7 +215,7 @@ export const TemplateMarketplace: React.FC = () => {
               type="button"
               aria-pressed={selectedCategory === cat}
               onClick={() => {
-                setSelectedCategory(cat);
+                handleCategoryChange(cat);
               }}
               className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${
                 selectedCategory === cat
@@ -211,9 +231,7 @@ export const TemplateMarketplace: React.FC = () => {
 
       {/* Template Grid */}
       {loading ? (
-        <div className="flex justify-center py-20" role="status">
-          <Spin size="large" />
-        </div>
+        <SkeletonLoader type="card" count={6} />
       ) : loadError ? (
         <div className="flex flex-col items-center gap-3 py-20">
           <p className="text-sm text-slate-500 dark:text-slate-400" role="alert">
@@ -231,10 +249,21 @@ export const TemplateMarketplace: React.FC = () => {
           </button>
         </div>
       ) : templates.length === 0 ? (
-        <Empty
-          description={t('agent.templates.noResults', 'No templates found')}
-          className="py-20"
-        />
+        <Empty description={t('agent.templates.noResults', 'No templates found')} className="py-20">
+          <button
+            type="button"
+            onClick={() => {
+              void handleSeed();
+            }}
+            disabled={seeding}
+            className="px-3 py-1.5 text-xs rounded-md bg-blue-500 hover:bg-blue-600 text-white transition-colors
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {seeding
+              ? t('agent.templates.seeding', 'Seeding…')
+              : t('agent.templates.seedBuiltin', 'Seed Built-in')}
+          </button>
+        </Empty>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {templates.map((tpl) => (
@@ -245,19 +274,35 @@ export const TemplateMarketplace: React.FC = () => {
             >
               {/* Card Header */}
               <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 min-w-0">
                   <Bot size={18} className="text-blue-500 shrink-0" />
-                  <div>
+                  <div className="min-w-0">
                     <h3 className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate max-w-[180px]">
-                      {tpl.display_name || tpl.name}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDetailTemplateId(tpl.id);
+                        }}
+                        className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors
+                          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 rounded-sm"
+                        aria-label={t('agent.templates.viewDetails', 'View details of {{name}}', {
+                          name: tpl.display_name || tpl.name,
+                        })}
+                      >
+                        {tpl.display_name || tpl.name}
+                      </button>
                     </h3>
                     <span className="text-2xs text-slate-400">v{tpl.version}</span>
                   </div>
                 </div>
                 {tpl.is_builtin && (
-                  <span title={t('agent.templates.builtIn', { defaultValue: 'Built-in' })}>
-                    <Shield size={14} className="text-amber-500 shrink-0" />
-                  </span>
+                  <Tooltip title={t('agent.templates.builtIn', { defaultValue: 'Built-in' })}>
+                    <Shield
+                      size={14}
+                      className="text-amber-500 shrink-0"
+                      aria-label={t('agent.templates.builtIn', { defaultValue: 'Built-in' })}
+                    />
+                  </Tooltip>
                 )}
               </div>
 
@@ -305,7 +350,10 @@ export const TemplateMarketplace: React.FC = () => {
                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
                 >
                   {installing.has(tpl.id) ? (
-                    <Spin size="small" />
+                    <>
+                      <Spin size="small" />
+                      {t('agent.templates.installing', 'Installing…')}
+                    </>
                   ) : (
                     <>
                       <Download size={12} />
@@ -318,6 +366,31 @@ export const TemplateMarketplace: React.FC = () => {
           ))}
         </div>
       )}
+
+      {total > PAGE_SIZE && !loading && !loadError ? (
+        <div className="flex justify-end mt-6">
+          <Pagination
+            current={page}
+            pageSize={PAGE_SIZE}
+            total={total}
+            showSizeChanger={false}
+            onChange={(nextPage) => {
+              setPage(nextPage);
+            }}
+          />
+        </div>
+      ) : null}
+
+      <SubAgentTemplateDetailDrawer
+        templateId={detailTemplateId}
+        onClose={() => {
+          setDetailTemplateId(null);
+        }}
+        onInstall={(templateId) => {
+          void handleInstall(templateId);
+        }}
+        installing={detailTemplateId !== null && installing.has(detailTemplateId)}
+      />
     </div>
   );
 };

@@ -8,6 +8,7 @@
  */
 
 import { useEffect, memo, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -91,6 +92,20 @@ interface ExecutionInsightsProps {
   latestToolsetChange?: ToolsetChangedEventData | null | undefined;
 }
 
+/** Collapsed-by-default container for debug identifiers (trace ids, budgets, lanes). */
+const DebugDetails = memo<{ children: ReactNode }>(({ children }) => {
+  const { t } = useTranslation();
+  return (
+    <details className="mt-1">
+      <summary className="cursor-pointer select-none text-xs-plus text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300">
+        {tFallback(t, 'agent.rightPanel.insights.debugDetails', 'Debug details')}
+      </summary>
+      {children}
+    </details>
+  );
+});
+DebugDetails.displayName = 'DebugDetails';
+
 const ExecutionInsights = memo<ExecutionInsightsProps>(
   ({
     executionPathDecision,
@@ -158,20 +173,24 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
             <div className="mt-1 text-xs text-slate-600 dark:text-slate-300">
               {executionPathDecision.reason}
             </div>
-            {executionPathDecision.route_id ? (
-              <div className="mt-1 text-xs-plus text-slate-500 dark:text-slate-400">
-                route_id: <span className="font-mono">{executionPathDecision.route_id}</span>
-              </div>
-            ) : null}
-            {traceId ? (
-              <div className="mt-1 text-xs-plus text-slate-500 dark:text-slate-400">
-                trace_id: <span className="font-mono">{traceId}</span>
-              </div>
-            ) : null}
-            {lane ? (
-              <div className="mt-1 text-xs-plus text-slate-500 dark:text-slate-400">
-                domain_lane: <span className="font-medium">{lane}</span>
-              </div>
+            {executionPathDecision.route_id || traceId || lane ? (
+              <DebugDetails>
+                {executionPathDecision.route_id ? (
+                  <div className="mt-1 text-xs-plus text-slate-500 dark:text-slate-400">
+                    route_id: <span className="font-mono">{executionPathDecision.route_id}</span>
+                  </div>
+                ) : null}
+                {traceId ? (
+                  <div className="mt-1 text-xs-plus text-slate-500 dark:text-slate-400">
+                    trace_id: <span className="font-mono">{traceId}</span>
+                  </div>
+                ) : null}
+                {lane ? (
+                  <div className="mt-1 text-xs-plus text-slate-500 dark:text-slate-400">
+                    domain_lane: <span className="font-medium">{lane}</span>
+                  </div>
+                ) : null}
+              </DebugDetails>
             ) : null}
           </div>
         ) : null}
@@ -196,9 +215,11 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
               })}
             </div>
             {typeof selectionTrace.tool_budget === 'number' ? (
-              <div className="mt-1 text-xs-plus text-slate-500 dark:text-slate-400">
-                tool_budget: <span className="font-medium">{selectionTrace.tool_budget}</span>
-              </div>
+              <DebugDetails>
+                <div className="mt-1 text-xs-plus text-slate-500 dark:text-slate-400">
+                  tool_budget: <span className="font-medium">{selectionTrace.tool_budget}</span>
+                </div>
+              </DebugDetails>
             ) : null}
           </div>
         ) : null}
@@ -217,9 +238,11 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
               })}
             </div>
             {policyFiltered.budget_exceeded_stages?.length ? (
-              <div className="mt-1 text-xs-plus text-amber-600 dark:text-amber-400">
-                budget_exceeded: {policyFiltered.budget_exceeded_stages.join(', ')}
-              </div>
+              <DebugDetails>
+                <div className="mt-1 text-xs-plus text-amber-600 dark:text-amber-400">
+                  budget_exceeded: {policyFiltered.budget_exceeded_stages.join(', ')}
+                </div>
+              </DebugDetails>
             ) : null}
           </div>
         ) : null}
@@ -240,9 +263,11 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
                 : ''}
             </div>
             {latestToolsetChange.trace_id ? (
-              <div className="mt-1 text-xs-plus text-slate-500 dark:text-slate-400">
-                trace_id: <span className="font-mono">{latestToolsetChange.trace_id}</span>
-              </div>
+              <DebugDetails>
+                <div className="mt-1 text-xs-plus text-slate-500 dark:text-slate-400">
+                  trace_id: <span className="font-mono">{latestToolsetChange.trace_id}</span>
+                </div>
+              </DebugDetails>
             ) : null}
           </div>
         ) : null}
@@ -277,15 +302,18 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
 
 ExecutionInsights.displayName = 'ExecutionInsights';
 
-function agentEventRole(event: AgentTimelineEvent): string {
-  if (event.type === 'user_message') return 'User';
-  if (event.type === 'assistant_message' || event.type === 'text_end') return 'Agent';
-  if (event.type === 'act') return 'Tool';
-  if (event.type === 'observe') return 'Result';
+function agentEventRole(event: AgentTimelineEvent, t: TFunction): string {
+  if (event.type === 'user_message')
+    return tFallback(t, 'agent.rightPanel.agentSession.role.user', 'User');
+  if (event.type === 'assistant_message' || event.type === 'text_end')
+    return tFallback(t, 'agent.rightPanel.agentSession.role.agent', 'Agent');
+  if (event.type === 'act') return tFallback(t, 'agent.rightPanel.agentSession.role.tool', 'Tool');
+  if (event.type === 'observe')
+    return tFallback(t, 'agent.rightPanel.agentSession.role.result', 'Result');
   return event.type.replace(/_/g, ' ');
 }
 
-function agentEventContent(event: AgentTimelineEvent): string {
+function agentEventContent(event: AgentTimelineEvent, t: TFunction): string {
   if ('content' in event && typeof event.content === 'string') {
     return event.content;
   }
@@ -296,7 +324,12 @@ function agentEventContent(event: AgentTimelineEvent): string {
     return JSON.stringify({ tool: event.toolName, input: event.toolInput }, null, 2);
   }
   if (event.type === 'observe') {
-    return event.toolOutput || (event.isError ? 'Tool failed' : 'Tool completed');
+    return (
+      event.toolOutput ||
+      (event.isError
+        ? tFallback(t, 'agent.rightPanel.agentSession.toolFailed', 'Tool failed')
+        : tFallback(t, 'agent.rightPanel.agentSession.toolCompleted', 'Tool completed'))
+    );
   }
   return '';
 }
@@ -416,7 +449,7 @@ const AgentSessionMessagesPanel = memo<{
         ) : (
           <div className="space-y-2">
             {events.map((event) => {
-              const content = agentEventContent(event);
+              const content = agentEventContent(event, t);
               if (!content) return null;
               return (
                 <article
@@ -425,7 +458,7 @@ const AgentSessionMessagesPanel = memo<{
                 >
                   <div className="mb-1 flex min-w-0 items-center gap-2">
                     <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                      {agentEventRole(event)}
+                      {agentEventRole(event, t)}
                     </span>
                     <span className="ml-auto shrink-0 text-[11px] text-slate-400 dark:text-slate-500">
                       {agentEventTimestamp(event, i18n.language || 'en')}
@@ -687,6 +720,8 @@ export const RightPanel = memo<RightPanelProps>(
                 <button
                   type="button"
                   role="tab"
+                  id="right-panel-tab-tasks"
+                  aria-controls="right-panel-panel-tasks"
                   aria-selected={activeTab === 'tasks'}
                   onClick={() => {
                     setPreferredTab('tasks');
@@ -727,6 +762,8 @@ export const RightPanel = memo<RightPanelProps>(
                 <button
                   type="button"
                   role="tab"
+                  id="right-panel-tab-agent"
+                  aria-controls="right-panel-panel-agent"
                   aria-selected={activeTab === 'agent'}
                   onClick={() => {
                     if (hasAgentSession) {
@@ -748,6 +785,8 @@ export const RightPanel = memo<RightPanelProps>(
                 <button
                   type="button"
                   role="tab"
+                  id="right-panel-tab-insights"
+                  aria-controls="right-panel-panel-insights"
                   aria-selected={activeTab === 'insights'}
                   onClick={() => {
                     if (hasInsights) {
@@ -766,6 +805,8 @@ export const RightPanel = memo<RightPanelProps>(
                 <button
                   type="button"
                   role="tab"
+                  id="right-panel-tab-agents"
+                  aria-controls="right-panel-panel-agents"
                   aria-selected={activeTab === 'agents'}
                   onClick={() => {
                     if (hasAgents) {
@@ -784,6 +825,8 @@ export const RightPanel = memo<RightPanelProps>(
                 <button
                   type="button"
                   role="tab"
+                  id="right-panel-tab-graph"
+                  aria-controls="right-panel-panel-graph"
                   aria-selected={activeTab === 'graph'}
                   onClick={() => {
                     if (hasGraph) {
@@ -821,11 +864,21 @@ export const RightPanel = memo<RightPanelProps>(
           </div>
 
           {activeTab === 'agent' ? (
-            <div className="min-h-0 flex-1 overflow-hidden">
+            <div
+              className="min-h-0 flex-1 overflow-hidden"
+              role="tabpanel"
+              id="right-panel-panel-agent"
+              aria-labelledby="right-panel-tab-agent"
+            >
               <AgentSessionMessagesPanel projectId={projectId} sessionId={selectedAgentSessionId} />
             </div>
           ) : activeTab === 'insights' ? (
-            <div className="flex-1 overflow-y-auto p-3">
+            <div
+              className="flex-1 overflow-y-auto p-3"
+              role="tabpanel"
+              id="right-panel-panel-insights"
+              aria-labelledby="right-panel-tab-insights"
+            >
               <ExecutionInsights
                 executionPathDecision={executionPathDecision}
                 selectionTrace={selectionTrace}
@@ -835,7 +888,12 @@ export const RightPanel = memo<RightPanelProps>(
               />
             </div>
           ) : activeTab === 'agents' ? (
-            <div className="flex-1 overflow-y-auto">
+            <div
+              className="flex-1 overflow-y-auto"
+              role="tabpanel"
+              id="right-panel-panel-agents"
+              aria-labelledby="right-panel-tab-agents"
+            >
               <MultiAgentPanel
                 agentNodes={displayAgentNodes}
                 onSessionSelect={onAgentSessionSelect}
@@ -843,7 +901,12 @@ export const RightPanel = memo<RightPanelProps>(
               />
             </div>
           ) : activeTab === 'graph' ? (
-            <div className="min-h-0 flex-1 overflow-hidden">
+            <div
+              className="min-h-0 flex-1 overflow-hidden"
+              role="tabpanel"
+              id="right-panel-panel-graph"
+              aria-labelledby="right-panel-tab-graph"
+            >
               <AgentGraphView
                 conversationId={conversationId}
                 workspaceId={workspaceId}
@@ -851,7 +914,12 @@ export const RightPanel = memo<RightPanelProps>(
               />
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto">
+            <div
+              className="flex-1 overflow-y-auto"
+              role="tabpanel"
+              id="right-panel-panel-tasks"
+              aria-labelledby="right-panel-tab-tasks"
+            >
               {isWorkspaceActive ? (
                 <WorkspaceTaskPlanPanel
                   rows={workspaceRows}

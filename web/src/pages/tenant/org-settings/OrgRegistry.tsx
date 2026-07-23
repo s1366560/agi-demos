@@ -314,40 +314,34 @@ export const OrgRegistry: React.FC = () => {
 
   const [registries, setRegistries] = useState<RegistryConfig[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRegistry, setEditingRegistry] = useState<RegistryConfig | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [testingRegistryId, setTestingRegistryId] = useState<string | null>(null);
 
-  // Load registries on mount
-  useEffect(() => {
+  const fetchRegistries = useCallback(async () => {
     if (!currentTenant?.id) {
       setIsLoading(false);
       return;
     }
-    let cancelled = false;
-    const fetchRegistries = async () => {
-      setIsLoading(true);
-      try {
-        const data = await registryService.list(currentTenant.id);
-        if (!cancelled) {
-          setRegistries(data as unknown as RegistryConfig[]);
-        }
-      } catch {
-        if (!cancelled) {
-          message?.error(t('common.error'));
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    };
-    void fetchRegistries();
-    return () => {
-      cancelled = true;
-    };
+    setIsLoading(true);
+    try {
+      const data = await registryService.list(currentTenant.id);
+      setRegistries(data as unknown as RegistryConfig[]);
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
+      message?.error(t('common.error'));
+    } finally {
+      setIsLoading(false);
+    }
   }, [currentTenant?.id, message, t]);
+
+  // Load registries on mount
+  useEffect(() => {
+    void fetchRegistries();
+  }, [fetchRegistries]);
 
   // Stats
   const stats = useMemo(
@@ -549,6 +543,24 @@ export const OrgRegistry: React.FC = () => {
         <div className="flex items-center justify-center py-20">
           <LazySpin size="large" />
         </div>
+      ) : loadError && registries.length === 0 ? (
+        <div
+          role="alert"
+          className="bg-white dark:bg-slate-800 rounded-xl border border-red-200 dark:border-red-800 p-12 text-center"
+        >
+          <p className="text-slate-700 dark:text-slate-300">
+            {t('tenant.orgSettings.registry.loadFailed', 'Failed to load registries')}
+          </p>
+          <button
+            onClick={() => {
+              void fetchRegistries();
+            }}
+            type="button"
+            className="mt-4 inline-flex items-center gap-2 px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm font-medium"
+          >
+            {t('common.retry')}
+          </button>
+        </div>
       ) : registries.length === 0 ? (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-12 text-center">
           <Server size={16} className="text-slate-300 dark:text-slate-600 text-5xl" />
@@ -671,7 +683,9 @@ export const OrgRegistry: React.FC = () => {
                           {t('common.edit')}
                         </button>
                         <LazyPopconfirm
-                          title={t('tenant.orgSettings.registry.deleteConfirm')}
+                          title={t('tenant.orgSettings.registry.deleteConfirm', {
+                            name: registry.name,
+                          })}
                           onConfirm={() => handleDeleteRegistry(registry)}
                           okText={t('common.confirm')}
                           cancelText={t('common.cancel')}

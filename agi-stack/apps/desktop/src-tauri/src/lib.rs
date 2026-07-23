@@ -4,7 +4,7 @@
 //! trusted-session persistence, and secure device-authorization browser launch.
 
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
@@ -25,30 +25,31 @@ use trusted_session::{
 use url::{Host, Position};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ApiBaseUrl(Url);
+struct DeviceAuthorizationBaseUrl(Url);
 
-impl ApiBaseUrl {
+impl DeviceAuthorizationBaseUrl {
     fn parse(raw_url: &str) -> Result<Self, String> {
         if raw_url.chars().any(char::is_whitespace) {
-            return Err("API base URL must not include whitespace".to_string());
+            return Err("authorization portal URL must not include whitespace".to_string());
         }
-        let url = Url::parse(raw_url).map_err(|_| "invalid API base URL".to_string())?;
+        let url =
+            Url::parse(raw_url).map_err(|_| "invalid authorization portal URL".to_string())?;
         if !matches!(url.scheme(), "http" | "https") {
-            return Err("API base URL must use http or https".to_string());
+            return Err("authorization portal URL must use http or https".to_string());
         }
         if !is_secure_web_url(&url) {
-            return Err("API base URL must use https or loopback http".to_string());
+            return Err("authorization portal URL must use https or loopback http".to_string());
         }
         if url.host_str().is_none() {
-            return Err("API base URL must include a host".to_string());
+            return Err("authorization portal URL must include a host".to_string());
         }
         if raw_authority_has_userinfo(raw_url)
             || !url[Position::BeforeUsername..Position::BeforeHost].is_empty()
         {
-            return Err("API base URL must not include user info".to_string());
+            return Err("authorization portal URL must not include user info".to_string());
         }
         if url.fragment().is_some() {
-            return Err("API base URL must not include a fragment".to_string());
+            return Err("authorization portal URL must not include a fragment".to_string());
         }
         Ok(Self(url))
     }
@@ -60,7 +61,7 @@ struct DeviceAuthorizationUrl(Url);
 impl DeviceAuthorizationUrl {
     fn parse(
         raw_url: &str,
-        api_base_url: &ApiBaseUrl,
+        authorization_base_url: &DeviceAuthorizationBaseUrl,
         expected_user_code: &str,
     ) -> Result<Self, String> {
         validate_device_user_code(expected_user_code)?;
@@ -89,8 +90,10 @@ impl DeviceAuthorizationUrl {
         if url.fragment().is_some() {
             return Err("device authorization URL must not include a fragment".to_string());
         }
-        if url.origin() != api_base_url.0.origin() {
-            return Err("device authorization URL must use the API origin".to_string());
+        if url.origin() != authorization_base_url.0.origin() {
+            return Err(
+                "device authorization URL must use the authorization portal origin".to_string(),
+            );
         }
 
         let mut query_pairs = url.query_pairs();
@@ -242,12 +245,12 @@ fn local_runtime_configure(
 #[tauri::command]
 fn open_device_authorization_url(
     url: String,
-    api_base_url: String,
+    device_authorization_base_url: String,
     expected_user_code: String,
 ) -> Result<(), String> {
-    let api_base_url = ApiBaseUrl::parse(&api_base_url)?;
+    let authorization_base_url = DeviceAuthorizationBaseUrl::parse(&device_authorization_base_url)?;
     let authorization_url =
-        DeviceAuthorizationUrl::parse(&url, &api_base_url, &expected_user_code)?;
+        DeviceAuthorizationUrl::parse(&url, &authorization_base_url, &expected_user_code)?;
     launch_device_authorization_url(&authorization_url)
 }
 
@@ -255,17 +258,22 @@ fn default_local_workspace_root() -> PathBuf {
     if let Ok(root) = std::env::var("AGISTACK_WORKSPACE_ROOT") {
         return PathBuf::from(root);
     }
-    let Ok(mut dir) = std::env::current_dir() else {
-        return PathBuf::from(".");
-    };
-    loop {
+    let user_home = std::env::var_os("HOME").map(PathBuf::from);
+    let launch_directory = std::env::current_dir()
+        .unwrap_or_else(|_| user_home.clone().unwrap_or_else(|| PathBuf::from(".")));
+    resolve_local_workspace_root(&launch_directory, user_home.as_deref())
+}
+
+fn resolve_local_workspace_root(launch_directory: &Path, user_home: Option<&Path>) -> PathBuf {
+    for dir in launch_directory.ancestors() {
         if dir.join("AGENTS.md").exists() || dir.join(".git").exists() {
-            return dir;
-        }
-        if !dir.pop() {
-            return std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            return dir.to_path_buf();
         }
     }
+    user_home
+        .filter(|path| path.is_absolute() && path.parent().is_some())
+        .unwrap_or(launch_directory)
+        .to_path_buf()
 }
 
 fn setup_error(message: String) -> Box<dyn std::error::Error> {
@@ -499,7 +507,6 @@ pub fn run() {
             .map_err(setup_error)?;
             app.manage(local_runtime);
             app.manage(TrustedSessionBroker::native(credential_vault));
-            ensure_main_window(app.handle())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -531,6 +538,17 @@ mod tests {
     }
 
     #[test]
+    fn release_launch_outside_a_repository_falls_back_to_the_user_home() {
+        let launch_directory = Path::new("/");
+        let user_home = Path::new("/Users/desktop-user");
+
+        assert_eq!(
+            resolve_local_workspace_root(launch_directory, Some(user_home)),
+            user_home
+        );
+    }
+
+    #[test]
     fn tauri_runtime_marker_sets_native_shell_attributes() {
         let script = tauri_runtime_marker_script();
         assert!(script.contains("dataset.runtimeShell = 'tauri'"));
@@ -548,14 +566,14 @@ mod tests {
 
     #[test]
     fn device_authorization_url_accepts_only_the_device_endpoint() {
-        for (api_base_url, raw_url) in [
+        for (authorization_base_url, raw_url) in [
             (
                 "https://auth.example.com/api/v1",
                 "https://auth.example.com/device?user_code=ABCDEFGH",
             ),
             (
-                "http://127.0.0.1:8000/api/v1",
-                "http://127.0.0.1:8000/device?user_code=ABCD2345",
+                "http://127.0.0.1:3000",
+                "http://127.0.0.1:3000/device?user_code=ABCD2345",
             ),
             (
                 "http://[::1]:8000/api/v1",
@@ -566,13 +584,14 @@ mod tests {
                 "https://auth.example.com/device?user_code=ABCDEFGH",
             ),
         ] {
-            let api_base_url = ApiBaseUrl::parse(api_base_url).expect("valid API base URL");
+            let authorization_base_url = DeviceAuthorizationBaseUrl::parse(authorization_base_url)
+                .expect("valid authorization base URL");
             let expected_user_code = raw_url
                 .split("user_code=")
                 .nth(1)
                 .expect("test URL includes user code");
             let authorization_url =
-                DeviceAuthorizationUrl::parse(raw_url, &api_base_url, expected_user_code)
+                DeviceAuthorizationUrl::parse(raw_url, &authorization_base_url, expected_user_code)
                     .expect("valid device authorization URL");
 
             assert_eq!(authorization_url.as_str(), raw_url);
@@ -581,8 +600,9 @@ mod tests {
 
     #[test]
     fn device_authorization_url_rejects_unsafe_url_components() {
-        let api_base_url =
-            ApiBaseUrl::parse("https://auth.example.com/api/v1").expect("valid API base URL");
+        let authorization_base_url =
+            DeviceAuthorizationBaseUrl::parse("https://auth.example.com/api/v1")
+                .expect("valid authorization base URL");
         for raw_url in [
             "file:///device",
             "javascript:alert(1)",
@@ -602,7 +622,8 @@ mod tests {
             "https://auth.example.com/device?user_code=one&user_code=two",
         ] {
             assert!(
-                DeviceAuthorizationUrl::parse(raw_url, &api_base_url, "ABCDEFGH").is_err(),
+                DeviceAuthorizationUrl::parse(raw_url, &authorization_base_url, "ABCDEFGH")
+                    .is_err(),
                 "unsafe URL must be rejected: {raw_url}"
             );
         }
@@ -610,8 +631,9 @@ mod tests {
 
     #[test]
     fn device_authorization_url_rejects_a_different_origin() {
-        let api_base_url =
-            ApiBaseUrl::parse("https://auth.example.com:8443/api/v1").expect("valid API base URL");
+        let authorization_base_url =
+            DeviceAuthorizationBaseUrl::parse("https://auth.example.com:8443/api/v1")
+                .expect("valid authorization base URL");
 
         for raw_url in [
             "http://auth.example.com:8443/device",
@@ -619,38 +641,41 @@ mod tests {
             "https://auth.example.com:9443/device",
         ] {
             assert!(
-                DeviceAuthorizationUrl::parse(raw_url, &api_base_url, "ABCDEFGH").is_err(),
+                DeviceAuthorizationUrl::parse(raw_url, &authorization_base_url, "ABCDEFGH")
+                    .is_err(),
                 "cross-origin URL must be rejected: {raw_url}"
             );
         }
     }
 
     #[test]
-    fn api_base_url_rejects_unsafe_url_components() {
+    fn device_authorization_base_url_rejects_unsafe_authorities() {
         for raw_url in [
-            "file:///api/v1",
-            "javascript:alert(1)",
-            "https://user@auth.example.com/api/v1",
-            "https://@auth.example.com/api/v1",
-            "https:\t//@auth.example.com/api/v1",
-            "https://auth.example.com/api/v1#fragment",
-            "https://auth.example.com/api/v1#",
-            "http://auth.example.com/api/v1",
+            "file:///device",
+            "http://auth.example.com",
+            "http://localhost.example",
+            "http://127.0.0.1.example",
+            "http://[::2]",
+            "https://user@auth.example.com",
+            "https://@auth.example.com",
+            "https:\t//@auth.example.com",
+            "https://auth.example.com#fragment",
         ] {
             assert!(
-                ApiBaseUrl::parse(raw_url).is_err(),
-                "unsafe API base URL must be rejected: {raw_url}"
+                DeviceAuthorizationBaseUrl::parse(raw_url).is_err(),
+                "unsafe authorization base URL must be rejected: {raw_url}"
             );
         }
     }
 
     #[test]
     fn opener_command_specs_are_cross_platform_and_shell_free() {
-        let api_base_url =
-            ApiBaseUrl::parse("https://auth.example.com/api/v1").expect("valid API base URL");
+        let authorization_base_url =
+            DeviceAuthorizationBaseUrl::parse("https://auth.example.com/api/v1")
+                .expect("valid authorization base URL");
         let authorization_url = DeviceAuthorizationUrl::parse(
             "https://auth.example.com/device?user_code=ABCDEFGH",
-            &api_base_url,
+            &authorization_base_url,
             "ABCDEFGH",
         )
         .expect("valid device authorization URL");
@@ -726,5 +751,24 @@ mod tests {
             main_window["hiddenTitle"], false,
             "the native title is visible in the single system titlebar"
         );
+    }
+
+    #[test]
+    fn setup_defers_fallible_window_creation_until_the_ready_event() {
+        let source = include_str!("lib.rs");
+        let setup = source
+            .split_once(".setup(|app|")
+            .expect("setup closure")
+            .1
+            .split_once(".invoke_handler")
+            .expect("invoke handler after setup")
+            .0;
+
+        assert!(
+            !setup.contains("ensure_main_window"),
+            "a recoverable release-resource error must not panic inside macOS didFinishLaunching"
+        );
+        assert!(source.contains("RunEvent::Ready =>"));
+        assert!(source.contains("if let Err(error) = ensure_main_window(app)"));
     }
 }

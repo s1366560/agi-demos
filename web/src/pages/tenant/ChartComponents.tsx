@@ -91,11 +91,15 @@ export const ChartComponents: React.FC<ChartComponentsProps> = ({
           {t('tenant.analytics.creation_trend')}
         </h2>
         <div
-          className="h-80 w-full relative"
+          className="h-80 w-full relative flex items-center justify-center"
           role="img"
           aria-label={t('tenant.analytics.creation_trend')}
         >
-          <Line options={lineOptions} data={memoryGrowthData} />
+          {memoryGrowthData.labels.length > 0 ? (
+            <Line options={lineOptions} data={memoryGrowthData} />
+          ) : (
+            <div className="text-slate-400">{t('tenant.analytics.no_data')}</div>
+          )}
         </div>
       </div>
 

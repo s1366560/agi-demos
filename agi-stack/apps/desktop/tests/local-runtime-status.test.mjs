@@ -25,6 +25,14 @@ const providerSettingsQaSource = readFileSync(
   new URL('../src/qa/ProviderSettingsQa.tsx', import.meta.url),
   'utf8',
 );
+const workspaceRuntimeProviderHookSource = readFileSync(
+  new URL('../src/features/settings/useWorkspaceRuntimeProvider.ts', import.meta.url),
+  'utf8',
+);
+const workspaceAgentPolicyHookSource = readFileSync(
+  new URL('../src/features/settings/useWorkspaceAgentPolicy.ts', import.meta.url),
+  'utf8',
+);
 test('Rust desktop backend is the default server preset with Python retained as fallback', () => {
   assert.deepEqual(LOCAL_DEV_SERVER_PRESETS[0], {
     id: 'agistack-rust',
@@ -350,6 +358,49 @@ test('latest conversation model events override or clear persisted selector stat
   assert.equal(latestConversationRuntimeModelEvent([{ type: 'context_status' }]), null);
 });
 
+test('cloud workspace model selector includes enabled cloud provider models', () => {
+  const policy = {
+    tenant_id: 'tenant-a',
+    project_id: 'project-a',
+    workspace_id: 'workspace-a',
+    revision: 4,
+    roles: {
+      default: { provider_id: 'provider-gemini', model_id: 'gemini-2.5-pro' },
+      fast: null,
+      coding: null,
+      vision: null,
+    },
+    fallbacks: [],
+    updated_at: '2026-07-21T00:00:00Z',
+  };
+  const providers = [
+    {
+      id: 'provider-gemini',
+      name: 'Google AI',
+      provider_type: 'gemini',
+      operation_type: 'llm',
+      auth_method: 'api_key',
+      credential_configured: true,
+      is_active: true,
+      is_enabled: true,
+      llm_model: 'gemini-2.5-pro',
+      allowed_models: ['gemini-2.5-pro', 'gemini-2.5-flash'],
+      health_status: 'healthy',
+    },
+  ];
+
+  assert.deepEqual(
+    workspaceRuntimeModelOptions(policy, providers, 'default', 'cloud').map((option) => ({
+      modelId: option.modelId,
+      selected: option.selected,
+    })),
+    [
+      { modelId: 'gemini-2.5-pro', selected: true },
+      { modelId: 'gemini-2.5-flash', selected: false },
+    ],
+  );
+});
+
 test('workspace model switch replaces only the default route and keeps policy concurrency', () => {
   const config = {
     ...DEFAULT_CONFIG,
@@ -464,4 +515,16 @@ test('Desktop runtime configuration and Tauri configure payload contain no LLM a
   assert.match(appSource, /modelLabel=\{chatRuntimeModelSelection\.displayLabel\}/);
   assert.match(appSource, /onModelChange=\{selectChatRuntimeModel\}/);
   assert.match(appSource, /onModelReset=\{[\s\S]{0,180}resetChatRuntimeModel/);
+  assert.doesNotMatch(
+    workspaceRuntimeProviderHookSource,
+    /config\.mode !== 'local'/,
+  );
+  assert.match(
+    workspaceRuntimeProviderHookSource,
+    /workspaceRuntimeModelOptions\([\s\S]{0,160}config\.mode/,
+  );
+  assert.match(
+    workspaceAgentPolicyHookSource,
+    /workspaceRuntimeModelOptions\([\s\S]{0,160}config\.mode/,
+  );
 });

@@ -92,7 +92,7 @@ describe('Login', () => {
     expect(screen.getByText('Signing in...')).toBeInTheDocument();
   });
 
-  it('shows static account recovery and registration guidance without fake links', () => {
+  it('shows account recovery guidance via an actionable forgot-password dialog', async () => {
     const { container } = render(<Login />);
 
     expect(container.querySelectorAll('a[href="#"]')).toHaveLength(0);
@@ -107,7 +107,13 @@ describe('Login', () => {
       screen.getByText('New accounts are created through tenant invitations.')
     ).toBeInTheDocument();
 
-    expect(screen.queryByRole('button', { name: 'Forgot password?' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Forgot password?' }));
+    expect(
+      await screen.findByText(
+        'If your organization uses single sign-on (SSO), sign in with your identity provider instead.'
+      )
+    ).toBeInTheDocument();
+
     expect(screen.queryByRole('button', { name: 'Register Now' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Privacy Policy' })).not.toBeInTheDocument();
   });

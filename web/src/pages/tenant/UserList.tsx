@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 
 import {
   BadgeCheck,
@@ -17,19 +17,24 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
+
 import { useTenantStore } from '@/stores/tenant';
 
 import { invitationService } from '@/services/invitationService';
+import { tenantService } from '@/services/tenantService';
 
 import { confirmAction } from '@/utils/confirmAction';
 import { formatDateOnly } from '@/utils/date';
 import { logger } from '@/utils/logger';
+
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 
 import type { UserTenant } from '@/types/memory';
 
 const PAGE_SIZE = 10;
 const ROLE_FILTERS = ['owner', 'admin', 'member', 'viewer', 'editor', 'guest'];
 const INVITE_ROLES = ['admin', 'member', 'viewer', 'editor'];
+const ASSIGNABLE_ROLES = ['admin', 'member', 'viewer', 'editor'];
 
 interface TenantMember {
   user_id: string;
@@ -95,10 +100,14 @@ export const UserList: React.FC = () => {
   );
   const tenantId = routeTenantId ?? currentTenant?.id ?? null;
   const tenantForLimits = currentTenant?.id === tenantId ? currentTenant : null;
+  const [searchParams, setSearchParams] = useSearchParams();
   const [members, setMembers] = useState<TenantMember[]>([]);
-  const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
-  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
+  const [roleFilter, setRoleFilter] = useState(() => searchParams.get('role') ?? 'all');
+  const [page, setPage] = useState(() => {
+    const p = Number(searchParams.get('page'));
+    return Number.isInteger(p) && p > 0 ? p : 1;
+  });
   const [pendingInvites, setPendingInvites] = useState(0);
   const [pendingLoading, setPendingLoading] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
@@ -108,6 +117,7 @@ export const UserList: React.FC = () => {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [openActionUserId, setOpenActionUserId] = useState<string | null>(null);
   const [removingUserId, setRemovingUserId] = useState<string | null>(null);
+  const [updatingRoleUserId, setUpdatingRoleUserId] = useState<string | null>(null);
   const [membersLoadError, setMembersLoadError] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
 
@@ -177,6 +187,30 @@ export const UserList: React.FC = () => {
     setPage(1);
   }, [search, roleFilter]);
 
+  // Reflect search/filters/pagination in the URL so views survive reload and sharing
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    const trimmedSearch = search.trim();
+    if (trimmedSearch) {
+      next.set('q', trimmedSearch);
+    } else {
+      next.delete('q');
+    }
+    if (roleFilter !== 'all') {
+      next.set('role', roleFilter);
+    } else {
+      next.delete('role');
+    }
+    if (page > 1) {
+      next.set('page', String(page));
+    } else {
+      next.delete('page');
+    }
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [search, roleFilter, page, searchParams, setSearchParams]);
+
   const filteredMembers = members.filter((member) => {
     const query = search.trim().toLowerCase();
     const matchesSearch =
@@ -239,10 +273,36 @@ export const UserList: React.FC = () => {
     }
   };
 
+  const handleRoleChange = async (member: TenantMember, newRole: string) => {
+    if (!tenantId || member.role === 'owner' || newRole === member.role) return;
+    const previousRole = member.role;
+    // Optimistic update
+    setMembers((prev) =>
+      prev.map((m) => (m.user_id === member.user_id ? { ...m, role: newRole } : m))
+    );
+    setUpdatingRoleUserId(member.user_id);
+    setNotice(null);
+    try {
+      await tenantService.updateMemberRole(tenantId, member.user_id, newRole);
+      setNotice({ kind: 'success', message: t('tenant.orgSettings.members.roleUpdated') });
+    } catch (error) {
+      logger.error('Failed to update member role', error);
+      setMembers((prev) =>
+        prev.map((m) => (m.user_id === member.user_id ? { ...m, role: previousRole } : m))
+      );
+      setNotice({ kind: 'error', message: t('tenant.users.update_error') });
+    } finally {
+      setUpdatingRoleUserId(null);
+    }
+  };
+
   const handleRemoveMember = async (member: TenantMember) => {
     if (!tenantId || member.role === 'owner') return;
     const confirmed = await confirmAction({
-      title: t('tenant.users.remove_confirm'),
+      title: t('tenant.users.remove_confirm_named', {
+        name: member.name,
+        defaultValue: 'Remove {{name}} from this organization?',
+      }),
       danger: true,
     });
     if (!confirmed) return;
@@ -270,8 +330,11 @@ export const UserList: React.FC = () => {
     );
   }
 
-  const maxUsers = Math.max(tenantForLimits?.max_users || members.length || 1, 1);
-  const usagePercent = Math.min((members.length / maxUsers) * 100, 100);
+  // Only use the tenant's real seat limit; when it is unknown, show the raw
+  // member count without a fabricated denominator or progress bar.
+  const userLimit = tenantForLimits?.max_users;
+  const hasUserLimit = typeof userLimit === 'number' && Number.isFinite(userLimit) && userLimit > 0;
+  const usagePercent = hasUserLimit ? Math.min((members.length / userLimit) * 100, 100) : 0;
 
   return (
     <div className="max-w-full mx-auto w-full flex flex-col gap-8">
@@ -301,7 +364,7 @@ export const UserList: React.FC = () => {
               ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/50 dark:bg-green-900/20 dark:text-green-300'
               : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300'
           }`}
-          role="status"
+          role={notice.kind === 'error' ? 'alert' : 'status'}
         >
           {notice.message}
         </div>
@@ -388,22 +451,26 @@ export const UserList: React.FC = () => {
             <div className="flex items-baseline gap-2">
               <h3 className="text-3xl font-bold text-slate-900 dark:text-white">
                 {members.length}
-                <span className="text-lg text-slate-400 font-normal">/{maxUsers}</span>
+                {hasUserLimit ? (
+                  <span className="text-lg text-slate-400 font-normal">/{userLimit}</span>
+                ) : null}
               </h3>
             </div>
-            <div
-              className="mt-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden"
-              role="progressbar"
-              aria-valuenow={Math.round(usagePercent)}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label={t('common.stats.total')}
-            >
+            {hasUserLimit ? (
               <div
-                className="bg-primary h-1.5 rounded-full"
-                style={{ width: `${String(usagePercent)}%` }}
-              />
-            </div>
+                className="mt-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden"
+                role="progressbar"
+                aria-valuenow={Math.round(usagePercent)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={t('common.stats.total')}
+              >
+                <div
+                  className="bg-primary h-1.5 rounded-full"
+                  style={{ width: `${String(usagePercent)}%` }}
+                />
+              </div>
+            ) : null}
           </div>
           <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-primary">
             <BadgeCheck size={16} aria-hidden="true" />
@@ -520,8 +587,8 @@ export const UserList: React.FC = () => {
             <tbody className="bg-surface-light dark:bg-surface-dark divide-y divide-slate-200 dark:divide-slate-700">
               {isLoading ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-8 text-center text-slate-500">
-                    {t('tenant.users.loading')}
+                  <td colSpan={4} className="px-6 py-4">
+                    <SkeletonLoader type="table" rows={5} />
                   </td>
                 </tr>
               ) : membersLoadError && members.length === 0 ? (
@@ -569,17 +636,33 @@ export const UserList: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          member.role === 'owner'
-                            ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
-                            : member.role === 'admin'
-                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
-                              : 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300'
-                        }`}
-                      >
-                        {getRoleLabel(member.role)}
-                      </span>
+                      {member.role === 'owner' ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
+                          {getRoleLabel(member.role)}
+                        </span>
+                      ) : (
+                        <select
+                          aria-label={t('tenant.users.changeRole', {
+                            name: member.name,
+                            defaultValue: 'Change role for {{name}}',
+                          })}
+                          className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-surface-dark dark:text-slate-200"
+                          value={member.role}
+                          disabled={updatingRoleUserId === member.user_id}
+                          onChange={(event) => {
+                            void handleRoleChange(member, event.target.value);
+                          }}
+                        >
+                          {(ASSIGNABLE_ROLES.includes(member.role)
+                            ? ASSIGNABLE_ROLES
+                            : [member.role, ...ASSIGNABLE_ROLES]
+                          ).map((role) => (
+                            <option key={role} value={role}>
+                              {getRoleLabel(role)}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                       {formatDateOnly(member.created_at)}

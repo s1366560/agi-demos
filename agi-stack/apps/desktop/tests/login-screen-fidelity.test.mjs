@@ -11,6 +11,10 @@ const loginStyles = readFileSync(
   new URL('../src/features/auth/LoginScreen.css', import.meta.url),
   'utf8'
 );
+const loginRuntimeSource = readFileSync(
+  new URL('../src/features/auth/loginRuntimeModel.ts', import.meta.url),
+  'utf8'
+);
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
 
 test('approved email path owns the trusted-device choice and inline alert', () => {
@@ -20,6 +24,19 @@ test('approved email path owns the trusted-device choice and inline alert', () =
   assert.match(loginSource, /<form[\s\S]*noValidate/);
   assert.match(loginSource, /role="alert"/);
   assert.match(loginSource, /t\('login\.invalidCredentials'\)/);
+});
+
+test('login exposes an accessible local and cloud workspace selector', () => {
+  assert.match(loginSource, /onModeChange: \(mode: RuntimeMode\) => void/);
+  assert.match(loginSource, /role="group"/);
+  assert.match(loginSource, /aria-label=\{t\('login\.modeLabel'\)\}/);
+  assert.match(loginSource, /aria-pressed=\{mode === 'local'\}/);
+  assert.match(loginSource, /aria-pressed=\{mode === 'cloud'\}/);
+  assert.match(loginSource, /onModeChange\('local'\)/);
+  assert.match(loginSource, /onModeChange\('cloud'\)/);
+  assert.match(loginSource, /mode === 'cloud'/);
+  assert.match(loginSource, /mode === 'local'/);
+  assert.match(appSource, /onModeChange=\{changeLoginMode\}/);
 });
 
 test('login validation remains localized in English and Simplified Chinese', () => {
@@ -55,6 +72,14 @@ test('login validation remains localized in English and Simplified Chinese', () 
   assert.match(i18nSource, /'login\.deviceTitle': '在浏览器中继续'/);
   assert.match(i18nSource, /'login\.deviceWaiting': 'Waiting for approval…'/);
   assert.match(i18nSource, /'login\.deviceWaiting': '正在等待授权…'/);
+  assert.match(i18nSource, /'login\.switchToLocal': 'Switch to local workspace'/);
+  assert.match(i18nSource, /'login\.switchToLocal': '切换到本地工作区'/);
+  assert.match(i18nSource, /'login\.modeLabel': 'Workspace mode'/);
+  assert.match(i18nSource, /'login\.modeLabel': '工作区模式'/);
+  assert.match(i18nSource, /'login\.modeLocal': 'Local workspace'/);
+  assert.match(i18nSource, /'login\.modeCloud': 'Cloud workspace'/);
+  assert.match(i18nSource, /'runtime\.deviceAuthorizationUrl': 'Authorization portal URL'/);
+  assert.match(i18nSource, /'runtime\.deviceAuthorizationUrl': '授权门户地址'/);
 });
 
 test('the workspace continue action exposes local and cloud authority without a fake success path', () => {
@@ -86,6 +111,7 @@ test('workspace SSO shows one accessible device authorization checkpoint', () =>
   assert.match(loginSource, /workspaceSso\.userCode/);
   assert.match(loginSource, /onOpenWorkspaceSso/);
   assert.match(loginSource, /onCancelWorkspaceSso/);
+  assert.match(loginSource, /t\('login\.switchToLocal'\)/);
   assert.match(loginSource, /'login\.deviceWaiting'/);
   assert.match(loginSource, /'login\.deviceExpiresCountdown'/);
   assert.match(loginSource, /'login\.deviceExpiredStatus'/);
@@ -161,6 +187,20 @@ test('device grant cleanup covers cancellation, expiry, retry, supersession, unm
   assert.doesNotMatch(appSource, /(?:localStorage|sessionStorage)[\s\S]{0,160}?device_code/);
 });
 
+test('email login revokes a token that fails before session adoption', () => {
+  const loginStart = appSource.indexOf('const login = async (trustedDevice: boolean) =>');
+  const loginEnd = appSource.indexOf('const hydrateLocalSession = async', loginStart);
+  const emailLoginSource = appSource.slice(loginStart, loginEnd);
+  assert.match(emailLoginSource, /let issuedAccessToken = '';/);
+  assert.match(emailLoginSource, /issuedAccessToken = outcome\.access_token;/);
+  assert.match(emailLoginSource, /let tokenAdopted = false;/);
+  assert.match(emailLoginSource, /tokenAdopted = true;/);
+  assert.match(
+    emailLoginSource,
+    /finally \{\s*if \(issuedAccessToken && !tokenAdopted\) \{\s*await revokeUnadoptedDeviceToken/,
+  );
+});
+
 test('authentication and workspace context failures are localized at their source', () => {
   const localizedKeys = [
     'runtime.activeTenantUnavailable',
@@ -229,4 +269,11 @@ test('browser storage never receives a trusted session credential or recovery ca
   assert.match(appSource, /authAttemptRevisionRef/);
   assert.match(appSource, /authAttemptRevisionRef\.current !== authAttemptRevision/);
   assert.match(appSource, /localReady=\{localRuntimeAuthorityReady\}/);
+  assert.match(loginRuntimeSource, /agistack\.desktop\.login-mode/);
+  assert.match(loginRuntimeSource, /JSON\.stringify\(\{ version: 1, mode \}\)/);
+  const preferenceWriter = loginRuntimeSource.slice(
+    loginRuntimeSource.indexOf('export function writeLoginModePreference'),
+    loginRuntimeSource.indexOf('export function runtimeConfigForLoginMode'),
+  );
+  assert.doesNotMatch(preferenceWriter, /apiKey|password|token|session|workspaceRoot|BaseUrl/);
 });

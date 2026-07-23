@@ -376,7 +376,7 @@ export const AgentDefinitions: React.FC = () => {
           <button
             type="button"
             onClick={handleCreate}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
           >
             <Plus size={16} />
             {t('tenant.agentDefinitions.createNew', 'Create Agent')}
@@ -435,8 +435,8 @@ export const AgentDefinitions: React.FC = () => {
             onChange={(e) => {
               setSearch(e.target.value);
             }}
-            aria-label={t('common.search', 'Search...')}
-            placeholder={t('common.search', 'Search...')}
+            aria-label={t('common.search', 'Search…')}
+            placeholder={t('common.search', 'Search…')}
             className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-text-inverse focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary outline-none"
           />
         </div>

@@ -5,9 +5,7 @@ import { useParams, Link } from 'react-router-dom';
 
 import {
   AlertCircle,
-  Bot,
   Brain,
-  CheckCircle,
   ChevronDown,
   Cloud,
   FileText,
@@ -285,10 +283,6 @@ export const ProjectOverview: React.FC = () => {
                   <div className="mt-3 text-2xl font-semibold tabular-nums tracking-[-0.03em] text-neutral-950 dark:text-neutral-50">
                     {numberFormatter.format(stats.active_nodes)}
                   </div>
-                  <div className="mt-1 flex items-center gap-1.5 text-xs text-neutral-500">
-                    <CheckCircle size={13} className="text-[#0070f3]" />
-                    {t('project.overview.operationalStatus')}
-                  </div>
                 </div>
 
                 <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900">
@@ -445,37 +439,6 @@ export const ProjectOverview: React.FC = () => {
             </div>
           </section>
 
-          <section className="rounded-md bg-neutral-950 p-5 text-white shadow-[0_0_0_1px_rgba(0,0,0,0.08)] dark:bg-neutral-50 dark:text-neutral-950">
-            <div className="mb-5 flex items-center justify-between">
-              <h3 className="text-sm font-semibold tracking-[-0.01em]">
-                {t('common.stats.systemStatus')}
-              </h3>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-white/80 dark:bg-neutral-950/10 dark:text-neutral-700">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#0070f3]" />
-                {t('project.overview.operationalStatus')}
-              </span>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white/10 dark:bg-neutral-950/10">
-                <Bot size={16} />
-              </div>
-              <div>
-                <p className="text-sm font-medium">{t('project.overview.autoIndexing')}</p>
-                <p className="mt-1 text-xs leading-5 text-white/60 dark:text-neutral-600">
-                  {t('project.overview.systemReady')}
-                </p>
-              </div>
-            </div>
-            <div className="mt-5">
-              <div className="h-1 overflow-hidden rounded-full bg-white/15 dark:bg-neutral-950/15">
-                <div className="h-full w-full rounded-full bg-white dark:bg-neutral-950" />
-              </div>
-              <div className="mt-2 flex justify-between text-[11px] text-white/55 dark:text-neutral-600">
-                <span>{t('project.overview.status')}</span>
-                <span>{t('project.overview.operational')}</span>
-              </div>
-            </div>
-          </section>
         </aside>
       </div>
     </div>

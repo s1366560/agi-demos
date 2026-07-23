@@ -99,7 +99,7 @@ const truncateMiddle = (value: string, maxLength = 120): string => {
   if (value.length <= maxLength) return value;
   const headLength = Math.ceil((maxLength - 3) * 0.62);
   const tailLength = Math.floor((maxLength - 3) * 0.38);
-  return `${value.slice(0, headLength)}...${value.slice(value.length - tailLength)}`;
+  return `${value.slice(0, headLength)}…${value.slice(value.length - tailLength)}`;
 };
 
 const TOOL_PREVIEW_KEYS = [

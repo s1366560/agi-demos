@@ -30,7 +30,7 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect, Children, memo } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 
 import { AlertCircle, Maximize, Network } from 'lucide-react';
 
@@ -38,6 +38,7 @@ import { CytoscapeGraph } from '@/components/graph/CytoscapeGraph';
 
 import { graphService } from '../../services/graphService';
 import { useProjectStore } from '../../stores/project';
+import { downloadJson } from '../../utils/downloadJson';
 import { logger } from '../../utils/logger';
 
 import { SearchForm, SearchResults, SearchConfig } from './search';
@@ -100,6 +101,21 @@ interface SearchParamsRef {
   timeRange: string;
   customTimeRange: { since?: string | undefined; until?: string | undefined };
   projectId: string | undefined;
+  resultLimit: number;
+}
+
+const SEARCH_PAGE_SIZE = 50;
+
+const SEARCH_MODES: readonly SearchMode[] = [
+  'semantic',
+  'graphTraversal',
+  'temporal',
+  'faceted',
+  'community',
+];
+
+function isSearchMode(value: string | null): value is SearchMode {
+  return value !== null && (SEARCH_MODES as readonly string[]).includes(value);
 }
 
 // ========================================
@@ -249,6 +265,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
   }) => {
     const { t } = useTranslation();
     const { projectId: routeProjectId, tenantId: routeTenantId } = useParams();
+    const [urlSearchParams, setUrlSearchParams] = useSearchParams();
     const { currentProject } = useProjectStore();
 
     const projectId = propProjectId || routeProjectId;
@@ -290,15 +307,19 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
     const includeGraph = hasSubComponents ? !!graphChild : true;
     const includeError = hasSubComponents ? !!errorChild : true;
 
-    // State
-    const [query, setQuery] = useState('');
+    // State (primary search inputs are restored from the URL query string)
+    const [query, setQuery] = useState(() => urlSearchParams.get('q') ?? '');
     const [results, setResults] = useState<SearchResult[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isSearchFocused, setIsSearchFocused] = useState(false);
+    const [resultLimit, setResultLimit] = useState(SEARCH_PAGE_SIZE);
 
     // Search Mode
-    const [searchMode, setSearchMode] = useState<SearchMode>(defaultSearchMode);
+    const [searchMode, setSearchMode] = useState<SearchMode>(() => {
+      const modeParam = urlSearchParams.get('mode');
+      return isSearchMode(modeParam) ? modeParam : defaultSearchMode;
+    });
 
     // Configuration State
     const [retrievalMode, setRetrievalMode] = useState<'hybrid' | 'nodeDistance'>('hybrid');
@@ -320,7 +341,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
     const [selectedSubgraphIds, setSelectedSubgraphIds] = useState<string[]>([]);
 
     // Graph Traversal State
-    const [startEntityUuid, setStartEntityUuid] = useState('');
+    const [startEntityUuid, setStartEntityUuid] = useState(() => urlSearchParams.get('start') ?? '');
     const [maxDepth, setMaxDepth] = useState(2);
     const [relationshipTypes, setRelationshipTypes] = useState<string[]>([]);
 
@@ -329,7 +350,9 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
     // Community Search State
-    const [communityUuid, setCommunityUuid] = useState('');
+    const [communityUuid, setCommunityUuid] = useState(
+      () => urlSearchParams.get('community') ?? ''
+    );
     const [includeEpisodes, setIncludeEpisodes] = useState(true);
 
     // Voice Search State
@@ -362,6 +385,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
       timeRange,
       customTimeRange,
       projectId,
+      resultLimit,
     });
 
     // Update ref whenever params change
@@ -383,6 +407,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
         timeRange,
         customTimeRange,
         projectId,
+        resultLimit,
       };
     }, [
       searchMode,
@@ -401,6 +426,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
       timeRange,
       customTimeRange,
       projectId,
+      resultLimit,
     ]);
 
     // Optimized handleSearch
@@ -446,6 +472,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
             data = await graphService.advancedSearch({
               query: params.query,
               strategy: params.strategy,
+              limit: params.resultLimit,
               project_id: params.projectId,
               focal_node_uuid:
                 params.retrievalMode === 'nodeDistance' ? params.focalNode : undefined,
@@ -461,7 +488,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
               max_depth: params.maxDepth,
               relationship_types:
                 params.relationshipTypes.length > 0 ? params.relationshipTypes : undefined,
-              limit: 50,
+              limit: params.resultLimit,
               project_id: params.projectId,
             });
             break;
@@ -471,7 +498,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
               query: params.query,
               since: params.timeRange === 'custom' ? params.customTimeRange.since : undefined,
               until: params.timeRange === 'custom' ? params.customTimeRange.until : undefined,
-              limit: 50,
+              limit: params.resultLimit,
               project_id: params.projectId,
             });
             break;
@@ -483,7 +510,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
                 params.selectedEntityTypes.length > 0 ? params.selectedEntityTypes : undefined,
               tags: params.selectedTags.length > 0 ? params.selectedTags : undefined,
               since: params.timeRange === 'custom' ? params.customTimeRange.since : undefined,
-              limit: 50,
+              limit: params.resultLimit,
               project_id: params.projectId,
             });
             break;
@@ -491,7 +518,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
           case 'community':
             data = await graphService.searchByCommunity({
               community_uuid: params.communityUuid,
-              limit: 50,
+              limit: params.resultLimit,
               include_episodes: params.includeEpisodes,
             });
             break;
@@ -503,6 +530,22 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
         );
 
         setResults(mappedResults);
+
+        // Reflect the executed search in the URL so it can be shared/restored.
+        setUrlSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            if (params.query) next.set('q', params.query);
+            else next.delete('q');
+            if (params.startEntityUuid) next.set('start', params.startEntityUuid);
+            else next.delete('start');
+            if (params.communityUuid) next.set('community', params.communityUuid);
+            else next.delete('community');
+            next.set('mode', params.searchMode);
+            return next;
+          },
+          { replace: true }
+        );
 
         // Add to search history
         if (params.query || params.startEntityUuid || params.communityUuid) {
@@ -529,7 +572,26 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
       } finally {
         setLoading(false);
       }
-    }, [t]);
+    }, [t, setUrlSearchParams]);
+
+    // Load more: raise the result cap and re-run the current search.
+    const handleLoadMore = useCallback(() => {
+      const nextLimit = searchParamsRef.current.resultLimit + SEARCH_PAGE_SIZE;
+      setResultLimit(nextLimit);
+      searchParamsRef.current.resultLimit = nextLimit;
+      void handleSearch();
+    }, [handleSearch]);
+
+    // Re-run the search once on mount when the URL carries a restored query.
+    const didRunRestoredSearchRef = useRef(false);
+    useEffect(() => {
+      if (didRunRestoredSearchRef.current) return;
+      didRunRestoredSearchRef.current = true;
+      const restored = searchParamsRef.current;
+      if (restored.query || restored.startEntityUuid || restored.communityUuid) {
+        void handleSearch();
+      }
+    }, [handleSearch]);
 
     // Extract node IDs for graph highlighting
     const highlightNodeIds = useMemo(() => {
@@ -604,15 +666,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
         })),
       };
 
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `search-results-${String(Date.now())}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadJson(`search-results-${String(Date.now())}.json`, exportData);
     }, [results]);
 
     const handleCopyId = useCallback((id: string, e: React.MouseEvent) => {
@@ -808,12 +862,14 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
                   viewMode={viewMode}
                   copiedId={copiedId}
                   selectedSubgraphIds={selectedSubgraphIds}
+                  hasMore={results.length >= resultLimit}
                   onResultsCollapseToggle={() => {
                     setIsResultsCollapsed(!isResultsCollapsed);
                   }}
                   onViewModeChange={setViewMode}
                   onResultClick={handleResultClick}
                   onCopyId={handleCopyId}
+                  onLoadMore={handleLoadMore}
                 />
               )}
             </div>

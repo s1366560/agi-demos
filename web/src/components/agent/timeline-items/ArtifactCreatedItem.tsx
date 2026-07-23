@@ -2,6 +2,7 @@ import { memo, useCallback, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { message } from 'antd';
 import {
   Loader2,
   PanelRight,
@@ -266,7 +267,7 @@ export const ArtifactCreatedItem = memo(
         }
         requestCanvasViewMode();
       } catch {
-        // Silently fail -- user can still download
+        message.error(t('agent.artifact.openInCanvasFailed', 'Failed to open in Canvas'));
       }
     }, [
       artifactUrl,
@@ -275,6 +276,7 @@ export const ArtifactCreatedItem = memo(
       event.filename,
       event.category,
       event.mimeType,
+      t,
     ]);
 
     const isImage = event.category === 'image';
@@ -377,7 +379,7 @@ export const ArtifactCreatedItem = memo(
                 {!url && artifactStatus === 'uploading' && (
                   <span className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
                     <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
-                    {t('agent.artifact.uploading', 'Uploading...')}
+                    {t('agent.artifact.uploading', 'Uploading…')}
                   </span>
                 )}
               </div>

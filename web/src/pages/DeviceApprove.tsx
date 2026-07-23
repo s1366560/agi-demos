@@ -12,11 +12,13 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Alert, Button, Card, Input, Result, Space, Typography } from 'antd';
-import { Terminal, CheckCircle2 } from 'lucide-react';
+import { Terminal } from 'lucide-react';
 
 import { useAuthStore } from '@/stores/auth';
 
 import { deviceAuthService } from '@/services/deviceAuthService';
+
+import { confirmAction } from '@/utils/confirmAction';
 
 import { getErrorMessage } from '@/types/common';
 
@@ -36,6 +38,7 @@ export const DeviceApprove: React.FC = () => {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const userEmail = useAuthStore((s) => s.user?.email ?? '');
 
   const [code, setCode] = useState<string>(() =>
     normalize(params.get('user_code') ?? params.get('code') ?? '')
@@ -45,8 +48,9 @@ export const DeviceApprove: React.FC = () => {
   const [approved, setApproved] = useState(false);
 
   if (!isAuthenticated) {
+    // Normally unreachable: App.tsx guards /device with RedirectToLogin.
+    // Kept as a defensive fallback so the shareable link can still be copied.
     const ret = `/device${code ? `?user_code=${code}` : ''}`;
-    const loginHref = `/login?redirect=${encodeURIComponent(ret)}`;
     return (
       <div style={{ maxWidth: 560, margin: '64px auto', padding: 24 }}>
         <Card
@@ -63,14 +67,9 @@ export const DeviceApprove: React.FC = () => {
                 {t('device.signInSubtitle')}
               </Paragraph>
             </Space>
-            <Space>
-              <Button type="primary" onClick={() => void navigate(loginHref)}>
-                {t('common.signIn')}
-              </Button>
-              <Text copyable={{ text: window.location.origin + ret }} type="secondary">
-                {t('device.copyBackLink')}
-              </Text>
-            </Space>
+            <Text copyable={{ text: window.location.origin + ret }} type="secondary">
+              {t('device.copyBackLink')}
+            </Text>
           </Space>
         </Card>
       </div>
@@ -82,6 +81,21 @@ export const DeviceApprove: React.FC = () => {
     const normalized = normalize(code);
     if (!CODE_PATTERN.test(normalized)) {
       setError(t('device.invalidCode'));
+      return;
+    }
+    // Approving grants the waiting CLI a 30-day API key — confirm with the
+    // exact code and account before minting anything.
+    const confirmed = await confirmAction({
+      title: t('device.confirmTitle', 'Approve CLI sign-in?'),
+      content: t(
+        'device.confirmContent',
+        'Code {{code}} will receive a 30-day API key for {{email}}. Only approve if you just requested this code in your own terminal.',
+        { code: normalized, email: userEmail }
+      ),
+      okText: t('device.approveSession', 'Approve CLI session'),
+      cancelText: t('common.cancel'),
+    });
+    if (!confirmed) {
       return;
     }
     setSubmitting(true);
@@ -99,7 +113,6 @@ export const DeviceApprove: React.FC = () => {
     return (
       <div style={{ maxWidth: 560, margin: '64px auto', padding: 24 }}>
         <Result
-          icon={<CheckCircle2 size={56} color="#0070f3" strokeWidth={1.5} />}
           status="success"
           title={t('device.approvedTitle')}
           subTitle={t('device.approvedSubtitle')}
@@ -131,6 +144,16 @@ export const DeviceApprove: React.FC = () => {
           </Space>
 
           {error && <Alert type="error" title={error} showIcon />}
+
+          <Alert
+            type="info"
+            showIcon
+            title={t(
+              'device.sessionInfo',
+              'Approving as {{email}}. The waiting CLI will receive a 30-day API key for this account.',
+              { email: userEmail }
+            )}
+          />
 
           <Space orientation="vertical" size={8} style={{ width: '100%' }}>
             <label htmlFor="device-code-input">
@@ -166,7 +189,7 @@ export const DeviceApprove: React.FC = () => {
               disabled={code.length !== CODE_LEN}
               onClick={() => void handleSubmit()}
             >
-              {t('device.approve')}
+              {t('device.approveSession', 'Approve CLI session')}
             </Button>
           </Space>
 
