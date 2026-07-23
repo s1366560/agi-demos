@@ -97,6 +97,14 @@ const HITL_REQUEST_EVENT_TYPES = new Set([
   'permission_requested',
 ]);
 
+const STATE_ONLY_EVENT_TYPES = new Set([
+  'suggestions',
+  'execution_path_decided',
+  'selection_trace',
+  'policy_filtered',
+  'toolset_changed',
+]);
+
 const HITL_RESPONSE_TO_REQUEST_EVENT_TYPE: Record<string, string> = {
   clarification_answered: 'clarification_asked',
   decision_answered: 'decision_asked',
@@ -219,6 +227,10 @@ export function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
     if (!event) continue;
     // Skip events already claimed by a forward scan
     if (claimedIndices.has(i)) continue;
+    // These events update dedicated conversation state and have no transcript
+    // representation. Dropping them before grouping avoids empty virtual rows
+    // while keeping genuinely unknown event types visible to diagnostics.
+    if (STATE_ONLY_EVENT_TYPES.has(event.type)) continue;
 
     // SubAgent event grouping
     if (SUBAGENT_EVENT_TYPES.has(event.type)) {

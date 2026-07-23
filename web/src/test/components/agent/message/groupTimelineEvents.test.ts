@@ -4,6 +4,102 @@ import { groupTimelineEvents } from '../../../../components/agent/message/groupT
 
 import type { TimelineEvent } from '../../../../types/agent';
 
+describe('groupTimelineEvents state-only events', () => {
+  it.each([
+    'suggestions',
+    'execution_path_decided',
+    'selection_trace',
+    'policy_filtered',
+    'toolset_changed',
+  ])(
+    'omits %s from renderable timeline rows',
+    (type) => {
+      const timeline = [
+        {
+          id: `state-only-${type}`,
+          type,
+          timestamp: 1,
+          eventTimeUs: 1_000,
+          eventCounter: 0,
+        },
+      ] as unknown as TimelineEvent[];
+
+      expect(groupTimelineEvents(timeline)).toEqual([]);
+    }
+  );
+
+  it('preserves unknown protocol events for MessageBubble diagnostics', () => {
+    const event = {
+      id: 'future-protocol-event',
+      type: 'future_protocol_event',
+      timestamp: 1,
+      eventTimeUs: 1_000,
+      eventCounter: 0,
+    } as unknown as TimelineEvent;
+
+    expect(groupTimelineEvents([event])).toEqual([{ kind: 'event', event, index: 0 }]);
+  });
+
+  it.each([
+    'suggestions',
+    'execution_path_decided',
+    'selection_trace',
+    'policy_filtered',
+    'toolset_changed',
+  ])('does not split a tool execution group when %s is interleaved', (type) => {
+    const timeline = [
+      {
+        id: 'act-1',
+        type: 'act',
+        timestamp: 1,
+        eventTimeUs: 1_000,
+        eventCounter: 0,
+        toolName: 'search',
+        toolInput: { query: 'MemStack' },
+        execution_id: 'exec-1',
+      },
+      {
+        id: `state-only-${type}`,
+        type,
+        timestamp: 2,
+        eventTimeUs: 2_000,
+        eventCounter: 0,
+      },
+      {
+        id: 'observe-1',
+        type: 'observe',
+        timestamp: 3,
+        eventTimeUs: 3_000,
+        eventCounter: 0,
+        toolName: 'search',
+        execution_id: 'exec-1',
+        toolOutput: 'ok',
+        isError: false,
+      },
+      {
+        id: 'act-2',
+        type: 'act',
+        timestamp: 4,
+        eventTimeUs: 4_000,
+        eventCounter: 0,
+        toolName: 'read',
+        toolInput: { path: '/workspace/README.md' },
+        execution_id: 'exec-2',
+      },
+    ] as unknown as TimelineEvent[];
+
+    const grouped = groupTimelineEvents(timeline);
+
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]?.kind).toBe('timeline');
+    if (grouped[0]?.kind !== 'timeline') return;
+    expect(grouped[0].startIndex).toBe(0);
+    expect(grouped[0].steps).toHaveLength(2);
+    expect(grouped[0].steps[0]?.status).toBe('success');
+    expect(grouped[0].steps[1]?.status).toBe('running');
+  });
+});
+
 describe('groupTimelineEvents SubAgent grouping', () => {
   it('keeps terminal aliases for one SubAgent execution in one card', () => {
     const timeline = [
