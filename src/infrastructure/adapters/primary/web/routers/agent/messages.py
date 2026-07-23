@@ -175,6 +175,11 @@ _DISPLAYABLE_EVENTS.update(
         "chain_step_started",
         "chain_step_completed",
         "chain_completed",
+        # Routing and runtime tool-registry diagnostics are emitted as legacy
+        # dict events but drive the same execution-insights UI as canonical
+        # selection_trace and policy_filtered events.
+        "execution_path_decided",
+        "toolset_changed",
     }
 )
 
@@ -1014,6 +1019,11 @@ def _build_execution_graph_event(data: dict[str, Any], **_kwargs: Any) -> dict[s
     return {"payload": dict(data)}
 
 
+def _build_execution_insight_event(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    """Preserve routing, selection, policy, and toolset evidence for Desktop history replay."""
+    return {"payload": dict(data)}
+
+
 def _build_agent_spawned(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {
         "agentId": data.get("agent_id", ""),
@@ -1158,6 +1168,10 @@ _EVENT_BUILDERS: dict[str, Any] = {
     "graph_node_failed": _build_execution_graph_event,
     "graph_node_skipped": _build_execution_graph_event,
     "graph_handoff": _build_execution_graph_event,
+    "execution_path_decided": _build_execution_insight_event,
+    "selection_trace": _build_execution_insight_event,
+    "policy_filtered": _build_execution_insight_event,
+    "toolset_changed": _build_execution_insight_event,
     "agent_spawned": _build_agent_spawned,
     "agent_completed": _build_agent_completed,
     "agent_message_sent": _build_agent_message_sent,

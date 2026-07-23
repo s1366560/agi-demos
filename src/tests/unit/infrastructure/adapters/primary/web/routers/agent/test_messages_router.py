@@ -1322,6 +1322,97 @@ def test_build_timeline_replays_execution_graph_events_for_desktop_history() -> 
     assert [item["payload"] for item in timeline] == [data for _, data in graph_events]
 
 
+def test_build_timeline_replays_execution_insight_events_for_desktop_history() -> None:
+    insight_events = [
+        (
+            "execution_path_decided",
+            {
+                "route_id": "route-release-verification",
+                "trace_id": "trace-release-verification",
+                "path": "react_loop",
+                "confidence": 0.94,
+                "reason": "Release verification needs governed tools and independent evidence.",
+                "target": "workspace-agent",
+                "metadata": {"domain_lane": "code"},
+            },
+        ),
+        (
+            "selection_trace",
+            {
+                "route_id": "route-release-verification",
+                "trace_id": "trace-release-verification",
+                "domain_lane": "code",
+                "initial_count": 12,
+                "final_count": 4,
+                "removed_total": 8,
+                "tool_budget": 4,
+                "budget_exceeded_stages": ["semantic_ranker"],
+                "stages": [
+                    {
+                        "stage": "capability_filter",
+                        "before_count": 12,
+                        "after_count": 7,
+                        "removed_count": 5,
+                        "duration_ms": 2.4,
+                        "explain": {"reason": "Workspace capability boundary"},
+                    },
+                    {
+                        "stage": "semantic_ranker",
+                        "before_count": 7,
+                        "after_count": 4,
+                        "removed_count": 3,
+                        "duration_ms": 5.8,
+                    },
+                ],
+            },
+        ),
+        (
+            "policy_filtered",
+            {
+                "route_id": "route-release-verification",
+                "trace_id": "trace-release-verification",
+                "domain_lane": "code",
+                "removed_total": 3,
+                "stage_count": 2,
+                "tool_budget": 4,
+                "budget_exceeded_stages": ["semantic_ranker"],
+            },
+        ),
+        (
+            "toolset_changed",
+            {
+                "trace_id": "trace-release-verification",
+                "project_id": "project-release",
+                "server_name": "release-tools",
+                "source": "plugin_manager",
+                "action": "install",
+                "plugin_name": "github",
+                "refresh_source": "processor",
+                "refresh_status": "success",
+                "refreshed_tool_count": 3,
+                "mutation_fingerprint": "sha256:release-verification",
+                "tool_names": ["mcp__release__verify", "mcp__release__publish"],
+            },
+        ),
+    ]
+    assert {event_type for event_type, _ in insight_events} <= _DISPLAYABLE_EVENTS
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(event_type=event_type, event_data=data, event_time_us=index * 1_000)
+            for index, (event_type, data) in enumerate(insight_events, start=1)
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert [item["type"] for item in timeline] == [event_type for event_type, _ in insight_events]
+    assert [item["payload"] for item in timeline] == [data for _, data in insight_events]
+
+
 def test_build_timeline_replays_complete_skill_execution_for_desktop_history() -> None:
     skill_events = [
         (
