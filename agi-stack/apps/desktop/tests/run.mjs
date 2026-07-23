@@ -52,6 +52,8 @@ copyFileSync(
 
 const testFiles = [
   'a2ui-action.test.mjs',
+  'agent-event-identity-model.test.mjs',
+  'agent-task-signal-model.test.mjs',
   'agent-event-parity.test.mjs',
   'api-client.test.mjs',
   'application-vault.test.mjs',

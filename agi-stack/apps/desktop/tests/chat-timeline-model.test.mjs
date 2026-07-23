@@ -10,13 +10,19 @@ const { agentLifecyclePresentation } = require(
 const { groupSubAgentTimelineItems } = require(
   '/tmp/agistack-desktop-test-dist/src/features/chat/subagentTimelineGroupModel.js',
 );
+const { coalesceStreamingTextEvents } = require(
+  '/tmp/agistack-desktop-test-dist/src/features/chat/streamingTextEventModel.js',
+);
 const {
   assistantCostTracking,
   assistantExecutionSummary,
   detectPayloadLanguage,
+  eventScopedStreamMessageId,
   formatToolCallDuration,
   latestAgentSuggestions,
+  mergeAgentSendAcknowledgement,
   mergeArtifactStreamItem,
+  mergeConversationTimelineItems,
   mergeAssistantTextStreamChunk,
   mergeAssistantCompletionEvent,
   mergeCostUpdateEvent,
@@ -38,6 +44,10 @@ const {
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const chatTimelineSource = readFileSync(
   new URL('../src/features/chat/ChatTimeline.tsx', import.meta.url),
+  'utf8',
+);
+const chatPanelSource = readFileSync(
+  new URL('../src/features/chat/ChatPanel.tsx', import.meta.url),
   'utf8',
 );
 const sessionSteeringQaSource = readFileSync(
@@ -80,6 +90,26 @@ test('assistant text stream preserves whitespace tokens and settles to authorita
   assert.equal(items[0].metadata.streaming, false);
 });
 
+test('text event coalescing preserves standalone whitespace and newline tokens', () => {
+  const events = ['Hello', ' ', 'world', '\n\n', 'next'].map((delta, index) => ({
+    type: 'text_delta',
+    conversation_id: 'conversation-1',
+    event_time_us: 1_000_000 + index,
+    event_counter: index + 1,
+    data: {
+      message_id: 'execution-message-1',
+      delta,
+    },
+  }));
+
+  const coalesced = coalesceStreamingTextEvents(events);
+
+  assert.equal(coalesced.length, 1);
+  assert.equal(coalesced[0].data.delta, 'Hello world\n\nnext');
+  assert.equal(coalesced[0].event_time_us, 1_000_004);
+  assert.equal(coalesced[0].event_counter, 5);
+});
+
 test('text end can recover the full response when every delta was missed', () => {
   const items = mergeAssistantTextStreamChunk([], {
     kind: 'complete',
@@ -95,7 +125,7 @@ test('text end can recover the full response when every delta was missed', () =>
   assert.equal(items[0].metadata.streaming, false);
 });
 
-test('complete merges content and execution metadata into the latest assistant turn', () => {
+test('complete merges content and execution metadata into its exact assistant response', () => {
   const existing = [
     {
       id: 'user-1',
@@ -106,10 +136,10 @@ test('complete merges content and execution metadata into the latest assistant t
       eventCounter: 1,
     },
     {
-      id: 'streaming-assistant-stream-conversation-1',
+      id: 'streaming-assistant-server-final-message-id',
       type: 'assistant_message',
       role: 'assistant',
-      message_id: 'stream-conversation-1',
+      message_id: 'server-final-message-id',
       content: 'Draft',
       metadata: { streaming: false },
       eventTimeUs: 2_000_000,
@@ -129,7 +159,7 @@ test('complete merges content and execution metadata into the latest assistant t
   });
 
   assert.equal(items.length, 2);
-  assert.equal(items[1].id, 'streaming-assistant-stream-conversation-1');
+  assert.equal(items[1].id, 'streaming-assistant-server-final-message-id');
   assert.equal(items[1].content, 'Authoritative final answer');
   assert.equal(items[1].metadata.streaming, false);
   assert.equal(items[1].metadata.traceUrl, 'https://trace.example/run');
@@ -159,10 +189,1099 @@ test('complete can create a final assistant response when text streaming was abs
   assert.equal(items[0].metadata.streaming, false);
 });
 
+test('history hydration reconciles a transient assistant only by its authoritative cursor', () => {
+  const history = [
+    {
+      id: 'user-message-1',
+      type: 'user_message',
+      role: 'user',
+      message_id: 'request-message-1',
+      content: 'hi',
+      eventTimeUs: 1_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'assistant-message-1',
+      type: 'assistant_message',
+      role: 'assistant',
+      message_id: 'persisted-assistant-message-1',
+      content: '你好！有什么可以帮你的吗？',
+      eventTimeUs: 2_000_000,
+      eventCounter: 4,
+      metadata: { source: 'history' },
+    },
+  ];
+  const live = [
+    {
+      ...history[0],
+      id: 'optimistic-user-request-message-1',
+      metadata: { optimistic: true },
+    },
+    {
+      id: 'streaming-assistant-request-message-1',
+      type: 'assistant_message',
+      role: 'assistant',
+      message_id: 'request-message-1',
+      executionMessageId: 'request-message-1',
+      content: 'stale streamed draft',
+      eventTimeUs: 2_000_000,
+      eventCounter: 4,
+      metadata: {
+        streaming: false,
+        executionSummary: { step_count: 2 },
+      },
+    },
+  ];
+
+  const items = mergeConversationTimelineItems(history, live);
+  const assistantItems = items.filter((item) => item.role === 'assistant');
+
+  assert.equal(assistantItems.length, 1);
+  assert.equal(assistantItems[0].id, 'assistant-message-1');
+  assert.equal(assistantItems[0].message_id, 'persisted-assistant-message-1');
+  assert.equal(assistantItems[0].executionMessageId, 'request-message-1');
+  assert.equal(assistantItems[0].content, '你好！有什么可以帮你的吗？');
+  assert.equal(assistantItems[0].metadata.streaming, false);
+  assert.deepEqual(assistantItems[0].metadata.executionSummary, { step_count: 2 });
+});
+
+test('live-first hydration still promotes the persisted assistant identity', () => {
+  const user = {
+    id: 'user-message-1',
+    type: 'user_message',
+    role: 'user',
+    message_id: 'request-message-1',
+    content: 'hi',
+    eventTimeUs: 1_000_000,
+    eventCounter: 1,
+  };
+  const transient = {
+    id: 'completed-assistant-request-message-1',
+    type: 'assistant_message',
+    role: 'assistant',
+    message_id: 'request-message-1',
+    executionMessageId: 'request-message-1',
+    content: 'draft',
+    eventTimeUs: 2_000_000,
+    eventCounter: 1,
+    metadata: { streaming: false, traceUrl: 'https://trace.example/run' },
+  };
+  const persisted = {
+    id: 'assistant-message-1',
+    type: 'assistant_message',
+    role: 'assistant',
+    message_id: 'persisted-assistant-message-1',
+    content: 'final',
+    eventTimeUs: 2_000_000,
+    eventCounter: 1,
+    metadata: { source: 'history' },
+  };
+
+  const items = mergeConversationTimelineItems([user, transient], [persisted]);
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'assistant'),
+    [
+      {
+        ...persisted,
+        executionMessageId: 'request-message-1',
+        metadata: {
+          streaming: false,
+          traceUrl: 'https://trace.example/run',
+          source: 'history',
+        },
+      },
+    ],
+  );
+});
+
+test('history hydration reconciles a live assistant by execution id when cursors differ', () => {
+  const live = {
+    id: 'completed-assistant-execution-message-1',
+    type: 'assistant_message',
+    role: 'assistant',
+    message_id: 'execution-message-1',
+    executionMessageId: 'execution-message-1',
+    content: 'Live final answer',
+    eventTimeUs: 2_000_000,
+    eventCounter: 2,
+    metadata: { streaming: false, traceUrl: 'https://trace.example/run' },
+  };
+  const history = {
+    id: 'assistant-message-1',
+    type: 'assistant_message',
+    role: 'assistant',
+    message_id: 'response-message-1',
+    executionMessageId: 'execution-message-1',
+    content: 'Persisted final answer',
+    eventTimeUs: 2_100_000,
+    eventCounter: 3,
+    metadata: { source: 'history' },
+  };
+
+  const items = mergeConversationTimelineItems([live], [history]);
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'assistant'),
+    [
+      {
+        ...history,
+        metadata: {
+          streaming: false,
+          traceUrl: 'https://trace.example/run',
+          source: 'history',
+        },
+      },
+    ],
+  );
+});
+
+test('history hydration also accepts an exact response id when live replay lacks execution identity', () => {
+  const liveReplay = {
+    id: 'completed-assistant-response-message-1',
+    type: 'assistant_message',
+    role: 'assistant',
+    message_id: 'response-message-1',
+    executionMessageId: 'response-message-1',
+    content: 'Live replay',
+    eventTimeUs: 2_000_000,
+    eventCounter: 2,
+    metadata: { streaming: false },
+  };
+  const history = {
+    id: 'assistant-message-1',
+    type: 'assistant_message',
+    role: 'assistant',
+    message_id: 'response-message-1',
+    executionMessageId: 'execution-message-1',
+    content: 'Persisted final answer',
+    eventTimeUs: 2_100_000,
+    eventCounter: 3,
+  };
+
+  const items = mergeConversationTimelineItems([liveReplay], [history]);
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'assistant').map((item) => item.content),
+    ['Persisted final answer'],
+  );
+});
+
+test('history hydration collapses every transient row bridged by response and execution ids', () => {
+  const responseReplay = {
+    id: 'completed-assistant-response-message-1',
+    type: 'assistant_message',
+    role: 'assistant',
+    message_id: 'response-message-1',
+    executionMessageId: 'response-message-1',
+    content: 'Response replay',
+    eventTimeUs: 2_000_000,
+    eventCounter: 2,
+    metadata: { streaming: false, traceUrl: 'https://trace.example/run' },
+  };
+  const executionCompletion = {
+    id: 'completed-assistant-execution-message-1',
+    type: 'assistant_message',
+    role: 'assistant',
+    message_id: 'execution-message-1',
+    executionMessageId: 'execution-message-1',
+    content: 'Execution completion',
+    eventTimeUs: 2_100_000,
+    eventCounter: 3,
+    metadata: {
+      streaming: false,
+      executionSummary: { step_count: 2 },
+    },
+  };
+  const history = {
+    id: 'assistant-message-1',
+    type: 'assistant_message',
+    role: 'assistant',
+    message_id: 'response-message-1',
+    executionMessageId: 'execution-message-1',
+    content: 'Persisted final answer',
+    eventTimeUs: 2_200_000,
+    eventCounter: 4,
+    metadata: { source: 'history' },
+  };
+
+  const items = mergeConversationTimelineItems(
+    [responseReplay, executionCompletion],
+    [history],
+  );
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'assistant'),
+    [
+      {
+        ...history,
+        metadata: {
+          streaming: false,
+          traceUrl: 'https://trace.example/run',
+          executionSummary: { step_count: 2 },
+          source: 'history',
+        },
+      },
+    ],
+  );
+});
+
+test('DB replay execution identity lets complete settle the response row before HTTP hydration', () => {
+  let items = mergeConversationTimelineItems([], [
+    {
+      id: 'completed-assistant-response-message-1',
+      type: 'assistant_message',
+      role: 'assistant',
+      message_id: 'response-message-1',
+      executionMessageId: 'execution-message-1',
+      content: 'Persisted response',
+      eventTimeUs: 2_000_000,
+      eventCounter: 2,
+      metadata: { streaming: false },
+    },
+  ]);
+
+  items = mergeAssistantCompletionEvent(items, {
+    messageId: 'execution-message-1',
+    content: 'Persisted final answer',
+    eventTimeUs: 2_100_000,
+    eventCounter: 3,
+    metadata: { executionSummary: { step_count: 2 } },
+  });
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'assistant').map((item) => ({
+      messageId: item.message_id,
+      executionMessageId: item.executionMessageId,
+      content: item.content,
+    })),
+    [
+      {
+        messageId: 'response-message-1',
+        executionMessageId: 'execution-message-1',
+        content: 'Persisted final answer',
+      },
+    ],
+  );
+  assert.match(
+    appSource,
+    /readStringField\(data, 'execution_message_id'\)[\s\S]*?item\.executionMessageId = executionMessageId/,
+  );
+});
+
+test('DB replay execution identity lets text end settle the response row without duplication', () => {
+  const existing = [
+    {
+      id: 'completed-assistant-response-message-1',
+      type: 'assistant_message',
+      role: 'assistant',
+      message_id: 'response-message-1',
+      executionMessageId: 'execution-message-1',
+      content: 'Persisted response',
+      eventTimeUs: 2_000_000,
+      eventCounter: 2,
+      metadata: { streaming: false },
+    },
+  ];
+
+  const items = mergeAssistantTextStreamChunk(existing, {
+    kind: 'complete',
+    messageId: 'execution-message-1',
+    content: 'Authoritative text end',
+    eventTimeUs: 2_100_000,
+    eventCounter: 3,
+  });
+
+  assert.deepEqual(
+    items.map((item) => ({
+      id: item.id,
+      messageId: item.message_id,
+      executionMessageId: item.executionMessageId,
+      content: item.content,
+    })),
+    [
+      {
+        id: 'completed-assistant-response-message-1',
+        messageId: 'response-message-1',
+        executionMessageId: 'execution-message-1',
+        content: 'Authoritative text end',
+      },
+    ],
+  );
+});
+
+test('send acknowledgement rebinds an optimistic user to its canonical execution identity', () => {
+  const optimistic = {
+    id: 'optimistic-user-client-request-1',
+    type: 'user_message',
+    role: 'user',
+    message_id: 'client-request-1',
+    content: '仅回复 DESKTOP_RENDER_PARITY_OK',
+    eventTimeUs: 1_000_000,
+    eventCounter: 0,
+    metadata: { optimistic: true },
+  };
+  const canonical = {
+    id: 'persisted-user-message-1',
+    type: 'user_message',
+    role: 'user',
+    message_id: 'execution-message-1',
+    content: '仅回复 DESKTOP_RENDER_PARITY_OK',
+    eventTimeUs: 1_000_001,
+    eventCounter: 1,
+    metadata: { source: 'history' },
+  };
+
+  const rebound = mergeAgentSendAcknowledgement(
+    [optimistic],
+    'client-request-1',
+    'execution-message-1',
+  );
+  const historyFirst = mergeConversationTimelineItems([canonical], rebound);
+  const liveFirst = mergeConversationTimelineItems(rebound, [canonical]);
+
+  for (const items of [historyFirst, liveFirst]) {
+    assert.deepEqual(
+      items.filter((item) => item.role === 'user'),
+      [
+        {
+          ...canonical,
+          executionMessageId: 'execution-message-1',
+          metadata: {
+            optimistic: false,
+            clientMessageId: 'client-request-1',
+            source: 'history',
+          },
+        },
+      ],
+    );
+  }
+});
+
+test('optimistic user rows never reconcile by cursor alone before acknowledgement', () => {
+  const optimistic = {
+    id: 'optimistic-user-client-request-1',
+    type: 'user_message',
+    role: 'user',
+    message_id: 'client-request-1',
+    content: 'First request',
+    eventTimeUs: 1_000_000,
+    eventCounter: 0,
+    metadata: { optimistic: true },
+  };
+  const unrelatedCanonical = {
+    id: 'persisted-user-message-2',
+    type: 'user_message',
+    role: 'user',
+    message_id: 'execution-message-2',
+    content: 'Second request',
+    eventTimeUs: 1_000_000,
+    eventCounter: 0,
+    metadata: { source: 'history' },
+  };
+
+  const items = mergeConversationTimelineItems(
+    [optimistic],
+    [unrelatedCanonical],
+  );
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'user').map((item) => item.content),
+    ['First request', 'Second request'],
+  );
+});
+
+test('canonical user rows are never deduplicated by content or shared message id', () => {
+  const first = {
+    id: 'persisted-user-message-1',
+    type: 'user_message',
+    role: 'user',
+    message_id: 'shared-request-id',
+    content: 'same content',
+    eventTimeUs: 1_000_000,
+    eventCounter: 1,
+  };
+  const second = {
+    ...first,
+    id: 'persisted-user-message-2',
+    eventTimeUs: 2_000_000,
+    eventCounter: 2,
+  };
+
+  const items = mergeConversationTimelineItems([first], [second]);
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'user').map((item) => item.id),
+    ['persisted-user-message-1', 'persisted-user-message-2'],
+  );
+});
+
+test('two optimistic user sends before an assistant response both remain visible', () => {
+  const first = {
+    id: 'optimistic-user-client-request-1',
+    type: 'user_message',
+    role: 'user',
+    message_id: 'client-request-1',
+    content: 'First',
+    eventTimeUs: 1_000_000,
+    eventCounter: 0,
+    metadata: { optimistic: true },
+  };
+  const second = {
+    ...first,
+    id: 'optimistic-user-client-request-2',
+    message_id: 'client-request-2',
+    content: 'Second',
+    eventTimeUs: 2_000_000,
+  };
+
+  const items = mergeConversationTimelineItems([first], [second]);
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'user').map((item) => item.content),
+    ['First', 'Second'],
+  );
+});
+
+test('optimistic user reconciliation does not cross an assistant boundary', () => {
+  const optimistic = {
+    id: 'optimistic-user-client-request-1',
+    type: 'user_message',
+    role: 'user',
+    message_id: 'client-request-1',
+    content: 'First',
+    eventTimeUs: 1_000_000,
+    eventCounter: 0,
+    metadata: { optimistic: true },
+  };
+  const assistant = {
+    id: 'assistant-1',
+    type: 'assistant_message',
+    role: 'assistant',
+    content: 'First result',
+    eventTimeUs: 2_000_000,
+    eventCounter: 1,
+  };
+  const canonical = {
+    id: 'persisted-user-message-2',
+    type: 'user_message',
+    role: 'user',
+    message_id: 'persisted-user-message-2',
+    content: 'Second',
+    eventTimeUs: 3_000_000,
+    eventCounter: 1,
+  };
+
+  const items = mergeConversationTimelineItems(
+    [optimistic, assistant],
+    [canonical],
+  );
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'user').map((item) => item.id),
+    ['optimistic-user-client-request-1', 'persisted-user-message-2'],
+  );
+});
+
+test('canonical assistant messages remain distinct within and across user turns', () => {
+  const firstUser = {
+    id: 'user-1',
+    type: 'user_message',
+    role: 'user',
+    content: 'repeat',
+    eventTimeUs: 1_000_000,
+    eventCounter: 1,
+  };
+  const firstAssistant = {
+    id: 'assistant-1',
+    type: 'assistant_message',
+    role: 'assistant',
+    message_id: 'request-1',
+    content: 'same text',
+    eventTimeUs: 2_000_000,
+    eventCounter: 1,
+  };
+  const secondAssistant = {
+    ...firstAssistant,
+    id: 'assistant-2',
+    eventTimeUs: 2_500_000,
+    eventCounter: 2,
+  };
+  const secondUser = {
+    ...firstUser,
+    id: 'user-2',
+    eventTimeUs: 3_000_000,
+    eventCounter: 1,
+  };
+  const thirdAssistant = {
+    ...firstAssistant,
+    id: 'assistant-3',
+    eventTimeUs: 4_000_000,
+    eventCounter: 1,
+  };
+
+  const items = mergeConversationTimelineItems(
+    [firstUser, firstAssistant],
+    [secondAssistant, secondUser, thirdAssistant],
+  );
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'assistant').map((item) => item.id),
+    ['assistant-1', 'assistant-2', 'assistant-3'],
+  );
+});
+
+test('multiple live assistants reconcile to persisted rows by cursor without swapping metadata', () => {
+  const user = {
+    id: 'user-1',
+    type: 'user_message',
+    role: 'user',
+    content: 'Run both',
+    eventTimeUs: 1_000_000,
+    eventCounter: 1,
+  };
+  const firstTransient = {
+    id: 'streaming-assistant-request-1',
+    type: 'assistant_message',
+    role: 'assistant',
+    message_id: 'request-1',
+    content: 'first draft',
+    eventTimeUs: 2_000_000,
+    eventCounter: 1,
+    metadata: { streaming: false, traceUrl: 'trace-first' },
+  };
+  const secondTransient = {
+    ...firstTransient,
+    id: 'streaming-assistant-request-2',
+    message_id: 'request-2',
+    content: 'second draft',
+    eventTimeUs: 3_000_000,
+    eventCounter: 2,
+    metadata: { streaming: false, traceUrl: 'trace-second' },
+  };
+  const firstPersisted = {
+    id: 'assistant-1',
+    type: 'assistant_message',
+    role: 'assistant',
+    message_id: 'persisted-1',
+    content: 'first final',
+    eventTimeUs: 2_000_000,
+    eventCounter: 1,
+  };
+  const secondPersisted = {
+    ...firstPersisted,
+    id: 'assistant-2',
+    message_id: 'persisted-2',
+    content: 'second final',
+    eventTimeUs: 3_000_000,
+    eventCounter: 2,
+  };
+
+  const items = mergeConversationTimelineItems(
+    [user, firstTransient, secondTransient],
+    [firstPersisted, secondPersisted],
+  );
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'assistant').map((item) => ({
+      id: item.id,
+      content: item.content,
+      traceUrl: item.metadata.traceUrl,
+    })),
+    [
+      { id: 'assistant-1', content: 'first final', traceUrl: 'trace-first' },
+      { id: 'assistant-2', content: 'second final', traceUrl: 'trace-second' },
+    ],
+  );
+});
+
+test('assistant reconciliation never crosses a user-turn boundary', () => {
+  const firstUser = {
+    id: 'user-1',
+    type: 'user_message',
+    role: 'user',
+    content: 'First',
+    eventTimeUs: 1_000_000,
+    eventCounter: 1,
+  };
+  const firstTransient = {
+    id: 'streaming-assistant-first',
+    type: 'assistant_message',
+    role: 'assistant',
+    content: 'First draft',
+    eventTimeUs: 2_000_000,
+    eventCounter: 1,
+    metadata: { streaming: false },
+  };
+  const secondUser = {
+    ...firstUser,
+    id: 'user-2',
+    content: 'Second',
+    eventTimeUs: 3_000_000,
+  };
+  const secondPersisted = {
+    id: 'assistant-2',
+    type: 'assistant_message',
+    role: 'assistant',
+    content: 'Second final',
+    eventTimeUs: 4_000_000,
+    eventCounter: 1,
+  };
+
+  const items = mergeConversationTimelineItems(
+    [firstUser, firstTransient],
+    [secondUser, secondPersisted],
+  );
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'assistant').map((item) => item.id),
+    ['streaming-assistant-first', 'assistant-2'],
+  );
+});
+
+test('an unmatched transient assistant remains beside an older canonical assistant', () => {
+  const existing = [
+    {
+      id: 'user-1',
+      type: 'user_message',
+      role: 'user',
+      content: 'Continue',
+      eventTimeUs: 1_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'assistant-old',
+      type: 'assistant_message',
+      role: 'assistant',
+      message_id: 'persisted-old',
+      content: 'Older canonical answer',
+      eventTimeUs: 2_000_000,
+      eventCounter: 1,
+    },
+  ];
+  const transient = {
+    id: 'streaming-assistant-new',
+    type: 'assistant_message',
+    role: 'assistant',
+    message_id: 'execution-new',
+    content: 'New answer in progress',
+    eventTimeUs: 3_000_000,
+    eventCounter: 1,
+    metadata: { streaming: true },
+  };
+
+  const items = mergeConversationTimelineItems(existing, [transient]);
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'assistant').map((item) => item.content),
+    ['Older canonical answer', 'New answer in progress'],
+  );
+});
+
+test('id-less final events receive event-scoped identities instead of a mutable turn identity', () => {
+  const lateFirstTurnComplete = eventScopedStreamMessageId(
+    'conversation-1',
+    'complete',
+    2_500_000,
+    4,
+  );
+  const secondTurnComplete = eventScopedStreamMessageId(
+    'conversation-1',
+    'complete',
+    4_500_000,
+    2,
+  );
+
+  assert.notEqual(lateFirstTurnComplete, secondTurnComplete);
+  assert.equal(
+    lateFirstTurnComplete,
+    'unassociated-conversation-1-complete-2500000-4',
+  );
+});
+
+test('complete with an unmatched response id appends without mutating canonical assistants', () => {
+  const existing = [
+    {
+      id: 'user-1',
+      type: 'user_message',
+      role: 'user',
+      content: 'Report both',
+      eventTimeUs: 1_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'assistant-1',
+      type: 'assistant_message',
+      role: 'assistant',
+      content: 'First result',
+      eventTimeUs: 2_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'assistant-2',
+      type: 'assistant_message',
+      role: 'assistant',
+      content: 'Second draft',
+      eventTimeUs: 3_000_000,
+      eventCounter: 2,
+    },
+  ];
+
+  const items = mergeAssistantCompletionEvent(existing, {
+    messageId: 'request-1',
+    content: 'Second final',
+    eventTimeUs: 4_000_000,
+    eventCounter: 3,
+  });
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'assistant').map((item) => item.content),
+    ['First result', 'Second draft', 'Second final'],
+  );
+  assert.equal(items.find((item) => item.id === 'assistant-2')?.message_id, undefined);
+  assert.equal(
+    items.find((item) => item.content === 'Second final')?.executionMessageId,
+    'request-1',
+  );
+});
+
+test('complete updates its exact transient response without overwriting an older canonical answer', () => {
+  const existing = [
+    {
+      id: 'user-1',
+      type: 'user_message',
+      role: 'user',
+      content: 'Continue',
+      eventTimeUs: 1_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'assistant-old',
+      type: 'assistant_message',
+      role: 'assistant',
+      message_id: 'persisted-old',
+      content: 'Older canonical answer',
+      eventTimeUs: 2_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'streaming-assistant-execution-new',
+      type: 'assistant_message',
+      role: 'assistant',
+      message_id: 'execution-new',
+      content: 'New draft',
+      eventTimeUs: 3_000_000,
+      eventCounter: 1,
+      metadata: { streaming: true },
+    },
+  ];
+
+  const items = mergeAssistantCompletionEvent(existing, {
+    messageId: 'execution-new',
+    content: 'New final answer',
+    eventTimeUs: 4_000_000,
+    eventCounter: 1,
+  });
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'assistant').map((item) => item.content),
+    ['Older canonical answer', 'New final answer'],
+  );
+});
+
+test('a delayed explicit completion updates its response across a newer user-turn boundary', () => {
+  const existing = [
+    {
+      id: 'user-1',
+      type: 'user_message',
+      role: 'user',
+      content: 'First',
+      eventTimeUs: 1_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'streaming-assistant-execution-1',
+      type: 'assistant_message',
+      role: 'assistant',
+      message_id: 'execution-1',
+      content: 'First draft',
+      eventTimeUs: 2_000_000,
+      eventCounter: 1,
+      metadata: { streaming: true },
+    },
+    {
+      id: 'user-2',
+      type: 'user_message',
+      role: 'user',
+      content: 'Second',
+      eventTimeUs: 3_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'streaming-assistant-execution-2',
+      type: 'assistant_message',
+      role: 'assistant',
+      message_id: 'execution-2',
+      content: 'Second draft',
+      eventTimeUs: 4_000_000,
+      eventCounter: 1,
+      metadata: { streaming: true },
+    },
+  ];
+
+  const items = mergeAssistantCompletionEvent(existing, {
+    messageId: 'execution-1',
+    content: 'First final',
+    eventTimeUs: 5_000_000,
+    eventCounter: 1,
+  });
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'assistant').map((item) => item.content),
+    ['First final', 'Second draft'],
+  );
+});
+
+test('a delayed text end settles its exact assistant without moving it across newer turns', () => {
+  const existing = [
+    {
+      id: 'user-1',
+      type: 'user_message',
+      role: 'user',
+      content: 'First',
+      eventTimeUs: 1_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'streaming-assistant-execution-1',
+      type: 'assistant_message',
+      role: 'assistant',
+      message_id: 'execution-1',
+      content: 'First draft',
+      eventTimeUs: 2_000_000,
+      eventCounter: 1,
+      metadata: { streaming: true },
+    },
+    {
+      id: 'user-2',
+      type: 'user_message',
+      role: 'user',
+      content: 'Second',
+      eventTimeUs: 3_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'streaming-assistant-execution-2',
+      type: 'assistant_message',
+      role: 'assistant',
+      message_id: 'execution-2',
+      content: 'Second answer',
+      eventTimeUs: 4_000_000,
+      eventCounter: 1,
+      metadata: { streaming: false },
+    },
+  ];
+
+  const items = mergeAssistantTextStreamChunk(existing, {
+    kind: 'complete',
+    messageId: 'execution-1',
+    content: 'First final',
+    eventTimeUs: 5_000_000,
+    eventCounter: 1,
+  });
+
+  assert.deepEqual(
+    items.map((item) => [item.id, item.content]),
+    [
+      ['user-1', 'First'],
+      ['streaming-assistant-execution-1', 'First final'],
+      ['user-2', 'Second'],
+      ['streaming-assistant-execution-2', 'Second answer'],
+    ],
+  );
+  assert.equal(items[1].eventTimeUs, 2_000_000);
+  assert.equal(items[1].eventCounter, 1);
+  assert.equal(items[1].metadata.streaming, false);
+});
+
+test('a delayed thought completion settles its exact row without moving it across newer turns', () => {
+  const existing = [
+    {
+      id: 'user-1',
+      type: 'user_message',
+      role: 'user',
+      content: 'First',
+      eventTimeUs: 1_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'streaming-thought-execution-1-2000000-1',
+      type: 'thought',
+      message_id: 'execution-1',
+      content: 'First thought draft',
+      eventTimeUs: 2_000_000,
+      eventCounter: 1,
+      metadata: { streaming: true },
+    },
+    {
+      id: 'user-2',
+      type: 'user_message',
+      role: 'user',
+      content: 'Second',
+      eventTimeUs: 3_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'streaming-thought-execution-2-4000000-1',
+      type: 'thought',
+      message_id: 'execution-2',
+      content: 'Second thought',
+      eventTimeUs: 4_000_000,
+      eventCounter: 1,
+      metadata: { streaming: false },
+    },
+  ];
+
+  const items = mergeThoughtStreamChunk(existing, {
+    kind: 'complete',
+    messageId: 'execution-1',
+    content: 'First thought final',
+    eventTimeUs: 5_000_000,
+    eventCounter: 1,
+  });
+
+  assert.deepEqual(
+    items.map((item) => [item.id, item.content]),
+    [
+      ['user-1', 'First'],
+      ['streaming-thought-execution-1-2000000-1', 'First thought final'],
+      ['user-2', 'Second'],
+      ['streaming-thought-execution-2-4000000-1', 'Second thought'],
+    ],
+  );
+  assert.equal(items[1].eventTimeUs, 2_000_000);
+  assert.equal(items[1].eventCounter, 1);
+  assert.equal(items[1].metadata.streaming, false);
+});
+
+test('complete without a matching response id preserves the existing transient assistant', () => {
+  const existing = [
+    {
+      id: 'user-1',
+      type: 'user_message',
+      role: 'user',
+      content: 'Continue',
+      eventTimeUs: 1_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'assistant-old',
+      type: 'assistant_message',
+      role: 'assistant',
+      content: 'Older canonical answer',
+      eventTimeUs: 2_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'streaming-assistant-new',
+      type: 'assistant_message',
+      role: 'assistant',
+      message_id: 'execution-new',
+      content: 'Newest draft',
+      eventTimeUs: 3_000_000,
+      eventCounter: 1,
+      metadata: { streaming: true },
+    },
+  ];
+
+  const items = mergeAssistantCompletionEvent(existing, {
+    messageId: 'completion-without-stream-id',
+    content: 'Newest final answer',
+    eventTimeUs: 4_000_000,
+    eventCounter: 1,
+  });
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'assistant').map((item) => item.content),
+    ['Older canonical answer', 'Newest draft', 'Newest final answer'],
+  );
+});
+
+test('a channel inbound user message starts a new completion turn', () => {
+  const existing = [
+    {
+      id: 'assistant-before-channel',
+      type: 'assistant_message',
+      role: 'assistant',
+      content: 'Before channel message',
+      eventTimeUs: 1_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'channel-event-1',
+      type: 'message',
+      eventTimeUs: 2_000_000,
+      eventCounter: 1,
+      payload: {
+        id: 'channel-user-1',
+        role: 'user',
+        content: 'Continue from Feishu',
+        metadata: { source: 'channel_inbound' },
+      },
+    },
+    {
+      id: 'streaming-assistant-channel-turn',
+      type: 'assistant_message',
+      role: 'assistant',
+      message_id: 'channel-execution-1',
+      content: 'Channel draft',
+      eventTimeUs: 3_000_000,
+      eventCounter: 1,
+      metadata: { streaming: true },
+    },
+  ];
+
+  const items = mergeAssistantCompletionEvent(existing, {
+    messageId: 'channel-execution-1',
+    content: 'Channel final',
+    eventTimeUs: 4_000_000,
+    eventCounter: 1,
+  });
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'assistant').map((item) => item.content),
+    ['Before channel message', 'Channel final'],
+  );
+});
+
 test('live Agent complete events preserve final content and execution summary metadata', () => {
   assert.match(appSource, /type === 'complete'[\s\S]*?mergeAssistantCompletionEvent\(/);
+  assert.match(appSource, /type === 'assistant_message'[\s\S]*?mergeConversationTimelineItems\(/);
   assert.match(appSource, /objectField\(data, 'execution_summary'\)/);
   assert.match(appSource, /readTextField\(data, 'content'\)/);
+});
+
+test('transport acknowledgements stay out of the transcript and terminal signals are released', () => {
+  assert.match(
+    appSource,
+    /type === 'ack'[\s\S]*?action'\) === 'send_message'[\s\S]*?mergeAgentSendAcknowledgement\(/,
+  );
+  assert.match(
+    appSource,
+    /function streamingMessageId\([\s\S]*?return protocolStreamMessageId\(payload\)/,
+  );
+  assert.match(
+    appSource,
+    /!explicitMessageId && type !== 'text_end'[\s\S]*?eventScopedStreamMessageId\(/,
+  );
+  assert.match(
+    appSource,
+    /setAgentTaskSignals\(\(current\) => \{[\s\S]*?reconcileAgentTaskSignals\(current, update\)/,
+  );
+  assert.match(
+    chatPanelSource,
+    /timelineFailureIds[\s\S]*?signal\.status === 'failed'[\s\S]*?!timelineFailureIds\.has\(signal\.messageId\)/,
+  );
 });
 
 test('MCP elicitation events expose safe request and response audit semantics', () => {
@@ -230,6 +1349,8 @@ test('cost updates merge into the current Agent reply without losing execution s
       id: 'assistant-cost-1',
       type: 'assistant_message',
       role: 'assistant',
+      message_id: 'execution-cost-1',
+      executionMessageId: 'execution-cost-1',
       content: 'Verification complete',
       eventTimeUs: 2_000_000,
       eventCounter: 2,
@@ -241,6 +1362,7 @@ test('cost updates merge into the current Agent reply without losing execution s
   ];
 
   const merged = mergeCostUpdateEvent(existing, {
+    message_id: 'execution-cost-1',
     cost_usd: 0.0042,
     total_tokens: 900,
     input_tokens: 700,
@@ -275,12 +1397,15 @@ test('cost updates accept domain token maps, prefer cumulative totals, and avoid
       id: 'assistant-cost-2',
       type: 'assistant_message',
       role: 'assistant',
+      message_id: 'execution-cost-2',
+      executionMessageId: 'execution-cost-2',
       content: 'Done',
       eventTimeUs: 3_000_000,
       eventCounter: 3,
     },
   ];
   const merged = mergeCostUpdateEvent(existing, {
+    execution_message_id: 'execution-cost-2',
     cost: 0.001,
     cumulative_cost_usd: 0.006,
     tokens: { input: 800, output: 200, total: 1_000 },
@@ -290,7 +1415,70 @@ test('cost updates accept domain token maps, prefer cumulative totals, and avoid
   assert.equal(assistantExecutionSummary(merged[0]).totalCost, 0.006);
   assert.equal(assistantExecutionSummary(merged[0]).totalTokens, 1_600);
   assert.equal(mergeCostUpdateEvent([], { cost: 0.001, tokens: { total: 100 } }).length, 0);
+  assert.equal(
+    mergeCostUpdateEvent(existing, { cost: 0.001, tokens: { total: 100 } }),
+    existing,
+  );
   assert.match(appSource, /type === 'cost_update'[\s\S]*?mergeCostUpdateEvent\(/);
+});
+
+test('a delayed cost update changes only the assistant with the exact execution id', () => {
+  const existing = [
+    {
+      id: 'user-cost-first',
+      type: 'user_message',
+      role: 'user',
+      content: 'First',
+      eventTimeUs: 1_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'assistant-cost-first',
+      type: 'assistant_message',
+      role: 'assistant',
+      message_id: 'response-cost-first',
+      executionMessageId: 'execution-cost-first',
+      content: 'First answer',
+      eventTimeUs: 2_000_000,
+      eventCounter: 2,
+    },
+    {
+      id: 'user-cost-second',
+      type: 'user_message',
+      role: 'user',
+      content: 'Second',
+      eventTimeUs: 3_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'assistant-cost-second',
+      type: 'assistant_message',
+      role: 'assistant',
+      message_id: 'response-cost-second',
+      executionMessageId: 'execution-cost-second',
+      content: 'Second answer',
+      eventTimeUs: 4_000_000,
+      eventCounter: 2,
+    },
+  ];
+
+  const merged = mergeCostUpdateEvent(existing, {
+    message_id: 'execution-cost-first',
+    cost_usd: 0.12,
+    input_tokens: 900,
+    output_tokens: 100,
+    total_tokens: 1_000,
+  });
+
+  assert.deepEqual(assistantCostTracking(merged[1]), {
+    inputTokens: 900,
+    outputTokens: 100,
+    reasoningTokens: 0,
+    totalTokens: 1_000,
+    costUsd: 0.12,
+    model: '',
+  });
+  assert.equal(assistantCostTracking(merged[3]), null);
 });
 
 test('domain cost updates accumulate input, output, reasoning, total tokens, and cost', () => {
@@ -299,6 +1487,8 @@ test('domain cost updates accumulate input, output, reasoning, total tokens, and
       id: 'assistant-cost-reasoning',
       type: 'assistant_message',
       role: 'assistant',
+      message_id: 'execution-cost-reasoning',
+      executionMessageId: 'execution-cost-reasoning',
       content: 'Compared both execution paths',
       eventTimeUs: 3_500_000,
       eventCounter: 4,
@@ -307,10 +1497,12 @@ test('domain cost updates accumulate input, output, reasoning, total tokens, and
   ];
 
   const afterFirstStep = mergeCostUpdateEvent(existing, {
+    message_id: 'execution-cost-reasoning',
     cost: 0.001,
     tokens: { input: 800, output: 100, reasoning: 100 },
   });
   const afterSecondStep = mergeCostUpdateEvent(afterFirstStep, {
+    message_id: 'execution-cost-reasoning',
     cost: 0.002,
     tokens: { input: 400, output: 200, reasoning: 50 },
   });
@@ -1728,8 +2920,16 @@ test('tool progress events expose structured work progress without raw payload f
   );
 });
 
-test('live cloud progress events enter the timeline instead of being discarded', () => {
+test('live cloud progress remains available as a structured Desktop activity', () => {
   assert.equal(shouldSkipLiveTimelineEvent('progress', null), false);
+  const progress = {
+    id: 'progress-1',
+    type: 'progress',
+    eventTimeUs: 1,
+    eventCounter: 1,
+    payload: { message: 'Uploading' },
+  };
+  assert.deepEqual(timelineItemsForDisplay([progress]), [progress]);
   assert.equal(shouldSkipLiveTimelineEvent('status', null), true);
   assert.equal(shouldSkipLiveTimelineEvent('message', 'subscribe_workspace'), true);
   assert.match(
@@ -2684,7 +3884,6 @@ test('UI-state events stay out of the visible conversation timeline', () => {
     [
       'user-message-1',
       'assistant-message-1',
-      'context-status-1',
       'reflection-complete-1',
       'task-start-1',
       'task-complete-1',
@@ -2701,6 +3900,25 @@ test('UI-state events stay out of the visible conversation timeline', () => {
         content: 'Run the compatibility matrix',
         eventTimeUs: 55_000_000,
         eventCounter: 5,
+      },
+    ]),
+    [],
+  );
+
+  assert.deepEqual(
+    latestAgentSuggestions([
+      ...items,
+      {
+        id: 'channel-inbound-user-1',
+        type: 'message',
+        eventTimeUs: 55_200_000,
+        eventCounter: 45,
+        payload: {
+          id: 'channel-user-1',
+          role: 'user',
+          content: 'Continue from Feishu',
+          metadata: { source: 'channel_inbound' },
+        },
       },
     ]),
     [],
@@ -2731,6 +3949,90 @@ test('UI-state events stay out of the visible conversation timeline', () => {
       },
     ]),
     ['Inspect the generated patch'],
+  );
+});
+
+test('Web state-only routing and lifecycle events do not become conversation activity rows', () => {
+  const visible = timelineItemsForDisplay(
+    [
+      'context_status',
+      'execution_path_decided',
+      'selection_trace',
+      'policy_filtered',
+      'toolset_changed',
+    ].map((type, index) => ({
+      id: `${type}-${index}`,
+      type,
+      eventTimeUs: index + 1,
+      eventCounter: index + 1,
+      payload: {},
+    })),
+  );
+
+  assert.deepEqual(visible, []);
+});
+
+test('the reported Web-parity turn renders only user, memory, and final assistant rows', () => {
+  const items = [
+    {
+      id: 'user-1',
+      type: 'user_message',
+      role: 'user',
+      content: 'hi',
+      eventTimeUs: 1,
+      eventCounter: 1,
+    },
+    {
+      id: 'route-1',
+      type: 'execution_path_decided',
+      eventTimeUs: 2,
+      eventCounter: 2,
+    },
+    {
+      id: 'memory-1',
+      type: 'memory_recalled',
+      eventTimeUs: 3,
+      eventCounter: 3,
+      payload: { count: 6, search_ms: 424 },
+    },
+    {
+      id: 'context-1',
+      type: 'context_status',
+      eventTimeUs: 4,
+      eventCounter: 4,
+    },
+    {
+      id: 'selection-1',
+      type: 'selection_trace',
+      eventTimeUs: 5,
+      eventCounter: 5,
+    },
+    {
+      id: 'assistant-1',
+      type: 'assistant_message',
+      role: 'assistant',
+      content: '你好！有什么可以帮你的吗？',
+      eventTimeUs: 6,
+      eventCounter: 6,
+    },
+    {
+      id: 'context-2',
+      type: 'context_status',
+      eventTimeUs: 7,
+      eventCounter: 7,
+    },
+    {
+      id: 'suggestions-1',
+      type: 'suggestions',
+      suggestions: ['帮我开始一个新任务'],
+      eventTimeUs: 8,
+      eventCounter: 8,
+    },
+  ];
+
+  assert.deepEqual(
+    timelineItemsForDisplay(items).map((item) => item.type),
+    ['user_message', 'memory_recalled', 'assistant_message'],
   );
 });
 
@@ -2872,6 +4174,53 @@ test('a second thought stream under the same Agent message remains a separate st
   assert.equal(withNext[1].metadata.streaming, true);
 });
 
+test('completed thought skeleton reconciles with its history row in either arrival order', () => {
+  let inFlight = mergeThoughtStreamChunk([], {
+    kind: 'start',
+    messageId: 'execution-message-1',
+    content: '',
+    eventTimeUs: 1_000_000,
+    eventCounter: 1,
+  });
+  inFlight = mergeThoughtStreamChunk(inFlight, {
+    kind: 'delta',
+    messageId: 'execution-message-1',
+    content: 'Inspect tests',
+    eventTimeUs: 1_100_000,
+    eventCounter: 2,
+  });
+  const completeChunk = {
+    kind: 'complete',
+    messageId: 'execution-message-1',
+    content: 'Inspect tests',
+    eventTimeUs: 1_200_000,
+    eventCounter: 3,
+  };
+  const completed = mergeThoughtStreamChunk(inFlight, completeChunk);
+  const history = {
+    id: 'thought-1200000-3',
+    type: 'thought',
+    content: 'Inspect tests',
+    eventTimeUs: 1_200_000,
+    eventCounter: 3,
+    metadata: { source: 'history' },
+  };
+
+  const hydratedAfterComplete = mergeConversationTimelineItems(completed, [history]);
+  const liveAfterHistory = mergeConversationTimelineItems([history], completed);
+  const historyBeforeComplete = mergeThoughtStreamChunk(
+    mergeConversationTimelineItems(inFlight, [history]),
+    completeChunk,
+  );
+
+  for (const items of [hydratedAfterComplete, liveAfterHistory, historyBeforeComplete]) {
+    assert.deepEqual(
+      items.filter((item) => item.type === 'thought').map((item) => item.id),
+      ['thought-1200000-3'],
+    );
+  }
+});
+
 test('live Agent events route thought start, delta, and completion through the stream merger', () => {
   assert.match(
     appSource,
@@ -2968,6 +4317,149 @@ test('streamed tool arguments merge into one stable call and settle on observe',
   assert.equal(items.length, 2);
   assert.equal(items[0].metadata.streaming, false);
   assert.equal(pairToolCallItems(items)[0].result?.id, 'observe-1');
+});
+
+test('history tool calls replace live delta skeletons without leaving a running duplicate', () => {
+  const deltaOnly = mergeToolStreamItem(
+    [],
+    {
+      id: 'act_delta-100-1',
+      type: 'act',
+      toolName: 'read_file',
+      toolInput: '{"path":"README.md"',
+      payload: { call_id: 'call-1', accumulated_arguments: '{"path":"README.md"' },
+      message_id: 'message-1',
+      eventTimeUs: 100,
+      eventCounter: 1,
+    },
+    'delta',
+  );
+  const finalAct = {
+    id: 'act-200-2',
+    type: 'act',
+    toolName: 'read_file',
+    toolInput: { path: 'README.md' },
+    payload: { call_id: 'call-1', tool_execution_id: 'exec-1' },
+    message_id: 'message-1',
+    eventTimeUs: 200,
+    eventCounter: 2,
+  };
+  const observe = {
+    id: 'observe-300-3',
+    type: 'observe',
+    toolName: 'read_file',
+    toolOutput: 'contents',
+    payload: { call_id: 'call-1', tool_execution_id: 'exec-1' },
+    message_id: 'message-1',
+    eventTimeUs: 300,
+    eventCounter: 3,
+  };
+  const historyAct = {
+    id: 'act-200-2',
+    type: 'act',
+    toolName: 'read_file',
+    toolInput: { path: 'README.md' },
+    execution_id: 'exec-1',
+    eventTimeUs: 200,
+    eventCounter: 2,
+  };
+  const historyObserve = {
+    id: 'observe-300-3',
+    type: 'observe',
+    toolName: 'read_file',
+    toolOutput: 'contents',
+    execution_id: 'exec-1',
+    eventTimeUs: 300,
+    eventCounter: 3,
+  };
+  let live = mergeToolStreamItem(deltaOnly, finalAct, 'act');
+  live = mergeToolStreamItem(live, observe, 'observe');
+  const hydratedAfterLive = mergeConversationTimelineItems(live, [
+    historyAct,
+    historyObserve,
+  ]);
+
+  let historyFirst = mergeConversationTimelineItems(deltaOnly, [historyAct]);
+  historyFirst = mergeToolStreamItem(historyFirst, finalAct, 'act');
+  historyFirst = mergeToolStreamItem(historyFirst, observe, 'observe');
+
+  for (const items of [hydratedAfterLive, historyFirst]) {
+    const pairs = pairToolCallItems(
+      items.filter((item) => item.type === 'act' || item.type === 'observe'),
+    );
+    assert.equal(pairs.length, 1);
+    assert.equal(pairs[0].call.id, 'act-200-2');
+    assert.equal(pairs[0].call.eventTimeUs, 200);
+    assert.equal(pairs[0].result?.id, 'observe-300-3');
+    assert.equal(toolCallPairStatus(pairs[0]), 'complete');
+  }
+});
+
+test('reused weak call ids never merge distinct strong tool executions', () => {
+  const items = mergeConversationTimelineItems(
+    [
+      {
+        id: 'act-execution-1',
+        type: 'act',
+        execution_id: 'execution-1',
+        payload: { call_id: 'workspace-recovery' },
+        eventTimeUs: 100,
+        eventCounter: 1,
+      },
+    ],
+    [
+      {
+        id: 'act-execution-2',
+        type: 'act',
+        execution_id: 'execution-2',
+        payload: { call_id: 'workspace-recovery' },
+        eventTimeUs: 200,
+        eventCounter: 2,
+      },
+    ],
+  );
+
+  assert.deepEqual(
+    items.map((item) => item.id),
+    ['act-execution-1', 'act-execution-2'],
+  );
+});
+
+test('tool pairing prefers strong execution ids when weak call ids are reused', () => {
+  const pairs = pairToolCallItems([
+    {
+      id: 'act-execution-1',
+      type: 'act',
+      execution_id: 'execution-1',
+      payload: { call_id: 'workspace-recovery' },
+      eventTimeUs: 100,
+    },
+    {
+      id: 'act-execution-2',
+      type: 'act',
+      execution_id: 'execution-2',
+      payload: { call_id: 'workspace-recovery' },
+      eventTimeUs: 200,
+    },
+    {
+      id: 'observe-execution-2',
+      type: 'observe',
+      execution_id: 'execution-2',
+      payload: { call_id: 'workspace-recovery' },
+      eventTimeUs: 300,
+    },
+    {
+      id: 'observe-execution-1',
+      type: 'observe',
+      execution_id: 'execution-1',
+      payload: { call_id: 'workspace-recovery' },
+      eventTimeUs: 400,
+    },
+  ]);
+
+  assert.equal(pairs.length, 2);
+  assert.equal(pairs[0].result?.id, 'observe-execution-1');
+  assert.equal(pairs[1].result?.id, 'observe-execution-2');
 });
 
 test('parallel tool observations pair by call identity instead of arrival order', () => {
@@ -3119,6 +4611,22 @@ test('working duration starts from the latest authoritative running boundary', (
 
   assert.equal(timelineWorkingStartedAtUs(items), 2_000_000);
   assert.equal(timelineWorkingStartedAtUs(items.slice(0, 1)), 1_000_000);
+  assert.equal(
+    timelineWorkingStartedAtUs([
+      {
+        id: 'channel-inbound-user-1',
+        type: 'message',
+        eventTimeUs: 4_000_000,
+        payload: {
+          id: 'channel-user-1',
+          role: 'user',
+          content: 'Continue from Feishu',
+          metadata: { source: 'channel_inbound' },
+        },
+      },
+    ]),
+    4_000_000,
+  );
   assert.equal(timelineWorkingStartedAtUs([]), null);
 });
 

@@ -23,6 +23,10 @@ test('session messages use the mission-control narrative hierarchy', () => {
   assert.match(chatStyles, /\.session-thread-message\.user \{[\s\S]*background: #161d27/);
   assert.match(chatStyles, /\.session-thread-message\.agent \{[\s\S]*background: transparent/);
   assert.match(chatStyles, /\.session-thread-message\.agent \.transcript-meta \{[\s\S]*opacity: 0/);
+  assert.match(
+    chatStyles,
+    /\.session-chat-narrative \.message\.session-thread-message\.user \{[\s\S]*width: fit-content;[\s\S]*margin-left: auto;/,
+  );
 });
 
 test('assistant execution summaries render structured input, output, and reasoning tokens', () => {
@@ -177,6 +181,7 @@ test('session composer exposes localized context actions and compact delivery co
 });
 
 test('chat copy and diagnostics are localized in both supported locales', () => {
+  assert.match(i18nSource, /'session\.statusActive': '活跃'/);
   for (const key of [
     'session.today',
     'session.workspaceAgent',

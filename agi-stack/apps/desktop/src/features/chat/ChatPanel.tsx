@@ -59,10 +59,15 @@ import {
 } from './chatComposerModel';
 import type { ChatComposerVariant } from './chatComposerModel';
 import { latestAgentSuggestions } from './chatTimelineModel';
+import type {
+  AgentTaskSignal,
+  AgentTaskSignalStatus,
+} from './agentTaskSignalModel';
 import './ChatPanel.css';
 import './ComposerMenus.css';
 
 export type { ChatWorkflowTarget } from './ChatWorkflowStrip';
+export type { AgentTaskSignal, AgentTaskSignalStatus } from './agentTaskSignalModel';
 
 type ChatAuthorityNotice = {
   tone: 'loading' | 'warning' | 'error';
@@ -124,19 +129,6 @@ type ChatPanelProps = {
   onModelReset?: () => Promise<void>;
   onOpenMCPAppResult?: (item: AgentTimelineItem) => void;
   onOpenCommands: (trigger?: HTMLElement | null) => void;
-};
-
-export type AgentTaskSignalStatus = 'saving' | 'queued' | 'acknowledged' | 'failed';
-
-export type AgentTaskSignal = {
-  id: string;
-  content: string;
-  status: AgentTaskSignalStatus;
-  detail: string;
-  createdAt: string;
-  conversationId?: string;
-  messageId?: string;
-  eventType?: string;
 };
 
 type EarlierTimelineScrollAnchor = {
@@ -221,9 +213,24 @@ export const ChatPanel = memo(function ChatPanel({
   const earlierScrollRef = useRef<EarlierTimelineScrollAnchor | null>(null);
   const [expandedTimelineItems, setExpandedTimelineItems] = useState<Record<string, boolean>>({});
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  const visibleAgentTaskSignals = useMemo(() => {
+    const timelineFailureIds = new Set(
+      (timelineState?.items ?? []).flatMap((item) => {
+        if (item.type !== 'error' && item.isError !== true) return [];
+        return [item.executionMessageId, item.message_id].filter(
+          (value): value is string => typeof value === 'string' && value.length > 0,
+        );
+      }),
+    );
+    return agentTaskSignals.filter(
+      (signal) =>
+        signal.status === 'failed' &&
+        (!signal.messageId || !timelineFailureIds.has(signal.messageId)),
+    );
+  }, [agentTaskSignals, timelineState?.items]);
   const signalStateKey = useMemo(
-    () => agentTaskSignals.map((signal) => `${signal.id}:${signal.status}`).join('|'),
-    [agentTaskSignals],
+    () => visibleAgentTaskSignals.map((signal) => `${signal.id}:${signal.status}`).join('|'),
+    [visibleAgentTaskSignals],
   );
   const timelineItemCount = timelineState?.items.length ?? 0;
   const timelineConversationId = timelineState?.conversationId ?? '';
@@ -613,9 +620,9 @@ export const ChatPanel = memo(function ChatPanel({
           ) : (
             messages.map((message) => <WorkspaceTranscriptMessage message={message} key={message.id} />)
           )}
-          {agentTaskSignals.length ? (
+          {visibleAgentTaskSignals.length ? (
             <div className="agent-run-stack" aria-label={t('chat.agentTaskStatus')}>
-              {agentTaskSignals.map((signal) => (
+              {visibleAgentTaskSignals.map((signal) => (
                 <article className={`message agent-run ${signal.status}`} key={signal.id}>
                   <Flex align="center" justify="between" gap="2" mb="2">
                     <Flex align="center" gap="2" className="agent-run-title">

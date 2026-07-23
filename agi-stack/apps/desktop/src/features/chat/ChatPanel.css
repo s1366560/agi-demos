@@ -289,9 +289,10 @@
 }
 
 .session-chat-narrative .message.session-thread-message.user {
-  width: auto;
-  max-width: 84%;
-  margin-left: 0;
+  width: fit-content;
+  max-width: 75%;
+  margin-right: 0;
+  margin-left: auto;
   padding: 12px 14px;
   border: 1px solid #2a3542;
   border-radius: 12px;

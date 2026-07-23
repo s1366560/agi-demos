@@ -89,6 +89,11 @@ import {
   type AgentTaskSignalStatus,
   type ChatWorkflowTarget,
 } from './features/chat/ChatPanel';
+import {
+  protocolClientMessageId,
+  protocolStreamMessageId,
+} from './features/chat/agentEventIdentityModel';
+import { reconcileAgentTaskSignals } from './features/chat/agentTaskSignalModel';
 import { DesktopMCPAppCanvas } from './features/chat/DesktopMCPAppCanvas';
 import { LiveArtifactCanvas } from './features/chat/LiveArtifactCanvas';
 import {
@@ -108,14 +113,18 @@ import {
   readConversationTitleStreamEvent,
 } from './features/chat/conversationTitleEventModel';
 import {
+  eventScopedStreamMessageId,
+  mergeAgentSendAcknowledgement,
   mergeArtifactStreamItem,
   mergeAssistantCompletionEvent,
   mergeAssistantTextStreamChunk,
+  mergeConversationTimelineItems,
   mergeCostUpdateEvent,
   mergeThoughtStreamChunk,
   mergeToolStreamItem,
   shouldSkipLiveTimelineEvent,
 } from './features/chat/chatTimelineModel';
+import { coalesceStreamingTextEvents } from './features/chat/streamingTextEventModel';
 import { applyHitlResponseStreamEvent } from './features/chat/hitlResponseEventModel';
 import { applyWorkspaceLifecycleStreamEvent } from './features/chat/workspaceLifecycleEventModel';
 import { applyWorkspaceMessageStreamEvent } from './features/chat/workspaceMessageEventModel';
@@ -606,6 +615,7 @@ function agentTaskUpdateFromSocketEvent(
 ): null | {
   conversationId: string;
   messageId?: string;
+  executionMessageId?: string;
   status: AgentTaskSignalStatus;
   detail: string;
   eventType: string;
@@ -624,6 +634,9 @@ function agentTaskUpdateFromSocketEvent(
     return {
       conversationId,
       messageId,
+      executionMessageId:
+        readStringField(payload, 'execution_message_id') ??
+        readStringField(payload, 'executionMessageId'),
       status: 'acknowledged',
       detail: 'Agent acknowledged the task over WebSocket.',
       eventType,
@@ -711,18 +724,7 @@ function socketErrorDetail(payload: Record<string, unknown>): string | undefined
 }
 
 function socketMessageId(payload: Record<string, unknown>): string | undefined {
-  const direct = readStringField(payload, 'message_id') ?? readStringField(payload, 'messageId');
-  if (direct) return direct;
-
-  for (const key of ['message', 'payload', 'data']) {
-    const nested = payload[key];
-    if (nested && typeof nested === 'object') {
-      const nestedId = socketMessageId(nested as Record<string, unknown>);
-      if (nestedId) return nestedId;
-    }
-  }
-
-  return undefined;
+  return protocolClientMessageId(payload);
 }
 
 function readStringField(payload: Record<string, unknown>, key: string): string | undefined {
@@ -739,37 +741,7 @@ function mergeTimelineItems(
   existing: AgentTimelineItem[],
   incoming: AgentTimelineItem[],
 ): AgentTimelineItem[] {
-  const merged = [...existing];
-  for (const item of incoming) {
-    const duplicateIndex = merged.findIndex((current) => timelineItemsMatch(current, item));
-    if (duplicateIndex >= 0) {
-      merged[duplicateIndex] = { ...merged[duplicateIndex], ...item };
-    } else {
-      merged.push(item);
-    }
-  }
-  return merged.sort((a, b) => {
-    if (a.eventTimeUs !== b.eventTimeUs) return a.eventTimeUs - b.eventTimeUs;
-    return a.eventCounter - b.eventCounter;
-  });
-}
-
-function timelineItemsMatch(current: AgentTimelineItem, incoming: AgentTimelineItem): boolean {
-  if (current.id === incoming.id) return true;
-  if (!current.message_id || current.message_id !== incoming.message_id) return false;
-  if (current.type === incoming.type) {
-    return (
-      current.type === 'user_message' ||
-      current.type === 'assistant_message' ||
-      Boolean(current.metadata?.optimistic) ||
-      Boolean(current.metadata?.streaming)
-    );
-  }
-  return (
-    current.role === 'assistant' &&
-    incoming.role === 'assistant' &&
-    (current.type === 'assistant_message' || incoming.type === 'assistant_message')
-  );
+  return mergeConversationTimelineItems(existing, incoming);
 }
 
 function timelineCursorFromFirst(items: AgentTimelineItem[]): ConversationTimelineState['firstCursor'] {
@@ -820,6 +792,11 @@ function timelineItemFromSocketEvent(event: unknown): AgentTimelineItem | null {
     socketMessageId(payload) ??
     readStringField(data, 'message_id') ??
     readStringField(data, 'messageId');
+  const executionMessageId =
+    readStringField(data, 'execution_message_id') ??
+    readStringField(data, 'executionMessageId') ??
+    readStringField(payload, 'execution_message_id') ??
+    readStringField(payload, 'executionMessageId');
   const item: AgentTimelineItem = {
     id: `${type}-${eventTimeUs}-${eventCounter}`,
     type,
@@ -832,6 +809,9 @@ function timelineItemFromSocketEvent(event: unknown): AgentTimelineItem | null {
 
   if (type === 'user_message' || type === 'assistant_message') {
     item.role = type === 'user_message' ? 'user' : 'assistant';
+    if (executionMessageId ?? messageId) {
+      item.executionMessageId = executionMessageId ?? messageId;
+    }
     item.content =
       readStringField(data, 'content') ??
       readStringField(data, 'answer') ??
@@ -872,12 +852,41 @@ function mergeLiveTimelineEvent(
   if (!event || typeof event !== 'object') return existing;
   const payload = event as Record<string, unknown>;
   const type = readStringField(payload, 'type') ?? readStringField(payload, 'event_type');
+  if (type === 'ack' && readStringField(payload, 'action') === 'send_message') {
+    const clientMessageId = socketMessageId(payload);
+    const executionMessageId =
+      readStringField(payload, 'execution_message_id') ??
+      readStringField(payload, 'executionMessageId');
+    return clientMessageId && executionMessageId
+      ? mergeAgentSendAcknowledgement(existing, clientMessageId, executionMessageId)
+      : existing;
+  }
   if (type === 'cost_update') {
     const data = objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
     return mergeCostUpdateEvent(existing, data);
   }
   if (type === 'text_start' || type === 'text_delta' || type === 'text_end') {
     return mergeStreamingTextEvent(existing, payload, type);
+  }
+  if (type === 'assistant_message') {
+    const item = timelineItemFromSocketEvent(event);
+    if (!item) return existing;
+    const messageId =
+      item.message_id ??
+      eventScopedStreamMessageId(
+        readStringField(payload, 'conversation_id') ?? 'agent',
+        type,
+        item.eventTimeUs,
+        item.eventCounter,
+      );
+    return mergeConversationTimelineItems(existing, [
+      {
+        ...item,
+        id: `completed-assistant-${messageId}`,
+        message_id: messageId,
+        metadata: { ...(item.metadata ?? {}), streaming: false },
+      },
+    ]);
   }
   if (type === 'complete') {
     const data = objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
@@ -901,8 +910,16 @@ function mergeLiveTimelineEvent(
       ...(executionSummary ? { executionSummary } : {}),
       ...(artifacts?.length ? { artifacts } : {}),
     };
+    const messageId =
+      streamingMessageId(payload) ??
+      eventScopedStreamMessageId(
+        readStringField(payload, 'conversation_id') ?? 'agent',
+        type,
+        eventTimeUs,
+        eventCounter,
+      );
     return mergeAssistantCompletionEvent(existing, {
-      messageId: streamingMessageId(payload),
+      messageId,
       content: readTextField(data, 'content') ?? '',
       eventTimeUs,
       eventCounter,
@@ -928,9 +945,19 @@ function mergeLiveTimelineEvent(
       readTextField(data, type === 'thought_delta' ? 'delta' : 'thought') ??
       readTextField(data, 'content') ??
       '';
+    const explicitMessageId = streamingMessageId(payload);
+    if (!explicitMessageId && type !== 'thought') return existing;
+    const messageId =
+      explicitMessageId ??
+      eventScopedStreamMessageId(
+        readStringField(payload, 'conversation_id') ?? 'agent',
+        type,
+        eventTimeUs,
+        eventCounter,
+      );
     return mergeThoughtStreamChunk(existing, {
       kind: type === 'thought_start' ? 'start' : type === 'thought_delta' ? 'delta' : 'complete',
-      messageId: streamingMessageId(payload),
+      messageId,
       content,
       eventTimeUs,
       eventCounter,
@@ -967,7 +994,6 @@ function mergeStreamingTextEvent(
   type: 'text_start' | 'text_delta' | 'text_end',
 ): AgentTimelineItem[] {
   const data = objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
-  const messageId = streamingMessageId(payload);
   const nowMs = Date.now();
   const eventTimeUs =
     numberField(payload, 'time_us') ??
@@ -979,6 +1005,16 @@ function mergeStreamingTextEvent(
     numberField(payload, 'event_counter') ??
     numberField(payload, 'eventCounter') ??
     0;
+  const explicitMessageId = streamingMessageId(payload);
+  if (!explicitMessageId && type !== 'text_end') return existing;
+  const messageId =
+    explicitMessageId ??
+    eventScopedStreamMessageId(
+      readStringField(payload, 'conversation_id') ?? 'agent',
+      type,
+      eventTimeUs,
+      eventCounter,
+    );
   const content =
     (type === 'text_end'
       ? readTextField(data, 'full_text') ?? readTextField(data, 'fullText')
@@ -996,69 +1032,8 @@ function mergeStreamingTextEvent(
   });
 }
 
-function streamingMessageId(payload: Record<string, unknown>): string {
-  return (
-    socketMessageId(payload) ??
-    `stream-${readStringField(payload, 'conversation_id') ?? 'agent'}`
-  );
-}
-
-function streamingTextDeltaParts(
-  event: unknown,
-): { messageId: string; delta: string; payload: Record<string, unknown> } | null {
-  if (!event || typeof event !== 'object') return null;
-  const payload = event as Record<string, unknown>;
-  const type = readStringField(payload, 'type') ?? readStringField(payload, 'event_type');
-  if (type !== 'text_delta') return null;
-  const data = objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
-  const delta =
-    readStringField(data, 'delta') ??
-    readStringField(data, 'text') ??
-    readStringField(data, 'content') ??
-    '';
-  return { messageId: streamingMessageId(payload), delta, payload };
-}
-
-// Collapse runs of consecutive text_delta events for the same message into one
-// synthetic delta carrying the latest event's time/counter. Sequential merging
-// runs a findIndex + full-array map copy + sortedness scan per token — a burst
-// of K deltas over N timeline items costs O(K·N) per animation frame. The
-// merged event applies the identical final content, time, counter and sort
-// position in a single merge pass (only pure delta runs are folded;
-// text_start/text_end pass through untouched).
-function coalesceStreamingTextEvents(events: unknown[]): unknown[] {
-  const out: unknown[] = [];
-  let runIndex = -1;
-  let runMessageId: string | null = null;
-  for (const event of events) {
-    const parts = streamingTextDeltaParts(event);
-    if (!parts) {
-      runIndex = -1;
-      runMessageId = null;
-      out.push(event);
-      continue;
-    }
-    if (runIndex >= 0 && runMessageId === parts.messageId) {
-      const previous = out[runIndex] as Record<string, unknown>;
-      const previousData = objectField(previous, 'data') ?? {};
-      const previousDelta = readStringField(previousData, 'delta') ?? '';
-      out[runIndex] = {
-        ...parts.payload,
-        data: {
-          ...(objectField(parts.payload, 'data') ?? {}),
-          delta: previousDelta + parts.delta,
-        },
-      };
-      continue;
-    }
-    runIndex = out.length;
-    runMessageId = parts.messageId;
-    out.push({
-      ...parts.payload,
-      data: { ...(objectField(parts.payload, 'data') ?? {}), delta: parts.delta },
-    });
-  }
-  return out;
+function streamingMessageId(payload: Record<string, unknown>): string | undefined {
+  return protocolStreamMessageId(payload);
 }
 
 function objectField(payload: Record<string, unknown>, key: string): Record<string, unknown> | null {
@@ -2643,37 +2618,7 @@ export function App() {
         }
       }
       setAgentTaskSignals((current) => {
-        const matchesConversation = (signal: AgentTaskSignal) =>
-          signal.conversationId === update.conversationId && signal.status !== 'failed';
-        const exactIndex = update.messageId
-          ? current.findIndex(
-              (signal) => matchesConversation(signal) && signal.messageId === update.messageId,
-            )
-          : -1;
-        let targetIndex = exactIndex;
-        if (targetIndex < 0) {
-          for (let index = current.length - 1; index >= 0; index -= 1) {
-            const signal = current[index];
-            if (signal && matchesConversation(signal)) {
-              targetIndex = index;
-              break;
-            }
-          }
-        }
-
-        if (targetIndex < 0) return current;
-
-        return current.map((signal, index) =>
-          index === targetIndex
-            ? {
-                ...signal,
-                messageId: update.messageId ?? signal.messageId,
-                status: update.status,
-                detail: update.detail,
-                eventType: update.eventType,
-              }
-            : signal,
-        );
+        return reconcileAgentTaskSignals(current, update);
       });
     }
   }, [socket.events]);

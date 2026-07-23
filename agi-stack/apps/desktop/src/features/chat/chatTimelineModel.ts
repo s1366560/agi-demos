@@ -116,7 +116,7 @@ export function shouldSkipLiveTimelineEvent(
 export function latestAgentSuggestions(items: AgentTimelineItem[]): string[] {
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
-    if (item.role === 'user' || item.type === 'user_message') return [];
+    if (isUserTimelineItem(item)) return [];
     if (item.type !== 'suggestions') continue;
     const payload = isRecord(item.payload) ? item.payload : null;
     const source = Array.isArray(item.suggestions)
@@ -138,6 +138,11 @@ export function latestAgentSuggestions(items: AgentTimelineItem[]): string[] {
 // intentionally absent because Web queues it into the visible timeline.
 const NON_TIMELINE_EVENT_TYPES = new Set([
   'suggestions',
+  'context_status',
+  'execution_path_decided',
+  'selection_trace',
+  'policy_filtered',
+  'toolset_changed',
   'canvas_updated',
   'pattern_match',
   'context_summary_generated',
@@ -327,7 +332,9 @@ export function mergeToolStreamItem(
         metadata: { ...(item.metadata ?? {}), ...(incoming.metadata ?? {}), streaming: true },
       };
     });
-    return sortTimelineItems(updated);
+    return kind === 'act'
+      ? mergeConversationTimelineItems([], updated)
+      : sortTimelineItems(updated);
   }
 
   return sortTimelineItems([
@@ -355,9 +362,8 @@ export function mergeAssistantTextStreamChunk(
           : chunk.content || item.content;
       return {
         ...item,
-        eventTimeUs: chunk.eventTimeUs,
-        eventCounter: chunk.eventCounter,
-        timestamp: Math.floor(chunk.eventTimeUs / 1000),
+        // Stream updates can arrive after a newer turn. Keep the response's
+        // original cursor so a delayed delta/text_end cannot reorder it.
         content,
         payload: chunk.payload ?? item.payload,
         metadata: { ...(item.metadata ?? {}), streaming: chunk.kind !== 'complete' },
@@ -385,29 +391,44 @@ export function mergeAssistantTextStreamChunk(
 }
 
 /**
- * Apply the authoritative `complete` event to the latest assistant response
- * in the current turn. Completion message IDs are not guaranteed to match
- * preceding text stream IDs, so the user-message boundary is the stable key.
+ * Apply an authoritative `complete` event only to the response carrying the
+ * same execution identity. An unmatched completion is a separate response;
+ * overwriting a nearby assistant by position can corrupt another turn.
  */
 export function mergeAssistantCompletionEvent(
   existing: AgentTimelineItem[],
   chunk: AssistantCompletionChunk,
 ): AgentTimelineItem[] {
-  const targetIndex = findCurrentTurnAssistantIndex(existing);
+  const exactTargetIndex = findAssistantIndexByResponseId(
+    existing,
+    chunk.messageId,
+  );
+  const targetIndex = exactTargetIndex;
   if (targetIndex >= 0) {
-    const updated = existing.map((item, index) => {
-      if (index !== targetIndex) return item;
-      return {
-        ...item,
-        content: chunk.content || item.content,
-        payload: chunk.payload ?? item.payload,
-        metadata: {
-          ...(item.metadata ?? {}),
-          ...(chunk.metadata ?? {}),
-          streaming: false,
+    const updated = existing.flatMap((item, index) => {
+      if (
+        exactTargetIndex >= 0 &&
+        index !== targetIndex &&
+        isTransientAssistantTimelineItem(item) &&
+        assistantHasResponseId(item, chunk.messageId)
+      ) {
+        return [];
+      }
+      if (index !== targetIndex) return [item];
+      return [
+        {
+          ...item,
+          executionMessageId: item.executionMessageId ?? chunk.messageId,
+          content: chunk.content || item.content,
+          payload: chunk.payload ?? item.payload,
+          metadata: {
+            ...(item.metadata ?? {}),
+            ...(chunk.metadata ?? {}),
+            streaming: false,
+          },
+          ...(chunk.artifacts ? { artifacts: chunk.artifacts } : {}),
         },
-        ...(chunk.artifacts ? { artifacts: chunk.artifacts } : {}),
-      };
+      ];
     });
     return sortTimelineItems(updated);
   }
@@ -423,6 +444,7 @@ export function mergeAssistantCompletionEvent(
       eventCounter: chunk.eventCounter,
       timestamp: Math.floor(chunk.eventTimeUs / 1000),
       message_id: chunk.messageId,
+      executionMessageId: chunk.messageId,
       role: 'assistant',
       content: chunk.content,
       payload: chunk.payload,
@@ -430,6 +452,86 @@ export function mergeAssistantCompletionEvent(
       ...(chunk.artifacts ? { artifacts: chunk.artifacts } : {}),
     },
   ]);
+}
+
+/**
+ * Merge authoritative history with optimistic/live state without deduplicating
+ * legitimate messages by content. Optimistic user rows and live assistant text
+ * streams have client-owned transient identities; promotion requires an exact
+ * protocol identity or the authoritative event cursor.
+ */
+export function mergeConversationTimelineItems(
+  existing: AgentTimelineItem[],
+  incoming: AgentTimelineItem[],
+): AgentTimelineItem[] {
+  const merged = sortTimelineItems([...existing]);
+  for (const item of sortTimelineItems([...incoming])) {
+    const duplicateIndexes = merged.flatMap((current, index) =>
+      timelineItemsShareIdentity(current, item) ? [index] : [],
+    );
+    if (duplicateIndexes.length > 0) {
+      const duplicateIndexSet = new Set(duplicateIndexes);
+      let reconciled = item;
+      for (const duplicateIndex of duplicateIndexes) {
+        reconciled = mergeTimelineIdentityPair(
+          merged[duplicateIndex],
+          reconciled,
+        );
+      }
+      merged.splice(
+        0,
+        merged.length,
+        ...merged.filter((_, index) => !duplicateIndexSet.has(index)),
+        reconciled,
+      );
+      sortTimelineItems(merged);
+      continue;
+    }
+    merged.push(item);
+    sortTimelineItems(merged);
+  }
+  return sortTimelineItems(merged);
+}
+
+/**
+ * Bind the client-generated optimistic row to the stable execution identity
+ * returned by the cloud send_message acknowledgement.
+ */
+export function mergeAgentSendAcknowledgement(
+  existing: AgentTimelineItem[],
+  clientMessageId: string,
+  executionMessageId: string,
+): AgentTimelineItem[] {
+  let changed = false;
+  const rebound = existing.map((item) => {
+    if (
+      !isTransientUserTimelineItem(item) ||
+      item.message_id !== clientMessageId
+    ) {
+      return item;
+    }
+    changed = true;
+    return {
+      ...item,
+      message_id: executionMessageId,
+      executionMessageId,
+      metadata: {
+        ...(item.metadata ?? {}),
+        clientMessageId,
+      },
+    };
+  });
+  return changed ? mergeConversationTimelineItems([], rebound) : existing;
+}
+
+/** Build an identity unique to one final event whose protocol message ID is absent. */
+export function eventScopedStreamMessageId(
+  conversationId: string,
+  eventType: string,
+  eventTimeUs: number,
+  eventCounter: number,
+): string {
+  return `unassociated-${conversationId}-${eventType}-${eventTimeUs}-${eventCounter}`;
 }
 
 /**
@@ -441,7 +543,11 @@ export function mergeCostUpdateEvent(
   existing: AgentTimelineItem[],
   data: Record<string, unknown>,
 ): AgentTimelineItem[] {
-  const targetIndex = findCurrentTurnAssistantIndex(existing);
+  const messageId =
+    recordString(data, 'executionMessageId', 'execution_message_id') ??
+    recordString(data, 'messageId', 'message_id');
+  if (!messageId) return existing;
+  const targetIndex = findAssistantIndexByResponseId(existing, messageId);
   if (targetIndex < 0) return existing;
 
   const tokens = isRecord(data.tokens) ? data.tokens : null;
@@ -600,21 +706,31 @@ export function mergeThoughtStreamChunk(
       if (index !== activeIndex) return item;
       return {
         ...item,
-        eventTimeUs: chunk.eventTimeUs,
-        eventCounter: chunk.eventCounter,
-        timestamp: Math.floor(chunk.eventTimeUs / 1000),
+        // Preserve the thought skeleton's position when a delayed chunk from
+        // an older turn arrives after newer conversation activity.
         content:
           chunk.kind === 'delta'
             ? `${item.content ?? ''}${chunk.content}`
             : chunk.content || item.content,
         payload: chunk.payload ?? item.payload,
-        metadata: { ...(item.metadata ?? {}), streaming: chunk.kind !== 'complete' },
+        metadata: {
+          ...(item.metadata ?? {}),
+          streaming: chunk.kind !== 'complete',
+          ...(chunk.kind === 'complete'
+            ? {
+                thoughtCompletionEventTimeUs: chunk.eventTimeUs,
+                thoughtCompletionEventCounter: chunk.eventCounter,
+              }
+            : {}),
+        },
       };
     });
-    return sortTimelineItems(updated);
+    return chunk.kind === 'complete'
+      ? mergeConversationTimelineItems([], updated)
+      : sortTimelineItems(updated);
   }
 
-  return sortTimelineItems([
+  const appended = [
     ...existing,
     {
       id: `streaming-thought-${chunk.messageId}-${chunk.eventTimeUs}-${chunk.eventCounter}`,
@@ -625,9 +741,20 @@ export function mergeThoughtStreamChunk(
       message_id: chunk.messageId,
       content: chunk.content,
       payload: chunk.payload,
-      metadata: { streaming: chunk.kind !== 'complete' },
+      metadata: {
+        streaming: chunk.kind !== 'complete',
+        ...(chunk.kind === 'complete'
+          ? {
+              thoughtCompletionEventTimeUs: chunk.eventTimeUs,
+              thoughtCompletionEventCounter: chunk.eventCounter,
+            }
+          : {}),
+      },
     },
-  ]);
+  ];
+  return chunk.kind === 'complete'
+    ? mergeConversationTimelineItems([], appended)
+    : sortTimelineItems(appended);
 }
 
 function findActiveThoughtIndex(items: AgentTimelineItem[], messageId: string): number {
@@ -649,7 +776,7 @@ function findActiveAssistantTextIndex(items: AgentTimelineItem[], messageId: str
     const item = items[index];
     if (
       item.role === 'assistant' &&
-      item.message_id === messageId &&
+      assistantHasResponseId(item, messageId) &&
       item.metadata?.streaming === true
     ) {
       return index;
@@ -661,25 +788,327 @@ function findActiveAssistantTextIndex(items: AgentTimelineItem[], messageId: str
 function findLastAssistantTextIndex(items: AgentTimelineItem[], messageId: string): number {
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
-    if (item.role === 'assistant' && item.message_id === messageId) return index;
+    if (item.role === 'assistant' && assistantHasResponseId(item, messageId)) return index;
   }
   return -1;
 }
 
-function findCurrentTurnAssistantIndex(items: AgentTimelineItem[]): number {
-  let turnStartIndex = -1;
+function findAssistantIndexByResponseId(
+  items: AgentTimelineItem[],
+  responseId: string,
+): number {
+  let transientIndex = -1;
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
-    if (item.role === 'user' || item.type === 'user_message') {
-      turnStartIndex = index;
-      break;
-    }
+    if (!isAssistantTimelineItem(item) || !assistantHasResponseId(item, responseId)) continue;
+    if (!isTransientAssistantTimelineItem(item)) return index;
+    if (transientIndex < 0) transientIndex = index;
   }
-  for (let index = items.length - 1; index > turnStartIndex; index -= 1) {
-    const item = items[index];
-    if (item.role === 'assistant' || item.type === 'assistant_message') return index;
+  return transientIndex;
+}
+
+function isAssistantTimelineItem(item: AgentTimelineItem): boolean {
+  return item.role === 'assistant' || item.type === 'assistant_message';
+}
+
+function isUserTimelineItem(item: AgentTimelineItem): boolean {
+  return (
+    item.role === 'user' ||
+    item.type === 'user_message' ||
+    channelInboundMessageForDisplay(item)?.role === 'user'
+  );
+}
+
+function isTransientUserTimelineItem(item: AgentTimelineItem): boolean {
+  return (
+    isUserTimelineItem(item) &&
+    (item.id.startsWith('optimistic-user-') || Boolean(item.metadata?.optimistic))
+  );
+}
+
+function isTransientAssistantTimelineItem(item: AgentTimelineItem): boolean {
+  return (
+    isAssistantTimelineItem(item) &&
+    (item.id.startsWith('streaming-assistant-') ||
+      item.id.startsWith('completed-assistant-'))
+  );
+}
+
+function isTransientThoughtTimelineItem(item: AgentTimelineItem): boolean {
+  return item.type === 'thought' && item.id.startsWith('streaming-thought-');
+}
+
+function thoughtCompletionCursor(
+  item: AgentTimelineItem,
+): { eventTimeUs: number; eventCounter: number } | null {
+  if (isTransientThoughtTimelineItem(item)) {
+    const metadata = isRecord(item.metadata) ? item.metadata : null;
+    const eventTimeUs = optionalFiniteNumber(metadata?.thoughtCompletionEventTimeUs);
+    const eventCounter = nonNegativeInteger(metadata?.thoughtCompletionEventCounter);
+    return eventTimeUs === null || eventCounter === null
+      ? null
+      : { eventTimeUs, eventCounter };
   }
-  return -1;
+  return item.type === 'thought'
+    ? { eventTimeUs: item.eventTimeUs, eventCounter: item.eventCounter }
+    : null;
+}
+
+function thoughtItemsShareCompletionIdentity(
+  current: AgentTimelineItem,
+  incoming: AgentTimelineItem,
+): boolean {
+  if (
+    current.type !== 'thought' ||
+    incoming.type !== 'thought' ||
+    isTransientThoughtTimelineItem(current) === isTransientThoughtTimelineItem(incoming)
+  ) {
+    return false;
+  }
+  const currentCursor = thoughtCompletionCursor(current);
+  const incomingCursor = thoughtCompletionCursor(incoming);
+  return Boolean(
+    currentCursor &&
+      incomingCursor &&
+      currentCursor.eventTimeUs === incomingCursor.eventTimeUs &&
+      currentCursor.eventCounter === incomingCursor.eventCounter,
+  );
+}
+
+function isTransientToolTimelineItem(item: AgentTimelineItem): boolean {
+  return item.type === 'act' && item.id.startsWith('act_delta-');
+}
+
+function toolItemsShareStableCallIdentity(
+  current: AgentTimelineItem,
+  incoming: AgentTimelineItem,
+): boolean {
+  if (
+    current.type !== incoming.type ||
+    (current.type !== 'act' && current.type !== 'observe')
+  ) {
+    return false;
+  }
+  const currentStrongIdentifiers = toolStrongIdentifiers(current);
+  const incomingStrongIdentifiers = toolStrongIdentifiers(incoming);
+  if (currentStrongIdentifiers.length > 0 && incomingStrongIdentifiers.length > 0) {
+    return currentStrongIdentifiers.some((identifier) =>
+      incomingStrongIdentifiers.includes(identifier),
+    );
+  }
+  if (
+    current.type !== 'act' ||
+    isTransientToolTimelineItem(current) === isTransientToolTimelineItem(incoming)
+  ) {
+    return false;
+  }
+  const currentWeakIdentifiers = toolWeakIdentifiers(current);
+  const incomingWeakIdentifiers = toolWeakIdentifiers(incoming);
+  return (
+    currentWeakIdentifiers.length > 0 &&
+    incomingWeakIdentifiers.length > 0 &&
+    currentWeakIdentifiers.some((identifier) =>
+      incomingWeakIdentifiers.includes(identifier),
+    )
+  );
+}
+
+function timelineItemsShareIdentity(
+  current: AgentTimelineItem,
+  incoming: AgentTimelineItem,
+): boolean {
+  if (current.id === incoming.id) return true;
+  if (thoughtItemsShareCompletionIdentity(current, incoming)) return true;
+  if (toolItemsShareStableCallIdentity(current, incoming)) return true;
+  if (!timelineItemsArePromotablePair(current, incoming)) return false;
+  if (
+    isAssistantTimelineItem(current) &&
+    isAssistantTimelineItem(incoming) &&
+    current.eventTimeUs === incoming.eventTimeUs &&
+    current.eventCounter === incoming.eventCounter
+  ) {
+    return true;
+  }
+  return timelineItemsShareStableIdentity(current, incoming);
+}
+
+function mergeTimelineIdentityPair(
+  current: AgentTimelineItem,
+  incoming: AgentTimelineItem,
+): AgentTimelineItem {
+  if (thoughtItemsShareCompletionIdentity(current, incoming)) {
+    return mergeTransientAndCanonicalThought(current, incoming);
+  }
+  if (toolItemsShareStableCallIdentity(current, incoming)) {
+    return mergeToolIdentityPair(current, incoming);
+  }
+  if (
+    isUserTimelineItem(current) &&
+    isUserTimelineItem(incoming) &&
+    isTransientUserTimelineItem(current) !== isTransientUserTimelineItem(incoming)
+  ) {
+    return mergeTransientAndCanonicalUser(current, incoming);
+  }
+  if (
+    isAssistantTimelineItem(current) &&
+    isAssistantTimelineItem(incoming) &&
+    isTransientAssistantTimelineItem(current) !==
+      isTransientAssistantTimelineItem(incoming)
+  ) {
+    return mergeTransientAndCanonicalAssistant(current, incoming);
+  }
+  return { ...current, ...incoming };
+}
+
+function timelineItemsArePromotablePair(
+  current: AgentTimelineItem,
+  incoming: AgentTimelineItem,
+): boolean {
+  if (isUserTimelineItem(current) && isUserTimelineItem(incoming)) {
+    return isTransientUserTimelineItem(current) !== isTransientUserTimelineItem(incoming);
+  }
+  if (isAssistantTimelineItem(current) && isAssistantTimelineItem(incoming)) {
+    return (
+      isTransientAssistantTimelineItem(current) !==
+      isTransientAssistantTimelineItem(incoming)
+    );
+  }
+  return false;
+}
+
+function stableTimelineExecutionIdentity(item: AgentTimelineItem): string | null {
+  const identity = item.executionMessageId ?? item.message_id;
+  return isStableTimelineIdentity(identity) ? identity : null;
+}
+
+function timelineItemsShareStableIdentity(
+  current: AgentTimelineItem,
+  incoming: AgentTimelineItem,
+): boolean {
+  const incomingIdentities = new Set(
+    [incoming.executionMessageId, incoming.message_id].filter(isStableTimelineIdentity),
+  );
+  return [current.executionMessageId, current.message_id]
+    .filter(isStableTimelineIdentity)
+    .some((identity) => incomingIdentities.has(identity));
+}
+
+function isStableTimelineIdentity(identity: string | null | undefined): identity is string {
+  return Boolean(
+    identity &&
+    !identity.startsWith('stream-') &&
+    !identity.startsWith('unassociated-'),
+  );
+}
+
+function assistantHasResponseId(item: AgentTimelineItem, responseId: string): boolean {
+  return item.executionMessageId === responseId || item.message_id === responseId;
+}
+
+function mergeTransientAndCanonicalUser(
+  current: AgentTimelineItem,
+  incoming: AgentTimelineItem,
+): AgentTimelineItem {
+  const currentIsTransient = isTransientUserTimelineItem(current);
+  const transient = currentIsTransient ? current : incoming;
+  const canonical = currentIsTransient ? incoming : current;
+  return {
+    ...transient,
+    ...canonical,
+    executionMessageId:
+      canonical.executionMessageId ??
+      transient.executionMessageId ??
+      stableTimelineExecutionIdentity(canonical) ??
+      stableTimelineExecutionIdentity(transient),
+    content: canonical.content || transient.content,
+    metadata: {
+      ...(transient.metadata ?? {}),
+      ...(canonical.metadata ?? {}),
+      optimistic: false,
+    },
+  };
+}
+
+function mergeTransientAndCanonicalAssistant(
+  current: AgentTimelineItem,
+  incoming: AgentTimelineItem,
+): AgentTimelineItem {
+  const currentIsTransient = isTransientAssistantTimelineItem(current);
+  const transient = currentIsTransient ? current : incoming;
+  const canonical = currentIsTransient ? incoming : current;
+  return {
+    ...transient,
+    ...canonical,
+    executionMessageId:
+      canonical.executionMessageId ??
+      transient.executionMessageId ??
+      stableTimelineExecutionIdentity(transient),
+    content: canonical.content || transient.content,
+    metadata: {
+      ...(transient.metadata ?? {}),
+      ...(canonical.metadata ?? {}),
+      streaming: false,
+    },
+    ...(canonical.artifacts
+      ? { artifacts: canonical.artifacts }
+      : transient.artifacts
+        ? { artifacts: transient.artifacts }
+        : {}),
+  };
+}
+
+function mergeTransientAndCanonicalThought(
+  current: AgentTimelineItem,
+  incoming: AgentTimelineItem,
+): AgentTimelineItem {
+  const currentIsTransient = isTransientThoughtTimelineItem(current);
+  const transient = currentIsTransient ? current : incoming;
+  const canonical = currentIsTransient ? incoming : current;
+  return {
+    ...transient,
+    ...canonical,
+    message_id: canonical.message_id ?? transient.message_id,
+    executionMessageId:
+      canonical.executionMessageId ?? transient.executionMessageId,
+    content: canonical.content || transient.content,
+    payload: canonical.payload ?? transient.payload,
+    metadata: {
+      ...(transient.metadata ?? {}),
+      ...(canonical.metadata ?? {}),
+      streaming: false,
+    },
+  };
+}
+
+function mergeToolIdentityPair(
+  current: AgentTimelineItem,
+  incoming: AgentTimelineItem,
+): AgentTimelineItem {
+  if (isTransientToolTimelineItem(current) !== isTransientToolTimelineItem(incoming)) {
+    const currentIsTransient = isTransientToolTimelineItem(current);
+    const transient = currentIsTransient ? current : incoming;
+    const canonical = currentIsTransient ? incoming : current;
+    return {
+      ...transient,
+      ...canonical,
+      message_id: canonical.message_id ?? transient.message_id,
+      executionMessageId:
+        canonical.executionMessageId ?? transient.executionMessageId,
+      payload: canonical.payload ?? transient.payload,
+      metadata: {
+        ...(transient.metadata ?? {}),
+        ...(canonical.metadata ?? {}),
+      },
+    };
+  }
+  return {
+    ...current,
+    ...incoming,
+    metadata: {
+      ...(current.metadata ?? {}),
+      ...(incoming.metadata ?? {}),
+    },
+  };
 }
 
 function sortTimelineItems(items: AgentTimelineItem[]): AgentTimelineItem[] {
@@ -814,7 +1243,7 @@ export function timelineWorkingStartedAtUs(items: AgentTimelineItem[]): number |
   }
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
-    if (item.role === 'user' || item.type === 'user_message') return item.eventTimeUs;
+    if (isUserTimelineItem(item)) return item.eventTimeUs;
   }
   return null;
 }
@@ -933,6 +1362,13 @@ function toolItemsReferToSameCall(
   call: AgentTimelineItem,
   result: AgentTimelineItem,
 ): boolean {
+  const callStrongIdentifiers = toolStrongIdentifiers(call);
+  const resultStrongIdentifiers = toolStrongIdentifiers(result);
+  if (callStrongIdentifiers.length > 0 && resultStrongIdentifiers.length > 0) {
+    return callStrongIdentifiers.some((identifier) =>
+      resultStrongIdentifiers.includes(identifier),
+    );
+  }
   const callIdentifiers = toolCallIdentifiers(call);
   const resultIdentifiers = toolCallIdentifiers(result);
   if (callIdentifiers.length > 0 && resultIdentifiers.length > 0) {
@@ -948,20 +1384,29 @@ function toolItemsReferToSameCall(
   return toolCallNamesMatch(call, result);
 }
 
-function toolCallIdentifiers(item: AgentTimelineItem): string[] {
+function toolStrongIdentifiers(item: AgentTimelineItem): string[] {
   const payload = isRecord(item.payload) ? item.payload : null;
-  const identifiers = [
+  return [
     item.tool_execution_id,
     item.execution_id,
-    item.call_id,
     payload?.tool_execution_id,
     payload?.execution_id,
-    payload?.call_id,
-    payload?.tool_call_id,
-  ];
-  return identifiers.filter(
-    (identifier): identifier is string => typeof identifier === 'string' && identifier.length > 0,
+  ].filter(
+    (identifier): identifier is string =>
+      typeof identifier === 'string' && identifier.length > 0,
   );
+}
+
+function toolWeakIdentifiers(item: AgentTimelineItem): string[] {
+  const payload = isRecord(item.payload) ? item.payload : null;
+  return [item.call_id, payload?.call_id, payload?.tool_call_id].filter(
+    (identifier): identifier is string =>
+      typeof identifier === 'string' && identifier.length > 0,
+  );
+}
+
+function toolCallIdentifiers(item: AgentTimelineItem): string[] {
+  return [...toolStrongIdentifiers(item), ...toolWeakIdentifiers(item)];
 }
 
 function startOfDay(timeMs: number): number {

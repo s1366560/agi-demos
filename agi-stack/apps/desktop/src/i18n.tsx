@@ -3983,7 +3983,7 @@ const zhCN: Record<string, string> = {
   'session.work': '通用',
   'session.planMode': '计划模式',
   'session.buildMode': '执行模式',
-  'session.statusActive': '进行中',
+  'session.statusActive': '活跃',
   'session.statusQueued': '排队中',
   'session.statusRunning': '执行中',
   'session.statusCompleted': '已完成',

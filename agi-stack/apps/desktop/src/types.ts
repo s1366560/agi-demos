@@ -1453,6 +1453,7 @@ export type AgentTimelineItem = {
   round?: number;
   timestamp?: number | null;
   message_id?: string | null;
+  executionMessageId?: string | null;
   role?: string;
   content?: string;
   toolName?: string;
