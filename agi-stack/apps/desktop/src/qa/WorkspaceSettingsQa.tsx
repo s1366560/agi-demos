@@ -5,10 +5,15 @@ import { Button, Theme } from '@radix-ui/themes';
 
 import { DesktopApiError } from '../api/client';
 import type {
+  WorkspaceBindingAgentDefinition,
   WorkspaceMemberRole,
   WorkspaceUpdateInput,
 } from '../api/client';
 import { WorkspaceSettingsDialog } from '../features/workspace/WorkspaceSettingsDialog';
+import {
+  removeWorkspaceAgentBindingById,
+  upsertWorkspaceAgentBinding,
+} from '../features/workspace/workspaceAgentBindingsModel';
 import {
   removeWorkspaceMemberByUserId,
   upsertWorkspaceMember,
@@ -17,6 +22,7 @@ import { WorkspaceSettingsScopeChangedError } from '../features/workspace/worksp
 import type { WorkspaceSettingsScope } from '../features/workspace/workspaceSettingsModel';
 import { I18nProvider } from '../i18n';
 import type {
+  WorkspaceAgentBinding,
   WorkspaceMemberSummary,
   WorkspaceSummary,
 } from '../types';
@@ -82,12 +88,68 @@ const INITIAL_MEMBERS: WorkspaceMemberSummary[] = [
   },
 ];
 
+const AGENT_DEFINITIONS: WorkspaceBindingAgentDefinition[] = [
+  {
+    id: 'agent-review-qa',
+    tenant_id: SCOPE.tenantId,
+    project_id: SCOPE.projectId,
+    name: 'reviewer',
+    display_name: 'Review Agent',
+    enabled: true,
+    model: 'gpt-5.6',
+  },
+  {
+    id: 'agent-research-qa',
+    tenant_id: SCOPE.tenantId,
+    project_id: SCOPE.projectId,
+    name: 'researcher',
+    display_name: 'Research Agent',
+    enabled: true,
+    model: 'gpt-5.6-mini',
+  },
+  {
+    id: 'agent-tenant-qa',
+    tenant_id: SCOPE.tenantId,
+    project_id: null,
+    name: 'tenant-helper',
+    display_name: 'Tenant Helper',
+    enabled: true,
+    model: null,
+  },
+];
+
+const INITIAL_AGENTS: WorkspaceAgentBinding[] = [
+  {
+    id: 'workspace-agent-review',
+    workspace_id: SCOPE.workspaceId,
+    agent_id: 'agent-review-qa',
+    display_name: 'Review Agent',
+    description: 'Reviews proposed changes before delivery.',
+    config: {},
+    is_active: true,
+    created_at: '2026-07-23T00:00:00Z',
+  },
+  {
+    id: 'workspace-agent-tenant-helper',
+    workspace_id: SCOPE.workspaceId,
+    agent_id: 'agent-tenant-qa',
+    display_name: 'Paused Tenant Helper',
+    description: 'Retained for management while inactive.',
+    config: {},
+    is_active: false,
+    status: 'paused',
+    created_at: '2026-07-23T00:00:00Z',
+  },
+];
+
 function WorkspaceSettingsQa() {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<WorkspaceSettingsQaMode>('success');
   const [workspace, setWorkspace] = useState<WorkspaceSummary>(INITIAL_WORKSPACE);
   const [members, setMembers] =
     useState<WorkspaceMemberSummary[]>(INITIAL_MEMBERS);
+  const [agents, setAgents] =
+    useState<WorkspaceAgentBinding[]>(INITIAL_AGENTS);
   const [status, setStatus] = useState('Ready for workspace settings QA.');
 
   const saveWorkspace = async (
@@ -184,6 +246,54 @@ function WorkspaceSettingsQa() {
     setStatus(`Removed ${userId}.`);
   };
 
+  const loadAgentDefinitions = async (
+    _submittedScope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ): Promise<WorkspaceBindingAgentDefinition[]> => {
+    setStatus('Loading Agent definitions.');
+    await delay(120, signal);
+    setStatus(`Loaded ${AGENT_DEFINITIONS.length} Agent definitions.`);
+    return AGENT_DEFINITIONS;
+  };
+
+  const bindAgent = async (
+    agentId: string,
+    displayName: string,
+    description: string,
+    _submittedScope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ): Promise<WorkspaceAgentBinding> => {
+    setStatus(`Binding Agent ${agentId} in ${mode} mode.`);
+    await agentMutationDelay(mode, signal);
+    const binding: WorkspaceAgentBinding = {
+      id: `workspace-agent-${agentId}`,
+      workspace_id: SCOPE.workspaceId,
+      agent_id: agentId,
+      display_name: displayName || null,
+      description: description || null,
+      config: {},
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setAgents((current) => upsertWorkspaceAgentBinding(current, binding));
+    setStatus(`Bound Agent ${agentId}.`);
+    return binding;
+  };
+
+  const unbindAgent = async (
+    bindingId: string,
+    _submittedScope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ): Promise<void> => {
+    setStatus(`Unbinding Agent binding ${bindingId} in ${mode} mode.`);
+    await agentMutationDelay(mode, signal);
+    setAgents((current) =>
+      removeWorkspaceAgentBindingById(current, bindingId),
+    );
+    setStatus(`Unbound Agent binding ${bindingId}.`);
+  };
+
   return (
     <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
       <main className="workspace-settings-qa-shell">
@@ -240,6 +350,10 @@ function WorkspaceSettingsQa() {
               <dt>Member count</dt>
               <dd>{members.length}</dd>
             </div>
+            <div>
+              <dt>Agent count</dt>
+              <dd>{agents.length}</dd>
+            </div>
           </dl>
         </section>
         <section className="workspace-settings-qa-status" aria-live="polite">
@@ -249,6 +363,7 @@ function WorkspaceSettingsQa() {
         <WorkspaceSettingsDialog
           open={open}
           workspace={workspace}
+          agents={{ status: 'ready', items: agents, error: null }}
           members={{ status: 'ready', items: members, error: null }}
           actorUserId={ACTOR_USER_ID}
           scope={SCOPE}
@@ -257,6 +372,9 @@ function WorkspaceSettingsQa() {
           onAddMember={addMember}
           onUpdateMemberRole={updateMemberRole}
           onRemoveMember={removeMember}
+          onLoadAgentDefinitions={loadAgentDefinitions}
+          onBindAgent={bindAgent}
+          onUnbindAgent={unbindAgent}
         />
       </main>
     </Theme>
@@ -276,6 +394,26 @@ async function memberMutationDelay(
   if (mode === 'error') {
     throw new DesktopApiError('QA workspace member failure', 503, {
       code: 'qa_workspace_member_failure',
+    });
+  }
+  if (mode === 'scope-change') {
+    throw new WorkspaceSettingsScopeChangedError();
+  }
+}
+
+async function agentMutationDelay(
+  mode: WorkspaceSettingsQaMode,
+  signal: AbortSignal,
+) {
+  await delay(mode === 'scope-change' ? 450 : 160, signal);
+  if (mode === 'duplicate') {
+    throw new DesktopApiError('Duplicate workspace Agent', 409, {
+      code: 'workspace_agent_conflict',
+    });
+  }
+  if (mode === 'error') {
+    throw new DesktopApiError('QA workspace Agent failure', 503, {
+      code: 'qa_workspace_agent_failure',
     });
   }
   if (mode === 'scope-change') {

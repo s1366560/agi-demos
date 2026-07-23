@@ -406,6 +406,162 @@ test('workspace member mutations use strict user-id routes and validate scoped r
   }
 });
 
+test('workspace Agent binding catalog and mutations preserve scoped authority identities', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const controller = new AbortController();
+  const tenantId = 'tenant / one';
+  const projectId = 'project / one';
+  const workspaceId = 'workspace / one';
+  const agentId = 'agent / one';
+  const bindingId = 'binding / one';
+  let responseMode = 'definitions';
+  globalThis.fetch = async (request, init) => {
+    calls.push({ request: String(request), init });
+    if (responseMode === 'definitions') {
+      return new Response(
+        JSON.stringify([
+          {
+            id: 'tenant-agent',
+            tenant_id: tenantId,
+            project_id: null,
+            name: 'tenant-agent',
+            display_name: 'Tenant Agent',
+            enabled: true,
+            model: 'tenant-model',
+          },
+          {
+            id: agentId,
+            tenant_id: tenantId,
+            project_id: projectId,
+            name: 'project-agent',
+            display_name: 'Project Agent',
+            enabled: true,
+            model: 'project-model',
+          },
+        ]),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    if (responseMode === 'unbind') return new Response(null, { status: 204 });
+    return new Response(
+      JSON.stringify({
+        id: bindingId,
+        workspace_id: workspaceId,
+        agent_id: agentId,
+        display_name: 'Project Agent',
+        description: 'Workspace helper',
+        config: {},
+        is_active: true,
+        hex_q: null,
+        hex_r: null,
+        theme_color: null,
+        label: null,
+        status: null,
+        created_at: '2026-07-24T00:00:00Z',
+        updated_at: '2026-07-24T00:01:00Z',
+      }),
+      { status: 201, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'trusted-session',
+      localApiToken: 'launch-capability',
+      tenantId,
+      projectId,
+      workspaceId,
+    });
+    const definitions =
+      await client.listWorkspaceBindingAgentDefinitionsForProject(
+        projectId,
+        tenantId,
+        controller.signal,
+      );
+    assert.deepEqual(
+      definitions.map(({ id, project_id }) => ({ id, project_id })),
+      [
+        { id: 'tenant-agent', project_id: null },
+        { id: agentId, project_id: projectId },
+      ],
+    );
+
+    responseMode = 'bind';
+    const binding = await client.bindWorkspaceAgentForProject(
+      projectId,
+      workspaceId,
+      {
+        agentId,
+        displayName: ' Project Agent ',
+        description: ' Workspace helper ',
+      },
+      tenantId,
+      controller.signal,
+    );
+    assert.equal(binding.id, bindingId);
+    assert.equal(binding.agent_id, agentId);
+
+    responseMode = 'unbind';
+    await client.unbindWorkspaceAgentForProject(
+      projectId,
+      workspaceId,
+      bindingId,
+      tenantId,
+      controller.signal,
+    );
+
+    const definitionsPath =
+      'http://127.0.0.1:8088/api/v1/agent/definitions?limit=100&enabled_only=true&project_id=project+%2F+one&tenant_id=tenant+%2F+one';
+    const bindingPath =
+      'http://127.0.0.1:8088/api/v1/tenants/tenant%20%2F%20one/projects/project%20%2F%20one/workspaces/workspace%20%2F%20one/agents';
+    assert.equal(calls[0].request, definitionsPath);
+    assert.equal(calls[0].init.method, 'GET');
+    assert.equal(calls[1].request, bindingPath);
+    assert.equal(calls[1].init.method, 'POST');
+    assert.deepEqual(JSON.parse(calls[1].init.body), {
+      agent_id: agentId,
+      display_name: 'Project Agent',
+      description: 'Workspace helper',
+    });
+    assert.equal(calls[2].request, `${bindingPath}/binding%20%2F%20one`);
+    assert.equal(calls[2].init.method, 'DELETE');
+    for (const call of calls) {
+      assert.equal(call.init.signal, controller.signal);
+      assert.equal(call.init.headers.get('Authorization'), 'Bearer trusted-session');
+      assert.equal(call.init.headers.get('X-Agistack-Launch'), 'launch-capability');
+    }
+
+    responseMode = 'definitions';
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify([
+          {
+            id: 'cross-project-agent',
+            tenant_id: tenantId,
+            project_id: 'different-project',
+            name: 'cross-project-agent',
+            enabled: true,
+          },
+        ]),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    await assert.rejects(
+      client.listWorkspaceBindingAgentDefinitionsForProject(projectId, tenantId),
+      (error) => {
+        assert.equal(error instanceof DesktopApiError, true);
+        assert.equal(error.status, 502);
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('workspace context unavailable detection requires the structured server code', () => {
   assert.equal(
     isWorkspaceContextUnavailableError(
@@ -1629,6 +1785,22 @@ test('workspace roster requests stay inside the selected scope', async () => {
             created_at: '2026-07-15T00:00:00Z',
             updated_at: null,
           },
+          {
+            id: 'binding-inactive',
+            workspace_id: 'workspace/1',
+            agent_id: 'agent-inactive',
+            display_name: 'Paused reviewer',
+            description: null,
+            config: {},
+            is_active: false,
+            hex_q: null,
+            hex_r: null,
+            theme_color: null,
+            label: null,
+            status: 'paused',
+            created_at: '2026-07-15T00:00:00Z',
+            updated_at: null,
+          },
         ];
     return new Response(JSON.stringify(payload), {
       status: 200,
@@ -1653,11 +1825,18 @@ test('workspace roster requests stay inside the selected scope', async () => {
 
     assert.equal(members[0].user_email, 'member@example.com');
     assert.equal(agents[0].display_name, 'Planner');
+    assert.deepEqual(
+      agents.map(({ agent_id, is_active }) => ({ agent_id, is_active })),
+      [
+        { agent_id: 'agent-1', is_active: true },
+        { agent_id: 'agent-inactive', is_active: false },
+      ],
+    );
     const rosterBaseUrl =
       'http://127.0.0.1:8088/api/v1/tenants/tenant%2F1/projects/project%2F1' +
       '/workspaces/workspace%2F1';
     assert.deepEqual(calls.sort(), [
-      `${rosterBaseUrl}/agents?active_only=true&limit=500&offset=0`,
+      `${rosterBaseUrl}/agents?active_only=false&limit=500&offset=0`,
       `${rosterBaseUrl}/members?limit=500&offset=0`,
     ]);
   } finally {

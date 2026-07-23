@@ -138,6 +138,22 @@ export type WorkspaceUpdateInput = {
 
 export type WorkspaceMemberRole = 'owner' | 'editor' | 'viewer';
 
+export type WorkspaceBindingAgentDefinition = {
+  id: string;
+  tenant_id: string;
+  project_id: string | null;
+  name: string;
+  display_name: string | null;
+  enabled: true;
+  model: string | null;
+};
+
+export type WorkspaceAgentBindInput = {
+  agentId: string;
+  displayName?: string;
+  description?: string;
+};
+
 export type DesktopMCPAppSummary = {
   id: string;
   server_name?: string | null;
@@ -550,7 +566,7 @@ export class DesktopApiClient {
     const agents: WorkspaceAgentBinding[] = [];
     for (let offset = 0; ; offset += WORKSPACE_ROSTER_PAGE_SIZE) {
       const params = new URLSearchParams({
-        active_only: 'true',
+        active_only: 'false',
         limit: String(WORKSPACE_ROSTER_PAGE_SIZE),
         offset: String(offset),
       });
@@ -843,6 +859,80 @@ export class DesktopApiClient {
         requiredProjectId,
         requiredWorkspaceId,
       )}/${encodeURIComponent(requiredUserId)}`,
+      { method: 'DELETE', signal },
+    );
+  }
+
+  async listWorkspaceBindingAgentDefinitionsForProject(
+    projectId: string,
+    tenantId = this.config.tenantId,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceBindingAgentDefinition[]> {
+    const requiredTenantId = requireValue(tenantId, 'tenant id');
+    const requiredProjectId = requireValue(projectId, 'project id');
+    const params = new URLSearchParams({
+      limit: '100',
+      enabled_only: 'true',
+      project_id: requiredProjectId,
+      tenant_id: requiredTenantId,
+    });
+    const payload = await this.request<unknown>(
+      `/api/v1/agent/definitions?${params.toString()}`,
+      { signal },
+    );
+    return requireWorkspaceBindingAgentDefinitions(
+      payload,
+      requiredTenantId,
+      requiredProjectId,
+    );
+  }
+
+  async bindWorkspaceAgentForProject(
+    projectId: string,
+    workspaceId: string,
+    input: WorkspaceAgentBindInput,
+    tenantId = this.config.tenantId,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceAgentBinding> {
+    const requiredTenantId = requireValue(tenantId, 'tenant id');
+    const requiredProjectId = requireValue(projectId, 'project id');
+    const requiredWorkspaceId = requireValue(workspaceId, 'workspace id');
+    const body = workspaceAgentBindRequestBody(input);
+    const payload = await this.request<unknown>(
+      workspaceAgentCollectionPath(
+        requiredTenantId,
+        requiredProjectId,
+        requiredWorkspaceId,
+      ),
+      { method: 'POST', body, signal },
+    );
+    return requireWorkspaceAgentBindingMutationResponse(
+      payload,
+      requiredWorkspaceId,
+      body.agent_id,
+    );
+  }
+
+  async unbindWorkspaceAgentForProject(
+    projectId: string,
+    workspaceId: string,
+    workspaceAgentBindingId: string,
+    tenantId = this.config.tenantId,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const requiredTenantId = requireValue(tenantId, 'tenant id');
+    const requiredProjectId = requireValue(projectId, 'project id');
+    const requiredWorkspaceId = requireValue(workspaceId, 'workspace id');
+    const requiredBindingId = requireValue(
+      workspaceAgentBindingId,
+      'workspace Agent binding id',
+    );
+    await this.request<unknown>(
+      `${workspaceAgentCollectionPath(
+        requiredTenantId,
+        requiredProjectId,
+        requiredWorkspaceId,
+      )}/${encodeURIComponent(requiredBindingId)}`,
       { method: 'DELETE', signal },
     );
   }
@@ -3004,6 +3094,113 @@ function requireWorkspaceMemberMutationResponse(
 
 function isWorkspaceMemberRole(value: unknown): value is WorkspaceMemberRole {
   return value === 'owner' || value === 'editor' || value === 'viewer';
+}
+
+function requireWorkspaceBindingAgentDefinitions(
+  payload: unknown,
+  tenantId: string,
+  projectId: string,
+): WorkspaceBindingAgentDefinition[] {
+  if (!Array.isArray(payload)) {
+    throw new DesktopApiError(
+      'Invalid workspace Agent definition response',
+      502,
+      payload,
+    );
+  }
+  const definitions = payload.map((value) =>
+    normalizeWorkspaceBindingAgentDefinition(value, tenantId, projectId),
+  );
+  if (
+    definitions.some((definition) => definition === null) ||
+    new Set(definitions.map((definition) => definition?.id)).size !==
+      definitions.length
+  ) {
+    throw new DesktopApiError(
+      'Invalid workspace Agent definition response',
+      502,
+      payload,
+    );
+  }
+  return definitions as WorkspaceBindingAgentDefinition[];
+}
+
+function normalizeWorkspaceBindingAgentDefinition(
+  value: unknown,
+  tenantId: string,
+  projectId: string,
+): WorkspaceBindingAgentDefinition | null {
+  if (
+    !isRecord(value) ||
+    !isNonEmptyString(value.id) ||
+    value.tenant_id !== tenantId ||
+    (value.project_id !== null && value.project_id !== projectId) ||
+    !isNonEmptyString(value.name) ||
+    !isOptionalNullableString(value.display_name) ||
+    value.enabled !== true ||
+    !isOptionalNullableString(value.model)
+  ) {
+    return null;
+  }
+  return {
+    id: value.id,
+    tenant_id: value.tenant_id,
+    project_id: value.project_id,
+    name: value.name,
+    display_name: value.display_name ?? null,
+    enabled: true,
+    model: value.model ?? null,
+  };
+}
+
+function workspaceAgentBindRequestBody(
+  input: WorkspaceAgentBindInput,
+): {
+  agent_id: string;
+  display_name?: string;
+  description?: string;
+} {
+  const agentId = requireValue(input.agentId, 'Agent definition id');
+  const displayName = input.displayName?.trim() ?? '';
+  const description = input.description?.trim() ?? '';
+  if (displayName.length > 120 || description.length > 500) {
+    throw new DesktopApiError('Invalid workspace Agent binding input', 422, {
+      detail: 'invalid_workspace_agent_binding_input',
+    });
+  }
+  return {
+    agent_id: agentId,
+    ...(displayName ? { display_name: displayName } : {}),
+    ...(description ? { description } : {}),
+  };
+}
+
+function workspaceAgentCollectionPath(
+  tenantId: string,
+  projectId: string,
+  workspaceId: string,
+): string {
+  return `/api/v1/tenants/${encodeURIComponent(tenantId)}/projects/${encodeURIComponent(
+    projectId,
+  )}/workspaces/${encodeURIComponent(workspaceId)}/agents`;
+}
+
+function requireWorkspaceAgentBindingMutationResponse(
+  payload: unknown,
+  workspaceId: string,
+  agentId: string,
+): WorkspaceAgentBinding {
+  if (
+    !isWorkspaceAgentBinding(payload, workspaceId) ||
+    payload.agent_id !== agentId
+  ) {
+    throw new DesktopApiError(
+      'Invalid workspace Agent binding response',
+      502,
+      payload,
+    );
+  }
+  return payload;
 }
 
 function isWorkspaceAgentBinding(

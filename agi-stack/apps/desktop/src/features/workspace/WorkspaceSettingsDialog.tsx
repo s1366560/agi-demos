@@ -16,11 +16,13 @@ import {
 
 import { DesktopApiError } from '../../api/client';
 import type {
+  WorkspaceBindingAgentDefinition,
   WorkspaceMemberRole,
   WorkspaceUpdateInput,
 } from '../../api/client';
 import { useI18n } from '../../i18n';
 import type {
+  WorkspaceAgentBinding,
   WorkspaceAuthorityCollection,
   WorkspaceMemberSummary,
   WorkspaceSummary,
@@ -47,12 +49,14 @@ import type {
   WorkspaceSettingsDraft,
   WorkspaceSettingsScope,
 } from './workspaceSettingsModel';
+import { WorkspaceAgentBindingsPanel } from './WorkspaceAgentBindingsPanel';
 import { WorkspaceMembersPanel } from './WorkspaceMembersPanel';
 import './WorkspaceSettingsDialog.css';
 
 type WorkspaceSettingsDialogProps = {
   open: boolean;
   workspace: WorkspaceSummary | null;
+  agents: WorkspaceAuthorityCollection<WorkspaceAgentBinding>;
   members: WorkspaceAuthorityCollection<WorkspaceMemberSummary>;
   actorUserId: string;
   scope: WorkspaceSettingsScope;
@@ -79,6 +83,22 @@ type WorkspaceSettingsDialogProps = {
     scope: WorkspaceSettingsScope,
     signal: AbortSignal,
   ) => Promise<void>;
+  onLoadAgentDefinitions: (
+    scope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ) => Promise<WorkspaceBindingAgentDefinition[]>;
+  onBindAgent: (
+    agentId: string,
+    displayName: string,
+    description: string,
+    scope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ) => Promise<WorkspaceAgentBinding>;
+  onUnbindAgent: (
+    bindingId: string,
+    scope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ) => Promise<void>;
 };
 
 type ConfirmationAction = 'close' | 'reset' | null;
@@ -86,6 +106,7 @@ type ConfirmationAction = 'close' | 'reset' | null;
 export function WorkspaceSettingsDialog({
   open,
   workspace,
+  agents,
   members,
   actorUserId,
   scope,
@@ -94,6 +115,9 @@ export function WorkspaceSettingsDialog({
   onAddMember,
   onUpdateMemberRole,
   onRemoveMember,
+  onLoadAgentDefinitions,
+  onBindAgent,
+  onUnbindAgent,
 }: WorkspaceSettingsDialogProps) {
   const { t } = useI18n();
   const initialDraft = workspace
@@ -424,6 +448,16 @@ export function WorkspaceSettingsDialog({
             onAddMember={onAddMember}
             onUpdateMemberRole={onUpdateMemberRole}
             onRemoveMember={onRemoveMember}
+          />
+          <WorkspaceAgentBindingsPanel
+            active={open}
+            agents={agents}
+            members={members}
+            actorUserId={actorUserId}
+            scope={scope}
+            onLoadAgentDefinitions={onLoadAgentDefinitions}
+            onBindAgent={onBindAgent}
+            onUnbindAgent={onUnbindAgent}
           />
         </Dialog.Content>
       </Dialog.Root>

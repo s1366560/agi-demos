@@ -1,0 +1,219 @@
+.workspace-agents-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 15px;
+  border: 1px solid rgba(71, 113, 135, 0.4);
+  border-radius: 10px;
+  background: rgba(8, 15, 23, 0.62);
+}
+
+.workspace-agents-panel > header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 9px;
+  color: var(--desktop-cyan, #38d6ff);
+}
+
+.workspace-agents-panel > header > svg {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+
+.workspace-agents-panel > header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.workspace-agents-panel > header strong {
+  color: var(--desktop-text, #edf6fb);
+  font-size: 12px;
+}
+
+.workspace-agents-panel > header small {
+  color: var(--desktop-faint, #637786);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.workspace-agents-read-only,
+.workspace-agents-empty,
+.workspace-agents-authority,
+.workspace-agents-definition-error {
+  margin: 0;
+  padding: 12px;
+  color: var(--desktop-muted, #8ca0af);
+  border: 1px solid rgba(71, 113, 135, 0.36);
+  border-radius: 8px;
+  background: rgba(13, 24, 34, 0.66);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.workspace-agents-read-only {
+  color: #d6b46e;
+  border-color: rgba(214, 180, 110, 0.35);
+}
+
+.workspace-agents-empty {
+  text-align: center;
+}
+
+.workspace-agents-authority,
+.workspace-agents-definition-error {
+  display: grid;
+  gap: 4px;
+}
+
+.workspace-agents-authority.error,
+.workspace-agents-definition-error {
+  color: #e58b95;
+  border-color: rgba(229, 139, 149, 0.35);
+}
+
+.workspace-agents-authority small {
+  color: inherit;
+  opacity: 0.8;
+}
+
+.workspace-agents-definition-error {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.workspace-agents-list {
+  display: grid;
+  gap: 8px;
+}
+
+.workspace-agents-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  border: 1px solid rgba(71, 113, 135, 0.36);
+  border-radius: 8px;
+  background: rgba(13, 24, 34, 0.66);
+}
+
+.workspace-agents-list article > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.workspace-agents-list article strong {
+  overflow: hidden;
+  color: var(--desktop-text, #edf6fb);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-agents-list article small,
+.workspace-agents-list article p {
+  margin: 0;
+  overflow: hidden;
+  color: var(--desktop-faint, #637786);
+  font-size: 10px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-agents-list article > span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.workspace-agents-list article > span.active {
+  color: #4cd6a3;
+  background: rgba(76, 214, 163, 0.12);
+}
+
+.workspace-agents-list article > span.inactive {
+  color: var(--desktop-faint, #637786);
+  background: rgba(99, 119, 134, 0.12);
+}
+
+.workspace-agents-feedback {
+  min-height: 18px;
+  color: var(--desktop-muted, #8ca0af);
+  font-size: 11px;
+}
+
+.workspace-agents-feedback.error {
+  color: #e58b95;
+}
+
+.workspace-agents-feedback.success {
+  color: #4cd6a3;
+}
+
+.workspace-agents-selector {
+  border: 1px solid rgba(71, 113, 135, 0.7);
+  background: #0b1119;
+}
+
+.workspace-agents-selector-fields {
+  display: grid;
+  gap: 13px;
+  margin-top: 18px;
+}
+
+.workspace-agents-selector-fields label {
+  display: grid;
+  gap: 7px;
+  color: var(--desktop-muted, #8ca0af);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.workspace-agents-selector select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  color: var(--desktop-text, #edf6fb);
+  border: 1px solid rgba(71, 113, 135, 0.58);
+  border-radius: 6px;
+  background: rgba(8, 15, 23, 0.8);
+  font: inherit;
+}
+
+.workspace-agents-selector select:focus-visible {
+  outline: 2px solid var(--desktop-cyan, #38d6ff);
+  outline-offset: 2px;
+}
+
+.workspace-agents-selector-actions,
+.workspace-agents-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 18px;
+}
+
+@media (max-width: 540px) {
+  .workspace-agents-panel > header {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .workspace-agents-panel > header > button {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+  }
+
+  .workspace-agents-list article {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .workspace-agents-list article > button {
+    grid-column: 2;
+  }
+}

@@ -47,6 +47,7 @@ import {
   isWorkspaceContextUnavailableError,
 } from './api/client';
 import type {
+  WorkspaceBindingAgentDefinition,
   WorkspaceCreateInput,
   WorkspaceMemberRole,
   WorkspaceUpdateInput,
@@ -311,6 +312,10 @@ import {
   workspaceCreateScopeIsCurrent,
 } from './features/workspace/workspaceCreateModel';
 import type { WorkspaceCreateScope } from './features/workspace/workspaceCreateModel';
+import {
+  removeWorkspaceAgentBindingById,
+  upsertWorkspaceAgentBinding,
+} from './features/workspace/workspaceAgentBindingsModel';
 import {
   removeWorkspaceMemberByUserId,
   upsertWorkspaceMember,
@@ -4615,6 +4620,115 @@ export function App() {
     }));
   };
 
+  const assertWorkspaceAgentBindingScope = (
+    submittedScope: WorkspaceSettingsScope,
+  ) => {
+    const currentScope = {
+      tenantId: configRef.current.tenantId,
+      projectId: configRef.current.projectId,
+      workspaceId: configRef.current.workspaceId,
+      epoch: configScopeEpochRef.current,
+      contextRevision: contextRevisionRef.current,
+    };
+    const scopedWorkspace = datasetRef.current.workspaces.find(
+      (workspace) =>
+        workspace.id === submittedScope.workspaceId &&
+        workspace.tenant_id === submittedScope.tenantId &&
+        workspace.project_id === submittedScope.projectId,
+    );
+    if (
+      !scopedWorkspace ||
+      !workspaceSettingsScopeIsCurrent(submittedScope, currentScope)
+    ) {
+      throw new WorkspaceSettingsScopeChangedError();
+    }
+  };
+
+  const workspaceAgentBindingClient = (scope: WorkspaceSettingsScope) =>
+    new DesktopApiClient({
+      ...configRef.current,
+      tenantId: scope.tenantId,
+      projectId: scope.projectId,
+      workspaceId: scope.workspaceId,
+    });
+
+  const loadWorkspaceAgentDefinitionsFromDialog = async (
+    submittedScope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ): Promise<WorkspaceBindingAgentDefinition[]> => {
+    assertWorkspaceAgentBindingScope(submittedScope);
+    const definitions = await workspaceAgentBindingClient(
+      submittedScope,
+    ).listWorkspaceBindingAgentDefinitionsForProject(
+      submittedScope.projectId,
+      submittedScope.tenantId,
+      signal,
+    );
+    assertWorkspaceAgentBindingScope(submittedScope);
+    return definitions;
+  };
+
+  const bindWorkspaceAgentFromDialog = async (
+    agentId: string,
+    displayName: string,
+    description: string,
+    submittedScope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ): Promise<WorkspaceAgentBinding> => {
+    assertWorkspaceAgentBindingScope(submittedScope);
+    const binding = await workspaceAgentBindingClient(
+      submittedScope,
+    ).bindWorkspaceAgentForProject(
+      submittedScope.projectId,
+      submittedScope.workspaceId,
+      { agentId, displayName, description },
+      submittedScope.tenantId,
+      signal,
+    );
+    assertWorkspaceAgentBindingScope(submittedScope);
+    updateDataset((current) => ({
+      ...current,
+      workspaceAgents: {
+        status: 'ready',
+        items: upsertWorkspaceAgentBinding(
+          current.workspaceAgents.items,
+          binding,
+        ),
+        error: null,
+      },
+    }));
+    return binding;
+  };
+
+  const unbindWorkspaceAgentFromDialog = async (
+    bindingId: string,
+    submittedScope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ): Promise<void> => {
+    assertWorkspaceAgentBindingScope(submittedScope);
+    await workspaceAgentBindingClient(
+      submittedScope,
+    ).unbindWorkspaceAgentForProject(
+      submittedScope.projectId,
+      submittedScope.workspaceId,
+      bindingId,
+      submittedScope.tenantId,
+      signal,
+    );
+    assertWorkspaceAgentBindingScope(submittedScope);
+    updateDataset((current) => ({
+      ...current,
+      workspaceAgents: {
+        status: 'ready',
+        items: removeWorkspaceAgentBindingById(
+          current.workspaceAgents.items,
+          bindingId,
+        ),
+        error: null,
+      },
+    }));
+  };
+
   const renameConversation = async (
     projectId: string,
     workspaceId: string,
@@ -7394,6 +7508,7 @@ export function App() {
         <WorkspaceSettingsDialog
           open={workspaceSettingsOpen}
           workspace={selectedWorkspace}
+          agents={dataset.workspaceAgents}
           members={dataset.workspaceMembers}
           actorUserId={auth.user?.user_id ?? ''}
           scope={{
@@ -7408,6 +7523,9 @@ export function App() {
           onAddMember={addWorkspaceMemberFromDialog}
           onUpdateMemberRole={updateWorkspaceMemberRoleFromDialog}
           onRemoveMember={removeWorkspaceMemberFromDialog}
+          onLoadAgentDefinitions={loadWorkspaceAgentDefinitionsFromDialog}
+          onBindAgent={bindWorkspaceAgentFromDialog}
+          onUnbindAgent={unbindWorkspaceAgentFromDialog}
         />
         <SettingsWindow
           open={settingsWindowOpen}
