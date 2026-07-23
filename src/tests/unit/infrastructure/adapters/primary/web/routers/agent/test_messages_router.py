@@ -965,6 +965,54 @@ def test_build_timeline_replays_orchestration_events() -> None:
     assert timeline[2]["subagentName"] == "Worker"
 
 
+def test_build_timeline_replays_mcp_app_events_for_desktop_history() -> None:
+    mcp_app_events = [
+        (
+            "mcp_app_registered",
+            {
+                "app_id": "release-verification-dashboard",
+                "server_name": "release-tools",
+                "tool_name": "show_release_verification",
+                "source": "agent_developed",
+                "resource_uri": "ui://release/verification-dashboard",
+                "title": "Release verification",
+            },
+        ),
+        (
+            "mcp_app_result",
+            {
+                "app_id": "release-verification-dashboard",
+                "server_name": "release-tools",
+                "tool_name": "show_release_verification",
+                "tool_input": {"release": "2026.07"},
+                "tool_result": {"content": [{"type": "text", "text": "Verified"}]},
+                "resource_html": "<main>18/18 checks passed</main>",
+                "resource_uri": "ui://release/verification-dashboard",
+                "ui_metadata": {"title": "Release verification"},
+                "tool_execution_id": "tool-execution-1",
+                "project_id": "project-1",
+                "structured_content": {"checks": 18, "failures": 0},
+            },
+        ),
+    ]
+    assert {event_type for event_type, _ in mcp_app_events} <= _DISPLAYABLE_EVENTS
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(event_type=event_type, event_data=data, event_time_us=index * 1_000)
+            for index, (event_type, data) in enumerate(mcp_app_events, start=1)
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert [item["type"] for item in timeline] == [event_type for event_type, _ in mcp_app_events]
+    assert [item["payload"] for item in timeline] == [data for _, data in mcp_app_events]
+
+
 def test_build_timeline_replays_complete_skill_execution_for_desktop_history() -> None:
     skill_events = [
         (

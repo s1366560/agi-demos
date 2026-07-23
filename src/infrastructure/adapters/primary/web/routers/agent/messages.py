@@ -994,6 +994,11 @@ def _build_extended_subagent_event(data: dict[str, Any], **_kwargs: Any) -> dict
     return {"payload": dict(data)}
 
 
+def _build_mcp_app_event(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    """Preserve MCP App UI resources and tool results for Desktop history replay."""
+    return {"payload": dict(data)}
+
+
 def _build_agent_spawned(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {
         "agentId": data.get("agent_id", ""),
@@ -1110,6 +1115,8 @@ _EVENT_BUILDERS: dict[str, Any] = {
     "skill_tool_result": _build_skill_event,
     "skill_execution_complete": _build_skill_event,
     "skill_fallback": _build_skill_event,
+    "mcp_app_registered": _build_mcp_app_event,
+    "mcp_app_result": _build_mcp_app_event,
     "agent_spawned": _build_agent_spawned,
     "agent_completed": _build_agent_completed,
     "agent_message_sent": _build_agent_message_sent,
