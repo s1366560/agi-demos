@@ -3162,6 +3162,46 @@ test('live cloud progress remains available as a structured Desktop activity', (
   );
 });
 
+test('history hydration hides the same protocol control events as the live Web transcript', () => {
+  const user = {
+    id: 'user-control-boundary',
+    type: 'user_message',
+    role: 'user',
+    content: 'hi',
+    eventTimeUs: 1,
+    eventCounter: 1,
+  };
+  const assistant = {
+    id: 'assistant-control-boundary',
+    type: 'assistant_message',
+    role: 'assistant',
+    content: 'Hello.',
+    eventTimeUs: 9,
+    eventCounter: 9,
+  };
+  const controls = [
+    'ack',
+    'status',
+    'start',
+    'complete',
+    'cancelled',
+    'heartbeat',
+    'status_update',
+    'lifecycle_state_change',
+    'sandbox_event',
+  ].map((type, index) => ({
+    id: `control-${type}`,
+    type,
+    eventTimeUs: index + 2,
+    eventCounter: index + 2,
+  }));
+
+  assert.deepEqual(
+    timelineItemsForDisplay([user, ...controls, assistant]).map((item) => item.id),
+    [user.id, assistant.id],
+  );
+});
+
 test('MCP App events expose the registered app and interactive tool result', () => {
   assert.deepEqual(
     agentLifecyclePresentation({

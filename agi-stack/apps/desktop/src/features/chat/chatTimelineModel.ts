@@ -183,7 +183,12 @@ const NON_TIMELINE_EVENT_TYPES = new Set([
 /** UI-state events drive affordances or replay and are not conversation log rows. */
 export function timelineItemsForDisplay(items: AgentTimelineItem[]): AgentTimelineItem[] {
   return foldHitlResponseTimelineItems(items).flatMap((item) => {
-    if (NON_TIMELINE_EVENT_TYPES.has(item.type)) return [];
+    if (
+      SKIPPED_LIVE_TIMELINE_EVENT_TYPES.has(item.type) ||
+      NON_TIMELINE_EVENT_TYPES.has(item.type)
+    ) {
+      return [];
+    }
     if (item.type !== 'message') return [item];
     const message = channelInboundMessageForDisplay(item);
     return message ? [message] : [];
