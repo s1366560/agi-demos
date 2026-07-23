@@ -136,6 +136,8 @@ export type WorkspaceUpdateInput = {
   metadata: Record<string, unknown>;
 };
 
+export type WorkspaceMemberRole = 'owner' | 'editor' | 'viewer';
+
 export type DesktopMCPAppSummary = {
   id: string;
   server_name?: string | null;
@@ -756,6 +758,93 @@ export class DesktopApiClient {
       throw new DesktopApiError('Invalid workspace response', 502, payload);
     }
     return workspace;
+  }
+
+  async addWorkspaceMemberForProject(
+    projectId: string,
+    workspaceId: string,
+    userId: string,
+    role: WorkspaceMemberRole,
+    tenantId = this.config.tenantId,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceMemberSummary> {
+    const requiredTenantId = requireValue(tenantId, 'tenant id');
+    const requiredProjectId = requireValue(projectId, 'project id');
+    const requiredWorkspaceId = requireValue(workspaceId, 'workspace id');
+    const requiredUserId = requireValue(userId, 'workspace member user id');
+    const requiredRole = requireWorkspaceMemberRole(role);
+    const payload = await this.request<unknown>(
+      workspaceMemberCollectionPath(
+        requiredTenantId,
+        requiredProjectId,
+        requiredWorkspaceId,
+      ),
+      {
+        method: 'POST',
+        body: { user_id: requiredUserId, role: requiredRole },
+        signal,
+      },
+    );
+    return requireWorkspaceMemberMutationResponse(
+      payload,
+      requiredWorkspaceId,
+      requiredUserId,
+      requiredRole,
+    );
+  }
+
+  async updateWorkspaceMemberRoleForProject(
+    projectId: string,
+    workspaceId: string,
+    userId: string,
+    role: WorkspaceMemberRole,
+    tenantId = this.config.tenantId,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceMemberSummary> {
+    const requiredTenantId = requireValue(tenantId, 'tenant id');
+    const requiredProjectId = requireValue(projectId, 'project id');
+    const requiredWorkspaceId = requireValue(workspaceId, 'workspace id');
+    const requiredUserId = requireValue(userId, 'workspace member user id');
+    const requiredRole = requireWorkspaceMemberRole(role);
+    const payload = await this.request<unknown>(
+      `${workspaceMemberCollectionPath(
+        requiredTenantId,
+        requiredProjectId,
+        requiredWorkspaceId,
+      )}/${encodeURIComponent(requiredUserId)}`,
+      {
+        method: 'PATCH',
+        body: { role: requiredRole },
+        signal,
+      },
+    );
+    return requireWorkspaceMemberMutationResponse(
+      payload,
+      requiredWorkspaceId,
+      requiredUserId,
+      requiredRole,
+    );
+  }
+
+  async removeWorkspaceMemberForProject(
+    projectId: string,
+    workspaceId: string,
+    userId: string,
+    tenantId = this.config.tenantId,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const requiredTenantId = requireValue(tenantId, 'tenant id');
+    const requiredProjectId = requireValue(projectId, 'project id');
+    const requiredWorkspaceId = requireValue(workspaceId, 'workspace id');
+    const requiredUserId = requireValue(userId, 'workspace member user id');
+    await this.request<unknown>(
+      `${workspaceMemberCollectionPath(
+        requiredTenantId,
+        requiredProjectId,
+        requiredWorkspaceId,
+      )}/${encodeURIComponent(requiredUserId)}`,
+      { method: 'DELETE', signal },
+    );
   }
 
   async listMessages(signal?: AbortSignal): Promise<WorkspaceMessage[]> {
@@ -2870,12 +2959,51 @@ function isWorkspaceMemberSummary(
     isNonEmptyString(value.id) &&
     value.workspace_id === workspaceId &&
     isNonEmptyString(value.user_id) &&
-    isNonEmptyString(value.role) &&
+    isWorkspaceMemberRole(value.role) &&
     isOptionalNullableString(value.user_email) &&
     isOptionalNullableString(value.invited_by) &&
     isOptionalString(value.created_at) &&
     isOptionalNullableString(value.updated_at)
   );
+}
+
+function workspaceMemberCollectionPath(
+  tenantId: string,
+  projectId: string,
+  workspaceId: string,
+): string {
+  return `/api/v1/tenants/${encodeURIComponent(tenantId)}/projects/${encodeURIComponent(
+    projectId,
+  )}/workspaces/${encodeURIComponent(workspaceId)}/members`;
+}
+
+function requireWorkspaceMemberRole(role: string): WorkspaceMemberRole {
+  if (!isWorkspaceMemberRole(role)) {
+    throw new DesktopApiError('Invalid workspace member role', 422, {
+      detail: 'invalid_workspace_member_role',
+    });
+  }
+  return role;
+}
+
+function requireWorkspaceMemberMutationResponse(
+  payload: unknown,
+  workspaceId: string,
+  userId: string,
+  role: WorkspaceMemberRole,
+): WorkspaceMemberSummary {
+  if (
+    !isWorkspaceMemberSummary(payload, workspaceId) ||
+    payload.user_id !== userId ||
+    payload.role !== role
+  ) {
+    throw new DesktopApiError('Invalid workspace member response', 502, payload);
+  }
+  return payload;
+}
+
+function isWorkspaceMemberRole(value: unknown): value is WorkspaceMemberRole {
+  return value === 'owner' || value === 'editor' || value === 'viewer';
 }
 
 function isWorkspaceAgentBinding(

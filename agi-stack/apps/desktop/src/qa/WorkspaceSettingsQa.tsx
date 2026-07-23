@@ -4,12 +4,22 @@ import { createRoot, type Root } from 'react-dom/client';
 import { Button, Theme } from '@radix-ui/themes';
 
 import { DesktopApiError } from '../api/client';
-import type { WorkspaceUpdateInput } from '../api/client';
+import type {
+  WorkspaceMemberRole,
+  WorkspaceUpdateInput,
+} from '../api/client';
 import { WorkspaceSettingsDialog } from '../features/workspace/WorkspaceSettingsDialog';
+import {
+  removeWorkspaceMemberByUserId,
+  upsertWorkspaceMember,
+} from '../features/workspace/workspaceMembersModel';
 import { WorkspaceSettingsScopeChangedError } from '../features/workspace/workspaceSettingsModel';
 import type { WorkspaceSettingsScope } from '../features/workspace/workspaceSettingsModel';
 import { I18nProvider } from '../i18n';
-import type { WorkspaceSummary } from '../types';
+import type {
+  WorkspaceMemberSummary,
+  WorkspaceSummary,
+} from '../types';
 import '../styles.css';
 import './workspaceSettingsQa.css';
 
@@ -26,6 +36,8 @@ const SCOPE: WorkspaceSettingsScope = {
   epoch: 5,
   contextRevision: 9,
 };
+
+const ACTOR_USER_ID = 'workspace-owner-qa';
 
 const INITIAL_WORKSPACE: WorkspaceSummary = {
   id: SCOPE.workspaceId,
@@ -51,10 +63,31 @@ const INITIAL_WORKSPACE: WorkspaceSummary = {
   updated_at: '2026-07-23T00:00:00Z',
 };
 
+const INITIAL_MEMBERS: WorkspaceMemberSummary[] = [
+  {
+    id: 'workspace-member-owner',
+    workspace_id: SCOPE.workspaceId,
+    user_id: ACTOR_USER_ID,
+    user_email: 'owner@example.test',
+    role: 'owner',
+    created_at: '2026-07-23T00:00:00Z',
+  },
+  {
+    id: 'workspace-member-viewer',
+    workspace_id: SCOPE.workspaceId,
+    user_id: 'workspace-viewer-qa',
+    user_email: 'viewer@example.test',
+    role: 'viewer',
+    created_at: '2026-07-23T00:00:00Z',
+  },
+];
+
 function WorkspaceSettingsQa() {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<WorkspaceSettingsQaMode>('success');
   const [workspace, setWorkspace] = useState<WorkspaceSummary>(INITIAL_WORKSPACE);
+  const [members, setMembers] =
+    useState<WorkspaceMemberSummary[]>(INITIAL_MEMBERS);
   const [status, setStatus] = useState('Ready for workspace settings QA.');
 
   const saveWorkspace = async (
@@ -93,6 +126,62 @@ function WorkspaceSettingsQa() {
     setStatus(`Saved ${updated.name}.`);
     document.documentElement.dataset.qaWorkspaceSettingsSaved = updated.name ?? '';
     return updated;
+  };
+
+  const addMember = async (
+    userId: string,
+    role: WorkspaceMemberRole,
+    _submittedScope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ): Promise<WorkspaceMemberSummary> => {
+    setStatus(`Adding member ${userId} in ${mode} mode.`);
+    await memberMutationDelay(mode, signal);
+    const member: WorkspaceMemberSummary = {
+      id: `workspace-member-${members.length + 1}`,
+      workspace_id: SCOPE.workspaceId,
+      user_id: userId,
+      user_email: null,
+      role,
+      invited_by: ACTOR_USER_ID,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setMembers((current) => upsertWorkspaceMember(current, member));
+    setStatus(`Added ${userId} as ${role}.`);
+    return member;
+  };
+
+  const updateMemberRole = async (
+    userId: string,
+    role: WorkspaceMemberRole,
+    _submittedScope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ): Promise<WorkspaceMemberSummary> => {
+    setStatus(`Updating member ${userId} in ${mode} mode.`);
+    await memberMutationDelay(mode, signal);
+    const current = members.find((member) => member.user_id === userId);
+    if (!current) {
+      throw new DesktopApiError('QA member missing', 404, {
+        code: 'qa_member_missing',
+      });
+    }
+    const updated = { ...current, role, updated_at: new Date().toISOString() };
+    setMembers((items) => upsertWorkspaceMember(items, updated));
+    setStatus(`Updated ${userId} to ${role}.`);
+    return updated;
+  };
+
+  const removeMember = async (
+    userId: string,
+    _submittedScope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ): Promise<void> => {
+    setStatus(`Removing member ${userId} in ${mode} mode.`);
+    await memberMutationDelay(mode, signal);
+    setMembers((current) =>
+      removeWorkspaceMemberByUserId(current, userId),
+    );
+    setStatus(`Removed ${userId}.`);
   };
 
   return (
@@ -147,6 +236,10 @@ function WorkspaceSettingsQa() {
                 {workspace.metadata?.unknown_extension ? 'Preserved' : 'Missing'}
               </dd>
             </div>
+            <div>
+              <dt>Member count</dt>
+              <dd>{members.length}</dd>
+            </div>
           </dl>
         </section>
         <section className="workspace-settings-qa-status" aria-live="polite">
@@ -156,13 +249,38 @@ function WorkspaceSettingsQa() {
         <WorkspaceSettingsDialog
           open={open}
           workspace={workspace}
+          members={{ status: 'ready', items: members, error: null }}
+          actorUserId={ACTOR_USER_ID}
           scope={SCOPE}
           onOpenChange={setOpen}
           onSave={saveWorkspace}
+          onAddMember={addMember}
+          onUpdateMemberRole={updateMemberRole}
+          onRemoveMember={removeMember}
         />
       </main>
     </Theme>
   );
+}
+
+async function memberMutationDelay(
+  mode: WorkspaceSettingsQaMode,
+  signal: AbortSignal,
+) {
+  await delay(mode === 'scope-change' ? 450 : 160, signal);
+  if (mode === 'duplicate') {
+    throw new DesktopApiError('Duplicate workspace member', 409, {
+      code: 'workspace_member_conflict',
+    });
+  }
+  if (mode === 'error') {
+    throw new DesktopApiError('QA workspace member failure', 503, {
+      code: 'qa_workspace_member_failure',
+    });
+  }
+  if (mode === 'scope-change') {
+    throw new WorkspaceSettingsScopeChangedError();
+  }
 }
 
 function delay(milliseconds: number, signal: AbortSignal): Promise<void> {

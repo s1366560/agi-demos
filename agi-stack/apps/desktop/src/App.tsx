@@ -46,7 +46,11 @@ import {
   DesktopApiClient,
   isWorkspaceContextUnavailableError,
 } from './api/client';
-import type { WorkspaceCreateInput, WorkspaceUpdateInput } from './api/client';
+import type {
+  WorkspaceCreateInput,
+  WorkspaceMemberRole,
+  WorkspaceUpdateInput,
+} from './api/client';
 import {
   clearLocalTrustedSession,
   clearNativeTrustedSession,
@@ -307,6 +311,10 @@ import {
   workspaceCreateScopeIsCurrent,
 } from './features/workspace/workspaceCreateModel';
 import type { WorkspaceCreateScope } from './features/workspace/workspaceCreateModel';
+import {
+  removeWorkspaceMemberByUserId,
+  upsertWorkspaceMember,
+} from './features/workspace/workspaceMembersModel';
 import {
   WorkspaceSettingsScopeChangedError,
   replaceWorkspaceInList,
@@ -4488,6 +4496,125 @@ export function App() {
     return updated;
   };
 
+  const assertWorkspaceMemberMutationScope = (
+    submittedScope: WorkspaceSettingsScope,
+  ) => {
+    const currentScope = {
+      tenantId: configRef.current.tenantId,
+      projectId: configRef.current.projectId,
+      workspaceId: configRef.current.workspaceId,
+      epoch: configScopeEpochRef.current,
+      contextRevision: contextRevisionRef.current,
+    };
+    const scopedWorkspace = datasetRef.current.workspaces.find(
+      (workspace) =>
+        workspace.id === submittedScope.workspaceId &&
+        workspace.tenant_id === submittedScope.tenantId &&
+        workspace.project_id === submittedScope.projectId,
+    );
+    if (
+      !scopedWorkspace ||
+      !workspaceSettingsScopeIsCurrent(submittedScope, currentScope)
+    ) {
+      throw new WorkspaceSettingsScopeChangedError();
+    }
+  };
+
+  const workspaceMemberClient = (scope: WorkspaceSettingsScope) =>
+    new DesktopApiClient({
+      ...configRef.current,
+      tenantId: scope.tenantId,
+      projectId: scope.projectId,
+      workspaceId: scope.workspaceId,
+    });
+
+  const addWorkspaceMemberFromDialog = async (
+    userId: string,
+    role: WorkspaceMemberRole,
+    submittedScope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ): Promise<WorkspaceMemberSummary> => {
+    assertWorkspaceMemberMutationScope(submittedScope);
+    const member = await workspaceMemberClient(
+      submittedScope,
+    ).addWorkspaceMemberForProject(
+      submittedScope.projectId,
+      submittedScope.workspaceId,
+      userId,
+      role,
+      submittedScope.tenantId,
+      signal,
+    );
+    assertWorkspaceMemberMutationScope(submittedScope);
+    updateDataset((current) => ({
+      ...current,
+      workspaceMembers: {
+        status: 'ready',
+        items: upsertWorkspaceMember(current.workspaceMembers.items, member),
+        error: null,
+      },
+    }));
+    return member;
+  };
+
+  const updateWorkspaceMemberRoleFromDialog = async (
+    userId: string,
+    role: WorkspaceMemberRole,
+    submittedScope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ): Promise<WorkspaceMemberSummary> => {
+    assertWorkspaceMemberMutationScope(submittedScope);
+    const member = await workspaceMemberClient(
+      submittedScope,
+    ).updateWorkspaceMemberRoleForProject(
+      submittedScope.projectId,
+      submittedScope.workspaceId,
+      userId,
+      role,
+      submittedScope.tenantId,
+      signal,
+    );
+    assertWorkspaceMemberMutationScope(submittedScope);
+    updateDataset((current) => ({
+      ...current,
+      workspaceMembers: {
+        status: 'ready',
+        items: upsertWorkspaceMember(current.workspaceMembers.items, member),
+        error: null,
+      },
+    }));
+    return member;
+  };
+
+  const removeWorkspaceMemberFromDialog = async (
+    userId: string,
+    submittedScope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ): Promise<void> => {
+    assertWorkspaceMemberMutationScope(submittedScope);
+    await workspaceMemberClient(
+      submittedScope,
+    ).removeWorkspaceMemberForProject(
+      submittedScope.projectId,
+      submittedScope.workspaceId,
+      userId,
+      submittedScope.tenantId,
+      signal,
+    );
+    assertWorkspaceMemberMutationScope(submittedScope);
+    updateDataset((current) => ({
+      ...current,
+      workspaceMembers: {
+        status: 'ready',
+        items: removeWorkspaceMemberByUserId(
+          current.workspaceMembers.items,
+          userId,
+        ),
+        error: null,
+      },
+    }));
+  };
+
   const renameConversation = async (
     projectId: string,
     workspaceId: string,
@@ -7267,6 +7394,8 @@ export function App() {
         <WorkspaceSettingsDialog
           open={workspaceSettingsOpen}
           workspace={selectedWorkspace}
+          members={dataset.workspaceMembers}
+          actorUserId={auth.user?.user_id ?? ''}
           scope={{
             tenantId: config.tenantId,
             projectId: config.projectId,
@@ -7276,6 +7405,9 @@ export function App() {
           }}
           onOpenChange={setWorkspaceSettingsOpen}
           onSave={updateWorkspaceFromDialog}
+          onAddMember={addWorkspaceMemberFromDialog}
+          onUpdateMemberRole={updateWorkspaceMemberRoleFromDialog}
+          onRemoveMember={removeWorkspaceMemberFromDialog}
         />
         <SettingsWindow
           open={settingsWindowOpen}

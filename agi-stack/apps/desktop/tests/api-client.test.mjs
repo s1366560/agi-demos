@@ -286,6 +286,126 @@ test('workspace update sends a strict scoped PATCH and validates the returned pr
   }
 });
 
+test('workspace member mutations use strict user-id routes and validate scoped responses', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const controller = new AbortController();
+  const tenantId = 'tenant / one';
+  const projectId = 'project / one';
+  const workspaceId = 'workspace / one';
+  const userId = 'user / one';
+  let responseMode = 'add';
+  globalThis.fetch = async (request, init) => {
+    calls.push({ request: String(request), init });
+    if (responseMode === 'remove') return new Response(null, { status: 204 });
+    const role = responseMode === 'add' ? 'viewer' : 'editor';
+    return new Response(
+      JSON.stringify({
+        id: 'member-record-id',
+        workspace_id: workspaceId,
+        user_id: userId,
+        user_email: 'member@example.test',
+        role,
+        invited_by: 'owner-1',
+        created_at: '2026-07-24T00:00:00Z',
+        updated_at: '2026-07-24T00:01:00Z',
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'trusted-session',
+      localApiToken: 'launch-capability',
+      tenantId,
+      projectId,
+      workspaceId,
+    });
+    const added = await client.addWorkspaceMemberForProject(
+      projectId,
+      workspaceId,
+      userId,
+      'viewer',
+      tenantId,
+      controller.signal,
+    );
+    assert.equal(added.user_id, userId);
+    assert.equal(added.role, 'viewer');
+
+    responseMode = 'update';
+    const updated = await client.updateWorkspaceMemberRoleForProject(
+      projectId,
+      workspaceId,
+      userId,
+      'editor',
+      tenantId,
+      controller.signal,
+    );
+    assert.equal(updated.role, 'editor');
+
+    responseMode = 'remove';
+    await client.removeWorkspaceMemberForProject(
+      projectId,
+      workspaceId,
+      userId,
+      tenantId,
+      controller.signal,
+    );
+
+    const memberPath =
+      'http://127.0.0.1:8088/api/v1/tenants/tenant%20%2F%20one/projects/project%20%2F%20one/workspaces/workspace%20%2F%20one/members';
+    assert.equal(calls[0].request, memberPath);
+    assert.equal(calls[0].init.method, 'POST');
+    assert.deepEqual(JSON.parse(calls[0].init.body), {
+      user_id: userId,
+      role: 'viewer',
+    });
+    assert.equal(calls[1].request, `${memberPath}/user%20%2F%20one`);
+    assert.equal(calls[1].init.method, 'PATCH');
+    assert.deepEqual(JSON.parse(calls[1].init.body), { role: 'editor' });
+    assert.equal(calls[2].request, `${memberPath}/user%20%2F%20one`);
+    assert.equal(calls[2].init.method, 'DELETE');
+    for (const call of calls) {
+      assert.equal(call.init.signal, controller.signal);
+      assert.equal(call.init.headers.get('Authorization'), 'Bearer trusted-session');
+      assert.equal(call.init.headers.get('X-Agistack-Launch'), 'launch-capability');
+      assert.equal(call.request.includes('member-record-id'), false);
+    }
+
+    responseMode = 'update';
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          id: 'member-record-id',
+          workspace_id: workspaceId,
+          user_id: 'different-user',
+          role: 'editor',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    await assert.rejects(
+      client.updateWorkspaceMemberRoleForProject(
+        projectId,
+        workspaceId,
+        userId,
+        'editor',
+        tenantId,
+      ),
+      (error) => {
+        assert.equal(error instanceof DesktopApiError, true);
+        assert.equal(error.status, 502);
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('workspace context unavailable detection requires the structured server code', () => {
   assert.equal(
     isWorkspaceContextUnavailableError(
@@ -1644,14 +1764,14 @@ test('workspace member roster exhausts every authoritative page', async () => {
             id: `member-${index}`,
             workspace_id: 'workspace-1',
             user_id: `user-${index}`,
-            role: 'member',
+            role: 'viewer',
           }))
         : [
             {
               id: 'member-500',
               workspace_id: 'workspace-1',
               user_id: 'user-500',
-              role: 'member',
+              role: 'viewer',
             },
           ];
     return new Response(JSON.stringify(items), {

@@ -1,4 +1,6 @@
 .workspace-settings-dialog {
+  max-height: min(90vh, 920px);
+  overflow-y: auto;
   border: 1px solid rgba(71, 113, 135, 0.7);
   background:
     radial-gradient(circle at top right, rgba(34, 211, 238, 0.08), transparent 28rem),

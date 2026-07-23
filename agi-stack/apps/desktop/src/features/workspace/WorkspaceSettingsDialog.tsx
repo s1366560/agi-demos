@@ -15,9 +15,16 @@ import {
 } from '@radix-ui/react-icons';
 
 import { DesktopApiError } from '../../api/client';
-import type { WorkspaceUpdateInput } from '../../api/client';
+import type {
+  WorkspaceMemberRole,
+  WorkspaceUpdateInput,
+} from '../../api/client';
 import { useI18n } from '../../i18n';
-import type { WorkspaceSummary } from '../../types';
+import type {
+  WorkspaceAuthorityCollection,
+  WorkspaceMemberSummary,
+  WorkspaceSummary,
+} from '../../types';
 import {
   WORKSPACE_COLLABORATION_MODES,
   WORKSPACE_USE_CASES,
@@ -40,11 +47,14 @@ import type {
   WorkspaceSettingsDraft,
   WorkspaceSettingsScope,
 } from './workspaceSettingsModel';
+import { WorkspaceMembersPanel } from './WorkspaceMembersPanel';
 import './WorkspaceSettingsDialog.css';
 
 type WorkspaceSettingsDialogProps = {
   open: boolean;
   workspace: WorkspaceSummary | null;
+  members: WorkspaceAuthorityCollection<WorkspaceMemberSummary>;
+  actorUserId: string;
   scope: WorkspaceSettingsScope;
   onOpenChange: (open: boolean) => void;
   onSave: (
@@ -52,6 +62,23 @@ type WorkspaceSettingsDialogProps = {
     scope: WorkspaceSettingsScope,
     signal: AbortSignal,
   ) => Promise<WorkspaceSummary>;
+  onAddMember: (
+    userId: string,
+    role: WorkspaceMemberRole,
+    scope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ) => Promise<WorkspaceMemberSummary>;
+  onUpdateMemberRole: (
+    userId: string,
+    role: WorkspaceMemberRole,
+    scope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ) => Promise<WorkspaceMemberSummary>;
+  onRemoveMember: (
+    userId: string,
+    scope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ) => Promise<void>;
 };
 
 type ConfirmationAction = 'close' | 'reset' | null;
@@ -59,9 +86,14 @@ type ConfirmationAction = 'close' | 'reset' | null;
 export function WorkspaceSettingsDialog({
   open,
   workspace,
+  members,
+  actorUserId,
   scope,
   onOpenChange,
   onSave,
+  onAddMember,
+  onUpdateMemberRole,
+  onRemoveMember,
 }: WorkspaceSettingsDialogProps) {
   const { t } = useI18n();
   const initialDraft = workspace
@@ -384,6 +416,15 @@ export function WorkspaceSettingsDialog({
               </Button>
             </div>
           </form>
+          <WorkspaceMembersPanel
+            active={open}
+            members={members}
+            actorUserId={actorUserId}
+            scope={scope}
+            onAddMember={onAddMember}
+            onUpdateMemberRole={onUpdateMemberRole}
+            onRemoveMember={onRemoveMember}
+          />
         </Dialog.Content>
       </Dialog.Root>
 
