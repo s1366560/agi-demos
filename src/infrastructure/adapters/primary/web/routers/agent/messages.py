@@ -74,11 +74,41 @@ _LIFECYCLE_NON_DISPLAYABLE: set[AgentEventType] = {
 }
 
 # Events derived from other persisted state — replaying them produces
-# duplicates of artefacts already rendered from the timeline + DB.
+# duplicates of artefacts already rendered from the timeline + DB. Workspace
+# events update dedicated workspace projections which clients rehydrate via
+# workspace APIs. Cost updates are live incremental snapshots; the final
+# execution summary is persisted on ``complete`` and merged into the assistant
+# message by ``_build_completion_map``.
 _DERIVED_NON_DISPLAYABLE: set[AgentEventType] = {
     AgentEventType.TOOLS_UPDATED,
     AgentEventType.CONTEXT_STATUS,
     AgentEventType.CONTEXT_SUMMARY_GENERATED,
+    AgentEventType.COST_UPDATE,
+    AgentEventType.BLACKBOARD_DIRECTORY_DELETED,
+    AgentEventType.BLACKBOARD_FILE_CREATED,
+    AgentEventType.BLACKBOARD_FILE_DELETED,
+    AgentEventType.BLACKBOARD_FILE_UPDATED,
+    AgentEventType.BLACKBOARD_POST_CREATED,
+    AgentEventType.BLACKBOARD_POST_DELETED,
+    AgentEventType.BLACKBOARD_POST_UPDATED,
+    AgentEventType.BLACKBOARD_REPLY_CREATED,
+    AgentEventType.BLACKBOARD_REPLY_DELETED,
+    AgentEventType.BLACKBOARD_REPLY_UPDATED,
+    AgentEventType.TOPOLOGY_UPDATED,
+    AgentEventType.WORKSPACE_AGENT_BOUND,
+    AgentEventType.WORKSPACE_AGENT_UNBOUND,
+    AgentEventType.WORKSPACE_DELETED,
+    AgentEventType.WORKSPACE_MEMBER_JOINED,
+    AgentEventType.WORKSPACE_MEMBER_LEFT,
+    AgentEventType.WORKSPACE_MEMBER_UPDATED,
+    AgentEventType.WORKSPACE_MESSAGE_CREATED,
+    AgentEventType.WORKSPACE_PLAN_UPDATED,
+    AgentEventType.WORKSPACE_TASK_ASSIGNED,
+    AgentEventType.WORKSPACE_TASK_CREATED,
+    AgentEventType.WORKSPACE_TASK_DELETED,
+    AgentEventType.WORKSPACE_TASK_STATUS_CHANGED,
+    AgentEventType.WORKSPACE_TASK_UPDATED,
+    AgentEventType.WORKSPACE_UPDATED,
 }
 
 _NON_DISPLAYABLE_EVENT_TYPES: set[AgentEventType] = (

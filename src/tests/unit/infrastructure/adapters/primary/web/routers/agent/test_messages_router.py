@@ -48,6 +48,39 @@ def test_displayable_events_include_persisted_act_delta() -> None:
     assert "act_delta" in _DISPLAYABLE_EVENTS
 
 
+def test_displayable_events_exclude_derived_workspace_and_cost_state() -> None:
+    derived_state_events = {
+        "cost_update",
+        "blackboard_directory_deleted",
+        "blackboard_file_created",
+        "blackboard_file_deleted",
+        "blackboard_file_updated",
+        "blackboard_post_created",
+        "blackboard_post_deleted",
+        "blackboard_post_updated",
+        "blackboard_reply_created",
+        "blackboard_reply_deleted",
+        "blackboard_reply_updated",
+        "topology_updated",
+        "workspace_agent_bound",
+        "workspace_agent_unbound",
+        "workspace_deleted",
+        "workspace_member_joined",
+        "workspace_member_left",
+        "workspace_member_updated",
+        "workspace_message_created",
+        "workspace_plan_updated",
+        "workspace_task_assigned",
+        "workspace_task_created",
+        "workspace_task_deleted",
+        "workspace_task_status_changed",
+        "workspace_task_updated",
+        "workspace_updated",
+    }
+
+    assert derived_state_events.isdisjoint(_DISPLAYABLE_EVENTS)
+
+
 def test_build_timeline_replays_latest_act_delta_as_act() -> None:
     timeline = _build_timeline(
         events=[
