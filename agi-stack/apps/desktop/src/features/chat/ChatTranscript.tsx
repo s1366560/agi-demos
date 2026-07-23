@@ -5,6 +5,7 @@ import {
   ChatBubbleIcon,
   CopyIcon,
   DotsHorizontalIcon,
+  DrawingPinIcon,
   Pencil1Icon,
   ReloadIcon,
 } from '@radix-ui/react-icons';
@@ -39,12 +40,16 @@ export const WorkspaceTranscriptMessage = memo(function WorkspaceTranscriptMessa
   onReply,
   onEdit,
   onRetry,
+  isPinned = false,
+  onPin,
   retryDisabled = false,
 }: {
   message: WorkspaceMessage;
   onReply?: () => void;
   onEdit?: () => void;
   onRetry?: () => void;
+  isPinned?: boolean;
+  onPin?: () => void;
   retryDisabled?: boolean;
 }) {
   const { t } = useI18n();
@@ -63,9 +68,12 @@ export const WorkspaceTranscriptMessage = memo(function WorkspaceTranscriptMessa
             : null
       }
       className="workspace-message"
+      timelineItemId={message.id}
       onReply={onReply}
       onEdit={onEdit}
       onRetry={onRetry}
+      isPinned={isPinned}
+      onPin={onPin}
       retryDisabled={retryDisabled}
     >
       <MarkdownContent content={message.content} className="transcript-content" />
@@ -85,6 +93,8 @@ export function NarrativeMessageFrame({
   onReply,
   onEdit,
   onRetry,
+  isPinned = false,
+  onPin,
   retryDisabled = false,
   children,
 }: {
@@ -99,6 +109,8 @@ export function NarrativeMessageFrame({
   onReply?: () => void;
   onEdit?: () => void;
   onRetry?: () => void;
+  isPinned?: boolean;
+  onPin?: () => void;
   retryDisabled?: boolean;
   children: ReactNode;
 }) {
@@ -106,8 +118,9 @@ export function NarrativeMessageFrame({
     <article
       className={`message transcript-message session-thread-message ${className} ${kind}${
         streaming ? ' is-streaming' : ''
-      }`}
+      }${isPinned ? ' is-pinned' : ''}`}
       data-timeline-anchor-id={timelineItemId}
+      tabIndex={-1}
     >
       <div className="session-message-body">
         <header className="transcript-meta">
@@ -121,6 +134,8 @@ export function NarrativeMessageFrame({
             onReply={onReply}
             onEdit={onEdit}
             onRetry={onRetry}
+            isPinned={isPinned}
+            onPin={onPin}
             retryDisabled={retryDisabled}
           />
         </header>
@@ -183,6 +198,8 @@ function MessageActionMenu({
   onReply,
   onEdit,
   onRetry,
+  isPinned,
+  onPin,
   retryDisabled,
 }: {
   content: string;
@@ -191,6 +208,8 @@ function MessageActionMenu({
   onReply?: () => void;
   onEdit?: () => void;
   onRetry?: () => void;
+  isPinned: boolean;
+  onPin?: () => void;
   retryDisabled: boolean;
 }) {
   const { t } = useI18n();
@@ -246,6 +265,17 @@ function MessageActionMenu({
           >
             <ReloadIcon aria-hidden="true" />
             {t('chat.retryMessage')}
+          </button>
+        ) : null}
+        {kind === 'agent' && onPin ? (
+          <button
+            type="button"
+            aria-label={t(isPinned ? 'chat.unpinMessage' : 'chat.pinMessage')}
+            aria-pressed={isPinned}
+            onClick={() => invoke(onPin)}
+          >
+            <DrawingPinIcon aria-hidden="true" />
+            {t(isPinned ? 'chat.unpinMessage' : 'chat.pinMessage')}
           </button>
         ) : null}
       </div>

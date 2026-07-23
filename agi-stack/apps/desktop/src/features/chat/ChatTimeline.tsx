@@ -85,6 +85,7 @@ import {
 const TIMELINE_RENDER_THRESHOLD = 150;
 const TIMELINE_RENDER_WINDOW = 100;
 export const TIMELINE_RENDER_STEP = 100;
+const EMPTY_PINNED_MESSAGE_IDS: readonly string[] = [];
 
 type TimelineActivityGroupNode = {
   kind: 'activity_group';
@@ -146,6 +147,8 @@ export function AgentTimeline({
   onReplyMessage,
   onEditMessage,
   onRetryMessage,
+  pinnedMessageIds = EMPTY_PINNED_MESSAGE_IDS,
+  onPinMessage,
   retryDisabled = false,
 }: {
   state: ConversationTimelineState;
@@ -162,6 +165,8 @@ export function AgentTimeline({
   onReplyMessage?: (item: AgentTimelineItem) => void;
   onEditMessage?: (item: AgentTimelineItem) => void;
   onRetryMessage?: (item: AgentTimelineItem) => void;
+  pinnedMessageIds?: readonly string[];
+  onPinMessage?: (item: AgentTimelineItem) => void;
   retryDisabled?: boolean;
 }) {
   const { t } = useI18n();
@@ -169,6 +174,7 @@ export function AgentTimeline({
     () => new Set(respondableHitlRequestIds),
     [respondableHitlRequestIds],
   );
+  const pinnedMessageIdSet = useMemo(() => new Set(pinnedMessageIds), [pinnedMessageIds]);
   const a2uiActionViews = useMemo(
     () =>
       new Map(
@@ -483,6 +489,8 @@ export function AgentTimeline({
                 onReplyMessage={onReplyMessage}
                 onEditMessage={onEditMessage}
                 onRetryMessage={onRetryMessage}
+                isPinned={pinnedMessageIdSet.has(item.id)}
+                onPinMessage={onPinMessage}
                 retryDisabled={retryDisabled}
               />
             </Fragment>
@@ -708,6 +716,8 @@ function TimelineItemView({
   onReplyMessage,
   onEditMessage,
   onRetryMessage,
+  isPinned = false,
+  onPinMessage,
   retryDisabled = false,
 }: {
   item: AgentTimelineItem;
@@ -720,6 +730,8 @@ function TimelineItemView({
   onReplyMessage?: (item: AgentTimelineItem) => void;
   onEditMessage?: (item: AgentTimelineItem) => void;
   onRetryMessage?: (item: AgentTimelineItem) => void;
+  isPinned?: boolean;
+  onPinMessage?: (item: AgentTimelineItem) => void;
   retryDisabled?: boolean;
 }) {
   const { t } = useI18n();
@@ -750,6 +762,12 @@ function TimelineItemView({
         onRetry={
           kind === 'agent' && item.content?.trim() && onRetryMessage
             ? () => onRetryMessage(item)
+            : undefined
+        }
+        isPinned={kind === 'agent' && isPinned}
+        onPin={
+          kind === 'agent' && item.content?.trim() && onPinMessage
+            ? () => onPinMessage(item)
             : undefined
         }
         retryDisabled={retryDisabled || Boolean(item.metadata?.streaming)}

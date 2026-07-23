@@ -56,6 +56,7 @@ import { ComposerPlusMenu } from './ComposerPlusMenu';
 import type { ComposerModelOption } from './ComposerControls';
 import type { ComposerCatalogClient } from './composerCatalogModel';
 import { ConversationSearch } from './ConversationSearch';
+import { PinnedMessages } from './PinnedMessages';
 import { AgentTimeline, TIMELINE_RENDER_STEP } from './ChatTimeline';
 import {
   isImportantTimelineItem,
@@ -89,6 +90,11 @@ import type {
   VisibleMessageForRetry,
   VisibleMessageKind,
 } from './chatMessageActionModel';
+import {
+  pinnedMessagesInTimelineOrder,
+  reconcilePinnedMessageIds,
+  togglePinnedMessageId,
+} from './pinnedMessageModel';
 import { latestAgentSuggestions } from './chatTimelineModel';
 import { useComposerFileDrop } from './useComposerFileDrop';
 import { useComposerFileUpload } from './useComposerFileUpload';
@@ -224,6 +230,10 @@ function timelineAnchorMemberIds(anchor: HTMLElement): string[] {
   }
 }
 
+function equalStringArrays(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
 export const ChatPanel = memo(function ChatPanel({
   api,
   conversations,
@@ -290,10 +300,14 @@ export const ChatPanel = memo(function ChatPanel({
   const [messageActionNotice, setMessageActionNotice] = useState<string | null>(null);
   const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
   const [conversationSearchVisible, setConversationSearchVisible] = useState(false);
+  const [pinnedMessageIds, setPinnedMessageIds] = useState<string[]>([]);
+  const [pinnedMessagesCollapsed, setPinnedMessagesCollapsed] = useState(false);
   const composerDraftSequenceRef = useRef(0);
   const retryDispatchLockRef = useRef<string | null>(null);
   const retryDispatchSawSendingRef = useRef(false);
   const retryUnlockTimerRef = useRef<number | null>(null);
+  const pinnedJumpTimerRef = useRef<number | null>(null);
+  const pinnedJumpTargetRef = useRef<HTMLElement | null>(null);
   const sendingRef = useRef(sending);
   sendingRef.current = sending;
   const visibleAgentTaskSignals = useMemo(() => {
@@ -377,6 +391,10 @@ export const ChatPanel = memo(function ChatPanel({
           ),
     [messageActionConversationId, messages, timelineConversationId, timelineState],
   );
+  const pinnedMessages = useMemo(
+    () => pinnedMessagesInTimelineOrder(visibleActionMessages, pinnedMessageIds),
+    [pinnedMessageIds, visibleActionMessages],
+  );
   const workspaceFirstMessageId = messages[0]?.id ?? '';
   const workspaceLastMessageId = messages[messages.length - 1]?.id ?? '';
   const activitySummary = useMemo(() => {
@@ -415,6 +433,14 @@ export const ChatPanel = memo(function ChatPanel({
       scrollAreaRef.current?.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]') ??
       scrollAreaRef.current
     );
+  }, []);
+  const clearPinnedJumpTarget = useCallback(() => {
+    pinnedJumpTargetRef.current?.classList.remove('chat-pinned-jump-target');
+    pinnedJumpTargetRef.current = null;
+    if (pinnedJumpTimerRef.current !== null) {
+      window.clearTimeout(pinnedJumpTimerRef.current);
+      pinnedJumpTimerRef.current = null;
+    }
   }, []);
   const captureEarlierScrollAnchor = useCallback((): EarlierTimelineScrollAnchor | null => {
     const viewport = scrollViewport();
@@ -460,8 +486,18 @@ export const ChatPanel = memo(function ChatPanel({
     setComposerDraftRequest(null);
     setMessageActionNotice(null);
     setConversationSearchVisible(false);
+    setPinnedMessageIds([]);
+    setPinnedMessagesCollapsed(false);
+    clearPinnedJumpTarget();
     clearRetryDispatch();
-  }, [clearRetryDispatch, messageActionConversationId]);
+  }, [clearPinnedJumpTarget, clearRetryDispatch, messageActionConversationId]);
+
+  useEffect(() => {
+    setPinnedMessageIds((current) => {
+      const reconciled = reconcilePinnedMessageIds(current, visibleActionMessages);
+      return equalStringArrays(current, reconciled) ? current : reconciled;
+    });
+  }, [visibleActionMessages]);
 
   useEffect(() => {
     const handleConversationSearchShortcut = (event: KeyboardEvent) => {
@@ -492,8 +528,9 @@ export const ChatPanel = memo(function ChatPanel({
       if (retryUnlockTimerRef.current !== null) {
         window.clearTimeout(retryUnlockTimerRef.current);
       }
+      clearPinnedJumpTarget();
     },
-    [],
+    [clearPinnedJumpTarget],
   );
 
   useEffect(() => {
@@ -774,6 +811,65 @@ export const ChatPanel = memo(function ChatPanel({
     },
     [messageActionConversationId, retryVisibleMessage],
   );
+  const togglePinnedVisibleMessage = useCallback(
+    (message: VisibleMessageForRetry) => {
+      if (
+        message.kind !== 'agent' ||
+        message.conversationId !== messageActionConversationId
+      ) {
+        return;
+      }
+      setPinnedMessageIds((current) => togglePinnedMessageId(current, message.id));
+    },
+    [messageActionConversationId],
+  );
+  const unpinVisibleMessage = useCallback((message: VisibleMessageForRetry) => {
+    setPinnedMessageIds((current) =>
+      current.includes(message.id)
+        ? current.filter((candidate) => candidate !== message.id)
+        : current,
+    );
+  }, []);
+  const togglePinnedTimelineMessage = useCallback(
+    (item: AgentTimelineItem) => {
+      const message = timelineVisibleMessage(item, messageActionConversationId);
+      if (message) togglePinnedVisibleMessage(message);
+    },
+    [messageActionConversationId, togglePinnedVisibleMessage],
+  );
+  const jumpToPinnedMessage = useCallback(
+    (message: VisibleMessageForRetry) => {
+      if (message.conversationId !== messageActionConversationId) return;
+      const viewport = scrollViewport();
+      if (!viewport) return;
+      const candidates = Array.from(
+        viewport.querySelectorAll<HTMLElement>('[data-timeline-anchor-id]'),
+      );
+      const target =
+        candidates.find(
+          (candidate) => candidate.dataset.timelineAnchorId === message.id,
+        ) ??
+        candidates.find((candidate) =>
+          timelineAnchorMemberIds(candidate).includes(message.id),
+        );
+      if (!target) return;
+
+      clearPinnedJumpTarget();
+      pinnedToLatestRef.current = false;
+      setShowJumpToLatest(viewport.scrollHeight > viewport.clientHeight);
+      target.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+          ? 'auto'
+          : 'smooth',
+        block: 'center',
+      });
+      target.classList.add('chat-pinned-jump-target');
+      target.focus({ preventScroll: true });
+      pinnedJumpTargetRef.current = target;
+      pinnedJumpTimerRef.current = window.setTimeout(clearPinnedJumpTarget, 1_800);
+    },
+    [clearPinnedJumpTarget, messageActionConversationId, scrollViewport],
+  );
   const toggleTimelineItem = useCallback((item: AgentTimelineItem) => {
     setExpandedTimelineItems((current) => {
       const currentValue = current[item.id] ?? isTimelineItemInitiallyExpanded(item);
@@ -815,6 +911,13 @@ export const ChatPanel = memo(function ChatPanel({
         aria-busy={timelineLoading || timelineLoadingEarlier}
         tabIndex={0}
       >
+        <PinnedMessages
+          messages={pinnedMessages}
+          collapsed={pinnedMessagesCollapsed}
+          onCollapsedChange={setPinnedMessagesCollapsed}
+          onJump={jumpToPinnedMessage}
+          onUnpin={unpinVisibleMessage}
+        />
         <div className="message-stack">
           {timelineState ? (
             <>
@@ -874,6 +977,8 @@ export const ChatPanel = memo(function ChatPanel({
                 onReplyMessage={replyToTimelineMessage}
                 onEditMessage={editTimelineMessage}
                 onRetryMessage={retryTimelineMessage}
+                pinnedMessageIds={pinnedMessageIds}
+                onPinMessage={togglePinnedTimelineMessage}
                 retryDisabled={disabled || sending || Boolean(retryingMessageId)}
               />
             </>
@@ -902,6 +1007,15 @@ export const ChatPanel = memo(function ChatPanel({
                   onRetry={
                     visibleMessage.kind === 'agent'
                       ? () => retryVisibleMessage(visibleMessage)
+                      : undefined
+                  }
+                  isPinned={
+                    visibleMessage.kind === 'agent' &&
+                    pinnedMessageIds.includes(visibleMessage.id)
+                  }
+                  onPin={
+                    visibleMessage.kind === 'agent'
+                      ? () => togglePinnedVisibleMessage(visibleMessage)
                       : undefined
                   }
                   retryDisabled={disabled || sending || Boolean(retryingMessageId)}
