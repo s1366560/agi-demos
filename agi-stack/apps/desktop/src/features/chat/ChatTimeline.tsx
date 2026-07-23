@@ -28,6 +28,7 @@ import type { SessionActivityPresence, SessionNarrativeNode } from '../session/s
 import { resolveA2UIActionView } from './a2uiAction';
 import type { A2UIActionView } from './a2uiAction';
 import {
+  assistantCostTracking,
   assistantExecutionSummary,
   detectPayloadLanguage,
   formatToolCallDuration,
@@ -925,6 +926,7 @@ function AssistantExecutionSummary({ item }: { item: AgentTimelineItem }) {
   const { t } = useI18n();
   const summary = assistantExecutionSummary(item);
   if (!summary) return null;
+  const costTracking = assistantCostTracking(item);
   const pills: Array<{ label: string; value: string }> = [];
   if (summary.stepCount > 0) {
     pills.push({ label: t('chat.summary.steps'), value: String(summary.stepCount) });
@@ -949,6 +951,16 @@ function AssistantExecutionSummary({ item }: { item: AgentTimelineItem }) {
   }
   if (summary.totalTokens > 0) {
     pills.push({ label: t('chat.summary.tokens'), value: String(summary.totalTokens) });
+  }
+  if (costTracking) {
+    pills.push({ label: t('chat.input'), value: String(costTracking.inputTokens) });
+    pills.push({ label: t('chat.output'), value: String(costTracking.outputTokens) });
+    if (costTracking.reasoningTokens > 0) {
+      pills.push({
+        label: t('session.activityReasoning'),
+        value: String(costTracking.reasoningTokens),
+      });
+    }
   }
   if (summary.totalCost > 0) {
     pills.push({ label: t('chat.summary.cost'), value: summary.totalCostFormatted });

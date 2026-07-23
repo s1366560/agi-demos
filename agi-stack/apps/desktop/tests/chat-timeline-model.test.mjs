@@ -11,6 +11,7 @@ const { groupSubAgentTimelineItems } = require(
   '/tmp/agistack-desktop-test-dist/src/features/chat/subagentTimelineGroupModel.js',
 );
 const {
+  assistantCostTracking,
   assistantExecutionSummary,
   detectPayloadLanguage,
   formatToolCallDuration,
@@ -261,6 +262,7 @@ test('cost updates merge into the current Agent reply without losing execution s
   assert.deepEqual(merged[1].metadata.costTracking, {
     inputTokens: 700,
     outputTokens: 200,
+    reasoningTokens: 0,
     totalTokens: 900,
     costUsd: 0.0042,
     model: 'gpt-5.5',
@@ -289,6 +291,63 @@ test('cost updates accept domain token maps, prefer cumulative totals, and avoid
   assert.equal(assistantExecutionSummary(merged[0]).totalTokens, 1_600);
   assert.equal(mergeCostUpdateEvent([], { cost: 0.001, tokens: { total: 100 } }).length, 0);
   assert.match(appSource, /type === 'cost_update'[\s\S]*?mergeCostUpdateEvent\(/);
+});
+
+test('domain cost updates accumulate input, output, reasoning, total tokens, and cost', () => {
+  const existing = [
+    {
+      id: 'assistant-cost-reasoning',
+      type: 'assistant_message',
+      role: 'assistant',
+      content: 'Compared both execution paths',
+      eventTimeUs: 3_500_000,
+      eventCounter: 4,
+      metadata: { executionSummary: {} },
+    },
+  ];
+
+  const afterFirstStep = mergeCostUpdateEvent(existing, {
+    cost: 0.001,
+    tokens: { input: 800, output: 100, reasoning: 100 },
+  });
+  const afterSecondStep = mergeCostUpdateEvent(afterFirstStep, {
+    cost: 0.002,
+    tokens: { input: 400, output: 200, reasoning: 50 },
+  });
+
+  assert.deepEqual(assistantCostTracking(afterSecondStep[0]), {
+    inputTokens: 1_200,
+    outputTokens: 300,
+    reasoningTokens: 150,
+    totalTokens: 1_650,
+    costUsd: 0.003,
+    model: '',
+  });
+  assert.equal(assistantExecutionSummary(afterSecondStep[0]).totalTokens, 1_650);
+  assert.equal(assistantExecutionSummary(afterSecondStep[0]).totalCost, 0.003);
+});
+
+test('assistant cost tracking fails closed for malformed token metadata', () => {
+  assert.equal(
+    assistantCostTracking({
+      id: 'assistant-cost-malformed',
+      type: 'assistant_message',
+      role: 'assistant',
+      eventTimeUs: 3_600_000,
+      eventCounter: 5,
+      metadata: {
+        costTracking: {
+          inputTokens: 100,
+          outputTokens: 50,
+          reasoningTokens: -1,
+          totalTokens: 149,
+          costUsd: 0.001,
+          model: 'gpt-5.5',
+        },
+      },
+    }),
+    null,
+  );
 });
 
 test('LLM retry events expose an explicit waiting lifecycle instead of a raw generic event', () => {

@@ -25,6 +25,13 @@ test('session messages use the mission-control narrative hierarchy', () => {
   assert.match(chatStyles, /\.session-thread-message\.agent \.transcript-meta \{[\s\S]*opacity: 0/);
 });
 
+test('assistant execution summaries render structured input, output, and reasoning tokens', () => {
+  assert.match(chatSource, /assistantCostTracking\(item\)/);
+  assert.match(chatSource, /t\('chat\.input'\)/);
+  assert.match(chatSource, /t\('chat\.output'\)/);
+  assert.match(chatSource, /t\('session\.activityReasoning'\)/);
+});
+
 test('debug activity collapses by structural event kind without text routing', () => {
   assert.match(chatSource, /groupNarrativeActivity\(buildSessionNarrative\(displayItems\)\)/);
   assert.match(

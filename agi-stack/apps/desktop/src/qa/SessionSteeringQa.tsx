@@ -409,8 +409,9 @@ const llmRuntimeTimelineItems: ConversationTimelineState['items'] = [
         totalTokens: { total: 1_600 },
       },
       costTracking: {
-        inputTokens: 1_200,
+        inputTokens: 1_000,
         outputTokens: 400,
+        reasoningTokens: 200,
         totalTokens: 1_600,
         costUsd: 0.006,
         model: 'gpt-5.5',

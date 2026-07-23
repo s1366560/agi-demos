@@ -74,6 +74,15 @@ export type AgentExecutionSummary = {
   tasks: { total: number; completed: number; remaining: number } | null;
 };
 
+export type AgentCostTracking = {
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  model: string;
+};
+
 export type ToolStreamEventKind = 'delta' | 'act' | 'observe';
 
 const SKIPPED_LIVE_TIMELINE_EVENT_TYPES = new Set([
@@ -436,25 +445,45 @@ export function mergeCostUpdateEvent(
   if (targetIndex < 0) return existing;
 
   const tokens = isRecord(data.tokens) ? data.tokens : null;
+  const previous = assistantCostTracking(existing[targetIndex]);
+  const inputSnapshot = optionalFiniteNumber(data.inputTokens ?? data.input_tokens);
+  const outputSnapshot = optionalFiniteNumber(data.outputTokens ?? data.output_tokens);
+  const reasoningSnapshot = optionalFiniteNumber(
+    data.reasoningTokens ?? data.reasoning_tokens,
+  );
+  const stepInputTokens = optionalFiniteNumber(tokens?.input) ?? 0;
+  const stepOutputTokens = optionalFiniteNumber(tokens?.output) ?? 0;
+  const stepReasoningTokens = optionalFiniteNumber(tokens?.reasoning) ?? 0;
   const inputTokens =
-    optionalFiniteNumber(data.inputTokens ?? data.input_tokens) ??
-    optionalFiniteNumber(tokens?.input) ??
-    0;
+    inputSnapshot ?? (tokens ? (previous?.inputTokens ?? 0) + stepInputTokens : 0);
   const outputTokens =
-    optionalFiniteNumber(data.outputTokens ?? data.output_tokens) ??
-    optionalFiniteNumber(tokens?.output) ??
-    0;
-  const totalTokens =
-    optionalFiniteNumber(data.cumulativeTokens ?? data.cumulative_tokens) ??
-    optionalFiniteNumber(data.totalTokens ?? data.total_tokens) ??
+    outputSnapshot ?? (tokens ? (previous?.outputTokens ?? 0) + stepOutputTokens : 0);
+  const reasoningTokens =
+    reasoningSnapshot ??
+    (tokens ? (previous?.reasoningTokens ?? 0) + stepReasoningTokens : 0);
+  const cumulativeTokens = optionalFiniteNumber(
+    data.cumulativeTokens ?? data.cumulative_tokens,
+  );
+  const totalSnapshot = optionalFiniteNumber(data.totalTokens ?? data.total_tokens);
+  const stepTotalTokens =
     optionalFiniteNumber(tokens?.total) ??
-    inputTokens + outputTokens;
+    stepInputTokens + stepOutputTokens + stepReasoningTokens;
+  const totalTokens =
+    cumulativeTokens ??
+    totalSnapshot ??
+    (tokens
+      ? (previous?.totalTokens ?? 0) + stepTotalTokens
+      : inputTokens + outputTokens + reasoningTokens);
+  const cumulativeCost = optionalFiniteNumber(
+    data.cumulativeCostUsd ?? data.cumulative_cost_usd,
+  );
+  const costSnapshot = optionalFiniteNumber(data.costUsd ?? data.cost_usd);
+  const stepCost = optionalFiniteNumber(data.cost) ?? 0;
   const costUsd =
-    optionalFiniteNumber(data.cumulativeCostUsd ?? data.cumulative_cost_usd) ??
-    optionalFiniteNumber(data.costUsd ?? data.cost_usd) ??
-    optionalFiniteNumber(data.cost) ??
-    0;
-  const model = typeof data.model === 'string' ? data.model : '';
+    cumulativeCost ??
+    costSnapshot ??
+    (tokens ? (previous?.costUsd ?? 0) + stepCost : stepCost);
+  const model = typeof data.model === 'string' ? data.model : (previous?.model ?? '');
 
   return existing.map((item, index) => {
     if (index !== targetIndex) return item;
@@ -482,6 +511,7 @@ export function mergeCostUpdateEvent(
         costTracking: {
           inputTokens,
           outputTokens,
+          reasoningTokens,
           totalTokens,
           costUsd,
           model,
@@ -489,6 +519,37 @@ export function mergeCostUpdateEvent(
       },
     };
   });
+}
+
+export function assistantCostTracking(item: AgentTimelineItem): AgentCostTracking | null {
+  const metadata = isRecord(item.metadata) ? item.metadata : null;
+  const raw = metadata?.costTracking ?? metadata?.cost_tracking;
+  if (!isRecord(raw)) return null;
+
+  const inputTokens = optionalFiniteNumber(raw.inputTokens ?? raw.input_tokens);
+  const outputTokens = optionalFiniteNumber(raw.outputTokens ?? raw.output_tokens);
+  const reasoningValue = raw.reasoningTokens ?? raw.reasoning_tokens;
+  const reasoningTokens = reasoningValue === undefined ? 0 : optionalFiniteNumber(reasoningValue);
+  const totalTokens = optionalFiniteNumber(raw.totalTokens ?? raw.total_tokens);
+  const costUsd = optionalFiniteNumber(raw.costUsd ?? raw.cost_usd);
+  if (
+    inputTokens === null ||
+    outputTokens === null ||
+    reasoningTokens === null ||
+    totalTokens === null ||
+    costUsd === null
+  ) {
+    return null;
+  }
+
+  return {
+    inputTokens,
+    outputTokens,
+    reasoningTokens,
+    totalTokens,
+    costUsd,
+    model: recordString(raw, 'model', 'model') ?? '',
+  };
 }
 
 export function assistantExecutionSummary(
