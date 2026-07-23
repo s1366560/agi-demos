@@ -68,6 +68,24 @@ test('resolves a live stateless button only when the server allow-list matches',
   assert.deepEqual(resolveA2UIActionView(mismatch, []).actions, []);
 });
 
+test('resolves allowlisted static A2UI action context without exposing request metadata', () => {
+  const contextual = asked();
+  contextual.payload.surface_data.context = { internal_trace: 'do-not-submit' };
+  contextual.payload.surface_data.components = components.replace(
+    '"action":{"name":"approve"}',
+    '"action":{"name":"approve","context":{"approved":{"literalBoolean":true},"release":{"literalString":"2026.07"},"attempt":{"literalNumber":2}}}',
+  );
+
+  assert.deepEqual(resolveA2UIActionView(contextual, []).actions, [
+    {
+      actionName: 'approve',
+      sourceComponentId: 'button-1',
+      label: 'Approve',
+      context: { approved: true, release: '2026.07', attempt: 2 },
+    },
+  ]);
+});
+
 test('restores a history action from its prior canvas block and persisted allow-list', () => {
   const canvas = {
     id: 'canvas-1',
@@ -197,14 +215,17 @@ test('replays incremental canvas updates before restoring an A2UI action', () =>
   );
 });
 
-test('rejects orphan buttons and dynamic context instead of guessing response values', () => {
+test('rejects orphan buttons and path-bound action context instead of guessing response values', () => {
   const orphanComponents = components.replace('"explicitList":["button-1"]', '"explicitList":[]');
   const orphan = asked();
   orphan.payload.surface_data.components = orphanComponents;
   assert.deepEqual(resolveA2UIActionView(orphan, []).actions, []);
 
   const contextual = asked();
-  contextual.payload.surface_data.context = { approved: true };
+  contextual.payload.surface_data.components = components.replace(
+    '"action":{"name":"approve"}',
+    '"action":{"name":"approve","context":{"approved":{"path":"/form/approved"}}}',
+  );
   assert.deepEqual(resolveA2UIActionView(contextual, []).actions, []);
 });
 

@@ -5,6 +5,7 @@ export type A2UIActionOption = {
   actionName: string;
   sourceComponentId: string;
   label: string;
+  context?: Record<string, string | number | boolean>;
 };
 
 export type A2UIActionView = {
@@ -16,7 +17,12 @@ const MAX_COMPONENT_BYTES = 64 * 1024;
 const MAX_RECORDS = 128;
 const MAX_COMPONENTS = 128;
 const MAX_OBJECT_NODES = 512;
+const MAX_ACTION_CONTEXT_ENTRIES = 32;
+const MAX_ACTION_CONTEXT_KEY_BYTES = 128;
+const MAX_ACTION_CONTEXT_STRING_BYTES = 4 * 1024;
+const MAX_ACTION_CONTEXT_BYTES = 16 * 1024;
 const DANGEROUS_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
+const UTF8_ENCODER = new TextEncoder();
 
 type JsonRecord = Record<string, unknown>;
 
@@ -33,9 +39,6 @@ export function resolveA2UIActionView(
 ): A2UIActionView {
   const payload = asRecord(item.payload) ?? item;
   const surfaceData = asRecord(payload.surface_data) ?? asRecord(payload.surfaceData);
-  if (surfaceData && !isEmptyRecord(surfaceData.context)) {
-    return unsupported('Dynamic A2UI context must be completed in the Web client.');
-  }
 
   const allowedActions = parseAllowedActions(
     surfaceData?.allowed_actions ??
@@ -70,11 +73,17 @@ export function resolveA2UIActionView(
     const action = asRecord(button.action);
     const actionName = stringValue(action?.name);
     const labelId = stringValue(button.child);
-    if (!actionName || !labelId || !isStatelessAction(action)) continue;
+    const context = staticActionContext(action);
+    if (!actionName || !labelId || context === null) continue;
     if (!allowedActions.has(actionKey(componentId, actionName))) continue;
     const label = buttonLabel(labelId, surface.components);
     if (!label) continue;
-    actions.push({ actionName, sourceComponentId: componentId, label });
+    actions.push({
+      actionName,
+      sourceComponentId: componentId,
+      label,
+      ...(Object.keys(context).length > 0 ? { context } : {}),
+    });
   }
 
   return actions.length > 0
@@ -248,17 +257,76 @@ function buttonLabel(labelId: string, components: Map<string, JsonRecord>): stri
   return literal && literal.length <= 200 ? literal : null;
 }
 
-function isStatelessAction(action: JsonRecord | null): boolean {
-  if (!action) return false;
+function staticActionContext(
+  action: JsonRecord | null,
+): Record<string, string | number | boolean> | null {
+  if (!action) return null;
   const keys = Object.keys(action);
-  if (keys.some((key) => key !== 'name' && key !== 'context')) return false;
-  return isEmptyRecord(action.context);
+  if (keys.some((key) => key !== 'name' && key !== 'context')) return null;
+  if (action.context === undefined || action.context === null) return {};
+
+  const entries = actionContextEntries(action.context);
+  if (!entries || entries.length > MAX_ACTION_CONTEXT_ENTRIES) return null;
+  const context: Record<string, string | number | boolean> = {};
+  for (const [key, rawValue] of entries) {
+    if (
+      !key.trim() ||
+      utf8Bytes(key) > MAX_ACTION_CONTEXT_KEY_BYTES ||
+      DANGEROUS_KEYS.has(key) ||
+      Object.prototype.hasOwnProperty.call(context, key)
+    ) {
+      return null;
+    }
+    const value = staticActionContextValue(rawValue);
+    if (value === null) return null;
+    context[key] = value;
+  }
+
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(context);
+  } catch {
+    return null;
+  }
+  return utf8Bytes(serialized) <= MAX_ACTION_CONTEXT_BYTES ? context : null;
 }
 
-function isEmptyRecord(value: unknown): boolean {
-  if (value === undefined || value === null) return true;
+function actionContextEntries(value: unknown): Array<[string, unknown]> | null {
+  if (Array.isArray(value)) {
+    const entries: Array<[string, unknown]> = [];
+    for (const candidate of value) {
+      const entry = asRecord(candidate);
+      const key = stringValue(entry?.key);
+      if (!key || !entry || !Object.prototype.hasOwnProperty.call(entry, 'value')) return null;
+      entries.push([key, entry.value]);
+    }
+    return entries;
+  }
   const record = asRecord(value);
-  return Boolean(record && Object.keys(record).length === 0);
+  return record ? Object.entries(record) : null;
+}
+
+function staticActionContextValue(value: unknown): string | number | boolean | null {
+  if (typeof value === 'string') {
+    return utf8Bytes(value) <= MAX_ACTION_CONTEXT_STRING_BYTES ? value : null;
+  }
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'boolean') return value;
+
+  const literal = asRecord(value);
+  if (!literal || Object.prototype.hasOwnProperty.call(literal, 'path')) return null;
+  const candidates = [
+    literal.literalString,
+    literal.literalNumber,
+    literal.literalBoolean,
+    literal.literal,
+  ].filter((candidate) => candidate !== undefined);
+  if (candidates.length !== 1) return null;
+  return staticActionContextValue(candidates[0]);
+}
+
+function utf8Bytes(value: string): number {
+  return UTF8_ENCODER.encode(value).byteLength;
 }
 
 function isSafeJsonTree(value: unknown): boolean {

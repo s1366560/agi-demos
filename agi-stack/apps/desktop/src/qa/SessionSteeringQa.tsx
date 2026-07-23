@@ -1472,7 +1472,17 @@ const a2uiCanvasComponents = [
         {
           id: 'approve-button',
           component: {
-            Button: { child: 'approve-label', action: { name: 'approve_release' } },
+            Button: {
+              child: 'approve-label',
+              action: {
+                name: 'approve_release',
+                context: {
+                  release: { literalString: '2026.07' },
+                  verified: { literalBoolean: true },
+                  checks: { literalNumber: 42 },
+                },
+              },
+            },
           },
         },
         {
@@ -2853,7 +2863,11 @@ function SessionSteeringQa() {
               onRespondToHitl={async (submission) => {
                 if (!a2uiCanvasEventsMode && !a2uiCanvasIncrementalEventsMode) return;
                 setA2UICanvasResponse(
-                  `${submission.responseData.action_name}:${submission.responseData.source_component_id}`,
+                  [
+                    submission.responseData.action_name,
+                    submission.responseData.source_component_id,
+                    JSON.stringify(submission.responseData.context ?? {}),
+                  ].join(':'),
                 );
               }}
               onWorkflowSelect={() => undefined}

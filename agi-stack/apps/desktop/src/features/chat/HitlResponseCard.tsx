@@ -325,7 +325,7 @@ export function HitlResponseCard({
                   void submit({
                     action_name: action.actionName,
                     source_component_id: action.sourceComponentId,
-                    context: {},
+                    context: action.context ?? {},
                   })
                 }
               >

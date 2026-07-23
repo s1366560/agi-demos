@@ -31,6 +31,10 @@ use crate::{auth::Identity, AppState};
 
 const HITL_RESPONSE_STREAM_MAX_LEN: usize = 1000;
 const HITL_RESPONSE_ENCODING: &str = "aes256gcm+json";
+const A2UI_CONTEXT_MAX_FIELDS: usize = 32;
+const A2UI_CONTEXT_MAX_KEY_BYTES: usize = 128;
+const A2UI_CONTEXT_MAX_STRING_BYTES: usize = 4 * 1024;
+const A2UI_CONTEXT_MAX_BYTES: usize = 16 * 1024;
 
 pub(crate) type SharedHitlResponses = Arc<dyn HitlResponseService>;
 
@@ -589,15 +593,37 @@ fn validate_a2ui_response_shape(response_data: &Map<String, Value>) -> Result<()
         .get("source_component_id")
         .and_then(Value::as_str)
         .is_some_and(|value| !value.trim().is_empty());
-    let context_is_stateless = response_data
+    if !action_name_is_valid || !source_component_id_is_valid {
+        return Err(HitlApiError::bad_request("Invalid A2UI action response"));
+    }
+
+    let context = response_data
         .get("context")
         .and_then(Value::as_object)
-        .is_some_and(Map::is_empty);
-    if action_name_is_valid && source_component_id_is_valid && context_is_stateless {
+        .ok_or_else(|| HitlApiError::bad_request("Invalid static A2UI action context"))?;
+    validate_static_a2ui_context(context)
+}
+
+fn validate_static_a2ui_context(context: &Map<String, Value>) -> Result<(), HitlApiError> {
+    let serialized = serde_json::to_vec(context)
+        .map_err(|_| HitlApiError::bad_request("Invalid static A2UI action context"))?;
+    let is_valid = context.len() <= A2UI_CONTEXT_MAX_FIELDS
+        && serialized.len() <= A2UI_CONTEXT_MAX_BYTES
+        && context.iter().all(|(key, value)| {
+            !key.trim().is_empty()
+                && key.len() <= A2UI_CONTEXT_MAX_KEY_BYTES
+                && !matches!(key.as_str(), "__proto__" | "prototype" | "constructor")
+                && match value {
+                    Value::Bool(_) | Value::Number(_) => true,
+                    Value::String(text) => text.len() <= A2UI_CONTEXT_MAX_STRING_BYTES,
+                    _ => false,
+                }
+        });
+    if is_valid {
         Ok(())
     } else {
         Err(HitlApiError::bad_request(
-            "Invalid stateless A2UI action response",
+            "Invalid static A2UI action context",
         ))
     }
 }
@@ -989,6 +1015,49 @@ mod tests {
     }
 
     #[test]
+    fn accepts_allowlisted_a2ui_action_with_safe_static_context() {
+        let prepared = prepare_response(
+            &a2ui_request("req-a2ui"),
+            HitlResponsePayload {
+                request_id: "req-a2ui".to_string(),
+                hitl_type: "a2ui_action".to_string(),
+                response_data: json!({
+                    "action_name": "approve",
+                    "source_component_id": "approve-button",
+                    "context": {
+                        "approved": true,
+                        "release": "2026.07",
+                        "attempt": 2,
+                    },
+                }),
+            },
+            Utc::now(),
+            Some(TEST_ENCRYPTION_KEY),
+        )
+        .expect("prepare contextual A2UI response");
+
+        let response_metadata = prepared.response_metadata.expect("response metadata");
+        assert_eq!(response_metadata["context"], json!({}));
+        let sealed_response = response_metadata["sealed_response"]
+            .as_str()
+            .expect("sealed response");
+        let decrypted =
+            try_decrypt_python_aes256_gcm(sealed_response, TEST_ENCRYPTION_KEY).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&decrypted).unwrap(),
+            json!({
+                "action_name": "approve",
+                "source_component_id": "approve-button",
+                "context": {
+                    "approved": true,
+                    "release": "2026.07",
+                    "attempt": 2,
+                },
+            })
+        );
+    }
+
+    #[test]
     fn rejects_a2ui_without_key_or_exact_allowlist_match() {
         let request = HitlResponsePayload {
             request_id: "req-a2ui".to_string(),
@@ -1021,7 +1090,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_dynamic_a2ui_context_on_stateless_rust_boundary() {
+    fn rejects_nested_a2ui_context_on_static_rust_boundary() {
         let err = prepare_response(
             &a2ui_request("req-a2ui"),
             HitlResponsePayload {
@@ -1030,7 +1099,7 @@ mod tests {
                 response_data: json!({
                     "action_name": "approve",
                     "source_component_id": "approve-button",
-                    "context": {"secret": "must-not-cross-stateless-boundary"},
+                    "context": {"form": {"approved": true}},
                 }),
             },
             Utc::now(),
@@ -1039,7 +1108,34 @@ mod tests {
         .unwrap_err();
 
         assert_eq!(err.status, StatusCode::BAD_REQUEST);
-        assert_eq!(err.detail(), "Invalid stateless A2UI action response");
+        assert_eq!(err.detail(), "Invalid static A2UI action context");
+    }
+
+    #[test]
+    fn rejects_unsafe_or_oversized_a2ui_static_context() {
+        for context in [
+            json!({"constructor": "unsafe"}),
+            json!({"release": "x".repeat(A2UI_CONTEXT_MAX_STRING_BYTES + 1)}),
+        ] {
+            let err = prepare_response(
+                &a2ui_request("req-a2ui"),
+                HitlResponsePayload {
+                    request_id: "req-a2ui".to_string(),
+                    hitl_type: "a2ui_action".to_string(),
+                    response_data: json!({
+                        "action_name": "approve",
+                        "source_component_id": "approve-button",
+                        "context": context,
+                    }),
+                },
+                Utc::now(),
+                Some(TEST_ENCRYPTION_KEY),
+            )
+            .unwrap_err();
+
+            assert_eq!(err.status, StatusCode::BAD_REQUEST);
+            assert_eq!(err.detail(), "Invalid static A2UI action context");
+        }
     }
 
     #[tokio::test]
