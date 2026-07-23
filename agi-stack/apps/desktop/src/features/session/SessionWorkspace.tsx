@@ -13,15 +13,21 @@ import {
   ExclamationTriangleIcon,
   LockClosedIcon,
   PauseIcon,
+  Pencil1Icon,
   Pencil2Icon,
   PersonIcon,
   PlayIcon,
   ReaderIcon,
   ReloadIcon,
   StopIcon,
+  TrashIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
+import {
+  ConversationLifecycleDialogs,
+  type ConversationLifecycleMode,
+} from '../workspace/ConversationLifecycleDialogs';
 import {
   defaultSessionCanvasTab,
   type SessionCanvasTabId,
@@ -55,6 +61,8 @@ type SessionWorkspaceProps = {
   liveError: string | null;
   onRunAction: (action: SessionRunAction, feedback?: string) => void;
   onOpenTask?: () => void;
+  onRenameConversation?: (title: string) => Promise<void>;
+  onDeleteConversation?: () => Promise<void>;
 };
 
 const stageLabels: Array<{ id: Exclude<SessionStage, 'unavailable'>; label: string }> = [
@@ -76,6 +84,8 @@ export function SessionWorkspace({
   liveError,
   onRunAction,
   onOpenTask,
+  onRenameConversation,
+  onDeleteConversation,
 }: SessionWorkspaceProps) {
   const { t } = useI18n();
   const hasCanvas = Boolean(canvas);
@@ -87,7 +97,9 @@ export function SessionWorkspace({
   const [reviewFeedbackOpen, setReviewFeedbackOpen] = useState(false);
   const [reviewFeedback, setReviewFeedback] = useState('');
   const [recoveryConfirmOpen, setRecoveryConfirmOpen] = useState(false);
+  const [lifecycleMode, setLifecycleMode] = useState<ConversationLifecycleMode>(null);
   const canvasTriggerRef = useRef<string | null>(null);
+  const moreActionsRef = useRef<HTMLDetailsElement>(null);
   const statusPresentation = sessionStatusPresentation(viewModel.status);
   const runActions = viewModel.runActions;
   const reattachPresentation = sessionRecoveryPresentation('reconnect');
@@ -152,6 +164,13 @@ export function SessionWorkspace({
         }
       });
     }
+  };
+  const closeLifecycleDialog = () => {
+    setLifecycleMode(null);
+    if (typeof window === 'undefined') return;
+    window.requestAnimationFrame(() =>
+      moreActionsRef.current?.querySelector<HTMLElement>('summary')?.focus(),
+    );
   };
 
   const canvasControls: SessionCanvasControls = {
@@ -339,7 +358,7 @@ export function SessionWorkspace({
               </AlertDialog.Content>
             </AlertDialog.Root>
           ) : null}
-          <details className="session-workspace-more">
+          <details className="session-workspace-more" ref={moreActionsRef}>
             <summary aria-label={t('session.moreActions')} title={t('session.moreActions')}>
               <DotsHorizontalIcon />
             </summary>
@@ -347,6 +366,29 @@ export function SessionWorkspace({
               <button type="button" onClick={() => openCanvas('overview')}>
                 <ReaderIcon /> {t('session.canvasOverview')}
               </button>
+              {onRenameConversation ? (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.currentTarget.closest('details')?.removeAttribute('open');
+                    setLifecycleMode('rename');
+                  }}
+                >
+                  <Pencil1Icon /> {t('workspaceTree.renameConversation')}
+                </button>
+              ) : null}
+              {onDeleteConversation ? (
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={(event) => {
+                    event.currentTarget.closest('details')?.removeAttribute('open');
+                    setLifecycleMode('delete');
+                  }}
+                >
+                  <TrashIcon /> {t('workspaceTree.deleteConversation')}
+                </button>
+              ) : null}
               {runActions.includes('cancel') ? (
                 <button
                   type="button"
@@ -362,6 +404,17 @@ export function SessionWorkspace({
           </details>
         </div>
       </header>
+      <ConversationLifecycleDialogs
+        mode={lifecycleMode}
+        target={{ id: viewModel.id, title: viewModel.title }}
+        onClose={closeLifecycleDialog}
+        onRename={async (title) => {
+          if (onRenameConversation) await onRenameConversation(title);
+        }}
+        onDelete={async () => {
+          if (onDeleteConversation) await onDeleteConversation();
+        }}
+      />
 
       {showStatusBanner && statusPresentation ? (
         <div

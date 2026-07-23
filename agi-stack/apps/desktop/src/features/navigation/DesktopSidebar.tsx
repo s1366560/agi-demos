@@ -51,6 +51,17 @@ type DesktopSidebarProps = {
     workspaceId: string,
     conversation: AgentConversation,
   ) => void;
+  onRenameConversation?: (
+    projectId: string,
+    workspaceId: string,
+    conversation: AgentConversation,
+    title: string,
+  ) => Promise<void>;
+  onDeleteConversation?: (
+    projectId: string,
+    workspaceId: string,
+    conversation: AgentConversation,
+  ) => Promise<void>;
   onNewTask: () => void;
   onOpenAccountSettings: () => void;
   onSwitchWorkspace: () => void;
@@ -83,6 +94,8 @@ export function DesktopSidebar({
   onRetryWorkspace,
   onSelectWorkspace,
   onSelectConversation,
+  onRenameConversation,
+  onDeleteConversation,
   onNewTask,
   onOpenAccountSettings,
   onSwitchWorkspace,
@@ -145,6 +158,8 @@ export function DesktopSidebar({
           onRetryWorkspace={onRetryWorkspace}
           onSelectWorkspace={onSelectWorkspace}
           onSelectConversation={onSelectConversation}
+          onRenameConversation={onRenameConversation}
+          onDeleteConversation={onDeleteConversation}
         />
       </section>
 

@@ -146,19 +146,27 @@
   border-left: 1px solid var(--desktop-border-soft);
 }
 
+.workspace-tree-session-row-shell {
+  position: relative;
+  min-width: 0;
+  border-radius: 6px;
+}
+
 .workspace-tree-session-row {
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr) 12px;
   align-items: center;
   gap: 7px;
+  width: 100%;
   min-width: 0;
-  padding: 7px 6px;
+  padding: 7px 28px 7px 6px;
   border-radius: 6px;
   text-align: left;
 }
 
 .workspace-tree-session-row:hover,
-.workspace-tree-session-row.selected {
+.workspace-tree-session-row.selected,
+.workspace-tree-session-row-shell:focus-within {
   background: rgba(148, 163, 184, 0.07);
 }
 
@@ -201,6 +209,123 @@
 .workspace-tree-session-row > svg:last-child[data-status='offline'],
 .workspace-tree-session-row > svg:last-child[data-status='unknown'] {
   color: var(--desktop-faint);
+}
+
+.workspace-tree-session-actions {
+  position: absolute;
+  z-index: 5;
+  top: 4px;
+  right: 3px;
+}
+
+.workspace-tree-session-actions > summary {
+  display: grid;
+  width: 21px;
+  height: 21px;
+  border-radius: 5px;
+  color: var(--desktop-faint);
+  cursor: pointer;
+  list-style: none;
+  opacity: 0;
+  place-items: center;
+}
+
+.workspace-tree-session-actions > summary::-webkit-details-marker {
+  display: none;
+}
+
+.workspace-tree-session-row-shell:hover .workspace-tree-session-actions > summary,
+.workspace-tree-session-row-shell:focus-within .workspace-tree-session-actions > summary,
+.workspace-tree-session-row-shell.selected .workspace-tree-session-actions > summary,
+.workspace-tree-session-actions[open] > summary {
+  opacity: 1;
+}
+
+.workspace-tree-session-actions > summary:hover,
+.workspace-tree-session-actions > summary:focus-visible,
+.workspace-tree-session-actions[open] > summary {
+  background: rgba(56, 214, 255, 0.12);
+  color: var(--desktop-text);
+}
+
+.workspace-tree-session-actions > summary:focus-visible {
+  outline: 1px solid var(--desktop-cyan);
+  outline-offset: 1px;
+}
+
+.workspace-tree-session-actions > div {
+  position: absolute;
+  z-index: 20;
+  top: 24px;
+  right: 0;
+  display: grid;
+  width: 154px;
+  padding: 5px;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 7px;
+  background: var(--desktop-panel);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
+}
+
+.workspace-tree-session-actions button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--desktop-muted);
+  font: inherit;
+  font-size: 9px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.workspace-tree-session-actions button:hover,
+.workspace-tree-session-actions button:focus-visible {
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--desktop-text);
+  outline: none;
+}
+
+.workspace-tree-session-actions button.danger {
+  color: #ff8b96;
+}
+
+.workspace-tree-session-actions button svg {
+  width: 12px;
+  height: 12px;
+}
+
+.conversation-lifecycle-dialog form,
+.conversation-lifecycle-dialog form > label {
+  display: grid;
+  gap: 8px;
+}
+
+.conversation-lifecycle-dialog form {
+  margin-top: 18px;
+}
+
+.conversation-lifecycle-dialog form > label > span {
+  color: var(--desktop-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.conversation-lifecycle-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.conversation-lifecycle-error {
+  margin: 10px 0 0;
+  color: #ff8b96;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .workspace-tree-state {

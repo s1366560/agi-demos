@@ -2589,6 +2589,107 @@ test('updateAgentConversationConfig persists and clears a scoped model override'
   }
 });
 
+test('conversation lifecycle mutations use the scoped Web-compatible routes', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    if (init?.method === 'DELETE') {
+      return new Response(null, { status: 204 });
+    }
+    return new Response(
+      JSON.stringify(
+        conversationRecord(1, {
+          tenant_id: 'tenant/1',
+          project_id: 'project/1',
+          workspace_id: 'workspace/1',
+          title: 'Renamed conversation',
+        }),
+      ),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      localApiToken: 'local-session-token',
+      tenantId: 'tenant/1',
+      projectId: 'project/1',
+      workspaceId: 'workspace/1',
+    });
+
+    const renamed = await client.updateAgentConversationTitle(
+      'conversation/1',
+      'Renamed conversation',
+      'project/1',
+      'workspace/1',
+    );
+    await client.deleteAgentConversation('conversation/1', 'project/1');
+
+    assert.equal(renamed.title, 'Renamed conversation');
+    assert.equal(
+      String(calls[0]?.input),
+      'http://127.0.0.1:8088/api/v1/agent/conversations/conversation%2F1/title?project_id=project%2F1',
+    );
+    assert.equal(calls[0]?.init?.method, 'PATCH');
+    assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
+      title: 'Renamed conversation',
+    });
+    assert.equal(
+      String(calls[1]?.input),
+      'http://127.0.0.1:8088/api/v1/agent/conversations/conversation%2F1?project_id=project%2F1',
+    );
+    assert.equal(calls[1]?.init?.method, 'DELETE');
+    assert.equal(calls[1]?.init?.body, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('conversation title mutation rejects a response outside the requested hierarchy scope', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify(
+        conversationRecord(1, {
+          tenant_id: 'tenant-other',
+          project_id: 'project/1',
+          workspace_id: 'workspace/1',
+          title: 'Renamed conversation',
+        }),
+      ),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      localApiToken: 'local-session-token',
+      tenantId: 'tenant/1',
+      projectId: 'project/1',
+      workspaceId: 'workspace/1',
+    });
+
+    await assert.rejects(
+      client.updateAgentConversationTitle(
+        'conversation/1',
+        'Renamed conversation',
+        'project/1',
+        'workspace/1',
+      ),
+      (error) =>
+        error instanceof DesktopApiError &&
+        error.status === 502 &&
+        error.message === 'Invalid agent conversation response',
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('createTaskSession posts one strictly scoped atomic task-session contract', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;

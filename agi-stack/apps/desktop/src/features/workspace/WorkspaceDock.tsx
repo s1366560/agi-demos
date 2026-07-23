@@ -9,7 +9,10 @@ import {
   CodeIcon,
   CubeIcon,
   DashboardIcon,
+  DotsHorizontalIcon,
   ExclamationTriangleIcon,
+  Pencil1Icon,
+  TrashIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
@@ -32,7 +35,18 @@ import {
   type WorkspaceTreeStatusTone,
   type WorkspaceTreeSelectionMode,
 } from './workspaceTreeModel';
+import {
+  ConversationLifecycleDialogs,
+  type ConversationLifecycleMode,
+} from './ConversationLifecycleDialogs';
 import './WorkspaceDock.css';
+
+type ConversationLifecycleRequest = {
+  mode: Exclude<ConversationLifecycleMode, null>;
+  projectId: string;
+  workspaceId: string;
+  conversation: AgentConversation;
+};
 
 type WorkspaceDockProps = {
   workspaces: WorkspaceSummary[];
@@ -52,6 +66,17 @@ type WorkspaceDockProps = {
     workspaceId: string,
     conversation: AgentConversation,
   ) => void;
+  onRenameConversation?: (
+    projectId: string,
+    workspaceId: string,
+    conversation: AgentConversation,
+    title: string,
+  ) => Promise<void>;
+  onDeleteConversation?: (
+    projectId: string,
+    workspaceId: string,
+    conversation: AgentConversation,
+  ) => Promise<void>;
 };
 
 export function WorkspaceDock({
@@ -68,11 +93,16 @@ export function WorkspaceDock({
   onRetryWorkspace,
   onSelectWorkspace,
   onSelectConversation,
+  onRenameConversation,
+  onDeleteConversation,
 }: WorkspaceDockProps) {
   const { t } = useI18n();
   const navigationRef = useRef<HTMLElement>(null);
   const workspaceToggleRefs = useRef(new Map<string, HTMLButtonElement>());
+  const conversationActionRefs = useRef(new Map<string, HTMLElement>());
   const [unboundTasksExpanded, setUnboundTasksExpanded] = useState(true);
+  const [lifecycleRequest, setLifecycleRequest] =
+    useState<ConversationLifecycleRequest | null>(null);
   const projectState = nodeState.projects[currentProjectId];
   // The dock re-renders with the App on every socket flush; the tree only
   // changes with the workspace/conversation data, so rebuild it only then.
@@ -91,17 +121,31 @@ export function WorkspaceDock({
     unboundState,
     unboundConversations.length,
   );
+  const closeLifecycleDialog = () => {
+    const conversationId = lifecycleRequest?.conversation.id ?? null;
+    setLifecycleRequest(null);
+    if (!conversationId || typeof window === 'undefined') return;
+    window.requestAnimationFrame(() => {
+      const action = conversationActionRefs.current.get(conversationId);
+      if (action?.isConnected) {
+        action.focus();
+        return;
+      }
+      navigationRef.current?.focus();
+    });
+  };
 
   return (
-    <nav
-      ref={navigationRef}
-      className="workspace-dock workspace-session-tree"
-      aria-label={t('workspaceTree.navigation')}
-      aria-busy={projectState?.loading || undefined}
-      tabIndex={-1}
-    >
-      <ScrollArea className="dock-list">
-        <div>
+    <>
+      <nav
+        ref={navigationRef}
+        className="workspace-dock workspace-session-tree"
+        aria-label={t('workspaceTree.navigation')}
+        aria-busy={projectState?.loading || undefined}
+        tabIndex={-1}
+      >
+        <ScrollArea className="dock-list">
+          <div>
           {hasProjectScope && availability === 'refreshing' ? (
             <WorkspaceTreeState compact title={t('workspaceTree.refreshing')} />
           ) : hasProjectScope && availability === 'stale-error' ? (
@@ -193,6 +237,32 @@ export function WorkspaceDock({
                         )}
                         onSelect={() =>
                           onSelectConversation(currentProjectId, '', conversation)
+                        }
+                        actionRef={(element) => {
+                          if (element) conversationActionRefs.current.set(conversation.id, element);
+                          else conversationActionRefs.current.delete(conversation.id);
+                        }}
+                        onRename={
+                          onRenameConversation
+                            ? () =>
+                                setLifecycleRequest({
+                                  mode: 'rename',
+                                  projectId: currentProjectId,
+                                  workspaceId: '',
+                                  conversation,
+                                })
+                            : undefined
+                        }
+                        onDelete={
+                          onDeleteConversation
+                            ? () =>
+                                setLifecycleRequest({
+                                  mode: 'delete',
+                                  projectId: currentProjectId,
+                                  workspaceId: '',
+                                  conversation,
+                                })
+                            : undefined
                         }
                       />
                     ))
@@ -371,6 +441,35 @@ export function WorkspaceDock({
                             onSelect={() =>
                               onSelectConversation(currentProjectId, workspace.id, conversation)
                             }
+                            actionRef={(element) => {
+                              if (element) {
+                                conversationActionRefs.current.set(conversation.id, element);
+                              } else {
+                                conversationActionRefs.current.delete(conversation.id);
+                              }
+                            }}
+                            onRename={
+                              onRenameConversation
+                                ? () =>
+                                    setLifecycleRequest({
+                                      mode: 'rename',
+                                      projectId: currentProjectId,
+                                      workspaceId: workspace.id,
+                                      conversation,
+                                    })
+                                : undefined
+                            }
+                            onDelete={
+                              onDeleteConversation
+                                ? () =>
+                                    setLifecycleRequest({
+                                      mode: 'delete',
+                                      projectId: currentProjectId,
+                                      workspaceId: workspace.id,
+                                      conversation,
+                                    })
+                                : undefined
+                            }
                           />
                         ))
                       )}
@@ -380,9 +479,39 @@ export function WorkspaceDock({
               );
             })
           )}
-        </div>
-      </ScrollArea>
-    </nav>
+          </div>
+        </ScrollArea>
+      </nav>
+      <ConversationLifecycleDialogs
+        mode={lifecycleRequest?.mode ?? null}
+        target={
+          lifecycleRequest
+            ? {
+                id: lifecycleRequest.conversation.id,
+                title: lifecycleRequest.conversation.title || lifecycleRequest.conversation.id,
+              }
+            : null
+        }
+        onClose={closeLifecycleDialog}
+        onRename={async (title) => {
+          if (!lifecycleRequest || !onRenameConversation) return;
+          await onRenameConversation(
+            lifecycleRequest.projectId,
+            lifecycleRequest.workspaceId,
+            lifecycleRequest.conversation,
+            title,
+          );
+        }}
+        onDelete={async () => {
+          if (!lifecycleRequest || !onDeleteConversation) return;
+          await onDeleteConversation(
+            lifecycleRequest.projectId,
+            lifecycleRequest.workspaceId,
+            lifecycleRequest.conversation,
+          );
+        }}
+      />
+    </>
   );
 }
 
@@ -390,10 +519,16 @@ function ConversationTreeRow({
   conversation,
   selected,
   onSelect,
+  actionRef,
+  onRename,
+  onDelete,
 }: {
   conversation: AgentConversation;
   selected: boolean;
   onSelect: () => void;
+  actionRef: (element: HTMLElement | null) => void;
+  onRename?: () => void;
+  onDelete?: () => void;
 }) {
   const { t } = useI18n();
   const CapabilityIcon = conversationIcon(conversation);
@@ -403,20 +538,67 @@ function ConversationTreeRow({
   const sessionSummary = conversationTreeMetadataSummary(conversation) ?? statusLabel;
   const StatusIcon = conversationStatusIcon(statusPresentation.tone);
 
+  const title = conversation.title || conversation.id;
+  const hasLifecycleActions = Boolean(onRename || onDelete);
+
   return (
-    <button
-      className={`workspace-tree-session-row ${selected ? 'selected' : ''}`}
-      type="button"
-      aria-current={selected ? 'page' : undefined}
-      onClick={onSelect}
-    >
-      <CapabilityIcon />
-      <span>
-        <strong>{conversation.title || conversation.id}</strong>
-        <small>{sessionSummary}</small>
-      </span>
-      <StatusIcon data-status={statusPresentation.tone} aria-label={statusLabel} />
-    </button>
+    <div className={`workspace-tree-session-row-shell ${selected ? 'selected' : ''}`}>
+      <button
+        className={`workspace-tree-session-row ${selected ? 'selected' : ''}`}
+        type="button"
+        aria-current={selected ? 'page' : undefined}
+        onClick={onSelect}
+      >
+        <CapabilityIcon />
+        <span>
+          <strong>{title}</strong>
+          <small>{sessionSummary}</small>
+        </span>
+        <StatusIcon data-status={statusPresentation.tone} aria-label={statusLabel} />
+      </button>
+      {hasLifecycleActions ? (
+        <details className="workspace-tree-session-actions">
+          <summary
+            ref={actionRef}
+            role="button"
+            aria-haspopup="menu"
+            aria-label={t('workspaceTree.conversationActions', { title })}
+            title={t('workspaceTree.conversationActions', { title })}
+          >
+            <DotsHorizontalIcon />
+          </summary>
+          <div role="menu" aria-label={t('workspaceTree.conversationActions', { title })}>
+            {onRename ? (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={(event) => {
+                  event.currentTarget.closest('details')?.removeAttribute('open');
+                  onRename();
+                }}
+              >
+                <Pencil1Icon />
+                {t('workspaceTree.renameConversation')}
+              </button>
+            ) : null}
+            {onDelete ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="danger"
+                onClick={(event) => {
+                  event.currentTarget.closest('details')?.removeAttribute('open');
+                  onDelete();
+                }}
+              >
+                <TrashIcon />
+                {t('workspaceTree.deleteConversation')}
+              </button>
+            ) : null}
+          </div>
+        </details>
+      ) : null}
+    </div>
   );
 }
 

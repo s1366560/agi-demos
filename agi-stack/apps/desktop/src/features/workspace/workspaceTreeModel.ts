@@ -436,6 +436,49 @@ export function filterUnboundConversations(
   return conversations.filter((conversation) => !conversation.workspace_id?.trim());
 }
 
+export function replaceConversationInWorkspaceRows(
+  current: Record<string, AgentConversation[]>,
+  replacement: AgentConversation,
+): Record<string, AgentConversation[]> {
+  let changed = false;
+  const next = Object.fromEntries(
+    Object.entries(current).map(([workspaceId, conversations]) => {
+      const index = conversations.findIndex(
+        (conversation) =>
+          conversation.id === replacement.id &&
+          conversation.project_id === replacement.project_id &&
+          conversation.tenant_id === replacement.tenant_id,
+      );
+      if (index === -1 || conversations[index] === replacement) {
+        return [workspaceId, conversations];
+      }
+      changed = true;
+      const updated = [...conversations];
+      updated[index] = replacement;
+      return [workspaceId, updated];
+    }),
+  );
+  return changed ? next : current;
+}
+
+export function removeConversationFromWorkspaceRows(
+  current: Record<string, AgentConversation[]>,
+  conversationId: string,
+): Record<string, AgentConversation[]> {
+  let changed = false;
+  const next = Object.fromEntries(
+    Object.entries(current).map(([workspaceId, conversations]) => {
+      const filtered = conversations.filter(
+        (conversation) => conversation.id !== conversationId,
+      );
+      if (filtered.length === conversations.length) return [workspaceId, conversations];
+      changed = true;
+      return [workspaceId, filtered];
+    }),
+  );
+  return changed ? next : current;
+}
+
 function latestWorkspaceTimestamp(
   workspace: WorkspaceSummary,
   conversationsByWorkspace: Record<string, AgentConversation[]>,

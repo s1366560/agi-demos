@@ -10,6 +10,10 @@ import {
   NewThreadComposer,
   type NewThreadComposerInput,
 } from '../features/task/NewThreadComposer';
+import {
+  removeConversationFromWorkspaceRows,
+  replaceConversationInWorkspaceRows,
+} from '../features/workspace/workspaceTreeModel';
 import { I18nProvider } from '../i18n';
 import type {
   AgentCapabilityMode,
@@ -299,11 +303,14 @@ function MissionControlQa() {
   const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState(
     () => new Set(workspaces.map((workspace) => workspace.id)),
   );
+  const [qaConversationsByWorkspace, setQaConversationsByWorkspace] = useState(
+    conversationsByWorkspace,
+  );
   const currentWorkspace =
     workspaces.find((workspace) => workspace.id === newThreadWorkspaceId) ?? null;
   const recentConversations = useMemo(
-    () => conversationsByWorkspace[newThreadWorkspaceId] ?? [],
-    [newThreadWorkspaceId],
+    () => qaConversationsByWorkspace[newThreadWorkspaceId] ?? [],
+    [newThreadWorkspaceId, qaConversationsByWorkspace],
   );
 
   const recordCreate = (input: NewThreadComposerInput) => {
@@ -321,7 +328,7 @@ function MissionControlQa() {
             projectName="Desktop Client"
             user={user}
             workspaces={workspaces}
-            conversationsByWorkspace={conversationsByWorkspace}
+            conversationsByWorkspace={qaConversationsByWorkspace}
             nodeState={nodeState}
             currentProjectId={projectId}
             currentWorkspaceId={workspaceId}
@@ -345,6 +352,29 @@ function MissionControlQa() {
             onRetryWorkspace={() => undefined}
             onSelectWorkspace={() => undefined}
             onSelectConversation={() => undefined}
+            onRenameConversation={async (_projectId, _workspaceId, conversation, title) => {
+              setQaConversationsByWorkspace((current) =>
+                replaceConversationInWorkspaceRows(current, {
+                  ...conversation,
+                  title,
+                  updated_at: new Date().toISOString(),
+                }),
+              );
+              document.documentElement.dataset.qaConversationLifecycle = JSON.stringify({
+                action: 'rename',
+                conversationId: conversation.id,
+                title,
+              });
+            }}
+            onDeleteConversation={async (_projectId, _workspaceId, conversation) => {
+              setQaConversationsByWorkspace((current) =>
+                removeConversationFromWorkspaceRows(current, conversation.id),
+              );
+              document.documentElement.dataset.qaConversationLifecycle = JSON.stringify({
+                action: 'delete',
+                conversationId: conversation.id,
+              });
+            }}
             onNewTask={() => setView('home')}
             onOpenAccountSettings={() => undefined}
             onSwitchWorkspace={() => undefined}

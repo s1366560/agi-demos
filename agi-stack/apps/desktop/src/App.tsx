@@ -303,8 +303,10 @@ import {
   beginWorkspaceConversationRequest,
   isCurrentWorkspaceConversationRequest,
   projectConversationLoadTargets,
+  removeConversationFromWorkspaceRows,
   reconcileExpandedWorkspaceIds,
   reconcileWorkspaceConversationRowsAfterRefresh,
+  replaceConversationInWorkspaceRows,
   resolveRuntimeWorkspaceId,
   shouldClearConversationSelectionAfterRefresh,
   shouldLoadWorkspaceConversations,
@@ -4352,6 +4354,108 @@ export function App() {
     void refreshRuntime(nextConfig);
   };
 
+  const renameConversation = async (
+    projectId: string,
+    workspaceId: string,
+    conversation: AgentConversation,
+    title: string,
+  ) => {
+    const requestConfig = configRef.current;
+    const expectedScopeEpoch = configScopeEpochRef.current;
+    const expectedContextRevision = contextRevisionRef.current;
+    const normalizedWorkspaceId = workspaceId.trim();
+    if (
+      conversation.tenant_id !== requestConfig.tenantId ||
+      conversation.project_id !== projectId ||
+      projectId !== requestConfig.projectId ||
+      (conversation.workspace_id?.trim() ?? '') !== normalizedWorkspaceId
+    ) {
+      throw new Error('Invalid conversation lifecycle scope');
+    }
+    const apiClient = new DesktopApiClient({
+      ...requestConfig,
+      projectId,
+      workspaceId: normalizedWorkspaceId,
+    });
+    const mutationScopeIsCurrent = () =>
+      expectedScopeEpoch === configScopeEpochRef.current &&
+      expectedContextRevision === contextRevisionRef.current &&
+      isSameDesktopProjectRequestScope(requestConfig, configRef.current);
+    const updated = await apiClient.updateAgentConversationTitle(
+      conversation.id,
+      title,
+      projectId,
+      normalizedWorkspaceId,
+    );
+    if (!mutationScopeIsCurrent()) return;
+    updateDataset((current) => {
+      const conversationsByWorkspace = replaceConversationInWorkspaceRows(
+        current.conversationsByWorkspace,
+        updated,
+      );
+      return conversationsByWorkspace === current.conversationsByWorkspace
+        ? current
+        : { ...current, conversationsByWorkspace };
+    });
+    const currentSession = agentConversationSessionRef.current;
+    if (
+      currentSession?.scopeKey !== agentConversationScopeKeyFor(projectId, normalizedWorkspaceId) ||
+      currentSession.conversation.id !== updated.id
+    ) {
+      return;
+    }
+    const nextSession = { ...currentSession, conversation: updated };
+    agentConversationSessionRef.current = nextSession;
+    setAgentConversationSession(nextSession);
+  };
+
+  const deleteConversation = async (
+    projectId: string,
+    workspaceId: string,
+    conversation: AgentConversation,
+  ) => {
+    const requestConfig = configRef.current;
+    const expectedScopeEpoch = configScopeEpochRef.current;
+    const expectedContextRevision = contextRevisionRef.current;
+    const normalizedWorkspaceId = workspaceId.trim();
+    if (
+      conversation.tenant_id !== requestConfig.tenantId ||
+      conversation.project_id !== projectId ||
+      projectId !== requestConfig.projectId ||
+      (conversation.workspace_id?.trim() ?? '') !== normalizedWorkspaceId
+    ) {
+      throw new Error('Invalid conversation lifecycle scope');
+    }
+    const apiClient = new DesktopApiClient({
+      ...requestConfig,
+      projectId,
+      workspaceId: normalizedWorkspaceId,
+    });
+    const mutationScopeIsCurrent = () =>
+      expectedScopeEpoch === configScopeEpochRef.current &&
+      expectedContextRevision === contextRevisionRef.current &&
+      isSameDesktopProjectRequestScope(requestConfig, configRef.current);
+    await apiClient.deleteAgentConversation(conversation.id, projectId);
+    if (!mutationScopeIsCurrent()) return;
+    updateDataset((current) => {
+      const conversationsByWorkspace = removeConversationFromWorkspaceRows(
+        current.conversationsByWorkspace,
+        conversation.id,
+      );
+      return conversationsByWorkspace === current.conversationsByWorkspace
+        ? current
+        : { ...current, conversationsByWorkspace };
+    });
+    if (
+      agentConversationSessionRef.current?.scopeKey ===
+        agentConversationScopeKeyFor(projectId, normalizedWorkspaceId) &&
+      agentConversationSessionRef.current.conversation.id === conversation.id
+    ) {
+      agentConversationSessionRef.current = null;
+      selectWorkspace(normalizedWorkspaceId, projectId);
+    }
+  };
+
   const selectConversation = (
     projectId: string,
     workspaceId: string,
@@ -6866,6 +6970,8 @@ export function App() {
             onRetryWorkspace={(workspaceId) => void loadWorkspaceConversations(workspaceId)}
             onSelectWorkspace={(projectId, workspaceId) => selectWorkspace(workspaceId, projectId)}
             onSelectConversation={selectConversation}
+            onRenameConversation={renameConversation}
+            onDeleteConversation={deleteConversation}
             onNewTask={startNewSession}
             onOpenAccountSettings={openSidebarSettings}
             onSwitchWorkspace={openProfileWorkspaceSettings}
@@ -6924,6 +7030,27 @@ export function App() {
                         setSelectedTaskId(sessionDetailViewModel.linkedTaskId!);
                         switchSection('board');
                       }
+                    : undefined
+                }
+                onRenameConversation={
+                  scopedConversation
+                    ? (title) =>
+                        renameConversation(
+                          config.projectId,
+                          config.workspaceId,
+                          scopedConversation,
+                          title,
+                        )
+                    : undefined
+                }
+                onDeleteConversation={
+                  scopedConversation
+                    ? () =>
+                        deleteConversation(
+                          config.projectId,
+                          config.workspaceId,
+                          scopedConversation,
+                        )
                     : undefined
                 }
               />

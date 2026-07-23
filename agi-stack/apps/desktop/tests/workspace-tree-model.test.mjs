@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
@@ -22,8 +23,10 @@ const {
   isCurrentWorkspaceConversationRequest,
   isWorkspaceOverviewSelected,
   projectConversationLoadTargets,
+  removeConversationFromWorkspaceRows,
   reconcileExpandedWorkspaceIds,
   reconcileWorkspaceConversationRowsAfterRefresh,
+  replaceConversationInWorkspaceRows,
   resolveRuntimeWorkspaceId,
   shouldClearConversationSelectionAfterRefresh,
   shouldLoadWorkspaceConversations,
@@ -34,6 +37,12 @@ const {
   workspaceTreeSessionAvailability,
   workspaceTreeAvailability,
 } = require('/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceTreeModel.js');
+const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+const sessionWorkspaceSource = readFileSync(
+  new URL('../src/features/session/SessionWorkspace.tsx', import.meta.url),
+  'utf8',
+);
 
 test('runtime workspace resolution preserves only an active same-project unbound session', () => {
   const workspaces = [{ id: 'workspace-1' }, { id: 'workspace-2' }];
@@ -80,7 +89,7 @@ function conversation(id, title, updatedAt) {
   };
 }
 
-function renderWorkspaceDock(nodeState, conversationsByWorkspace) {
+function renderWorkspaceDock(nodeState, conversationsByWorkspace, lifecycleActions = false) {
   return renderToStaticMarkup(
     React.createElement(
       I18nProvider,
@@ -106,6 +115,12 @@ function renderWorkspaceDock(nodeState, conversationsByWorkspace) {
         onRetryWorkspace: () => {},
         onSelectWorkspace: () => {},
         onSelectConversation: () => {},
+        ...(lifecycleActions
+          ? {
+              onRenameConversation: async () => {},
+              onDeleteConversation: async () => {},
+            }
+          : {}),
       })
     )
   );
@@ -178,6 +193,99 @@ test('workspace dock renders unbound sessions in a task group before workspace r
   assert.match(markup, />Tasks</);
   assert.match(markup, /Unbound task session/);
   assert.ok(markup.indexOf('Unbound task session') < markup.indexOf('Desktop Client'));
+});
+
+test('workspace dock exposes accessible persisted lifecycle actions for every conversation row', () => {
+  const markup = renderWorkspaceDock(
+    {
+      projects: { 'project-1': { loading: false, error: null } },
+      workspaces: {
+        [UNBOUND_CONVERSATIONS_KEY]: { loading: false, error: null },
+        'workspace-a': { loading: false, error: null },
+      },
+    },
+    {
+      [UNBOUND_CONVERSATIONS_KEY]: [
+        conversation('conversation-unbound', 'Unbound task session', '2026-07-04T00:00:00Z'),
+      ],
+      'workspace-a': [
+        {
+          ...conversation('conversation-bound', 'Bound workspace session', '2026-07-03T00:00:00Z'),
+          workspace_id: 'workspace-a',
+        },
+      ],
+    },
+    true,
+  );
+
+  assert.equal((markup.match(/aria-haspopup="menu"/g) ?? []).length, 2);
+  assert.equal((markup.match(/role="button"/g) ?? []).length, 2);
+  assert.equal((markup.match(/>Rename conversation</g) ?? []).length, 2);
+  assert.equal((markup.match(/>Delete conversation</g) ?? []).length, 2);
+  assert.match(markup, /aria-label="Actions for Unbound task session"/);
+  assert.match(markup, /aria-label="Actions for Bound workspace session"/);
+});
+
+test('conversation lifecycle row updates are immutable and constrained to existing identities', () => {
+  const original = {
+    [UNBOUND_CONVERSATIONS_KEY]: [
+      conversation('conversation-unbound', 'Unbound', '2026-07-04T00:00:00Z'),
+    ],
+    'workspace-a': [
+      conversation('conversation-a', 'Original', '2026-07-03T00:00:00Z'),
+      conversation('conversation-b', 'Keep', '2026-07-02T00:00:00Z'),
+    ],
+  };
+  const renamedConversation = {
+    ...original['workspace-a'][0],
+    title: 'Renamed',
+    updated_at: '2026-07-05T00:00:00Z',
+  };
+
+  const renamed = replaceConversationInWorkspaceRows(original, renamedConversation);
+  assert.notEqual(renamed, original);
+  assert.equal(renamed[UNBOUND_CONVERSATIONS_KEY], original[UNBOUND_CONVERSATIONS_KEY]);
+  assert.equal(renamed['workspace-a'][0], renamedConversation);
+  assert.equal(renamed['workspace-a'][1], original['workspace-a'][1]);
+
+  const removed = removeConversationFromWorkspaceRows(renamed, 'conversation-a');
+  assert.deepEqual(
+    removed['workspace-a'].map((item) => item.id),
+    ['conversation-b'],
+  );
+  assert.equal(removed[UNBOUND_CONVERSATIONS_KEY], original[UNBOUND_CONVERSATIONS_KEY]);
+  assert.equal(
+    replaceConversationInWorkspaceRows(original, conversation('missing', 'Missing', null)),
+    original,
+  );
+  assert.equal(removeConversationFromWorkspaceRows(original, 'missing'), original);
+});
+
+test('App coordinates lifecycle responses with current scope and active-session cleanup', () => {
+  assert.match(appSource, /const renameConversation = async/);
+  assert.match(appSource, /apiClient\.updateAgentConversationTitle/);
+  assert.match(appSource, /replaceConversationInWorkspaceRows/);
+  assert.match(appSource, /agentConversationSessionRef\.current = nextSession/);
+  assert.match(appSource, /const deleteConversation = async/);
+  assert.match(appSource, /apiClient\.deleteAgentConversation/);
+  assert.match(appSource, /removeConversationFromWorkspaceRows/);
+  assert.match(appSource, /mutationScopeIsCurrent\(\)/);
+  assert.match(appSource, /selectWorkspace\(normalizedWorkspaceId, projectId\)/);
+  assert.match(sessionWorkspaceSource, /onRenameConversation\?: \(title: string\)/);
+  assert.match(sessionWorkspaceSource, /setLifecycleMode\('rename'\)/);
+  assert.match(sessionWorkspaceSource, /setLifecycleMode\('delete'\)/);
+  assert.match(sessionWorkspaceSource, /<ConversationLifecycleDialogs/);
+
+  for (const key of [
+    'workspaceTree.conversationActions',
+    'workspaceTree.renameConversation',
+    'workspaceTree.deleteConversation',
+    'workspaceTree.renameTitle',
+    'workspaceTree.deleteTitle',
+    'workspaceTree.lifecycleError',
+  ]) {
+    assert.equal((i18nSource.match(new RegExp(`'${key.replaceAll('.', '\\.')}'`, 'g')) ?? []).length, 2);
+  }
 });
 
 test('recent grouping orders workspaces and conversations by authoritative timestamps', () => {

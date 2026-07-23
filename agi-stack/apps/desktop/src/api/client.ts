@@ -788,6 +788,51 @@ export class DesktopApiClient {
     );
   }
 
+  async updateAgentConversationTitle(
+    conversationId: string,
+    title: string,
+    projectId = this.config.projectId,
+    workspaceId = this.config.workspaceId,
+  ): Promise<AgentConversation> {
+    const requiredTenantId = requireValue(this.config.tenantId, 'tenant id');
+    const requiredProjectId = requireValue(projectId, 'project id');
+    const requiredTitle = requireValue(title, 'conversation title');
+    const normalizedWorkspaceId = workspaceId.trim() || null;
+    const payload = await this.request<unknown>(
+      `/api/v1/agent/conversations/${encodeURIComponent(
+        conversationId,
+      )}/title?project_id=${encodeURIComponent(requiredProjectId)}`,
+      {
+        method: 'PATCH',
+        body: { title: requiredTitle },
+      },
+    );
+    const conversation = normalizeAgentConversation(
+      payload,
+      requiredTenantId,
+      requiredProjectId,
+      normalizedWorkspaceId,
+      normalizedWorkspaceId === null,
+    );
+    if (!conversation || conversation.title !== requiredTitle) {
+      throw new DesktopApiError('Invalid agent conversation response', 502, payload);
+    }
+    return conversation;
+  }
+
+  async deleteAgentConversation(
+    conversationId: string,
+    projectId = this.config.projectId,
+  ): Promise<void> {
+    const requiredProjectId = requireValue(projectId, 'project id');
+    await this.request<unknown>(
+      `/api/v1/agent/conversations/${encodeURIComponent(
+        conversationId,
+      )}?project_id=${encodeURIComponent(requiredProjectId)}`,
+      { method: 'DELETE' },
+    );
+  }
+
   async listConversations(
     projectId = this.config.projectId,
     workspaceIdOrOptions?:
