@@ -904,6 +904,18 @@ function agentFromBody(
     allowed_skills: stringArray(body.allowed_skills, current?.allowed_skills ?? []),
     allowed_mcp_servers: stringArray(body.allowed_mcp_servers, current?.allowed_mcp_servers ?? []),
     fallback_models: stringArray(body.fallback_models, stringArray(current?.fallback_models)),
+    spawn_policy:
+      body.spawn_policy === null
+        ? null
+        : body.spawn_policy !== undefined
+          ? (recordValue(body.spawn_policy) as ManagedAgentDefinition['spawn_policy'])
+          : (current?.spawn_policy ?? null),
+    tool_policy:
+      body.tool_policy === null
+        ? null
+        : body.tool_policy !== undefined
+          ? (recordValue(body.tool_policy) as ManagedAgentDefinition['tool_policy'])
+          : (current?.tool_policy ?? null),
     can_spawn: booleanValue(body.can_spawn, booleanValue(current?.can_spawn, false)),
     max_spawn_depth: numberValue(body.max_spawn_depth, numberValue(current?.max_spawn_depth, 3)),
     agent_to_agent_enabled: booleanValue(

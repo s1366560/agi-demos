@@ -1252,6 +1252,19 @@ export type UpdateManagedChannelConfigRequest = Omit<
 
 export type ManagedChannelTestResult = { success: boolean; message: string };
 
+export type ManagedAgentSpawnPolicy = {
+  max_depth: number;
+  max_active_runs: number;
+  max_children_per_requester: number;
+  allowed_subagents: string[] | null;
+};
+
+export type ManagedAgentToolPolicy = {
+  allow: string[];
+  deny: string[];
+  precedence: 'allow_first' | 'deny_first';
+};
+
 export type ManagedAgentDefinition = {
   id: string;
   name: string;
@@ -1263,6 +1276,8 @@ export type ManagedAgentDefinition = {
   allowed_tools?: string[];
   allowed_skills?: string[];
   allowed_mcp_servers?: string[];
+  spawn_policy?: ManagedAgentSpawnPolicy | null;
+  tool_policy?: ManagedAgentToolPolicy | null;
   updated_at?: string | null;
   [key: string]: unknown;
 };
@@ -1289,6 +1304,8 @@ export type ManagedAgentDefinitionMutation = {
   discoverable: boolean;
   max_retries: number;
   fallback_models: string[];
+  spawn_policy?: ManagedAgentSpawnPolicy | null;
+  tool_policy?: ManagedAgentToolPolicy | null;
 };
 
 export type ManagedSubAgent = {

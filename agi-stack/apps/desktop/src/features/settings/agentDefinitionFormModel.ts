@@ -18,10 +18,18 @@ export type AgentDefinitionEditorDraft = {
   fallbackModels: string;
   canSpawn: boolean;
   maxSpawnDepth: number;
+  spawnMaxActiveRuns: number | null;
+  spawnMaxChildrenPerRequester: number | null;
+  spawnAllowedSubagents: string;
   agentToAgentEnabled: boolean;
   agentToAgentAllowlist: string;
   discoverable: boolean;
   maxRetries: number;
+  toolPolicyPrecedence: 'allow_first' | 'deny_first';
+  toolPolicyAllow: string;
+  toolPolicyDeny: string;
+  hadSpawnPolicy: boolean;
+  hadToolPolicy: boolean;
 };
 
 export type AgentDefinitionDraftField = keyof AgentDefinitionEditorDraft;
@@ -61,14 +69,24 @@ export function agentDefinitionDraftFrom(
       fallbackModels: '',
       canSpawn: false,
       maxSpawnDepth: 3,
+      spawnMaxActiveRuns: null,
+      spawnMaxChildrenPerRequester: null,
+      spawnAllowedSubagents: '',
       agentToAgentEnabled: false,
       agentToAgentAllowlist: '',
       discoverable: true,
       maxRetries: 0,
+      toolPolicyPrecedence: 'deny_first',
+      toolPolicyAllow: '',
+      toolPolicyDeny: '',
+      hadSpawnPolicy: false,
+      hadToolPolicy: false,
     };
   }
 
   const trigger = recordValue(definition.trigger);
+  const spawnPolicy = recordValue(definition.spawn_policy);
+  const toolPolicy = recordValue(definition.tool_policy);
   return {
     name: definition.name,
     displayName: definition.display_name ?? '',
@@ -86,17 +104,59 @@ export function agentDefinitionDraftFrom(
     allowedMcpServers: stringList(definition.allowed_mcp_servers).join('\n'),
     fallbackModels: stringList(definition.fallback_models).join('\n'),
     canSpawn: booleanValue(definition.can_spawn, false),
-    maxSpawnDepth: numberValue(definition.max_spawn_depth, 3),
+    maxSpawnDepth: numberValue(spawnPolicy?.max_depth, numberValue(definition.max_spawn_depth, 3)),
+    spawnMaxActiveRuns: optionalNumberValue(spawnPolicy?.max_active_runs),
+    spawnMaxChildrenPerRequester: optionalNumberValue(
+      spawnPolicy?.max_children_per_requester,
+    ),
+    spawnAllowedSubagents: stringList(spawnPolicy?.allowed_subagents).join('\n'),
     agentToAgentEnabled: booleanValue(definition.agent_to_agent_enabled, false),
     agentToAgentAllowlist: stringList(definition.agent_to_agent_allowlist).join('\n'),
     discoverable: booleanValue(definition.discoverable, true),
     maxRetries: numberValue(definition.max_retries, 0),
+    toolPolicyPrecedence:
+      toolPolicy?.precedence === 'allow_first' ? 'allow_first' : 'deny_first',
+    toolPolicyAllow: stringList(toolPolicy?.allow).join('\n'),
+    toolPolicyDeny: stringList(toolPolicy?.deny).join('\n'),
+    hadSpawnPolicy: spawnPolicy !== null,
+    hadToolPolicy: toolPolicy !== null,
   };
 }
 
 export function agentDefinitionMutationFromDraft(
   draft: AgentDefinitionEditorDraft,
 ): ManagedAgentDefinitionMutation {
+  const spawnAllowedSubagents = normalizedList(draft.spawnAllowedSubagents);
+  const hasSpawnPolicyFields =
+    draft.canSpawn ||
+    draft.spawnMaxActiveRuns !== null ||
+    draft.spawnMaxChildrenPerRequester !== null ||
+    spawnAllowedSubagents.length > 0;
+  const spawnPolicy = hasSpawnPolicyFields
+    ? {
+        max_depth: draft.maxSpawnDepth,
+        max_active_runs: draft.spawnMaxActiveRuns ?? 16,
+        max_children_per_requester: draft.spawnMaxChildrenPerRequester ?? 8,
+        allowed_subagents: spawnAllowedSubagents.length > 0 ? spawnAllowedSubagents : null,
+      }
+    : draft.hadSpawnPolicy
+      ? null
+      : undefined;
+  const toolPolicyAllow = normalizedList(draft.toolPolicyAllow);
+  const toolPolicyDeny = normalizedList(draft.toolPolicyDeny);
+  const hasToolPolicyFields =
+    toolPolicyAllow.length > 0 ||
+    toolPolicyDeny.length > 0 ||
+    draft.toolPolicyPrecedence !== 'deny_first';
+  const toolPolicy = hasToolPolicyFields
+    ? {
+        allow: toolPolicyAllow,
+        deny: toolPolicyDeny,
+        precedence: draft.toolPolicyPrecedence,
+      }
+    : draft.hadToolPolicy
+      ? null
+      : undefined;
   return {
     name: draft.name.trim(),
     display_name: draft.displayName.trim(),
@@ -121,6 +181,8 @@ export function agentDefinitionMutationFromDraft(
       : null,
     discoverable: draft.discoverable,
     max_retries: draft.maxRetries,
+    ...(spawnPolicy !== undefined ? { spawn_policy: spawnPolicy } : {}),
+    ...(toolPolicy !== undefined ? { tool_policy: toolPolicy } : {}),
   };
 }
 
@@ -141,6 +203,18 @@ export function validateAgentDefinitionDraft(
   if (!isPositiveInteger(draft.maxIterations)) errors.maxIterations = 'positive_integer';
   if (!isNonNegativeInteger(draft.maxSpawnDepth)) {
     errors.maxSpawnDepth = 'non_negative_integer';
+  }
+  if (
+    draft.spawnMaxActiveRuns !== null &&
+    !isPositiveInteger(draft.spawnMaxActiveRuns)
+  ) {
+    errors.spawnMaxActiveRuns = 'positive_integer';
+  }
+  if (
+    draft.spawnMaxChildrenPerRequester !== null &&
+    !isPositiveInteger(draft.spawnMaxChildrenPerRequester)
+  ) {
+    errors.spawnMaxChildrenPerRequester = 'positive_integer';
   }
   if (!isNonNegativeInteger(draft.maxRetries)) errors.maxRetries = 'non_negative_integer';
   return errors;
@@ -172,6 +246,10 @@ function stringList(value: unknown): string[] {
 
 function numberValue(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function optionalNumberValue(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 function booleanValue(value: unknown, fallback: boolean): boolean {

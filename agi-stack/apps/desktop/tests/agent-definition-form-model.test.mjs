@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
@@ -8,6 +9,14 @@ const {
   agentDefinitionMutationFromDraft,
   validateAgentDefinitionDraft,
 } = require('/tmp/agistack-desktop-test-dist/src/features/settings/agentDefinitionFormModel.js');
+const editorSource = readFileSync(
+  new URL('../src/features/settings/AgentDefinitionEditorDialog.tsx', import.meta.url),
+  'utf8',
+);
+const providerQaSource = readFileSync(
+  new URL('../src/qa/ProviderSettingsQa.tsx', import.meta.url),
+  'utf8',
+);
 
 const definition = {
   id: 'agent-reviewer',
@@ -35,6 +44,17 @@ const definition = {
   discoverable: false,
   max_retries: 2,
   fallback_models: ['anthropic/claude-sonnet-4-5'],
+  spawn_policy: {
+    max_depth: 2,
+    max_active_runs: 4,
+    max_children_per_requester: 2,
+    allowed_subagents: ['agent-planner', 'agent-researcher'],
+  },
+  tool_policy: {
+    allow: ['read', 'git_diff'],
+    deny: ['terminal'],
+    precedence: 'allow_first',
+  },
 };
 
 test('new Agent definition drafts inherit the selected project and safe runtime defaults', () => {
@@ -56,10 +76,18 @@ test('new Agent definition drafts inherit the selected project and safe runtime 
     fallbackModels: '',
     canSpawn: false,
     maxSpawnDepth: 3,
+    spawnMaxActiveRuns: null,
+    spawnMaxChildrenPerRequester: null,
+    spawnAllowedSubagents: '',
     agentToAgentEnabled: false,
     agentToAgentAllowlist: '',
     discoverable: true,
     maxRetries: 0,
+    toolPolicyPrecedence: 'deny_first',
+    toolPolicyAllow: '',
+    toolPolicyDeny: '',
+    hadSpawnPolicy: false,
+    hadToolPolicy: false,
   });
 });
 
@@ -82,10 +110,18 @@ test('editing an Agent definition preserves authoritative identity, runtime, and
     fallbackModels: 'anthropic/claude-sonnet-4-5',
     canSpawn: true,
     maxSpawnDepth: 2,
+    spawnMaxActiveRuns: 4,
+    spawnMaxChildrenPerRequester: 2,
+    spawnAllowedSubagents: 'agent-planner\nagent-researcher',
     agentToAgentEnabled: true,
     agentToAgentAllowlist: 'agent-planner',
     discoverable: false,
     maxRetries: 2,
+    toolPolicyPrecedence: 'allow_first',
+    toolPolicyAllow: 'read\ngit_diff',
+    toolPolicyDeny: 'terminal',
+    hadSpawnPolicy: true,
+    hadToolPolicy: true,
   });
 });
 
@@ -96,6 +132,9 @@ test('Agent definition mutations normalize list fields and fail closed for empty
     allowedTools: 'read, git_diff\nread',
     fallbackModels: ' model-a, model-b ',
     agentToAgentAllowlist: 'agent-planner, agent-reviewer, agent-planner',
+    spawnAllowedSubagents: 'agent-planner, agent-researcher, agent-planner',
+    toolPolicyAllow: 'read, git_diff, read',
+    toolPolicyDeny: 'terminal, terminal',
   };
 
   assert.deepEqual(agentDefinitionMutationFromDraft(draft), {
@@ -120,6 +159,17 @@ test('Agent definition mutations normalize list fields and fail closed for empty
     agent_to_agent_allowlist: ['agent-planner', 'agent-reviewer'],
     discoverable: false,
     max_retries: 2,
+    spawn_policy: {
+      max_depth: 2,
+      max_active_runs: 4,
+      max_children_per_requester: 2,
+      allowed_subagents: ['agent-planner', 'agent-researcher'],
+    },
+    tool_policy: {
+      allow: ['read', 'git_diff'],
+      deny: ['terminal'],
+      precedence: 'allow_first',
+    },
   });
 
   assert.deepEqual(
@@ -127,6 +177,19 @@ test('Agent definition mutations normalize list fields and fail closed for empty
       .agent_to_agent_allowlist,
     [],
   );
+
+  const clearedPolicies = agentDefinitionMutationFromDraft({
+    ...draft,
+    canSpawn: false,
+    spawnMaxActiveRuns: null,
+    spawnMaxChildrenPerRequester: null,
+    spawnAllowedSubagents: '',
+    toolPolicyPrecedence: 'deny_first',
+    toolPolicyAllow: '',
+    toolPolicyDeny: '',
+  });
+  assert.equal(clearedPolicies.spawn_policy, null);
+  assert.equal(clearedPolicies.tool_policy, null);
 });
 
 test('Agent definition validation covers Web naming and backend runtime constraints', () => {
@@ -142,6 +205,8 @@ test('Agent definition validation covers Web naming and backend runtime constrai
       maxTokens: 0,
       maxIterations: 0,
       maxSpawnDepth: -1,
+      spawnMaxActiveRuns: 0,
+      spawnMaxChildrenPerRequester: 0,
       maxRetries: -1,
     }),
     {
@@ -152,7 +217,25 @@ test('Agent definition validation covers Web naming and backend runtime constrai
       maxTokens: 'positive_integer',
       maxIterations: 'positive_integer',
       maxSpawnDepth: 'non_negative_integer',
+      spawnMaxActiveRuns: 'positive_integer',
+      spawnMaxChildrenPerRequester: 'positive_integer',
       maxRetries: 'non_negative_integer',
     },
   );
+});
+
+test('Agent definition editor exposes structured spawn and tool policy controls', () => {
+  assert.match(editorSource, /draft\.spawnMaxActiveRuns/);
+  assert.match(editorSource, /draft\.spawnMaxChildrenPerRequester/);
+  assert.match(editorSource, /draft\.spawnAllowedSubagents/);
+  assert.match(editorSource, /draft\.toolPolicyPrecedence/);
+  assert.match(editorSource, /draft\.toolPolicyAllow/);
+  assert.match(editorSource, /draft\.toolPolicyDeny/);
+});
+
+test('provider settings QA round-trips structured Agent policies', () => {
+  assert.match(providerQaSource, /body\.spawn_policy/);
+  assert.match(providerQaSource, /current\?\.spawn_policy/);
+  assert.match(providerQaSource, /body\.tool_policy/);
+  assert.match(providerQaSource, /current\?\.tool_policy/);
 });

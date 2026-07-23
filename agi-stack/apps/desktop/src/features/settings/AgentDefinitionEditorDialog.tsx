@@ -296,6 +296,33 @@ export function AgentDefinitionEditorDialog({
                 disabled={busy}
                 onChange={(value) => update('allowedMcpServers', value)}
               />
+              <EditorField label={t('settings.agentEditor.toolPolicyPrecedence')}>
+                <select
+                  value={draft.toolPolicyPrecedence}
+                  disabled={busy}
+                  onChange={(event) =>
+                    update(
+                      'toolPolicyPrecedence',
+                      event.target.value === 'allow_first' ? 'allow_first' : 'deny_first',
+                    )
+                  }
+                >
+                  <option value="deny_first">{t('settings.agentEditor.denyFirst')}</option>
+                  <option value="allow_first">{t('settings.agentEditor.allowFirst')}</option>
+                </select>
+              </EditorField>
+              <ListField
+                label={t('settings.agentEditor.toolPolicyAllow')}
+                value={draft.toolPolicyAllow}
+                disabled={busy}
+                onChange={(value) => update('toolPolicyAllow', value)}
+              />
+              <ListField
+                label={t('settings.agentEditor.toolPolicyDeny')}
+                value={draft.toolPolicyDeny}
+                disabled={busy}
+                onChange={(value) => update('toolPolicyDeny', value)}
+              />
             </div>
           ) : null}
 
@@ -315,6 +342,31 @@ export function AgentDefinitionEditorDialog({
                 disabled={busy || !draft.canSpawn}
                 error={fieldError(errors, 'maxSpawnDepth', t)}
                 onChange={(value) => update('maxSpawnDepth', value)}
+              />
+              <OptionalNumberField
+                label={t('settings.agentEditor.spawnMaxActiveRuns')}
+                value={draft.spawnMaxActiveRuns}
+                min={1}
+                step={1}
+                disabled={busy}
+                error={fieldError(errors, 'spawnMaxActiveRuns', t)}
+                onChange={(value) => update('spawnMaxActiveRuns', value)}
+              />
+              <OptionalNumberField
+                label={t('settings.agentEditor.spawnMaxChildren')}
+                value={draft.spawnMaxChildrenPerRequester}
+                min={1}
+                step={1}
+                disabled={busy}
+                error={fieldError(errors, 'spawnMaxChildrenPerRequester', t)}
+                onChange={(value) => update('spawnMaxChildrenPerRequester', value)}
+              />
+              <ListField
+                className="wide"
+                label={t('settings.agentEditor.spawnAllowedSubagents')}
+                value={draft.spawnAllowedSubagents}
+                disabled={busy}
+                onChange={(value) => update('spawnAllowedSubagents', value)}
               />
               <ToggleField
                 label={t('settings.agentEditor.agentToAgent')}
@@ -499,6 +551,39 @@ function ToggleField({
   );
 }
 
+function OptionalNumberField({
+  label,
+  value,
+  min,
+  step,
+  disabled,
+  error,
+  onChange,
+}: {
+  label: string;
+  value: number | null;
+  min: number;
+  step: number;
+  disabled: boolean;
+  error?: string;
+  onChange: (value: number | null) => void;
+}) {
+  return (
+    <EditorField label={label} error={error}>
+      <input
+        type="number"
+        value={value ?? ''}
+        min={min}
+        step={step}
+        disabled={disabled}
+        onChange={(event) =>
+          onChange(event.target.value === '' ? null : Number(event.target.value))
+        }
+      />
+    </EditorField>
+  );
+}
+
 function tabForField(field: keyof AgentDefinitionEditorDraft): EditorTab {
   if (
     field === 'name' ||
@@ -520,7 +605,14 @@ function tabForField(field: keyof AgentDefinitionEditorDraft): EditorTab {
   ) {
     return 'runtime';
   }
-  if (field === 'allowedTools' || field === 'allowedSkills' || field === 'allowedMcpServers') {
+  if (
+    field === 'allowedTools' ||
+    field === 'allowedSkills' ||
+    field === 'allowedMcpServers' ||
+    field === 'toolPolicyPrecedence' ||
+    field === 'toolPolicyAllow' ||
+    field === 'toolPolicyDeny'
+  ) {
     return 'capabilities';
   }
   return 'coordination';
