@@ -90,6 +90,34 @@ test('assistant text stream preserves whitespace tokens and settles to authorita
   assert.equal(items[0].metadata.streaming, false);
 });
 
+test('a late text delta cannot reopen a settled assistant response', () => {
+  let items = mergeAssistantTextStreamChunk([], {
+    kind: 'delta',
+    messageId: 'message-text-late-delta',
+    content: 'Final answer.',
+    eventTimeUs: 1_000_000,
+    eventCounter: 1,
+  });
+  items = mergeAssistantTextStreamChunk(items, {
+    kind: 'complete',
+    messageId: 'message-text-late-delta',
+    content: 'Final answer.',
+    eventTimeUs: 2_000_000,
+    eventCounter: 2,
+  });
+  items = mergeAssistantTextStreamChunk(items, {
+    kind: 'delta',
+    messageId: 'message-text-late-delta',
+    content: ' delayed duplicate',
+    eventTimeUs: 3_000_000,
+    eventCounter: 3,
+  });
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].content, 'Final answer.');
+  assert.equal(items[0].metadata.streaming, false);
+});
+
 test('text event coalescing preserves standalone whitespace and newline tokens', () => {
   const events = ['Hello', ' ', 'world', '\n\n', 'next'].map((delta, index) => ({
     type: 'text_delta',
@@ -187,6 +215,155 @@ test('complete can create a final assistant response when text streaming was abs
   assert.equal(items[0].role, 'assistant');
   assert.equal(items[0].content, 'Completed without text events');
   assert.equal(items[0].metadata.streaming, false);
+});
+
+test('id-less complete folds into the single assistant response in its user turn', () => {
+  const existing = [
+    {
+      id: 'user-message-1',
+      type: 'user_message',
+      role: 'user',
+      message_id: 'request-message-1',
+      content: 'hi',
+      eventTimeUs: 1_000_000,
+      eventCounter: 0,
+    },
+    {
+      id: 'assistant-message-1',
+      type: 'assistant_message',
+      role: 'assistant',
+      message_id: 'response-message-1',
+      content: '你好！有什么可以帮你的吗？',
+      eventTimeUs: 2_000_000,
+      eventCounter: 0,
+      metadata: { source: 'live' },
+    },
+  ];
+
+  const items = mergeAssistantCompletionEvent(existing, {
+    messageId: 'unassociated-conversation-1-complete-3000000-0',
+    content: '你好！有什么可以帮你的吗？',
+    eventTimeUs: 3_000_000,
+    eventCounter: 0,
+    metadata: { executionSummary: { step_count: 1 } },
+    turnScopedFallback: true,
+  });
+
+  assert.equal(items.length, 2);
+  assert.deepEqual(
+    items.filter((item) => item.role === 'assistant').map((item) => ({
+      id: item.id,
+      messageId: item.message_id,
+      executionMessageId: item.executionMessageId,
+      content: item.content,
+      metadata: item.metadata,
+    })),
+    [
+      {
+        id: 'assistant-message-1',
+        messageId: 'response-message-1',
+        executionMessageId: undefined,
+        content: '你好！有什么可以帮你的吗？',
+        metadata: {
+          source: 'live',
+          executionSummary: { step_count: 1 },
+          streaming: false,
+        },
+      },
+    ],
+  );
+});
+
+test('turn-scoped complete uses its event cursor instead of the latest user turn', () => {
+  const existing = [
+    {
+      id: 'user-message-1',
+      type: 'user_message',
+      role: 'user',
+      content: 'First',
+      eventTimeUs: 1_000_000,
+      eventCounter: 0,
+    },
+    {
+      id: 'assistant-message-1',
+      type: 'assistant_message',
+      role: 'assistant',
+      content: 'First answer',
+      eventTimeUs: 2_000_000,
+      eventCounter: 0,
+    },
+    {
+      id: 'user-message-2',
+      type: 'user_message',
+      role: 'user',
+      content: 'Second',
+      eventTimeUs: 4_000_000,
+      eventCounter: 0,
+    },
+    {
+      id: 'assistant-message-2',
+      type: 'assistant_message',
+      role: 'assistant',
+      content: 'Second answer',
+      eventTimeUs: 5_000_000,
+      eventCounter: 0,
+    },
+  ];
+
+  const items = mergeAssistantCompletionEvent(existing, {
+    messageId: 'unassociated-conversation-1-complete-3000000-0',
+    content: 'First final answer',
+    eventTimeUs: 3_000_000,
+    eventCounter: 0,
+    turnScopedFallback: true,
+  });
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'assistant').map((item) => item.content),
+    ['First final answer', 'Second answer'],
+  );
+});
+
+test('turn-scoped complete does not collapse multiple assistant messages in one turn', () => {
+  const existing = [
+    {
+      id: 'user-message-1',
+      type: 'user_message',
+      role: 'user',
+      content: 'Ask both agents',
+      eventTimeUs: 1_000_000,
+      eventCounter: 0,
+    },
+    {
+      id: 'assistant-message-1',
+      type: 'assistant_message',
+      role: 'assistant',
+      content: 'First agent answer',
+      eventTimeUs: 2_000_000,
+      eventCounter: 0,
+    },
+    {
+      id: 'assistant-message-2',
+      type: 'assistant_message',
+      role: 'assistant',
+      content: 'Second agent answer',
+      eventTimeUs: 2_500_000,
+      eventCounter: 0,
+    },
+  ];
+
+  const items = mergeAssistantCompletionEvent(existing, {
+    messageId: 'unassociated-conversation-1-complete-3000000-0',
+    content: 'Combined completion',
+    eventTimeUs: 3_000_000,
+    eventCounter: 0,
+    turnScopedFallback: true,
+  });
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'assistant').map((item) => item.content),
+    ['First agent answer', 'Second agent answer', 'Combined completion'],
+  );
 });
 
 test('history hydration reconciles a transient assistant only by its authoritative cursor', () => {
@@ -1292,7 +1469,14 @@ test('a channel inbound user message starts a new completion turn', () => {
 
 test('live Agent complete events preserve final content and execution summary metadata', () => {
   assert.match(appSource, /type === 'complete'[\s\S]*?mergeAssistantCompletionEvent\(/);
-  assert.match(appSource, /type === 'assistant_message'[\s\S]*?mergeConversationTimelineItems\(/);
+  assert.match(
+    appSource,
+    /const explicitMessageId = streamingMessageId\(payload\)[\s\S]*?turnScopedFallback: !explicitMessageId/,
+  );
+  assert.match(
+    appSource,
+    /if \(type === 'assistant_message'\) \{(?:(?!if \(type === 'complete'\))[\s\S])*?return mergeAssistantCompletionEvent\(/,
+  );
   assert.match(appSource, /objectField\(data, 'execution_summary'\)/);
   assert.match(appSource, /readTextField\(data, 'content'\)/);
 });

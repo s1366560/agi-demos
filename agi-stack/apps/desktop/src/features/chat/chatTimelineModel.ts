@@ -59,6 +59,7 @@ export type AssistantCompletionChunk = {
   content: string;
   eventTimeUs: number;
   eventCounter: number;
+  turnScopedFallback?: boolean;
   payload?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   artifacts?: unknown[];
@@ -348,10 +349,15 @@ export function mergeAssistantTextStreamChunk(
   chunk: AssistantTextStreamChunk,
 ): AgentTimelineItem[] {
   const activeIndex = findActiveAssistantTextIndex(existing, chunk.messageId);
+  const exactIndex =
+    activeIndex < 0 ? findLastAssistantTextIndex(existing, chunk.messageId) : -1;
+  if (activeIndex < 0 && exactIndex >= 0 && chunk.kind !== 'complete') {
+    // The response already reached a terminal state. A delayed text_start or
+    // text_delta for the same protocol identity must not reopen a duplicate row.
+    return existing;
+  }
   const settledIndex =
-    activeIndex < 0 && chunk.kind === 'complete'
-      ? findLastAssistantTextIndex(existing, chunk.messageId)
-      : -1;
+    activeIndex < 0 && chunk.kind === 'complete' ? exactIndex : -1;
   const targetIndex = activeIndex >= 0 ? activeIndex : settledIndex;
   if (targetIndex >= 0) {
     const updated = existing.map((item, index) => {
@@ -403,7 +409,11 @@ export function mergeAssistantCompletionEvent(
     existing,
     chunk.messageId,
   );
-  const targetIndex = exactTargetIndex;
+  const turnTargetIndex =
+    exactTargetIndex < 0 && chunk.turnScopedFallback
+      ? findTurnSingletonAssistantIndex(existing, chunk)
+      : -1;
+  const targetIndex = exactTargetIndex >= 0 ? exactTargetIndex : turnTargetIndex;
   if (targetIndex >= 0) {
     const updated = existing.flatMap((item, index) => {
       if (
@@ -418,7 +428,9 @@ export function mergeAssistantCompletionEvent(
       return [
         {
           ...item,
-          executionMessageId: item.executionMessageId ?? chunk.messageId,
+          ...(exactTargetIndex >= 0
+            ? { executionMessageId: item.executionMessageId ?? chunk.messageId }
+            : {}),
           content: chunk.content || item.content,
           payload: chunk.payload ?? item.payload,
           metadata: {
@@ -452,6 +464,71 @@ export function mergeAssistantCompletionEvent(
       ...(chunk.artifacts ? { artifacts: chunk.artifacts } : {}),
     },
   ]);
+}
+
+function findTurnSingletonAssistantIndex(
+  items: AgentTimelineItem[],
+  completion: Pick<AssistantCompletionChunk, 'eventTimeUs' | 'eventCounter'>,
+): number {
+  let turnStartIndex = -1;
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (
+      !isUserTimelineItem(item) ||
+      compareTimelineCursor(
+        item.eventTimeUs,
+        item.eventCounter,
+        completion.eventTimeUs,
+        completion.eventCounter,
+      ) >= 0
+    ) {
+      continue;
+    }
+    if (
+      turnStartIndex < 0 ||
+      compareTimelineCursor(
+        items[turnStartIndex].eventTimeUs,
+        items[turnStartIndex].eventCounter,
+        item.eventTimeUs,
+        item.eventCounter,
+      ) < 0
+    ) {
+      turnStartIndex = index;
+    }
+  }
+  if (turnStartIndex < 0) return -1;
+
+  const turnStart = items[turnStartIndex];
+  const assistantIndexes = items.flatMap((item, index) => {
+    if (!isAssistantTimelineItem(item)) return [];
+    const afterTurnStart =
+      compareTimelineCursor(
+        item.eventTimeUs,
+        item.eventCounter,
+        turnStart.eventTimeUs,
+        turnStart.eventCounter,
+      ) > 0;
+    const beforeCompletion =
+      compareTimelineCursor(
+        item.eventTimeUs,
+        item.eventCounter,
+        completion.eventTimeUs,
+        completion.eventCounter,
+      ) <= 0;
+    return afterTurnStart && beforeCompletion ? [index] : [];
+  });
+  return assistantIndexes.length === 1 ? assistantIndexes[0] : -1;
+}
+
+function compareTimelineCursor(
+  leftTimeUs: number,
+  leftCounter: number,
+  rightTimeUs: number,
+  rightCounter: number,
+): number {
+  return leftTimeUs === rightTimeUs
+    ? leftCounter - rightCounter
+    : leftTimeUs - rightTimeUs;
 }
 
 /**

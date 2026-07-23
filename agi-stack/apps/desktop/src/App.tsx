@@ -903,6 +903,7 @@ function mergeLiveTimelineEvent(
   if (type === 'assistant_message') {
     const item = timelineItemFromSocketEvent(event);
     if (!item) return existing;
+    const data = objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
     const messageId =
       item.message_id ??
       eventScopedStreamMessageId(
@@ -911,14 +912,15 @@ function mergeLiveTimelineEvent(
         item.eventTimeUs,
         item.eventCounter,
       );
-    return mergeConversationTimelineItems(existing, [
-      {
-        ...item,
-        id: `completed-assistant-${messageId}`,
-        message_id: messageId,
-        metadata: { ...(item.metadata ?? {}), streaming: false },
-      },
-    ]);
+    return mergeAssistantCompletionEvent(existing, {
+      messageId,
+      content: item.content ?? '',
+      eventTimeUs: item.eventTimeUs,
+      eventCounter: item.eventCounter,
+      payload: data,
+      metadata: item.metadata ?? undefined,
+      artifacts: Array.isArray(data.artifacts) ? data.artifacts : undefined,
+    });
   }
   if (type === 'complete') {
     const data = objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
@@ -942,8 +944,9 @@ function mergeLiveTimelineEvent(
       ...(executionSummary ? { executionSummary } : {}),
       ...(artifacts?.length ? { artifacts } : {}),
     };
+    const explicitMessageId = streamingMessageId(payload);
     const messageId =
-      streamingMessageId(payload) ??
+      explicitMessageId ??
       eventScopedStreamMessageId(
         readStringField(payload, 'conversation_id') ?? 'agent',
         type,
@@ -955,6 +958,7 @@ function mergeLiveTimelineEvent(
       content: readTextField(data, 'content') ?? '',
       eventTimeUs,
       eventCounter,
+      turnScopedFallback: !explicitMessageId,
       payload: data,
       metadata,
       artifacts,

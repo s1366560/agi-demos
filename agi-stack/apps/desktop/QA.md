@@ -1759,6 +1759,25 @@
   hidden-panel rule, and `documentWidth` / `bodyWidth` remain 390 with no
   overlay. Screenshots: `/tmp/agi-desktop-board-dashed-apply-patch.png` and
   `/tmp/agi-desktop-board-dashed-apply-patch-mobile.png`.
+- Browser plugin validation against the real cloud conversation
+  `dc6582c0-8da2-4e7b-baac-4e6410777a3a` reproduced the reported transient
+  duplicate Agent response before the fix. The event path now folds
+  `assistant_message` into the exact streamed response identity and ignores a
+  delayed `text_start` or `text_delta` after that identity has settled. A
+  follow-up prompt with token `DESKTOP_SINGLE_REPLY_NO_DUP_20260724` was sampled
+  every 250 ms for 15 seconds: the conversation gained one user row and never
+  more than one Agent row, the final token occurred once in the user prompt and
+  once in exactly one Agent response, duplicate timeline anchor IDs stayed at
+  zero, the Vite error overlay stayed absent, and the 1280x720 page had no
+  horizontal overflow. The fix hot-update was followed by zero new console
+  errors; the React duplicate-key error captured during reproduction did not
+  recur. `pnpm --dir agi-stack/apps/desktop test` passed 884 tests
+  (882 passed, 2 skipped), and `pnpm --dir agi-stack/apps/desktop
+  build:electron` passed. The canonical native command
+  `make -C agi-stack run-desktop` rebuilt the sidecar, started the Electron
+  renderer, and reached `starting electron app...`; Computer Use could not
+  inspect the native window because macOS was locked, so native visual
+  acceptance remains explicitly unclaimed for this pass.
 
 ### Open
 
