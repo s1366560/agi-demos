@@ -1089,6 +1089,130 @@ def test_build_timeline_replays_context_and_memory_events_for_desktop_history() 
     assert [item["payload"] for item in timeline] == [data for _, data in context_and_memory_events]
 
 
+def test_build_timeline_replays_runtime_infrastructure_events_for_desktop_history() -> None:
+    runtime_events = [
+        (
+            "sandbox_created",
+            {
+                "sandbox_id": "sandbox-1",
+                "project_id": "project-1",
+                "status": "running",
+                "endpoint": "wss://sandbox.example/ws",
+                "websocket_url": "wss://sandbox.example/events",
+            },
+        ),
+        ("sandbox_status", {"sandbox_id": "sandbox-1", "status": "ready"}),
+        (
+            "desktop_started",
+            {
+                "sandbox_id": "sandbox-1",
+                "url": "https://sandbox.example/desktop",
+                "display": ":1",
+                "resolution": "1280x720",
+                "port": 6080,
+            },
+        ),
+        (
+            "desktop_status",
+            {
+                "sandbox_id": "sandbox-1",
+                "running": True,
+                "url": "https://sandbox.example/desktop",
+                "display": ":1",
+                "resolution": "1280x720",
+                "port": 6080,
+            },
+        ),
+        (
+            "terminal_started",
+            {
+                "sandbox_id": "sandbox-1",
+                "url": "wss://sandbox.example/terminal",
+                "port": 7681,
+                "session_id": "terminal-1",
+                "pid": 4242,
+            },
+        ),
+        (
+            "terminal_status",
+            {
+                "sandbox_id": "sandbox-1",
+                "running": True,
+                "url": "wss://sandbox.example/terminal",
+                "port": 7681,
+                "session_id": "terminal-1",
+                "pid": 4242,
+            },
+        ),
+        (
+            "http_service_started",
+            {
+                "sandbox_id": "sandbox-1",
+                "service_id": "service-preview-1",
+                "service_name": "Vite preview",
+                "source_type": "sandbox_internal",
+                "service_url": "http://172.17.0.2:5173",
+                "proxy_url": "/api/v1/projects/project-1/sandbox/http-services/service-preview-1/",
+                "ws_proxy_url": "wss://sandbox.example/preview",
+                "auto_open": True,
+                "restart_token": "restart-1",
+            },
+        ),
+        (
+            "http_service_updated",
+            {
+                "sandbox_id": "sandbox-1",
+                "service_id": "service-preview-1",
+                "service_name": "Vite preview",
+                "source_type": "sandbox_internal",
+                "service_url": "http://172.17.0.2:4173",
+                "status": "running",
+            },
+        ),
+        (
+            "http_service_error",
+            {
+                "sandbox_id": "sandbox-1",
+                "service_id": "service-preview-1",
+                "service_name": "Vite preview",
+                "status": "error",
+                "error_message": "Preview port is not reachable",
+            },
+        ),
+        (
+            "http_service_stopped",
+            {
+                "sandbox_id": "sandbox-1",
+                "service_id": "service-preview-1",
+                "service_name": "Vite preview",
+                "status": "stopped",
+            },
+        ),
+        (
+            "terminal_stopped",
+            {"sandbox_id": "sandbox-1", "session_id": "terminal-1"},
+        ),
+        ("desktop_stopped", {"sandbox_id": "sandbox-1"}),
+        ("sandbox_terminated", {"sandbox_id": "sandbox-1"}),
+    ]
+    assert {event_type for event_type, _ in runtime_events} <= _DISPLAYABLE_EVENTS
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(event_type=event_type, event_data=data, event_time_us=index * 1_000)
+            for index, (event_type, data) in enumerate(runtime_events, start=1)
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert [item["type"] for item in timeline] == [event_type for event_type, _ in runtime_events]
+    assert [item["payload"] for item in timeline] == [data for _, data in runtime_events]
+
+
 def test_build_timeline_replays_complete_skill_execution_for_desktop_history() -> None:
     skill_events = [
         (

@@ -1004,6 +1004,11 @@ def _build_context_memory_event(data: dict[str, Any], **_kwargs: Any) -> dict[st
     return {"payload": dict(data)}
 
 
+def _build_runtime_infrastructure_event(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    """Preserve runtime resource evidence for Desktop history replay."""
+    return {"payload": dict(data)}
+
+
 def _build_agent_spawned(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {
         "agentId": data.get("agent_id", ""),
@@ -1126,6 +1131,19 @@ _EVENT_BUILDERS: dict[str, Any] = {
     "context_compacted": _build_context_memory_event,
     "memory_recalled": _build_context_memory_event,
     "memory_captured": _build_context_memory_event,
+    "sandbox_created": _build_runtime_infrastructure_event,
+    "sandbox_status": _build_runtime_infrastructure_event,
+    "sandbox_terminated": _build_runtime_infrastructure_event,
+    "desktop_started": _build_runtime_infrastructure_event,
+    "desktop_status": _build_runtime_infrastructure_event,
+    "desktop_stopped": _build_runtime_infrastructure_event,
+    "terminal_started": _build_runtime_infrastructure_event,
+    "terminal_status": _build_runtime_infrastructure_event,
+    "terminal_stopped": _build_runtime_infrastructure_event,
+    "http_service_started": _build_runtime_infrastructure_event,
+    "http_service_updated": _build_runtime_infrastructure_event,
+    "http_service_stopped": _build_runtime_infrastructure_event,
+    "http_service_error": _build_runtime_infrastructure_event,
     "agent_spawned": _build_agent_spawned,
     "agent_completed": _build_agent_completed,
     "agent_message_sent": _build_agent_message_sent,
