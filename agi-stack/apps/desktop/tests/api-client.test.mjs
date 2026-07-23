@@ -518,6 +518,89 @@ test('conversation catalog exhausts every authoritative scoped page', async () =
   }
 });
 
+test('conversation catalog retries one transport failure without changing scope', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input: String(input), init });
+    if (calls.length === 1) throw new TypeError('Failed to fetch');
+    return new Response(
+      JSON.stringify({
+        items: [conversationRecord(1)],
+        total: 1,
+        has_more: false,
+        offset: 0,
+        limit: 500,
+        next_offset: null,
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'authenticated-session',
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
+      workspaceId: 'workspace-1',
+    });
+    const result = await client.listConversations('project-1', 'workspace-1');
+
+    assert.deepEqual(result.items.map((item) => item.id), ['conversation-1']);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].input, calls[1].input);
+    assert.equal(calls[0].init?.signal, calls[1].init?.signal);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('conversation catalog does not retry HTTP failures or aborted reads', async () => {
+  const originalFetch = globalThis.fetch;
+  const client = new DesktopApiClient({
+    ...DEFAULT_CONFIG,
+    apiBaseUrl: 'http://127.0.0.1:8088',
+    apiKey: 'authenticated-session',
+    tenantId: 'tenant-1',
+    projectId: 'project-1',
+    workspaceId: 'workspace-1',
+  });
+
+  try {
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return new Response(JSON.stringify({ detail: 'Unavailable' }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+    await assert.rejects(client.listConversations('project-1', 'workspace-1'), (error) => {
+      assert.equal(error instanceof DesktopApiError, true);
+      assert.equal(error.status, 503);
+      return true;
+    });
+    assert.equal(calls, 1);
+
+    const controller = new AbortController();
+    controller.abort();
+    calls = 0;
+    globalThis.fetch = async (_input, init) => {
+      calls += 1;
+      throw init?.signal?.reason ?? new DOMException('Aborted', 'AbortError');
+    };
+    await assert.rejects(
+      client.listConversations('project-1', 'workspace-1', controller.signal),
+      { name: 'AbortError' },
+    );
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('conversation catalog accepts the Rust null terminal cursor', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () =>

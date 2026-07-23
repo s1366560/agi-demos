@@ -787,10 +787,15 @@ export class DesktopApiClient {
         offset: String(offset),
       });
       if (requiredWorkspaceId) params.set('workspace_id', requiredWorkspaceId);
-      const payload = await this.request<unknown>(
-        `/api/v1/agent/conversations?${params.toString()}`,
-        { signal },
-      );
+      const path = `/api/v1/agent/conversations?${params.toString()}`;
+      const requestPage = () => this.request<unknown>(path, { signal });
+      let payload: unknown;
+      try {
+        payload = await requestPage();
+      } catch (error) {
+        if (error instanceof DesktopApiError || signal?.aborted) throw error;
+        payload = await requestPage();
+      }
       const page = requireConversationCatalogPage(
         payload,
         offset,
