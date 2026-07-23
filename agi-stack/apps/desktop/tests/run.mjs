@@ -68,6 +68,7 @@ const testFiles = [
   'auxiliary-view.test.mjs',
   'auth-context-model.test.mjs',
   'chat-composer-model.test.mjs',
+  'compose-ahead-model.test.mjs',
   'composer-catalog-model.test.mjs',
   'composer-mentions.test.mjs',
   'composer-context.test.mjs',

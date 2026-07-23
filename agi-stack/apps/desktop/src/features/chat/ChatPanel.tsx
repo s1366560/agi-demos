@@ -1,10 +1,20 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { Badge, Button, Flex, Heading, ScrollArea, Text, TextArea } from '@radix-ui/themes';
 import {
   ActivityLogIcon,
   ArrowTopRightIcon,
   ArrowUpIcon,
   ChevronDownIcon,
+  ClockIcon,
   CodeIcon,
   Cross2Icon,
   MixerHorizontalIcon,
@@ -60,6 +70,15 @@ import {
   composerHasSendableAttachment,
 } from './chatComposerModel';
 import type { ChatComposerVariant } from './chatComposerModel';
+import {
+  composeAheadContextSnapshot,
+  composeAheadConversationScope,
+  composeAheadEligibility,
+  composeAheadQueueStore,
+  conversationResponseIsStreaming,
+  EMPTY_COMPOSE_AHEAD_QUEUE,
+} from './composeAheadModel';
+import type { ComposeAheadPrompt } from './composeAheadModel';
 import {
   findRetryMessageContent,
   quoteMessageForComposer,
@@ -321,6 +340,28 @@ export const ChatPanel = memo(function ChatPanel({
   const hasTimelineState = timelineState !== null;
   const messageActionConversationId =
     timelineConversationId || selectedConversationId || messages[0]?.workspace_id || '';
+  const composeAheadConversation = useMemo(
+    () =>
+      selectedConversationId
+        ? conversations.find((conversation) => conversation.id === selectedConversationId) ?? null
+        : null,
+    [conversations, selectedConversationId],
+  );
+  const composeAheadScope = useMemo(
+    () => composeAheadConversationScope(composeAheadConversation),
+    [composeAheadConversation],
+  );
+  const composeAheadEnabled =
+    Boolean(composeAheadScope) && runInputDeliveryOptions.length === 0;
+  const responseStreaming =
+    composeAheadEnabled &&
+    conversationResponseIsStreaming({
+      activeConversationId: selectedConversationId ?? '',
+      sending,
+      activityPresence,
+      signals: agentTaskSignals,
+      timelineItems: timelineState?.items ?? [],
+    });
   const visibleActionMessages = useMemo<VisibleMessageForRetry[]>(
     () =>
       timelineState
@@ -953,6 +994,9 @@ export const ChatPanel = memo(function ChatPanel({
         onModelReset={onModelReset}
         onOpenCommands={onOpenCommands}
         onSend={handleComposerSend}
+        composeAheadScope={composeAheadScope}
+        composeAheadEnabled={composeAheadEnabled}
+        responseStreaming={responseStreaming}
       />
     </section>
   );
@@ -1029,6 +1073,9 @@ type ChatComposerProps = {
     contextItems: ComposerContextItem[],
     onWorkspaceMessageSaved?: () => void,
   ) => void;
+  composeAheadScope: string | null;
+  composeAheadEnabled: boolean;
+  responseStreaming: boolean;
 };
 
 function ChatComposer({
@@ -1069,11 +1116,23 @@ function ChatComposer({
   onModelReset,
   onOpenCommands,
   onSend,
+  composeAheadScope,
+  composeAheadEnabled,
+  responseStreaming,
 }: ChatComposerProps) {
   const { t } = useI18n();
   const [input, setInput] = useState(initialInput);
   const [contextItems, setContextItems] = useState<ComposerContextItem[]>([]);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
+  const sendingRef = useRef(sending);
+  const responseStreamingRef = useRef(responseStreaming);
+  const dispatchMonitorRef = useRef<{
+    timerId: number;
+    scope: string;
+    promptId: string;
+  } | null>(null);
+  sendingRef.current = sending;
+  responseStreamingRef.current = responseStreaming;
   const disabled = Boolean(disabledReason);
   const addContextItem = useCallback((item: ComposerContextItem) => {
     setContextItems((current) => appendComposerContextItem(current, item));
@@ -1086,20 +1145,52 @@ function ChatComposer({
     uploadFiles,
     rejectFileDrop,
   } = useComposerFileUpload({ api, onAdd: addContextItem });
-  const canSend =
+  const composeAheadSnapshot = composeAheadContextSnapshot(contextItems);
+  const composeAheadQueueEligibility = composeAheadEligibility({
+    content: input,
+    streaming: composeAheadEnabled && responseStreaming,
+    disabled,
+    uploading: uploadingAttachments,
+    contextItems,
+    referenceCount: references.length,
+  });
+  const canSendNow =
     !disabled &&
     !sending &&
+    !(composeAheadEnabled && responseStreaming) &&
     !uploadingAttachments &&
     (Boolean(input.trim()) || composerHasSendableAttachment(contextItems));
+  const canSubmit = canSendNow || composeAheadQueueEligibility.canQueue;
   const composerPresentation = chatComposerPresentation(composerVariant);
   const queuedRunInputs = useMemo(() => visibleQueuedRunInputs(runInputs), [runInputs]);
+  const getComposeAheadSnapshot = useCallback(
+    () =>
+      composeAheadScope
+        ? composeAheadQueueStore.getSnapshot(composeAheadScope)
+        : EMPTY_COMPOSE_AHEAD_QUEUE,
+    [composeAheadScope],
+  );
+  const queuedPrompts = useSyncExternalStore(
+    composeAheadQueueStore.subscribe,
+    getComposeAheadSnapshot,
+    getComposeAheadSnapshot,
+  );
   useEffect(() => {
     if (!draftRequest || draftRequest.conversationId !== activeConversationId) return;
     setInput(draftRequest.content);
     window.requestAnimationFrame(() => composerInputRef.current?.focus());
   }, [activeConversationId, draftRequest]);
   const handleSend = useCallback(() => {
-    if (!canSend) return;
+    if (composeAheadQueueEligibility.canQueue && composeAheadScope) {
+      composeAheadQueueStore.enqueue(composeAheadScope, {
+        text: input,
+        contextItems: composeAheadSnapshot.contextItems,
+      });
+      setInput('');
+      setContextItems([]);
+      return;
+    }
+    if (!canSendNow) return;
     const content =
       input.trim() ||
       t('composer.attachmentOnlyMessage', {
@@ -1112,7 +1203,111 @@ function ChatComposer({
       setInput('');
       setContextItems([]);
     });
-  }, [canSend, contextItems, input, onSend, t]);
+  }, [
+    canSendNow,
+    composeAheadQueueEligibility.canQueue,
+    composeAheadScope,
+    composeAheadSnapshot.contextItems,
+    contextItems,
+    input,
+    onSend,
+    t,
+  ]);
+  useEffect(() => {
+    return () => {
+      if (dispatchMonitorRef.current) {
+        window.clearTimeout(dispatchMonitorRef.current.timerId);
+        dispatchMonitorRef.current = null;
+      }
+    };
+  }, []);
+  useEffect(() => {
+    if (!composeAheadScope) return;
+    const scheduleDispatchMonitor = (prompt: ComposeAheadPrompt) => {
+      const activeMonitor = dispatchMonitorRef.current;
+      if (
+        activeMonitor?.scope === composeAheadScope &&
+        activeMonitor.promptId === prompt.id
+      ) {
+        return;
+      }
+      if (activeMonitor) {
+        window.clearTimeout(activeMonitor.timerId);
+        composeAheadQueueStore.fail(activeMonitor.scope, activeMonitor.promptId);
+      }
+      const monitorDispatch = () => {
+        const currentMonitor = dispatchMonitorRef.current;
+        if (
+          currentMonitor?.scope !== composeAheadScope ||
+          currentMonitor.promptId !== prompt.id
+        ) {
+          return;
+        }
+        dispatchMonitorRef.current = null;
+        const current = composeAheadQueueStore
+          .getSnapshot(composeAheadScope)
+          .find((candidate) => candidate.id === prompt.id);
+        if (!current || current.status !== 'dispatching') return;
+        if (sendingRef.current || responseStreamingRef.current) {
+          scheduleDispatchMonitor(prompt);
+          return;
+        }
+        composeAheadQueueStore.fail(composeAheadScope, prompt.id);
+      };
+      dispatchMonitorRef.current = {
+        timerId: window.setTimeout(monitorDispatch, 750),
+        scope: composeAheadScope,
+        promptId: prompt.id,
+      };
+    };
+    const head = queuedPrompts[0];
+    if (head?.status === 'dispatching') {
+      scheduleDispatchMonitor(head);
+      return;
+    }
+    if (
+      !composeAheadEnabled ||
+      responseStreaming ||
+      sending ||
+      disabled
+    ) {
+      return;
+    }
+    const claimed = composeAheadQueueStore.claimHead(composeAheadScope);
+    if (!claimed) return;
+    scheduleDispatchMonitor(claimed);
+    try {
+      onSend(claimed.text, [...claimed.contextItems], () => {
+        const activeMonitor = dispatchMonitorRef.current;
+        if (
+          activeMonitor?.scope === composeAheadScope &&
+          activeMonitor.promptId === claimed.id
+        ) {
+          window.clearTimeout(activeMonitor.timerId);
+          dispatchMonitorRef.current = null;
+        }
+        composeAheadQueueStore.accept(composeAheadScope, claimed.id);
+      });
+    } catch {
+      const activeMonitor = dispatchMonitorRef.current;
+      if (
+        activeMonitor?.scope === composeAheadScope &&
+        activeMonitor.promptId === claimed.id
+      ) {
+        window.clearTimeout(activeMonitor.timerId);
+        dispatchMonitorRef.current = null;
+      }
+      composeAheadQueueStore.fail(composeAheadScope, claimed.id);
+    }
+  }, [
+    composeAheadEnabled,
+    composeAheadScope,
+    disabled,
+    onSend,
+    queuedPrompts,
+    responseStreaming,
+    sending,
+  ]);
   const {
     isFileDragging,
     handleFileDragEnter,
@@ -1243,6 +1438,12 @@ function ChatComposer({
           ) : null}
         </div>
       ) : null}
+      {composeAheadEnabled && queuedPrompts.length ? (
+        <ComposeAheadQueue
+          prompts={queuedPrompts}
+          scope={composeAheadScope}
+        />
+      ) : null}
       <div
         className={`session-composer-editor${isFileDragging ? ' is-file-dragging' : ''}`}
         data-file-drop-target
@@ -1321,6 +1522,8 @@ function ChatComposer({
             if (
               event.key === 'Enter' &&
               !event.shiftKey &&
+              !event.nativeEvent.isComposing &&
+              canSubmit &&
               (runInputDeliveryOptions.length === 0 || event.metaKey || event.ctrlKey)
             ) {
               event.preventDefault();
@@ -1426,23 +1629,99 @@ function ChatComposer({
             className="send-pill"
             type="submit"
             aria-label={
-              runInputDelivery === 'steer_now'
+              composeAheadQueueEligibility.canQueue
+                ? t('chat.composeAhead.queueMessage')
+                : runInputDelivery === 'steer_now'
                 ? t('session.sendSteering')
                 : runInputDelivery === 'queue_next'
                   ? t('session.sendQueuedInput')
                   : t('session.sendMessage')
             }
-            title={runInputDeliveryOptions.length ? t('session.sendShortcut') : undefined}
+            title={
+              composeAheadEnabled &&
+              responseStreaming &&
+              composeAheadQueueEligibility.reason &&
+              composeAheadQueueEligibility.reason !== 'empty'
+                ? t('chat.composeAhead.unsupportedContext')
+                : runInputDeliveryOptions.length
+                  ? t('session.sendShortcut')
+                  : undefined
+            }
             loading={sending}
-            disabled={!canSend}
+            disabled={!canSubmit}
           >
-            <ArrowUpIcon />
+            {composeAheadQueueEligibility.canQueue ? <ClockIcon /> : <ArrowUpIcon />}
           </Button>
         </Flex>
         </Flex>
       </div>
     </form>
   );
+}
+
+const ComposeAheadQueue = memo(function ComposeAheadQueue({
+  prompts,
+  scope,
+}: {
+  prompts: readonly ComposeAheadPrompt[];
+  scope: string | null;
+}) {
+  const { t } = useI18n();
+  if (!scope) return null;
+  return (
+    <section
+      className="compose-ahead-queue"
+      aria-label={t('chat.composeAhead.region')}
+      aria-live="polite"
+    >
+      <strong>{t('chat.composeAhead.count', { count: prompts.length })}</strong>
+      <div>
+        {prompts.map((prompt, index) => {
+          const skill = prompt.contextItems.find(
+            (item) => item.metadata?.execution_slot === 'skill',
+          );
+          const subagent = prompt.contextItems.find(
+            (item) => item.metadata?.execution_slot === 'subagent',
+          );
+          return (
+            <span
+              className={`compose-ahead-prompt is-${prompt.status}`}
+              title={prompt.text}
+              key={prompt.id}
+            >
+              <ClockIcon aria-hidden="true" />
+              <span>{composeAheadPreview(prompt.text)}</span>
+              {skill ? <em>/{skill.label}</em> : null}
+              {subagent ? <em>@{subagent.label}</em> : null}
+              {index === 0 ? (
+                <small>{t(`chat.composeAhead.status.${prompt.status}`)}</small>
+              ) : null}
+              {prompt.status === 'failed' ? (
+                <button
+                  type="button"
+                  onClick={() => composeAheadQueueStore.retry(scope, prompt.id)}
+                >
+                  {t('chat.composeAhead.retry')}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                aria-label={t('chat.composeAhead.remove', { prompt: prompt.text })}
+                onClick={() => composeAheadQueueStore.remove(scope, prompt.id)}
+              >
+                <Cross2Icon aria-hidden="true" />
+              </button>
+            </span>
+          );
+        })}
+      </div>
+    </section>
+  );
+});
+
+function composeAheadPreview(text: string): string {
+  const normalized = text.trim();
+  return normalized.length > 60 ? `${normalized.slice(0, 60).trim()}…` : normalized;
 }
 
 function agentSignalLabelKey(status: AgentTaskSignalStatus): string {

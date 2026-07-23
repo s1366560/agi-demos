@@ -130,6 +130,111 @@
   box-shadow: 0 0 0 2px rgba(83, 208, 239, 0.24);
 }
 
+.compose-ahead-queue {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid rgba(83, 208, 239, 0.18);
+  border-radius: 8px;
+  background: rgba(13, 30, 39, 0.72);
+}
+
+.compose-ahead-queue > strong {
+  color: #7fa4b0;
+  font-size: 9px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.compose-ahead-queue > div {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.compose-ahead-prompt {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 6px;
+  border: 1px solid #30404f;
+  border-radius: 999px;
+  background: #111923;
+  color: #a8bac6;
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.compose-ahead-prompt > svg {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+  color: #6caec0;
+}
+
+.compose-ahead-prompt > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compose-ahead-prompt em,
+.compose-ahead-prompt small {
+  flex: 0 0 auto;
+  font-size: 8px;
+  font-style: normal;
+}
+
+.compose-ahead-prompt em {
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.08);
+  color: #8195a6;
+}
+
+.compose-ahead-prompt small {
+  color: #6caec0;
+}
+
+.compose-ahead-prompt.is-dispatching {
+  border-color: rgba(83, 208, 239, 0.42);
+  background: rgba(18, 48, 59, 0.82);
+}
+
+.compose-ahead-prompt.is-failed {
+  border-color: rgba(232, 161, 173, 0.44);
+  color: #e8a1ad;
+}
+
+.compose-ahead-prompt button {
+  display: inline-grid;
+  min-width: 18px;
+  min-height: 18px;
+  padding: 0 4px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.compose-ahead-prompt button:hover,
+.compose-ahead-prompt button:focus-visible {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--desktop-text);
+  outline: none;
+}
+
+.compose-ahead-prompt button:focus-visible {
+  box-shadow: 0 0 0 2px rgba(83, 208, 239, 0.2);
+}
+
 .session-chat-narrative .timeline-working-indicator.timeline-worklog-row {
   display: grid;
   align-items: center;

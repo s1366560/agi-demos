@@ -146,6 +146,14 @@
   border-right: 1px solid var(--desktop-border-soft);
 }
 
+.session-steering-qa-content.compose-ahead-qa-content {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.session-steering-qa-content.compose-ahead-qa-content > .chat-shell {
+  border-right: 0;
+}
+
 @media (max-width: 1120px) {
   .session-steering-qa-shell {
     grid-template-columns: 184px minmax(0, 1fr);
