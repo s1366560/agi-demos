@@ -76,6 +76,7 @@ const testFiles = [
   'conversation-search-model.test.mjs',
   'pinned-message-model.test.mjs',
   'conversation-export-model.test.mjs',
+  'conversation-comparison-model.test.mjs',
   'chat-timeline-model.test.mjs',
   'artifact-canvas-events.test.mjs',
   'mcp-app-canvas-events.test.mjs',

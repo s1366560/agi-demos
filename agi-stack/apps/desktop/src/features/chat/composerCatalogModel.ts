@@ -1,9 +1,11 @@
 import type {
   AgentInputFileMetadata,
+  ConversationMessagesResponse,
   ManagedAgentDefinition,
   ManagedPlugin,
   ManagedSkill,
   ManagedSubAgent,
+  PaginatedConversationsResponse,
   WorkspaceAgentBinding,
 } from '../../types';
 
@@ -13,6 +15,30 @@ export type ComposerCatalogClient = {
   listManagedSkills: (signal?: AbortSignal) => Promise<ManagedSkill[]>;
   listManagedPlugins: (signal?: AbortSignal) => Promise<ManagedPlugin[]>;
   listManagedSubAgents?: (signal?: AbortSignal) => Promise<ManagedSubAgent[]>;
+  listConversations?: (
+    projectId?: string,
+    workspaceIdOrOptions?:
+      | string
+      | null
+      | {
+          workspaceId?: string | null;
+          unboundOnly?: boolean;
+          signal?: AbortSignal;
+        },
+    legacySignal?: AbortSignal,
+  ) => Promise<PaginatedConversationsResponse>;
+  getConversationMessages?: (
+    conversationId: string,
+    projectId?: string,
+    options?: {
+      limit?: number;
+      fromTimeUs?: number;
+      fromCounter?: number;
+      beforeTimeUs?: number;
+      beforeCounter?: number;
+      signal?: AbortSignal;
+    },
+  ) => Promise<ConversationMessagesResponse>;
   uploadSandboxFile?: (
     file: Pick<File, 'name' | 'type' | 'size' | 'arrayBuffer'>,
   ) => Promise<AgentInputFileMetadata>;
@@ -44,6 +70,8 @@ export function unboundComposerCatalogClient(
   api: ComposerCatalogClient,
 ): ComposerCatalogClient {
   const listManagedSubAgents = api.listManagedSubAgents?.bind(api);
+  const listConversations = api.listConversations?.bind(api);
+  const getConversationMessages = api.getConversationMessages?.bind(api);
   const uploadSandboxFile = api.uploadSandboxFile?.bind(api);
   return {
     listWorkspaceAgents: async () => [],
@@ -51,6 +79,8 @@ export function unboundComposerCatalogClient(
     listManagedSkills: (signal) => api.listManagedSkills(signal),
     listManagedPlugins: (signal) => api.listManagedPlugins(signal),
     ...(listManagedSubAgents ? { listManagedSubAgents } : {}),
+    ...(listConversations ? { listConversations } : {}),
+    ...(getConversationMessages ? { getConversationMessages } : {}),
     ...(uploadSandboxFile ? { uploadSandboxFile } : {}),
   };
 }

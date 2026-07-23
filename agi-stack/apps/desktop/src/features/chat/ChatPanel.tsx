@@ -16,6 +16,7 @@ import {
   ChevronDownIcon,
   ClockIcon,
   CodeIcon,
+  ColumnsIcon,
   Cross2Icon,
   MixerHorizontalIcon,
   ReloadIcon,
@@ -55,6 +56,8 @@ import { ComposerControls } from './ComposerControls';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
 import type { ComposerModelOption } from './ComposerControls';
 import type { ComposerCatalogClient } from './composerCatalogModel';
+import { ConversationComparison, ConversationComparisonPicker } from './ConversationComparison';
+import type { ConversationComparisonClient } from './ConversationComparison';
 import { ConversationSearch } from './ConversationSearch';
 import { ConversationExportMenu } from './ConversationExportMenu';
 import { PinnedMessages } from './PinnedMessages';
@@ -98,6 +101,10 @@ import {
 } from './pinnedMessageModel';
 import { latestAgentSuggestions } from './chatTimelineModel';
 import { createConversationExportSnapshot } from './conversationExportModel';
+import {
+  conversationComparisonAvailable,
+  conversationComparisonScope,
+} from './conversationComparisonModel';
 import { useComposerFileDrop } from './useComposerFileDrop';
 import { useComposerFileUpload } from './useComposerFileUpload';
 import type {
@@ -302,6 +309,11 @@ export const ChatPanel = memo(function ChatPanel({
   const [messageActionNotice, setMessageActionNotice] = useState<string | null>(null);
   const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
   const [conversationSearchVisible, setConversationSearchVisible] = useState(false);
+  const [conversationComparisonVisible, setConversationComparisonVisible] = useState(false);
+  const [conversationComparisonPickerOpen, setConversationComparisonPickerOpen] = useState(false);
+  const [comparisonConversation, setComparisonConversation] = useState<AgentConversation | null>(
+    null,
+  );
   const [pinnedMessageIds, setPinnedMessageIds] = useState<string[]>([]);
   const [pinnedMessagesCollapsed, setPinnedMessagesCollapsed] = useState(false);
   const composerDraftSequenceRef = useRef(0);
@@ -310,6 +322,7 @@ export const ChatPanel = memo(function ChatPanel({
   const retryUnlockTimerRef = useRef<number | null>(null);
   const pinnedJumpTimerRef = useRef<number | null>(null);
   const pinnedJumpTargetRef = useRef<HTMLElement | null>(null);
+  const comparisonTriggerRef = useRef<HTMLButtonElement>(null);
   const sendingRef = useRef(sending);
   sendingRef.current = sending;
   const visibleAgentTaskSignals = useMemo(() => {
@@ -376,6 +389,17 @@ export const ChatPanel = memo(function ChatPanel({
         ? conversations.find((conversation) => conversation.id === selectedConversationId) ?? null
         : null,
     [conversations, selectedConversationId],
+  );
+  const comparisonClient = useMemo<ConversationComparisonClient | null>(() => {
+    const listConversations = api.listConversations?.bind(api);
+    const getConversationMessages = api.getConversationMessages?.bind(api);
+    return listConversations && getConversationMessages
+      ? { listConversations, getConversationMessages }
+      : null;
+  }, [api]);
+  const comparisonAvailable = conversationComparisonAvailable(
+    composeAheadConversation,
+    Boolean(comparisonClient),
   );
   const composeAheadScope = useMemo(
     () => composeAheadConversationScope(composeAheadConversation),
@@ -499,6 +523,9 @@ export const ChatPanel = memo(function ChatPanel({
     setComposerDraftRequest(null);
     setMessageActionNotice(null);
     setConversationSearchVisible(false);
+    setConversationComparisonVisible(false);
+    setConversationComparisonPickerOpen(false);
+    setComparisonConversation(null);
     setPinnedMessageIds([]);
     setPinnedMessagesCollapsed(false);
     clearPinnedJumpTarget();
@@ -889,6 +916,29 @@ export const ChatPanel = memo(function ChatPanel({
       return { ...current, [item.id]: !currentValue };
     });
   }, []);
+  const openConversationComparison = useCallback(() => {
+    if (!comparisonAvailable) return;
+    setConversationComparisonVisible(true);
+    setConversationComparisonPickerOpen(true);
+  }, [comparisonAvailable]);
+  const closeConversationComparison = useCallback(() => {
+    setConversationComparisonVisible(false);
+    setConversationComparisonPickerOpen(false);
+    setComparisonConversation(null);
+    window.requestAnimationFrame(() => comparisonTriggerRef.current?.focus());
+  }, []);
+  const selectComparisonConversation = useCallback(
+    (conversation: AgentConversation) => {
+      if (
+        !composeAheadConversation ||
+        !conversationComparisonScope(composeAheadConversation, conversation)
+      ) {
+        return;
+      }
+      setComparisonConversation(conversation);
+    },
+    [composeAheadConversation],
+  );
 
   return (
     <section
@@ -917,9 +967,37 @@ export const ChatPanel = memo(function ChatPanel({
           </Button>
         </header>
       ) : null}
-      {conversationExportSnapshot?.events.length ? (
-        <ConversationExportMenu snapshot={conversationExportSnapshot} />
+      {comparisonAvailable || conversationExportSnapshot?.events.length ? (
+        <div className="chat-conversation-actions">
+          {comparisonAvailable ? (
+            <button
+              ref={comparisonTriggerRef}
+              type="button"
+              className="chat-conversation-compare-trigger"
+              aria-label={t('chat.comparison.compare')}
+              title={t('chat.comparison.compare')}
+              aria-pressed={conversationComparisonVisible}
+              onClick={openConversationComparison}
+            >
+              <ColumnsIcon aria-hidden="true" />
+              <span>{t('chat.comparison.compare')}</span>
+            </button>
+          ) : null}
+          {conversationExportSnapshot?.events.length ? (
+            <ConversationExportMenu snapshot={conversationExportSnapshot} />
+          ) : null}
+        </div>
       ) : null}
+      {conversationComparisonVisible && comparisonClient && composeAheadConversation ? (
+        <ConversationComparison
+          client={comparisonClient}
+          currentConversation={composeAheadConversation}
+          comparisonConversation={comparisonConversation}
+          onChooseConversation={() => setConversationComparisonPickerOpen(true)}
+          onClose={closeConversationComparison}
+        />
+      ) : (
+        <>
       <ScrollArea
         className="message-scroll"
         ref={scrollAreaRef}
@@ -938,7 +1016,10 @@ export const ChatPanel = memo(function ChatPanel({
           {timelineState ? (
             <>
               {activitySummary ? (
-                <section className="session-current-activity" aria-label={t('session.currentActivity')}>
+                <section
+                  className="session-current-activity"
+                  aria-label={t('session.currentActivity')}
+                >
                   <div className="session-current-activity-primary">
                     <span className="session-current-activity-icon" aria-hidden="true">
                       <ActivityLogIcon />
@@ -1153,6 +1234,17 @@ export const ChatPanel = memo(function ChatPanel({
         composeAheadEnabled={composeAheadEnabled}
         responseStreaming={responseStreaming}
       />
+        </>
+      )}
+      {conversationComparisonVisible && comparisonClient && composeAheadConversation ? (
+        <ConversationComparisonPicker
+          open={conversationComparisonPickerOpen}
+          client={comparisonClient}
+          currentConversation={composeAheadConversation}
+          onSelect={selectComparisonConversation}
+          onClose={() => setConversationComparisonPickerOpen(false)}
+        />
+      ) : null}
     </section>
   );
 });

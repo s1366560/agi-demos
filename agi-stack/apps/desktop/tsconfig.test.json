@@ -31,6 +31,7 @@
     "src/features/chat/conversationSearchModel.ts",
     "src/features/chat/pinnedMessageModel.ts",
     "src/features/chat/conversationExportModel.ts",
+    "src/features/chat/conversationComparisonModel.ts",
     "src/features/chat/composeAheadModel.ts",
     "src/features/chat/chatMessageActionModel.ts",
     "src/features/chat/composerFileDropModel.ts",
