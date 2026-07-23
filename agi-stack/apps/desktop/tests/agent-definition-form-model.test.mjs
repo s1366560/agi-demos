@@ -17,6 +17,14 @@ const providerQaSource = readFileSync(
   new URL('../src/qa/ProviderSettingsQa.tsx', import.meta.url),
   'utf8',
 );
+const agentManagementSource = readFileSync(
+  new URL('../src/features/settings/useAgentDefinitionManagement.ts', import.meta.url),
+  'utf8',
+);
+const managementDialogsSource = readFileSync(
+  new URL('../src/features/settings/SettingsManagementDialogs.tsx', import.meta.url),
+  'utf8',
+);
 
 const definition = {
   id: 'agent-reviewer',
@@ -68,6 +76,14 @@ const definition = {
     allowed_tools: ['read', 'git_diff'],
     budget_limit_tokens: 12000,
   },
+  execution_backend: {
+    type: 'acp_external',
+    acp_agent_key: 'review-agent',
+  },
+  workspace_config: {
+    sandbox_scope: 'agent',
+    base_path: '/srv/agents/reviewer',
+  },
 };
 
 test('new Agent definition drafts inherit the selected project and safe runtime defaults', () => {
@@ -80,6 +96,10 @@ test('new Agent definition drafts inherit the selected project and safe runtime 
     triggerKeywords: '',
     triggerExamples: '',
     model: 'inherit',
+    executionBackendType: 'memstack',
+    executionBackendAcpAgentKey: '',
+    workspaceType: 'shared',
+    workspaceBaseDir: '',
     temperature: 0.7,
     maxTokens: 4096,
     maxIterations: 10,
@@ -125,6 +145,10 @@ test('editing an Agent definition preserves authoritative identity, runtime, and
     triggerKeywords: 'release\nreadiness',
     triggerExamples: 'Review this candidate',
     model: 'openai/gpt-5.1',
+    executionBackendType: 'acp_external',
+    executionBackendAcpAgentKey: 'review-agent',
+    workspaceType: 'isolated',
+    workspaceBaseDir: '/srv/agents/reviewer',
     temperature: 0.3,
     maxTokens: 6000,
     maxIterations: 18,
@@ -182,6 +206,14 @@ test('Agent definition mutations normalize list fields and fail closed for empty
     trigger_keywords: ['release', 'readiness'],
     trigger_examples: ['Review this candidate'],
     model: 'openai/gpt-5.1',
+    execution_backend: {
+      type: 'acp_external',
+      acp_agent_key: 'review-agent',
+    },
+    workspace_config: {
+      type: 'isolated',
+      base_dir: '/srv/agents/reviewer',
+    },
     temperature: 0.3,
     max_tokens: 6000,
     max_iterations: 18,
@@ -259,6 +291,7 @@ test('Agent definition validation covers Web naming and backend runtime constrai
     validateAgentDefinitionDraft({
       ...valid,
       name: 'Release Reviewer',
+      executionBackendAcpAgentKey: '',
       displayName: '',
       systemPrompt: '',
       temperature: 2.1,
@@ -277,6 +310,7 @@ test('Agent definition validation covers Web naming and backend runtime constrai
     }),
     {
       name: 'invalid_name',
+      executionBackendAcpAgentKey: 'required',
       displayName: 'required',
       systemPrompt: 'required',
       temperature: 'temperature_range',
@@ -312,6 +346,11 @@ test('Agent definition editor exposes structured spawn and tool policy controls'
   assert.match(editorSource, /draft\.delegateMaxDelegationDepth/);
   assert.match(editorSource, /draft\.delegateAllowedTools/);
   assert.match(editorSource, /draft\.delegateBudgetLimitTokens/);
+  assert.match(editorSource, /draft\.executionBackendType/);
+  assert.match(editorSource, /draft\.executionBackendAcpAgentKey/);
+  assert.match(editorSource, /draft\.workspaceType/);
+  assert.match(editorSource, /draft\.workspaceBaseDir/);
+  assert.match(editorSource, /agent\.enabled \|\|/);
 });
 
 test('provider settings QA round-trips structured Agent policies', () => {
@@ -323,4 +362,11 @@ test('provider settings QA round-trips structured Agent policies', () => {
   assert.match(providerQaSource, /current\?\.session_policy/);
   assert.match(providerQaSource, /body\.delegate_config/);
   assert.match(providerQaSource, /current\?\.delegate_config/);
+  assert.match(providerQaSource, /body\.execution_backend/);
+  assert.match(providerQaSource, /current\?\.execution_backend/);
+  assert.match(providerQaSource, /body\.workspace_config/);
+  assert.match(providerQaSource, /current\?\.workspace_config/);
+  assert.match(providerQaSource, /external-agents/);
+  assert.match(agentManagementSource, /listManagedExternalAcpAgents/);
+  assert.match(managementDialogsSource, /externalAcpAgents/);
 });

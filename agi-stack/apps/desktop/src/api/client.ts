@@ -47,6 +47,7 @@ import type {
   LlmProviderValidationOutcome,
   ManagedAgentDefinition,
   ManagedAgentDefinitionMutation,
+  ManagedExternalAcpAgent,
   ManagedChannelConfig,
   ManagedChannelPluginCatalogItem,
   ManagedChannelPluginConfigSchema,
@@ -1664,6 +1665,20 @@ export class DesktopApiClient {
       { signal },
     );
     return readArray<ManagedAgentDefinition>(payload, ['definitions', 'items', 'data']);
+  }
+
+  async listManagedExternalAcpAgents(signal?: AbortSignal): Promise<ManagedExternalAcpAgent[]> {
+    const tenantId = requireValue(this.config.tenantId, 'tenant id');
+    const payload = await this.request<unknown>(
+      `/api/v1/acp/tenants/${encodeURIComponent(tenantId)}/external-agents`,
+      { signal },
+    );
+    return readArray<ManagedExternalAcpAgent>(payload, [
+      'agents',
+      'items',
+      'externalAgents',
+      'data',
+    ]);
   }
 
   async setManagedAgentEnabled(

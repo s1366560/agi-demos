@@ -9,6 +9,10 @@ export type AgentDefinitionEditorDraft = {
   triggerKeywords: string;
   triggerExamples: string;
   model: string;
+  executionBackendType: 'memstack' | 'acp_external';
+  executionBackendAcpAgentKey: string;
+  workspaceType: 'shared' | 'isolated' | 'inherited';
+  workspaceBaseDir: string;
   temperature: number;
   maxTokens: number;
   maxIterations: number;
@@ -72,6 +76,10 @@ export function agentDefinitionDraftFrom(
       triggerKeywords: '',
       triggerExamples: '',
       model: 'inherit',
+      executionBackendType: 'memstack',
+      executionBackendAcpAgentKey: '',
+      workspaceType: 'shared',
+      workspaceBaseDir: '',
       temperature: 0.7,
       maxTokens: 4096,
       maxIterations: 10,
@@ -112,6 +120,8 @@ export function agentDefinitionDraftFrom(
   const toolPolicy = recordValue(definition.tool_policy);
   const sessionPolicy = recordValue(definition.session_policy);
   const delegateConfig = recordValue(definition.delegate_config);
+  const executionBackend = recordValue(definition.execution_backend);
+  const workspaceConfig = recordValue(definition.workspace_config);
   return {
     name: definition.name,
     displayName: definition.display_name ?? '',
@@ -121,6 +131,12 @@ export function agentDefinitionDraftFrom(
     triggerKeywords: stringList(trigger?.keywords).join('\n'),
     triggerExamples: stringList(trigger?.examples).join('\n'),
     model: stringValue(definition.model) || definition.model_name || 'inherit',
+    executionBackendType:
+      executionBackend?.type === 'acp_external' ? 'acp_external' : 'memstack',
+    executionBackendAcpAgentKey: stringValue(executionBackend?.acp_agent_key),
+    workspaceType: workspaceTypeValue(workspaceConfig),
+    workspaceBaseDir:
+      stringValue(workspaceConfig?.base_dir) || stringValue(workspaceConfig?.base_path),
     temperature: numberValue(definition.temperature, 0.7),
     maxTokens: numberValue(definition.max_tokens, 4096),
     maxIterations: numberValue(definition.max_iterations, 10),
@@ -251,6 +267,17 @@ export function agentDefinitionMutationFromDraft(
     trigger_keywords: normalizedList(draft.triggerKeywords),
     trigger_examples: normalizedList(draft.triggerExamples),
     model: draft.model.trim() || 'inherit',
+    execution_backend:
+      draft.executionBackendType === 'acp_external'
+        ? {
+            type: 'acp_external',
+            acp_agent_key: draft.executionBackendAcpAgentKey.trim(),
+          }
+        : { type: 'memstack' },
+    workspace_config: {
+      type: draft.workspaceType,
+      base_dir: draft.workspaceBaseDir.trim(),
+    },
     temperature: draft.temperature,
     max_tokens: draft.maxTokens,
     max_iterations: draft.maxIterations,
@@ -283,6 +310,12 @@ export function validateAgentDefinitionDraft(
   if (!draft.displayName.trim()) errors.displayName = 'required';
   if (!draft.systemPrompt.trim()) errors.systemPrompt = 'required';
   if (!draft.triggerDescription.trim()) errors.triggerDescription = 'required';
+  if (
+    draft.executionBackendType === 'acp_external' &&
+    !draft.executionBackendAcpAgentKey.trim()
+  ) {
+    errors.executionBackendAcpAgentKey = 'required';
+  }
   if (!Number.isFinite(draft.temperature) || draft.temperature < 0 || draft.temperature > 2) {
     errors.temperature = 'temperature_range';
   }
@@ -390,6 +423,22 @@ function delegateCapabilityTierValue(
     value === 'none'
     ? value
     : '';
+}
+
+function workspaceTypeValue(
+  workspaceConfig: Record<string, unknown> | null,
+): AgentDefinitionEditorDraft['workspaceType'] {
+  if (!workspaceConfig) return 'shared';
+  if (
+    workspaceConfig?.type === 'shared' ||
+    workspaceConfig?.type === 'isolated' ||
+    workspaceConfig?.type === 'inherited'
+  ) {
+    return workspaceConfig.type;
+  }
+  if (workspaceConfig?.sandbox_scope === 'shared') return 'shared';
+  if (workspaceConfig?.sandbox_scope === 'session') return 'inherited';
+  return 'isolated';
 }
 
 function booleanValue(value: unknown, fallback: boolean): boolean {

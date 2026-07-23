@@ -928,6 +928,14 @@ function agentFromBody(
         : body.delegate_config !== undefined
           ? (recordValue(body.delegate_config) as ManagedAgentDefinition['delegate_config'])
           : (current?.delegate_config ?? null),
+    execution_backend:
+      body.execution_backend !== undefined
+        ? (recordValue(body.execution_backend) as ManagedAgentDefinition['execution_backend'])
+        : (current?.execution_backend ?? { type: 'memstack' }),
+    workspace_config:
+      body.workspace_config !== undefined
+        ? (recordValue(body.workspace_config) as ManagedAgentDefinition['workspace_config'])
+        : (current?.workspace_config ?? null),
     can_spawn: booleanValue(body.can_spawn, booleanValue(current?.can_spawn, false)),
     max_spawn_depth: numberValue(body.max_spawn_depth, numberValue(current?.max_spawn_depth, 3)),
     agent_to_agent_enabled: booleanValue(
@@ -1389,6 +1397,20 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     const { [pluginName]: _removed, ...remainingConfigs } = pluginConfigs;
     pluginConfigs = remainingConfigs;
     return jsonResponse(pluginActionResponse('uninstall', 'Plugin uninstalled.', pluginName));
+  }
+  if (
+    method === 'GET' &&
+    /^\/api\/v1\/acp\/tenants\/[^/]+\/external-agents$/.test(path)
+  ) {
+    return jsonResponse([
+      {
+        id: 'acp-review-agent',
+        agentKey: 'review-agent',
+        name: 'Review Agent',
+        enabled: true,
+        available: true,
+      },
+    ]);
   }
   if (method === 'GET' && path === '/api/v1/agent/definitions') {
     return jsonResponse({ definitions: agents });

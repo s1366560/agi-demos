@@ -1280,6 +1280,26 @@ export type ManagedAgentDelegateConfig = {
   budget_limit_tokens?: number | null;
 };
 
+export type ManagedAgentExecutionBackend = {
+  type: 'memstack' | 'acp_external';
+  acp_agent_key?: string;
+};
+
+export type ManagedAgentWorkspaceConfig = {
+  type?: 'shared' | 'isolated' | 'inherited';
+  base_dir?: string;
+  base_path?: string;
+  sandbox_scope?: 'session' | 'agent' | 'shared';
+};
+
+export type ManagedExternalAcpAgent = {
+  id: string;
+  agentKey: string;
+  name: string;
+  enabled: boolean;
+  available: boolean;
+};
+
 export type ManagedAgentDefinition = {
   id: string;
   name: string;
@@ -1295,6 +1315,8 @@ export type ManagedAgentDefinition = {
   tool_policy?: ManagedAgentToolPolicy | null;
   session_policy?: ManagedAgentSessionPolicy | null;
   delegate_config?: ManagedAgentDelegateConfig | null;
+  execution_backend?: ManagedAgentExecutionBackend;
+  workspace_config?: ManagedAgentWorkspaceConfig | null;
   updated_at?: string | null;
   [key: string]: unknown;
 };
@@ -1325,6 +1347,8 @@ export type ManagedAgentDefinitionMutation = {
   tool_policy?: ManagedAgentToolPolicy | null;
   session_policy?: ManagedAgentSessionPolicy | null;
   delegate_config?: ManagedAgentDelegateConfig | null;
+  execution_backend: ManagedAgentExecutionBackend;
+  workspace_config: ManagedAgentWorkspaceConfig;
 };
 
 export type ManagedSubAgent = {

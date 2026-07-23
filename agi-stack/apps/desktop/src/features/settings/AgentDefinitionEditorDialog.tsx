@@ -11,6 +11,7 @@ import { useI18n } from '../../i18n';
 import type {
   ManagedAgentDefinition,
   ManagedAgentDefinitionMutation,
+  ManagedExternalAcpAgent,
   ProjectSummary,
 } from '../../types';
 import {
@@ -30,6 +31,9 @@ export function AgentDefinitionEditorDialog({
   definition,
   projects,
   initialProjectId,
+  externalAcpAgents,
+  externalAcpAgentsLoading,
+  externalAcpAgentsError,
   busy,
   error,
   onClose,
@@ -39,6 +43,9 @@ export function AgentDefinitionEditorDialog({
   definition: ManagedAgentDefinition | null;
   projects: ProjectSummary[];
   initialProjectId: string | null;
+  externalAcpAgents: ManagedExternalAcpAgent[];
+  externalAcpAgentsLoading: boolean;
+  externalAcpAgentsError: string | null;
   busy: boolean;
   error: string | null;
   onClose: () => void;
@@ -229,10 +236,81 @@ export function AgentDefinitionEditorDialog({
 
           {activeTab === 'runtime' ? (
             <div className="agent-definition-form-grid">
+              <h3 className="agent-definition-form-section">
+                {t('settings.agentEditor.execution')}
+              </h3>
+              <EditorField label={t('settings.agentEditor.executionBackend')}>
+                <select
+                  value={draft.executionBackendType}
+                  disabled={busy}
+                  onChange={(event) =>
+                    update(
+                      'executionBackendType',
+                      event.target.value === 'acp_external' ? 'acp_external' : 'memstack',
+                    )
+                  }
+                >
+                  <option value="memstack">
+                    {t('settings.agentEditor.executionBackendMemstack')}
+                  </option>
+                  <option value="acp_external">
+                    {t('settings.agentEditor.executionBackendAcp')}
+                  </option>
+                </select>
+              </EditorField>
+              {draft.executionBackendType === 'acp_external' ? (
+                <EditorField
+                  label={t('settings.agentEditor.externalAcpAgent')}
+                  error={
+                    fieldError(errors, 'executionBackendAcpAgentKey', t) ??
+                    externalAcpAgentsError ??
+                    undefined
+                  }
+                >
+                  <select
+                    value={draft.executionBackendAcpAgentKey}
+                    disabled={busy || externalAcpAgentsLoading}
+                    onChange={(event) =>
+                      update('executionBackendAcpAgentKey', event.target.value)
+                    }
+                  >
+                    <option value="">
+                      {t(
+                        externalAcpAgentsLoading
+                          ? 'settings.agentEditor.loadingExternalAcpAgents'
+                          : 'settings.agentEditor.selectExternalAcpAgent',
+                      )}
+                    </option>
+                    {draft.executionBackendAcpAgentKey &&
+                    !externalAcpAgents.some(
+                      (agent) => agent.agentKey === draft.executionBackendAcpAgentKey,
+                    ) ? (
+                      <option value={draft.executionBackendAcpAgentKey}>
+                        {draft.executionBackendAcpAgentKey}
+                      </option>
+                    ) : null}
+                    {externalAcpAgents
+                      .filter(
+                        (agent) =>
+                          agent.enabled ||
+                          agent.agentKey === draft.executionBackendAcpAgentKey,
+                      )
+                      .map((agent) => (
+                        <option
+                          key={agent.id}
+                          value={agent.agentKey}
+                          disabled={!agent.enabled || !agent.available}
+                        >
+                          {agent.name} ({agent.agentKey})
+                        </option>
+                      ))}
+                  </select>
+                </EditorField>
+              ) : null}
               <EditorField label={t('settings.agentEditor.model')}>
                 <input
                   value={draft.model}
-                  disabled={busy}
+                  disabled={busy || draft.executionBackendType === 'acp_external'}
                   placeholder="inherit"
                   onChange={(event) => update('model', event.target.value)}
                 />
@@ -272,6 +350,35 @@ export function AgentDefinitionEditorDialog({
                 disabled={busy}
                 onChange={(value) => update('fallbackModels', value)}
               />
+              <h3 className="agent-definition-form-section">
+                {t('settings.agentEditor.workspaceConfig')}
+              </h3>
+              <EditorField label={t('settings.agentEditor.workspaceType')}>
+                <select
+                  value={draft.workspaceType}
+                  disabled={busy}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    update(
+                      'workspaceType',
+                      value === 'isolated' || value === 'inherited' ? value : 'shared',
+                    );
+                  }}
+                >
+                  <option value="shared">{t('settings.agentEditor.workspaceShared')}</option>
+                  <option value="isolated">{t('settings.agentEditor.workspaceIsolated')}</option>
+                  <option value="inherited">
+                    {t('settings.agentEditor.workspaceInherited')}
+                  </option>
+                </select>
+              </EditorField>
+              <EditorField label={t('settings.agentEditor.workspaceBaseDir')}>
+                <input
+                  value={draft.workspaceBaseDir}
+                  disabled={busy}
+                  onChange={(event) => update('workspaceBaseDir', event.target.value)}
+                />
+              </EditorField>
             </div>
           ) : null}
 

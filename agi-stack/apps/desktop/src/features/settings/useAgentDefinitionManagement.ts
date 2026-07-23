@@ -5,6 +5,7 @@ import type {
   DesktopRuntimeConfig,
   ManagedAgentDefinition,
   ManagedAgentDefinitionMutation,
+  ManagedExternalAcpAgent,
 } from '../../types';
 
 export function useAgentDefinitionManagement({
@@ -28,6 +29,9 @@ export function useAgentDefinitionManagement({
   const [dialogKey, setDialogKey] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [externalAcpAgents, setExternalAcpAgents] = useState<ManagedExternalAcpAgent[]>([]);
+  const [externalAcpAgentsLoading, setExternalAcpAgentsLoading] = useState(false);
+  const [externalAcpAgentsError, setExternalAcpAgentsError] = useState<string | null>(null);
   const contextKeyRef = useRef(contextKey);
   contextKeyRef.current = contextKey;
 
@@ -35,7 +39,35 @@ export function useAgentDefinitionManagement({
     setDefinition(undefined);
     setBusy(false);
     setError(null);
+    setExternalAcpAgents([]);
+    setExternalAcpAgentsLoading(false);
+    setExternalAcpAgentsError(null);
   }, [active, contextKey]);
+
+  useEffect(() => {
+    if (definition === undefined) return;
+    const requestContextKey = contextKey;
+    const controller = new AbortController();
+    setExternalAcpAgentsLoading(true);
+    setExternalAcpAgentsError(null);
+    void new DesktopApiClient(config)
+      .listManagedExternalAcpAgents(controller.signal)
+      .then((agents) => {
+        if (contextKeyRef.current === requestContextKey) setExternalAcpAgents(agents);
+      })
+      .catch((caught) => {
+        if (!controller.signal.aborted && contextKeyRef.current === requestContextKey) {
+          setExternalAcpAgents([]);
+          setExternalAcpAgentsError(errorMessage(caught));
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted && contextKeyRef.current === requestContextKey) {
+          setExternalAcpAgentsLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, [config, contextKey, definition]);
 
   const open = useCallback(
     (next: ManagedAgentDefinition | null) => {
@@ -97,6 +129,9 @@ export function useAgentDefinitionManagement({
     dialog: definition === undefined ? null : { key: dialogKey, definition },
     busy,
     error,
+    externalAcpAgents,
+    externalAcpAgentsLoading,
+    externalAcpAgentsError,
     open,
     close,
     save,

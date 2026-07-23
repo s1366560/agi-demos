@@ -49,6 +49,9 @@ export function SettingsManagementDialogs({
           definition={agents.dialog.definition}
           projects={projects}
           initialProjectId={config.projectId || null}
+          externalAcpAgents={agents.externalAcpAgents}
+          externalAcpAgentsLoading={agents.externalAcpAgentsLoading}
+          externalAcpAgentsError={agents.externalAcpAgentsError}
           busy={agents.busy}
           error={agents.error}
           onClose={agents.close}

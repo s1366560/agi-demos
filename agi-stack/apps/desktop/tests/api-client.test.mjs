@@ -3055,6 +3055,49 @@ test('managed agent APIs preserve project scope and the enabled mutation body', 
   }
 });
 
+test('managed external ACP Agent catalog preserves tenant scope', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    return new Response(
+      JSON.stringify([
+        {
+          id: 'acp-agent-1',
+          agentKey: 'review-agent',
+          name: 'Review Agent',
+          enabled: true,
+          available: true,
+        },
+      ]),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'https://api.memstack.test',
+      apiKey: 'cloud-session-token',
+      tenantId: 'tenant 1',
+      mode: 'cloud',
+    });
+
+    assert.equal((await client.listManagedExternalAcpAgents())[0].agentKey, 'review-agent');
+    assert.deepEqual(
+      calls.map((call) => [String(call.input), call.init?.method]),
+      [
+        [
+          'https://api.memstack.test/api/v1/acp/tenants/tenant%201/external-agents',
+          'GET',
+        ],
+      ],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('managed Agent definition CRUD preserves tenant scope and request bodies', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
