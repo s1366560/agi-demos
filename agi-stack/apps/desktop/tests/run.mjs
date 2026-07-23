@@ -151,6 +151,7 @@ const testFiles = [
   'subagent-library-management.test.mjs',
   'plugin-management-model.test.mjs',
   'plugin-runtime-activity.test.mjs',
+  'prompt-template-model.test.mjs',
   'channel-connection-management.test.mjs',
   'sidecar-command-surface.test.mjs',
   'managed-resource-model.test.mjs',

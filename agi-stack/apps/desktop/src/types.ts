@@ -257,6 +257,28 @@ export type ComposerContextItem = {
   metadata?: Record<string, string | number | boolean | null>;
 };
 
+export type PromptTemplateVariable = {
+  name: string;
+  description: string;
+  default_value: string;
+  required: boolean;
+};
+
+export type PromptTemplateRecord = {
+  id: string;
+  tenant_id: string;
+  project_id: string | null;
+  created_by: string;
+  title: string;
+  content: string;
+  category: string;
+  variables: PromptTemplateVariable[];
+  is_system: boolean;
+  usage_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AgentInputFileMetadata = {
   filename: string;
   sandbox_path: string;

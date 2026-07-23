@@ -36,6 +36,7 @@
     "src/features/chat/chatMessageActionModel.ts",
     "src/features/chat/composerFileDropModel.ts",
     "src/features/chat/composerCatalogModel.ts",
+    "src/features/chat/promptTemplateModel.ts",
     "src/features/chat/chatTimelineModel.ts",
     "src/features/chat/artifactCanvasEventModel.ts",
     "src/features/chat/mcpAppCanvasEventModel.ts",

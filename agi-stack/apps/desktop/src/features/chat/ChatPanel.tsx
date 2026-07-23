@@ -61,6 +61,7 @@ import type { ConversationComparisonClient } from './ConversationComparison';
 import { ConversationSearch } from './ConversationSearch';
 import { ConversationExportMenu } from './ConversationExportMenu';
 import { PinnedMessages } from './PinnedMessages';
+import { PromptTemplateLibrary } from './PromptTemplateLibrary';
 import { AgentTimeline, TIMELINE_RENDER_STEP } from './ChatTimeline';
 import {
   isImportantTimelineItem,
@@ -1381,6 +1382,12 @@ function ChatComposer({
   sendingRef.current = sending;
   responseStreamingRef.current = responseStreaming;
   const disabled = Boolean(disabledReason);
+  const promptTemplateConversation =
+    conversations.find((conversation) => conversation.id === activeConversationId) ?? null;
+  const insertPromptTemplate = useCallback((prompt: string) => {
+    setInput(prompt);
+    window.requestAnimationFrame(() => composerInputRef.current?.focus());
+  }, []);
   const addContextItem = useCallback((item: ComposerContextItem) => {
     setContextItems((current) => appendComposerContextItem(current, item));
   }, []);
@@ -1794,6 +1801,14 @@ function ChatComposer({
               onUploadFiles={uploadFiles}
               uploadingFileCount={uploadingFileCount}
             />
+            <PromptTemplateLibrary
+              api={api}
+              tenantId={promptTemplateConversation?.tenant_id ?? ''}
+              projectId={promptTemplateConversation?.project_id ?? ''}
+              conversationId={promptTemplateConversation?.id ?? ''}
+              disabled={disabled}
+              onInsert={insertPromptTemplate}
+            />
             <button
               type="button"
               onClick={(event) => onOpenCommands(event.currentTarget)}
@@ -1813,6 +1828,16 @@ function ChatComposer({
               />
             ) : null}
           </div>
+        ) : null}
+        {composerVariant !== 'session' ? (
+          <PromptTemplateLibrary
+            api={api}
+            tenantId={promptTemplateConversation?.tenant_id ?? ''}
+            projectId={promptTemplateConversation?.project_id ?? ''}
+            conversationId={promptTemplateConversation?.id ?? ''}
+            disabled={disabled}
+            onInsert={insertPromptTemplate}
+          />
         ) : null}
         {composerPresentation.showCommands ? (
           <button

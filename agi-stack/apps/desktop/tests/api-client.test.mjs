@@ -3114,6 +3114,90 @@ test('updateAgentConversationConfig persists and clears a scoped model override'
   }
 });
 
+test('prompt template catalog and deletion preserve the authenticated tenant contract', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  const template = {
+    id: 'template-1',
+    tenant_id: 'tenant / one',
+    project_id: null,
+    created_by: 'user-1',
+    title: 'Release brief',
+    content: 'Summarize {{release}}.',
+    category: 'writing',
+    variables: [
+      {
+        name: 'release',
+        description: 'Release identifier',
+        default_value: '',
+        required: true,
+      },
+    ],
+    is_system: false,
+    usage_count: 2,
+    created_at: '2026-07-24T00:00:00Z',
+    updated_at: '2026-07-24T00:00:00Z',
+  };
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input: String(input), init });
+    if (init?.method === 'DELETE') return new Response(null, { status: 204 });
+    return new Response(JSON.stringify([template]), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'cloud',
+      apiBaseUrl: 'https://api.memstack.test',
+      apiKey: 'cloud-session',
+      tenantId: 'tenant / one',
+    });
+
+    assert.deepEqual(
+      await client.listPromptTemplates('tenant / one', controller.signal),
+      [template],
+    );
+    await client.deletePromptTemplate('template / one', controller.signal);
+
+    assert.equal(
+      calls[0].input,
+      'https://api.memstack.test/api/v1/agent/templates?tenant_id=tenant+%2F+one&limit=100&offset=0',
+    );
+    assert.equal(calls[0].init.signal, controller.signal);
+    assert.equal(calls[0].init.headers.get('Authorization'), 'Bearer cloud-session');
+    assert.equal(
+      calls[1].input,
+      'https://api.memstack.test/api/v1/agent/templates/template%20%2F%20one',
+    );
+    assert.equal(calls[1].init.method, 'DELETE');
+    assert.equal(calls[1].init.signal, controller.signal);
+
+    for (const invalidTemplate of [
+      { ...template, tenant_id: 'tenant-two' },
+      { ...template, variables: [{ ...template.variables[0], required: 'yes' }] },
+    ]) {
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify([invalidTemplate]), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      await assert.rejects(
+        () => client.listPromptTemplates('tenant / one'),
+        (error) =>
+          error instanceof DesktopApiError &&
+          error.status === 502 &&
+          error.message === 'Invalid prompt template catalog response',
+      );
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('conversation lifecycle mutations use the scoped Web-compatible routes', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;

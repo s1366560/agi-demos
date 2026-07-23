@@ -6,6 +6,7 @@ import type {
   ManagedSkill,
   ManagedSubAgent,
   PaginatedConversationsResponse,
+  PromptTemplateRecord,
   WorkspaceAgentBinding,
 } from '../../types';
 
@@ -15,6 +16,11 @@ export type ComposerCatalogClient = {
   listManagedSkills: (signal?: AbortSignal) => Promise<ManagedSkill[]>;
   listManagedPlugins: (signal?: AbortSignal) => Promise<ManagedPlugin[]>;
   listManagedSubAgents?: (signal?: AbortSignal) => Promise<ManagedSubAgent[]>;
+  listPromptTemplates?: (
+    tenantId: string,
+    signal?: AbortSignal,
+  ) => Promise<PromptTemplateRecord[]>;
+  deletePromptTemplate?: (templateId: string, signal?: AbortSignal) => Promise<void>;
   listConversations?: (
     projectId?: string,
     workspaceIdOrOptions?:
@@ -70,6 +76,8 @@ export function unboundComposerCatalogClient(
   api: ComposerCatalogClient,
 ): ComposerCatalogClient {
   const listManagedSubAgents = api.listManagedSubAgents?.bind(api);
+  const listPromptTemplates = api.listPromptTemplates?.bind(api);
+  const deletePromptTemplate = api.deletePromptTemplate?.bind(api);
   const listConversations = api.listConversations?.bind(api);
   const getConversationMessages = api.getConversationMessages?.bind(api);
   const uploadSandboxFile = api.uploadSandboxFile?.bind(api);
@@ -79,6 +87,8 @@ export function unboundComposerCatalogClient(
     listManagedSkills: (signal) => api.listManagedSkills(signal),
     listManagedPlugins: (signal) => api.listManagedPlugins(signal),
     ...(listManagedSubAgents ? { listManagedSubAgents } : {}),
+    ...(listPromptTemplates ? { listPromptTemplates } : {}),
+    ...(deletePromptTemplate ? { deletePromptTemplate } : {}),
     ...(listConversations ? { listConversations } : {}),
     ...(getConversationMessages ? { getConversationMessages } : {}),
     ...(uploadSandboxFile ? { uploadSandboxFile } : {}),

@@ -76,6 +76,8 @@ import type {
   PluginConfigSchema,
   PaginatedConversationsResponse,
   PlanSnapshot,
+  PromptTemplateRecord,
+  PromptTemplateVariable,
   ProjectMyWorkResponse,
   ProjectSummary,
   ProjectSandbox,
@@ -2050,6 +2052,30 @@ export class DesktopApiClient {
     return readArray<ManagedAgentDefinition>(payload, ['definitions', 'items', 'data']);
   }
 
+  async listPromptTemplates(
+    tenantId: string,
+    signal?: AbortSignal,
+  ): Promise<PromptTemplateRecord[]> {
+    const requiredTenantId = requireValue(tenantId, 'tenant id');
+    const params = new URLSearchParams({
+      tenant_id: requiredTenantId,
+      limit: '100',
+      offset: '0',
+    });
+    const payload = await this.request<unknown>(
+      `/api/v1/agent/templates?${params.toString()}`,
+      { signal },
+    );
+    return requirePromptTemplateCatalog(payload, requiredTenantId);
+  }
+
+  async deletePromptTemplate(templateId: string, signal?: AbortSignal): Promise<void> {
+    await this.request<unknown>(
+      `/api/v1/agent/templates/${encodeURIComponent(requireValue(templateId, 'template id'))}`,
+      { method: 'DELETE', signal },
+    );
+  }
+
   async listManagedExternalAcpAgents(signal?: AbortSignal): Promise<ManagedExternalAcpAgent[]> {
     const tenantId = requireValue(this.config.tenantId, 'tenant id');
     const payload = await this.request<unknown>(
@@ -2500,6 +2526,89 @@ function readArray<T>(payload: unknown, keys: string[]): T[] {
     if (Array.isArray(value)) return value as T[];
   }
   return [];
+}
+
+function requirePromptTemplateCatalog(
+  payload: unknown,
+  tenantId: string,
+): PromptTemplateRecord[] {
+  if (!Array.isArray(payload) || payload.length > 100) {
+    throw invalidPromptTemplateCatalogResponse(payload);
+  }
+  const seenIds = new Set<string>();
+  const templates = payload.map((value) => normalizePromptTemplate(value, tenantId));
+  if (
+    templates.some((template) => template === null) ||
+    templates.some((template) => {
+      if (template === null || seenIds.has(template.id)) return true;
+      seenIds.add(template.id);
+      return false;
+    })
+  ) {
+    throw invalidPromptTemplateCatalogResponse(payload);
+  }
+  return templates as PromptTemplateRecord[];
+}
+
+function normalizePromptTemplate(
+  value: unknown,
+  tenantId: string,
+): PromptTemplateRecord | null {
+  if (
+    !isRecord(value) ||
+    !isNonEmptyString(value.id) ||
+    value.tenant_id !== tenantId ||
+    !(value.project_id === null || typeof value.project_id === 'string') ||
+    !isNonEmptyString(value.created_by) ||
+    !isNonEmptyString(value.title) ||
+    typeof value.content !== 'string' ||
+    !isNonEmptyString(value.category) ||
+    !Array.isArray(value.variables) ||
+    typeof value.is_system !== 'boolean' ||
+    !isUnsignedSafeInteger(value.usage_count) ||
+    !isNonEmptyString(value.created_at) ||
+    !isNonEmptyString(value.updated_at)
+  ) {
+    return null;
+  }
+  const variables = value.variables.map(normalizePromptTemplateVariable);
+  if (variables.some((variable) => variable === null)) return null;
+  return {
+    id: value.id,
+    tenant_id: value.tenant_id,
+    project_id: value.project_id,
+    created_by: value.created_by,
+    title: value.title,
+    content: value.content,
+    category: value.category,
+    variables: variables as PromptTemplateVariable[],
+    is_system: value.is_system,
+    usage_count: value.usage_count,
+    created_at: value.created_at,
+    updated_at: value.updated_at,
+  };
+}
+
+function normalizePromptTemplateVariable(value: unknown): PromptTemplateVariable | null {
+  if (
+    !isRecord(value) ||
+    !isNonEmptyString(value.name) ||
+    typeof value.description !== 'string' ||
+    typeof value.default_value !== 'string' ||
+    typeof value.required !== 'boolean'
+  ) {
+    return null;
+  }
+  return {
+    name: value.name,
+    description: value.description,
+    default_value: value.default_value,
+    required: value.required,
+  };
+}
+
+function invalidPromptTemplateCatalogResponse(payload: unknown): DesktopApiError {
+  return new DesktopApiError('Invalid prompt template catalog response', 502, payload);
 }
 
 async function loadPagedIdentityCatalog<T extends { id: string }>(
