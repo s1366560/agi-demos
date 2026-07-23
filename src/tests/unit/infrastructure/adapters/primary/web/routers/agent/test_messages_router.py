@@ -1523,6 +1523,77 @@ def test_build_timeline_replays_agent_guidance_events_for_desktop_history() -> N
     assert [item["payload"] for item in timeline] == [data for _, data in guidance_events]
 
 
+def test_build_timeline_replays_multi_agent_action_events_for_desktop_history() -> None:
+    action_events = [
+        (
+            "conversation_participant_joined",
+            {
+                "conversation_id": "conversation-release",
+                "agent_id": "agent-reviewer",
+                "actor_id": "agent-coordinator",
+                "role": "participant",
+            },
+        ),
+        (
+            "conversation_participant_left",
+            {
+                "conversation_id": "conversation-release",
+                "agent_id": "agent-reviewer",
+                "actor_id": "agent-coordinator",
+                "reason": "review completed",
+            },
+        ),
+        (
+            "agent_task_assigned",
+            {
+                "conversation_id": "conversation-release",
+                "actor_agent_id": "agent-coordinator",
+                "target_agent_id": "agent-reviewer",
+                "task_id": "task-release-review",
+                "task_title": "Review the release evidence",
+                "rationale": "Independent verification is required.",
+            },
+        ),
+        (
+            "agent_task_refused",
+            {
+                "conversation_id": "conversation-release",
+                "actor_agent_id": "agent-reviewer",
+                "task_id": "task-release-review",
+                "reason": "Missing deployment credentials",
+                "suggested_reassignment": "agent-operator",
+            },
+        ),
+        (
+            "agent_progress_declared",
+            {
+                "conversation_id": "conversation-release",
+                "actor_agent_id": "agent-reviewer",
+                "task_id": "task-release-review",
+                "status": "needs_review",
+                "summary": "Ready for coordinator review",
+                "percent_complete": 75,
+            },
+        ),
+    ]
+    assert {event_type for event_type, _ in action_events} <= _DISPLAYABLE_EVENTS
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(event_type=event_type, event_data=data, event_time_us=index * 1_000)
+            for index, (event_type, data) in enumerate(action_events, start=1)
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert [item["type"] for item in timeline] == [event_type for event_type, _ in action_events]
+    assert [item["payload"] for item in timeline] == [data for _, data in action_events]
+
+
 def test_build_timeline_replays_complete_skill_execution_for_desktop_history() -> None:
     skill_events = [
         (

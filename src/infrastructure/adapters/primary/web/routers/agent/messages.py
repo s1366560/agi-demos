@@ -1034,6 +1034,11 @@ def _build_agent_guidance_event(data: dict[str, Any], **_kwargs: Any) -> dict[st
     return {"payload": dict(data)}
 
 
+def _build_multi_agent_action_event(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    """Preserve participant and structured Agent action evidence for Desktop history replay."""
+    return {"payload": dict(data)}
+
+
 def _build_agent_spawned(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {
         "agentId": data.get("agent_id", ""),
@@ -1110,6 +1115,11 @@ _EVENT_BUILDERS: dict[str, Any] = {
     "doom_loop_detected": _build_agent_guidance_event,
     "doom_loop_intervened": _build_agent_guidance_event,
     "tool_policy_denied": _build_agent_guidance_event,
+    "conversation_participant_joined": _build_multi_agent_action_event,
+    "conversation_participant_left": _build_multi_agent_action_event,
+    "agent_task_assigned": _build_multi_agent_action_event,
+    "agent_task_refused": _build_multi_agent_action_event,
+    "agent_progress_declared": _build_multi_agent_action_event,
     "clarification_asked": _build_clarification_asked,
     "clarification_answered": _build_clarification_answered,
     "decision_asked": _build_decision_asked,
