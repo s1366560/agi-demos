@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityLogIcon,
   ArrowRightIcon,
@@ -23,6 +23,7 @@ import { ComposerPlusMenu } from '../chat/ComposerPlusMenu';
 import { appendComposerContextItem } from '../chat/chatComposerModel';
 import type { ComposerCatalogClient } from '../chat/composerCatalogModel';
 import { PickerMenu } from '../chat/PickerMenu';
+import { useComposerFileUpload } from '../chat/useComposerFileUpload';
 import '../chat/ComposerMenus.css';
 import './NewThreadComposer.css';
 
@@ -104,7 +105,15 @@ export function NewThreadComposer({
     value: WorkspacePermissionMode;
   }>({ workspaceId: '', value: 'ask' });
   const [contextItems, setContextItems] = useState<ComposerContextItem[]>([]);
-  const [uploadingAttachments, setUploadingAttachments] = useState(false);
+  const addContextItem = useCallback((item: ComposerContextItem) => {
+    setContextItems((current) => appendComposerContextItem(current, item));
+  }, []);
+  const {
+    uploadingFileCount,
+    uploadingAttachments,
+    fileUploadErrors,
+    uploadFiles,
+  } = useComposerFileUpload({ api, onAdd: addContextItem });
 
   const defaultModelValue = workspaceId
     ? (modelOptions.find((option) => option.selected)?.value ?? modelOptions[0]?.value ?? '')
@@ -149,9 +158,6 @@ export function NewThreadComposer({
     });
   };
 
-  const addContextItem = (item: ComposerContextItem) => {
-    setContextItems((current) => appendComposerContextItem(current, item));
-  };
   const workspacePickerOptions = [
     {
       value: '',
@@ -220,7 +226,10 @@ export function NewThreadComposer({
   ];
 
   return (
-    <main className="new-thread-view" aria-busy={creating || loadingPolicy}>
+    <main
+      className="new-thread-view"
+      aria-busy={creating || loadingPolicy || uploadingAttachments}
+    >
       <div className="new-thread-content">
         <header className="new-thread-heading">
           <span className="eyebrow">{t('task.newThreadEyebrow')}</span>
@@ -266,7 +275,8 @@ export function NewThreadComposer({
               api={api}
               conversations={conversations}
               onAdd={addContextItem}
-              onUploadingChange={setUploadingAttachments}
+              onUploadFiles={uploadFiles}
+              uploadingFileCount={uploadingFileCount}
             />
             <div className="composer-pickers">
               <div className="mode-picker" role="group" aria-label={t('task.mode')}>
@@ -289,6 +299,7 @@ export function NewThreadComposer({
                 label={t('task.workspace')}
                 value={workspaceId}
                 options={workspacePickerOptions}
+                disabled={uploadingAttachments}
                 onChange={(value) => {
                   setContextItems([]);
                   onWorkspaceChange(value);
@@ -351,6 +362,13 @@ export function NewThreadComposer({
         {compatibilityMode ? <p className="new-thread-notice">{t('task.policyUpgradeRequired')}</p> : null}
         {disabledReason || error ? (
           <p className="new-thread-error" role="alert">{error ?? disabledReason}</p>
+        ) : null}
+        {fileUploadErrors.length ? (
+          <div className="new-thread-error" role="alert">
+            {fileUploadErrors.map((uploadError, index) => (
+              <span key={`${index}:${uploadError}`}>{uploadError}</span>
+            ))}
+          </div>
         ) : null}
 
         <section className="new-thread-suggestions" aria-label={t('task.suggestions')}>

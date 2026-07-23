@@ -53,15 +53,14 @@ type Category = {
   items?: CatalogItem[];
 };
 
-const MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024;
-
 type ComposerPlusMenuProps = {
   api: ComposerCatalogClient;
   conversations: readonly AgentConversation[];
   excludedConversationId?: string | null;
   compact?: boolean;
   onAdd: (item: ComposerContextItem) => void;
-  onUploadingChange?: (uploading: boolean) => void;
+  onUploadFiles: (files: File[]) => void | Promise<void>;
+  uploadingFileCount?: number;
 };
 
 export function ComposerPlusMenu({
@@ -70,15 +69,14 @@ export function ComposerPlusMenu({
   excludedConversationId,
   compact = false,
   onAdd,
-  onUploadingChange,
+  onUploadFiles,
+  uploadingFileCount = 0,
 }: ComposerPlusMenuProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<Category['id'] | null>(null);
   const [catalog, setCatalog] = useState<ComposerCatalog | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
-  const [uploadingFileCount, setUploadingFileCount] = useState(0);
-  const [fileUploadError, setFileUploadError] = useState<string | null>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -252,41 +250,11 @@ export function ComposerPlusMenu({
     close();
   }
 
-  async function handleFiles(files: FileList | null) {
+  function handleFiles(files: FileList | null) {
     const selectedFiles = Array.from(files ?? []);
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (!selectedFiles.length) return;
-    if (!api.uploadSandboxFile) {
-      setFileUploadError(t('composer.fileUploadUnavailable'));
-      return;
-    }
-    setFileUploadError(null);
-    setUploadingFileCount(selectedFiles.length);
-    onUploadingChange?.(true);
-    for (const [index, file] of selectedFiles.entries()) {
-      try {
-        if (file.size > MAX_ATTACHMENT_BYTES) {
-          throw new Error(t('composer.fileTooLarge'));
-        }
-        const metadata = await api.uploadSandboxFile(file);
-        onAdd({
-          kind: 'attachment',
-          resource_id: metadata.sandbox_path,
-          label: metadata.filename,
-          metadata: { ...metadata },
-        });
-      } catch (caught) {
-        setFileUploadError(
-          t('composer.fileUploadFailed', {
-            filename: file.name,
-            error: caught instanceof Error ? caught.message : String(caught),
-          }),
-        );
-      } finally {
-        setUploadingFileCount(selectedFiles.length - index - 1);
-      }
-    }
-    onUploadingChange?.(false);
+    void onUploadFiles(selectedFiles);
   }
 
   return (
@@ -339,11 +307,6 @@ export function ComposerPlusMenu({
                           {t('composer.uploadingFiles', { count: uploadingFileCount })}
                         </div>
                       ) : null}
-                      {fileUploadError ? (
-                        <div className="plus-menu-empty" role="alert">
-                          {fileUploadError}
-                        </div>
-                      ) : null}
                     </>
                   ) : items?.length ? (
                     items.map((item) => (
@@ -376,7 +339,7 @@ export function ComposerPlusMenu({
         hidden
         tabIndex={-1}
         aria-hidden="true"
-        onChange={(event) => void handleFiles(event.target.files)}
+        onChange={(event) => handleFiles(event.target.files)}
       />
     </div>
   );

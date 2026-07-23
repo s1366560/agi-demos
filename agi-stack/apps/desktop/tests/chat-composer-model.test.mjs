@@ -11,6 +11,11 @@ import {
   composerMentionIds,
   workspaceMessageRequiresDefaultAgentLaunch,
 } from '/tmp/agistack-desktop-test-dist/src/features/chat/chatComposerModel.js';
+import {
+  composerFileDragActive,
+  composerFileDropAction,
+  uploadComposerFilesSequentially,
+} from '/tmp/agistack-desktop-test-dist/src/features/chat/composerFileDropModel.js';
 
 const chatPanelSource = readFileSync(
   new URL('../src/features/chat/ChatPanel.tsx', import.meta.url),
@@ -28,8 +33,20 @@ const composerCatalogSource = readFileSync(
   new URL('../src/features/chat/composerCatalogModel.ts', import.meta.url),
   'utf8',
 );
+const composerFileDropSource = readFileSync(
+  new URL('../src/features/chat/useComposerFileDrop.ts', import.meta.url),
+  'utf8',
+);
+const composerFileUploadSource = readFileSync(
+  new URL('../src/features/chat/useComposerFileUpload.ts', import.meta.url),
+  'utf8',
+);
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const qaSource = readFileSync(new URL('../src/qa/SessionSteeringQa.tsx', import.meta.url), 'utf8');
+const newThreadComposerSource = readFileSync(
+  new URL('../src/features/task/NewThreadComposer.tsx', import.meta.url),
+  'utf8',
+);
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
 
 test('session composer keeps run-scoped steering and queue handoff affordances', () => {
@@ -237,6 +254,177 @@ test('uploaded attachment context becomes authoritative sandbox file metadata', 
   });
 });
 
+test('file drag activation accepts only supported enabled file payloads', () => {
+  assert.equal(
+    composerFileDragActive({
+      disabled: false,
+      supportsUpload: true,
+      types: ['Files'],
+    }),
+    true,
+  );
+  assert.equal(
+    composerFileDragActive({
+      disabled: false,
+      supportsUpload: true,
+      types: ['text/plain'],
+    }),
+    false,
+  );
+  assert.equal(
+    composerFileDragActive({
+      disabled: true,
+      supportsUpload: true,
+      types: ['Files'],
+    }),
+    false,
+  );
+  assert.equal(
+    composerFileDragActive({
+      disabled: false,
+      supportsUpload: false,
+      types: ['Files'],
+    }),
+    false,
+  );
+});
+
+test('file drop action distinguishes upload, unsupported, and ignored drops', () => {
+  assert.equal(
+    composerFileDropAction({
+      disabled: false,
+      supportsUpload: true,
+      fileCount: 2,
+    }),
+    'upload',
+  );
+  assert.equal(
+    composerFileDropAction({
+      disabled: false,
+      supportsUpload: false,
+      fileCount: 1,
+    }),
+    'unsupported',
+  );
+  assert.equal(
+    composerFileDropAction({
+      disabled: true,
+      supportsUpload: true,
+      fileCount: 1,
+    }),
+    'ignore',
+  );
+  assert.equal(
+    composerFileDropAction({
+      disabled: false,
+      supportsUpload: true,
+      fileCount: 0,
+    }),
+    'ignore',
+  );
+});
+
+test('composer uploads files sequentially and preserves partial success', async () => {
+  let activeUploads = 0;
+  let maximumActiveUploads = 0;
+  const uploadedNames = [];
+  const arrayBufferReads = [];
+  const remaining = [];
+  const files = [
+    {
+      name: 'evidence.txt',
+      type: 'text/plain',
+      size: 42,
+      arrayBuffer: async () => {
+        arrayBufferReads.push('evidence.txt');
+        return new ArrayBuffer(42);
+      },
+    },
+    {
+      name: 'too-large.bin',
+      type: 'application/octet-stream',
+      size: 100 * 1024 * 1024 + 1,
+      arrayBuffer: async () => {
+        arrayBufferReads.push('too-large.bin');
+        return new ArrayBuffer(0);
+      },
+    },
+    {
+      name: 'failed.txt',
+      type: 'text/plain',
+      size: 18,
+      arrayBuffer: async () => {
+        arrayBufferReads.push('failed.txt');
+        return new ArrayBuffer(18);
+      },
+    },
+  ];
+
+  const result = await uploadComposerFilesSequentially(
+    files,
+    async (file) => {
+      activeUploads += 1;
+      maximumActiveUploads = Math.max(maximumActiveUploads, activeUploads);
+      uploadedNames.push(file.name);
+      await file.arrayBuffer();
+      activeUploads -= 1;
+      if (file.name === 'failed.txt') throw new Error('sandbox unavailable');
+      return {
+        filename: file.name,
+        sandbox_path: `/workspace/input/${file.name}`,
+        mime_type: file.type,
+        size_bytes: file.size,
+      };
+    },
+    (count) => remaining.push(count),
+  );
+
+  assert.equal(maximumActiveUploads, 1);
+  assert.deepEqual(uploadedNames, ['evidence.txt', 'failed.txt']);
+  assert.deepEqual(arrayBufferReads, ['evidence.txt', 'failed.txt']);
+  assert.deepEqual(remaining, [2, 1, 0]);
+  assert.deepEqual(result.uploaded, [
+    {
+      file: files[0],
+      metadata: {
+        filename: 'evidence.txt',
+        sandbox_path: '/workspace/input/evidence.txt',
+        mime_type: 'text/plain',
+        size_bytes: 42,
+      },
+    },
+  ]);
+  assert.deepEqual(result.failures, [
+    { filename: 'too-large.bin', reason: 'too_large' },
+    {
+      filename: 'failed.txt',
+      reason: 'upload_failed',
+      error: 'sandbox unavailable',
+    },
+  ]);
+});
+
+test('Desktop composer wires Web-compatible file drag and drop to sandbox upload authority', () => {
+  assert.match(composerFileDropSource, /composerFileDragActive/);
+  assert.match(composerFileDropSource, /composerFileDropAction/);
+  assert.match(composerFileDropSource, /dataTransfer\.types/);
+  assert.match(composerFileDropSource, /dataTransfer\.files/);
+  assert.doesNotMatch(composerFileDropSource, /\.path\b|webkitGetAsEntry|text\/html|text\/uri-list/);
+  assert.match(composerFileUploadSource, /uploadComposerFilesSequentially/);
+  assert.match(composerFileUploadSource, /api\.uploadSandboxFile/);
+  assert.match(chatPanelSource, /onDragEnter=\{handleFileDragEnter\}/);
+  assert.match(chatPanelSource, /onDrop=\{handleFileDrop\}/);
+  assert.match(chatPanelSource, /className="composer-file-drop-overlay"/);
+  assert.match(chatPanelSource, /aria-busy=\{uploadingAttachments\}/);
+  assert.match(chatPanelSource, /useComposerFileUpload/);
+  assert.match(newThreadComposerSource, /useComposerFileUpload/);
+  assert.match(newThreadComposerSource, /disabled=\{uploadingAttachments\}/);
+  assert.match(composerPlusMenuSource, /onUploadFiles/);
+  assert.doesNotMatch(composerPlusMenuSource, /MAX_ATTACHMENT_BYTES|api\.uploadSandboxFile/);
+  assert.equal(i18nSource.split("'composer.dropFilesToUpload'").length - 1, 2);
+  assert.equal(i18nSource.split("'composer.fileDropUnsupported'").length - 1, 2);
+});
+
 test('single-slot composer resources replace the prior selection without affecting mentions', () => {
   const mention = {
     kind: 'agent',
@@ -279,10 +467,10 @@ test('composer catalog exposes execution metadata for Agents, SubAgents, skills,
     appSource,
     /composerAgentExecutionContext\([\s\S]*?buildPlanningPrompt\(definition\)[\s\S]*?input\.contextItems/,
   );
-  assert.match(composerPlusMenuSource, /uploadSandboxFile/);
-  assert.match(composerPlusMenuSource, /sandbox_path/);
-  assert.match(composerPlusMenuSource, /onUploadingChange\?\.\(true\)/);
+  assert.match(composerFileUploadSource, /api\.uploadSandboxFile/);
+  assert.match(composerFileUploadSource, /metadata\.sandbox_path/);
+  assert.match(chatPanelSource, /uploadingFileCount/);
   assert.match(chatPanelSource, /composerHasSendableAttachment\(contextItems\)/);
   assert.match(chatPanelSource, /!uploadingAttachments/);
-  assert.match(chatPanelSource, /onUploadingChange=\{setUploadingAttachments\}/);
+  assert.match(composerPlusMenuSource, /onUploadFiles/);
 });

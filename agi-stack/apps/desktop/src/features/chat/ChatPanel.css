@@ -1793,6 +1793,7 @@
 }
 
 .session-chat-narrative .session-composer-editor {
+  position: relative;
   min-width: 0;
   overflow: visible;
   border: 1px solid #334151;
@@ -1816,6 +1817,48 @@
 .session-chat-narrative .session-composer-editor:focus-within {
   border-color: #2c7085;
   box-shadow: 0 0 0 1px rgba(44, 112, 133, 0.18);
+}
+
+.session-chat-narrative .session-composer-editor.is-file-dragging {
+  border-color: var(--desktop-cyan);
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.14);
+}
+
+.session-chat-narrative .composer-file-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: inherit;
+  background: rgba(8, 26, 35, 0.92);
+  color: var(--desktop-cyan);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.session-chat-narrative .composer-file-drop-overlay svg {
+  width: 20px;
+  height: 20px;
+}
+
+.session-chat-narrative .composer-file-upload-status,
+.session-chat-narrative .composer-file-upload-errors {
+  display: grid;
+  gap: 3px;
+  padding: 7px 9px 0;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.session-chat-narrative .composer-file-upload-status {
+  color: var(--desktop-muted);
+}
+
+.session-chat-narrative .composer-file-upload-errors {
+  color: #d6ad70;
 }
 
 .session-chat-narrative .composer-reference-chips {

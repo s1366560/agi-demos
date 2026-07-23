@@ -12,6 +12,10 @@ const chatPanelSource = readFileSync(
   new URL('../src/features/chat/ChatPanel.tsx', import.meta.url),
   'utf8',
 );
+const fileUploadSource = readFileSync(
+  new URL('../src/features/chat/useComposerFileUpload.ts', import.meta.url),
+  'utf8',
+);
 const apiSource = readFileSync(new URL('../src/api/client.ts', import.meta.url), 'utf8');
 const typesSource = readFileSync(new URL('../src/types.ts', import.meta.url), 'utf8');
 
@@ -19,7 +23,8 @@ test('both composers use the shared six-category context menu and removable chip
   assert.equal(existsSync(plusMenuUrl), true);
   if (!existsSync(plusMenuUrl)) return;
   const plusMenuSource = readFileSync(plusMenuUrl, 'utf8');
-  assert.match(plusMenuSource, /kind: 'attachment'/);
+  assert.match(plusMenuSource, /id: 'attachments'/);
+  assert.match(fileUploadSource, /kind: 'attachment'/);
   for (const category of ['agent', 'skill', 'plugin', 'command', 'thread']) {
     assert.match(plusMenuSource, new RegExp(`resourceItem\\(\\s*'${category}'`));
   }

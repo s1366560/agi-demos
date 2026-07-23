@@ -10,6 +10,7 @@ import {
   MixerHorizontalIcon,
   ReloadIcon,
   RocketIcon,
+  UploadIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
@@ -69,6 +70,8 @@ import type {
   VisibleMessageKind,
 } from './chatMessageActionModel';
 import { latestAgentSuggestions } from './chatTimelineModel';
+import { useComposerFileDrop } from './useComposerFileDrop';
+import { useComposerFileUpload } from './useComposerFileUpload';
 import type {
   AgentTaskSignal,
   AgentTaskSignalStatus,
@@ -1070,9 +1073,19 @@ function ChatComposer({
   const { t } = useI18n();
   const [input, setInput] = useState(initialInput);
   const [contextItems, setContextItems] = useState<ComposerContextItem[]>([]);
-  const [uploadingAttachments, setUploadingAttachments] = useState(false);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const disabled = Boolean(disabledReason);
+  const addContextItem = useCallback((item: ComposerContextItem) => {
+    setContextItems((current) => appendComposerContextItem(current, item));
+  }, []);
+  const {
+    supportsFileUpload,
+    uploadingFileCount,
+    uploadingAttachments,
+    fileUploadErrors,
+    uploadFiles,
+    rejectFileDrop,
+  } = useComposerFileUpload({ api, onAdd: addContextItem });
   const canSend =
     !disabled &&
     !sending &&
@@ -1100,13 +1113,23 @@ function ChatComposer({
       setContextItems([]);
     });
   }, [canSend, contextItems, input, onSend, t]);
-  const addContextItem = useCallback((item: ComposerContextItem) => {
-    setContextItems((current) => appendComposerContextItem(current, item));
-  }, []);
+  const {
+    isFileDragging,
+    handleFileDragEnter,
+    handleFileDragOver,
+    handleFileDragLeave,
+    handleFileDrop,
+  } = useComposerFileDrop({
+    disabled: disabled || uploadingAttachments,
+    supportsUpload: supportsFileUpload,
+    onUploadFiles: uploadFiles,
+    onUnsupported: rejectFileDrop,
+  });
 
   return (
     <form
       className="composer chat-composer"
+      aria-busy={uploadingAttachments}
       onSubmit={(event) => {
         event.preventDefault();
         handleSend();
@@ -1220,7 +1243,32 @@ function ChatComposer({
           ) : null}
         </div>
       ) : null}
-      <div className="session-composer-editor">
+      <div
+        className={`session-composer-editor${isFileDragging ? ' is-file-dragging' : ''}`}
+        data-file-drop-target
+        onDragEnter={handleFileDragEnter}
+        onDragOver={handleFileDragOver}
+        onDragLeave={handleFileDragLeave}
+        onDrop={handleFileDrop}
+      >
+        {isFileDragging ? (
+          <div className="composer-file-drop-overlay" role="status" aria-live="polite">
+            <UploadIcon aria-hidden="true" />
+            <strong>{t('composer.dropFilesToUpload')}</strong>
+          </div>
+        ) : null}
+        {uploadingFileCount ? (
+          <div className="composer-file-upload-status" role="status" aria-live="polite">
+            {t('composer.uploadingFiles', { count: uploadingFileCount })}
+          </div>
+        ) : null}
+        {fileUploadErrors.length ? (
+          <div className="composer-file-upload-errors" role="alert">
+            {fileUploadErrors.map((error, index) => (
+              <span key={`${index}:${error}`}>{error}</span>
+            ))}
+          </div>
+        ) : null}
         {contextItems.length ? (
           <div className="composer-context-chips" aria-label={t('composer.addedContext')}>
             {contextItems.map((item) => (
@@ -1293,7 +1341,8 @@ function ChatComposer({
               excludedConversationId={selectedConversationId}
               compact
               onAdd={addContextItem}
-              onUploadingChange={setUploadingAttachments}
+              onUploadFiles={uploadFiles}
+              uploadingFileCount={uploadingFileCount}
             />
             <button
               type="button"

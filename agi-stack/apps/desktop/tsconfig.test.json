@@ -29,6 +29,7 @@
     "src/features/chat/agentLifecyclePresentationModel.ts",
     "src/features/chat/chatComposerModel.ts",
     "src/features/chat/chatMessageActionModel.ts",
+    "src/features/chat/composerFileDropModel.ts",
     "src/features/chat/composerCatalogModel.ts",
     "src/features/chat/chatTimelineModel.ts",
     "src/features/chat/artifactCanvasEventModel.ts",

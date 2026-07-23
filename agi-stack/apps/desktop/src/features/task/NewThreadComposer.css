@@ -209,6 +209,10 @@
   color: #f4a6a6;
 }
 
+.new-thread-error span {
+  display: block;
+}
+
 .new-thread-suggestions {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
