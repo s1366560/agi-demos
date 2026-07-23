@@ -1029,6 +1029,11 @@ def _build_artifact_stream_event(data: dict[str, Any], **_kwargs: Any) -> dict[s
     return {"payload": dict(data)}
 
 
+def _build_agent_guidance_event(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    """Preserve Agent guidance and safety evidence for Desktop history replay."""
+    return {"payload": dict(data)}
+
+
 def _build_agent_spawned(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {
         "agentId": data.get("agent_id", ""),
@@ -1099,6 +1104,12 @@ _EVENT_BUILDERS: dict[str, Any] = {
     "artifact_update": _build_artifact_stream_event,
     "artifact_close": _build_artifact_stream_event,
     "artifacts_batch": _build_artifact_stream_event,
+    "suggestions": _build_agent_guidance_event,
+    "pattern_match": _build_agent_guidance_event,
+    "plan_suggested": _build_agent_guidance_event,
+    "doom_loop_detected": _build_agent_guidance_event,
+    "doom_loop_intervened": _build_agent_guidance_event,
+    "tool_policy_denied": _build_agent_guidance_event,
     "clarification_asked": _build_clarification_asked,
     "clarification_answered": _build_clarification_answered,
     "decision_asked": _build_decision_asked,

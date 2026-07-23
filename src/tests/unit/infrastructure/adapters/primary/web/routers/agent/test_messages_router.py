@@ -1468,6 +1468,61 @@ def test_build_timeline_replays_artifact_canvas_events_for_desktop_history() -> 
     assert [item["payload"] for item in timeline] == [data for _, data in artifact_events]
 
 
+def test_build_timeline_replays_agent_guidance_events_for_desktop_history() -> None:
+    guidance_events = [
+        (
+            "suggestions",
+            {"suggestions": ["Open the report", "Run the compatibility matrix"]},
+        ),
+        (
+            "pattern_match",
+            {"pattern_id": "pattern-release", "pattern_name": "Release guard", "confidence": 0.93},
+        ),
+        (
+            "plan_suggested",
+            {
+                "plan_id": "plan-release",
+                "conversation_id": "conversation-release",
+                "reason": "The rollout has multiple governed steps.",
+                "confidence": 0.91,
+            },
+        ),
+        (
+            "doom_loop_detected",
+            {"tool": "terminal", "input": {"command": "make test"}},
+        ),
+        (
+            "doom_loop_intervened",
+            {"request_id": "request-doom-loop", "action": "resume_with_guardrails"},
+        ),
+        (
+            "tool_policy_denied",
+            {
+                "agent_id": "agent-main",
+                "tool_name": "shell_command",
+                "policy_layer": "workspace",
+                "denial_reason": "Requires approval",
+            },
+        ),
+    ]
+    assert {event_type for event_type, _ in guidance_events} <= _DISPLAYABLE_EVENTS
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(event_type=event_type, event_data=data, event_time_us=index * 1_000)
+            for index, (event_type, data) in enumerate(guidance_events, start=1)
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert [item["type"] for item in timeline] == [event_type for event_type, _ in guidance_events]
+    assert [item["payload"] for item in timeline] == [data for _, data in guidance_events]
+
+
 def test_build_timeline_replays_complete_skill_execution_for_desktop_history() -> None:
     skill_events = [
         (
