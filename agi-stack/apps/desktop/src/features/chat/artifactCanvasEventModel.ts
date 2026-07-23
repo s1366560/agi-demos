@@ -97,6 +97,14 @@ export function applyArtifactCanvasStreamEvent(
   };
 }
 
+export function replayArtifactCanvasEvents(events: readonly unknown[]): LiveArtifactCanvasState {
+  let state = emptyArtifactCanvasState();
+  for (const event of events) {
+    state = applyArtifactCanvasStreamEvent(state, event).state;
+  }
+  return state;
+}
+
 export function selectArtifactCanvasTab(
   state: LiveArtifactCanvasState,
   artifactId: string,

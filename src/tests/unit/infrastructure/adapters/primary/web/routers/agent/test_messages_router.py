@@ -1413,6 +1413,61 @@ def test_build_timeline_replays_execution_insight_events_for_desktop_history() -
     assert [item["payload"] for item in timeline] == [data for _, data in insight_events]
 
 
+def test_build_timeline_replays_artifact_canvas_events_for_desktop_history() -> None:
+    artifact_events = [
+        (
+            "artifact_open",
+            {
+                "artifact_id": "artifact-release-notes",
+                "title": "release-notes.md",
+                "content": "# Release",
+                "content_type": "markdown",
+                "language": "markdown",
+            },
+        ),
+        (
+            "artifact_update",
+            {
+                "artifact_id": "artifact-release-notes",
+                "content": "\nCloud session restored.",
+                "append": True,
+            },
+        ),
+        ("artifact_close", {"artifact_id": "artifact-release-notes"}),
+        (
+            "artifacts_batch",
+            {
+                "sandbox_id": "sandbox-release",
+                "tool_execution_id": "tool-release",
+                "artifacts": [
+                    {
+                        "artifact_id": "artifact-report",
+                        "name": "report.md",
+                        "content_type": "text/markdown",
+                    }
+                ],
+                "source_tool": "release_report",
+            },
+        ),
+    ]
+    assert {event_type for event_type, _ in artifact_events} <= _DISPLAYABLE_EVENTS
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(event_type=event_type, event_data=data, event_time_us=index * 1_000)
+            for index, (event_type, data) in enumerate(artifact_events, start=1)
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert [item["type"] for item in timeline] == [event_type for event_type, _ in artifact_events]
+    assert [item["payload"] for item in timeline] == [data for _, data in artifact_events]
+
+
 def test_build_timeline_replays_complete_skill_execution_for_desktop_history() -> None:
     skill_events = [
         (

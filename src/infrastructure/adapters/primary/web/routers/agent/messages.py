@@ -1024,6 +1024,11 @@ def _build_execution_insight_event(data: dict[str, Any], **_kwargs: Any) -> dict
     return {"payload": dict(data)}
 
 
+def _build_artifact_stream_event(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    """Preserve artifact canvas and batch payloads for Desktop history replay."""
+    return {"payload": dict(data)}
+
+
 def _build_agent_spawned(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {
         "agentId": data.get("agent_id", ""),
@@ -1090,6 +1095,10 @@ _EVENT_BUILDERS: dict[str, Any] = {
     "artifact_created": _build_artifact_created,
     "artifact_ready": _build_artifact_skip,
     "artifact_error": _build_artifact_skip,
+    "artifact_open": _build_artifact_stream_event,
+    "artifact_update": _build_artifact_stream_event,
+    "artifact_close": _build_artifact_stream_event,
+    "artifacts_batch": _build_artifact_stream_event,
     "clarification_asked": _build_clarification_asked,
     "clarification_answered": _build_clarification_answered,
     "decision_asked": _build_decision_asked,

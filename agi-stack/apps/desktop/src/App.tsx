@@ -87,6 +87,7 @@ import { LiveArtifactCanvas } from './features/chat/LiveArtifactCanvas';
 import {
   applyArtifactCanvasStreamEvent,
   emptyArtifactCanvasState,
+  replayArtifactCanvasEvents,
   selectArtifactCanvasTab,
   type LiveArtifactCanvasState,
 } from './features/chat/artifactCanvasEventModel';
@@ -2268,6 +2269,9 @@ export function App() {
         });
         if (!requestIsCurrent()) return;
         const responseItems = response.timeline ?? [];
+        const restoredArtifactCanvas = replayArtifactCanvasEvents(responseItems);
+        artifactCanvasStateRef.current = restoredArtifactCanvas;
+        setArtifactCanvasState(restoredArtifactCanvas);
         setConversationTimeline((current) => {
           if (!requestIsCurrent() || current.conversationId !== conversation.id) return current;
           const items =

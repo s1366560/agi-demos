@@ -7,6 +7,7 @@ const require = createRequire(import.meta.url);
 const {
   applyArtifactCanvasStreamEvent,
   emptyArtifactCanvasState,
+  replayArtifactCanvasEvents,
   selectArtifactCanvasTab,
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/chat/artifactCanvasEventModel.js',
@@ -110,10 +111,58 @@ test('artifact lifecycle protocol events are consumed even when malformed or sta
   );
 });
 
+test('persisted artifact lifecycle events rebuild the latest canvas state in order', () => {
+  const state = replayArtifactCanvasEvents([
+    {
+      type: 'artifact_open',
+      payload: {
+        artifact_id: 'artifact-release-notes',
+        title: 'release-notes.md',
+        content: '# Release',
+        content_type: 'markdown',
+        language: 'markdown',
+      },
+    },
+    {
+      type: 'artifact_open',
+      payload: {
+        artifact_id: 'artifact-checklist',
+        title: 'checklist.txt',
+        content: 'Verify cloud session',
+      },
+    },
+    {
+      type: 'artifact_update',
+      payload: {
+        artifact_id: 'artifact-release-notes',
+        content: '\nDesktop Canvas restored.',
+        append: true,
+      },
+    },
+    {
+      type: 'artifact_close',
+      payload: { artifact_id: 'artifact-checklist' },
+    },
+  ]);
+
+  assert.equal(state.activeArtifactId, 'artifact-release-notes');
+  assert.equal(state.openRevision, 2);
+  assert.deepEqual(state.tabs, [
+    {
+      id: 'artifact-release-notes',
+      title: 'release-notes.md',
+      content: '# Release\nDesktop Canvas restored.',
+      contentType: 'markdown',
+      language: 'markdown',
+    },
+  ]);
+});
+
 test('Desktop folds artifact canvas events out of the timeline and exposes Browser QA', () => {
   assert.match(appSource, /applyArtifactCanvasStreamEvent\(emptyArtifactCanvasState\(\), event\)/);
   assert.match(appSource, /artifactCanvasResult\.handled[\s\S]*return existing/);
   assert.match(appSource, /setReviewTab\('artifacts'\)/);
+  assert.match(appSource, /replayArtifactCanvasEvents\(responseItems\)/);
   assert.match(componentSource, /aria-label=\{t\('artifact\.liveCanvas'\)\}/);
   assert.doesNotMatch(componentSource, /dangerouslySetInnerHTML/);
   assert.match(qaSource, /artifact-canvas-events/);
