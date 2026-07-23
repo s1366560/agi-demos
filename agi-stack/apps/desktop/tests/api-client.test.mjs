@@ -518,6 +518,67 @@ test('conversation catalog exhausts every authoritative scoped page', async () =
   }
 });
 
+test('conversation catalog requests and validates authoritative unbound-only pages', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    calls.push(url);
+    return new Response(
+      JSON.stringify({
+        items: [conversationRecord(1, { workspace_id: null })],
+        total: 1,
+        has_more: false,
+        offset: 0,
+        limit: 500,
+        next_offset: null,
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'authenticated-session',
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
+      workspaceId: '',
+    });
+    const result = await client.listConversations('project-1', {
+      unboundOnly: true,
+    });
+
+    assert.equal(result.items[0]?.workspace_id, null);
+    assert.equal(calls[0]?.searchParams.get('workspace_id'), null);
+    assert.equal(calls[0]?.searchParams.get('unbound_only'), 'true');
+
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          items: [conversationRecord(1, { workspace_id: 'workspace-1' })],
+          total: 1,
+          has_more: false,
+          offset: 0,
+          limit: 500,
+          next_offset: null,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    await assert.rejects(
+      client.listConversations('project-1', { unboundOnly: true }),
+      (error) => {
+        assert.equal(error instanceof DesktopApiError, true);
+        assert.equal(error.status, 502);
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('conversation catalog retries one transport failure without changing scope', async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
@@ -2125,7 +2186,7 @@ test('artifact review and delivery stay bound to immutable version revisions', a
   }
 });
 
-test('desktop identity credentials stay separate from the Tauri launch capability', () => {
+test('desktop identity credentials stay separate from the sidecar launch capability', () => {
   assert.equal(
     desktopApiCredential({
       ...DEFAULT_CONFIG,
@@ -2138,7 +2199,7 @@ test('desktop identity credentials stay separate from the Tauri launch capabilit
     desktopApiCredential({
       ...DEFAULT_CONFIG,
       apiKey: 'manual-local-key',
-      localApiToken: 'tauri-capability',
+      localApiToken: 'sidecar-capability',
     }),
     'manual-local-key'
   );
@@ -2146,9 +2207,9 @@ test('desktop identity credentials stay separate from the Tauri launch capabilit
     desktopLaunchCapability({
       ...DEFAULT_CONFIG,
       apiKey: 'authenticated-session',
-      localApiToken: 'tauri-capability',
+      localApiToken: 'sidecar-capability',
     }),
-    'tauri-capability'
+    'sidecar-capability'
   );
 });
 
@@ -2157,15 +2218,15 @@ test('agent WebSocket keeps launch and identity credentials in separate subproto
     ...DEFAULT_CONFIG,
     apiBaseUrl: 'http://127.0.0.1:8088',
     apiKey: 'authenticated-session',
-    localApiToken: 'tauri-capability',
+    localApiToken: 'sidecar-capability',
   });
 
   const url = client.agentWsUrl('session-1');
   assert.equal(url, 'ws://127.0.0.1:8088/api/v1/agent/ws?session_id=session-1');
-  assert.doesNotMatch(url, /tauri-capability/);
+  assert.doesNotMatch(url, /sidecar-capability/);
   assert.deepEqual(client.agentWsProtocols(), [
     'memstack.launch',
-    'tauri-capability',
+    'sidecar-capability',
     'memstack.auth',
     'authenticated-session',
   ]);
@@ -2187,7 +2248,7 @@ test('local session bootstrap and context switch preserve the dual credential bo
       ...DEFAULT_CONFIG,
       apiBaseUrl: 'http://127.0.0.1:8088',
       apiKey: '',
-      localApiToken: 'tauri-capability',
+      localApiToken: 'sidecar-capability',
     });
     await bootstrap.createLocalSession(false);
 
@@ -2195,19 +2256,19 @@ test('local session bootstrap and context switch preserve the dual credential bo
       ...DEFAULT_CONFIG,
       apiBaseUrl: 'http://127.0.0.1:8088',
       apiKey: 'authenticated-session',
-      localApiToken: 'tauri-capability',
+      localApiToken: 'sidecar-capability',
     });
     await authenticated.switchWorkspaceContext('orbital', 'agent-evals', 4, 'switch-5');
     await authenticated.signOut();
 
     const bootstrapHeaders = new Headers(calls[0]?.init?.headers);
     assert.equal(bootstrapHeaders.get('Authorization'), null);
-    assert.equal(bootstrapHeaders.get('X-Agistack-Launch'), 'tauri-capability');
+    assert.equal(bootstrapHeaders.get('X-Agistack-Launch'), 'sidecar-capability');
     assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), { trusted_device: false });
 
     const switchHeaders = new Headers(calls[1]?.init?.headers);
     assert.equal(switchHeaders.get('Authorization'), 'Bearer authenticated-session');
-    assert.equal(switchHeaders.get('X-Agistack-Launch'), 'tauri-capability');
+    assert.equal(switchHeaders.get('X-Agistack-Launch'), 'sidecar-capability');
     assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), {
       tenant_id: 'orbital',
       project_id: 'agent-evals',
@@ -2277,11 +2338,12 @@ test('createAgentConversation preserves the explicit Work or Code capability', a
   globalThis.fetch = async (input, init) => {
     calls.push({ input, init });
     return new Response(
-      JSON.stringify({
-        id: 'conversation-1',
-        project_id: 'project-1',
+      JSON.stringify(conversationRecord(1, {
+        workspace_id: null,
+        workspace_name: null,
+        title: 'Implement review flow',
         agent_config: { capability_mode: 'code' },
-      }),
+      })),
       { status: 200, headers: { 'content-type': 'application/json' } }
     );
   };
@@ -2291,9 +2353,16 @@ test('createAgentConversation preserves the explicit Work or Code capability', a
       ...DEFAULT_CONFIG,
       apiBaseUrl: 'http://127.0.0.1:8088',
       localApiToken: 'local-session-token',
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
     });
 
-    await client.createAgentConversation('Implement review flow', 'project-1', 'code');
+    await client.createAgentConversation(
+      'Implement review flow',
+      'project-1',
+      'user-1',
+      'code',
+    );
 
     assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
       project_id: 'project-1',
@@ -2303,6 +2372,132 @@ test('createAgentConversation preserves the explicit Work or Code capability', a
         capability_mode: 'code',
       },
     });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('createAgentConversation atomically includes an optional model override', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    return new Response(
+      JSON.stringify(conversationRecord(1, {
+        workspace_id: null,
+        workspace_name: null,
+        title: 'Research release risk',
+        agent_config: { capability_mode: 'work', llm_model_override: 'gpt-primary' },
+      })),
+      { status: 200, headers: { 'content-type': 'application/json' } }
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      localApiToken: 'local-session-token',
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
+    });
+
+    await client.createAgentConversation(
+      'Research release risk',
+      'project-1',
+      'user-1',
+      'work',
+      {
+        llm_model_override: 'gpt-primary',
+      },
+    );
+
+    assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
+      project_id: 'project-1',
+      title: 'Research release risk',
+      agent_config: {
+        selected_agent_id: 'builtin:all-access',
+        capability_mode: 'work',
+        llm_model_override: 'gpt-primary',
+      },
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('createAgentConversation rejects malformed or cross-authority success payloads', async () => {
+  const originalFetch = globalThis.fetch;
+  const invalidResponses = [
+    conversationRecord(1, {
+      workspace_id: null,
+      workspace_name: null,
+      title: 'Expected title',
+      tenant_id: 'tenant-other',
+    }),
+    conversationRecord(1, {
+      workspace_id: null,
+      workspace_name: null,
+      title: 'Expected title',
+      project_id: 'project-other',
+    }),
+    conversationRecord(1, {
+      workspace_id: null,
+      workspace_name: null,
+      title: 'Expected title',
+      user_id: 'user-other',
+    }),
+    conversationRecord(1, {
+      workspace_id: null,
+      workspace_name: null,
+      title: 'Expected title',
+      status: 'archived',
+    }),
+    conversationRecord(1, {
+      title: 'Expected title',
+    }),
+    conversationRecord(1, {
+      workspace_id: null,
+      workspace_name: null,
+      title: 'Unexpected title',
+    }),
+    conversationRecord(1, {
+      workspace_id: null,
+      workspace_name: null,
+      title: 'Expected title',
+      message_count: -1,
+    }),
+  ];
+  let responseIndex = 0;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify(invalidResponses[responseIndex++]), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      localApiToken: 'local-session-token',
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
+    });
+
+    for (const _response of invalidResponses) {
+      await assert.rejects(
+        client.createAgentConversation(
+          'Expected title',
+          'project-1',
+          'user-1',
+          'work',
+        ),
+        (error) =>
+          error instanceof DesktopApiError &&
+          error.status === 502 &&
+          error.message === 'Invalid agent conversation response',
+      );
+    }
   } finally {
     globalThis.fetch = originalFetch;
   }

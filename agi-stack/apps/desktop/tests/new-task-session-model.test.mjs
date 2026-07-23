@@ -275,7 +275,7 @@ test('local task-session request uses the exact existing workspace union', () =>
   });
 });
 
-test('runtime task-session requests keep local extensions out of the cloud contract', () => {
+test('runtime task-session requests preserve model policy and context in every mode', () => {
   const definition = {
     title: 'Review cloud session startup',
     objective: 'Create a cloud-compatible planning session',
@@ -294,7 +294,7 @@ test('runtime task-session requests keep local extensions out of the cloud contr
     expected_revision: 7,
     route: { provider_id: 'provider-1', model_id: 'model-1' },
     reasoning_effort: 'high',
-    permission_mode: 'workspace_write',
+    permission_mode: 'ask',
   };
 
   assert.deepEqual(
@@ -313,7 +313,11 @@ test('runtime task-session requests keep local extensions out of the cloud contr
         title: 'Review cloud session startup',
         capability_mode: 'work',
       },
-      initial_message: { content: 'Create a cloud-compatible planning session' },
+      initial_message: {
+        content: 'Create a cloud-compatible planning session',
+        context_items: contextItems,
+      },
+      workspace_policy: workspacePolicy,
     },
   );
 

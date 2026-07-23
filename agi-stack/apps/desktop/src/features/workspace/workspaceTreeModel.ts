@@ -54,6 +54,21 @@ export type WorkspaceTreeStatusPresentation = {
 
 export const UNBOUND_CONVERSATIONS_KEY = '';
 
+export function resolveRuntimeWorkspaceId(
+  requestedWorkspaceId: string,
+  projectId: string,
+  workspaces: readonly Pick<WorkspaceSummary, 'id'>[],
+  activeConversation: Pick<AgentConversation, 'project_id' | 'workspace_id'> | null,
+): string {
+  const requested = requestedWorkspaceId.trim();
+  if (requested && workspaces.some((workspace) => workspace.id === requested)) return requested;
+  const preservesUnboundSession =
+    !requested &&
+    activeConversation?.project_id.trim() === projectId.trim() &&
+    activeConversation.workspace_id === null;
+  return preservesUnboundSession ? UNBOUND_CONVERSATIONS_KEY : workspaces[0]?.id ?? '';
+}
+
 const CONVERSATION_STATUS_PRESENTATIONS: Readonly<
   Record<string, WorkspaceTreeStatusPresentation>
 > = {

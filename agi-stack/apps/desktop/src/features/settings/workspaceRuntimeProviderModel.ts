@@ -146,6 +146,32 @@ export function workspaceRuntimeModelOptions(
   );
 }
 
+export function projectRuntimeModelOptions(
+  providers: readonly ManagedLlmProvider[],
+  mode: RuntimeMode = 'local',
+): WorkspaceRuntimeModelOption[] {
+  const seenModelIds = new Set<string>();
+  const options: WorkspaceRuntimeModelOption[] = [];
+  for (const provider of providers) {
+    const providerLabel = provider.name.trim() || provider.provider_type;
+    for (const modelId of workspaceRoutingModelIds(provider, mode)) {
+      if (seenModelIds.has(modelId)) continue;
+      seenModelIds.add(modelId);
+      options.push({
+        value: workspaceRuntimeModelSelectionValue(provider.id, modelId),
+        providerId: provider.id,
+        providerLabel,
+        modelId,
+        selected: false,
+        roles: [],
+        description: `${providerLabel} · ${provider.provider_type}`,
+        contextWindow: null,
+      });
+    }
+  }
+  return options;
+}
+
 function workspaceRoutingModelIds(
   provider: ManagedLlmProvider,
   mode: RuntimeMode,

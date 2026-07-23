@@ -24,6 +24,7 @@ const {
   projectConversationLoadTargets,
   reconcileExpandedWorkspaceIds,
   reconcileWorkspaceConversationRowsAfterRefresh,
+  resolveRuntimeWorkspaceId,
   shouldClearConversationSelectionAfterRefresh,
   shouldLoadWorkspaceConversations,
   supersedeWorkspaceConversationRequests,
@@ -33,6 +34,37 @@ const {
   workspaceTreeSessionAvailability,
   workspaceTreeAvailability,
 } = require('/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceTreeModel.js');
+
+test('runtime workspace resolution preserves only an active same-project unbound session', () => {
+  const workspaces = [{ id: 'workspace-1' }, { id: 'workspace-2' }];
+
+  assert.equal(
+    resolveRuntimeWorkspaceId('workspace-2', 'project-1', workspaces, null),
+    'workspace-2',
+  );
+  assert.equal(resolveRuntimeWorkspaceId('', 'project-1', workspaces, null), 'workspace-1');
+  assert.equal(
+    resolveRuntimeWorkspaceId('', 'project-1', workspaces, {
+      project_id: 'project-1',
+      workspace_id: null,
+    }),
+    '',
+  );
+  assert.equal(
+    resolveRuntimeWorkspaceId('', 'project-1', workspaces, {
+      project_id: 'project-2',
+      workspace_id: null,
+    }),
+    'workspace-1',
+  );
+  assert.equal(
+    resolveRuntimeWorkspaceId('missing', 'project-1', workspaces, {
+      project_id: 'project-1',
+      workspace_id: 'workspace-2',
+    }),
+    'workspace-1',
+  );
+});
 
 function conversation(id, title, updatedAt) {
   return {

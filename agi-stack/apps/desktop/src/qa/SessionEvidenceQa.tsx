@@ -60,7 +60,7 @@ const versions: DesktopArtifactVersion[] = [
         id: 'source-runtime-contract',
         kind: 'repository-file',
         label: 'Desktop runtime contract',
-        path: 'agi-stack/apps/desktop/src-tauri/src/server/mod.rs',
+        path: 'agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs',
         line: 214,
         status: 'verified',
       },

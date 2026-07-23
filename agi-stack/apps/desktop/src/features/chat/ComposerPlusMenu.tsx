@@ -15,15 +15,14 @@ import {
 import { useI18n } from '../../i18n';
 import type {
   AgentConversation,
-  AgentInputFileMetadata,
   ComposerContextItem,
   ComposerContextKind,
-  ManagedAgentDefinition,
-  ManagedPlugin,
-  ManagedSkill,
-  ManagedSubAgent,
-  WorkspaceAgentBinding,
 } from '../../types';
+import {
+  loadComposerCatalog,
+  type ComposerCatalog,
+  type ComposerCatalogClient,
+} from './composerCatalogModel';
 
 const COMMANDS = [
   { id: '/plan', descriptionKey: 'composer.commandPlanDescription' },
@@ -54,17 +53,6 @@ type Category = {
   items?: CatalogItem[];
 };
 
-export type ComposerCatalogClient = {
-  listWorkspaceAgents: (signal?: AbortSignal) => Promise<WorkspaceAgentBinding[]>;
-  listManagedAgents: (signal?: AbortSignal) => Promise<ManagedAgentDefinition[]>;
-  listManagedSkills: (signal?: AbortSignal) => Promise<ManagedSkill[]>;
-  listManagedPlugins: (signal?: AbortSignal) => Promise<ManagedPlugin[]>;
-  listManagedSubAgents?: (signal?: AbortSignal) => Promise<ManagedSubAgent[]>;
-  uploadSandboxFile?: (
-    file: Pick<File, 'name' | 'type' | 'size' | 'arrayBuffer'>,
-  ) => Promise<AgentInputFileMetadata>;
-};
-
 const MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024;
 
 type ComposerPlusMenuProps = {
@@ -87,13 +75,7 @@ export function ComposerPlusMenu({
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<Category['id'] | null>(null);
-  const [catalog, setCatalog] = useState<{
-    workspaceAgents: WorkspaceAgentBinding[];
-    agents: ManagedAgentDefinition[];
-    skills: ManagedSkill[];
-    plugins: ManagedPlugin[];
-    subagents: ManagedSubAgent[];
-  } | null>(null);
+  const [catalog, setCatalog] = useState<ComposerCatalog | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [uploadingFileCount, setUploadingFileCount] = useState(0);
   const [fileUploadError, setFileUploadError] = useState<string | null>(null);
@@ -123,16 +105,8 @@ export function ComposerPlusMenu({
     if (!open || catalog) return;
     const controller = new AbortController();
     setCatalogError(null);
-    void Promise.all([
-      api.listWorkspaceAgents(controller.signal),
-      api.listManagedAgents(controller.signal),
-      api.listManagedSkills(controller.signal),
-      api.listManagedPlugins(controller.signal),
-      api.listManagedSubAgents?.(controller.signal) ?? Promise.resolve([]),
-    ])
-      .then(([workspaceAgents, agents, skills, plugins, subagents]) =>
-        setCatalog({ workspaceAgents, agents, skills, plugins, subagents }),
-      )
+    void loadComposerCatalog(api, controller.signal)
+      .then(setCatalog)
       .catch((caught) => {
         if (!controller.signal.aborted) {
           setCatalogError(caught instanceof Error ? caught.message : String(caught));

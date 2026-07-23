@@ -20,13 +20,13 @@ flowchart LR
     CORE["crates/core<br/>可移植核心<br/>(零 tokio / 零 std::time)"]
     CORE --> SRV["云端 server<br/>原生 axum 二进制"]
     CORE --> WEB["Web<br/>wasm-bindgen 包"]
-    CORE --> PC["PC 桌面<br/>Tauri 外壳"]
+    CORE --> PC["PC 桌面<br/>Electron + Rust sidecar"]
     CORE --> AND["Android<br/>.so + Kotlin"]
     CORE --> IOS["iOS<br/>XCFramework + Swift"]
 
     SRV -. "重型适配器<br/>reqwest/wasmtime/rusqlite/tokio" .-> SRVA["仅 apps/server + 重型 crate"]
     WEB -. "WasmClock + 内存/IndexedDB" .-> WEBA["浏览器 Web Crypto / Date.now"]
-    PC -. "SQLite 设备适配器" .-> PCA["tokio 仅在外壳"]
+    PC -. "SQLite 设备适配器" .-> PCA["tokio 仅在独立 sidecar"]
     AND -. "UniFFI" .-> ANDA["NDK clang 编 SQLite C"]
     IOS -. "UniFFI" .-> IOSA["Apple clang 编 SQLite C"]
 ```
@@ -41,7 +41,7 @@ crate,**绝不泄漏回核心或端口签名**;wasm 路径用 `WasmClock` + 内�
 |---|---|---|---|---|---|
 | **云端 server** | `make server` | `target/release/agistack-server`(原生 axum 二进制) | **5.46 MB**(opt=z+lto+strip) | tokio/axum/reqwest/wasmtime/rusqlite(仅此侧) | [04 #2/#11/#22](04-spike-evidence.md) |
 | **Web 浏览器** | `make wasm-web` | `crates/bindings-wasm/pkg/*.wasm`(node smoke) + `crates/bindings-wasm/pkg-web/*.wasm`(browser ESM) + JS 胶水(core-as-guest) | **124.8 KB raw / 60 KB gzip** | wasm-pack/wasm-bindgen;`WasmClock`(`Date.now`) | [04 #4/#16](04-spike-evidence.md) |
-| **PC 桌面** | `make desktop`; `make desktop-bundle`; `make desktop-bundle-smoke` | Tauri 外壳(`apps/desktop`,链核心 + SQLite 设备适配器) + CI bundle artifact | 全树编译链接通过;macOS CI 执行完整 Tauri bundle 并静态 smoke 检查 bundle/`.app` | tauri 2 + 系统 WebKit;tokio 仅在外壳 | [04 #17](04-spike-evidence.md) |
+| **PC 桌面** | `make desktop`; `make desktop-bundle`; `make desktop-bundle-smoke` | Electron 安装包 + 独立 Rust sidecar + 三平台更新元数据 | sidecar/renderer 行为测试、真实 HMAC/凭据往返、macOS bundle 签名 smoke；tag workflow 在三平台原生构建并在验证后发布 | Electron/electron-vite/electron-builder；tokio 仅在 sidecar | [`apps/desktop/ELECTRON.md`](../../apps/desktop/ELECTRON.md) |
 | **Android** | `make android` | `libagistack_mobile.so`(`aarch64-linux-android`)+ Kotlin 绑定 + CI artifact;`make bench` 记录 UniFFI ingest/search/semantic-search 延迟 | **1.5 MB**(stripped,含 NDK clang 编 SQLite C) | Android NDK r30;UniFFI 0.28 | [04 #12](04-spike-evidence.md) |
 | **iOS** | `make ios` | `AgistackMobile.xcframework`(device+sim 两 arm64 切片)+ Swift 绑定 + CI artifact;`make bench` 记录 UniFFI ingest/search/semantic-search 延迟 | `.a` 各切片(链接后同量级);**iPhone 17 模拟器实跑 SMOKE_OK** | full Xcode 26.6;UniFFI 0.28 | [04 #13](04-spike-evidence.md) |
 
@@ -55,7 +55,7 @@ crate,**绝不泄漏回核心或端口签名**;wasm 路径用 `WasmClock` + 内�
 | 层 | 无需额外 SDK(任意开发机 + CI) | 需额外 SDK(显式调用) |
 |---|---|---|
 | target | `test` `wasm-core` `ci` `server` `wasm-web` `desktop` `bench` `all` | `android`(NDK)· `ios`(full Xcode) |
-| 理由 | 纯 Rust + wasm-pack/node;Tauri 用系统 WebKit | NDK clang / Xcode SDK 交叉编译,CI 需预装 |
+| 理由 | 纯 Rust + wasm-pack/node;Electron 使用目标平台预编译运行时 | NDK clang / Xcode SDK 交叉编译,CI 需预装 |
 
 - **`make ci`** 是建议的最小合并门禁:`cargo test --workspace` + 核心 `wasm32` 构建 —— 守住
   「运行时无关核心」不变量,零额外 SDK,适合每次 PR。

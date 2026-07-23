@@ -4,11 +4,13 @@ import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const {
+  confirmPendingAgentRunMessageReceipt,
   buildHitlSocketMessage,
   canQueuePendingAgentRunMessage,
   createPendingAgentMessageQueue,
   conversationSubscriptionMessages,
   createAgentSocketContextState,
+  deliverAgentRunMessage,
   enqueuePendingAgentRunMessage,
   eventCursor,
   flushPendingAgentRunMessages,
@@ -57,6 +59,16 @@ test('cloud agent turns wait in a bounded deduplicated queue until the socket op
       message_id: 'message-1',
     },
   ]);
+  assert.equal(queue.size, 1);
+  assert.equal(
+    confirmPendingAgentRunMessageReceipt(queue, {
+      type: 'ack',
+      action: 'send_message',
+      conversation_id: 'conversation-1',
+      message_id: 'message-1',
+    }),
+    true,
+  );
   assert.equal(queue.size, 0);
 });
 
@@ -77,6 +89,106 @@ test('failed socket flush preserves pending cloud turns for the next reconnect',
 
   assert.equal(flushPendingAgentRunMessages(queue, () => false), 0);
   assert.equal(queue.size, 2);
+});
+
+test('a scope transition defers the first turn even while the previous socket is open', () => {
+  const queue = createPendingAgentMessageQueue();
+  const sent = [];
+
+  assert.equal(
+    deliverAgentRunMessage(
+      queue,
+      {
+        conversationId: 'conversation-unbound',
+        projectId: 'project-1',
+        message: 'Start the unbound conversation',
+        messageId: 'message-unbound-1',
+        deferUntilNextConnection: true,
+      },
+      (payload) => {
+        sent.push(payload);
+        return true;
+      },
+      true,
+    ),
+    true,
+  );
+  assert.deepEqual(sent, []);
+  assert.equal(queue.size, 1);
+
+  assert.equal(
+    flushPendingAgentRunMessages(queue, (payload) => {
+      sent.push(payload);
+      return true;
+    }),
+    1,
+  );
+  assert.deepEqual(sent, [
+    {
+      type: 'send_message',
+      conversation_id: 'conversation-unbound',
+      project_id: 'project-1',
+      message: 'Start the unbound conversation',
+      message_id: 'message-unbound-1',
+    },
+  ]);
+  assert.equal(queue.size, 1);
+  assert.equal(
+    confirmPendingAgentRunMessageReceipt(queue, {
+      type: 'user_message',
+      conversation_id: 'conversation-unbound',
+      data: { message_id: 'message-unbound-1' },
+    }),
+    true,
+  );
+  assert.equal(queue.size, 0);
+});
+
+test('an open-socket send remains in the outbox until receipt and replays after disconnect', () => {
+  const queue = createPendingAgentMessageQueue();
+  const sent = [];
+  const message = {
+    conversationId: 'conversation-reconnect',
+    projectId: 'project-1',
+    message: 'Keep this turn durable',
+    messageId: 'message-reconnect-1',
+  };
+
+  assert.equal(
+    deliverAgentRunMessage(
+      queue,
+      message,
+      (payload) => {
+        sent.push(payload);
+        return true;
+      },
+      true,
+    ),
+    true,
+  );
+  assert.equal(sent.length, 1);
+  assert.equal(queue.size, 1);
+
+  assert.equal(
+    flushPendingAgentRunMessages(queue, (payload) => {
+      sent.push(payload);
+      return true;
+    }),
+    1,
+  );
+  assert.equal(sent.length, 2);
+  assert.deepEqual(sent[1], sent[0]);
+  assert.equal(queue.size, 1);
+  assert.equal(
+    confirmPendingAgentRunMessageReceipt(queue, {
+      type: 'ack',
+      action: 'send_message',
+      conversation_id: 'conversation-reconnect',
+      message_id: 'message-reconnect-1',
+    }),
+    true,
+  );
+  assert.equal(queue.size, 0);
 });
 
 test('pending cloud turns survive workspace activation within the same project', () => {

@@ -25,7 +25,7 @@
 .PHONY: sandbox-build sandbox-run sandbox-stop sandbox-restart sandbox-status sandbox-logs sandbox-shell sandbox-clean sandbox-reset sandbox-test
 .PHONY: ray-up ray-up-dev ray-down ray-reload agent-actor-up
 .PHONY: plugin-template-build plugin-feishu-validate plugin-build-all
-.PHONY: desktop desktop-bundle desktop-bundle-smoke run-desktop
+.PHONY: desktop desktop-bundle desktop-bundle-smoke desktop-electron-frontend run-desktop run-desktop-electron
 .PHONY: helm-build-images helm-lint helm-package helm-install-dev helm-test-dev helm-verify-dev helm-uninstall-dev
 
 # =============================================================================
@@ -1103,6 +1103,12 @@ desktop-bundle-smoke: ## Verify desktop bundle artifacts
 
 run-desktop: ## Start desktop client in development mode
 	@$(MAKE) -C $(AGISTACK_DIR) run-desktop
+
+run-desktop-electron: ## Start the Electron desktop client (compatibility alias)
+	@$(MAKE) -C $(AGISTACK_DIR) run-desktop-electron
+
+desktop-electron-frontend: ## Build Electron main, preload, and renderer
+	@$(MAKE) -C $(AGISTACK_DIR) desktop-electron-frontend
 
 build: build-backend build-web ## Build all for production
 	@echo " Build completed"

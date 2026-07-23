@@ -3,7 +3,7 @@ import { Theme } from '@radix-ui/themes';
 import { useMemo, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
-import type { ComposerCatalogClient } from '../features/chat/ComposerPlusMenu';
+import type { ComposerCatalogClient } from '../features/chat/composerCatalogModel';
 import { MyWorkQueue } from '../features/my-work/MyWorkQueue';
 import { DesktopSidebar } from '../features/navigation/DesktopSidebar';
 import {
@@ -295,13 +295,15 @@ function MissionControlQa() {
     initialView === 'my-work' ? 'my-work' : 'home',
   );
   const [mode, setMode] = useState<AgentCapabilityMode>('work');
+  const [newThreadWorkspaceId, setNewThreadWorkspaceId] = useState(workspaceId);
   const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState(
     () => new Set(workspaces.map((workspace) => workspace.id)),
   );
-  const currentWorkspace = workspaces[0];
+  const currentWorkspace =
+    workspaces.find((workspace) => workspace.id === newThreadWorkspaceId) ?? null;
   const recentConversations = useMemo(
-    () => conversationsByWorkspace[currentWorkspace.id] ?? [],
-    [currentWorkspace.id],
+    () => conversationsByWorkspace[newThreadWorkspaceId] ?? [],
+    [newThreadWorkspaceId],
   );
 
   const recordCreate = (input: NewThreadComposerInput) => {
@@ -352,7 +354,9 @@ function MissionControlQa() {
             {view === 'home' ? (
               <NewThreadComposer
                 api={api}
+                workspaceId={newThreadWorkspaceId}
                 workspace={currentWorkspace}
+                workspaces={workspaces}
                 conversations={recentConversations}
                 mode={mode}
                 policy={policy}
@@ -368,6 +372,7 @@ function MissionControlQa() {
                 creating={false}
                 error={null}
                 onModeChange={setMode}
+                onWorkspaceChange={setNewThreadWorkspaceId}
                 onCreate={recordCreate}
                 onOpenThread={() => undefined}
                 onManageModels={() => undefined}

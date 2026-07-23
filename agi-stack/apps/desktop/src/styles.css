@@ -87,7 +87,7 @@ select {
   display: none;
 }
 
-.app-shell.tauri-window {
+.app-shell.desktop-window {
   grid-template-rows: 44px minmax(0, 1fr);
 }
 
@@ -95,7 +95,7 @@ select {
   grid-template-columns: 44px minmax(0, 1fr);
 }
 
-.app-shell.tauri-window.sidebar-collapsed {
+.app-shell.desktop-window.sidebar-collapsed {
   grid-template-columns: 44px minmax(0, 1fr);
 }
 
@@ -110,12 +110,12 @@ select {
 .app-shell .titlebar-window-controls,
 .app-shell [aria-label="Window controls"],
 .app-shell [data-window-controls],
-.app-shell [data-tauri-window-controls],
+.app-shell [data-desktop-window-controls],
 .app-shell [class*="traffic-light"],
 .app-shell [class*="window-control"],
 .app-shell [class*="window-dot"],
-html[data-tauri-window] .app-shell [class*="traffic-light"],
-html[data-tauri-window] .app-shell [class*="window-dot"] {
+html[data-desktop-window] .app-shell [class*="traffic-light"],
+html[data-desktop-window] .app-shell [class*="window-dot"] {
   display: none !important;
   width: 0 !important;
   height: 0 !important;
@@ -147,7 +147,7 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   background: #0b0f16;
 }
 
-.app-shell.tauri-window .titlebar {
+.app-shell.desktop-window .titlebar {
   padding-left: 10px;
 }
 
@@ -519,7 +519,7 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   background: #151b22;
 }
 
-.app-shell.tauri-window .copilot-sidebar {
+.app-shell.desktop-window .copilot-sidebar {
   grid-template-rows: 44px minmax(0, 1fr) auto;
 }
 
@@ -527,7 +527,7 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   grid-template-rows: 44px minmax(0, 1fr);
 }
 
-.app-shell.tauri-window.sidebar-collapsed .copilot-sidebar {
+.app-shell.desktop-window.sidebar-collapsed .copilot-sidebar {
   grid-template-rows: 44px minmax(0, 1fr);
 }
 
@@ -6980,12 +6980,12 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
 
 @media (max-width: 760px) {
   .app-shell,
-  .app-shell.tauri-window {
+  .app-shell.desktop-window {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 44px minmax(0, 1fr);
   }
 
-  .app-shell.tauri-window {
+  .app-shell.desktop-window {
     grid-template-rows: 44px minmax(0, 1fr);
   }
 

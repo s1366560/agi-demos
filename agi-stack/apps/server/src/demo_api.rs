@@ -33,10 +33,7 @@ fn desktop_origin_allowed(origin: &HeaderValue) -> bool {
     let Ok(origin) = origin.to_str() else {
         return false;
     };
-    origin == "tauri://localhost"
-        || origin == "http://tauri.localhost"
-        || origin == "https://tauri.localhost"
-        || origin.starts_with("http://localhost:")
+    origin.starts_with("http://localhost:")
         || origin.starts_with("https://localhost:")
         || origin.starts_with("http://127.0.0.1:")
         || origin.starts_with("https://127.0.0.1:")
@@ -386,13 +383,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn desktop_origin_allowlist_accepts_tauri_and_loopback() {
-        for origin in [
-            "tauri://localhost",
-            "http://tauri.localhost",
-            "http://localhost:5173",
-            "http://127.0.0.1:1420",
-        ] {
+    fn desktop_origin_allowlist_accepts_loopback() {
+        for origin in ["http://localhost:5173", "http://127.0.0.1:1420"] {
             let value = HeaderValue::from_str(origin).expect("origin header");
             assert!(desktop_origin_allowed(&value), "{origin}");
         }
@@ -400,7 +392,13 @@ mod tests {
 
     #[test]
     fn desktop_origin_allowlist_rejects_non_loopback_web_origins() {
-        for origin in ["https://example.com", "http://192.168.1.20:5173"] {
+        for origin in [
+            "tauri://localhost",
+            "http://tauri.localhost",
+            "https://tauri.localhost",
+            "https://example.com",
+            "http://192.168.1.20:5173",
+        ] {
             let value = HeaderValue::from_str(origin).expect("origin header");
             assert!(!desktop_origin_allowed(&value), "{origin}");
         }

@@ -1,0 +1,6 @@
+extends: electron-builder.yml
+afterPack: scripts/sign-local-macos.mjs
+forceCodeSigning: false
+publish: null
+mac:
+  identity: null

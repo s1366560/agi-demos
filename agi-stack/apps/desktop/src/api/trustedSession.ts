@@ -1,6 +1,6 @@
 import type { RuntimeMode } from '../types';
 
-type TauriInvoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
+type DesktopInvoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
 
 export type NativeTrustedCredentialKind = 'cloud_bearer' | 'local_session_reference';
 
@@ -22,13 +22,14 @@ const trustedSessionKeys = new Set([
   'expires_at',
 ]);
 
-function desktopInvoke(): TauriInvoke | null {
-  return window.__TAURI__?.core?.invoke ?? null;
+function desktopInvoke(): DesktopInvoke | null {
+  if (typeof window === 'undefined') return null;
+  return window.__MEMSTACK_DESKTOP__?.core?.invoke ?? null;
 }
 
-function requireDesktopInvoke(): TauriInvoke {
+function requireDesktopInvoke(): DesktopInvoke {
   const invoke = desktopInvoke();
-  if (!invoke) throw new Error('Trusted sessions require the Tauri desktop shell.');
+  if (!invoke) throw new Error('Trusted sessions require a supported desktop shell.');
   return invoke;
 }
 

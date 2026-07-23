@@ -236,7 +236,7 @@ export function buildLocalTaskSessionRequest(
 }
 
 export function buildRuntimeTaskSessionRequest(
-  mode: DesktopRuntimeConfig['mode'],
+  _mode: DesktopRuntimeConfig['mode'],
   definition: NewTaskDefinition,
   workspaceSelection: string,
   idempotencyKey: string,
@@ -248,7 +248,6 @@ export function buildRuntimeTaskSessionRequest(
     workspaceSelection,
     idempotencyKey,
   );
-  if (mode === 'cloud') return request;
   return {
     ...request,
     initial_message: {

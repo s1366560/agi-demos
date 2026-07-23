@@ -15,7 +15,10 @@ const {
 const {
   LOGIN_MODE_PREFERENCE_KEY,
   initialDesktopRuntimeConfig,
+  loginModeForRuntimeAvailability,
   readLoginModePreference,
+  runsInElectronShell,
+  runtimeConfigForLoginAvailability,
   runtimeConfigForLoginMode,
   writeLoginModePreference,
 } = require(
@@ -109,10 +112,91 @@ test('login mode config mapping selects the matching API and clears cross-mode i
 test('startup restores the preferred mode before session recovery', () => {
   const config = initialDesktopRuntimeConfig(
     createMemoryStorage('{"version":1,"mode":"cloud"}'),
+    false,
   );
   assert.equal(config.mode, 'cloud');
   assert.equal(config.apiBaseUrl, 'http://127.0.0.1:8000');
   assert.equal(config.deviceAuthorizationBaseUrl, 'http://127.0.0.1:3000');
+});
+
+test('browser fallback overrides a persisted local login with the cloud runtime', () => {
+  const config = initialDesktopRuntimeConfig(
+    createMemoryStorage('{"version":1,"mode":"local"}'),
+    false,
+  );
+  assert.equal(loginModeForRuntimeAvailability('local', false), 'cloud');
+  assert.equal(config.mode, 'cloud');
+  assert.equal(config.apiBaseUrl, 'http://127.0.0.1:8000');
+  assert.equal(config.tenantId, 'default');
+  assert.equal(config.projectId, '');
+  assert.equal(config.localApiToken, '');
+});
+
+test('email and SSO login runtime selection force cloud outside Electron and preserve local inside it', () => {
+  const local = runtimeConfigForLoginMode(
+    {
+      apiBaseUrl: 'http://127.0.0.1:9999',
+      deviceAuthorizationBaseUrl: 'https://signin.memstack.example',
+      apiKey: 'secret-token',
+      localApiToken: 'local-token',
+      tenantId: 'tenant-a',
+      projectId: 'project-a',
+      workspaceId: 'workspace-a',
+      mode: 'cloud',
+      workspaceRoot: '/workspace',
+    },
+    'local',
+  );
+
+  assert.deepEqual(runtimeConfigForLoginAvailability(local, false), {
+    apiBaseUrl: 'http://127.0.0.1:8000',
+    deviceAuthorizationBaseUrl: 'https://signin.memstack.example',
+    apiKey: '',
+    localApiToken: '',
+    tenantId: 'default',
+    projectId: '',
+    workspaceId: '',
+    mode: 'cloud',
+    workspaceRoot: '/workspace',
+  });
+  assert.equal(runtimeConfigForLoginAvailability(local, true), local);
+});
+
+test('Electron startup restores local mode now that the sidecar provides local authority', () => {
+  globalThis.window = {
+    __MEMSTACK_DESKTOP__: {
+      runtime: 'electron',
+      core: { invoke: async () => undefined },
+    },
+  };
+  try {
+    const config = initialDesktopRuntimeConfig(
+      createMemoryStorage('{"version":1,"mode":"local"}'),
+      true,
+    );
+    assert.equal(config.mode, 'local');
+    assert.equal(config.apiBaseUrl, 'http://127.0.0.1:8088');
+    assert.equal(config.tenantId, 'local');
+    assert.equal(config.projectId, 'local-project');
+  } finally {
+    delete globalThis.window;
+  }
+});
+
+test('Electron shell detection requires the dedicated allow-listed bridge', () => {
+  globalThis.window = {
+    __MEMSTACK_DESKTOP__: {
+      runtime: 'electron',
+      core: { invoke: async () => undefined },
+    },
+  };
+  assert.equal(runsInElectronShell(), true);
+
+  globalThis.window = {
+    __TAURI__: { core: { invoke: async () => undefined } },
+  };
+  assert.equal(runsInElectronShell(), false);
+  delete globalThis.window;
 });
 
 test('local workspace continue preserves the trusted-device choice when the runtime is ready', () => {

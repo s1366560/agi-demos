@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SOURCE_ICON="${1:-apps/desktop/src-tauri/icons/icon.png}"
-OUTPUT_ICON="${2:-apps/desktop/src-tauri/icons/icon.icns}"
+SOURCE_ICON="${1:-apps/desktop/electron/resources/icon.png}"
+OUTPUT_ICON="${2:-apps/desktop/electron/resources/icon.icns}"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   if [[ -f "$OUTPUT_ICON" ]]; then

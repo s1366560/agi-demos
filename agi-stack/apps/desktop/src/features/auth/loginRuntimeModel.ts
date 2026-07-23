@@ -23,6 +23,14 @@ function browserStorage(): LoginModeStorage | null {
   }
 }
 
+export function runsInElectronShell(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.__MEMSTACK_DESKTOP__?.runtime === 'electron' &&
+    typeof window.__MEMSTACK_DESKTOP__.core?.invoke === 'function'
+  );
+}
+
 function isLoginModePreference(value: unknown): value is LoginModePreference {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
@@ -74,8 +82,28 @@ export function runtimeConfigForLoginMode(
   };
 }
 
+export function loginModeForRuntimeAvailability(
+  mode: RuntimeMode,
+  localModeAvailable: boolean,
+): RuntimeMode {
+  return localModeAvailable ? mode : 'cloud';
+}
+
+export function runtimeConfigForLoginAvailability(
+  current: DesktopRuntimeConfig,
+  localModeAvailable: boolean,
+): DesktopRuntimeConfig {
+  const mode = loginModeForRuntimeAvailability(current.mode, localModeAvailable);
+  return mode === current.mode ? current : runtimeConfigForLoginMode(current, mode);
+}
+
 export function initialDesktopRuntimeConfig(
   storage = browserStorage(),
+  localModeAvailable = runsInElectronShell(),
 ): DesktopRuntimeConfig {
-  return runtimeConfigForLoginMode(DEFAULT_CONFIG, readLoginModePreference(storage));
+  const preferredConfig = runtimeConfigForLoginMode(
+    DEFAULT_CONFIG,
+    readLoginModePreference(storage),
+  );
+  return runtimeConfigForLoginAvailability(preferredConfig, localModeAvailable);
 }

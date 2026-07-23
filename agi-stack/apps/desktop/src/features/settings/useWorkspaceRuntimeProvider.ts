@@ -10,6 +10,7 @@ import type {
   WorkspaceRuntimeProvider,
 } from '../../types';
 import {
+  projectRuntimeModelOptions,
   workspaceRuntimeModelOptions,
   workspaceRuntimeProviderFromAuthority,
   workspaceRuntimeRoutingMutation,
@@ -67,12 +68,14 @@ export function useWorkspaceRuntimeProvider(
   scopeKeyRef.current = scopeKey;
 
   const commitAuthority = useCallback(
-    (policy: LlmProviderRoutingPolicy, providers: ManagedLlmProvider[]) => {
+    (policy: LlmProviderRoutingPolicy | null, providers: ManagedLlmProvider[]) => {
       const nextSnapshot = {
         scopeKey,
         policy,
         providers,
-        provider: workspaceRuntimeProviderFromAuthority(config, policy, providers, role),
+        provider: policy
+          ? workspaceRuntimeProviderFromAuthority(config, policy, providers, role)
+          : null,
       };
       snapshotRef.current = nextSnapshot;
       setSnapshot(nextSnapshot);
@@ -82,12 +85,7 @@ export function useWorkspaceRuntimeProvider(
 
   useEffect(() => {
     const controller = new AbortController();
-    if (
-      !enabled ||
-      !config.tenantId.trim() ||
-      !config.projectId.trim() ||
-      !config.workspaceId.trim()
-    ) {
+    if (!enabled || !config.tenantId.trim() || !config.projectId.trim()) {
       const emptySnapshot = { scopeKey, policy: null, providers: [], provider: null };
       snapshotRef.current = emptySnapshot;
       setSnapshot(emptySnapshot);
@@ -96,14 +94,19 @@ export function useWorkspaceRuntimeProvider(
       return () => controller.abort();
     }
 
-    void Promise.all([
-      client.getLlmProviderRoutingPolicy(
-        config.projectId,
-        config.workspaceId,
-        controller.signal,
-      ),
-      client.listLlmProviders(controller.signal),
-    ])
+    const authorityRequest = config.workspaceId.trim()
+      ? Promise.all([
+          client.getLlmProviderRoutingPolicy(
+            config.projectId,
+            config.workspaceId,
+            controller.signal,
+          ),
+          client.listLlmProviders(controller.signal),
+        ])
+      : client
+          .listLlmProviders(controller.signal)
+          .then((providers) => [null, providers] as const);
+    void authorityRequest
       .then(([policy, providers]) => {
         if (!controller.signal.aborted) {
           commitAuthority(policy, providers);
@@ -123,13 +126,15 @@ export function useWorkspaceRuntimeProvider(
   const activeSnapshot = enabled && snapshot.scopeKey === scopeKey ? snapshot : null;
   const modelOptions = useMemo(
     () =>
-      activeSnapshot?.policy
-        ? workspaceRuntimeModelOptions(
-            activeSnapshot.policy,
-            activeSnapshot.providers,
-            role,
-            config.mode,
-          )
+      activeSnapshot
+        ? activeSnapshot.policy
+          ? workspaceRuntimeModelOptions(
+              activeSnapshot.policy,
+              activeSnapshot.providers,
+              role,
+              config.mode,
+            )
+          : projectRuntimeModelOptions(activeSnapshot.providers, config.mode)
         : [],
     [activeSnapshot, config.mode, role],
   );

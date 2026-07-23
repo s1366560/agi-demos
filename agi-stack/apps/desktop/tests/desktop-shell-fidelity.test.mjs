@@ -301,7 +301,8 @@ test('runtime refresh hydrates unbound tasks plus selected or expanded workspace
     )?.[0] ?? '';
 
   assert.match(refreshRuntime, /projectConversationLoadTargets\(/);
-  assert.match(refreshRuntime, /filterUnboundConversations\(/);
+  assert.match(refreshRuntime, /unboundOnly: isUnboundGroup/);
+  assert.doesNotMatch(refreshRuntime, /filterUnboundConversations\(/);
   assert.doesNotMatch(refreshRuntime, /workspaces\.map\(async \(workspace\) => \{/);
   assert.match(appSource, /loadWorkspaceConversations/);
   assert.match(appSource, /if \(!wasExpanded\) void loadWorkspaceConversations\(workspaceId\)/);

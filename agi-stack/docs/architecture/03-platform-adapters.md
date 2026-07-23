@@ -47,7 +47,7 @@
 | 平台 | 外壳 | 绑定方式 |
 |---|---|---|
 | 服务器 | axum 二进制 | 直接链核心 |
-| 桌面 | Tauri | React renderer + Tauri commands + capability-protected loopback Axum local runtime；链 portable core/SQLite，并提供受限 host tools。该外壳不是 Web 全功能副本(✅ `apps/desktop`) |
+| 桌面 | Electron + Rust sidecar | React renderer 经受限 preload bridge 调用独立 sidecar；Electron main 管理一次性 HMAC 握手、loopback 端口/token、崩溃恢复与签名发布，sidecar 链 portable core/SQLite 并提供受限 host tools(✅ `apps/desktop`) |
 | iOS | SwiftUI app | UniFFI → 生成 Swift 绑定,链 `.a` |
 | Android | Compose app | UniFFI → 生成 Kotlin 绑定,链 `.so` |
 | Web | JS/TS 前端 | wasm-bindgen → wasm-pack 包(✅ `crates/bindings-wasm`,见 [04 #16](04-spike-evidence.md)) |

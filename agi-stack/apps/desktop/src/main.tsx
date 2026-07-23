@@ -30,20 +30,27 @@ function showFatalError(error: unknown) {
   root.replaceChildren(panel);
 }
 
-function runsInTauriShell(): boolean {
-  return Boolean(window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__);
+function desktopInvoke() {
+  return window.__MEMSTACK_DESKTOP__?.core?.invoke ?? null;
+}
+
+function runsInElectronShell(): boolean {
+  return (
+    window.__MEMSTACK_DESKTOP__?.runtime === 'electron' &&
+    typeof window.__MEMSTACK_DESKTOP__.core?.invoke === 'function'
+  );
 }
 
 function markRuntimeShell() {
-  const isTauri = runsInTauriShell();
-  document.documentElement.dataset.runtimeShell = isTauri ? 'tauri' : 'browser';
-  document.documentElement.toggleAttribute('data-tauri-window', isTauri);
+  const isElectron = runsInElectronShell();
+  document.documentElement.dataset.runtimeShell = isElectron ? 'electron' : 'browser';
+  document.documentElement.toggleAttribute('data-desktop-window', isElectron);
 }
 
 function reportFrontendReady() {
   if (!import.meta.env.DEV) return;
 
-  const invoke = window.__TAURI__?.core?.invoke;
+  const invoke = desktopInvoke();
   if (!invoke) return;
 
   window.requestAnimationFrame(() => {

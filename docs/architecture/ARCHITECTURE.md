@@ -25,7 +25,7 @@ Rust gateway / server (strangler)
 Portable Rust core
   | memory and ReAct foundations used by server/bindings/Desktop
 
-Tauri Desktop
+Electron Desktop + signed Rust sidecar
   | authenticated cloud subset + capability-protected local host runtime
 ```
 
@@ -33,10 +33,10 @@ Tauri Desktop
 
 Python/FastAPI and the React Web console remain the production feature baseline.
 The Rust server is a capability-by-capability strangler and must not be treated
-as a complete replacement until the corresponding parity gates pass. The Tauri
-Desktop exposes a smaller cloud API subset plus Local Memory and an explicit
-host runtime; Local Memory is not the same store as server Project Memory and is
-not implicitly synchronized.
+as a complete replacement until the corresponding parity gates pass. The Electron
+Desktop exposes a smaller cloud API subset while its independently signed Rust
+sidecar provides Local Memory and an explicit host runtime; Local Memory is not the
+same store as server Project Memory and is not implicitly synchronized.
 
 | Capability | Python/Web | Rust server | Desktop |
 | --- | --- | --- | --- |

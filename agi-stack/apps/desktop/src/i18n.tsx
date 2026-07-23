@@ -2473,6 +2473,14 @@ const enUS: Record<string, string> = {
   'task.codeAgent': 'Code Agent',
   'task.codeAgentDescription': 'Repository-aware implementation and verification',
   'task.workspace': 'Workspace',
+  'task.noWorkspace': 'No workspace',
+  'task.noWorkspaceDescription':
+    'Start a project conversation without binding it to a workspace.',
+  'task.projectDefaultModel': 'Project default',
+  'task.projectDefaultModelDescription':
+    'Let the Agent runtime choose the configured project model.',
+  'task.unboundConversationScopeMismatch':
+    'The server returned a workspace-bound conversation for a no-workspace thread.',
   'task.createWorkspace': 'Create a new workspace',
   'task.workspaceAuthorityLoading':
     'Workspace options are still loading. Wait for project authority before creating a task.',
@@ -5019,6 +5027,12 @@ const zhCN: Record<string, string> = {
   'task.codeAgent': '编程智能体',
   'task.codeAgentDescription': '理解代码仓库的实现与验证',
   'task.workspace': '工作空间',
+  'task.noWorkspace': '无工作空间',
+  'task.noWorkspaceDescription': '创建不绑定工作空间的项目会话。',
+  'task.projectDefaultModel': '项目默认模型',
+  'task.projectDefaultModelDescription': '由智能体运行时选择项目配置的默认模型。',
+  'task.unboundConversationScopeMismatch':
+    '服务端为“无工作空间”线程返回了已绑定工作空间的会话。',
   'task.createWorkspace': '创建新工作空间',
   'task.workspaceAuthorityLoading': '工作空间选项仍在加载，请等待项目权威状态就绪后再创建任务。',
   'task.workspaceAuthorityError': '无法验证工作空间选项，请刷新项目后再创建任务。',

@@ -11,10 +11,10 @@ export type SignOutDisposition = 'complete' | 'complete_with_persistence_warning
 export function isCurrentLocalRuntimeAuthority(
   config: DesktopRuntimeConfig,
   status: LocalRuntimeStatus | null,
-  runsInTauri: boolean,
+  runsInNativeDesktop: boolean,
 ): boolean {
   return Boolean(
-    runsInTauri &&
+    runsInNativeDesktop &&
       config.mode === 'local' &&
       status?.running &&
       status.api_base_url === config.apiBaseUrl &&

@@ -46,6 +46,7 @@ export type AgentRunMessage = {
   projectId: string;
   message: string;
   messageId?: string;
+  deferUntilNextConnection?: boolean;
   agentId?: string;
   forcedSkillName?: string;
   mentions?: string[];
@@ -135,6 +136,22 @@ function agentRunSocketMessage(message: AgentRunMessage): AgentRunSocketMessage 
   };
 }
 
+export function deliverAgentRunMessage(
+  queue: PendingAgentMessageQueue,
+  message: AgentRunMessage,
+  send: (message: AgentRunSocketMessage) => boolean,
+  canQueue: boolean,
+): boolean {
+  const payload = agentRunSocketMessage(message);
+  if (!payload) return false;
+  if (!canQueue) {
+    return !message.deferUntilNextConnection && send(payload);
+  }
+  if (!enqueuePendingAgentSocketMessage(queue, payload)) return false;
+  if (!message.deferUntilNextConnection) send(payload);
+  return true;
+}
+
 function enqueuePendingAgentSocketMessage(
   queue: PendingAgentMessageQueue,
   payload: AgentRunSocketMessage,
@@ -150,12 +167,23 @@ export function flushPendingAgentRunMessages(
   send: (message: AgentRunSocketMessage) => boolean,
 ): number {
   let sent = 0;
-  for (const [key, message] of queue) {
+  for (const message of queue.values()) {
     if (!send(message)) break;
-    queue.delete(key);
     sent += 1;
   }
   return sent;
+}
+
+export function confirmPendingAgentRunMessageReceipt(
+  queue: PendingAgentMessageQueue,
+  event: unknown,
+): boolean {
+  if (!event || typeof event !== 'object') return false;
+  const payload = event as Record<string, unknown>;
+  const conversationId = nestedStringField(payload, ['conversation_id', 'conversationId']);
+  const messageId = nestedStringField(payload, ['message_id', 'messageId']);
+  if (!conversationId || !messageId) return false;
+  return queue.delete(`${conversationId}\u0000${messageId}`);
 }
 
 export function useAgentSocket(
@@ -215,11 +243,12 @@ export function useAgentSocket(
       const conversationId = message.conversationId.trim();
       if (!conversationId) return false;
       contextStateRef.current.subscribedConversations.add(conversationId);
-      const payload = agentRunSocketMessage(message);
-      if (!payload) return false;
-      if (sendSocketMessage(payload)) return true;
-      if (!canQueuePendingAgentRunMessage(config.mode, enabled, credential)) return false;
-      return enqueuePendingAgentSocketMessage(pendingAgentMessagesRef.current, payload);
+      return deliverAgentRunMessage(
+        pendingAgentMessagesRef.current,
+        message,
+        sendSocketMessage,
+        canQueuePendingAgentRunMessage(config.mode, enabled, credential),
+      );
     },
     [config.mode, credential, enabled, sendSocketMessage],
   );
@@ -429,6 +458,7 @@ export function useAgentSocket(
         if (disposed || socketRef.current !== socket) return;
         lastMessageAt = Date.now();
         const event = parseEvent(message.data);
+        confirmPendingAgentRunMessageReceipt(pendingAgentMessagesRef.current, event);
         const type =
           stringField(event, 'type') ?? stringField(event, 'event_type');
         if (type === 'heartbeat' || type === 'pong') return;
@@ -502,6 +532,24 @@ export function useAgentSocket(
     sendAgentMessage,
     respondToHitl,
   };
+}
+
+function nestedStringField(
+  payload: Record<string, unknown>,
+  keys: readonly string[],
+): string | null {
+  for (const key of keys) {
+    const value = stringField(payload, key);
+    if (value) return value;
+  }
+  for (const key of ['message', 'payload', 'data']) {
+    const nested = payload[key];
+    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+      const value = nestedStringField(nested as Record<string, unknown>, keys);
+      if (value) return value;
+    }
+  }
+  return null;
 }
 
 export function createAgentSocketContextState(): AgentSocketContextState {

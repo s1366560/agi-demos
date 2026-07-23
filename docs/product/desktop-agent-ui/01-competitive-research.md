@@ -68,7 +68,7 @@ Agent 桌面产品的核心竞争已经从“模型能否完成任务”转向�
 
 仓库证据：
 
-- 已存在 Tauri + React 桌面应用：`agi-stack/apps/desktop`。
+- 已存在 Electron + React 桌面应用及独立 Rust sidecar：`agi-stack/apps/desktop`。
 - 已实现 Session 侧栏、Runs、Agents、Memory、Artifacts、Runtime、Chat、Board、Workspace Dock、Terminal、Changes、Pull request、Plan、Tool events 和 Artifacts 等大量表面。
 - 当前视觉采用深色基础色 `#080C12`，面板 `#0F141D / #151A24`，状态色 Cyan/Green/Amber/Red，适合延续。
 - 当前 `App` 主函数覆盖约 3,000 行并直接协调大量状态和表面。后续大规模 UX 实现前，应将 Shell、Task State、Navigation、Workspace Canvas 和 Approval 分离，否则设计迭代成本会持续上升。

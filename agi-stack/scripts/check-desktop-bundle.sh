@@ -1,33 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${AGISTACK_DESKTOP_ROOT:-apps/desktop/src-tauri}"
-BUNDLE_ROOT="${AGISTACK_DESKTOP_BUNDLE_ROOT:-$ROOT/target/release/bundle}"
-CONFIG="$ROOT/tauri.conf.json"
-DIST="$ROOT/../dist/index.html"
+ROOT="${AGISTACK_DESKTOP_ROOT:-apps/desktop}"
+BUNDLE_ROOT="${AGISTACK_DESKTOP_BUNDLE_ROOT:-$ROOT/release}"
+CONFIG="$ROOT/electron-builder.yml"
 EXPECTED_ID="${AGISTACK_DESKTOP_IDENTIFIER:-ai.agistack.desktop}"
-EXPECTED_BIN="${AGISTACK_DESKTOP_BIN:-agistack-desktop}"
+EXPECTED_SIDECAR="${AGISTACK_DESKTOP_SIDECAR:-agistack-desktop-sidecar}"
 
-python3 - "$CONFIG" "$EXPECTED_ID" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-config_path = Path(sys.argv[1])
-expected_id = sys.argv[2]
-config = json.loads(config_path.read_text())
-identifier = config.get("identifier")
-if identifier != expected_id:
-    raise SystemExit(f"unexpected Tauri identifier: {identifier!r}")
-if not config.get("bundle", {}).get("active"):
-    raise SystemExit("Tauri bundle.active must be true")
-frontend_dist = config.get("build", {}).get("frontendDist")
-if not frontend_dist:
-    raise SystemExit("Tauri build.frontendDist is required")
-PY
-
-test -f "$DIST" || {
-  echo "missing desktop frontend dist: $DIST" >&2
+grep -q "^appId: $EXPECTED_ID$" "$CONFIG" || {
+  echo "unexpected Electron app identifier in $CONFIG" >&2
   exit 1
 }
 test -d "$BUNDLE_ROOT" || {
@@ -43,10 +24,15 @@ test -n "$first_bundle" || {
 
 app_dir="$(find "$BUNDLE_ROOT" -name '*.app' -type d -print -quit || true)"
 if [[ -n "$app_dir" ]]; then
-  macos_bin="$app_dir/Contents/MacOS/$EXPECTED_BIN"
+  macos_bin="$(find "$app_dir/Contents/MacOS" -type f -perm -111 -print -quit)"
+  sidecar_bin="$app_dir/Contents/Resources/sidecar/$EXPECTED_SIDECAR"
   info_plist="$app_dir/Contents/Info.plist"
-  test -x "$macos_bin" || {
-    echo "macOS bundle binary is missing or not executable: $macos_bin" >&2
+  test -n "$macos_bin" || {
+    echo "macOS bundle has no executable" >&2
+    exit 1
+  }
+  test -x "$sidecar_bin" || {
+    echo "macOS sidecar is missing or not executable: $sidecar_bin" >&2
     exit 1
   }
   test -f "$info_plist" || {
@@ -57,6 +43,8 @@ if [[ -n "$app_dir" ]]; then
     echo "macOS bundle Info.plist does not contain identifier $EXPECTED_ID" >&2
     exit 1
   }
+  codesign --verify --deep --strict "$app_dir"
+  codesign --verify --strict "$sidecar_bin"
 fi
 
 echo "DESKTOP_BUNDLE_SMOKE_OK bundle_root=$BUNDLE_ROOT"

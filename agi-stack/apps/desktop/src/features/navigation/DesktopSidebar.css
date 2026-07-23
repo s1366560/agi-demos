@@ -321,7 +321,7 @@
 }
 
 .app-shell.hierarchy-shell,
-.app-shell.tauri-window.hierarchy-shell {
+.app-shell.desktop-window.hierarchy-shell {
   grid-template-rows: minmax(0, 1fr);
   grid-template-columns: var(--desktop-sidebar-width) minmax(0, 1fr);
 }

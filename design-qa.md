@@ -62,7 +62,7 @@ final result: passed
 - Source visual truth: `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control`
 - Implementation harness: `/Users/tiejunsun/github/agi-demos/agi-stack/apps/desktop/qa/mission-control.html`
 - Desktop source: `/Users/tiejunsun/github/agi-demos/agi-stack/apps/desktop/src`
-- Rust authority source: `/Users/tiejunsun/github/agi-demos/agi-stack/apps/desktop/src-tauri/src`
+- Rust authority source: `/Users/tiejunsun/github/agi-demos/agi-stack/apps/desktop/sidecar/src`
 - Python/cloud source: `/Users/tiejunsun/github/agi-demos/src`
 - Viewports: `1440 × 1024` and `1100 × 800`.
 - States: composer-first Home and grouped My Work inbox, authenticated dark desktop shell.
@@ -89,7 +89,8 @@ Each comparison places the source prototype and implementation side by side at t
 - Navigate the Workspace-grouped thread tree and open My Work cards directly into the authoritative conversation.
 - Render plan replacement and approval against the current immutable version only.
 - Keep the latest permission HITL above the composer and submit `allow`, `allow_always`, or `deny` without optimistic completion.
-- Native Tauri acceptance launched through `make -C agi-stack run-desktop`; the app shell reported no fatal runtime state.
+- Native Electron acceptance launched through `make -C agi-stack run-desktop`; the app shell and
+  independently built Rust sidecar reported no fatal runtime state.
 - Browser console warnings and errors in the final QA harness: none.
 
 ## Comparison history

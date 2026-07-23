@@ -1,12 +1,15 @@
 /// <reference types="vite/client" />
 
-type TauriInvoke = <T = string>(command: string, args?: Record<string, unknown>) => Promise<T>;
+type DesktopInvoke = <T = string>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
 interface Window {
-  __TAURI__?: {
+  __MEMSTACK_DESKTOP__?: {
+    runtime: 'electron';
     core?: {
-      invoke?: TauriInvoke;
+      invoke?: DesktopInvoke;
+    };
+    events?: {
+      onSidecarRecovered?: (listener: () => void) => () => void;
     };
   };
-  __TAURI_INTERNALS__?: unknown;
 }

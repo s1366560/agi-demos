@@ -1,11 +1,8 @@
 # The repo-root Python .gitignore excludes `dist/` (sdist build output).
-# The Tauri shell checks in its generated desktop frontend bundle because
-# Tauri points `frontendDist` at this folder.
 !dist/
 !dist/**
 
-# Tauri build outputs. This app crate is intentionally excluded from the cargo
-# workspace (heavy tauri/wry/tao + tokio tree), so it has its own nested
-# target/ and an auto-generated ACL schema dir.
-src-tauri/target/
-src-tauri/gen/schemas/
+# electron-vite build output. Electron runs from out/ for preview and packaging.
+out/
+release/
+build/sidecar/

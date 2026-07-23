@@ -5,6 +5,7 @@ import type {
   DesktopRuntimeConfig,
   ManagedLlmProvider,
   WorkspaceAgentPolicy,
+  WorkspaceMemberSummary,
 } from '../../types';
 import { workspaceRuntimeModelOptions } from './workspaceRuntimeProviderModel';
 import type { WorkspaceRuntimeModelOption } from './workspaceRuntimeProviderModel';
@@ -13,6 +14,7 @@ type WorkspaceAgentPolicyState = {
   scopeKey: string;
   policy: WorkspaceAgentPolicy | null;
   providers: ManagedLlmProvider[];
+  members: WorkspaceMemberSummary[];
   loading: boolean;
   compatibilityMode: boolean;
   error: string | null;
@@ -42,6 +44,7 @@ export function useWorkspaceAgentPolicy(
     scopeKey: '',
     policy: null,
     providers: [],
+    members: [],
     loading: false,
     compatibilityMode: false,
     error: null,
@@ -49,28 +52,48 @@ export function useWorkspaceAgentPolicy(
 
   useEffect(() => {
     const controller = new AbortController();
-    if (!enabled || !config.tenantId || !config.projectId || !config.workspaceId) {
+    if (!enabled || !config.tenantId || !config.projectId) {
       setState({
         scopeKey,
         policy: null,
         providers: [],
+        members: [],
         loading: false,
         compatibilityMode: false,
         error: null,
       });
       return () => controller.abort();
     }
-    setState((current) => ({ ...current, scopeKey, loading: true, error: null }));
+    setState({
+      scopeKey,
+      policy: null,
+      providers: [],
+      members: [],
+      loading: true,
+      compatibilityMode: false,
+      error: null,
+    });
+    const policyPromise: Promise<{
+      policy: WorkspaceAgentPolicy | null;
+      compatibilityMode: boolean;
+    }> = config.workspaceId
+      ? loadAgentPolicy(client, config.projectId, config.workspaceId, controller.signal)
+      : Promise.resolve({ policy: null, compatibilityMode: false });
+    const membersPromise = config.workspaceId
+      ? client.listWorkspaceMembers(controller.signal)
+      : Promise.resolve<WorkspaceMemberSummary[]>([]);
     void Promise.all([
-      loadAgentPolicy(client, config.projectId, config.workspaceId, controller.signal),
+      policyPromise,
       client.listLlmProviders(controller.signal),
+      membersPromise,
     ])
-      .then(([policyResult, providers]) => {
+      .then(([policyResult, providers, members]) => {
         if (controller.signal.aborted) return;
         setState({
           scopeKey,
           policy: policyResult.policy,
           providers,
+          members,
           loading: false,
           compatibilityMode: policyResult.compatibilityMode,
           error: null,
@@ -82,6 +105,7 @@ export function useWorkspaceAgentPolicy(
           scopeKey,
           policy: null,
           providers: [],
+          members: [],
           loading: false,
           compatibilityMode: false,
           error: caught instanceof Error ? caught.message : String(caught),
@@ -90,7 +114,10 @@ export function useWorkspaceAgentPolicy(
     return () => controller.abort();
   }, [client, config, enabled, refreshRevision, scopeKey]);
 
-  const current = state.scopeKey === scopeKey ? state : { ...state, policy: null, providers: [] };
+  const current =
+    state.scopeKey === scopeKey
+      ? state
+      : { ...state, policy: null, providers: [], members: [] };
   const refresh = useCallback(() => setRefreshRevision((value) => value + 1), []);
   const acceptPolicy = useCallback(
     (policy: WorkspaceAgentPolicy) => {

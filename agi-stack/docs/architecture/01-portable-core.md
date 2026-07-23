@@ -77,7 +77,7 @@ agi-stack/                         # 本根目录
 │   └── bindings-wasm/             # web:wasm-bindgen/wasm-pack 导出 JS/TS
 └── apps/
     ├── server/                    # axum 二进制(tokio 只在这里)
-    ├── desktop/                   # Tauri
+    ├── desktop/                   # Electron shell + signed Rust sidecar
     ├── ios/                       # 最小 SwiftUI app 调 uniffi framework
     └── android/                   # 最小 Compose app 调 uniffi .so
 ```

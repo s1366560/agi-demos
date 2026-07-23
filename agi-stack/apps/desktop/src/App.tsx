@@ -78,6 +78,8 @@ import {
 } from './features/auth/loginScreenModel';
 import {
   initialDesktopRuntimeConfig,
+  runsInElectronShell,
+  runtimeConfigForLoginAvailability,
   runtimeConfigForLoginMode,
   writeLoginModePreference,
 } from './features/auth/loginRuntimeModel';
@@ -100,6 +102,7 @@ import {
   composerAgentExecutionContext,
   workspaceMessageRequiresDefaultAgentLaunch,
 } from './features/chat/chatComposerModel';
+import { unboundComposerCatalogClient } from './features/chat/composerCatalogModel';
 import {
   applyConversationTitleUpdate,
   readConversationTitleStreamEvent,
@@ -245,6 +248,7 @@ import { useWorkspaceRuntimeProvider } from './features/settings/useWorkspaceRun
 import {
   conversationRuntimeModelSelection,
   latestConversationRuntimeModelEvent,
+  projectRuntimeModelOptions,
 } from './features/settings/workspaceRuntimeProviderModel';
 import {
   NewTaskFlow,
@@ -288,11 +292,11 @@ import { beginDesktopRuntimeScopeTransition } from './features/workspace/workspa
 import {
   UNBOUND_CONVERSATIONS_KEY,
   beginWorkspaceConversationRequest,
-  filterUnboundConversations,
   isCurrentWorkspaceConversationRequest,
   projectConversationLoadTargets,
   reconcileExpandedWorkspaceIds,
   reconcileWorkspaceConversationRowsAfterRefresh,
+  resolveRuntimeWorkspaceId,
   shouldClearConversationSelectionAfterRefresh,
   shouldLoadWorkspaceConversations,
   supersedeWorkspaceConversationRequests,
@@ -569,16 +573,15 @@ type AgentTaskSignalPatch = Partial<Omit<AgentTaskSignal, 'id'>> & {
   id: string;
 };
 
-function detectTauriShell(): boolean {
+function detectNativeDesktopShell(): boolean {
   if (typeof window === 'undefined') return false;
   return Boolean(
-    window.__TAURI__?.core?.invoke ||
-      window.__TAURI_INTERNALS__ ||
-      document.documentElement.hasAttribute('data-tauri-window'),
+    runsInElectronShell() ||
+      document.documentElement.hasAttribute('data-desktop-window'),
   );
 }
 
-function localRuntimeTauriConfig(config: DesktopRuntimeConfig) {
+function localRuntimeSidecarConfig(config: DesktopRuntimeConfig) {
   return {
     workspace_root: config.workspaceRoot,
   };
@@ -1599,9 +1602,11 @@ class WorkspaceSsoFlowError extends Error {
 }
 
 export function App() {
-  const runsInTauri = detectTauriShell();
+  const runsInNativeDesktop = detectNativeDesktopShell();
   const { t } = useI18n();
-  const [config, setConfig] = useState<DesktopRuntimeConfig>(() => initialDesktopRuntimeConfig());
+  const [config, setConfig] = useState<DesktopRuntimeConfig>(() =>
+    initialDesktopRuntimeConfig(undefined, runsInNativeDesktop),
+  );
   const [auth, setAuth] = useState<AuthState>(emptyAuthState);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -1610,6 +1615,10 @@ export function App() {
   const [newTaskResumeDraft, setNewTaskResumeDraft] =
     useState<NewTaskResumeDraft | null>(null);
   const [preferredTaskMode, setPreferredTaskMode] = useState<'work' | 'code'>('work');
+  const [newThreadScope, setNewThreadScope] = useState({
+    projectId: '',
+    workspaceId: '',
+  });
   const [newThreadCreating, setNewThreadCreating] = useState(false);
   const [newThreadError, setNewThreadError] = useState<string | null>(null);
   const [settingsWindowOpen, setSettingsWindowOpen] = useState(false);
@@ -1816,6 +1825,10 @@ export function App() {
       : null;
   const scopedConversationId = scopedConversation?.id ?? '';
   const api = useMemo(() => new DesktopApiClient(config), [config]);
+  const chatComposerApi = useMemo(
+    () => (config.workspaceId.trim() ? api : unboundComposerCatalogClient(api)),
+    [api, config.workspaceId],
+  );
   const socket = useAgentSocket(
     config,
     showRuntimeConfig && connection === 'ready',
@@ -1835,11 +1848,11 @@ export function App() {
     [socket.events],
   );
   const modalOpen = loginModalOpen || commandPaletteOpen || newTaskOpen || settingsWindowOpen;
-  const localRuntimeMode = config.mode === 'local' && runsInTauri;
+  const localRuntimeMode = config.mode === 'local' && runsInNativeDesktop;
   const localRuntimeAuthorityReady = isCurrentLocalRuntimeAuthority(
     config,
     localRuntimeStatus,
-    runsInTauri,
+    runsInNativeDesktop,
   );
   const runtimeModelRole: LlmRoutingRole =
     scopedConversation?.agent_config?.capability_mode === 'code' ? 'coding' : 'default';
@@ -1859,37 +1872,60 @@ export function App() {
     runtimeProjectionRefreshRevision,
     runtimeModelRole,
   );
+  const newThreadWorkspaces = dataset.workspacesByProject[config.projectId] ?? [];
+  const configuredNewThreadWorkspaceId = newThreadWorkspaces.some(
+    (workspace) => workspace.id === config.workspaceId,
+  )
+    ? config.workspaceId
+    : '';
+  const newThreadWorkspaceId =
+    newThreadScope.projectId === config.projectId &&
+    (!newThreadScope.workspaceId ||
+      newThreadWorkspaces.some((workspace) => workspace.id === newThreadScope.workspaceId))
+      ? newThreadScope.workspaceId
+      : configuredNewThreadWorkspaceId;
+  const newThreadRuntimeConfig = useMemo(
+    () => ({ ...config, workspaceId: newThreadWorkspaceId }),
+    [config, newThreadWorkspaceId],
+  );
+  const newThreadApi = useMemo(
+    () => new DesktopApiClient(newThreadRuntimeConfig),
+    [newThreadRuntimeConfig],
+  );
+  const newThreadComposerApi = useMemo(() => {
+    if (newThreadWorkspaceId) return newThreadApi;
+    return unboundComposerCatalogClient(newThreadApi);
+  }, [newThreadApi, newThreadWorkspaceId]);
   const workspaceAgentPolicy = useWorkspaceAgentPolicy(
-    config,
+    newThreadRuntimeConfig,
     identityAuthenticated && showRuntimeConfig && connection === 'ready',
   );
   const canManageWorkspacePolicy = useMemo(() => {
     if (auth.user?.roles.some((role) => role === 'admin' || role === 'owner')) return true;
-    if (dataset.workspaceMembers.status !== 'ready') return false;
-    const membership = dataset.workspaceMembers.items.find(
+    const membership = workspaceAgentPolicy.members.find(
       (member) =>
-        member.workspace_id === config.workspaceId && member.user_id === auth.user?.user_id,
+        member.workspace_id === newThreadWorkspaceId && member.user_id === auth.user?.user_id,
     );
     return membership?.role === 'manager' || membership?.role === 'owner';
-  }, [auth.user, config.workspaceId, dataset.workspaceMembers]);
+  }, [auth.user, newThreadWorkspaceId, workspaceAgentPolicy.members]);
 
   const syncLocalRuntimeConfig = useCallback(
     async (nextConfig: DesktopRuntimeConfig): Promise<DesktopRuntimeConfig> => {
-      if (!runsInTauri || nextConfig.mode !== 'local') return nextConfig;
-      const invoke = window.__TAURI__?.core?.invoke;
+      if (!runsInNativeDesktop || nextConfig.mode !== 'local') return nextConfig;
+      const invoke = window.__MEMSTACK_DESKTOP__?.core?.invoke;
       if (!invoke) return nextConfig;
       const status = await invoke<LocalRuntimeStatus>('local_runtime_configure', {
-        config: localRuntimeTauriConfig(nextConfig),
+        config: localRuntimeSidecarConfig(nextConfig),
       });
       setLocalRuntimeStatus(status);
       return mergeLocalRuntimeStatus(nextConfig, status);
     },
-    [runsInTauri],
+    [runsInNativeDesktop],
   );
 
   const refreshLocalRuntimeStatus = useCallback(async (): Promise<void> => {
-    if (!runsInTauri || configRef.current.mode !== 'local') return;
-    const invoke = window.__TAURI__?.core?.invoke;
+    if (!runsInNativeDesktop || configRef.current.mode !== 'local') return;
+    const invoke = window.__MEMSTACK_DESKTOP__?.core?.invoke;
     if (!invoke) return;
     try {
       const status = await invoke<LocalRuntimeStatus>('local_runtime_status');
@@ -1902,12 +1938,12 @@ export function App() {
       setError(message);
       throw caught instanceof Error ? caught : new Error(message);
     }
-  }, [commitRuntimeConfig, runsInTauri]);
+  }, [commitRuntimeConfig, runsInNativeDesktop]);
 
   useEffect(() => {
     if (!localRuntimeMode) return;
     let cancelled = false;
-    const invoke = window.__TAURI__?.core?.invoke;
+    const invoke = window.__MEMSTACK_DESKTOP__?.core?.invoke;
     if (!invoke) return;
     invoke<LocalRuntimeStatus>('local_runtime_status')
       .then((status) => {
@@ -2914,10 +2950,8 @@ export function App() {
       ? 'An authenticated session is required before sending messages.'
       : !config.tenantId.trim() || !config.projectId.trim()
         ? 'Select an account and project before chatting.'
-    : !config.workspaceId
-      ? 'Create or select a workspace before sending messages.'
       : connection !== 'ready'
-        ? 'Connect the workspace before sending messages.'
+        ? t('task.liveConnectionRequired')
         : null;
 
   useEffect(() => {
@@ -3074,11 +3108,12 @@ export function App() {
         );
         const workspaces = workspaceResults.flatMap((result) => result.workspaces);
         const projectWorkspaces = workspacesByProject[resolvedProjectId] ?? [];
-        const workspaceId =
-          runtimeConfig.workspaceId.trim() &&
-          projectWorkspaces.some((workspace) => workspace.id === runtimeConfig.workspaceId.trim())
-            ? runtimeConfig.workspaceId.trim()
-            : projectWorkspaces[0]?.id ?? '';
+        const workspaceId = resolveRuntimeWorkspaceId(
+          runtimeConfig.workspaceId,
+          resolvedProjectId,
+          projectWorkspaces,
+          agentConversationSessionRef.current?.conversation ?? null,
+        );
         const nextExpandedWorkspaceIds = reconcileExpandedWorkspaceIds(
           expandedWorkspaceIdsRef.current,
           projectWorkspaces.map((workspace) => workspace.id),
@@ -3152,14 +3187,15 @@ export function App() {
             try {
               const response = await client.listConversations(
                 resolvedProjectId,
-                isUnboundGroup ? null : targetWorkspaceId,
+                {
+                  workspaceId: isUnboundGroup ? null : targetWorkspaceId,
+                  unboundOnly: isUnboundGroup,
+                },
               );
               return {
                 workspaceId: targetWorkspaceId,
                 requestGeneration,
-                conversations: isUnboundGroup
-                  ? filterUnboundConversations(response.items)
-                  : response.items,
+                conversations: response.items,
                 error: null,
               };
             } catch (caught) {
@@ -3355,6 +3391,16 @@ export function App() {
   );
 
   useEffect(() => {
+    if (!localRuntimeMode) return;
+    const onSidecarRecovered =
+      window.__MEMSTACK_DESKTOP__?.events?.onSidecarRecovered;
+    if (!onSidecarRecovered) return;
+    return onSidecarRecovered(() => {
+      void refreshRuntime(configRef.current);
+    });
+  }, [localRuntimeMode, refreshRuntime]);
+
+  useEffect(() => {
     const events = socketEventsSince(socket.events, workspaceLifecycleEventsHeadRef.current);
     workspaceLifecycleEventsHeadRef.current = socket.events[0] ?? null;
     const runtimeConfig = configRef.current;
@@ -3459,11 +3505,12 @@ export function App() {
       });
       const response = await client.listConversations(
         projectId,
-        isUnboundGroup ? null : workspaceId,
+        {
+          workspaceId: isUnboundGroup ? null : workspaceId,
+          unboundOnly: isUnboundGroup,
+        },
       );
-      const refreshedConversations = isUnboundGroup
-        ? filterUnboundConversations(response.items)
-        : response.items;
+      const refreshedConversations = response.items;
       if (!requestIsCurrent()) return;
       updateDataset((current) => {
         if (
@@ -3777,8 +3824,8 @@ export function App() {
     }
     current.openInFlight = true;
     try {
-      const invoke = window.__TAURI__?.core?.invoke;
-      if (runsInTauri && invoke) {
+      const invoke = window.__MEMSTACK_DESKTOP__?.core?.invoke;
+      if (runsInNativeDesktop && invoke) {
         await invoke('open_device_authorization_url', {
           url: authorizationUrl,
           deviceAuthorizationBaseUrl,
@@ -3840,7 +3887,10 @@ export function App() {
   };
 
   const loginWithWorkspaceSso = async (trustedDevice: boolean) => {
-    const runtimeConfig = configRef.current;
+    const runtimeConfig = runtimeConfigForLoginAvailability(
+      configRef.current,
+      runsInNativeDesktop,
+    );
     if (runtimeConfig.mode !== 'cloud') return;
 
     const preserveExpiredPresentation = Boolean(
@@ -4026,6 +4076,10 @@ export function App() {
     supersedeWorkspaceSsoAttempt();
     const username = loginEmail.trim();
     if (!username || !loginPassword) return;
+    const runtimeConfig = runtimeConfigForLoginAvailability(
+      configRef.current,
+      runsInNativeDesktop,
+    );
 
     const authAttemptRevision = ++authAttemptRevisionRef.current;
     localResumeAttemptRef.current = '';
@@ -4045,7 +4099,7 @@ export function App() {
         }
         if (authAttemptRevisionRef.current !== authAttemptRevision) return;
       }
-      const loginClient = new DesktopApiClient({ ...config, apiKey: '' });
+      const loginClient = new DesktopApiClient({ ...runtimeConfig, apiKey: '' });
       const outcome = await loginClient.login(username, loginPassword);
       issuedAccessToken = outcome.access_token;
       if (authAttemptRevisionRef.current !== authAttemptRevision) return;
@@ -4055,7 +4109,7 @@ export function App() {
       if (trustedDevice && hasNativeTrustedSessionBroker()) {
         const trustedSession: NativeTrustedSession = {
           version: 1,
-          api_base_url: config.apiBaseUrl,
+          api_base_url: runtimeConfig.apiBaseUrl,
           runtime_mode: 'cloud',
           credential_kind: 'cloud_bearer',
           credential: outcome.access_token,
@@ -4068,7 +4122,7 @@ export function App() {
         }
         if (authAttemptRevisionRef.current !== authAttemptRevision) return;
       }
-      const hydrated = await hydrateCloudSession(outcome, config, authAttemptRevision);
+      const hydrated = await hydrateCloudSession(outcome, runtimeConfig, authAttemptRevision);
       if (!hydrated) return;
       tokenAdopted = true;
       if (persistenceWarning) setError(persistenceWarning);
@@ -4081,13 +4135,13 @@ export function App() {
           // Preserve the original authentication failure without exposing credential-store detail.
         }
       }
-      const message = formatLoginError(caught, config.apiBaseUrl);
+      const message = formatLoginError(caught, runtimeConfig.apiBaseUrl);
       setAuth({ ...emptyAuthState, error: message });
       setConnection('error');
       setError(message);
     } finally {
       if (issuedAccessToken && !tokenAdopted) {
-        await revokeUnadoptedDeviceToken(issuedAccessToken, config);
+        await revokeUnadoptedDeviceToken(issuedAccessToken, runtimeConfig);
       }
     }
   };
@@ -4264,10 +4318,11 @@ export function App() {
   };
 
   const changeLoginMode = (mode: RuntimeMode) => {
-    if (mode === configRef.current.mode) return;
+    const nextMode: RuntimeMode = mode;
+    if (nextMode === configRef.current.mode) return;
     setLoginEmail('');
     setLoginPassword('');
-    handleConfigChange(runtimeConfigForLoginMode(configRef.current, mode));
+    handleConfigChange(runtimeConfigForLoginMode(configRef.current, nextMode));
   };
 
   const useApiKeyManually = () => {
@@ -4401,7 +4456,24 @@ export function App() {
 
   const startNewSession = () => {
     setNewThreadError(null);
+    setNewThreadScope({
+      projectId: config.projectId,
+      workspaceId: configuredNewThreadWorkspaceId,
+    });
     switchSection('home');
+  };
+
+  const changeNewThreadWorkspace = (workspaceId: string) => {
+    const nextWorkspaceId = workspaceId.trim();
+    if (
+      nextWorkspaceId &&
+      !newThreadWorkspaces.some((workspace) => workspace.id === nextWorkspaceId)
+    ) {
+      setNewThreadError(t('task.workspaceSelectionStale'));
+      return;
+    }
+    setNewThreadError(null);
+    setNewThreadScope({ projectId: config.projectId, workspaceId: nextWorkspaceId });
   };
 
   const resumeSessionTaskListReview = () => {
@@ -4496,8 +4568,40 @@ export function App() {
     void loadConversationTimeline(conversation, sessionConfig.projectId);
   };
 
+  const activateUnboundNewThread = (
+    conversation: AgentConversation,
+    threadConfig: DesktopRuntimeConfig,
+  ) => {
+    setSelectedTaskId('');
+    resetConversationTimeline();
+    setAgentTaskSignals([]);
+    setReviewTab('overview');
+    setSectionBackStack([]);
+    setSectionForwardStack([]);
+    setDataset((current) => ({
+      ...current,
+      conversationsByWorkspace: {
+        ...current.conversationsByWorkspace,
+        [UNBOUND_CONVERSATIONS_KEY]: [
+          conversation,
+          ...(current.conversationsByWorkspace[UNBOUND_CONVERSATIONS_KEY] ?? []).filter(
+            (item) => item.id !== conversation.id,
+          ),
+        ],
+      },
+    }));
+    commitRuntimeConfig(threadConfig);
+    setAgentConversationSession({
+      scopeKey: agentConversationScopeKeyFor(threadConfig.projectId, ''),
+      conversation,
+    });
+    applySectionSideEffects('chat');
+    void loadConversationTimeline(conversation, threadConfig.projectId, threadConfig);
+  };
+
   const runNewTaskAgentTurn = async (
     input: NewTaskAgentTurnInput,
+    delivery: { deferUntilNextConnection?: boolean } = {},
   ): Promise<NewTaskAgentTurnOutcome> => {
     const acknowledgment = new Promise<NewTaskAgentTurnOutcome>((resolve, reject) => {
       const timeoutId = window.setTimeout(() => {
@@ -4523,6 +4627,7 @@ export function App() {
       projectId: input.projectId,
       message: input.message,
       messageId: input.messageId,
+      deferUntilNextConnection: delivery.deferUntilNextConnection,
       agentId: input.agentId,
       forcedSkillName: input.forcedSkillName,
       mentions: input.mentions,
@@ -4548,11 +4653,135 @@ export function App() {
   };
 
   const createComposerThread = async (input: NewThreadComposerInput) => {
-    const policy = workspaceAgentPolicy.policy;
     const actorId = auth.user?.user_id.trim() ?? '';
-    const workspaceId = config.workspaceId.trim();
+    const workspaceId = input.workspaceId.trim();
     const title = input.prompt.split(/\r?\n/, 1)[0].trim().slice(0, 96);
-    if (!actorId || !workspaceId || !title || !policy) {
+    if (!actorId || !title) {
+      setNewThreadError(t('task.creationContextUnavailable'));
+      return;
+    }
+    const requestConfig = configRef.current;
+    const expectedContextRevision = contextRevisionRef.current;
+    const expectedScopeEpoch = configScopeEpochRef.current;
+    const threadConfig = { ...requestConfig, workspaceId };
+    let activatedConfig: DesktopRuntimeConfig | null = null;
+    let activatedScopeEpoch: number | null = null;
+    const requestScopeIsCurrent = () =>
+      isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) &&
+      expectedScopeEpoch === configScopeEpochRef.current &&
+      isSameDesktopRequestScope(requestConfig, configRef.current);
+    const activatedScopeIsCurrent = () =>
+      activatedConfig !== null &&
+      activatedScopeEpoch !== null &&
+      isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) &&
+      activatedScopeEpoch === configScopeEpochRef.current &&
+      isSameDesktopRequestScope(activatedConfig, configRef.current);
+    const creationScopeIsCurrent = () =>
+      activatedConfig === null ? requestScopeIsCurrent() : activatedScopeIsCurrent();
+
+    if (!workspaceId) {
+      if (threadConfig.mode === 'cloud' && connection !== 'ready') {
+        setNewThreadError(t('task.liveConnectionRequired'));
+        return;
+      }
+      let activatedConversation: AgentConversation | null = null;
+      let firstMessageId = '';
+      let firstSignalId = '';
+      setNewThreadCreating(true);
+      setNewThreadError(null);
+      setError(null);
+      try {
+        const client = new DesktopApiClient(threadConfig);
+        const conversation = await client.createAgentConversation(
+          title,
+          threadConfig.projectId,
+          actorId,
+          input.mode,
+          input.model ? { llm_model_override: input.model.modelId } : undefined,
+        );
+        if (!requestScopeIsCurrent()) return;
+        if (conversation.workspace_id !== null) {
+          throw new Error(t('task.unboundConversationScopeMismatch'));
+        }
+        activateUnboundNewThread(conversation, threadConfig);
+        activatedConfig = threadConfig;
+        activatedScopeEpoch = configScopeEpochRef.current;
+        activatedConversation = conversation;
+        const execution = composerAgentExecutionContext(input.prompt, input.contextItems);
+        firstMessageId = `desktop-thread-${crypto.randomUUID()}`;
+        firstSignalId = `agent-task-${firstMessageId}`;
+        upsertAgentTaskSignal({
+          id: firstSignalId,
+          conversationId: conversation.id,
+          messageId: firstMessageId,
+          content: input.prompt,
+          status: 'queued',
+          detail: 'Agent conversation opened. Sending the first turn.',
+        });
+        const outcome = await runNewTaskAgentTurn(
+          {
+            config: threadConfig,
+            conversationId: conversation.id,
+            projectId: threadConfig.projectId,
+            message: execution.message,
+            messageId: firstMessageId,
+            agentId: execution.agentId,
+            forcedSkillName: execution.forcedSkillName,
+            mentions: execution.mentions,
+            fileMetadata: execution.fileMetadata,
+            appModelContext: execution.appModelContext,
+          },
+          {
+            deferUntilNextConnection: !isSameDesktopRequestScope(
+              requestConfig,
+              threadConfig,
+            ),
+          },
+        );
+        if (!activatedScopeIsCurrent()) return;
+        upsertAgentTaskSignal({
+          id: firstSignalId,
+          status: outcome === 'acknowledged' ? 'acknowledged' : 'queued',
+          detail:
+            outcome === 'acknowledged'
+              ? 'Agent acknowledged the first turn.'
+              : 'The first turn was sent, but acknowledgement is still pending.',
+        });
+      } catch (caught) {
+        if (!creationScopeIsCurrent()) return;
+        const detail = formatConnectionError(caught, threadConfig.apiBaseUrl);
+        setNewThreadError(detail);
+        setError(detail);
+        if (activatedConversation && firstMessageId && firstSignalId) {
+          upsertAgentTaskSignal({
+            id: firstSignalId,
+            conversationId: activatedConversation.id,
+            messageId: firstMessageId,
+            content: input.prompt,
+            status: 'failed',
+            detail,
+          });
+        }
+      } finally {
+        setNewThreadCreating(false);
+      }
+      return;
+    }
+
+    const expectedPolicyScopeKey = [
+      threadConfig.mode,
+      threadConfig.apiBaseUrl,
+      threadConfig.tenantId,
+      threadConfig.projectId,
+      workspaceId,
+    ].join('\u0000');
+    const policy = workspaceAgentPolicy.policy;
+    if (
+      workspaceAgentPolicy.loading ||
+      workspaceAgentPolicy.scopeKey !== expectedPolicyScopeKey ||
+      !policy ||
+      !input.model
+    ) {
       setNewThreadError(t('task.creationContextUnavailable'));
       return;
     }
@@ -4560,7 +4789,7 @@ export function App() {
       title,
       objective: input.prompt,
       kind: input.mode === 'code' ? 'programming' : 'general',
-      workspaceRoot: config.workspaceRoot,
+      workspaceRoot: requestConfig.workspaceRoot,
       contextSources: ['project_memory', 'project_files'],
     };
     const policySelection =
@@ -4576,7 +4805,7 @@ export function App() {
           }
         : undefined;
     const baseFingerprint = taskSessionCreationFingerprint(
-      config,
+      threadConfig,
       actorId,
       definition,
       workspaceId,
@@ -4602,9 +4831,9 @@ export function App() {
     setNewThreadCreating(true);
     setNewThreadError(null);
     try {
-      const client = new DesktopApiClient(config);
+      const client = new DesktopApiClient(threadConfig);
       const request = buildRuntimeTaskSessionRequest(
-        config.mode,
+        threadConfig.mode,
         definition,
         workspaceId,
         attempt.idempotencyKey,
@@ -4612,31 +4841,43 @@ export function App() {
         policySelection,
       );
       const result = await client.createTaskSession(request);
+      clearTaskSessionCreationAttempt(storage, fingerprint);
+      if (!requestScopeIsCurrent()) return;
       const session: NewTaskSession = {
         workspace: result.workspace,
         conversation: result.conversation,
-        config: { ...config, workspaceId: result.workspace.id },
+        config: { ...threadConfig, workspaceId: result.workspace.id },
       };
-      clearTaskSessionCreationAttempt(storage, fingerprint);
       if (result.policy) workspaceAgentPolicy.acceptPolicy(result.policy);
       activateNewTaskSession(session);
+      activatedConfig = session.config;
+      activatedScopeEpoch = configScopeEpochRef.current;
       const execution = composerAgentExecutionContext(
         buildPlanningPrompt(definition),
         input.contextItems,
       );
-      await runNewTaskAgentTurn({
-        config: session.config,
-        conversationId: session.conversation.id,
-        projectId: session.config.projectId,
-        message: execution.message,
-        messageId: `desktop-plan-${crypto.randomUUID()}`,
-        agentId: execution.agentId,
-        forcedSkillName: execution.forcedSkillName,
-        mentions: execution.mentions,
-        fileMetadata: execution.fileMetadata,
-        appModelContext: execution.appModelContext,
-      });
+      await runNewTaskAgentTurn(
+        {
+          config: session.config,
+          conversationId: session.conversation.id,
+          projectId: session.config.projectId,
+          message: execution.message,
+          messageId: `desktop-plan-${crypto.randomUUID()}`,
+          agentId: execution.agentId,
+          forcedSkillName: execution.forcedSkillName,
+          mentions: execution.mentions,
+          fileMetadata: execution.fileMetadata,
+          appModelContext: execution.appModelContext,
+        },
+        {
+          deferUntilNextConnection: !isSameDesktopRequestScope(
+            requestConfig,
+            session.config,
+          ),
+        },
+      );
     } catch (caught) {
+      if (!creationScopeIsCurrent()) return;
       setNewThreadError(caught instanceof Error ? caught.message : String(caught));
     } finally {
       setNewThreadCreating(false);
@@ -4658,6 +4899,7 @@ export function App() {
     const created = await api.createAgentConversation(
       `${workspaceLabel}: ${titleSource}`,
       config.projectId,
+      auth.user?.user_id ?? '',
     );
     const conversation = config.workspaceId.trim()
       ? await api.updateAgentConversationMode(
@@ -4684,6 +4926,78 @@ export function App() {
     }));
     void loadConversationTimeline(conversation, config.projectId);
     return conversation;
+  };
+
+  const dispatchAgentConversationMessage = async (
+    conversation: AgentConversation,
+    content: string,
+    execution: ReturnType<typeof composerAgentExecutionContext>,
+    messageId: string,
+    signalId: string,
+    workspaceMessageSaved = false,
+  ) => {
+    upsertAgentTaskSignal({
+      id: signalId,
+      conversationId: conversation.id,
+      messageId,
+      status: 'queued',
+      detail: 'Agent conversation opened. Sending task over WebSocket.',
+    });
+    const queued = socket.sendAgentMessage({
+      conversationId: conversation.id,
+      projectId: config.projectId,
+      message: execution.message,
+      messageId,
+      agentId: execution.agentId,
+      forcedSkillName: execution.forcedSkillName,
+      mentions: execution.mentions,
+      fileMetadata: execution.fileMetadata,
+      appModelContext: execution.appModelContext,
+    });
+    setConversationTimeline((current) => {
+      if (current.conversationId !== conversation.id) return current;
+      const items = mergeTimelineItems(current.items, [
+        optimisticUserTimelineItem(messageId, content),
+      ]);
+      return {
+        ...current,
+        items,
+        firstCursor: timelineCursorFromFirst(items),
+        lastCursor: timelineCursorFromLast(items),
+      };
+    });
+    if (!queued && localRuntimeMode) {
+      await api.runAgentMessage(
+        conversation.id,
+        execution.message,
+        messageId,
+        config.projectId,
+      );
+      invalidateSessionAuthority();
+      upsertAgentTaskSignal({
+        id: signalId,
+        status: 'queued',
+        detail: 'Task sent to local Agent runtime over loopback HTTP.',
+      });
+      return;
+    }
+    if (!queued) {
+      const websocketMessage = workspaceMessageSaved
+        ? 'Message saved, but the Agent WebSocket is not connected yet.'
+        : 'Message was not sent because the Agent WebSocket is disconnected.';
+      setError(websocketMessage);
+      upsertAgentTaskSignal({
+        id: signalId,
+        status: 'failed',
+        detail: websocketMessage,
+      });
+      return;
+    }
+    upsertAgentTaskSignal({
+      id: signalId,
+      status: 'queued',
+      detail: 'Task sent to Agent. Waiting for acknowledgement.',
+    });
   };
 
   const sendMessageContent = async (
@@ -4720,7 +5034,9 @@ export function App() {
       id: signalId,
       content,
       status: 'saving',
-      detail: 'Saving workspace message before handing it to the Agent.',
+      detail: config.workspaceId.trim()
+        ? 'Saving workspace message before handing it to the Agent.'
+        : 'Opening the Agent conversation.',
       createdAt: new Date().toISOString(),
     });
     try {
@@ -4780,6 +5096,19 @@ export function App() {
         }
         return;
       }
+      if (!config.workspaceId.trim()) {
+        const conversation = await ensureAgentConversation(content);
+        const messageId = `desktop-${crypto.randomUUID()}`;
+        await dispatchAgentConversationMessage(
+          conversation,
+          content,
+          execution,
+          messageId,
+          signalId,
+        );
+        onWorkspaceMessageSaved?.();
+        return;
+      }
       const saved = await api.sendMessage(content, undefined, contextItems, mentions);
       setDataset((current) => ({ ...current, messages: [...current.messages, saved] }));
       onWorkspaceMessageSaved?.();
@@ -4801,59 +5130,14 @@ export function App() {
         try {
           const conversation = await ensureAgentConversation(content);
           const messageId = saved.id || `desktop-${Date.now()}`;
-          upsertAgentTaskSignal({
-            id: signalId,
-            conversationId: conversation.id,
+          await dispatchAgentConversationMessage(
+            conversation,
+            content,
+            execution,
             messageId,
-            status: 'queued',
-            detail: 'Agent conversation opened. Sending task over WebSocket.',
-          });
-          const queued = socket.sendAgentMessage({
-            conversationId: conversation.id,
-            projectId: config.projectId,
-            message: execution.message,
-            messageId,
-            agentId: execution.agentId,
-            forcedSkillName: execution.forcedSkillName,
-            mentions: execution.mentions,
-            fileMetadata: execution.fileMetadata,
-            appModelContext: execution.appModelContext,
-          });
-          setConversationTimeline((current) => {
-            if (current.conversationId !== conversation.id) return current;
-            const items = mergeTimelineItems(current.items, [
-              optimisticUserTimelineItem(messageId, content),
-            ]);
-            return {
-              ...current,
-              items,
-              firstCursor: timelineCursorFromFirst(items),
-              lastCursor: timelineCursorFromLast(items),
-            };
-          });
-          if (!queued && localRuntimeMode) {
-            await api.runAgentMessage(conversation.id, content, messageId, config.projectId);
-            invalidateSessionAuthority();
-            upsertAgentTaskSignal({
-              id: signalId,
-              status: 'queued',
-              detail: 'Task sent to local Agent runtime over loopback HTTP.',
-            });
-          } else if (!queued) {
-            const websocketMessage = 'Message saved, but the Agent WebSocket is not connected yet.';
-            setError(websocketMessage);
-            upsertAgentTaskSignal({
-              id: signalId,
-              status: 'failed',
-              detail: websocketMessage,
-            });
-          } else {
-            upsertAgentTaskSignal({
-              id: signalId,
-              status: 'queued',
-              detail: 'Task sent to Agent. Waiting for acknowledgement.',
-            });
-          }
+            signalId,
+            true,
+          );
         } catch (agentError) {
           const detail = `Message saved, but Agent launch failed: ${formatConnectionError(
             agentError,
@@ -5807,7 +6091,13 @@ export function App() {
   };
 
   useEffect(() => {
-    if (!runsInTauri || auth.status !== 'signed_out' || !hasNativeTrustedSessionBroker()) return;
+    if (
+      !runsInNativeDesktop ||
+      auth.status !== 'signed_out' ||
+      !hasNativeTrustedSessionBroker()
+    ) {
+      return;
+    }
     const attemptKey = `${config.mode}|${config.apiBaseUrl}|${config.localApiToken}`;
     if (localResumeAttemptRef.current === attemptKey) return;
     localResumeAttemptRef.current = attemptKey;
@@ -5868,7 +6158,7 @@ export function App() {
         }
 
         // The native local runtime uses an ephemeral port after each launch. Bind recovery to the
-        // exact live endpoint and launch capability reported by Tauri, then rotate the saved record.
+        // exact live endpoint and launch capability reported by the sidecar, then rotate the record.
         const bootstrapClient = new DesktopApiClient({ ...config, apiKey: '' });
         const outcome = await bootstrapClient.resumeLocalSession(trustedSession.credential);
         if (
@@ -5924,7 +6214,7 @@ export function App() {
     config.localApiToken,
     config.mode,
     localRuntimeAuthorityReady,
-    runsInTauri,
+    runsInNativeDesktop,
   ]);
 
   const switchSection = (section: WorkbenchSection) => {
@@ -6156,7 +6446,7 @@ export function App() {
 
   const renderChatPanel = () => (
     <ChatPanel
-      api={api}
+      api={chatComposerApi}
       conversations={dataset.conversationsByWorkspace[config.workspaceId] ?? []}
       selectedConversationId={selectedConversation?.id ?? null}
       messages={dataset.messages}
@@ -6354,46 +6644,78 @@ export function App() {
     />
   );
 
-  const renderNewThreadComposer = () => (
-    <NewThreadComposer
-      api={api}
-      workspace={selectedWorkspace}
-      conversations={dataset.conversationsByWorkspace[config.workspaceId] ?? []}
-      mode={preferredTaskMode}
-      policy={workspaceAgentPolicy.policy}
-      modelOptions={
-        preferredTaskMode === 'code'
-          ? workspaceAgentPolicy.codeModelOptions
-          : workspaceAgentPolicy.workModelOptions
-      }
-      canManagePolicy={canManageWorkspacePolicy && !workspaceAgentPolicy.compatibilityMode}
-      loadingPolicy={workspaceAgentPolicy.loading}
-      compatibilityMode={workspaceAgentPolicy.compatibilityMode}
-      disabledReason={
-        newTaskDisabledReason ??
-        (workspaceAgentPolicy.error
-          ? t('task.policyUnavailable')
-          : workspaceAgentPolicy.policy &&
-              (preferredTaskMode === 'code'
-                ? workspaceAgentPolicy.codeModelOptions
-                : workspaceAgentPolicy.workModelOptions
-              ).length === 0
-            ? t('task.noModelsAvailable')
-            : null)
-      }
-      creating={newThreadCreating}
-      error={newThreadError}
-      onModeChange={setPreferredTaskMode}
-      onCreate={(input) => void createComposerThread(input)}
-      onOpenThread={(conversation) =>
-        selectConversation(config.projectId, config.workspaceId, conversation, 'chat')
-      }
-      onManageModels={() => {
-        setSettingsInitialSection('models');
-        setSettingsWindowOpen(true);
-      }}
-    />
-  );
+  const renderNewThreadComposer = () => {
+    const newThreadComposerScopeKey = [
+      config.mode,
+      config.apiBaseUrl,
+      config.tenantId,
+      config.projectId,
+      auth.user?.user_id ?? '',
+    ].join('\u0000');
+    const workspace =
+      newThreadWorkspaces.find((item) => item.id === newThreadWorkspaceId) ?? null;
+    const workspaceModelOptions =
+      preferredTaskMode === 'code'
+        ? workspaceAgentPolicy.codeModelOptions
+        : workspaceAgentPolicy.workModelOptions;
+    const modelOptions = newThreadWorkspaceId
+      ? workspaceModelOptions
+      : projectRuntimeModelOptions(workspaceAgentPolicy.providers, config.mode);
+    const policyUnavailable = Boolean(
+      newThreadWorkspaceId && workspaceAgentPolicy.error,
+    );
+    const modelUnavailable = Boolean(
+      newThreadWorkspaceId &&
+        workspaceAgentPolicy.policy &&
+        workspaceModelOptions.length === 0,
+    );
+    const unboundTransportUnavailable =
+      !newThreadWorkspaceId && config.mode === 'cloud' && connection !== 'ready';
+    return (
+      <NewThreadComposer
+        key={newThreadComposerScopeKey}
+        api={newThreadComposerApi}
+        workspaceId={newThreadWorkspaceId}
+        workspace={workspace}
+        workspaces={newThreadWorkspaces}
+        conversations={
+          dataset.conversationsByWorkspace[
+            newThreadWorkspaceId || UNBOUND_CONVERSATIONS_KEY
+          ] ?? []
+        }
+        mode={preferredTaskMode}
+        policy={workspaceAgentPolicy.policy}
+        modelOptions={modelOptions}
+        canManagePolicy={canManageWorkspacePolicy && !workspaceAgentPolicy.compatibilityMode}
+        loadingPolicy={workspaceAgentPolicy.loading}
+        compatibilityMode={
+          Boolean(newThreadWorkspaceId) && workspaceAgentPolicy.compatibilityMode
+        }
+        disabledReason={
+          newTaskDisabledReason ??
+          (unboundTransportUnavailable
+            ? t('task.liveConnectionRequired')
+            : policyUnavailable
+              ? t('task.policyUnavailable')
+              : modelUnavailable
+                ? t('task.noModelsAvailable')
+                : null)
+        }
+        creating={newThreadCreating}
+        error={newThreadError}
+        onModeChange={setPreferredTaskMode}
+        onWorkspaceChange={changeNewThreadWorkspace}
+        onCreate={(input) => void createComposerThread(input)}
+        onOpenThread={(conversation) =>
+          selectConversation(config.projectId, newThreadWorkspaceId, conversation, 'chat')
+        }
+        onManageModels={() => {
+          setSettingsInitialSection('models');
+          setSettingsWindowOpen(true);
+        }}
+      />
+    );
+  };
 
   const renderAuxiliaryView = (section: 'home' | 'search') => (
     <AuxiliaryView
@@ -6521,6 +6843,7 @@ export function App() {
           auth={auth}
           mode={config.mode}
           localReady={localRuntimeAuthorityReady}
+          localModeAvailable={runsInNativeDesktop}
           email={loginEmail}
           password={loginPassword}
           onModeChange={changeLoginMode}
@@ -6542,7 +6865,7 @@ export function App() {
       <div
         ref={appShellRef}
         className={`app-shell hierarchy-shell runtime-mode ${
-          runsInTauri ? 'tauri-window' : 'browser-window'
+          runsInNativeDesktop ? 'desktop-window' : 'browser-window'
         } ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${
           activeSection === 'board' ? 'my-work-mode' : ''
         }`}

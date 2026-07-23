@@ -22,7 +22,7 @@
   - `docs/product/desktop-agent-ui/05-workspace-conversation-ux-mapping.md`
   - `docs/product/desktop-agent-ui/06-session-detail-competitive-research.md`
   - `agi-stack/apps/desktop/src/`
-  - `agi-stack/apps/desktop/src-tauri/src/local_runtime/`
+  - `agi-stack/apps/desktop/sidecar/src/local_runtime/`
 - Precedence: explicit PRD state, authority, security, and lifecycle requirements override
   prototype mock behavior. The prototype is authoritative for layout, hierarchy, visual language,
   and user-visible flow when it does not conflict with the PRD.
@@ -220,8 +220,9 @@
 
 ## Implementation constraints
 
-- Framework/styling system: React 19 + TypeScript + Vite + Radix UI; Tauri/Rust local runtime;
-  Python/FastAPI remains the cloud/reference backend. Use existing feature modules and direct imports.
+- Framework/styling system: React 19 + TypeScript + Vite + Radix UI; Electron shell with an
+  independently signed Rust sidecar for the local runtime; Python/FastAPI remains the
+  cloud/reference backend. Use existing feature modules and direct imports.
 - Design-token constraints: current `--desktop-*` tokens are the production mapping of prototype
   `--bg/--panel/--border/...` tokens; extend them instead of introducing hard-to-govern themes.
 - Performance constraints: cold Shell p95 ≤3s; readable Task switch p95 ≤1s; reconnect state p95

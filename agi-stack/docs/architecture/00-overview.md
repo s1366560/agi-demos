@@ -51,7 +51,8 @@
 
 - 唯一能让单一核心同时编译为:服务器原生二进制、浏览器 WASM、桌面原生、以及 iOS/Android **原生静态库**(经 UniFFI 自动生成 Swift/Kotlin 绑定)。
 - 端上 AI 生态最强:Candle / llama.cpp / ONNX Runtime(ort)做本地推理,sqlite-vec / libsql 做本地向量+关系存储。
-- 外壳:PC 用 Tauri,移动端用 UniFFI 绑定 + 原生 UI,Web 用 wasm-bindgen。
+- 外壳:PC 用 Electron + 独立 Rust sidecar,移动端用 UniFFI 绑定 + 原生 UI,Web 用
+  wasm-bindgen。
 - **额外收获**:同一套机制天然支撑插件沙箱(WASM),见 [02-extensibility](02-extensibility.md)。
 - 代价:学习曲线最陡;86K LOC 核心重写 + 团队所有权模型适应期。
 

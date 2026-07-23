@@ -291,7 +291,10 @@ test('desktop runtime transition invalidates data at its exact authority boundar
   const dataset = {
     workspaces: [{ id: 'workspace-a' }],
     workspacesByProject: { 'project-1': [{ id: 'workspace-a' }] },
-    conversationsByWorkspace: { 'workspace-a': [] },
+    conversationsByWorkspace: {
+      '': [{ id: 'conversation-unbound', workspace_id: null }],
+      'workspace-a': [],
+    },
     nodeState: { projects: {}, workspaces: {} },
     messages: [{ id: 'message-a', content: 'workspace message' }],
     tasks: [{ id: 'task-a', title: 'Workspace task' }],
@@ -326,6 +329,10 @@ test('desktop runtime transition invalidates data at its exact authority boundar
   assert.equal(workspaceChanged.workspaceAgents.status, 'unavailable');
   assert.equal(workspaceChanged.sandbox, dataset.sandbox);
   assert.equal(workspaceChanged.myWork, dataset.myWork);
+  assert.equal(
+    workspaceChanged.conversationsByWorkspace[''][0]?.id,
+    'conversation-unbound',
+  );
 
   const projectChanged = beginDesktopRuntimeScopeTransition(dataset, previousConfig, {
     ...previousConfig,

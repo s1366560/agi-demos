@@ -1,0 +1,43 @@
+[package]
+name = "agistack-desktop-sidecar"
+description = "Signed local runtime sidecar for the MemStack Electron desktop client."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "agistack-desktop-sidecar"
+path = "src/main.rs"
+
+[dependencies]
+aes-gcm = { version = "0.10", features = ["zeroize"] }
+async-trait.workspace = true
+axum = { version = "0.7", features = ["ws"] }
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+futures-util = "0.3"
+getrandom = "0.2"
+hmac = "0.12"
+portable-pty = "0.8"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+rusqlite = { version = "0.32", features = ["backup", "bundled"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.10"
+tokio = { version = "1", features = ["io-std", "io-util", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
+tower-http = { version = "0.6", features = ["cors"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+url = "2"
+uuid = { version = "1", features = ["v4"] }
+zeroize = "1"
+
+agistack-core = { path = "../../../crates/core" }
+agistack-adapters-device = { path = "../../../crates/adapters-device" }
+agistack-adapters-http-llm = { path = "../../../crates/adapters-http-llm" }
+agistack-adapters-local-tools = { path = "../../../crates/adapters-local-tools" }
+agistack-adapters-mem = { path = "../../../crates/adapters-mem" }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }

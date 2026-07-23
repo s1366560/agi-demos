@@ -24,6 +24,10 @@ const composerPlusMenuSource = readFileSync(
   new URL('../src/features/chat/ComposerPlusMenu.tsx', import.meta.url),
   'utf8',
 );
+const composerCatalogSource = readFileSync(
+  new URL('../src/features/chat/composerCatalogModel.ts', import.meta.url),
+  'utf8',
+);
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const qaSource = readFileSync(new URL('../src/qa/SessionSteeringQa.tsx', import.meta.url), 'utf8');
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
@@ -117,7 +121,7 @@ test('workspace mention routing suppresses the duplicate default Agent launch', 
     }),
     false,
   );
-  assert.match(composerPlusMenuSource, /listWorkspaceAgents/);
+  assert.match(composerCatalogSource, /listWorkspaceAgents/);
   assert.match(composerPlusMenuSource, /mention_target: true/);
   assert.match(appSource, /workspaceMessageRequiresDefaultAgentLaunch\(saved\)/);
 });
@@ -262,7 +266,7 @@ test('single-slot composer resources replace the prior selection without affecti
 });
 
 test('composer catalog exposes execution metadata for Agents, SubAgents, skills, and commands', () => {
-  assert.match(composerPlusMenuSource, /listManagedSubAgents/);
+  assert.match(composerCatalogSource, /listManagedSubAgents/);
   assert.match(composerPlusMenuSource, /execution_agent_id/);
   assert.match(composerPlusMenuSource, /execution_subagent_name/);
   assert.match(composerPlusMenuSource, /execution_skill_name/);

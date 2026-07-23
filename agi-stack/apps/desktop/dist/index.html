@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:* https: wss:; font-src 'self' data:; frame-src 'self' https: http://127.0.0.1:* http://localhost:* http://[::1]:*; img-src 'self' blob: data:; object-src 'none'; base-uri 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    />
     <title>agi-stack Desktop</title>
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32x32.png" />
@@ -40,7 +44,7 @@
       .titlebar-window-controls,
       [aria-label="Window controls"],
       [data-window-controls],
-      [data-tauri-window-controls],
+      [data-desktop-window-controls],
       [class*="traffic-light"],
       [class*="window-control"],
       [class*="window-dot"],
@@ -48,8 +52,8 @@
         display: none !important;
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-BqxLBfbl.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-DsfnsZ8y.css">
+    <script type="module" crossorigin src="./assets/index-BFvjf_Lh.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DiNajMoS.css">
   </head>
   <body>
     <div id="root">

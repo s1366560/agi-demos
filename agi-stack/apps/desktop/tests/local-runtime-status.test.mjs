@@ -12,6 +12,7 @@ const {
 const {
   conversationRuntimeModelSelection,
   latestConversationRuntimeModelEvent,
+  projectRuntimeModelOptions,
   workspaceRuntimeModelOptions,
   workspaceRuntimeModelSelectionValue,
   workspaceRuntimeProviderFromAuthority,
@@ -233,6 +234,45 @@ test('workspace model selector exposes only routable enabled models and marks th
   assert.equal(
     workspaceRuntimeProviderFromAuthority(config, codingPolicy, providers, 'coding')?.model,
     'gpt-fast',
+  );
+});
+
+test('project model selector exposes one structural option for duplicate model ids', () => {
+  const providers = [
+    {
+      id: 'provider-a',
+      name: 'Provider A',
+      provider_type: 'openai_compatible',
+      operation_type: 'llm',
+      auth_method: 'api_key',
+      credential_configured: true,
+      is_active: true,
+      is_enabled: true,
+      llm_model: 'shared-model',
+      allowed_models: ['shared-model', 'unique-a'],
+    },
+    {
+      id: 'provider-b',
+      name: 'Provider B',
+      provider_type: 'openai_compatible',
+      operation_type: 'llm',
+      auth_method: 'api_key',
+      credential_configured: true,
+      is_active: true,
+      is_enabled: true,
+      llm_model: 'shared-model',
+      allowed_models: ['shared-model', 'unique-b'],
+    },
+  ];
+
+  const options = projectRuntimeModelOptions(providers, 'cloud');
+  assert.deepEqual(
+    options.map((option) => [option.providerId, option.modelId]),
+    [
+      ['provider-a', 'shared-model'],
+      ['provider-a', 'unique-a'],
+      ['provider-b', 'unique-b'],
+    ],
   );
 });
 
@@ -486,20 +526,20 @@ test('code-session model switch writes the coding route and repairs an empty def
   });
 });
 
-test('Desktop runtime configuration and Tauri configure payload contain no LLM authority', () => {
+test('Desktop runtime configuration and sidecar configure payload contain no LLM authority', () => {
   const configType =
     typesSource.match(/export type DesktopRuntimeConfig = \{[\s\S]*?\n\};/)?.[0] ?? '';
   const defaultConfig =
     typesSource.match(/export const DEFAULT_CONFIG: DesktopRuntimeConfig = \{[\s\S]*?\n\};/)?.[0] ?? '';
-  const tauriConfig =
-    appSource.match(/function localRuntimeTauriConfig\([\s\S]*?\n\}/)?.[0] ?? '';
+  const sidecarConfig =
+    appSource.match(/function localRuntimeSidecarConfig\([\s\S]*?\n\}/)?.[0] ?? '';
   const logout = appSource.match(/const logout = async \(\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
   const forbidden = /llmProvider|llmBaseUrl|llmModel|llmApiKey|api_key|base_url|provider:|model:/;
 
   assert.doesNotMatch(configType, forbidden);
   assert.doesNotMatch(defaultConfig, forbidden);
-  assert.match(tauriConfig, /workspace_root: config\.workspaceRoot/);
-  assert.doesNotMatch(tauriConfig, forbidden);
+  assert.match(sidecarConfig, /workspace_root: config\.workspaceRoot/);
+  assert.doesNotMatch(sidecarConfig, forbidden);
   assert.doesNotMatch(logout, /llmProvider|llmBaseUrl|llmModel|llmApiKey/);
   assert.doesNotMatch(providerSettingsQaSource, /llmProvider|llmBaseUrl|llmModel|llmApiKey/);
   assert.doesNotMatch(appSource, /runtimeProviderForTenant/);

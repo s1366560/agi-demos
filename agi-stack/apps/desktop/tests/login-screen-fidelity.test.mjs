@@ -28,15 +28,47 @@ test('approved email path owns the trusted-device choice and inline alert', () =
 
 test('login exposes an accessible local and cloud workspace selector', () => {
   assert.match(loginSource, /onModeChange: \(mode: RuntimeMode\) => void/);
+  assert.match(loginSource, /localModeAvailable \?/);
+  assert.match(
+    loginSource,
+    /loginModeForRuntimeAvailability\(mode, localModeAvailable\)/,
+  );
   assert.match(loginSource, /role="group"/);
   assert.match(loginSource, /aria-label=\{t\('login\.modeLabel'\)\}/);
-  assert.match(loginSource, /aria-pressed=\{mode === 'local'\}/);
-  assert.match(loginSource, /aria-pressed=\{mode === 'cloud'\}/);
+  assert.match(loginSource, /aria-pressed=\{effectiveMode === 'local'\}/);
+  assert.match(loginSource, /aria-pressed=\{effectiveMode === 'cloud'\}/);
   assert.match(loginSource, /onModeChange\('local'\)/);
   assert.match(loginSource, /onModeChange\('cloud'\)/);
-  assert.match(loginSource, /mode === 'cloud'/);
-  assert.match(loginSource, /mode === 'local'/);
+  assert.match(loginSource, /effectiveMode === 'cloud'/);
   assert.match(appSource, /onModeChange=\{changeLoginMode\}/);
+  assert.match(appSource, /localModeAvailable=\{runsInNativeDesktop\}/);
+});
+
+test('browser fallback uses the cloud runtime for email login and workspace SSO', () => {
+  assert.match(
+    appSource,
+    /initialDesktopRuntimeConfig\(undefined, runsInNativeDesktop\)/,
+  );
+  const ssoHandler = appSource.slice(
+    appSource.indexOf('const loginWithWorkspaceSso'),
+    appSource.indexOf('const login = async'),
+  );
+  const emailHandler = appSource.slice(
+    appSource.indexOf('const login = async'),
+    appSource.indexOf('const hydrateLocalSession'),
+  );
+  assert.match(
+    ssoHandler,
+    /runtimeConfigForLoginAvailability\(\s*configRef\.current,\s*runsInNativeDesktop,\s*\)/,
+  );
+  assert.match(ssoHandler, /new DesktopApiClient\(\{ \.\.\.runtimeConfig, apiKey: '' \}\)/);
+  assert.match(
+    emailHandler,
+    /runtimeConfigForLoginAvailability\(\s*configRef\.current,\s*runsInNativeDesktop,\s*\)/,
+  );
+  assert.match(emailHandler, /new DesktopApiClient\(\{ \.\.\.runtimeConfig, apiKey: '' \}\)/);
+  assert.match(emailHandler, /hydrateCloudSession\(outcome, runtimeConfig, authAttemptRevision\)/);
+  assert.doesNotMatch(emailHandler, /new DesktopApiClient\(\{ \.\.\.config, apiKey: '' \}\)/);
 });
 
 test('login validation remains localized in English and Simplified Chinese', () => {
@@ -82,11 +114,11 @@ test('login validation remains localized in English and Simplified Chinese', () 
   assert.match(i18nSource, /'runtime\.deviceAuthorizationUrl': '授权门户地址'/);
 });
 
-test('the workspace continue action exposes local and cloud authority without a fake success path', () => {
-  assert.match(loginSource, /resolveWorkspaceContinueLabelKey\(mode\)/);
+test('the workspace continue action exposes available authority without a fake success path', () => {
+  assert.match(loginSource, /resolveWorkspaceContinueLabelKey\(effectiveMode\)/);
   assert.match(
     loginSource,
-    /resolveWorkspaceSsoAction\(mode, localReady, trustedDevice\)/,
+    /resolveWorkspaceSsoAction\(effectiveMode, localReady, trustedDevice\)/,
   );
   assert.match(loginSource, /onLocalSession\(action\.trustedDevice\)/);
   assert.match(

@@ -14,7 +14,7 @@
 - **本地优先**:端上用嵌入式存储/推理(SQLite/libsql + sqlite-vec + Candle/llama.cpp)离线运行,云端保留重算力(Ray 分布式)与多租户数据。
 - **可扩展即一等公民**:MemStack 本质是插件平台(L1 Tool / L2 Skill / L3 SubAgent / MCP 全是扩展点);架构按**信任 × 平台**两轴为每类扩展点选机制,并把"插件宿主"也抽象成一个六边形端口。
 
-> 选型结论:**Rust 核心 + 平台外壳**(UniFFI→Swift/Kotlin、wasm-bindgen→Web、Tauri→桌面)。强力替补:Kotlin Multiplatform。完整论证见 [`docs/architecture/00-overview.md`](docs/architecture/00-overview.md)。
+> 选型结论:**Rust 核心 + 平台外壳**(UniFFI→Swift/Kotlin、wasm-bindgen→Web、Electron + 独立 Rust sidecar→桌面)。强力替补:Kotlin Multiplatform。完整论证见 [`docs/architecture/00-overview.md`](docs/architecture/00-overview.md)。
 
 ## 两条架构主轴
 
@@ -29,7 +29,7 @@ graph TD
     subgraph axis1["轴一 · 可移植性 (Platform)"]
         SV[服务器 axum]
         WB[浏览器 WASM]
-        PC[桌面 Tauri]
+        PC[桌面 Electron + Rust sidecar]
         MO[移动端 UniFFI]
     end
 

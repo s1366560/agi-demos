@@ -22,12 +22,14 @@ import {
   resolveWorkspaceSsoAction,
   validateLoginCredentials,
 } from './loginScreenModel';
+import { loginModeForRuntimeAvailability } from './loginRuntimeModel';
 import './LoginScreen.css';
 
 type LoginScreenProps = {
   auth: AuthState;
   mode: RuntimeMode;
   localReady: boolean;
+  localModeAvailable?: boolean;
   email: string;
   password: string;
   onModeChange: (mode: RuntimeMode) => void;
@@ -76,6 +78,7 @@ export function LoginScreen({
   auth,
   mode,
   localReady,
+  localModeAvailable = true,
   email,
   password,
   onModeChange,
@@ -89,6 +92,7 @@ export function LoginScreen({
   onCancelWorkspaceSso,
 }: LoginScreenProps) {
   const { t } = useI18n();
+  const effectiveMode = loginModeForRuntimeAvailability(mode, localModeAvailable);
   const [showPassword, setShowPassword] = useState(false);
   const [trustedDevice, setTrustedDevice] = useState(true);
   const [interactionError, setInteractionError] = useState<string | null>(null);
@@ -126,7 +130,7 @@ export function LoginScreen({
 
   const continueWithWorkspace = () => {
     setInteractionError(null);
-    const action = resolveWorkspaceSsoAction(mode, localReady, trustedDevice);
+    const action = resolveWorkspaceSsoAction(effectiveMode, localReady, trustedDevice);
     if (action.kind === 'local_session') {
       onLocalSession(action.trustedDevice);
       return;
@@ -205,30 +209,32 @@ export function LoginScreen({
             onEmailLogin(trustedDevice);
           }}
         >
-          <div className="desktop-login-mode" role="group" aria-label={t('login.modeLabel')}>
-            <button
-              type="button"
-              aria-pressed={mode === 'local'}
-              disabled={busy}
-              onClick={() => {
-                setInteractionError(null);
-                onModeChange('local');
-              }}
-            >
-              {t('login.modeLocal')}
-            </button>
-            <button
-              type="button"
-              aria-pressed={mode === 'cloud'}
-              disabled={busy}
-              onClick={() => {
-                setInteractionError(null);
-                onModeChange('cloud');
-              }}
-            >
-              {t('login.modeCloud')}
-            </button>
-          </div>
+          {localModeAvailable ? (
+            <div className="desktop-login-mode" role="group" aria-label={t('login.modeLabel')}>
+              <button
+                type="button"
+                aria-pressed={effectiveMode === 'local'}
+                disabled={busy}
+                onClick={() => {
+                  setInteractionError(null);
+                  onModeChange('local');
+                }}
+              >
+                {t('login.modeLocal')}
+              </button>
+              <button
+                type="button"
+                aria-pressed={effectiveMode === 'cloud'}
+                disabled={busy}
+                onClick={() => {
+                  setInteractionError(null);
+                  onModeChange('cloud');
+                }}
+              >
+                {t('login.modeCloud')}
+              </button>
+            </div>
+          ) : null}
 
           <header>
             <span>{t('login.welcome')}</span>
@@ -236,7 +242,7 @@ export function LoginScreen({
             <p>{t('login.organizationDescription')}</p>
           </header>
 
-          {mode === 'cloud' ? (
+          {effectiveMode === 'cloud' ? (
             <>
               <button
                 className="desktop-login-sso"
@@ -245,7 +251,7 @@ export function LoginScreen({
                 disabled={busy}
               >
                 <img src="/icon-192.png" alt="" />
-                {t(resolveWorkspaceContinueLabelKey(mode))}
+                {t(resolveWorkspaceContinueLabelKey(effectiveMode))}
                 <ArrowRightIcon />
               </button>
 
@@ -300,7 +306,7 @@ export function LoginScreen({
               autoFocus
             >
               <img src="/icon-192.png" alt="" />
-              {t(resolveWorkspaceContinueLabelKey(mode))}
+              {t(resolveWorkspaceContinueLabelKey(effectiveMode))}
               <ArrowRightIcon />
             </button>
           )}
@@ -317,7 +323,7 @@ export function LoginScreen({
                 {t('login.keepSignedIn')}
               </span>
             </label>
-            {mode === 'cloud' ? (
+            {effectiveMode === 'cloud' ? (
               <button type="button">{t('login.forgotPassword')}</button>
             ) : null}
           </div>
@@ -328,7 +334,7 @@ export function LoginScreen({
             </div>
           ) : null}
 
-          {mode === 'cloud' ? (
+          {effectiveMode === 'cloud' ? (
             <button className="desktop-login-submit" type="submit" disabled={busy}>
               {busy ? t('login.signingIn') : t('login.signIn')}
               <ArrowRightIcon />
@@ -407,15 +413,17 @@ export function LoginScreen({
               </div>
             ) : null}
             <div className="desktop-device-auth-actions">
-              <button
-                type="button"
-                onClick={() => {
-                  setInteractionError(null);
-                  onModeChange('local');
-                }}
-              >
-                {t('login.switchToLocal')}
-              </button>
+              {localModeAvailable ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInteractionError(null);
+                    onModeChange('local');
+                  }}
+                >
+                  {t('login.switchToLocal')}
+                </button>
+              ) : null}
               <button type="button" onClick={onCancelWorkspaceSso}>
                 {t('login.deviceCancel')}
               </button>

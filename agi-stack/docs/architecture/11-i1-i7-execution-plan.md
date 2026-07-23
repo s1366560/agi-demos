@@ -1,5 +1,9 @@
 # agi-stack I1-I7 Execution Plan
 
+> 本文是历史执行记录。其中的 Tauri 打包步骤已由 Electron + 独立 Rust sidecar 发布链
+> 替代；当前命令与签名流程见
+> [`apps/desktop/ELECTRON.md`](../../apps/desktop/ELECTRON.md)。
+
 This plan turns the unfinished-function audit into implementation waves. The
 rule for every wave is unchanged: exact or method-scoped gateway flips only,
 rollback comments, Python wire parity negative controls, server golden coverage,

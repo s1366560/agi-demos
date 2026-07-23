@@ -13,7 +13,7 @@ import {
 } from '@radix-ui/react-icons';
 
 import { ChatPanel } from '../features/chat/ChatPanel';
-import type { ComposerCatalogClient } from '../features/chat/ComposerPlusMenu';
+import type { ComposerCatalogClient } from '../features/chat/composerCatalogModel';
 import { DesktopMCPAppCanvas } from '../features/chat/DesktopMCPAppCanvas';
 import { LiveArtifactCanvas } from '../features/chat/LiveArtifactCanvas';
 import {
@@ -1101,7 +1101,7 @@ const memoryTimelineItems: ConversationTimelineState['items'] = [
         {
           id: 'memory-native-runner',
           content:
-            'Launch the native Desktop client from the repository root with make -C agi-stack run-desktop so Tauri runtime, signing, and application-vault persistence match the supported development path.',
+            'Launch the native Desktop client from the repository root with make -C agi-stack run-desktop so the Electron shell, signed sidecar, and application-vault persistence match the supported development path.',
           score: 0.96,
           source: 'repository',
           category: 'procedural',

@@ -1,0 +1,53 @@
+appId: ai.agistack.desktop
+productName: agi-stack Desktop
+artifactName: agi-stack-desktop-${version}-${os}-${arch}.${ext}
+asar: true
+electronUpdaterCompatibility: ">=2.16"
+forceCodeSigning: true
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+extraResources:
+  - from: build/sidecar
+    to: sidecar
+    filter:
+      - agistack-desktop-sidecar*
+      - SHA256SUMS
+publish:
+  provider: github
+  owner: s1366560
+  repo: agi-demos
+  releaseType: draft
+  publishAutoUpdate: true
+  tagNamePrefix: v
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.developer-tools
+  icon: electron/resources/icon.icns
+  hardenedRuntime: true
+  notarize: true
+  entitlements: electron/resources/entitlements.mac.plist
+  entitlementsInherit: electron/resources/entitlements.mac.inherit.plist
+  binaries:
+    - Contents/Resources/sidecar/agistack-desktop-sidecar
+win:
+  target:
+    - nsis
+  icon: electron/resources/icon.png
+  signExecutable: true
+  signExts:
+    - .exe
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Development
+  icon: electron/resources/icon.png

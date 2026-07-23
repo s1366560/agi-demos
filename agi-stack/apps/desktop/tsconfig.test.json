@@ -6,10 +6,15 @@
     "moduleResolution": "Node",
     "noEmit": false,
     "outDir": "/tmp/agistack-desktop-test-dist",
-    "rootDir": "."
+    "rootDir": ".",
+    "types": ["node"]
   },
   "include": [
     "tests/css.d.ts",
+    "electron/main/automaticUpdateLoop.ts",
+    "electron/main/rendererProtocol.ts",
+    "electron/main/sidecarSupervisor.ts",
+    "electron/main/updatePolicy.ts",
     "src/vite-env.d.ts",
     "src/api/client.ts",
     "src/api/trustedSession.ts",
@@ -20,6 +25,7 @@
     "src/features/chat/a2uiAction.ts",
     "src/features/chat/agentLifecyclePresentationModel.ts",
     "src/features/chat/chatComposerModel.ts",
+    "src/features/chat/composerCatalogModel.ts",
     "src/features/chat/chatTimelineModel.ts",
     "src/features/chat/artifactCanvasEventModel.ts",
     "src/features/chat/mcpAppCanvasEventModel.ts",

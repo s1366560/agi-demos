@@ -41,8 +41,9 @@ import {
   visibleQueuedRunInputs,
 } from '../session/sessionRunInputModel';
 import { ComposerControls } from './ComposerControls';
-import { ComposerPlusMenu, type ComposerCatalogClient } from './ComposerPlusMenu';
+import { ComposerPlusMenu } from './ComposerPlusMenu';
 import type { ComposerModelOption } from './ComposerControls';
+import type { ComposerCatalogClient } from './composerCatalogModel';
 import { AgentTimeline, TIMELINE_RENDER_STEP } from './ChatTimeline';
 import {
   isImportantTimelineItem,

@@ -1,0 +1,358 @@
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  net,
+  protocol,
+  session,
+  shell,
+  type IpcMainInvokeEvent,
+} from 'electron';
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, isAbsolute, join, normalize, parse, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+import {
+  RENDERER_ENTRY_URL,
+  RENDERER_PROTOCOL_HOST,
+  RENDERER_PROTOCOL_SCHEME,
+  RendererProtocolError,
+  resolveRendererAsset,
+} from './rendererProtocol';
+import { SidecarSupervisor } from './sidecarSupervisor';
+import { startAutomaticUpdates } from './updater';
+
+const currentDirectory = dirname(fileURLToPath(import.meta.url));
+const rendererDirectory = join(currentDirectory, '../renderer');
+const DESKTOP_COMMAND_CHANNEL = 'agistack:desktop-command';
+const SIDECAR_RECOVERED_CHANNEL = 'agistack:sidecar-recovered';
+const DEVICE_USER_CODE = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/u;
+const SIDECAR_COMMANDS = new Set([
+  'trusted_session_save',
+  'trusted_session_load',
+  'trusted_session_clear',
+  'local_trusted_session_save',
+  'local_trusted_session_load',
+  'local_trusted_session_clear',
+  'local_runtime_status',
+  'local_runtime_configure',
+]);
+
+type DesktopCommandArgs = Record<string, unknown> | undefined;
+
+let mainWindow: BrowserWindow | null = null;
+let sidecarSupervisor: SidecarSupervisor | null = null;
+let sidecarShutdownComplete = false;
+let stopAutomaticUpdates: (() => void) | null = null;
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: RENDERER_PROTOCOL_SCHEME,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
+]);
+
+function isLoopbackHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return (
+    normalized === 'localhost' ||
+    normalized === '127.0.0.1' ||
+    normalized === '[::1]' ||
+    normalized === '::1'
+  );
+}
+
+function isSecureWebUrl(url: URL): boolean {
+  return url.protocol === 'https:' || (url.protocol === 'http:' && isLoopbackHost(url.hostname));
+}
+
+function parseSecureWebUrl(value: unknown, label: string): URL {
+  if (typeof value !== 'string' || /\s/u.test(value)) {
+    throw new Error(`${label} is invalid`);
+  }
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${label} is invalid`);
+  }
+  if (!isSecureWebUrl(url) || url.username || url.password || url.hash) {
+    throw new Error(`${label} must use HTTPS or loopback HTTP without user info or fragments`);
+  }
+  return url;
+}
+
+function validateDeviceAuthorizationUrl(args: DesktopCommandArgs): string {
+  const authorizationUrl = parseSecureWebUrl(args?.url, 'device authorization URL');
+  const baseUrl = parseSecureWebUrl(
+    args?.deviceAuthorizationBaseUrl,
+    'authorization portal URL',
+  );
+  const expectedUserCode = args?.expectedUserCode;
+  if (typeof expectedUserCode !== 'string' || !DEVICE_USER_CODE.test(expectedUserCode)) {
+    throw new Error('device user code does not match the expected protocol shape');
+  }
+  if (authorizationUrl.origin !== baseUrl.origin || authorizationUrl.pathname !== '/device') {
+    throw new Error('device authorization URL does not match the authorization portal');
+  }
+  const queryEntries = [...authorizationUrl.searchParams.entries()];
+  if (
+    queryEntries.length !== 1 ||
+    queryEntries[0]?.[0] !== 'user_code' ||
+    queryEntries[0]?.[1] !== expectedUserCode
+  ) {
+    throw new Error('device authorization URL must contain exactly the expected user_code');
+  }
+  return authorizationUrl.toString();
+}
+
+async function executeDesktopCommand(
+  event: IpcMainInvokeEvent,
+  command: unknown,
+  args: DesktopCommandArgs,
+): Promise<unknown> {
+  if (event.sender !== mainWindow?.webContents || typeof command !== 'string') {
+    throw new Error('desktop command is not authorized');
+  }
+  switch (command) {
+    case 'frontend_ready':
+      return undefined;
+    case 'open_device_authorization_url':
+      await shell.openExternal(validateDeviceAuthorizationUrl(args), { activate: true });
+      return undefined;
+    default:
+      if (SIDECAR_COMMANDS.has(command)) {
+        if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
+        return sidecarSupervisor.invoke(command, args);
+      }
+      throw new Error('desktop command is not supported');
+  }
+}
+
+function sidecarBinaryPath(): string {
+  const override = process.env.AGISTACK_SIDECAR_PATH;
+  if (override) {
+    if (!isAbsolute(override)) {
+      throw new Error('AGISTACK_SIDECAR_PATH must be absolute');
+    }
+    return override;
+  }
+  const executable =
+    process.platform === 'win32'
+      ? 'agistack-desktop-sidecar.exe'
+      : 'agistack-desktop-sidecar';
+  if (app.isPackaged) {
+    return join(process.resourcesPath, 'sidecar', executable);
+  }
+  return join(currentDirectory, '../../../../target/debug', executable);
+}
+
+function defaultWorkspaceRoot(): string {
+  const configured = process.env.AGISTACK_WORKSPACE_ROOT;
+  if (configured && isAbsolute(configured)) return resolve(configured);
+
+  let candidate = resolve(process.cwd());
+  const filesystemRoot = parse(candidate).root;
+  while (true) {
+    if (existsSync(join(candidate, 'AGENTS.md')) || existsSync(join(candidate, '.git'))) {
+      return candidate;
+    }
+    if (candidate === filesystemRoot) break;
+    candidate = dirname(candidate);
+  }
+  return homedir();
+}
+
+function legacyTauriDataDirectories(destination: string): string[] {
+  const identifier = 'ai.agistack.desktop';
+  const candidates = [join(app.getPath('appData'), identifier)];
+  if (process.platform === 'linux') {
+    const xdgDataHome = process.env.XDG_DATA_HOME;
+    candidates.push(
+      xdgDataHome && isAbsolute(xdgDataHome)
+        ? join(xdgDataHome, identifier)
+        : join(homedir(), '.local', 'share', identifier),
+    );
+  }
+  return [...new Set(candidates.map((candidate) => resolve(candidate)))].filter(
+    (candidate) => normalize(candidate) !== normalize(destination),
+  );
+}
+
+function createSidecarSupervisor(): SidecarSupervisor {
+  const dataDirectory = join(app.getPath('userData'), 'runtime');
+  return new SidecarSupervisor({
+    binaryPath: sidecarBinaryPath(),
+    dataDirectory,
+    workspaceRoot: defaultWorkspaceRoot(),
+    legacyDataDirectories: legacyTauriDataDirectories(dataDirectory),
+    onRecovered: () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(SIDECAR_RECOVERED_CHANNEL);
+      }
+    },
+  });
+}
+
+function rendererDevelopmentUrl(): URL | null {
+  const value = process.env.ELECTRON_RENDERER_URL;
+  if (!value) return null;
+  const url = new URL(value);
+  if (url.protocol !== 'http:' || !isLoopbackHost(url.hostname)) {
+    throw new Error('Electron renderer development URL must use loopback HTTP');
+  }
+  return url;
+}
+
+async function handleRendererRequest(request: Request): Promise<Response> {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return new Response('Method not allowed', {
+      status: 405,
+      headers: { Allow: 'GET, HEAD' },
+    });
+  }
+  try {
+    const assetPath = await resolveRendererAsset(rendererDirectory, request.url);
+    const response = await net.fetch(pathToFileURL(assetPath).toString());
+    if (request.method === 'HEAD') {
+      return new Response(null, {
+        status: response.status,
+        headers: response.headers,
+      });
+    }
+    return response;
+  } catch (error) {
+    const status = error instanceof RendererProtocolError ? error.status : 500;
+    return new Response(status === 404 ? 'Not found' : 'Request denied', { status });
+  }
+}
+
+function installRendererProtocol(): void {
+  protocol.handle(RENDERER_PROTOCOL_SCHEME, handleRendererRequest);
+}
+
+function installNavigationPolicy(window: BrowserWindow, developmentUrl: URL | null): void {
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const target = new URL(url);
+      if (isSecureWebUrl(target)) void shell.openExternal(target.toString());
+    } catch {
+      // Invalid or privileged URLs stay blocked.
+    }
+    return { action: 'deny' };
+  });
+  window.webContents.on('will-navigate', (event, url) => {
+    let allowedDevelopmentNavigation = false;
+    let allowedProductionNavigation = false;
+    try {
+      const target = new URL(url);
+      allowedDevelopmentNavigation =
+        developmentUrl !== null && target.origin === developmentUrl.origin;
+      allowedProductionNavigation =
+        developmentUrl === null &&
+        target.protocol === `${RENDERER_PROTOCOL_SCHEME}:` &&
+        target.hostname === RENDERER_PROTOCOL_HOST &&
+        !target.username &&
+        !target.password &&
+        !target.port;
+    } catch {
+      // Malformed navigation targets stay blocked.
+    }
+    if (!allowedDevelopmentNavigation && !allowedProductionNavigation) {
+      event.preventDefault();
+    }
+  });
+}
+
+async function createMainWindow(): Promise<void> {
+  const developmentUrl = rendererDevelopmentUrl();
+  const window = new BrowserWindow({
+    title: 'agi-stack Desktop',
+    width: 1728,
+    height: 1024,
+    minWidth: 1080,
+    minHeight: 720,
+    center: true,
+    show: false,
+    webPreferences: {
+      preload: join(currentDirectory, '../preload/index.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+    },
+  });
+  mainWindow = window;
+  installNavigationPolicy(window, developmentUrl);
+  window.once('ready-to-show', () => window.show());
+  window.on('closed', () => {
+    if (mainWindow === window) mainWindow = null;
+  });
+  if (developmentUrl) {
+    await window.loadURL(developmentUrl.toString());
+  } else {
+    await window.loadURL(RENDERER_ENTRY_URL);
+  }
+}
+
+function handleFatalStartup(error: unknown): void {
+  const detail = error instanceof Error ? error.message : String(error);
+  console.error('Electron desktop startup failed', error);
+  try {
+    dialog.showErrorBox('agi-stack Desktop failed to start', detail);
+  } finally {
+    process.exitCode = 1;
+    app.quit();
+  }
+}
+
+async function bootstrapApplication(): Promise<void> {
+  installRendererProtocol();
+  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
+    callback(false);
+  });
+  sidecarSupervisor = createSidecarSupervisor();
+  await sidecarSupervisor.start();
+  ipcMain.handle(DESKTOP_COMMAND_CHANNEL, executeDesktopCommand);
+  await createMainWindow();
+  stopAutomaticUpdates = startAutomaticUpdates();
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      void createMainWindow().catch(handleFatalStartup);
+    }
+  });
+}
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow?.isMinimized()) mainWindow.restore();
+    mainWindow?.show();
+    mainWindow?.focus();
+  });
+  void app.whenReady().then(bootstrapApplication).catch(handleFatalStartup);
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit();
+  });
+  app.on('before-quit', (event) => {
+    if (!sidecarSupervisor || sidecarShutdownComplete) return;
+    event.preventDefault();
+    stopAutomaticUpdates?.();
+    stopAutomaticUpdates = null;
+    const supervisor = sidecarSupervisor;
+    sidecarSupervisor = null;
+    void supervisor.stop().finally(() => {
+      sidecarShutdownComplete = true;
+      app.quit();
+    });
+  });
+}

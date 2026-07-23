@@ -8,6 +8,7 @@ const {
   clearLocalTrustedSession,
   clearNativeTrustedSession,
   decodeNativeTrustedSession,
+  hasNativeTrustedSessionBroker,
   loadLocalTrustedSession,
   loadNativeTrustedSession,
   saveLocalTrustedSession,
@@ -45,10 +46,11 @@ test('native trusted session decoder accepts only the versioned broker contract'
   );
 });
 
-test('native trusted session commands preserve the strict Tauri broker contract', async () => {
+test('native trusted session commands preserve the strict desktop broker contract', async () => {
   const commands = [];
   globalThis.window = {
-    __TAURI__: {
+    __MEMSTACK_DESKTOP__: {
+      runtime: 'electron',
       core: {
         invoke: async (command, args) => {
           commands.push({ command, args });
@@ -70,10 +72,25 @@ test('native trusted session commands preserve the strict Tauri broker contract'
   delete globalThis.window;
 });
 
+test('legacy Tauri globals cannot impersonate the dedicated desktop bridge', async () => {
+  globalThis.window = {
+    __TAURI__: {
+      core: {
+        invoke: async () => cloudRecord,
+      },
+    },
+  };
+
+  assert.equal(hasNativeTrustedSessionBroker(), false);
+  await assert.rejects(loadNativeTrustedSession(), /supported desktop shell/);
+  delete globalThis.window;
+});
+
 test('local trusted session references use the SQLite broker instead of native credential storage', async () => {
   const commands = [];
   globalThis.window = {
-    __TAURI__: {
+    __MEMSTACK_DESKTOP__: {
+      runtime: 'electron',
       core: {
         invoke: async (command, args) => {
           commands.push({ command, args });
@@ -112,7 +129,8 @@ test('local login never invokes the native credential broker', () => {
 test('malformed native records are cleared before a redacted error is returned', async () => {
   const commands = [];
   globalThis.window = {
-    __TAURI__: {
+    __MEMSTACK_DESKTOP__: {
+      runtime: 'electron',
       core: {
         invoke: async (command) => {
           commands.push(command);

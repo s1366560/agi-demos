@@ -708,11 +708,15 @@ export class DesktopApiClient {
 
   async createAgentConversation(
     title: string,
-    projectId = this.config.projectId,
+    projectId: string,
+    expectedUserId: string,
     capabilityMode?: AgentCapabilityMode,
+    agentConfig?: { llm_model_override?: string | null },
   ): Promise<AgentConversation> {
+    const requiredTenantId = requireValue(this.config.tenantId, 'tenant id');
     const requiredProjectId = requireValue(projectId, 'project id');
-    return this.request<AgentConversation>('/api/v1/agent/conversations', {
+    const requiredUserId = requireValue(expectedUserId, 'user id');
+    const payload = await this.request<unknown>('/api/v1/agent/conversations', {
       method: 'POST',
       body: {
         project_id: requiredProjectId,
@@ -720,9 +724,25 @@ export class DesktopApiClient {
         agent_config: {
           selected_agent_id: 'builtin:all-access',
           ...(capabilityMode ? { capability_mode: capabilityMode } : {}),
+          ...agentConfig,
         },
       },
     });
+    const conversation = normalizeAgentConversation(
+      payload,
+      requiredTenantId,
+      requiredProjectId,
+      null,
+      true,
+    );
+    if (
+      !conversation ||
+      conversation.user_id !== requiredUserId ||
+      conversation.title !== title
+    ) {
+      throw new DesktopApiError('Invalid agent conversation response', 502, payload);
+    }
+    return conversation;
   }
 
   async updateAgentConversationMode(
@@ -770,12 +790,35 @@ export class DesktopApiClient {
 
   async listConversations(
     projectId = this.config.projectId,
-    workspaceId?: string | null,
-    signal?: AbortSignal,
+    workspaceIdOrOptions?:
+      | string
+      | null
+      | {
+          workspaceId?: string | null;
+          unboundOnly?: boolean;
+          signal?: AbortSignal;
+        },
+    legacySignal?: AbortSignal,
   ): Promise<PaginatedConversationsResponse> {
     const requiredTenantId = requireValue(this.config.tenantId, 'tenant id');
     const requiredProjectId = requireValue(projectId, 'project id');
-    const requiredWorkspaceId = workspaceId?.trim() || null;
+    const options: {
+      workspaceId?: string | null;
+      unboundOnly?: boolean;
+      signal?: AbortSignal;
+    } =
+      workspaceIdOrOptions !== null && typeof workspaceIdOrOptions === 'object'
+        ? workspaceIdOrOptions
+        : {
+            workspaceId: workspaceIdOrOptions,
+            signal: legacySignal,
+          };
+    const signal = options.signal;
+    const requiredWorkspaceId = options.workspaceId?.trim() || null;
+    const unboundOnly = options.unboundOnly === true;
+    if (requiredWorkspaceId && unboundOnly) {
+      throw new Error('workspaceId and unboundOnly cannot be combined');
+    }
     const items: AgentConversation[] = [];
     const seenIds = new Set<string>();
     let offset = 0;
@@ -789,6 +832,7 @@ export class DesktopApiClient {
         offset: String(offset),
       });
       if (requiredWorkspaceId) params.set('workspace_id', requiredWorkspaceId);
+      if (unboundOnly) params.set('unbound_only', 'true');
       const path = `/api/v1/agent/conversations?${params.toString()}`;
       const requestPage = () => this.request<unknown>(path, { signal });
       let payload: unknown;
@@ -804,6 +848,7 @@ export class DesktopApiClient {
         requiredTenantId,
         requiredProjectId,
         requiredWorkspaceId,
+        unboundOnly,
       );
       if (expectedTotal === null) {
         expectedTotal = page.total;
@@ -2478,6 +2523,7 @@ function requireConversationCatalogPage(
   tenantId: string,
   projectId: string,
   workspaceId: string | null,
+  unboundOnly = false,
 ): {
   items: AgentConversation[];
   total: number;
@@ -2515,7 +2561,7 @@ function requireConversationCatalogPage(
     throw invalidHierarchyCatalogResponse('conversation catalog', payload);
   }
   const items = payload.items.map((value) =>
-    normalizeAgentConversation(value, tenantId, projectId, workspaceId),
+    normalizeAgentConversation(value, tenantId, projectId, workspaceId, unboundOnly),
   );
   if (items.some((item) => item === null)) {
     throw invalidHierarchyCatalogResponse('conversation catalog', payload);
@@ -2533,6 +2579,7 @@ function normalizeAgentConversation(
   tenantId: string,
   projectId: string,
   workspaceId: string | null,
+  unboundOnly = false,
 ): AgentConversation | null {
   if (
     !isRecord(value) ||
@@ -2540,6 +2587,7 @@ function normalizeAgentConversation(
     value.tenant_id !== tenantId ||
     value.project_id !== projectId ||
     (workspaceId !== null && value.workspace_id !== workspaceId) ||
+    (unboundOnly && value.workspace_id !== null) ||
     !isNonEmptyString(value.user_id) ||
     !isNonEmptyString(value.title) ||
     value.status !== 'active' ||

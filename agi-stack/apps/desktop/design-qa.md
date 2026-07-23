@@ -1,5 +1,8 @@
 # Login screen design QA
 
+> Historical entries mentioning Tauri document earlier validation runs. Electron is now the only
+> supported desktop shell; current build and release evidence lives in `ELECTRON.md` and `QA.md`.
+
 ## Comparison target
 
 - Source visual truth: `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/login-screen.png`

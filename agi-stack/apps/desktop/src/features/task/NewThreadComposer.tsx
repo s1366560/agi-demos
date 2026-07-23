@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ActivityLogIcon,
   ArrowRightIcon,
@@ -19,11 +19,9 @@ import type {
   WorkspaceSummary,
 } from '../../types';
 import type { WorkspaceRuntimeModelOption } from '../settings/workspaceRuntimeProviderModel';
-import {
-  ComposerPlusMenu,
-  type ComposerCatalogClient,
-} from '../chat/ComposerPlusMenu';
+import { ComposerPlusMenu } from '../chat/ComposerPlusMenu';
 import { appendComposerContextItem } from '../chat/chatComposerModel';
+import type { ComposerCatalogClient } from '../chat/composerCatalogModel';
 import { PickerMenu } from '../chat/PickerMenu';
 import '../chat/ComposerMenus.css';
 import './NewThreadComposer.css';
@@ -31,14 +29,17 @@ import './NewThreadComposer.css';
 export type NewThreadComposerInput = {
   prompt: string;
   mode: AgentCapabilityMode;
-  model: WorkspaceRuntimeModelOption;
+  workspaceId: string;
+  model: WorkspaceRuntimeModelOption | null;
   reasoningEffort: WorkspaceReasoningEffort;
   permissionMode: WorkspacePermissionMode;
   contextItems: ComposerContextItem[];
 };
 
 type NewThreadComposerProps = {
+  workspaceId: string;
   workspace: WorkspaceSummary | null;
+  workspaces: WorkspaceSummary[];
   api: ComposerCatalogClient;
   conversations: AgentConversation[];
   mode: AgentCapabilityMode;
@@ -51,6 +52,7 @@ type NewThreadComposerProps = {
   creating: boolean;
   error: string | null;
   onModeChange: (mode: AgentCapabilityMode) => void;
+  onWorkspaceChange: (workspaceId: string) => void;
   onCreate: (input: NewThreadComposerInput) => void;
   onOpenThread: (conversation: AgentConversation) => void;
   onManageModels: () => void;
@@ -70,7 +72,9 @@ const SUGGESTIONS: Record<AgentCapabilityMode, Array<{ title: string; prompt: st
 };
 
 export function NewThreadComposer({
+  workspaceId,
   workspace,
+  workspaces,
   api,
   conversations,
   mode,
@@ -83,39 +87,61 @@ export function NewThreadComposer({
   creating,
   error,
   onModeChange,
+  onWorkspaceChange,
   onCreate,
   onOpenThread,
   onManageModels,
 }: NewThreadComposerProps) {
   const { t } = useI18n();
   const [prompt, setPrompt] = useState('');
-  const [modelValue, setModelValue] = useState('');
-  const [reasoningEffort, setReasoningEffort] = useState<WorkspaceReasoningEffort>('medium');
-  const [permissionMode, setPermissionMode] = useState<WorkspacePermissionMode>('ask');
+  const [modelSelection, setModelSelection] = useState({ workspaceId: '', value: '' });
+  const [reasoningSelection, setReasoningSelection] = useState<{
+    workspaceId: string;
+    value: WorkspaceReasoningEffort;
+  }>({ workspaceId: '', value: 'medium' });
+  const [permissionSelection, setPermissionSelection] = useState<{
+    workspaceId: string;
+    value: WorkspacePermissionMode;
+  }>({ workspaceId: '', value: 'ask' });
   const [contextItems, setContextItems] = useState<ComposerContextItem[]>([]);
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
 
-  useEffect(() => {
-    setModelValue(modelOptions.find((option) => option.selected)?.value ?? modelOptions[0]?.value ?? '');
-  }, [modelOptions]);
-  useEffect(() => {
-    setReasoningEffort(policy?.reasoning_effort ?? 'medium');
-    setPermissionMode(policy?.permission_mode ?? 'ask');
-  }, [policy]);
-
+  const defaultModelValue = workspaceId
+    ? (modelOptions.find((option) => option.selected)?.value ?? modelOptions[0]?.value ?? '')
+    : '';
+  const modelValue =
+    modelSelection.workspaceId === workspaceId &&
+    (modelSelection.value === '' ||
+      modelOptions.some((option) => option.value === modelSelection.value))
+      ? modelSelection.value
+      : defaultModelValue;
+  const reasoningEffort =
+    reasoningSelection.workspaceId === workspaceId
+      ? reasoningSelection.value
+      : (policy?.reasoning_effort ?? 'medium');
+  const permissionMode =
+    permissionSelection.workspaceId === workspaceId
+      ? permissionSelection.value
+      : (policy?.permission_mode ?? 'ask');
   const selectedModel = useMemo(
     () => modelOptions.find((option) => option.value === modelValue) ?? null,
     [modelOptions, modelValue],
   );
   const recentThreads = conversations.slice(0, 5);
   const canSend = Boolean(
-    prompt.trim() && selectedModel && !disabledReason && !creating && !uploadingAttachments,
+    prompt.trim() &&
+      (!workspaceId || selectedModel) &&
+      !disabledReason &&
+      !creating &&
+      !loadingPolicy &&
+      !uploadingAttachments,
   );
   const send = () => {
-    if (!canSend || !selectedModel) return;
+    if (!canSend) return;
     onCreate({
       prompt: prompt.trim(),
       mode,
+      workspaceId,
       model: selectedModel,
       reasoningEffort,
       permissionMode,
@@ -126,13 +152,38 @@ export function NewThreadComposer({
   const addContextItem = (item: ComposerContextItem) => {
     setContextItems((current) => appendComposerContextItem(current, item));
   };
-  const modelPickerOptions = modelOptions.map((option) => ({
-    value: option.value,
-    label: option.modelId,
-    description: option.description,
-    meta: option.contextWindow ?? t('task.contextWindowUnavailable'),
-    badges: option.roles.map((role) => t(`task.modelRole.${role}`)),
-  }));
+  const workspacePickerOptions = [
+    {
+      value: '',
+      label: t('task.noWorkspace'),
+      description: t('task.noWorkspaceDescription'),
+    },
+    ...workspaces.map((option) => ({
+      value: option.id,
+      label: option.name || option.title || option.id,
+      description: option.description ?? undefined,
+    })),
+  ];
+  const modelPickerOptions = [
+    ...(workspaceId
+      ? []
+      : [
+          {
+            value: '',
+            label: t('task.projectDefaultModel'),
+            description: t('task.projectDefaultModelDescription'),
+            meta: null,
+            badges: [],
+          },
+        ]),
+    ...modelOptions.map((option) => ({
+      value: option.value,
+      label: option.modelId,
+      description: option.description,
+      meta: option.contextWindow ?? t('task.contextWindowUnavailable'),
+      badges: option.roles.map((role) => t(`task.modelRole.${role}`)),
+    })),
+  ];
   const effortOptions = [
     {
       value: 'low',
@@ -176,7 +227,8 @@ export function NewThreadComposer({
           <h1>{t('task.newThreadTitle')}</h1>
           <p>{t('task.newThreadDescription')}</p>
           <span className="new-thread-workspace">
-            <CubeIcon /> {workspace?.name ?? workspace?.title ?? t('overview.none')}
+            <CubeIcon />{' '}
+            {workspace?.name ?? workspace?.title ?? t('task.noWorkspace')}
           </span>
         </header>
 
@@ -210,6 +262,7 @@ export function NewThreadComposer({
           />
           <div className="new-thread-composer-toolbar">
             <ComposerPlusMenu
+              key={workspaceId || 'unbound'}
               api={api}
               conversations={conversations}
               onAdd={addContextItem}
@@ -233,32 +286,55 @@ export function NewThreadComposer({
                 </button>
               </div>
               <PickerMenu
+                label={t('task.workspace')}
+                value={workspaceId}
+                options={workspacePickerOptions}
+                onChange={(value) => {
+                  setContextItems([]);
+                  onWorkspaceChange(value);
+                }}
+              />
+              <PickerMenu
                 label={t('task.model')}
                 value={modelValue}
                 options={modelPickerOptions}
-                readOnly={!canManagePolicy}
-                onChange={setModelValue}
+                readOnly={Boolean(workspaceId) && !canManagePolicy}
+                onChange={(value) => setModelSelection({ workspaceId, value })}
                 footer={{
                   label: t('task.manageModels'),
                   icon: <CubeIcon />,
                   onClick: onManageModels,
                 }}
               />
-              <PickerMenu
-                label={t('task.effort')}
-                value={reasoningEffort}
-                options={effortOptions}
-                readOnly={!canManagePolicy}
-                onChange={(value) => setReasoningEffort(value as WorkspaceReasoningEffort)}
-              />
-              <PickerMenu
-                label={t('task.permissionMode')}
-                value={permissionMode}
-                options={permissionOptions}
-                readOnly={!canManagePolicy}
-                hideLabel
-                onChange={(value) => setPermissionMode(value as WorkspacePermissionMode)}
-              />
+              {workspaceId ? (
+                <>
+                  <PickerMenu
+                    label={t('task.effort')}
+                    value={reasoningEffort}
+                    options={effortOptions}
+                    readOnly={!canManagePolicy}
+                    onChange={(value) =>
+                      setReasoningSelection({
+                        workspaceId,
+                        value: value as WorkspaceReasoningEffort,
+                      })
+                    }
+                  />
+                  <PickerMenu
+                    label={t('task.permissionMode')}
+                    value={permissionMode}
+                    options={permissionOptions}
+                    readOnly={!canManagePolicy}
+                    hideLabel
+                    onChange={(value) =>
+                      setPermissionSelection({
+                        workspaceId,
+                        value: value as WorkspacePermissionMode,
+                      })
+                    }
+                  />
+                </>
+              ) : null}
             </div>
             <button
               className="send-button"

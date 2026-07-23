@@ -1,16 +1,16 @@
 # Desktop QA Log
 
-## 2026-07-09
+## Validation history: 2026-07-09 through 2026-07-23
 
 ### Verified
 
-- `make run-desktop` launches the Tauri dev shell, starts Vite on `127.0.0.1:5173`,
-  and renders the React app to `New session`.
-- On macOS, `make run-desktop` provisions a private local development signing identity and signs
-  each rebuilt dev binary with that stable identity. Desktop credentials no longer access Keychain;
-  cloud sessions and Provider API keys persist through the application-managed encrypted vault.
-- The macOS Tauri configuration applies the same signing runner to direct `tauri dev` launches, so
-  IDE and coding-agent development commands cannot accidentally fall back to ad-hoc signatures.
+- `make run-desktop` launches the Electron shell through `electron-vite` and starts the independent
+  Rust local-runtime sidecar.
+- Production packages sign the Electron application and nested sidecar. Local macOS bundles use an
+  explicitly ad-hoc signed development package; the tag release workflow requires Developer ID,
+  notarization, and Windows Authenticode credentials before it can publish.
+- Desktop credentials never use Keychain; cloud sessions and Provider API keys persist through the
+  Rust sidecar's application-managed encrypted vault.
 - The encrypted vault stores only AES-256-GCM ciphertext in SQLite and keeps its random installation
   key in a separate user-private file. Upgrading from a Keychain-backed build requires signing in and
   entering Provider API keys once; legacy Keychain entries are left untouched.
@@ -32,8 +32,8 @@
   layout: 220px sidebar, Quick links, Sessions, central conversation timeline
   with run/tool cards, bottom workflow chips, and a right Workspace panel with
   tabbed review content.
-- Rebuilt release macOS bundle was captured through Computer Use by targeting
-  `src-tauri/target/release/bundle/macos/agi-stack Desktop.app`; the native app
+- The historical Tauri release bundle was captured through Computer Use before the Electron
+  migration; current bundles are generated under `apps/desktop/release/`. The native app
   exposes the current signed-out workflow shortcut set and warning/composer UI.
 - Local server smoke on `http://127.0.0.1:8000` confirms the default admin
   account can log in, tenants/projects/workspaces load, workspace messages can
@@ -606,7 +606,8 @@
   desktop composer model control to an editable combobox backed by listbox
   options while preserving the compact footer layout.
 - `pnpm build`
-- `cargo test` in `apps/desktop/src-tauri`
+- `cargo test -p agistack-desktop-sidecar`
+- `AGISTACK_REAL_SIDECAR=... pnpm test` in `apps/desktop`
 - `make desktop-bundle`
 - `make desktop-bundle-smoke`
 - Local login/workspace/conversation/WS smoke against `127.0.0.1:8000`
