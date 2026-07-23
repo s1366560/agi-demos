@@ -1,4 +1,5 @@
 import type { AgentTimelineItem, DesktopRunStatus, ToolDisplayData } from '../../types';
+import { pairToolCallItems } from '../chat/chatTimelineModel';
 
 export type SessionToolGroupStatus = 'running' | 'complete' | 'failed';
 
@@ -47,36 +48,39 @@ export function sessionActivityPresence(
 
 export function buildSessionNarrative(items: AgentTimelineItem[]): SessionNarrativeNode[] {
   const narrative: SessionNarrativeNode[] = [];
-  let toolItems: AgentTimelineItem[] = [];
+  let structuredItems: AgentTimelineItem[] = [];
 
-  const flushToolItems = () => {
-    if (!toolItems.length) return;
-    if (!toolItems.some((item) => item.type === 'act' || item.type === 'observe')) {
-      narrative.push(...toolItems.map((item) => ({ kind: 'item' as const, id: item.id, item })));
-      toolItems = [];
-      return;
-    }
-    narrative.push({
-      kind: 'tool_group',
-      id: `tool-group:${toolItems[0].id}:${toolItems[toolItems.length - 1].id}`,
-      toolCount: toolGroupCount(toolItems),
-      status: toolGroupStatus(toolItems),
-      items: toolItems,
-    });
-    toolItems = [];
+  const flushStructuredItems = () => {
+    appendStructuredNarrative(narrative, structuredItems);
+    structuredItems = [];
   };
 
   items.forEach((item) => {
     if (item.type === 'thought' || item.type === 'act' || item.type === 'observe') {
-      toolItems.push(item);
+      structuredItems.push(item);
       return;
     }
-    flushToolItems();
+    flushStructuredItems();
     narrative.push({ kind: 'item', id: item.id, item });
   });
-  flushToolItems();
+  flushStructuredItems();
 
   return narrative;
+}
+
+export function timelineGroupOpen(
+  items: readonly Pick<AgentTimelineItem, 'id'>[],
+  expandedItems: Readonly<Record<string, boolean>>,
+  defaultOpen = false,
+): boolean {
+  let hasExplicitState = false;
+  let open = false;
+  for (const item of items) {
+    if (!Object.prototype.hasOwnProperty.call(expandedItems, item.id)) continue;
+    hasExplicitState = true;
+    open ||= expandedItems[item.id] === true;
+  }
+  return hasExplicitState ? open : defaultOpen;
 }
 
 export function sessionActivitySummary(input: {
@@ -130,6 +134,47 @@ function toolGroupCount(items: AgentTimelineItem[]): number {
   if (calls) return calls;
   const namedTools = new Set(items.map((item) => item.toolName).filter(Boolean));
   return Math.max(namedTools.size, items.length ? 1 : 0);
+}
+
+function appendStructuredNarrative(
+  narrative: SessionNarrativeNode[],
+  items: AgentTimelineItem[],
+): void {
+  if (!items.length) return;
+  const pairs = pairToolCallItems(
+    items.filter((item) => item.type === 'act' || item.type === 'observe'),
+  );
+  const pairsByCallId = new Map(pairs.map((pair) => [pair.call.id, pair]));
+  const claimedResultIds = new Set(
+    pairs.flatMap((pair) => (pair.result ? [pair.result.id] : [])),
+  );
+  let toolItems: AgentTimelineItem[] = [];
+
+  const flushToolItems = () => {
+    if (!toolItems.length) return;
+    narrative.push({
+      kind: 'tool_group',
+      id: `tool-group:${toolItems[0].id}`,
+      toolCount: toolGroupCount(toolItems),
+      status: toolGroupStatus(toolItems),
+      items: toolItems,
+    });
+    toolItems = [];
+  };
+
+  items.forEach((item) => {
+    if (item.type === 'thought') {
+      flushToolItems();
+      narrative.push({ kind: 'item', id: item.id, item });
+      return;
+    }
+    if (claimedResultIds.has(item.id)) return;
+    const pair = pairsByCallId.get(item.id);
+    if (!pair) return;
+    toolItems.push(pair.call);
+    if (pair.result) toolItems.push(pair.result);
+  });
+  flushToolItems();
 }
 
 function activityTitleKey(item: AgentTimelineItem | undefined): string | null {

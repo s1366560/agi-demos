@@ -316,6 +316,7 @@ export function isImportantTimelineItem(item: AgentTimelineItem): boolean {
 }
 
 export function isTimelineItemInitiallyExpanded(item: AgentTimelineItem): boolean {
+  if (item.type === 'thought') return true;
   if (!isImportantTimelineItem(item)) return false;
   return (
     item.type !== 'doom_loop_detected' &&

@@ -24,6 +24,7 @@ const chatSource = [
 ].map(readSource).join('\n');
 const chatStyles = readSource('features/chat/ChatPanel.css');
 const i18nSource = readSource('i18n.tsx');
+const sessionConversationQaSource = readSource('qa/SessionConversationQa.tsx');
 
 test('session messages use the mission-control narrative hierarchy', () => {
   assert.match(chatSource, /function NarrativeMessageFrame/);
@@ -403,6 +404,33 @@ test('completed Agent replies render the authoritative execution summary', () =>
   assert.match(chatSource, /assistantExecutionSummary\(item\)/);
   assert.match(chatSource, /className="assistant-execution-summary"/);
   assert.match(chatStyles, /\.assistant-execution-summary/);
+});
+
+test('reasoning and tool disclosures follow the Web transcript defaults', () => {
+  assert.match(
+    chatSource,
+    /isTimelineItemInitiallyExpanded[\s\S]*item\.type === 'thought'[\s\S]*return true/,
+  );
+  assert.match(
+    chatSource,
+    /const lastToolGroupIndex = useMemo\([\s\S]*narrative\.length - 1[\s\S]*narrative\[index\]\.kind === 'tool_group'/,
+  );
+  assert.match(
+    chatSource,
+    /timelineGroupOpen\(\s*node\.items,\s*expandedGroupItems,\s*index === lastToolGroupIndex/,
+  );
+  assert.match(
+    chatSource,
+    /className="timeline-tool-group-summary"[\s\S]*aria-expanded=\{open\}/,
+  );
+  assert.match(
+    chatSource,
+    /\{isThought \? null : <span className="timeline-row-summary">\{summary\}<\/span>\}/,
+  );
+  assert.match(
+    sessionConversationQaSource,
+    /current\[toggleItem\.id\]\s*\?\?\s*isTimelineItemInitiallyExpanded\(toggleItem\)/,
+  );
 });
 
 test('narrative content is bounded without discarding authoritative markdown', () => {

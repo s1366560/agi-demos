@@ -3,9 +3,12 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { buildSessionNarrative, sessionActivityPresence, sessionActivitySummary } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/session/sessionNarrativeModel.js'
-);
+const {
+  buildSessionNarrative,
+  sessionActivityPresence,
+  sessionActivitySummary,
+  timelineGroupOpen,
+} = require('/tmp/agistack-desktop-test-dist/src/features/session/sessionNarrativeModel.js');
 
 test('consecutive tool calls are grouped without merging surrounding conversation turns', () => {
   const narrative = buildSessionNarrative([
@@ -18,16 +21,57 @@ test('consecutive tool calls are grouped without merging surrounding conversatio
     { id: 'agent-1', type: 'assistant_message', role: 'assistant', content: 'Fixed.' },
   ]);
 
-  assert.equal(narrative.length, 3);
+  assert.equal(narrative.length, 4);
   assert.equal(narrative[0].kind, 'item');
-  assert.equal(narrative[1].kind, 'tool_group');
+  assert.equal(narrative[1].kind, 'item');
+  assert.equal(narrative[1].item.type, 'thought');
+  assert.equal(narrative[2].kind, 'tool_group');
   assert.deepEqual(
-    narrative[1].items.map((item) => item.type),
-    ['thought', 'act', 'observe', 'act', 'observe'],
+    narrative[2].items.map((item) => item.type),
+    ['act', 'observe', 'act', 'observe'],
   );
-  assert.equal(narrative[1].toolCount, 2);
-  assert.equal(narrative[1].status, 'complete');
-  assert.equal(narrative[2].kind, 'item');
+  assert.equal(narrative[2].toolCount, 2);
+  assert.equal(narrative[2].status, 'complete');
+  assert.equal(narrative[3].kind, 'item');
+});
+
+test('thought does not split a structurally matched act and observe pair', () => {
+  const narrative = buildSessionNarrative([
+    {
+      id: 'act-1',
+      type: 'act',
+      toolName: 'read_file',
+      tool_execution_id: 'execution-1',
+    },
+    { id: 'thought-1', type: 'thought', content: 'I should inspect the result.' },
+    {
+      id: 'observe-1',
+      type: 'observe',
+      toolName: 'read_file',
+      tool_execution_id: 'execution-1',
+    },
+  ]);
+
+  assert.deepEqual(
+    narrative.map((node) => node.kind),
+    ['tool_group', 'item'],
+  );
+  assert.deepEqual(
+    narrative[0].items.map((item) => item.id),
+    ['act-1', 'observe-1'],
+  );
+  assert.equal(narrative[0].toolCount, 1);
+  assert.equal(narrative[0].status, 'complete');
+  assert.equal(narrative[1].item.id, 'thought-1');
+});
+
+test('group disclosure keeps explicit user state ahead of changing defaults', () => {
+  const items = [{ id: 'act-1' }, { id: 'observe-1' }];
+
+  assert.equal(timelineGroupOpen(items, {}, true), true);
+  assert.equal(timelineGroupOpen(items, {}, false), false);
+  assert.equal(timelineGroupOpen(items, { 'act-1': false }, true), false);
+  assert.equal(timelineGroupOpen(items, { 'act-1': true }, false), true);
 });
 
 test('tool groups expose running and failed states from structural events', () => {

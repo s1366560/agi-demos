@@ -23,7 +23,7 @@ import type {
   DesktopApprovalRequest,
   HitlResponseSubmission,
 } from '../../types';
-import { buildSessionNarrative } from '../session/sessionNarrativeModel';
+import { buildSessionNarrative, timelineGroupOpen } from '../session/sessionNarrativeModel';
 import type { SessionActivityPresence, SessionNarrativeNode } from '../session/sessionNarrativeModel';
 import { resolveA2UIActionView } from './a2uiAction';
 import type { A2UIActionView } from './a2uiAction';
@@ -183,6 +183,12 @@ export function AgentTimeline({
     () => annotateTimelineGroups(groupNarrativeActivity(buildSessionNarrative(displayItems))),
     [displayItems],
   );
+  const lastToolGroupIndex = useMemo(() => {
+    for (let index = narrative.length - 1; index >= 0; index -= 1) {
+      if (narrative[index].kind === 'tool_group') return index;
+    }
+    return -1;
+  }, [narrative]);
   const renderWindow = useMemo(
     () => resolveTimelineRenderWindow(narrative, displayItems.length, earlierRenderAllowance),
     [narrative, displayItems.length, earlierRenderAllowance],
@@ -400,7 +406,11 @@ export function AgentTimeline({
           }
           if (node.kind === 'tool_group') {
             const groupId = timelineGroupIdentity(narrative, index);
-            const open = node.items.some((item) => expandedGroupItems[item.id]);
+            const open = timelineGroupOpen(
+              node.items,
+              expandedGroupItems,
+              index === lastToolGroupIndex,
+            );
             return (
               <Fragment key={groupId}>
                 {dayDivider}
@@ -409,9 +419,15 @@ export function AgentTimeline({
                   data-timeline-anchor-id={groupId}
                   data-timeline-anchor-members={node.membersJson}
                   open={open}
-                  onToggle={(event) => setGroupOpen(node.items, event.currentTarget.open)}
                 >
-                  <summary>
+                  <summary
+                    className="timeline-tool-group-summary"
+                    aria-expanded={open}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      setGroupOpen(node.items, !open);
+                    }}
+                  >
                     <span className="timeline-tool-group-icon" aria-hidden>
                       <ActivityLogIcon />
                     </span>
@@ -785,7 +801,7 @@ function TimelineItemView({
           <span className="timeline-row-title">
             {isThought ? t('session.thinking') : timelineTitle(item, t)}
           </span>
-          <span className="timeline-row-summary">{summary}</span>
+          {isThought ? null : <span className="timeline-row-summary">{summary}</span>}
         </div>
         {expanded && hasDetails ? (
           <TimelineItemBody
@@ -1307,21 +1323,6 @@ function timelineGroupIdentity(narrative: AnnotatedTimelineNode[], index: number
   const node = narrative[index];
   if (!node || node.kind === 'item') return node?.id ?? `timeline-node:${index}`;
   return node.groupId;
-}
-
-function timelineGroupOpen(
-  items: readonly AgentTimelineItem[],
-  expandedItems: Readonly<Record<string, boolean>>,
-  defaultOpen = false,
-): boolean {
-  let hasExplicitState = false;
-  let open = false;
-  for (const item of items) {
-    if (!Object.prototype.hasOwnProperty.call(expandedItems, item.id)) continue;
-    hasExplicitState = true;
-    open ||= expandedItems[item.id] === true;
-  }
-  return hasExplicitState ? open : defaultOpen;
 }
 
 function resolveTimelineRenderWindow(

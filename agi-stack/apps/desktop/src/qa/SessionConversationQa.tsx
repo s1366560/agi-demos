@@ -1,9 +1,10 @@
 import '@radix-ui/themes/styles.css';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Theme } from '@radix-ui/themes';
 
 import { AgentTimeline } from '../features/chat/ChatTimeline';
+import { isTimelineItemInitiallyExpanded } from '../features/chat/chatTimelinePresentation';
 import { I18nProvider } from '../i18n';
 import type { AgentTimelineItem, ConversationTimelineState } from '../types';
 import '../styles.css';
@@ -837,7 +838,9 @@ function TimelineFixture({
       onToggleItem={(toggleItem) =>
         setExpandedItems((current) => ({
           ...current,
-          [toggleItem.id]: !current[toggleItem.id],
+          [toggleItem.id]: !(
+            current[toggleItem.id] ?? isTimelineItemInitiallyExpanded(toggleItem)
+          ),
         }))
       }
       onLoadEarlier={() => {}}
@@ -852,23 +855,6 @@ function TimelineFixture({
 }
 
 function SessionConversationQa() {
-  useEffect(() => {
-    // Open the interactive layers (groups, pairs, reasoning) so the capture
-    // shows the expanded states without a scripted browser session.
-    const timer = window.setTimeout(() => {
-      document
-        .querySelectorAll<HTMLElement>('.timeline-tool-group > summary')
-        .forEach((element) => element.click());
-      document
-        .querySelectorAll<HTMLElement>('.tool-call .timeline-row-toggle')
-        .forEach((element) => element.click());
-      document
-        .querySelectorAll<HTMLElement>('.message.timeline-row.thought .timeline-row-toggle')
-        .forEach((element) => element.click());
-    }, 350);
-    return () => window.clearTimeout(timer);
-  }, []);
-
   return (
     <div className="session-workspace-thread" style={{ minHeight: '100%' }}>
       <section

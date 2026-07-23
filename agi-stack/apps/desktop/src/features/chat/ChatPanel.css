@@ -164,8 +164,18 @@
 }
 
 .session-chat-narrative .agent-timeline > .message.timeline-row.thought {
-  border: 0;
-  background: transparent;
+  margin-top: 14px;
+  padding: 9px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  background: rgba(30, 41, 59, 0.34);
+}
+
+.session-chat-narrative .agent-timeline > .message.timeline-row.thought .timeline-row-title {
+  color: #9aa8bb;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .session-chat-narrative .agent-timeline > .message.timeline-row.thought .timeline-row-summary {
