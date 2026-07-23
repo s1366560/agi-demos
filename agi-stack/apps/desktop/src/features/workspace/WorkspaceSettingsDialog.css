@@ -1,0 +1,193 @@
+.workspace-settings-dialog {
+  border: 1px solid rgba(71, 113, 135, 0.7);
+  background:
+    radial-gradient(circle at top right, rgba(34, 211, 238, 0.08), transparent 28rem),
+    #0b1119;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.56);
+}
+
+.workspace-settings-dialog .rt-DialogTitle {
+  margin: 0;
+  color: var(--desktop-text, #edf6fb);
+  font-size: 19px;
+}
+
+.workspace-settings-dialog .rt-DialogDescription {
+  margin-top: 7px;
+  color: var(--desktop-muted, #8ca0af);
+  line-height: 1.55;
+}
+
+.workspace-settings-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.workspace-settings-form > section {
+  display: grid;
+  gap: 14px;
+  padding: 15px;
+  border: 1px solid rgba(71, 113, 135, 0.4);
+  border-radius: 10px;
+  background: rgba(8, 15, 23, 0.62);
+}
+
+.workspace-settings-form > section > header {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--desktop-cyan, #38d6ff);
+}
+
+.workspace-settings-form > section > header > svg {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+
+.workspace-settings-form > section > header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.workspace-settings-form > section > header strong {
+  color: var(--desktop-text, #edf6fb);
+  font-size: 12px;
+}
+
+.workspace-settings-form > section > header small {
+  color: var(--desktop-faint, #637786);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.workspace-settings-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workspace-settings-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--desktop-muted, #8ca0af);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.workspace-settings-form .rt-TextFieldRoot,
+.workspace-settings-form .rt-TextAreaRoot,
+.workspace-settings-form select {
+  border-color: rgba(71, 113, 135, 0.58);
+  background: rgba(8, 15, 23, 0.8);
+}
+
+.workspace-settings-form .rt-TextFieldInput,
+.workspace-settings-form .rt-TextAreaInput,
+.workspace-settings-form select {
+  color: var(--desktop-text, #edf6fb);
+}
+
+.workspace-settings-form select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgba(71, 113, 135, 0.58);
+  border-radius: 6px;
+  font: inherit;
+}
+
+.workspace-settings-form select:focus-visible {
+  outline: 2px solid var(--desktop-cyan, #38d6ff);
+  outline-offset: 2px;
+}
+
+.workspace-settings-field-heading,
+.workspace-settings-archive,
+.workspace-settings-archive > span,
+.workspace-settings-actions,
+.workspace-settings-confirm-actions {
+  display: flex;
+  align-items: center;
+}
+
+.workspace-settings-field-heading,
+.workspace-settings-archive {
+  justify-content: space-between;
+}
+
+.workspace-settings-field-heading small {
+  color: var(--desktop-faint, #637786);
+  font-variant-numeric: tabular-nums;
+}
+
+.workspace-settings-archive {
+  box-sizing: border-box;
+  min-height: 34px;
+  align-self: end;
+  padding: 7px 10px;
+  border: 1px solid rgba(71, 113, 135, 0.45);
+  border-radius: 7px;
+  background: rgba(13, 24, 34, 0.72);
+}
+
+.workspace-settings-archive > span {
+  gap: 8px;
+}
+
+.workspace-settings-archive > span > svg {
+  color: var(--desktop-cyan, #38d6ff);
+}
+
+.workspace-settings-archive > span > span {
+  display: grid;
+  gap: 2px;
+}
+
+.workspace-settings-archive small,
+.workspace-settings-form label > small {
+  color: var(--desktop-faint, #637786);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.workspace-settings-form label > small.error {
+  color: #e58b95;
+}
+
+.workspace-settings-feedback {
+  min-height: 18px;
+  color: var(--desktop-muted, #8ca0af);
+  font-size: 11px;
+}
+
+.workspace-settings-feedback.error {
+  color: #e58b95;
+}
+
+.workspace-settings-feedback.success {
+  color: #4cd6a3;
+}
+
+.workspace-settings-actions {
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+.workspace-settings-actions > span {
+  flex: 1;
+}
+
+.workspace-settings-confirm-actions {
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 18px;
+}
+
+@media (max-width: 680px) {
+  .workspace-settings-field-grid {
+    grid-template-columns: 1fr;
+  }
+}

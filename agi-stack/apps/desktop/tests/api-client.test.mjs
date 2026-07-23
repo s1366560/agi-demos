@@ -169,6 +169,123 @@ test('workspace creation sends an explicit project-scoped contract and validates
   }
 });
 
+test('workspace update sends a strict scoped PATCH and validates the returned projection', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const controller = new AbortController();
+  const input = {
+    name: 'Updated workspace',
+    description: 'Updated objective.',
+    isArchived: true,
+    metadata: {
+      workspace_use_case: 'operations',
+      workspace_type: 'operations',
+      collaboration_mode: 'autonomous',
+      unknown_extension: { preserved: true },
+    },
+  };
+  globalThis.fetch = async (request, init) => {
+    calls.push({ request: String(request), init });
+    return new Response(
+      JSON.stringify(
+        workspaceRecord('updated', {
+          id: 'workspace / one',
+          tenant_id: 'tenant / one',
+          project_id: 'project / one',
+          name: input.name,
+          description: input.description,
+          is_archived: input.isArchived,
+          metadata: input.metadata,
+        }),
+      ),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'trusted-session',
+      localApiToken: 'launch-capability',
+      tenantId: 'tenant / one',
+      projectId: 'project / one',
+      workspaceId: 'workspace / one',
+    });
+    const updated = await client.updateWorkspaceForProject(
+      'project / one',
+      'workspace / one',
+      input,
+      'tenant / one',
+      controller.signal,
+    );
+    assert.equal(updated.name, input.name);
+    assert.equal(updated.is_archived, true);
+    assert.equal(calls.length, 1);
+    assert.equal(
+      calls[0].request,
+      'http://127.0.0.1:8088/api/v1/tenants/tenant%20%2F%20one/projects/project%20%2F%20one/workspaces/workspace%20%2F%20one',
+    );
+    assert.equal(calls[0].init.method, 'PATCH');
+    assert.equal(calls[0].init.signal, controller.signal);
+    assert.equal(calls[0].init.headers.get('Authorization'), 'Bearer trusted-session');
+    assert.equal(calls[0].init.headers.get('X-Agistack-Launch'), 'launch-capability');
+    assert.deepEqual(JSON.parse(calls[0].init.body), {
+      name: input.name,
+      description: input.description,
+      is_archived: input.isArchived,
+      metadata: input.metadata,
+    });
+
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify(
+          workspaceRecord('wrong-id', {
+            tenant_id: 'tenant / one',
+            project_id: 'project / one',
+            name: input.name,
+          }),
+        ),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    await assert.rejects(
+      client.updateWorkspaceForProject(
+        'project / one',
+        'workspace / one',
+        input,
+        'tenant / one',
+      ),
+      (error) => {
+        assert.equal(error instanceof DesktopApiError, true);
+        assert.equal(error.status, 502);
+        return true;
+      },
+    );
+
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ detail: 'Workspace already exists' }), {
+        status: 409,
+        headers: { 'content-type': 'application/json' },
+      });
+    await assert.rejects(
+      client.updateWorkspaceForProject(
+        'project / one',
+        'workspace / one',
+        input,
+        'tenant / one',
+      ),
+      (error) => {
+        assert.equal(error instanceof DesktopApiError, true);
+        assert.equal(error.status, 409);
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('workspace context unavailable detection requires the structured server code', () => {
   assert.equal(
     isWorkspaceContextUnavailableError(

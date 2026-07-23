@@ -46,7 +46,7 @@ import {
   DesktopApiClient,
   isWorkspaceContextUnavailableError,
 } from './api/client';
-import type { WorkspaceCreateInput } from './api/client';
+import type { WorkspaceCreateInput, WorkspaceUpdateInput } from './api/client';
 import {
   clearLocalTrustedSession,
   clearNativeTrustedSession,
@@ -296,6 +296,7 @@ import {
 } from './features/task/newTaskSessionModel';
 import { WorkspaceOverview } from './features/workspace/WorkspaceOverview';
 import { WorkspaceCreateDialog } from './features/workspace/WorkspaceCreateDialog';
+import { WorkspaceSettingsDialog } from './features/workspace/WorkspaceSettingsDialog';
 import {
   applyWorkspaceActivityStreamEvent,
   type WorkspaceLiveActivity,
@@ -306,6 +307,13 @@ import {
   workspaceCreateScopeIsCurrent,
 } from './features/workspace/workspaceCreateModel';
 import type { WorkspaceCreateScope } from './features/workspace/workspaceCreateModel';
+import {
+  WorkspaceSettingsScopeChangedError,
+  replaceWorkspaceInList,
+  replaceWorkspaceInProjectCatalog,
+  workspaceSettingsScopeIsCurrent,
+} from './features/workspace/workspaceSettingsModel';
+import type { WorkspaceSettingsScope } from './features/workspace/workspaceSettingsModel';
 import { beginDesktopRuntimeScopeTransition } from './features/workspace/workspaceOverviewModel';
 import {
   UNBOUND_CONVERSATIONS_KEY,
@@ -1598,6 +1606,7 @@ export function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [workspaceCreateOpen, setWorkspaceCreateOpen] = useState(false);
+  const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(false);
   const [newTaskPreferredWorkspaceId, setNewTaskPreferredWorkspaceId] = useState('');
   const [newTaskResumeDraft, setNewTaskResumeDraft] =
     useState<NewTaskResumeDraft | null>(null);
@@ -4421,6 +4430,64 @@ export function App() {
     selectWorkspace(created.id, submittedScope.projectId);
   };
 
+  const updateWorkspaceFromDialog = async (
+    input: WorkspaceUpdateInput,
+    submittedScope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ): Promise<WorkspaceSummary> => {
+    const currentScope = {
+      tenantId: configRef.current.tenantId,
+      projectId: configRef.current.projectId,
+      workspaceId: configRef.current.workspaceId,
+      epoch: configScopeEpochRef.current,
+      contextRevision: contextRevisionRef.current,
+    };
+    const scopedWorkspace = datasetRef.current.workspaces.find(
+      (workspace) =>
+        workspace.id === submittedScope.workspaceId &&
+        workspace.tenant_id === submittedScope.tenantId &&
+        workspace.project_id === submittedScope.projectId,
+    );
+    if (
+      !scopedWorkspace ||
+      !workspaceSettingsScopeIsCurrent(submittedScope, currentScope)
+    ) {
+      throw new WorkspaceSettingsScopeChangedError();
+    }
+    const settingsClient = new DesktopApiClient({
+      ...configRef.current,
+      tenantId: submittedScope.tenantId,
+      projectId: submittedScope.projectId,
+      workspaceId: submittedScope.workspaceId,
+    });
+    const updated = await settingsClient.updateWorkspaceForProject(
+      submittedScope.projectId,
+      submittedScope.workspaceId,
+      input,
+      submittedScope.tenantId,
+      signal,
+    );
+    const committedScope = {
+      tenantId: configRef.current.tenantId,
+      projectId: configRef.current.projectId,
+      workspaceId: configRef.current.workspaceId,
+      epoch: configScopeEpochRef.current,
+      contextRevision: contextRevisionRef.current,
+    };
+    if (!workspaceSettingsScopeIsCurrent(submittedScope, committedScope)) {
+      throw new WorkspaceSettingsScopeChangedError();
+    }
+    updateDataset((current) => ({
+      ...current,
+      workspaces: replaceWorkspaceInList(current.workspaces, updated),
+      workspacesByProject: replaceWorkspaceInProjectCatalog(
+        current.workspacesByProject,
+        updated,
+      ),
+    }));
+    return updated;
+  };
+
   const renameConversation = async (
     projectId: string,
     workspaceId: string,
@@ -6352,7 +6419,13 @@ export function App() {
   };
 
   const openSidebarSettings = () => openSettingsEntry('sidebar');
-  const openWorkspaceSettings = () => openSettingsEntry('workspace_overview');
+  const openWorkspaceSettings = () => {
+    if (selectedWorkspace && config.tenantId && config.projectId) {
+      setWorkspaceSettingsOpen(true);
+      return;
+    }
+    openSettingsEntry('workspace_overview');
+  };
   const openProfileWorkspaceSettings = () => openSettingsEntry('profile_workspace_switch');
 
   const openConnectionSettings = () => {
@@ -7190,6 +7263,19 @@ export function App() {
           }}
           onOpenChange={setWorkspaceCreateOpen}
           onCreate={createWorkspaceFromDialog}
+        />
+        <WorkspaceSettingsDialog
+          open={workspaceSettingsOpen}
+          workspace={selectedWorkspace}
+          scope={{
+            tenantId: config.tenantId,
+            projectId: config.projectId,
+            workspaceId: config.workspaceId,
+            epoch: configScopeEpochRef.current,
+            contextRevision: contextRevisionRef.current,
+          }}
+          onOpenChange={setWorkspaceSettingsOpen}
+          onSave={updateWorkspaceFromDialog}
         />
         <SettingsWindow
           open={settingsWindowOpen}

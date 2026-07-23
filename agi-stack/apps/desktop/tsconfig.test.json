@@ -95,6 +95,7 @@
     "src/features/workspace/WorkspaceCreateDialog.tsx",
     "src/features/workspace/WorkspaceOverview.tsx",
     "src/features/workspace/workspaceCreateModel.ts",
+    "src/features/workspace/workspaceSettingsModel.ts",
     "src/features/workspace/workspaceActivityEventModel.ts",
     "src/features/workspace/workspaceTreeModel.ts",
     "src/features/workspace/workspaceOverviewModel.ts",

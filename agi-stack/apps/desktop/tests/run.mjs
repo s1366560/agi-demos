@@ -155,6 +155,8 @@ const testFiles = [
   'workspace-tree-model.test.mjs',
   'workspace-create-model.test.mjs',
   'workspace-create-dialog.test.mjs',
+  'workspace-settings-model.test.mjs',
+  'workspace-settings-dialog.test.mjs',
   'workspace-overview-model.test.mjs',
   'workspace-overview-style.test.mjs',
   'workspace-execution-model.test.mjs',

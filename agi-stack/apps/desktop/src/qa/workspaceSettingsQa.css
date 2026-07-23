@@ -1,0 +1,145 @@
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  color: var(--desktop-text);
+  background:
+    radial-gradient(circle at 72% 14%, rgba(19, 176, 219, 0.1), transparent 36%),
+    #070c13;
+}
+
+.workspace-settings-qa-shell {
+  box-sizing: border-box;
+  display: grid;
+  align-content: start;
+  gap: 22px;
+  min-height: 100vh;
+  padding: 52px clamp(28px, 7vw, 112px);
+}
+
+.workspace-settings-qa-shell > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+}
+
+.workspace-settings-qa-shell > header span,
+.workspace-settings-qa-status strong,
+.workspace-settings-qa-projection small {
+  color: var(--desktop-cyan);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.workspace-settings-qa-shell h1 {
+  margin: 8px 0;
+  font-size: clamp(30px, 4vw, 54px);
+  letter-spacing: -0.04em;
+}
+
+.workspace-settings-qa-shell p {
+  max-width: 760px;
+  margin: 0;
+  color: var(--desktop-muted);
+}
+
+.workspace-settings-qa-shell > nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.workspace-settings-qa-shell > nav button {
+  padding: 7px 12px;
+  color: var(--desktop-muted);
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 999px;
+  background: rgba(9, 17, 27, 0.7);
+  font: 600 11px/1 inherit;
+  cursor: pointer;
+}
+
+.workspace-settings-qa-shell > nav button.selected {
+  color: var(--desktop-cyan);
+  border-color: rgba(56, 214, 255, 0.42);
+  background: rgba(56, 214, 255, 0.1);
+}
+
+.workspace-settings-qa-projection,
+.workspace-settings-qa-status {
+  padding: 16px 18px;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 12px;
+  background: rgba(9, 17, 27, 0.72);
+}
+
+.workspace-settings-qa-projection {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 24px;
+}
+
+.workspace-settings-qa-projection > div {
+  display: grid;
+  gap: 7px;
+}
+
+.workspace-settings-qa-projection > div strong {
+  font-size: 20px;
+}
+
+.workspace-settings-qa-projection > div span,
+.workspace-settings-qa-status span {
+  color: var(--desktop-muted);
+  font-size: 13px;
+}
+
+.workspace-settings-qa-projection dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.workspace-settings-qa-projection dl > div {
+  display: grid;
+  gap: 4px;
+  padding: 9px 11px;
+  border: 1px solid rgba(71, 113, 135, 0.36);
+  border-radius: 8px;
+}
+
+.workspace-settings-qa-projection dt {
+  color: var(--desktop-faint);
+  font-size: 10px;
+}
+
+.workspace-settings-qa-projection dd {
+  margin: 0;
+  font-size: 12px;
+}
+
+.workspace-settings-qa-status {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 52px;
+}
+
+@media (max-width: 760px) {
+  .workspace-settings-qa-shell > header,
+  .workspace-settings-qa-projection {
+    align-items: flex-start;
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+}

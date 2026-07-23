@@ -129,6 +129,13 @@ export type WorkspaceCreateInput = {
   metadata: Record<string, unknown>;
 };
 
+export type WorkspaceUpdateInput = {
+  name: string;
+  description: string;
+  isArchived: boolean;
+  metadata: Record<string, unknown>;
+};
+
 export type DesktopMCPAppSummary = {
   id: string;
   server_name?: string | null;
@@ -706,6 +713,46 @@ export class DesktopApiClient {
     );
     const workspace = normalizeWorkspaceSummary(payload, requiredTenantId, requiredProjectId);
     if (!workspace || workspace.name !== input.name) {
+      throw new DesktopApiError('Invalid workspace response', 502, payload);
+    }
+    return workspace;
+  }
+
+  async updateWorkspaceForProject(
+    projectId: string,
+    workspaceId: string,
+    input: WorkspaceUpdateInput,
+    tenantId = this.config.tenantId,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceSummary> {
+    const requiredTenantId = requireValue(tenantId, 'tenant id');
+    const requiredProjectId = requireValue(projectId, 'project id');
+    const requiredWorkspaceId = requireValue(workspaceId, 'workspace id');
+    const payload = await this.request<unknown>(
+      `/api/v1/tenants/${encodeURIComponent(requiredTenantId)}/projects/${encodeURIComponent(
+        requiredProjectId,
+      )}/workspaces/${encodeURIComponent(requiredWorkspaceId)}`,
+      {
+        method: 'PATCH',
+        body: {
+          name: input.name,
+          description: input.description,
+          is_archived: input.isArchived,
+          metadata: input.metadata,
+        },
+        signal,
+      },
+    );
+    const workspace = normalizeWorkspaceSummary(
+      payload,
+      requiredTenantId,
+      requiredProjectId,
+    );
+    if (
+      !workspace ||
+      workspace.id !== requiredWorkspaceId ||
+      workspace.name !== input.name
+    ) {
       throw new DesktopApiError('Invalid workspace response', 502, payload);
     }
     return workspace;
