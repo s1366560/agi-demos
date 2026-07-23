@@ -56,6 +56,7 @@ import { ComposerPlusMenu } from './ComposerPlusMenu';
 import type { ComposerModelOption } from './ComposerControls';
 import type { ComposerCatalogClient } from './composerCatalogModel';
 import { ConversationSearch } from './ConversationSearch';
+import { ConversationExportMenu } from './ConversationExportMenu';
 import { PinnedMessages } from './PinnedMessages';
 import { AgentTimeline, TIMELINE_RENDER_STEP } from './ChatTimeline';
 import {
@@ -96,6 +97,7 @@ import {
   togglePinnedMessageId,
 } from './pinnedMessageModel';
 import { latestAgentSuggestions } from './chatTimelineModel';
+import { createConversationExportSnapshot } from './conversationExportModel';
 import { useComposerFileDrop } from './useComposerFileDrop';
 import { useComposerFileUpload } from './useComposerFileUpload';
 import type {
@@ -356,6 +358,17 @@ export const ChatPanel = memo(function ChatPanel({
   const hasTimelineState = timelineState !== null;
   const messageActionConversationId =
     timelineConversationId || selectedConversationId || messages[0]?.workspace_id || '';
+  const conversationExportSnapshot = useMemo(
+    () =>
+      timelineState && messageActionConversationId
+        ? createConversationExportSnapshot({
+            conversationId: messageActionConversationId,
+            title: sessionTitle,
+            items: timelineState.items,
+          })
+        : null,
+    [messageActionConversationId, sessionTitle, timelineState],
+  );
   const conversationSearchScopeId = timelineConversationId || selectedConversationId || '';
   const composeAheadConversation = useMemo(
     () =>
@@ -903,6 +916,9 @@ export const ChatPanel = memo(function ChatPanel({
             <ReloadIcon /> {t('common.refresh')}
           </Button>
         </header>
+      ) : null}
+      {conversationExportSnapshot?.events.length ? (
+        <ConversationExportMenu snapshot={conversationExportSnapshot} />
       ) : null}
       <ScrollArea
         className="message-scroll"
