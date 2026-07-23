@@ -143,6 +143,10 @@ export function AgentTimeline({
   respondableHitlRequestIds,
   activityPresence,
   onOpenMCPAppResult,
+  onReplyMessage,
+  onEditMessage,
+  onRetryMessage,
+  retryDisabled = false,
 }: {
   state: ConversationTimelineState;
   expandedItems: Record<string, boolean>;
@@ -155,6 +159,10 @@ export function AgentTimeline({
   respondableHitlRequestIds: readonly string[];
   activityPresence: SessionActivityPresence;
   onOpenMCPAppResult?: (item: AgentTimelineItem) => void;
+  onReplyMessage?: (item: AgentTimelineItem) => void;
+  onEditMessage?: (item: AgentTimelineItem) => void;
+  onRetryMessage?: (item: AgentTimelineItem) => void;
+  retryDisabled?: boolean;
 }) {
   const { t } = useI18n();
   const respondableHitlRequestIdSet = useMemo(
@@ -456,6 +464,10 @@ export function AgentTimeline({
                 approvalRequest={state.approvalRequests.find(
                   (request) => request.id === requestId,
                 )}
+                onReplyMessage={onReplyMessage}
+                onEditMessage={onEditMessage}
+                onRetryMessage={onRetryMessage}
+                retryDisabled={retryDisabled}
               />
             </Fragment>
           );
@@ -677,6 +689,10 @@ function TimelineItemView({
   canRespondToHitl,
   a2uiActionView,
   approvalRequest,
+  onReplyMessage,
+  onEditMessage,
+  onRetryMessage,
+  retryDisabled = false,
 }: {
   item: AgentTimelineItem;
   expanded: boolean;
@@ -685,6 +701,10 @@ function TimelineItemView({
   canRespondToHitl: boolean;
   a2uiActionView?: A2UIActionView;
   approvalRequest?: DesktopApprovalRequest;
+  onReplyMessage?: (item: AgentTimelineItem) => void;
+  onEditMessage?: (item: AgentTimelineItem) => void;
+  onRetryMessage?: (item: AgentTimelineItem) => void;
+  retryDisabled?: boolean;
 }) {
   const { t } = useI18n();
   const kind = timelineKind(item);
@@ -701,6 +721,22 @@ function TimelineItemView({
         className="timeline-item"
         timelineItemId={item.id}
         streaming={Boolean(item.metadata?.streaming)}
+        onReply={
+          item.content?.trim() && onReplyMessage
+            ? () => onReplyMessage(item)
+            : undefined
+        }
+        onEdit={
+          kind === 'user' && item.content?.trim() && onEditMessage
+            ? () => onEditMessage(item)
+            : undefined
+        }
+        onRetry={
+          kind === 'agent' && item.content?.trim() && onRetryMessage
+            ? () => onRetryMessage(item)
+            : undefined
+        }
+        retryDisabled={retryDisabled || Boolean(item.metadata?.streaming)}
       >
         <TimelineItemBody
           item={item}

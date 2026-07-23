@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { test } from 'node:test';
+
+const require = createRequire(import.meta.url);
+const {
+  findRetryMessageContent,
+  messageActionsForVisibleMessage,
+  quoteMessageForComposer,
+  resolveRetryDispatch,
+} = require(
+  '/tmp/agistack-desktop-test-dist/src/features/chat/chatMessageActionModel.js',
+);
 
 const readSource = (path) =>
   readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8');
@@ -17,7 +28,7 @@ const i18nSource = readSource('i18n.tsx');
 test('session messages use the mission-control narrative hierarchy', () => {
   assert.match(chatSource, /function NarrativeMessageFrame/);
   assert.match(chatSource, /className="session-message-body"/);
-  assert.match(chatSource, /<MessageActionMenu content=\{content\} \/>/);
+  assert.match(chatSource, /<MessageActionMenu[\s\S]*content=\{content\}/);
   assert.doesNotMatch(chatSource, /className="session-thread-avatar"/);
   assert.match(chatSource, /className="session-message-context sr-only"/);
   assert.match(chatStyles, /\.session-thread-message\.user \{[\s\S]*background: #161d27/);
@@ -27,6 +38,125 @@ test('session messages use the mission-control narrative hierarchy', () => {
     chatStyles,
     /\.session-chat-narrative \.message\.session-thread-message\.user \{[\s\S]*width: fit-content;[\s\S]*margin-left: auto;/,
   );
+});
+
+test('message action availability matches the Web role and streaming contract', () => {
+  assert.deepEqual(messageActionsForVisibleMessage('user', false), {
+    copy: true,
+    reply: true,
+    edit: true,
+    retry: false,
+    retryDisabled: false,
+  });
+  assert.deepEqual(messageActionsForVisibleMessage('agent', false), {
+    copy: true,
+    reply: true,
+    edit: false,
+    retry: true,
+    retryDisabled: false,
+  });
+  assert.deepEqual(messageActionsForVisibleMessage('agent', true), {
+    copy: true,
+    reply: true,
+    edit: false,
+    retry: true,
+    retryDisabled: true,
+  });
+  assert.deepEqual(messageActionsForVisibleMessage('runtime', false), {
+    copy: true,
+    reply: false,
+    edit: false,
+    retry: false,
+    retryDisabled: false,
+  });
+});
+
+test('reply drafts quote visible multiline text and cap the Web-compatible excerpt', () => {
+  assert.equal(
+    quoteMessageForComposer('  first line\nsecond line  '),
+    '> first line\n> second line\n\n',
+  );
+  assert.equal(
+    quoteMessageForComposer('x'.repeat(504)),
+    `> ${'x'.repeat(500)}…\n\n`,
+  );
+  assert.equal(quoteMessageForComposer('   '), null);
+});
+
+test('retry resolves only the nearest user prompt in the current conversation', () => {
+  const messages = [
+    {
+      id: 'foreign-user',
+      conversationId: 'conversation-2',
+      kind: 'user',
+      content: 'Do not resend',
+    },
+    {
+      id: 'user-1',
+      conversationId: 'conversation-1',
+      kind: 'user',
+      content: 'First prompt',
+    },
+    {
+      id: 'agent-1',
+      conversationId: 'conversation-1',
+      kind: 'agent',
+      content: 'First answer',
+    },
+    {
+      id: 'user-2',
+      conversationId: 'conversation-1',
+      kind: 'user',
+      content: 'Nearest prompt',
+    },
+    {
+      id: 'agent-2',
+      conversationId: 'conversation-1',
+      kind: 'agent',
+      content: 'Retry this answer',
+    },
+  ];
+
+  assert.equal(
+    findRetryMessageContent(messages, 'agent-2', 'conversation-1'),
+    'Nearest prompt',
+  );
+  assert.equal(findRetryMessageContent(messages, 'agent-2', 'conversation-2'), null);
+  assert.equal(findRetryMessageContent(messages, 'user-2', 'conversation-1'), null);
+  assert.equal(findRetryMessageContent(messages, 'missing', 'conversation-1'), null);
+});
+
+test('retry dispatch lock rejects duplicate or otherwise blocked sends', () => {
+  assert.deepEqual(resolveRetryDispatch(null, 'agent-1', false), {
+    accepted: true,
+    lock: 'agent-1',
+  });
+  assert.deepEqual(resolveRetryDispatch('agent-1', 'agent-1', false), {
+    accepted: false,
+    lock: 'agent-1',
+  });
+  assert.deepEqual(resolveRetryDispatch(null, 'agent-1', true), {
+    accepted: false,
+    lock: null,
+  });
+});
+
+test('Desktop wires message actions through the scoped composer and send authority', () => {
+  assert.match(chatSource, /messageActionsForVisibleMessage\(kind, streaming\)/);
+  assert.match(chatSource, /onReplyMessage=\{replyToTimelineMessage\}/);
+  assert.match(chatSource, /onEditMessage=\{editTimelineMessage\}/);
+  assert.match(chatSource, /onRetryMessage=\{retryTimelineMessage\}/);
+  assert.match(chatSource, /findRetryMessageContent\(/);
+  assert.match(chatSource, /resolveRetryDispatch\(/);
+  assert.match(chatSource, /handleComposerSend\(retryContent, \[\]\)/);
+  assert.match(
+    chatSource,
+    /draftRequest\.conversationId !== activeConversationId[\s\S]*setInput\(draftRequest\.content\)/,
+  );
+  assert.match(chatSource, /ref=\{composerInputRef\}/);
+  assert.match(chatSource, /retryDisabled=\{disabled \|\| sending \|\| Boolean\(retryingMessageId\)\}/);
+  assert.match(chatStyles, /\.session-message-actions button:disabled/);
+  assert.match(chatStyles, /\.session-message-action-notice/);
 });
 
 test('assistant execution summaries render structured input, output, and reasoning tokens', () => {
@@ -195,6 +325,10 @@ test('chat copy and diagnostics are localized in both supported locales', () => 
     'session.failedShort',
     'chat.messageActions',
     'chat.copyMessage',
+    'chat.replyMessage',
+    'chat.editMessage',
+    'chat.retryMessage',
+    'chat.retryNoUserMessage',
     'chat.status.waitingForInput',
     'chat.status.blocked',
     'chat.retrying',

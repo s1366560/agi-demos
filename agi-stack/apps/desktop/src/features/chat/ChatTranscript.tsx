@@ -2,8 +2,11 @@ import { isValidElement, memo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import {
   ActivityLogIcon,
+  ChatBubbleIcon,
   CopyIcon,
   DotsHorizontalIcon,
+  Pencil1Icon,
+  ReloadIcon,
 } from '@radix-ui/react-icons';
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
@@ -11,6 +14,8 @@ import remarkGfm from 'remark-gfm';
 
 import { useI18n } from '../../i18n';
 import type { WorkspaceMessage } from '../../types';
+import { messageActionsForVisibleMessage } from './chatMessageActionModel';
+import type { VisibleMessageKind } from './chatMessageActionModel';
 import { CodeBlockFrame } from './HighlightedCode';
 
 export function SessionEmptyState() {
@@ -31,8 +36,16 @@ export function SessionEmptyState() {
 // reconcile the entire transcript; now unchanged rows bail out immediately.
 export const WorkspaceTranscriptMessage = memo(function WorkspaceTranscriptMessage({
   message,
+  onReply,
+  onEdit,
+  onRetry,
+  retryDisabled = false,
 }: {
   message: WorkspaceMessage;
+  onReply?: () => void;
+  onEdit?: () => void;
+  onRetry?: () => void;
+  retryDisabled?: boolean;
 }) {
   const { t } = useI18n();
   const kind = messageKind(message);
@@ -50,6 +63,10 @@ export const WorkspaceTranscriptMessage = memo(function WorkspaceTranscriptMessa
             : null
       }
       className="workspace-message"
+      onReply={onReply}
+      onEdit={onEdit}
+      onRetry={onRetry}
+      retryDisabled={retryDisabled}
     >
       <MarkdownContent content={message.content} className="transcript-content" />
     </NarrativeMessageFrame>
@@ -65,6 +82,10 @@ export function NarrativeMessageFrame({
   className,
   timelineItemId,
   streaming = false,
+  onReply,
+  onEdit,
+  onRetry,
+  retryDisabled = false,
   children,
 }: {
   kind: 'user' | 'agent' | 'runtime';
@@ -75,6 +96,10 @@ export function NarrativeMessageFrame({
   className: string;
   timelineItemId?: string;
   streaming?: boolean;
+  onReply?: () => void;
+  onEdit?: () => void;
+  onRetry?: () => void;
+  retryDisabled?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -89,7 +114,15 @@ export function NarrativeMessageFrame({
           <span className="session-message-context sr-only">
             {[label, badge, time].filter(Boolean).join(' · ')}
           </span>
-          <MessageActionMenu content={content} />
+          <MessageActionMenu
+            content={content}
+            kind={kind}
+            streaming={streaming}
+            onReply={onReply}
+            onEdit={onEdit}
+            onRetry={onRetry}
+            retryDisabled={retryDisabled}
+          />
         </header>
         {children}
         {streaming ? <span className="streaming-caret" aria-hidden="true" /> : null}
@@ -143,13 +176,35 @@ function reactNodeToText(node: ReactNode): string {
   return '';
 }
 
-function MessageActionMenu({ content }: { content: string }) {
+function MessageActionMenu({
+  content,
+  kind,
+  streaming,
+  onReply,
+  onEdit,
+  onRetry,
+  retryDisabled,
+}: {
+  content: string;
+  kind: VisibleMessageKind;
+  streaming: boolean;
+  onReply?: () => void;
+  onEdit?: () => void;
+  onRetry?: () => void;
+  retryDisabled: boolean;
+}) {
   const { t } = useI18n();
   const detailsRef = useRef<HTMLDetailsElement>(null);
+  const availability = messageActionsForVisibleMessage(kind, streaming);
+  const closeMenu = () => detailsRef.current?.removeAttribute('open');
 
   const copyContent = () => {
     if (navigator.clipboard) void navigator.clipboard.writeText(content);
-    detailsRef.current?.removeAttribute('open');
+    closeMenu();
+  };
+  const invoke = (action: (() => void) | undefined) => {
+    action?.();
+    closeMenu();
   };
 
   return (
@@ -158,10 +213,41 @@ function MessageActionMenu({ content }: { content: string }) {
         <DotsHorizontalIcon />
       </summary>
       <div>
-        <button type="button" onClick={copyContent}>
+        <button type="button" aria-label={t('chat.copyMessage')} onClick={copyContent}>
           <CopyIcon aria-hidden="true" />
           {t('chat.copyMessage')}
         </button>
+        {availability.reply && onReply ? (
+          <button
+            type="button"
+            aria-label={t('chat.replyMessage')}
+            onClick={() => invoke(onReply)}
+          >
+            <ChatBubbleIcon aria-hidden="true" />
+            {t('chat.replyMessage')}
+          </button>
+        ) : null}
+        {availability.edit && onEdit ? (
+          <button
+            type="button"
+            aria-label={t('chat.editMessage')}
+            onClick={() => invoke(onEdit)}
+          >
+            <Pencil1Icon aria-hidden="true" />
+            {t('chat.editMessage')}
+          </button>
+        ) : null}
+        {availability.retry && onRetry ? (
+          <button
+            type="button"
+            aria-label={t('chat.retryMessage')}
+            disabled={availability.retryDisabled || retryDisabled}
+            onClick={() => invoke(onRetry)}
+          >
+            <ReloadIcon aria-hidden="true" />
+            {t('chat.retryMessage')}
+          </button>
+        ) : null}
       </div>
     </details>
   );

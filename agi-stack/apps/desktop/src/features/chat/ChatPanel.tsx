@@ -48,6 +48,7 @@ import { AgentTimeline, TIMELINE_RENDER_STEP } from './ChatTimeline';
 import {
   isImportantTimelineItem,
   isTimelineItemInitiallyExpanded,
+  timelineKind,
 } from './chatTimelinePresentation';
 import { SessionEmptyState, WorkspaceTranscriptMessage } from './ChatTranscript';
 import { ChatWorkflowStrip } from './ChatWorkflowStrip';
@@ -58,6 +59,15 @@ import {
   composerHasSendableAttachment,
 } from './chatComposerModel';
 import type { ChatComposerVariant } from './chatComposerModel';
+import {
+  findRetryMessageContent,
+  quoteMessageForComposer,
+  resolveRetryDispatch,
+} from './chatMessageActionModel';
+import type {
+  VisibleMessageForRetry,
+  VisibleMessageKind,
+} from './chatMessageActionModel';
 import { latestAgentSuggestions } from './chatTimelineModel';
 import type {
   AgentTaskSignal,
@@ -139,6 +149,45 @@ type EarlierTimelineScrollAnchor = {
   top: number;
 };
 
+type ComposerDraftRequest = {
+  id: number;
+  conversationId: string;
+  content: string;
+};
+
+function timelineVisibleMessage(
+  item: AgentTimelineItem,
+  conversationId: string,
+): VisibleMessageForRetry | null {
+  const kind = timelineKind(item);
+  if (kind !== 'user' && kind !== 'agent') return null;
+  return {
+    id: item.id,
+    conversationId,
+    kind,
+    content: item.content ?? '',
+  };
+}
+
+function workspaceVisibleMessage(
+  message: WorkspaceMessage,
+  conversationId: string,
+): VisibleMessageForRetry {
+  const sender = (message.sender_type ?? '').toLowerCase();
+  const kind: VisibleMessageKind =
+    sender === 'human' || sender === 'user'
+      ? 'user'
+      : sender === 'runtime' || sender === 'system'
+        ? 'runtime'
+        : 'agent';
+  return {
+    id: message.id,
+    conversationId,
+    kind,
+    content: message.content,
+  };
+}
+
 function timelineAnchorMemberIds(anchor: HTMLElement): string[] {
   const serialized = anchor.dataset.timelineAnchorMembers;
   if (!serialized) return [];
@@ -213,6 +262,16 @@ export const ChatPanel = memo(function ChatPanel({
   const earlierScrollRef = useRef<EarlierTimelineScrollAnchor | null>(null);
   const [expandedTimelineItems, setExpandedTimelineItems] = useState<Record<string, boolean>>({});
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  const [composerDraftRequest, setComposerDraftRequest] =
+    useState<ComposerDraftRequest | null>(null);
+  const [messageActionNotice, setMessageActionNotice] = useState<string | null>(null);
+  const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
+  const composerDraftSequenceRef = useRef(0);
+  const retryDispatchLockRef = useRef<string | null>(null);
+  const retryDispatchSawSendingRef = useRef(false);
+  const retryUnlockTimerRef = useRef<number | null>(null);
+  const sendingRef = useRef(sending);
+  sendingRef.current = sending;
   const visibleAgentTaskSignals = useMemo(() => {
     const timelineFailureIds = new Set(
       (timelineState?.items ?? []).flatMap((item) => {
@@ -257,6 +316,20 @@ export const ChatPanel = memo(function ChatPanel({
   const timelineError = timelineState?.error ?? null;
   const timelineItems = timelineState?.items ?? null;
   const hasTimelineState = timelineState !== null;
+  const messageActionConversationId =
+    timelineConversationId || selectedConversationId || messages[0]?.workspace_id || '';
+  const visibleActionMessages = useMemo<VisibleMessageForRetry[]>(
+    () =>
+      timelineState
+        ? timelineState.items.flatMap((item) => {
+            const message = timelineVisibleMessage(item, timelineConversationId);
+            return message ? [message] : [];
+          })
+        : messages.map((message) =>
+            workspaceVisibleMessage(message, messageActionConversationId),
+          ),
+    [messageActionConversationId, messages, timelineConversationId, timelineState],
+  );
   const workspaceFirstMessageId = messages[0]?.id ?? '';
   const workspaceLastMessageId = messages[messages.length - 1]?.id ?? '';
   const activitySummary = useMemo(() => {
@@ -326,6 +399,39 @@ export const ChatPanel = memo(function ChatPanel({
     setShowJumpToLatest(false);
     scrollToLatest();
   }, [scrollToLatest]);
+  const clearRetryDispatch = useCallback(() => {
+    retryDispatchLockRef.current = null;
+    retryDispatchSawSendingRef.current = false;
+    setRetryingMessageId(null);
+    if (retryUnlockTimerRef.current !== null) {
+      window.clearTimeout(retryUnlockTimerRef.current);
+      retryUnlockTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    setComposerDraftRequest(null);
+    setMessageActionNotice(null);
+    clearRetryDispatch();
+  }, [clearRetryDispatch, messageActionConversationId]);
+
+  useEffect(() => {
+    if (!retryDispatchLockRef.current) return;
+    if (sending) {
+      retryDispatchSawSendingRef.current = true;
+      return;
+    }
+    if (retryDispatchSawSendingRef.current) clearRetryDispatch();
+  }, [clearRetryDispatch, sending]);
+
+  useEffect(
+    () => () => {
+      if (retryUnlockTimerRef.current !== null) {
+        window.clearTimeout(retryUnlockTimerRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (hasTimelineState) {
@@ -516,6 +622,95 @@ export const ChatPanel = memo(function ChatPanel({
     (suggestion: string) => handleComposerSend(suggestion, []),
     [handleComposerSend],
   );
+  const requestComposerDraft = useCallback(
+    (content: string) => {
+      if (!messageActionConversationId || !content) return;
+      composerDraftSequenceRef.current += 1;
+      setComposerDraftRequest({
+        id: composerDraftSequenceRef.current,
+        conversationId: messageActionConversationId,
+        content,
+      });
+      setMessageActionNotice(null);
+    },
+    [messageActionConversationId],
+  );
+  const replyToVisibleMessage = useCallback(
+    (message: VisibleMessageForRetry) => {
+      const draft = quoteMessageForComposer(message.content);
+      if (draft) requestComposerDraft(draft);
+    },
+    [requestComposerDraft],
+  );
+  const editVisibleMessage = useCallback(
+    (message: VisibleMessageForRetry) => {
+      if (message.kind === 'user' && message.content.trim()) {
+        requestComposerDraft(message.content);
+      }
+    },
+    [requestComposerDraft],
+  );
+  const retryVisibleMessage = useCallback(
+    (message: VisibleMessageForRetry) => {
+      const retryContent = findRetryMessageContent(
+        visibleActionMessages,
+        message.id,
+        messageActionConversationId,
+      );
+      if (!retryContent) {
+        setMessageActionNotice(t('chat.retryNoUserMessage'));
+        return;
+      }
+      const resolution = resolveRetryDispatch(
+        retryDispatchLockRef.current,
+        message.id,
+        disabled || sending,
+      );
+      retryDispatchLockRef.current = resolution.lock;
+      if (!resolution.accepted) return;
+
+      retryDispatchSawSendingRef.current = false;
+      setRetryingMessageId(message.id);
+      setMessageActionNotice(null);
+      handleComposerSend(retryContent, []);
+      if (retryUnlockTimerRef.current !== null) {
+        window.clearTimeout(retryUnlockTimerRef.current);
+      }
+      retryUnlockTimerRef.current = window.setTimeout(() => {
+        if (!sendingRef.current) clearRetryDispatch();
+      }, 1_500);
+    },
+    [
+      clearRetryDispatch,
+      disabled,
+      handleComposerSend,
+      messageActionConversationId,
+      sending,
+      t,
+      visibleActionMessages,
+    ],
+  );
+  const replyToTimelineMessage = useCallback(
+    (item: AgentTimelineItem) => {
+      const message = timelineVisibleMessage(item, messageActionConversationId);
+      if (message) replyToVisibleMessage(message);
+    },
+    [messageActionConversationId, replyToVisibleMessage],
+  );
+  const editTimelineMessage = useCallback(
+    (item: AgentTimelineItem) => {
+      const message = timelineVisibleMessage(item, messageActionConversationId);
+      if (message) editVisibleMessage(message);
+    },
+    [editVisibleMessage, messageActionConversationId],
+  );
+  const retryTimelineMessage = useCallback(
+    (item: AgentTimelineItem) => {
+      const message = timelineVisibleMessage(item, messageActionConversationId);
+      if (message) retryVisibleMessage(message);
+    },
+    [messageActionConversationId, retryVisibleMessage],
+  );
   const toggleTimelineItem = useCallback((item: AgentTimelineItem) => {
     setExpandedTimelineItems((current) => {
       const currentValue = current[item.id] ?? isTimelineItemInitiallyExpanded(item);
@@ -613,12 +808,43 @@ export const ChatPanel = memo(function ChatPanel({
                 respondableHitlRequestIds={respondableHitlRequestIds}
                 activityPresence={activityPresence}
                 onOpenMCPAppResult={onOpenMCPAppResult}
+                onReplyMessage={replyToTimelineMessage}
+                onEditMessage={editTimelineMessage}
+                onRetryMessage={retryTimelineMessage}
+                retryDisabled={disabled || sending || Boolean(retryingMessageId)}
               />
             </>
           ) : messages.length === 0 ? (
             <SessionEmptyState />
           ) : (
-            messages.map((message) => <WorkspaceTranscriptMessage message={message} key={message.id} />)
+            messages.map((message) => {
+              const visibleMessage = workspaceVisibleMessage(
+                message,
+                messageActionConversationId,
+              );
+              return (
+                <WorkspaceTranscriptMessage
+                  message={message}
+                  key={message.id}
+                  onReply={
+                    visibleMessage.kind === 'runtime'
+                      ? undefined
+                      : () => replyToVisibleMessage(visibleMessage)
+                  }
+                  onEdit={
+                    visibleMessage.kind === 'user'
+                      ? () => editVisibleMessage(visibleMessage)
+                      : undefined
+                  }
+                  onRetry={
+                    visibleMessage.kind === 'agent'
+                      ? () => retryVisibleMessage(visibleMessage)
+                      : undefined
+                  }
+                  retryDisabled={disabled || sending || Boolean(retryingMessageId)}
+                />
+              );
+            })
           )}
           {visibleAgentTaskSignals.length ? (
             <div className="agent-run-stack" aria-label={t('chat.agentTaskStatus')}>
@@ -680,10 +906,17 @@ export const ChatPanel = memo(function ChatPanel({
           {t('session.jumpToLatest')}
         </Button>
       ) : null}
+      {messageActionNotice ? (
+        <div className="session-message-action-notice" role="status" aria-live="polite">
+          {messageActionNotice}
+        </div>
+      ) : null}
       <ChatComposer
         api={api}
         conversations={conversations}
         selectedConversationId={selectedConversationId}
+        activeConversationId={messageActionConversationId}
+        draftRequest={composerDraftRequest}
         key={composerResetKey}
         composerVariant={composerVariant}
         initialInput={initialInput}
@@ -755,6 +988,8 @@ type ChatComposerProps = {
   api: ComposerCatalogClient;
   conversations: readonly AgentConversation[];
   selectedConversationId?: string | null;
+  activeConversationId: string;
+  draftRequest: ComposerDraftRequest | null;
   composerVariant: ChatComposerVariant;
   initialInput?: string;
   sending: boolean;
@@ -797,6 +1032,8 @@ function ChatComposer({
   api,
   conversations,
   selectedConversationId,
+  activeConversationId,
+  draftRequest,
   composerVariant,
   initialInput = '',
   sending,
@@ -834,6 +1071,7 @@ function ChatComposer({
   const [input, setInput] = useState(initialInput);
   const [contextItems, setContextItems] = useState<ComposerContextItem[]>([]);
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
+  const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const disabled = Boolean(disabledReason);
   const canSend =
     !disabled &&
@@ -842,6 +1080,11 @@ function ChatComposer({
     (Boolean(input.trim()) || composerHasSendableAttachment(contextItems));
   const composerPresentation = chatComposerPresentation(composerVariant);
   const queuedRunInputs = useMemo(() => visibleQueuedRunInputs(runInputs), [runInputs]);
+  useEffect(() => {
+    if (!draftRequest || draftRequest.conversationId !== activeConversationId) return;
+    setInput(draftRequest.content);
+    window.requestAnimationFrame(() => composerInputRef.current?.focus());
+  }, [activeConversationId, draftRequest]);
   const handleSend = useCallback(() => {
     if (!canSend) return;
     const content =
@@ -1015,6 +1258,7 @@ function ChatComposer({
           </div>
         ) : null}
         <TextArea
+          ref={composerInputRef}
           className="chat-composer-input"
           value={input}
           disabled={disabled}

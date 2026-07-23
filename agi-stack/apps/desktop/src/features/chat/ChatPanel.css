@@ -390,6 +390,26 @@
   color: var(--desktop-text);
 }
 
+.session-message-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.session-message-actions button:disabled:hover {
+  background: transparent;
+  color: var(--desktop-muted);
+}
+
+.session-message-action-notice {
+  margin: 0 14px 8px;
+  padding: 7px 9px;
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  border-radius: 7px;
+  background: rgba(120, 53, 15, 0.14);
+  color: #d6ad70;
+  font-size: 10px;
+}
+
 .session-chat-narrative .session-thread-message .transcript-content {
   min-width: 0;
   max-width: 100%;
