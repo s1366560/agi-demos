@@ -999,6 +999,11 @@ def _build_mcp_app_event(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]
     return {"payload": dict(data)}
 
 
+def _build_context_memory_event(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    """Preserve context metrics and memory evidence for Desktop history replay."""
+    return {"payload": dict(data)}
+
+
 def _build_agent_spawned(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {
         "agentId": data.get("agent_id", ""),
@@ -1117,6 +1122,10 @@ _EVENT_BUILDERS: dict[str, Any] = {
     "skill_fallback": _build_skill_event,
     "mcp_app_registered": _build_mcp_app_event,
     "mcp_app_result": _build_mcp_app_event,
+    "context_compressed": _build_context_memory_event,
+    "context_compacted": _build_context_memory_event,
+    "memory_recalled": _build_context_memory_event,
+    "memory_captured": _build_context_memory_event,
     "agent_spawned": _build_agent_spawned,
     "agent_completed": _build_agent_completed,
     "agent_message_sent": _build_agent_message_sent,

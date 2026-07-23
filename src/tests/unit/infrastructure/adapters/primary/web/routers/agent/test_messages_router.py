@@ -1013,6 +1013,82 @@ def test_build_timeline_replays_mcp_app_events_for_desktop_history() -> None:
     assert [item["payload"] for item in timeline] == [data for _, data in mcp_app_events]
 
 
+def test_build_timeline_replays_context_and_memory_events_for_desktop_history() -> None:
+    context_and_memory_events = [
+        (
+            "context_compressed",
+            {
+                "was_compressed": True,
+                "compression_strategy": "summarize",
+                "compression_level": "l2_summarize",
+                "original_message_count": 42,
+                "final_message_count": 26,
+                "estimated_tokens": 54_000,
+                "token_budget": 128_000,
+                "budget_utilization_pct": 42.2,
+                "summarized_message_count": 16,
+                "tokens_saved": 18_000,
+                "compression_ratio": 0.75,
+                "pruned_tool_outputs": 4,
+                "duration_ms": 46,
+            },
+        ),
+        (
+            "context_compacted",
+            {
+                "conversation_id": "conversation-1",
+                "before_tokens": 12_000,
+                "after_tokens": 4_500,
+            },
+        ),
+        (
+            "memory_recalled",
+            {
+                "count": 2,
+                "search_ms": 24,
+                "memories": [
+                    {
+                        "id": "memory-1",
+                        "content": "Use the canonical native Desktop runner.",
+                        "score": 0.96,
+                        "source": "repository",
+                        "category": "procedural",
+                    },
+                    {
+                        "id": "memory-2",
+                        "content": "Keep event rendering structured.",
+                        "score": 0.91,
+                        "source": "project",
+                        "category": "preference",
+                    },
+                ],
+            },
+        ),
+        (
+            "memory_captured",
+            {"captured_count": 2, "categories": ["procedural", "preference"]},
+        ),
+    ]
+    assert {event_type for event_type, _ in context_and_memory_events} <= _DISPLAYABLE_EVENTS
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(event_type=event_type, event_data=data, event_time_us=index * 1_000)
+            for index, (event_type, data) in enumerate(context_and_memory_events, start=1)
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert [item["type"] for item in timeline] == [
+        event_type for event_type, _ in context_and_memory_events
+    ]
+    assert [item["payload"] for item in timeline] == [data for _, data in context_and_memory_events]
+
+
 def test_build_timeline_replays_complete_skill_execution_for_desktop_history() -> None:
     skill_events = [
         (
