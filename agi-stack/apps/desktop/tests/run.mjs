@@ -73,6 +73,7 @@ const testFiles = [
   'composer-mentions.test.mjs',
   'composer-context.test.mjs',
   'chat-narrative-presentation.test.mjs',
+  'conversation-search-model.test.mjs',
   'chat-timeline-model.test.mjs',
   'artifact-canvas-events.test.mjs',
   'mcp-app-canvas-events.test.mjs',

@@ -28,6 +28,7 @@
     "src/features/chat/agentTaskSignalModel.ts",
     "src/features/chat/agentLifecyclePresentationModel.ts",
     "src/features/chat/chatComposerModel.ts",
+    "src/features/chat/conversationSearchModel.ts",
     "src/features/chat/composeAheadModel.ts",
     "src/features/chat/chatMessageActionModel.ts",
     "src/features/chat/composerFileDropModel.ts",

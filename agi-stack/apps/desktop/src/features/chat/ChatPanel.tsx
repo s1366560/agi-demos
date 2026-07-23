@@ -55,6 +55,7 @@ import { ComposerControls } from './ComposerControls';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
 import type { ComposerModelOption } from './ComposerControls';
 import type { ComposerCatalogClient } from './composerCatalogModel';
+import { ConversationSearch } from './ConversationSearch';
 import { AgentTimeline, TIMELINE_RENDER_STEP } from './ChatTimeline';
 import {
   isImportantTimelineItem,
@@ -288,6 +289,7 @@ export const ChatPanel = memo(function ChatPanel({
     useState<ComposerDraftRequest | null>(null);
   const [messageActionNotice, setMessageActionNotice] = useState<string | null>(null);
   const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
+  const [conversationSearchVisible, setConversationSearchVisible] = useState(false);
   const composerDraftSequenceRef = useRef(0);
   const retryDispatchLockRef = useRef<string | null>(null);
   const retryDispatchSawSendingRef = useRef(false);
@@ -340,6 +342,7 @@ export const ChatPanel = memo(function ChatPanel({
   const hasTimelineState = timelineState !== null;
   const messageActionConversationId =
     timelineConversationId || selectedConversationId || messages[0]?.workspace_id || '';
+  const conversationSearchScopeId = timelineConversationId || selectedConversationId || '';
   const composeAheadConversation = useMemo(
     () =>
       selectedConversationId
@@ -456,8 +459,24 @@ export const ChatPanel = memo(function ChatPanel({
   useEffect(() => {
     setComposerDraftRequest(null);
     setMessageActionNotice(null);
+    setConversationSearchVisible(false);
     clearRetryDispatch();
   }, [clearRetryDispatch, messageActionConversationId]);
+
+  useEffect(() => {
+    const handleConversationSearchShortcut = (event: KeyboardEvent) => {
+      if (
+        conversationSearchScopeId &&
+        (event.metaKey || event.ctrlKey) &&
+        event.key.toLowerCase() === 'f'
+      ) {
+        event.preventDefault();
+        setConversationSearchVisible((visible) => !visible);
+      }
+    };
+    window.addEventListener('keydown', handleConversationSearchShortcut);
+    return () => window.removeEventListener('keydown', handleConversationSearchShortcut);
+  }, [conversationSearchScopeId]);
 
   useEffect(() => {
     if (!retryDispatchLockRef.current) return;
@@ -938,6 +957,12 @@ export const ChatPanel = memo(function ChatPanel({
           <div ref={scrollAnchorRef} aria-hidden="true" />
         </div>
       </ScrollArea>
+      <ConversationSearch
+        items={timelineItems ?? []}
+        visible={conversationSearchVisible}
+        getViewport={scrollViewport}
+        onClose={() => setConversationSearchVisible(false)}
+      />
       {showJumpToLatest ? (
         <Button
           type="button"

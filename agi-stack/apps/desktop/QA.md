@@ -1778,6 +1778,24 @@
   renderer, and reached `starting electron app...`; Computer Use could not
   inspect the native window because macOS was locked, so native visual
   acceptance remains explicitly unclaimed for this pass.
+- Browser plugin validation against the real cloud conversation titled
+  `仅回复 DESKTOP_UNBOUND_CLOUD_FIXED_OK_20260723，不调用工具。` verified
+  Web-compatible in-conversation search on reference
+  `4b5b030bdc343d0f04d0940eb11df59981144a0f`. `Cmd+F` opened the search
+  surface and focused its input. The case-insensitive query
+  `desktop_unbound_cloud_fixed_ok_20260723` found the user and Agent rows,
+  reported `1/2`, advanced to `2/2` with Enter, and returned to `1/2` with
+  Shift+Enter while keeping exactly one highlighted timeline anchor. A missing
+  query reported `0 个结果`, disabled both navigation controls, and removed
+  the highlight. Escape closed the surface, cleared all highlights, and
+  restored the prior button focus. The real cloud page had no horizontal
+  overflow and Browser recorded zero console errors. `corepack pnpm test`
+  passed 887 tests (885 passed, 2 skipped), and
+  `corepack pnpm run build:electron` passed. The canonical native command
+  `make -C agi-stack run-desktop` rebuilt the sidecar, started the Electron
+  renderer, and reached `starting electron app...`; Computer Use again could
+  not inspect the native window because macOS was locked, so native visual
+  acceptance remains explicitly unclaimed for this pass.
 
 ### Open
 
