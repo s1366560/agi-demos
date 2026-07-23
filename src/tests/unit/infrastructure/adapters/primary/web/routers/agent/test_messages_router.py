@@ -1594,6 +1594,104 @@ def test_build_timeline_replays_multi_agent_action_events_for_desktop_history() 
     assert [item["payload"] for item in timeline] == [data for _, data in action_events]
 
 
+def test_build_timeline_replays_agent_governance_events_for_desktop_history() -> None:
+    governance_events = [
+        (
+            "agent_human_input_requested",
+            {
+                "conversation_id": "conversation-release",
+                "actor_agent_id": "agent-reviewer",
+                "question": "Approve production rollout?",
+                "urgency": "blocking",
+                "category": "approval",
+                "rationale": "Production deployment requires a human decision.",
+                "proposed_fallback": "Keep the release staged.",
+            },
+        ),
+        (
+            "agent_escalated",
+            {
+                "conversation_id": "conversation-release",
+                "actor_agent_id": "agent-reviewer",
+                "escalated_to": "coordinator",
+                "reason": "Deployment credentials are unavailable.",
+                "severity": "high",
+            },
+        ),
+        (
+            "agent_conflict_marked",
+            {
+                "conversation_id": "conversation-release",
+                "actor_agent_id": "agent-reviewer",
+                "conflict_with": "agent-operator",
+                "summary": "Verification evidence disagrees.",
+                "evidence": "checksums differ",
+            },
+        ),
+        (
+            "agent_supervisor_verdict",
+            {
+                "conversation_id": "conversation-release",
+                "actor_agent_id": "agent-supervisor",
+                "status": "stalled",
+                "rationale": "No progress since the last checkpoint.",
+                "recommended_actions": ["reassign", "request credentials"],
+                "trigger": "stale",
+            },
+        ),
+        (
+            "agent_decision_logged",
+            {
+                "conversation_id": "conversation-release",
+                "actor_agent_id": "agent-supervisor",
+                "tool_name": "workspace_submit_supervisor_decision",
+                "input_payload": {"status": "stalled"},
+                "output_summary": "Escalated to coordinator",
+                "rationale": "The task needs new authority.",
+                "latency_ms": 37,
+            },
+        ),
+        (
+            "agent_goal_completed",
+            {
+                "conversation_id": "conversation-release",
+                "actor_agent_id": "agent-coordinator",
+                "summary": "Release verification completed.",
+                "artifacts": ["report-1", "checksums-1"],
+            },
+        ),
+        (
+            "agent_conversation_finished",
+            {
+                "conversation_id": "conversation-release",
+                "reason": "budget_turns",
+                "actor": "system",
+                "rationale": "Turn budget reached.",
+                "terminal_state": {"turns_used": 20, "turn_cap": 20},
+                "resumable_state": {"can_resume": True},
+            },
+        ),
+    ]
+    assert {event_type for event_type, _ in governance_events} <= _DISPLAYABLE_EVENTS
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(event_type=event_type, event_data=data, event_time_us=index * 1_000)
+            for index, (event_type, data) in enumerate(governance_events, start=1)
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert [item["type"] for item in timeline] == [
+        event_type for event_type, _ in governance_events
+    ]
+    assert [item["payload"] for item in timeline] == [data for _, data in governance_events]
+
+
 def test_build_timeline_replays_complete_skill_execution_for_desktop_history() -> None:
     skill_events = [
         (

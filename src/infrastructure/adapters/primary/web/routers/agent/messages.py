@@ -1039,6 +1039,11 @@ def _build_multi_agent_action_event(data: dict[str, Any], **_kwargs: Any) -> dic
     return {"payload": dict(data)}
 
 
+def _build_agent_governance_event(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    """Preserve Agent governance, audit, and termination evidence for Desktop history replay."""
+    return {"payload": dict(data)}
+
+
 def _build_agent_spawned(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {
         "agentId": data.get("agent_id", ""),
@@ -1120,6 +1125,13 @@ _EVENT_BUILDERS: dict[str, Any] = {
     "agent_task_assigned": _build_multi_agent_action_event,
     "agent_task_refused": _build_multi_agent_action_event,
     "agent_progress_declared": _build_multi_agent_action_event,
+    "agent_human_input_requested": _build_agent_governance_event,
+    "agent_escalated": _build_agent_governance_event,
+    "agent_conflict_marked": _build_agent_governance_event,
+    "agent_supervisor_verdict": _build_agent_governance_event,
+    "agent_decision_logged": _build_agent_governance_event,
+    "agent_goal_completed": _build_agent_governance_event,
+    "agent_conversation_finished": _build_agent_governance_event,
     "clarification_asked": _build_clarification_asked,
     "clarification_answered": _build_clarification_answered,
     "decision_asked": _build_decision_asked,
