@@ -107,7 +107,18 @@ class _MessageContext:
         self.sent.append({"type": "ack", "action": action, **kwargs})
 
     async def send_error(self, message: str, **kwargs: Any) -> None:
-        self.sent.append({"type": "error", "message": message, **kwargs})
+        data = {"message": message}
+        code = kwargs.get("code")
+        if code is not None:
+            data["code"] = code
+        extra = kwargs.get("extra")
+        if isinstance(extra, dict):
+            data.update(extra)
+        error = {"type": "error", "data": data}
+        conversation_id = kwargs.get("conversation_id")
+        if conversation_id is not None:
+            error["conversation_id"] = conversation_id
+        self.sent.append(error)
 
 
 class _EmptyHitlRepository:
@@ -182,6 +193,11 @@ class _ScopeThenMissingEventDb(_AuthorizedScopeDb):
         return _ScalarResult("project-1" if self.execution_count == 1 else None)
 
 
+class _ExplodingMessageContext(_MessageContext):
+    def get_scoped_container(self) -> _Container:
+        raise RuntimeError("simulated permanent send failure")
+
+
 @pytest.fixture
 def successful_chat_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_stream_agent_to_websocket_with_fresh_session(**_kwargs: Any) -> None:
@@ -230,6 +246,16 @@ def _message_payload_hash() -> str:
             "project_id": "project-1",
         }
     )
+
+
+def _assert_error_message_id(context: _MessageContext, message_id: str) -> None:
+    assert context.sent[0]["type"] == "error"
+    assert context.sent[0]["data"]["message_id"] == message_id
+
+
+def _assert_error_code(context: _MessageContext, code: str) -> None:
+    assert context.sent[0]["type"] == "error"
+    assert context.sent[0]["data"]["code"] == code
 
 
 @pytest.mark.parametrize("message_id", ["desktop-turn-123", None])
@@ -308,8 +334,9 @@ async def test_started_duplicate_without_user_event_fails_closed(
     assert context.connection_manager.subscriptions == []
     assert context.connection_manager.tasks == []
     assert context.sent[0]["type"] == "error"
-    assert context.sent[0]["code"] == "TURN_START_UNCONFIRMED"
-    assert context.sent[0]["extra"]["turn_status"] == "started"
+    assert context.sent[0]["data"]["code"] == "TURN_START_UNCONFIRMED"
+    assert context.sent[0]["data"]["turn_status"] == "started"
+    _assert_error_message_id(context, "desktop-turn-unconfirmed")
 
 
 async def test_accepted_replay_still_respects_pending_hitl(
@@ -335,7 +362,60 @@ async def test_accepted_replay_still_respects_pending_hitl(
     assert context.connection_manager.subscriptions == []
     assert context.connection_manager.tasks == []
     assert context.sent[0]["type"] == "error"
-    assert context.sent[0]["code"] == "HITL_PENDING"
+    assert context.sent[0]["data"]["code"] == "HITL_PENDING"
+    _assert_error_message_id(context, "desktop-turn-accepted")
+
+
+async def test_missing_conversation_error_echoes_valid_message_id(
+    successful_chat_dependencies: None,
+) -> None:
+    context = _MessageContext()
+    context.conversation = None
+
+    await SendMessageHandler().handle(
+        context,
+        _message(message_id="desktop-turn-missing"),
+    )  # type: ignore[arg-type]
+
+    assert context.connection_manager.subscriptions == []
+    assert context.connection_manager.tasks == []
+    _assert_error_message_id(context, "desktop-turn-missing")
+    _assert_error_code(context, "CONVERSATION_NOT_FOUND")
+
+
+async def test_unexpected_send_error_echoes_valid_message_id(
+    successful_chat_dependencies: None,
+) -> None:
+    context = _ExplodingMessageContext()
+
+    await SendMessageHandler().handle(
+        context,
+        _message(message_id="desktop-turn-error"),
+    )  # type: ignore[arg-type]
+
+    assert context.connection_manager.subscriptions == []
+    assert context.connection_manager.tasks == []
+    _assert_error_message_id(context, "desktop-turn-error")
+
+
+async def test_missing_required_field_error_echoes_valid_message_id(
+    successful_chat_dependencies: None,
+) -> None:
+    context = _MessageContext()
+
+    await SendMessageHandler().handle(
+        context,
+        {
+            "conversation_id": "conversation-1",
+            "message_id": "desktop-turn-invalid-payload",
+            "project_id": "project-1",
+        },
+    )  # type: ignore[arg-type]
+
+    assert context.connection_manager.subscriptions == []
+    assert context.connection_manager.tasks == []
+    _assert_error_message_id(context, "desktop-turn-invalid-payload")
+    _assert_error_code(context, "INVALID_SEND_MESSAGE")
 
 
 @pytest.mark.parametrize(
@@ -358,12 +438,17 @@ async def test_send_message_rejects_conversation_scope_mismatch_before_ack(
         )
     )
 
-    await SendMessageHandler().handle(context, _message())  # type: ignore[arg-type]
+    await SendMessageHandler().handle(
+        context,
+        _message(message_id="desktop-turn-scope-denied"),
+    )  # type: ignore[arg-type]
 
     assert context.connection_manager.subscriptions == []
     assert context.connection_manager.tasks == []
     assert len(context.sent) == 1
     assert context.sent[0]["type"] == "error"
+    _assert_error_message_id(context, "desktop-turn-scope-denied")
+    _assert_error_code(context, "CONVERSATION_ACCESS_DENIED")
 
 
 @pytest.mark.parametrize("revoked_membership", ["project", "tenant"])
@@ -401,7 +486,7 @@ async def test_send_message_rejects_revoked_scope_membership_before_ack(
     await SendMessageHandler().handle(
         context,  # type: ignore[arg-type]
         {
-            **_message(),
+            **_message(message_id="desktop-turn-membership-revoked"),
             "project_id": test_project_db.id,
         },
     )
@@ -410,3 +495,5 @@ async def test_send_message_rejects_revoked_scope_membership_before_ack(
     assert context.connection_manager.tasks == []
     assert len(context.sent) == 1
     assert context.sent[0]["type"] == "error"
+    _assert_error_message_id(context, "desktop-turn-membership-revoked")
+    _assert_error_code(context, "CONVERSATION_ACCESS_DENIED")

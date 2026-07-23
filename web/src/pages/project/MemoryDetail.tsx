@@ -279,16 +279,6 @@ export const MemoryDetail: React.FC = () => {
     }
   };
 
-  const handleCopyId = async () => {
-    try {
-      await navigator.clipboard.writeText(memory.id);
-      message?.success(t('memory.detail.idCopied', 'Memory ID copied to clipboard'));
-    } catch (error) {
-      logger.error('[MemoryDetail] Failed to copy memory ID:', error);
-      message?.error(t('memory.detail.idCopyFailed', 'Failed to copy memory ID'));
-    }
-  };
-
   const handleExport = () => {
     try {
       const blob = new Blob([JSON.stringify(memory, null, 2)], {

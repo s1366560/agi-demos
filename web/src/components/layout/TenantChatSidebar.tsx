@@ -82,7 +82,12 @@ interface ConversationItemProps {
 }
 
 type ConversationListSection =
-  | { type: 'conversation'; conversation: ConversationWithProject }
+  | {
+      type: 'tasks';
+      id: string;
+      workspaceTitle: string;
+      conversations: ConversationWithProject[];
+    }
   | {
       type: 'workspace';
       id: string;
@@ -199,15 +204,6 @@ function workspaceNodeIdFromConversation(conversation: Conversation): string | n
 
 function isDerivedAgentConversation(conversation: Conversation): boolean {
   if (conversation.parent_conversation_id) {
-    return true;
-  }
-
-  const looksLikeGeneratedAgentSessionTitle = /\bsession\s*$/i.test(conversation.title.trim());
-  if (
-    looksLikeGeneratedAgentSessionTitle &&
-    !conversation.workspace_id &&
-    !conversation.linked_workspace_task_id
-  ) {
     return true;
   }
 
@@ -336,34 +332,51 @@ function buildConversationSections(
   conversations: ConversationWithProject[],
   t: ReturnType<typeof useTranslation>['t']
 ): ConversationListSection[] {
-  const sections: ConversationListSection[] = [];
+  const taskConversations: ConversationWithProject[] = [];
+  const workspaceSections: Extract<ConversationListSection, { type: 'workspace' }>[] = [];
+  const workspaceSectionsByKey = new Map<
+    string,
+    Extract<ConversationListSection, { type: 'workspace' }>
+  >();
 
   for (const conversation of conversations) {
     const display = buildConversationDisplay(conversation, t, '');
-    if (!display.isWorkspaceConversation) {
-      sections.push({ type: 'conversation', conversation });
+    const workspaceId = workspaceIdFromConversation(conversation);
+    if (!workspaceId) {
+      taskConversations.push(conversation);
       continue;
     }
 
-    const workspaceKey = workspaceIdFromConversation(conversation) ?? display.contextLabel;
-    const sectionGroupKey = `workspace:${workspaceKey}`;
-    const previousSection = sections[sections.length - 1];
-
-    if (previousSection?.type === 'workspace' && previousSection.groupKey === sectionGroupKey) {
-      previousSection.conversations.push(conversation);
+    const sectionGroupKey = `workspace:${workspaceId}`;
+    const existingSection = workspaceSectionsByKey.get(sectionGroupKey);
+    if (existingSection) {
+      existingSection.conversations.push(conversation);
       continue;
     }
 
-    sections.push({
+    const section: Extract<ConversationListSection, { type: 'workspace' }> = {
       type: 'workspace',
-      id: `${sectionGroupKey}:${sections.length.toString()}`,
+      id: sectionGroupKey,
       groupKey: sectionGroupKey,
       workspaceTitle: display.contextLabel,
       conversations: [conversation],
-    });
+    };
+    workspaceSectionsByKey.set(sectionGroupKey, section);
+    workspaceSections.push(section);
   }
 
-  return sections;
+  const taskSection: ConversationListSection[] =
+    conversations.length > 0
+      ? [
+          {
+            type: 'tasks',
+            id: 'tasks:unbound',
+            workspaceTitle: t('agent.sidebar.tasks', 'Tasks'),
+            conversations: taskConversations,
+          },
+        ]
+      : [];
+  return [...taskSection, ...workspaceSections];
 }
 
 function conversationActivityDate(conversation: Conversation): string {
@@ -1109,24 +1122,19 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     () => buildConversationSections(filteredConversations, t),
     [filteredConversations, t]
   );
-  const workspaceGroupIdsKey = useMemo(
-    () =>
-      JSON.stringify(
-        conversationSections
-          .filter((section) => section.type === 'workspace')
-          .map((section) => section.id)
-      ),
+  const conversationGroupIdsKey = useMemo(
+    () => JSON.stringify(conversationSections.map((section) => section.id)),
     [conversationSections]
   );
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
-    const validGroupIds = new Set(JSON.parse(workspaceGroupIdsKey) as string[]);
+    const validGroupIds = new Set(JSON.parse(conversationGroupIdsKey) as string[]);
     setCollapsedGroupIds((current) => {
       const next = new Set(Array.from(current).filter((groupId) => validGroupIds.has(groupId)));
       return next.size === current.size ? current : next;
     });
-  }, [workspaceGroupIdsKey]);
+  }, [conversationGroupIdsKey]);
 
   const toggleConversationGroup = useCallback((groupId: string) => {
     setCollapsedGroupIds((current) => {
@@ -1754,9 +1762,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
           ) : null}
           {projectSearchError && hasProjectSearchQuery ? (
             <div className="flex items-center justify-between gap-2 rounded-md border border-dashed border-rose-200 px-3 py-2 text-xs text-rose-600 dark:border-rose-900/50 dark:text-rose-400">
-              <span>
-                {t('agent.sidebar.projectSearchFailed', 'Project search failed')}
-              </span>
+              <span>{t('agent.sidebar.projectSearchFailed', 'Project search failed')}</span>
               <button
                 type="button"
                 onClick={() => {
@@ -1831,10 +1837,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
       {/* New Chat Button */}
       <div className={collapsed ? 'px-2 flex justify-center' : 'p-3'}>
-        <LazyTooltip
-          title={newChatDisabledReason ?? ''}
-          placement={collapsed ? 'right' : 'top'}
-        >
+        <LazyTooltip title={newChatDisabledReason ?? ''} placement={collapsed ? 'right' : 'top'}>
           <span className={collapsed ? 'inline-flex' : 'block w-full'}>
             <LazyButton
               type="primary"
@@ -1891,10 +1894,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                   <div className="text-center py-8">
                     <MessageSquare size={32} className="mx-auto mb-2 text-rose-400" />
                     <p className="text-xs text-rose-600 dark:text-rose-400">
-                      {t(
-                        'agent.sidebar.conversationsLoadFailed',
-                        'Failed to load conversations'
-                      )}
+                      {t('agent.sidebar.conversationsLoadFailed', 'Failed to load conversations')}
                     </p>
                     <button
                       type="button"
@@ -1923,34 +1923,6 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                   </div>
                 ) : (
                   conversationSections.map((section) => {
-                    if (section.type === 'conversation') {
-                      const conv = section.conversation;
-                      return (
-                        <ConversationItem
-                          activeItemRef={
-                            conv.id === selectedConversationId
-                              ? activeConversationItemRef
-                              : undefined
-                          }
-                          key={conv.id}
-                          conversation={conv}
-                          isActive={conv.id === selectedConversationId}
-                          href={buildAgentWorkspacePath({
-                            tenantId,
-                            conversationId: conv.id,
-                            projectId: conv.projectId,
-                            workspaceId: workspaceIdFromQuery,
-                          })}
-                          onDelete={(e) => {
-                            handleDeleteConversation(conv, e);
-                          }}
-                          onRename={(e) => {
-                            handleRenameClick(conv, e);
-                          }}
-                        />
-                      );
-                    }
-
                     const groupCollapsed = collapsedGroupIds.has(section.id);
                     return (
                       <section key={section.id} aria-label={section.workspaceTitle}>
@@ -1978,7 +1950,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                                   tenantId,
                                   conversationId: conv.id,
                                   projectId: conv.projectId,
-                                  workspaceId: workspaceIdFromQuery,
+                                  workspaceId: workspaceIdFromConversation(conv),
                                 })}
                                 onDelete={(e) => {
                                   handleDeleteConversation(conv, e);

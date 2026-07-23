@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { desktopApiCredential, DesktopApiClient } from '../api/client';
+import { desktopApiCredential, DesktopApiClient } from "../api/client";
 import type {
   AgentInputFileMetadata,
   AgentWsEvent,
   DesktopRuntimeConfig,
   HitlResponseSubmission,
-} from '../types';
+} from "../types";
 
 const HEARTBEAT_INTERVAL_MS = 20_000;
 const WATCHDOG_INTERVAL_MS = 10_000;
@@ -14,6 +14,15 @@ const STALE_CONNECTION_MS = 60_000;
 const MAX_SOCKET_EVENTS = 200;
 const MAX_EVENT_KEYS = 400;
 const MAX_PENDING_AGENT_MESSAGES = 100;
+const TERMINAL_AGENT_MESSAGE_ERROR_CODES = new Set([
+  "CONVERSATION_ACCESS_DENIED",
+  "CONVERSATION_NOT_FOUND",
+  "HITL_PENDING",
+  "INVALID_MESSAGE_ID",
+  "INVALID_SEND_MESSAGE",
+  "MESSAGE_ID_CONFLICT",
+  "TURN_START_UNCONFIRMED",
+]);
 
 type AgentEventCursor = {
   conversationId: string;
@@ -55,7 +64,7 @@ export type AgentRunMessage = {
 };
 
 export type AgentRunSocketMessage = {
-  type: 'send_message';
+  type: "send_message";
   conversation_id: string;
   project_id: string;
   message: string;
@@ -76,11 +85,11 @@ export function createPendingAgentMessageQueue(): PendingAgentMessageQueue {
 }
 
 export function canQueuePendingAgentRunMessage(
-  mode: DesktopRuntimeConfig['mode'],
+  mode: DesktopRuntimeConfig["mode"],
   enabled: boolean,
   credential: string,
 ): boolean {
-  return mode === 'cloud' && enabled && Boolean(credential.trim());
+  return mode === "cloud" && enabled && Boolean(credential.trim());
 }
 
 export function pendingAgentRunQueueScopeKey(
@@ -94,8 +103,8 @@ export function pendingAgentRunQueueScopeKey(
     config.mode,
     config.tenantId.trim(),
     config.projectId.trim(),
-    contextRevision ?? '',
-  ].join('\u0000');
+    contextRevision ?? "",
+  ].join("\u0000");
 }
 
 export function enqueuePendingAgentRunMessage(
@@ -107,7 +116,9 @@ export function enqueuePendingAgentRunMessage(
   return enqueuePendingAgentSocketMessage(queue, payload);
 }
 
-function agentRunSocketMessage(message: AgentRunMessage): AgentRunSocketMessage | null {
+function agentRunSocketMessage(
+  message: AgentRunMessage,
+): AgentRunSocketMessage | null {
   const conversationId = message.conversationId.trim();
   const projectId = message.projectId.trim();
   const content = message.message.trim();
@@ -117,9 +128,11 @@ function agentRunSocketMessage(message: AgentRunMessage): AgentRunSocketMessage 
     `desktop-agent-${Date.now()}-${(pendingAgentMessageSequence += 1)}`;
   const agentId = message.agentId?.trim();
   const forcedSkillName = message.forcedSkillName?.trim();
-  const mentions = message.mentions?.map((mention) => mention.trim()).filter(Boolean);
+  const mentions = message.mentions
+    ?.map((mention) => mention.trim())
+    .filter(Boolean);
   return {
-    type: 'send_message',
+    type: "send_message",
     conversation_id: conversationId,
     project_id: projectId,
     message: content,
@@ -178,10 +191,24 @@ export function confirmPendingAgentRunMessageReceipt(
   queue: PendingAgentMessageQueue,
   event: unknown,
 ): boolean {
-  if (!event || typeof event !== 'object') return false;
+  if (!event || typeof event !== "object") return false;
   const payload = event as Record<string, unknown>;
-  const conversationId = nestedStringField(payload, ['conversation_id', 'conversationId']);
-  const messageId = nestedStringField(payload, ['message_id', 'messageId']);
+  const eventType = typeof payload.type === "string" ? payload.type : "";
+  const isAcceptedAck =
+    eventType === "ack" &&
+    payload.action === "send_message" &&
+    nestedStringField(payload, ["outcome"]) === "accepted";
+  const isDurableUserMessage = eventType === "user_message";
+  const errorCode =
+    eventType === "error" ? nestedStringField(payload, ["code"]) : null;
+  const isTerminalError =
+    errorCode !== null && TERMINAL_AGENT_MESSAGE_ERROR_CODES.has(errorCode);
+  if (!isAcceptedAck && !isDurableUserMessage && !isTerminalError) return false;
+  const conversationId = nestedStringField(payload, [
+    "conversation_id",
+    "conversationId",
+  ]);
+  const messageId = nestedStringField(payload, ["message_id", "messageId"]);
   if (!conversationId || !messageId) return false;
   return queue.delete(`${conversationId}\u0000${messageId}`);
 }
@@ -200,7 +227,10 @@ export function useAgentSocket(
   const pendingAgentMessagesRef = useRef(createPendingAgentMessageQueue());
   const pendingEventsRef = useRef<AgentWsEvent[]>([]);
   const eventsFlushCancelRef = useRef<(() => void) | null>(null);
-  const pendingAgentQueueScopeKey = pendingAgentRunQueueScopeKey(config, contextRevision);
+  const pendingAgentQueueScopeKey = pendingAgentRunQueueScopeKey(
+    config,
+    contextRevision,
+  );
 
   const client = useMemo(
     () => new DesktopApiClient(config),
@@ -223,12 +253,14 @@ export function useAgentSocket(
     (conversationId: string) => {
       const normalizedConversationId = conversationId.trim();
       if (!normalizedConversationId) return false;
-      contextStateRef.current.subscribedConversations.add(normalizedConversationId);
+      contextStateRef.current.subscribedConversations.add(
+        normalizedConversationId,
+      );
       const cursor = contextStateRef.current.conversationCursors.get(
         normalizedConversationId,
       );
       return sendSocketMessage({
-        type: 'subscribe',
+        type: "subscribe",
         conversation_id: normalizedConversationId,
         ...(cursor
           ? { from_time_us: cursor.timeUs, from_counter: cursor.counter + 1 }
@@ -280,7 +312,10 @@ export function useAgentSocket(
       activeConversationId,
     );
     transition.unsubscribeConversationIds.forEach((conversationId) => {
-      sendSocketMessage({ type: 'unsubscribe', conversation_id: conversationId });
+      sendSocketMessage({
+        type: "unsubscribe",
+        conversation_id: conversationId,
+      });
     });
     if (transition.subscribeConversationId) {
       subscribeConversation(transition.subscribeConversationId);
@@ -317,7 +352,7 @@ export function useAgentSocket(
 
   const scheduleEventsFlush = useCallback(() => {
     if (eventsFlushCancelRef.current) return;
-    if (typeof requestAnimationFrame === 'function') {
+    if (typeof requestAnimationFrame === "function") {
       const frame = requestAnimationFrame(flushPendingEvents);
       eventsFlushCancelRef.current = () => cancelAnimationFrame(frame);
     } else {
@@ -349,42 +384,45 @@ export function useAgentSocket(
     };
 
     const sendSubscriptions = (socket: WebSocket) => {
-      if (config.mode === 'cloud' && config.projectId.trim()) {
+      if (config.mode === "cloud" && config.projectId.trim()) {
         socket.send(
           JSON.stringify({
-            type: 'subscribe_status',
+            type: "subscribe_status",
             project_id: config.projectId,
           }),
         );
         socket.send(
           JSON.stringify({
-            type: 'subscribe_lifecycle_state',
+            type: "subscribe_lifecycle_state",
             project_id: config.projectId,
             tenant_id: config.tenantId || undefined,
           }),
         );
         socket.send(
           JSON.stringify({
-            type: 'subscribe_sandbox',
+            type: "subscribe_sandbox",
             project_id: config.projectId,
             tenant_id: config.tenantId || undefined,
           }),
         );
       }
-      if (config.mode === 'cloud' && config.workspaceId.trim()) {
+      if (config.mode === "cloud" && config.workspaceId.trim()) {
         socket.send(
           JSON.stringify({
-            type: 'subscribe_workspace',
+            type: "subscribe_workspace",
             project_id: config.projectId,
             workspace_id: config.workspaceId,
             tenant_id: config.tenantId || undefined,
-            last_event_id: contextStateRef.current.workspaceEventId || undefined,
+            last_event_id:
+              contextStateRef.current.workspaceEventId || undefined,
           }),
         );
       }
-      conversationSubscriptionMessages(contextStateRef.current).forEach((message) => {
-        socket.send(JSON.stringify(message));
-      });
+      conversationSubscriptionMessages(contextStateRef.current).forEach(
+        (message) => {
+          socket.send(JSON.stringify(message));
+        },
+      );
     };
 
     const scheduleReconnect = (connect: () => void) => {
@@ -419,32 +457,35 @@ export function useAgentSocket(
         setConnected(true);
         setError(null);
         sendSubscriptions(socket);
-        flushPendingAgentRunMessages(pendingAgentMessagesRef.current, (payload) => {
-          if (socket.readyState !== WebSocket.OPEN) return false;
-          try {
-            socket.send(JSON.stringify(payload));
-            return true;
-          } catch {
-            return false;
-          }
-        });
+        flushPendingAgentRunMessages(
+          pendingAgentMessagesRef.current,
+          (payload) => {
+            if (socket.readyState !== WebSocket.OPEN) return false;
+            try {
+              socket.send(JSON.stringify(payload));
+              return true;
+            } catch {
+              return false;
+            }
+          },
+        );
         stopConnectionTimers();
-        if (config.mode === 'cloud') {
+        if (config.mode === "cloud") {
           heartbeatTimer = setInterval(() => {
             if (socket.readyState === WebSocket.OPEN) {
-              socket.send(JSON.stringify({ type: 'heartbeat' }));
+              socket.send(JSON.stringify({ type: "heartbeat" }));
             }
           }, HEARTBEAT_INTERVAL_MS);
           watchdogTimer = setInterval(() => {
             if (Date.now() - lastMessageAt > STALE_CONNECTION_MS) {
-              socket.close(4000, 'Agent WebSocket heartbeat timeout');
+              socket.close(4000, "Agent WebSocket heartbeat timeout");
             }
           }, WATCHDOG_INTERVAL_MS);
         }
       };
 
       socket.onerror = () => {
-        if (!disposed) setError('Agent WebSocket error');
+        if (!disposed) setError("Agent WebSocket error");
       };
 
       socket.onclose = () => {
@@ -458,10 +499,13 @@ export function useAgentSocket(
         if (disposed || socketRef.current !== socket) return;
         lastMessageAt = Date.now();
         const event = parseEvent(message.data);
-        confirmPendingAgentRunMessageReceipt(pendingAgentMessagesRef.current, event);
+        confirmPendingAgentRunMessageReceipt(
+          pendingAgentMessagesRef.current,
+          event,
+        );
         const type =
-          stringField(event, 'type') ?? stringField(event, 'event_type');
-        if (type === 'heartbeat' || type === 'pong') return;
+          stringField(event, "type") ?? stringField(event, "event_type");
+        if (type === "heartbeat" || type === "pong") return;
 
         const cursor = eventCursor(event);
         if (cursor) {
@@ -474,20 +518,26 @@ export function useAgentSocket(
             (cursor.timeUs === previous.timeUs &&
               cursor.counter > previous.counter)
           ) {
-            contextStateRef.current.conversationCursors.set(cursor.conversationId, cursor);
+            contextStateRef.current.conversationCursors.set(
+              cursor.conversationId,
+              cursor,
+            );
           }
         }
-        const workspaceId = stringField(event, 'workspace_id');
-        const eventId = stringField(event, 'event_id');
-        if (workspaceId && eventId) contextStateRef.current.workspaceEventId = eventId;
+        const workspaceId = stringField(event, "workspace_id");
+        const eventId = stringField(event, "event_id");
+        if (workspaceId && eventId)
+          contextStateRef.current.workspaceEventId = eventId;
 
         const key = socketEventKey(event);
         if (key && contextStateRef.current.seenEventKeys.has(key)) return;
         if (key) {
           contextStateRef.current.seenEventKeys.add(key);
           if (contextStateRef.current.seenEventKeys.size > MAX_EVENT_KEYS) {
-            const oldestKey = contextStateRef.current.seenEventKeys.values().next().value;
-            if (typeof oldestKey === 'string')
+            const oldestKey = contextStateRef.current.seenEventKeys
+              .values()
+              .next().value;
+            if (typeof oldestKey === "string")
               contextStateRef.current.seenEventKeys.delete(oldestKey);
           }
         }
@@ -542,9 +592,9 @@ function nestedStringField(
     const value = stringField(payload, key);
     if (value) return value;
   }
-  for (const key of ['message', 'payload', 'data']) {
+  for (const key of ["message", "payload", "data"]) {
     const nested = payload[key];
-    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
       const value = nestedStringField(nested as Record<string, unknown>, keys);
       if (value) return value;
     }
@@ -561,7 +611,9 @@ export function createAgentSocketContextState(): AgentSocketContextState {
   };
 }
 
-export function resetAgentSocketContextState(state: AgentSocketContextState): void {
+export function resetAgentSocketContextState(
+  state: AgentSocketContextState,
+): void {
   state.conversationCursors.clear();
   state.subscribedConversations.clear();
   state.workspaceEventId = null;
@@ -574,7 +626,8 @@ export function transitionAgentSocketConversationSelection(
 ): AgentSocketConversationTransition {
   const normalizedConversationId = conversationId?.trim() || null;
   const unsubscribeConversationIds = [...state.subscribedConversations].filter(
-    (currentConversationId) => currentConversationId !== normalizedConversationId,
+    (currentConversationId) =>
+      currentConversationId !== normalizedConversationId,
   );
   state.subscribedConversations.clear();
   if (normalizedConversationId) {
@@ -592,7 +645,7 @@ export function conversationSubscriptionMessages(
   return [...state.subscribedConversations].map((conversationId) => {
     const cursor = state.conversationCursors.get(conversationId);
     return {
-      type: 'subscribe',
+      type: "subscribe",
       conversation_id: conversationId,
       ...(cursor
         ? {
@@ -609,41 +662,41 @@ export function buildHitlSocketMessage(
 ): Record<string, unknown> {
   const { requestId, hitlType, responseData } = submission;
   switch (hitlType) {
-    case 'clarification':
+    case "clarification":
       return {
-        type: 'clarification_respond',
+        type: "clarification_respond",
         request_id: requestId,
         answer: responseData.answer,
       };
-    case 'decision':
+    case "decision":
       return {
-        type: 'decision_respond',
+        type: "decision_respond",
         request_id: requestId,
         decision: responseData.decision,
       };
-    case 'env_var':
+    case "env_var":
       return {
-        type: 'env_var_respond',
+        type: "env_var_respond",
         request_id: requestId,
         ...(responseData.values ? { values: responseData.values } : {}),
         ...(responseData.cancelled === true ? { cancelled: true } : {}),
         ...(responseData.timeout === true ? { timeout: true } : {}),
       };
-    case 'permission': {
+    case "permission": {
       const granted =
-        typeof responseData.granted === 'boolean'
+        typeof responseData.granted === "boolean"
           ? responseData.granted
-          : responseData.action === 'allow' ||
-            responseData.action === 'allow_always';
+          : responseData.action === "allow" ||
+            responseData.action === "allow_always";
       return {
-        type: 'permission_respond',
+        type: "permission_respond",
         request_id: requestId,
         granted,
       };
     }
-    case 'a2ui_action':
+    case "a2ui_action":
       return {
-        type: 'a2ui_action_respond',
+        type: "a2ui_action_respond",
         request_id: requestId,
         action_name: responseData.action_name,
         source_component_id: responseData.source_component_id,
@@ -657,43 +710,50 @@ export function reconnectDelay(attempt: number): number {
 }
 
 export function eventCursor(event: AgentWsEvent): AgentEventCursor | null {
-  const conversationId = stringField(event, 'conversation_id');
+  const conversationId = stringField(event, "conversation_id");
   const timeUs =
-    numberField(event, 'event_time_us') ??
-    numberField(event, 'time_us') ??
-    numberField(event, 'eventTimeUs');
+    numberField(event, "event_time_us") ??
+    numberField(event, "time_us") ??
+    numberField(event, "eventTimeUs");
   const counter =
-    numberField(event, 'event_counter') ??
-    numberField(event, 'counter') ??
-    numberField(event, 'eventCounter');
+    numberField(event, "event_counter") ??
+    numberField(event, "counter") ??
+    numberField(event, "eventCounter");
   if (!conversationId || timeUs === null || counter === null) return null;
   return { conversationId, timeUs, counter };
 }
 
 export function socketEventKey(event: AgentWsEvent): string | null {
-  const eventId = stringField(event, 'event_id') ?? stringField(event, 'seq');
+  const eventId = stringField(event, "event_id") ?? stringField(event, "seq");
   if (eventId) return `event:${eventId}`;
   const cursor = eventCursor(event);
   if (!cursor) return null;
   return `cursor:${cursor.conversationId}:${cursor.timeUs}:${cursor.counter}`;
 }
 
-export function socketEventsSince<T>(events: readonly T[], previousHead: T | null): T[] {
+export function socketEventsSince<T>(
+  events: readonly T[],
+  previousHead: T | null,
+): T[] {
   if (!events.length) return [];
-  const boundaryIndex = previousHead === null ? -1 : events.indexOf(previousHead);
-  const fresh = events.slice(0, boundaryIndex < 0 ? events.length : boundaryIndex);
+  const boundaryIndex =
+    previousHead === null ? -1 : events.indexOf(previousHead);
+  const fresh = events.slice(
+    0,
+    boundaryIndex < 0 ? events.length : boundaryIndex,
+  );
   return fresh.reverse();
 }
 
 function parseEvent(data: unknown): AgentWsEvent {
-  if (typeof data !== 'string') return { type: 'binary', payload: data };
+  if (typeof data !== "string") return { type: "binary", payload: data };
   try {
     const parsed = JSON.parse(data);
-    if (parsed && typeof parsed === 'object') return parsed as AgentWsEvent;
+    if (parsed && typeof parsed === "object") return parsed as AgentWsEvent;
   } catch {
-    return { type: 'text', payload: data };
+    return { type: "text", payload: data };
   }
-  return { type: 'text', payload: data };
+  return { type: "text", payload: data };
 }
 
 function stringField(
@@ -701,7 +761,7 @@ function stringField(
   key: string,
 ): string | null {
   const field = value[key];
-  return typeof field === 'string' && field ? field : null;
+  return typeof field === "string" && field ? field : null;
 }
 
 function numberField(
@@ -709,5 +769,5 @@ function numberField(
   key: string,
 ): number | null {
   const field = value[key];
-  return typeof field === 'number' && Number.isFinite(field) ? field : null;
+  return typeof field === "number" && Number.isFinite(field) ? field : null;
 }

@@ -17,10 +17,23 @@ interface MemoryCapturedStepProps {
   event: MemoryCapturedTimelineEvent;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export const MemoryCapturedStep: React.FC<MemoryCapturedStepProps> = ({ event }) => {
   const { t } = useTranslation();
+  const payloadValue = (event as MemoryCapturedTimelineEvent & { payload?: unknown }).payload;
+  const payload = isRecord(payloadValue) ? payloadValue : null;
+  const rawCount =
+    typeof event.capturedCount === 'number' ? event.capturedCount : payload?.captured_count;
+  const capturedCount = typeof rawCount === 'number' && Number.isFinite(rawCount) ? rawCount : 0;
+  const rawCategories = Array.isArray(event.categories) ? event.categories : payload?.categories;
+  const categories = Array.isArray(rawCategories)
+    ? rawCategories.filter((category): category is string => typeof category === 'string')
+    : [];
 
-  if (!event.capturedCount || event.capturedCount === 0) {
+  if (capturedCount === 0) {
     return null;
   }
 
@@ -30,11 +43,11 @@ export const MemoryCapturedStep: React.FC<MemoryCapturedStepProps> = ({ event })
       <span>
         {t('components.memoryTimeline.captured', {
           defaultValue: 'Captured {{count}} memories',
-          count: event.capturedCount,
+          count: capturedCount,
         })}
       </span>
-      {event.categories.length > 0 && (
-        <span className="text-green-500 dark:text-green-400">({event.categories.join(', ')})</span>
+      {categories.length > 0 && (
+        <span className="text-green-500 dark:text-green-400">({categories.join(', ')})</span>
       )}
     </div>
   );

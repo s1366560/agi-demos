@@ -7335,6 +7335,7 @@
       "online": "在线",
       "aiAssistant": "AI 助手",
       "noConversations": "暂无对话",
+      "tasks": "任务",
       "conversationCount": "{{count}} 个对话",
       "startNewChat": "开始一个新的对话吧",
       "selectProject": "选择项目",

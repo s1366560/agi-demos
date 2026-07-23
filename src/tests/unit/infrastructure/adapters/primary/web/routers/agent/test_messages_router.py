@@ -1120,6 +1120,13 @@ def test_build_timeline_replays_context_and_memory_events_for_desktop_history() 
         event_type for event_type, _ in context_and_memory_events
     ]
     assert [item["payload"] for item in timeline] == [data for _, data in context_and_memory_events]
+    recalled = timeline[2]
+    assert recalled["memories"] == context_and_memory_events[2][1]["memories"]
+    assert recalled["count"] == 2
+    assert recalled["searchMs"] == 24
+    captured = timeline[3]
+    assert captured["capturedCount"] == 2
+    assert captured["categories"] == ["procedural", "preference"]
 
 
 def test_build_timeline_replays_runtime_infrastructure_events_for_desktop_history() -> None:

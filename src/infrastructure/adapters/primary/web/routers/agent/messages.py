@@ -1034,9 +1034,50 @@ def _build_mcp_app_event(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]
     return {"payload": dict(data)}
 
 
-def _build_context_memory_event(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
-    """Preserve context metrics and memory evidence for Desktop history replay."""
-    return {"payload": dict(data)}
+def _build_context_memory_event(
+    data: dict[str, Any], *, event: Any | None = None, **_kwargs: Any
+) -> dict[str, Any]:
+    """Preserve Desktop evidence while retaining the Web timeline contract."""
+    fields: dict[str, Any] = {"payload": dict(data)}
+    event_type = getattr(event, "event_type", "")
+
+    if event_type == "memory_recalled":
+        raw_memories = data.get("memories")
+        memories = (
+            [memory for memory in raw_memories if isinstance(memory, dict)]
+            if isinstance(raw_memories, list)
+            else []
+        )
+        raw_count = data.get("count")
+        raw_search_ms = data.get("search_ms")
+        fields.update(
+            {
+                "memories": memories,
+                "count": raw_count
+                if isinstance(raw_count, int) and not isinstance(raw_count, bool)
+                else len(memories),
+                "searchMs": raw_search_ms
+                if isinstance(raw_search_ms, (int, float)) and not isinstance(raw_search_ms, bool)
+                else 0,
+            }
+        )
+    elif event_type == "memory_captured":
+        raw_count = data.get("captured_count")
+        raw_categories = data.get("categories")
+        fields.update(
+            {
+                "capturedCount": raw_count
+                if isinstance(raw_count, int) and not isinstance(raw_count, bool)
+                else 0,
+                "categories": (
+                    [category for category in raw_categories if isinstance(category, str)]
+                    if isinstance(raw_categories, list)
+                    else []
+                ),
+            }
+        )
+
+    return fields
 
 
 def _build_runtime_infrastructure_event(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:

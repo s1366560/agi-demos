@@ -31,6 +31,38 @@ interface JitContextCardProps {
 
 const SNIPPET_LIMIT = 220;
 
+type MemoryRecallHit = MemoryRecalledTimelineEvent['memories'][number];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function eventPayload(event: MemoryRecalledTimelineEvent): Record<string, unknown> | null {
+  const payload = (event as MemoryRecalledTimelineEvent & { payload?: unknown }).payload;
+  return isRecord(payload) ? payload : null;
+}
+
+function isMemoryRecallHit(value: unknown): value is MemoryRecallHit {
+  return (
+    isRecord(value) &&
+    typeof value.content === 'string' &&
+    typeof value.score === 'number' &&
+    Number.isFinite(value.score) &&
+    typeof value.source === 'string' &&
+    typeof value.category === 'string'
+  );
+}
+
+function normalizedMemoryHits(event: MemoryRecalledTimelineEvent): MemoryRecallHit[] {
+  const payload = eventPayload(event);
+  const candidate = Array.isArray(event.memories) ? event.memories : payload?.memories;
+  return Array.isArray(candidate) ? candidate.filter(isMemoryRecallHit) : [];
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
 function formatScore(score: number): string {
   if (Number.isNaN(score)) return '—';
   return score.toFixed(2);
@@ -47,7 +79,10 @@ export const JitContextCard: FC<JitContextCardProps> = ({ event, conversationId 
   const [activeSource, setActiveSource] = useState<string | null>(null);
   const pins = useJitContextPins(conversationId);
 
-  const hits = useMemo(() => event.memories, [event.memories]);
+  const hits = useMemo(() => normalizedMemoryHits(event), [event]);
+  const payload = eventPayload(event);
+  const recalledCount = finiteNumber(event.count) ?? finiteNumber(payload?.count) ?? hits.length;
+  const searchMs = finiteNumber(event.searchMs) ?? finiteNumber(payload?.search_ms) ?? 0;
   const eventId = event.id;
 
   const sourceBreakdown = useMemo(() => {
@@ -112,10 +147,10 @@ export const JitContextCard: FC<JitContextCardProps> = ({ event, conversationId 
         <span className="font-medium">
           {t('components.jitContext.recalled', {
             defaultValue: 'Recalled {{count}} memories',
-            count: event.count,
+            count: recalledCount,
           })}
         </span>
-        <span className="text-blue-500/80 dark:text-blue-400/80">({String(event.searchMs)}ms)</span>
+        <span className="text-blue-500/80 dark:text-blue-400/80">({String(searchMs)}ms)</span>
         {pinnedCount > 0 ? (
           <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
             <Pin size={10} />

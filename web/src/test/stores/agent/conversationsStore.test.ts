@@ -156,6 +156,86 @@ describe('ConversationsStore', () => {
   });
 
   describe('listConversations', () => {
+    it('preserves the explicit unbound order before unique project supplements', async () => {
+      const projectFirst = {
+        ...createMockConversation('project-first', 'proj-1', 'Project first'),
+        updated_at: '2024-01-01T00:00:00Z',
+        workspace_id: 'workspace-1',
+      };
+      const sharedUnbound = {
+        ...createMockConversation('shared-unbound', 'proj-1', 'Shared unbound'),
+        updated_at: '2024-01-03T00:00:00Z',
+        workspace_id: null,
+      };
+      const projectThird = {
+        ...createMockConversation('project-third', 'proj-1', 'Project third'),
+        updated_at: '2024-01-02T00:00:00Z',
+        workspace_id: 'workspace-2',
+      };
+      const supplementalUnbound = {
+        ...createMockConversation('supplemental-unbound', 'proj-1', 'Supplemental unbound'),
+        updated_at: '2024-01-04T00:00:00Z',
+        workspace_id: null,
+      };
+
+      listConversationsMock.mockImplementation(
+        async (_projectId, _status, _limit, _offset, _signal, options) => ({
+          items: options?.unboundOnly
+            ? [sharedUnbound, supplementalUnbound]
+            : [projectFirst, sharedUnbound, projectThird],
+          has_more: false,
+          total: 4,
+          offset: 0,
+          limit: 10,
+        })
+      );
+
+      await useConversationsStore.getState().listConversations('proj-1');
+
+      expect(
+        useConversationsStore.getState().conversations.map((conversation) => conversation.id)
+      ).toEqual(['shared-unbound', 'supplemental-unbound', 'project-first', 'project-third']);
+    });
+
+    it('merges an explicit unbound page when the project page only contains workspaces', async () => {
+      const workspaceConversation = {
+        ...createMockConversation('workspace-conv', 'proj-1', 'Workspace conversation'),
+        workspace_id: 'workspace-1',
+      };
+      const unboundConversation = {
+        ...createMockConversation('task-conv', 'proj-1', 'Task conversation'),
+        workspace_id: null,
+      };
+
+      listConversationsMock.mockImplementation(
+        async (_projectId, _status, _limit, _offset, _signal, options) =>
+          options?.unboundOnly
+            ? {
+                items: [unboundConversation],
+                has_more: false,
+                total: 1,
+                offset: 0,
+                limit: 10,
+              }
+            : {
+                items: [workspaceConversation],
+                has_more: false,
+                total: 2,
+                offset: 0,
+                limit: 10,
+              }
+      );
+
+      await useConversationsStore.getState().listConversations('proj-1');
+
+      expect(
+        useConversationsStore.getState().conversations.map((conversation) => conversation.id)
+      ).toEqual(['task-conv', 'workspace-conv']);
+      expect(listConversationsMock).toHaveBeenCalledWith('proj-1', undefined, 10, 0, undefined, {
+        unboundOnly: true,
+      });
+    });
+
     it('should fetch conversations successfully', async () => {
       const mockConversations: Conversation[] = [
         createMockConversation('conv-1', 'proj-1', 'Conversation 1'),
@@ -247,15 +327,22 @@ describe('ConversationsStore', () => {
       const projectAConversation = createMockConversation('conv-a', 'proj-a', 'Project A');
       const projectBConversation = createMockConversation('conv-b', 'proj-b', 'Project B');
 
-      listConversationsMock
-        .mockReturnValueOnce(projectARequest.promise as any)
-        .mockReturnValueOnce(projectBRequest.promise as any);
+      listConversationsMock.mockImplementation(
+        (projectId, _status, _limit, _offset, _signal, options) => {
+          if (options?.unboundOnly) {
+            return Promise.resolve({ items: [], has_more: false, total: 0 });
+          }
+          return projectId === 'proj-a'
+            ? (projectARequest.promise as any)
+            : (projectBRequest.promise as any);
+        }
+      );
 
       const projectAPromise = useConversationsStore.getState().listConversations('proj-a');
       expect(useConversationsStore.getState().conversationsLoading).toBe(true);
 
       const projectBPromise = useConversationsStore.getState().listConversations('proj-b');
-      expect(listConversationsMock).toHaveBeenCalledTimes(2);
+      expect(listConversationsMock).toHaveBeenCalledTimes(4);
 
       projectBRequest.resolve({
         items: [projectBConversation],
@@ -291,9 +378,16 @@ describe('ConversationsStore', () => {
       const staleConversation = createMockConversation('conv-stale', 'proj-stale', 'Stale');
       const freshConversation = createMockConversation('conv-fresh', 'proj-fresh', 'Fresh');
 
-      listConversationsMock
-        .mockReturnValueOnce(staleRequest.promise as any)
-        .mockReturnValueOnce(freshRequest.promise as any);
+      listConversationsMock.mockImplementation(
+        (projectId, _status, _limit, _offset, _signal, options) => {
+          if (options?.unboundOnly) {
+            return Promise.resolve({ items: [], has_more: false, total: 0 });
+          }
+          return projectId === 'proj-stale'
+            ? (staleRequest.promise as any)
+            : (freshRequest.promise as any);
+        }
+      );
 
       const staleLoad = useConversationsStore.getState().listConversations('proj-stale');
       useConversationsStore.getState().reset();
@@ -369,6 +463,208 @@ describe('ConversationsStore', () => {
   });
 
   describe('loadMoreConversations', () => {
+    it('uses the authoritative project cursor even when merged conversations are longer', async () => {
+      const taskConversation = {
+        ...createMockConversation('task-1', 'proj-1', 'Task one'),
+        workspace_id: null,
+      };
+      useConversationsStore.setState({
+        conversations: [taskConversation],
+        hasMoreConversations: true,
+        projectConversationsHasMore: true,
+        unboundConversationsHasMore: false,
+        conversationsNextOffset: 0,
+        conversationListProjectId: 'proj-1',
+      });
+      listConversationsMock.mockResolvedValue({
+        items: [],
+        has_more: false,
+        total: 1,
+        offset: 0,
+        limit: 10,
+        next_offset: 0,
+      });
+
+      await useConversationsStore.getState().loadMoreConversations('proj-1');
+
+      expect(listConversationsMock).toHaveBeenCalledWith('proj-1', undefined, 10, 0, undefined, {
+        groupByWorkspace: true,
+      });
+    });
+
+    it('deduplicates conversations returned by both load-more requests', async () => {
+      const existingConversation = createMockConversation('conv-existing', 'proj-1', 'Existing');
+      const overlappingConversation = {
+        ...createMockConversation('task-overlap', 'proj-1', 'Overlapping task'),
+        workspace_id: null,
+      };
+      useConversationsStore.setState({
+        conversations: [existingConversation],
+        hasMoreConversations: true,
+        projectConversationsHasMore: true,
+        unboundConversationsHasMore: true,
+        conversationsNextOffset: 1,
+        unboundConversationsNextOffset: 0,
+        conversationListProjectId: 'proj-1',
+      });
+      listConversationsMock.mockResolvedValue({
+        items: [overlappingConversation],
+        has_more: false,
+        total: 2,
+        offset: 1,
+        limit: 10,
+      });
+
+      await useConversationsStore.getState().loadMoreConversations('proj-1');
+
+      expect(
+        useConversationsStore
+          .getState()
+          .conversations.filter((conversation) => conversation.id === 'task-overlap')
+      ).toHaveLength(1);
+    });
+
+    it('keeps explicit unbound order across interleaved load-more pages', async () => {
+      const taskOne = {
+        ...createMockConversation('task-1', 'proj-1', 'Task one'),
+        workspace_id: null,
+      };
+      const taskTwo = {
+        ...createMockConversation('task-2', 'proj-1', 'Task two'),
+        workspace_id: null,
+      };
+      const taskThree = {
+        ...createMockConversation('task-3', 'proj-1', 'Task three'),
+        workspace_id: null,
+      };
+      const taskFour = {
+        ...createMockConversation('task-4', 'proj-1', 'Task four'),
+        workspace_id: null,
+      };
+      const workspaceOne = {
+        ...createMockConversation('workspace-1', 'proj-1', 'Workspace one'),
+        workspace_id: 'workspace-1',
+      };
+      const workspaceTwo = {
+        ...createMockConversation('workspace-2', 'proj-1', 'Workspace two'),
+        workspace_id: 'workspace-2',
+      };
+      const workspaceThree = {
+        ...createMockConversation('workspace-3', 'proj-1', 'Workspace three'),
+        workspace_id: 'workspace-3',
+      };
+
+      useConversationsStore.setState({
+        conversations: [taskOne, workspaceOne],
+        hasMoreConversations: true,
+        projectConversationsHasMore: true,
+        unboundConversationsHasMore: true,
+        conversationsNextOffset: 1,
+        unboundConversationsNextOffset: 1,
+        conversationListProjectId: 'proj-1',
+      });
+      listConversationsMock.mockImplementation(
+        async (_projectId, _status, _limit, offset, _signal, options) => {
+          if (options?.unboundOnly) {
+            return offset === 1
+              ? {
+                  items: [taskTwo, taskThree],
+                  has_more: true,
+                  total: 4,
+                  offset: 1,
+                  limit: 10,
+                  next_offset: 3,
+                }
+              : {
+                  items: [taskFour],
+                  has_more: false,
+                  total: 4,
+                  offset: 3,
+                  limit: 10,
+                  next_offset: 4,
+                };
+          }
+          return offset === 1
+            ? {
+                items: [workspaceTwo, taskThree, taskTwo, taskFour],
+                has_more: true,
+                total: 7,
+                offset: 1,
+                limit: 10,
+                next_offset: 5,
+              }
+            : {
+                items: [workspaceThree, taskFour],
+                has_more: false,
+                total: 7,
+                offset: 5,
+                limit: 10,
+                next_offset: 7,
+              };
+        }
+      );
+
+      await useConversationsStore.getState().loadMoreConversations('proj-1');
+      await useConversationsStore.getState().loadMoreConversations('proj-1');
+
+      const conversations = useConversationsStore.getState().conversations;
+      expect(
+        conversations
+          .filter((conversation) => conversation.workspace_id === null)
+          .map((conversation) => conversation.id)
+      ).toEqual(['task-1', 'task-2', 'task-3', 'task-4']);
+      expect(conversations.map((conversation) => conversation.id)).toEqual([
+        'task-1',
+        'workspace-1',
+        'task-2',
+        'task-3',
+        'workspace-2',
+        'task-4',
+        'workspace-3',
+      ]);
+    });
+
+    it('continues the independent unbound cursor after the project page is exhausted', async () => {
+      const workspaceConversation = {
+        ...createMockConversation('workspace-conv', 'proj-1', 'Workspace conversation'),
+        workspace_id: 'workspace-1',
+      };
+      const firstTask = {
+        ...createMockConversation('task-1', 'proj-1', 'Task one'),
+        workspace_id: null,
+      };
+      const secondTask = {
+        ...createMockConversation('task-2', 'proj-1', 'Task two'),
+        workspace_id: null,
+      };
+      useConversationsStore.setState({
+        conversations: [firstTask, workspaceConversation],
+        hasMoreConversations: true,
+        projectConversationsHasMore: false,
+        unboundConversationsHasMore: true,
+        unboundConversationsNextOffset: 1,
+        conversationListProjectId: 'proj-1',
+      });
+      listConversationsMock.mockResolvedValue({
+        items: [secondTask],
+        has_more: false,
+        total: 2,
+        offset: 1,
+        limit: 10,
+      });
+
+      await useConversationsStore.getState().loadMoreConversations('proj-1');
+
+      expect(listConversationsMock).toHaveBeenCalledTimes(1);
+      expect(listConversationsMock).toHaveBeenCalledWith('proj-1', undefined, 10, 1, undefined, {
+        unboundOnly: true,
+      });
+      expect(
+        useConversationsStore.getState().conversations.map((conversation) => conversation.id)
+      ).toEqual(['task-1', 'workspace-conv', 'task-2']);
+      expect(useConversationsStore.getState().hasMoreConversations).toBe(false);
+    });
+
     it('appends older pages without moving existing conversations behind them', async () => {
       const olderConversation = {
         ...createMockConversation('conv-old', 'proj-1', 'Old'),
@@ -403,10 +699,22 @@ describe('ConversationsStore', () => {
       ).toEqual(['conv-refresh', 'conv-old', 'conv-next-page']);
     });
 
-    it('ignores stale older pages after conversation scope reset', async () => {
+    it('does not let a pre-reset page clear the current load-more owner', async () => {
       const existingConversation = createMockConversation('conv-existing', 'proj-stale', 'Current');
       const staleConversation = createMockConversation('conv-stale-page', 'proj-stale', 'Stale');
+      const currentConversation = createMockConversation('conv-current', 'proj-current', 'Current');
+      const currentNextConversation = createMockConversation(
+        'conv-current-next',
+        'proj-current',
+        'Current next'
+      );
       const stalePage = deferred<{
+        items: Conversation[];
+        has_more: boolean;
+        total: number;
+        offset: number;
+      }>();
+      const currentPage = deferred<{
         items: Conversation[];
         has_more: boolean;
         total: number;
@@ -425,6 +733,19 @@ describe('ConversationsStore', () => {
       expect(useConversationsStore.getState().conversationsLoadingMore).toBe(true);
 
       useConversationsStore.getState().reset();
+      useConversationsStore.setState({
+        conversations: [currentConversation],
+        hasMoreConversations: true,
+        projectConversationsHasMore: true,
+        conversationsNextOffset: 1,
+        conversationListProjectId: 'proj-current',
+      });
+      listConversationsMock.mockReturnValueOnce(currentPage.promise as any);
+      const currentLoadPromise = useConversationsStore
+        .getState()
+        .loadMoreConversations('proj-current');
+      expect(useConversationsStore.getState().conversationsLoadingMore).toBe(true);
+
       stalePage.resolve({
         items: [staleConversation],
         has_more: false,
@@ -434,8 +755,109 @@ describe('ConversationsStore', () => {
 
       await loadPromise;
 
-      expect(useConversationsStore.getState().conversations).toEqual([]);
-      expect(useConversationsStore.getState().conversationListProjectId).toBe(null);
+      expect(useConversationsStore.getState().conversations).toEqual([currentConversation]);
+      expect(useConversationsStore.getState().conversationListProjectId).toBe('proj-current');
+      expect(useConversationsStore.getState().conversationsLoadingMore).toBe(true);
+
+      currentPage.resolve({
+        items: [currentNextConversation],
+        has_more: false,
+        total: 2,
+        offset: 1,
+      });
+      await currentLoadPromise;
+
+      expect(useConversationsStore.getState().conversations).toEqual([
+        currentConversation,
+        currentNextConversation,
+      ]);
+      expect(useConversationsStore.getState().conversationsLoadingMore).toBe(false);
+    });
+
+    it('does not let a page superseded by a list request clear the next load-more owner', async () => {
+      const staleConversation = createMockConversation('conv-stale', 'proj-a', 'Stale');
+      const currentConversation = createMockConversation('conv-current', 'proj-b', 'Current');
+      const currentNextConversation = createMockConversation(
+        'conv-current-next',
+        'proj-b',
+        'Current next'
+      );
+      const stalePage = deferred<{
+        items: Conversation[];
+        has_more: boolean;
+        total: number;
+        offset: number;
+      }>();
+      const currentPage = deferred<{
+        items: Conversation[];
+        has_more: boolean;
+        total: number;
+        offset: number;
+      }>();
+
+      useConversationsStore.setState({
+        conversations: [staleConversation],
+        hasMoreConversations: true,
+        projectConversationsHasMore: true,
+        conversationsNextOffset: 1,
+        conversationListProjectId: 'proj-a',
+      });
+      listConversationsMock.mockImplementation(
+        (projectId, _status, _limit, offset, _signal, options) => {
+          if (options?.unboundOnly) {
+            return Promise.resolve({
+              items: [],
+              has_more: false,
+              total: 0,
+              offset,
+              limit: 10,
+            });
+          }
+          if (projectId === 'proj-a') {
+            return stalePage.promise as any;
+          }
+          if (offset === 0) {
+            return Promise.resolve({
+              items: [currentConversation],
+              has_more: true,
+              total: 2,
+              offset: 0,
+              limit: 10,
+              next_offset: 1,
+            });
+          }
+          return currentPage.promise as any;
+        }
+      );
+
+      const staleLoadPromise = useConversationsStore.getState().loadMoreConversations('proj-a');
+      await useConversationsStore.getState().listConversations('proj-b');
+      const currentLoadPromise = useConversationsStore.getState().loadMoreConversations('proj-b');
+      expect(useConversationsStore.getState().conversationsLoadingMore).toBe(true);
+
+      stalePage.resolve({
+        items: [staleConversation],
+        has_more: false,
+        total: 1,
+        offset: 1,
+      });
+      await staleLoadPromise;
+
+      expect(useConversationsStore.getState().conversations).toEqual([currentConversation]);
+      expect(useConversationsStore.getState().conversationsLoadingMore).toBe(true);
+
+      currentPage.resolve({
+        items: [currentNextConversation],
+        has_more: false,
+        total: 2,
+        offset: 1,
+      });
+      await currentLoadPromise;
+
+      expect(useConversationsStore.getState().conversations).toEqual([
+        currentConversation,
+        currentNextConversation,
+      ]);
       expect(useConversationsStore.getState().conversationsLoadingMore).toBe(false);
     });
   });

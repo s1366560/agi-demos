@@ -48,8 +48,11 @@ interface ConversationsState {
   conversationsError: string | null;
   isNewConversationPending: boolean;
   hasMoreConversations: boolean;
+  projectConversationsHasMore: boolean;
+  unboundConversationsHasMore: boolean;
   conversationsTotal: number;
   conversationsNextOffset: number;
+  unboundConversationsNextOffset: number;
   conversationListProjectId: string | null;
 
   // Actions
@@ -111,15 +114,24 @@ export const initialState = {
   conversationsError: null,
   isNewConversationPending: false,
   hasMoreConversations: false,
+  projectConversationsHasMore: false,
+  unboundConversationsHasMore: false,
   conversationsTotal: 0,
   conversationsNextOffset: 0,
+  unboundConversationsNextOffset: 0,
   conversationListProjectId: null,
 };
 
 const groupedConversationListOptions = { groupByWorkspace: true };
+const unboundConversationListOptions = { unboundOnly: true };
 let listConversationsRequestSequence = 0;
 let activeListConversationsRequest: {
   key: string;
+  sequence: number;
+} | null = null;
+let loadMoreConversationsRequestSequence = 0;
+let activeLoadMoreConversationsRequest: {
+  projectId: string;
   sequence: number;
 } | null = null;
 
@@ -153,10 +165,31 @@ function resetListConversationsRequestTracking(): void {
   listConversationsRequestSequence += 1;
 }
 
-function conversationActivityTime(conversation: Conversation): number {
-  const rawTimestamp = conversation.updated_at || conversation.created_at;
-  const time = Date.parse(rawTimestamp);
-  return Number.isFinite(time) ? time : 0;
+function startLoadMoreConversationsRequest(projectId: string): number {
+  const sequence = loadMoreConversationsRequestSequence + 1;
+  loadMoreConversationsRequestSequence = sequence;
+  activeLoadMoreConversationsRequest = { projectId, sequence };
+  return sequence;
+}
+
+function isActiveLoadMoreConversationsRequest(sequence: number, projectId: string): boolean {
+  return (
+    activeLoadMoreConversationsRequest?.sequence === sequence &&
+    activeLoadMoreConversationsRequest.projectId === projectId
+  );
+}
+
+function finishLoadMoreConversationsRequest(sequence: number, projectId: string): boolean {
+  if (!isActiveLoadMoreConversationsRequest(sequence, projectId)) {
+    return false;
+  }
+  activeLoadMoreConversationsRequest = null;
+  return true;
+}
+
+function invalidateLoadMoreConversationsRequest(): void {
+  activeLoadMoreConversationsRequest = null;
+  loadMoreConversationsRequestSequence += 1;
 }
 
 function mergeUniqueConversations(
@@ -170,16 +203,15 @@ function mergeUniqueConversations(
     return existing;
   }
 
-  const incomingIds = new Set(incoming.map((conversation) => conversation.id));
-  return [
-    ...incoming,
-    ...existing
-      .filter((conversation) => !incomingIds.has(conversation.id))
-      .sort((a, b) => {
-        const timeDiff = conversationActivityTime(b) - conversationActivityTime(a);
-        return timeDiff !== 0 ? timeDiff : b.id.localeCompare(a.id);
-      }),
-  ];
+  const seenIds = new Set(existing.map((conversation) => conversation.id));
+  const supplements = incoming.filter((conversation) => {
+    if (seenIds.has(conversation.id)) {
+      return false;
+    }
+    seenIds.add(conversation.id);
+    return true;
+  });
+  return [...existing, ...supplements];
 }
 
 function appendUniqueConversations(
@@ -248,36 +280,47 @@ export const useConversationsStore = create<ConversationsState>()(
           return;
         }
 
+        invalidateLoadMoreConversationsRequest();
         const requestSequence = startListConversationsRequest(requestKey);
         if (!silent) {
-          set({ conversationsLoading: true, conversationsError: null });
+          set({
+            conversationsLoading: true,
+            conversationsLoadingMore: false,
+            conversationsError: null,
+          });
+        } else if (state.conversationsLoadingMore) {
+          set({ conversationsLoadingMore: false });
         }
         try {
-          const response = signal
-            ? await agentService.listConversations(
-                projectId,
-                status,
-                limit,
-                0,
-                signal,
-                groupedConversationListOptions
-              )
-            : await agentService.listConversations(
-                projectId,
-                status,
-                limit,
-                0,
-                undefined,
-                groupedConversationListOptions
-              );
+          const [response, unboundResponse] = await Promise.all([
+            agentService.listConversations(
+              projectId,
+              status,
+              limit,
+              0,
+              signal,
+              groupedConversationListOptions
+            ),
+            agentService.listConversations(
+              projectId,
+              status,
+              limit,
+              0,
+              signal,
+              unboundConversationListOptions
+            ),
+          ]);
           if (!isActiveListConversationsRequest(requestSequence)) {
             return;
           }
           set({
-            conversations: mergeUniqueConversations([], response.items),
-            hasMoreConversations: response.has_more,
+            conversations: mergeUniqueConversations(unboundResponse.items, response.items),
+            hasMoreConversations: response.has_more || unboundResponse.has_more,
+            projectConversationsHasMore: response.has_more,
+            unboundConversationsHasMore: unboundResponse.has_more,
             conversationsTotal: response.total,
             conversationsNextOffset: responseNextOffset(response, 0),
+            unboundConversationsNextOffset: responseNextOffset(unboundResponse, 0),
             conversationListProjectId: projectId,
             ...(!silent ? { conversationsLoading: false } : {}),
           });
@@ -315,38 +358,74 @@ export const useConversationsStore = create<ConversationsState>()(
           return;
         }
 
-        const requestSequence = listConversationsRequestSequence;
+        const requestSequence = startLoadMoreConversationsRequest(projectId);
         set({ conversationsLoadingMore: true, conversationsError: null });
         try {
-          const offset = state.conversationsNextOffset || state.conversations.length;
-          const response = await agentService.listConversations(
-            projectId,
-            status,
-            10,
-            offset,
-            undefined,
-            groupedConversationListOptions
-          );
+          const shouldLoadProjectConversations =
+            state.projectConversationsHasMore ||
+            (!state.unboundConversationsHasMore && state.hasMoreConversations);
+          const shouldLoadUnboundConversations = state.unboundConversationsHasMore;
+          const projectOffset = state.conversationsNextOffset;
+          const unboundOffset = state.unboundConversationsNextOffset;
+          const [response, unboundResponse] = await Promise.all([
+            shouldLoadProjectConversations
+              ? agentService.listConversations(
+                  projectId,
+                  status,
+                  10,
+                  projectOffset,
+                  undefined,
+                  groupedConversationListOptions
+                )
+              : Promise.resolve(null),
+            shouldLoadUnboundConversations
+              ? agentService.listConversations(
+                  projectId,
+                  status,
+                  10,
+                  unboundOffset,
+                  undefined,
+                  unboundConversationListOptions
+                )
+              : Promise.resolve(null),
+          ]);
           const latestState = get();
+          if (!isActiveLoadMoreConversationsRequest(requestSequence, projectId)) {
+            return;
+          }
           if (
-            requestSequence !== listConversationsRequestSequence ||
-            (latestState.conversationListProjectId !== null &&
-              latestState.conversationListProjectId !== projectId)
+            latestState.conversationListProjectId !== null &&
+            latestState.conversationListProjectId !== projectId
           ) {
+            finishLoadMoreConversationsRequest(requestSequence, projectId);
             set({ conversationsLoadingMore: false });
             return;
           }
+          const nextProjectHasMore = response?.has_more ?? latestState.projectConversationsHasMore;
+          const nextUnboundHasMore =
+            unboundResponse?.has_more ?? latestState.unboundConversationsHasMore;
+          const incoming = mergeUniqueConversations(
+            unboundResponse?.items ?? [],
+            response?.items ?? []
+          );
+          finishLoadMoreConversationsRequest(requestSequence, projectId);
           set({
-            conversations: appendUniqueConversations(latestState.conversations, response.items),
-            hasMoreConversations: response.has_more,
-            conversationsTotal: response.total,
-            conversationsNextOffset: responseNextOffset(response, offset),
+            conversations: appendUniqueConversations(latestState.conversations, incoming),
+            hasMoreConversations: nextProjectHasMore || nextUnboundHasMore,
+            projectConversationsHasMore: nextProjectHasMore,
+            unboundConversationsHasMore: nextUnboundHasMore,
+            conversationsTotal: response?.total ?? latestState.conversationsTotal,
+            conversationsNextOffset: response
+              ? responseNextOffset(response, projectOffset)
+              : latestState.conversationsNextOffset,
+            unboundConversationsNextOffset: unboundResponse
+              ? responseNextOffset(unboundResponse, unboundOffset)
+              : latestState.unboundConversationsNextOffset,
             conversationListProjectId: projectId,
             conversationsLoadingMore: false,
           });
         } catch (error: unknown) {
-          if (requestSequence !== listConversationsRequestSequence) {
-            set({ conversationsLoadingMore: false });
+          if (!finishLoadMoreConversationsRequest(requestSequence, projectId)) {
             return;
           }
           const err = error as {
@@ -636,6 +715,7 @@ export const useConversationsStore = create<ConversationsState>()(
        */
       reset: () => {
         resetListConversationsRequestTracking();
+        invalidateLoadMoreConversationsRequest();
         set(initialState);
       },
     }),

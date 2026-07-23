@@ -49,6 +49,10 @@ logger = logging.getLogger(__name__)
 _CLIENT_MESSAGE_ID_MAX_LENGTH = 255
 
 
+def _client_message_id_extra(message_id: str | None) -> dict[str, str] | None:
+    return {"message_id": message_id} if message_id is not None else None
+
+
 class _RayCancelMethod(Protocol):
     def remote(self, conversation_id: str) -> object: ...
 
@@ -225,16 +229,6 @@ class SendMessageHandler(WebSocketMessageHandler):
             else None
         )
 
-        if not all([conversation_id, user_message, project_id]):
-            await context.send_error(
-                "Missing required fields: conversation_id, message, project_id"
-            )
-            return
-
-        # Type narrowing: after the guard above, these are guaranteed to be non-None strings
-        assert isinstance(conversation_id, str)
-        assert isinstance(user_message, str)
-        assert isinstance(project_id, str)
         if message_id is not None and (
             not isinstance(message_id, str)
             or not message_id.strip()
@@ -246,6 +240,20 @@ class SendMessageHandler(WebSocketMessageHandler):
                 conversation_id=conversation_id,
             )
             return
+        client_message_id = message_id if isinstance(message_id, str) else None
+        if not all([conversation_id, user_message, project_id]):
+            await context.send_error(
+                "Missing required fields: conversation_id, message, project_id",
+                code="INVALID_SEND_MESSAGE",
+                conversation_id=conversation_id if isinstance(conversation_id, str) else None,
+                extra=_client_message_id_extra(client_message_id),
+            )
+            return
+
+        # Type narrowing: after the guard above, these are guaranteed to be non-None strings
+        assert isinstance(conversation_id, str)
+        assert isinstance(user_message, str)
+        assert isinstance(project_id, str)
         if preferred_language not in {"en-US", "zh-CN"}:
             preferred_language = None
 
@@ -275,7 +283,12 @@ class SendMessageHandler(WebSocketMessageHandler):
             conversation = await conversation_repo.find_by_id(conversation_id)
 
             if not conversation:
-                await context.send_error("Conversation not found", conversation_id=conversation_id)
+                await context.send_error(
+                    "Conversation not found",
+                    code="CONVERSATION_NOT_FOUND",
+                    conversation_id=conversation_id,
+                    extra=_client_message_id_extra(client_message_id),
+                )
                 return
 
             if not await _conversation_scope_is_active(
@@ -285,7 +298,9 @@ class SendMessageHandler(WebSocketMessageHandler):
             ):
                 await context.send_error(
                     "You do not have permission to access this conversation",
+                    code="CONVERSATION_ACCESS_DENIED",
                     conversation_id=conversation_id,
+                    extra=_client_message_id_extra(client_message_id),
                 )
                 return
 
@@ -293,7 +308,7 @@ class SendMessageHandler(WebSocketMessageHandler):
                 context,
                 conversation_id=conversation_id,
                 project_id=project_id,
-                message_id=message_id,
+                message_id=client_message_id,
                 execution_payload=client_execution_payload,
             )
             if admission is None:
@@ -303,9 +318,9 @@ class SendMessageHandler(WebSocketMessageHandler):
             await context.connection_manager.subscribe(context.session_id, conversation_id)
 
             # Send acknowledgment
-            ack_fields = {"conversation_id": conversation_id}
-            if message_id is not None:
-                ack_fields["message_id"] = message_id
+            ack_fields: dict[str, Any] = {"conversation_id": conversation_id}
+            if client_message_id is not None:
+                ack_fields["message_id"] = client_message_id
                 assert admission.turn is not None
                 ack_fields.update(
                     {
@@ -332,7 +347,7 @@ class SendMessageHandler(WebSocketMessageHandler):
                         image_attachments=image_attachments,
                         agent_id=agent_id,
                         mentions=mentions,
-                        client_message_id=message_id,
+                        client_message_id=client_message_id,
                         client_payload_hash=admission.payload_hash,
                         execution_message_id=(
                             admission.turn.execution_message_id
@@ -349,7 +364,11 @@ class SendMessageHandler(WebSocketMessageHandler):
 
         except Exception as e:
             logger.error(f"[WS] Error handling send_message: {e}", exc_info=True)
-            await context.send_error(str(e), conversation_id=conversation_id)
+            await context.send_error(
+                str(e),
+                conversation_id=conversation_id,
+                extra=_client_message_id_extra(client_message_id),
+            )
 
 
 class StopSessionHandler(WebSocketMessageHandler):
@@ -555,6 +574,7 @@ async def _send_pending_hitl_error(
     context: MessageContext,
     *,
     conversation_id: str,
+    message_id: str | None,
     pending_hitl: list[Any],
 ) -> None:
     from src.infrastructure.agent.hitl.utils import resolve_trusted_hitl_type
@@ -568,6 +588,7 @@ async def _send_pending_hitl_error(
         code="HITL_PENDING",
         conversation_id=conversation_id,
         extra={
+            **({"message_id": message_id} if message_id is not None else {}),
             "pending_requests": [
                 {
                     "request_id": request.id,
@@ -576,7 +597,7 @@ async def _send_pending_hitl_error(
                     "question": request.question,
                 }
                 for request in pending_hitl
-            ]
+            ],
         },
     )
 
@@ -642,6 +663,7 @@ async def _admit_client_turn(
             await _send_pending_hitl_error(
                 context,
                 conversation_id=conversation_id,
+                message_id=message_id,
                 pending_hitl=pending_hitl,
             )
             return None

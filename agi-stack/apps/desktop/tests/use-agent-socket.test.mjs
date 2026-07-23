@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
-import { test } from 'node:test';
+import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+import { test } from "node:test";
 
 const require = createRequire(import.meta.url);
 const {
@@ -20,22 +20,31 @@ const {
   transitionAgentSocketConversationSelection,
   socketEventKey,
   socketEventsSince,
-} = require('/tmp/agistack-desktop-test-dist/src/hooks/useAgentSocket.js');
+} = require("/tmp/agistack-desktop-test-dist/src/hooks/useAgentSocket.js");
 
-test('only an authenticated cloud socket may retain a turn for reconnect', () => {
-  assert.equal(canQueuePendingAgentRunMessage('cloud', true, 'ms_sk_session'), true);
-  assert.equal(canQueuePendingAgentRunMessage('cloud', false, 'ms_sk_session'), false);
-  assert.equal(canQueuePendingAgentRunMessage('cloud', true, ''), false);
-  assert.equal(canQueuePendingAgentRunMessage('local', true, 'local-session'), false);
+test("only an authenticated cloud socket may retain a turn for reconnect", () => {
+  assert.equal(
+    canQueuePendingAgentRunMessage("cloud", true, "ms_sk_session"),
+    true,
+  );
+  assert.equal(
+    canQueuePendingAgentRunMessage("cloud", false, "ms_sk_session"),
+    false,
+  );
+  assert.equal(canQueuePendingAgentRunMessage("cloud", true, ""), false);
+  assert.equal(
+    canQueuePendingAgentRunMessage("local", true, "local-session"),
+    false,
+  );
 });
 
-test('cloud agent turns wait in a bounded deduplicated queue until the socket opens', () => {
+test("cloud agent turns wait in a bounded deduplicated queue until the socket opens", () => {
   const queue = createPendingAgentMessageQueue();
   const message = {
-    conversationId: 'conversation-1',
-    projectId: 'project-1',
-    message: 'Prepare the plan',
-    messageId: 'message-1',
+    conversationId: "conversation-1",
+    projectId: "project-1",
+    message: "Prepare the plan",
+    messageId: "message-1",
   };
 
   assert.equal(enqueuePendingAgentRunMessage(queue, message), true);
@@ -52,46 +61,50 @@ test('cloud agent turns wait in a bounded deduplicated queue until the socket op
   );
   assert.deepEqual(sent, [
     {
-      type: 'send_message',
-      conversation_id: 'conversation-1',
-      project_id: 'project-1',
-      message: 'Prepare the plan',
-      message_id: 'message-1',
+      type: "send_message",
+      conversation_id: "conversation-1",
+      project_id: "project-1",
+      message: "Prepare the plan",
+      message_id: "message-1",
     },
   ]);
   assert.equal(queue.size, 1);
   assert.equal(
     confirmPendingAgentRunMessageReceipt(queue, {
-      type: 'ack',
-      action: 'send_message',
-      conversation_id: 'conversation-1',
-      message_id: 'message-1',
+      type: "ack",
+      action: "send_message",
+      outcome: "accepted",
+      conversation_id: "conversation-1",
+      message_id: "message-1",
     }),
     true,
   );
   assert.equal(queue.size, 0);
 });
 
-test('failed socket flush preserves pending cloud turns for the next reconnect', () => {
+test("failed socket flush preserves pending cloud turns for the next reconnect", () => {
   const queue = createPendingAgentMessageQueue();
   enqueuePendingAgentRunMessage(queue, {
-    conversationId: 'conversation-1',
-    projectId: 'project-1',
-    message: 'Prepare the plan',
-    messageId: 'message-1',
+    conversationId: "conversation-1",
+    projectId: "project-1",
+    message: "Prepare the plan",
+    messageId: "message-1",
   });
   enqueuePendingAgentRunMessage(queue, {
-    conversationId: 'conversation-2',
-    projectId: 'project-1',
-    message: 'Review the result',
-    messageId: 'message-2',
+    conversationId: "conversation-2",
+    projectId: "project-1",
+    message: "Review the result",
+    messageId: "message-2",
   });
 
-  assert.equal(flushPendingAgentRunMessages(queue, () => false), 0);
+  assert.equal(
+    flushPendingAgentRunMessages(queue, () => false),
+    0,
+  );
   assert.equal(queue.size, 2);
 });
 
-test('a scope transition defers the first turn even while the previous socket is open', () => {
+test("a scope transition defers the first turn even while the previous socket is open", () => {
   const queue = createPendingAgentMessageQueue();
   const sent = [];
 
@@ -99,10 +112,10 @@ test('a scope transition defers the first turn even while the previous socket is
     deliverAgentRunMessage(
       queue,
       {
-        conversationId: 'conversation-unbound',
-        projectId: 'project-1',
-        message: 'Start the unbound conversation',
-        messageId: 'message-unbound-1',
+        conversationId: "conversation-unbound",
+        projectId: "project-1",
+        message: "Start the unbound conversation",
+        messageId: "message-unbound-1",
         deferUntilNextConnection: true,
       },
       (payload) => {
@@ -125,33 +138,33 @@ test('a scope transition defers the first turn even while the previous socket is
   );
   assert.deepEqual(sent, [
     {
-      type: 'send_message',
-      conversation_id: 'conversation-unbound',
-      project_id: 'project-1',
-      message: 'Start the unbound conversation',
-      message_id: 'message-unbound-1',
+      type: "send_message",
+      conversation_id: "conversation-unbound",
+      project_id: "project-1",
+      message: "Start the unbound conversation",
+      message_id: "message-unbound-1",
     },
   ]);
   assert.equal(queue.size, 1);
   assert.equal(
     confirmPendingAgentRunMessageReceipt(queue, {
-      type: 'user_message',
-      conversation_id: 'conversation-unbound',
-      data: { message_id: 'message-unbound-1' },
+      type: "user_message",
+      conversation_id: "conversation-unbound",
+      data: { message_id: "message-unbound-1" },
     }),
     true,
   );
   assert.equal(queue.size, 0);
 });
 
-test('an open-socket send remains in the outbox until receipt and replays after disconnect', () => {
+test("an open-socket send remains in the outbox until receipt and replays after disconnect", () => {
   const queue = createPendingAgentMessageQueue();
   const sent = [];
   const message = {
-    conversationId: 'conversation-reconnect',
-    projectId: 'project-1',
-    message: 'Keep this turn durable',
-    messageId: 'message-reconnect-1',
+    conversationId: "conversation-reconnect",
+    projectId: "project-1",
+    message: "Keep this turn durable",
+    messageId: "message-reconnect-1",
   };
 
   assert.equal(
@@ -181,82 +194,154 @@ test('an open-socket send remains in the outbox until receipt and replays after 
   assert.equal(queue.size, 1);
   assert.equal(
     confirmPendingAgentRunMessageReceipt(queue, {
-      type: 'ack',
-      action: 'send_message',
-      conversation_id: 'conversation-reconnect',
-      message_id: 'message-reconnect-1',
+      type: "ack",
+      action: "send_message",
+      outcome: "accepted",
+      conversation_id: "conversation-reconnect",
+      message_id: "message-reconnect-1",
     }),
     true,
   );
   assert.equal(queue.size, 0);
 });
 
-test('pending cloud turns survive workspace activation within the same project', () => {
+test("a permanent server error with the client message id removes the stale outbox turn", () => {
+  const queue = createPendingAgentMessageQueue();
+  enqueuePendingAgentRunMessage(queue, {
+    conversationId: "conversation-rejected",
+    projectId: "project-1",
+    message: "Blocked while HITL is pending",
+    messageId: "message-rejected-1",
+  });
+
+  assert.equal(
+    confirmPendingAgentRunMessageReceipt(queue, {
+      type: "error",
+      conversation_id: "conversation-rejected",
+      data: {
+        code: "HITL_PENDING",
+        message_id: "message-rejected-1",
+      },
+    }),
+    true,
+  );
+  assert.equal(queue.size, 0);
+});
+
+test("a transient server error with the client message id stays queued for reconnect", () => {
+  const queue = createPendingAgentMessageQueue();
+  enqueuePendingAgentRunMessage(queue, {
+    conversationId: "conversation-retry",
+    projectId: "project-1",
+    message: "Retry after a temporary server failure",
+    messageId: "message-retry-1",
+  });
+
+  assert.equal(
+    confirmPendingAgentRunMessageReceipt(queue, {
+      type: "error",
+      conversation_id: "conversation-retry",
+      data: {
+        message: "Temporary database failure",
+        message_id: "message-retry-1",
+      },
+    }),
+    false,
+  );
+  assert.equal(queue.size, 1);
+});
+
+test("an unrelated acknowledgment cannot clear a pending agent turn", () => {
+  const queue = createPendingAgentMessageQueue();
+  enqueuePendingAgentRunMessage(queue, {
+    conversationId: "conversation-pending",
+    projectId: "project-1",
+    message: "Keep this message pending",
+    messageId: "message-pending-1",
+  });
+
+  assert.equal(
+    confirmPendingAgentRunMessageReceipt(queue, {
+      type: "ack",
+      action: "subscribe",
+      outcome: "accepted",
+      conversation_id: "conversation-pending",
+      message_id: "message-pending-1",
+    }),
+    false,
+  );
+  assert.equal(queue.size, 1);
+});
+
+test("pending cloud turns survive workspace activation within the same project", () => {
   const baseConfig = {
-    apiBaseUrl: 'https://cloud.memstack.example',
-    apiKey: 'cloud-session',
-    localApiToken: '',
-    tenantId: 'tenant-1',
-    projectId: 'project-1',
-    workspaceId: 'workspace-before-create',
-    mode: 'cloud',
-    workspaceRoot: '',
+    apiBaseUrl: "https://cloud.memstack.example",
+    apiKey: "cloud-session",
+    localApiToken: "",
+    tenantId: "tenant-1",
+    projectId: "project-1",
+    workspaceId: "workspace-before-create",
+    mode: "cloud",
+    workspaceRoot: "",
   };
 
   assert.equal(
     pendingAgentRunQueueScopeKey(baseConfig, 7),
     pendingAgentRunQueueScopeKey(
-      { ...baseConfig, workspaceId: 'workspace-created-for-session' },
+      { ...baseConfig, workspaceId: "workspace-created-for-session" },
       7,
     ),
   );
 });
 
-test('pending cloud turns reset when authenticated project authority changes', () => {
+test("pending cloud turns reset when authenticated project authority changes", () => {
   const baseConfig = {
-    apiBaseUrl: 'https://cloud.memstack.example',
-    apiKey: 'cloud-session',
-    localApiToken: '',
-    tenantId: 'tenant-1',
-    projectId: 'project-1',
-    workspaceId: 'workspace-1',
-    mode: 'cloud',
-    workspaceRoot: '',
+    apiBaseUrl: "https://cloud.memstack.example",
+    apiKey: "cloud-session",
+    localApiToken: "",
+    tenantId: "tenant-1",
+    projectId: "project-1",
+    workspaceId: "workspace-1",
+    mode: "cloud",
+    workspaceRoot: "",
   };
   const currentKey = pendingAgentRunQueueScopeKey(baseConfig, 7);
 
   assert.notEqual(
     currentKey,
-    pendingAgentRunQueueScopeKey({ ...baseConfig, projectId: 'project-2' }, 7),
+    pendingAgentRunQueueScopeKey({ ...baseConfig, projectId: "project-2" }, 7),
   );
   assert.notEqual(
     currentKey,
-    pendingAgentRunQueueScopeKey({ ...baseConfig, apiKey: 'rotated-session' }, 7),
+    pendingAgentRunQueueScopeKey(
+      { ...baseConfig, apiKey: "rotated-session" },
+      7,
+    ),
   );
   assert.notEqual(currentKey, pendingAgentRunQueueScopeKey(baseConfig, 8));
 });
 
-test('queued cloud turns preserve Agent, skill, mention, attachment, and composer context routing', () => {
+test("queued cloud turns preserve Agent, skill, mention, attachment, and composer context routing", () => {
   const queue = createPendingAgentMessageQueue();
   enqueuePendingAgentRunMessage(queue, {
-    conversationId: 'conversation-1',
-    projectId: 'project-1',
-    message: '/review Review this change',
-    messageId: 'message-context-1',
-    agentId: 'definition-reviewer',
-    forcedSkillName: 'source-research',
-    mentions: ['agent-research'],
+    conversationId: "conversation-1",
+    projectId: "project-1",
+    message: "/review Review this change",
+    messageId: "message-context-1",
+    agentId: "definition-reviewer",
+    forcedSkillName: "source-research",
+    mentions: ["agent-research"],
     fileMetadata: [
       {
-        filename: 'evidence.txt',
-        sandbox_path: '/workspace/input/evidence.txt',
-        mime_type: 'text/plain',
+        filename: "evidence.txt",
+        sandbox_path: "/workspace/input/evidence.txt",
+        mime_type: "text/plain",
         size_bytes: 42,
       },
     ],
     appModelContext: {
       desktop_composer_context: {
-        resources: [{ kind: 'plugin', resource_id: 'github' }],
+        resources: [{ kind: "plugin", resource_id: "github" }],
       },
     },
   });
@@ -271,107 +356,126 @@ test('queued cloud turns preserve Agent, skill, mention, attachment, and compose
   );
   assert.deepEqual(sent, [
     {
-      type: 'send_message',
-      conversation_id: 'conversation-1',
-      project_id: 'project-1',
-      message: '/review Review this change',
-      message_id: 'message-context-1',
-      agent_id: 'definition-reviewer',
-      forced_skill_name: 'source-research',
-      mentions: ['agent-research'],
+      type: "send_message",
+      conversation_id: "conversation-1",
+      project_id: "project-1",
+      message: "/review Review this change",
+      message_id: "message-context-1",
+      agent_id: "definition-reviewer",
+      forced_skill_name: "source-research",
+      mentions: ["agent-research"],
       file_metadata: [
         {
-          filename: 'evidence.txt',
-          sandbox_path: '/workspace/input/evidence.txt',
-          mime_type: 'text/plain',
+          filename: "evidence.txt",
+          sandbox_path: "/workspace/input/evidence.txt",
+          mime_type: "text/plain",
           size_bytes: 42,
         },
       ],
       app_model_context: {
         desktop_composer_context: {
-          resources: [{ kind: 'plugin', resource_id: 'github' }],
+          resources: [{ kind: "plugin", resource_id: "github" }],
         },
       },
     },
   ]);
 });
 
-test('buildHitlSocketMessage preserves the backend WebSocket contract', () => {
+test("buildHitlSocketMessage preserves the backend WebSocket contract", () => {
   assert.deepEqual(
     buildHitlSocketMessage({
-      requestId: 'clarification-1',
-      hitlType: 'clarification',
-      responseData: { answer: 'Use the indexed repository.' },
+      requestId: "clarification-1",
+      hitlType: "clarification",
+      responseData: { answer: "Use the indexed repository." },
     }),
     {
-      type: 'clarification_respond',
-      request_id: 'clarification-1',
-      answer: 'Use the indexed repository.',
-    }
+      type: "clarification_respond",
+      request_id: "clarification-1",
+      answer: "Use the indexed repository.",
+    },
   );
   assert.deepEqual(
     buildHitlSocketMessage({
-      requestId: 'permission-1',
-      hitlType: 'permission',
+      requestId: "permission-1",
+      hitlType: "permission",
       responseData: { granted: false },
     }),
     {
-      type: 'permission_respond',
-      request_id: 'permission-1',
+      type: "permission_respond",
+      request_id: "permission-1",
       granted: false,
-    }
+    },
   );
 });
 
-test('eventCursor accepts Python, server Rust, and desktop Rust cursor fields', () => {
+test("eventCursor accepts Python, server Rust, and desktop Rust cursor fields", () => {
   assert.deepEqual(
-    eventCursor({ conversation_id: 'conversation-1', event_time_us: 41, event_counter: 2 }),
-    { conversationId: 'conversation-1', timeUs: 41, counter: 2 }
+    eventCursor({
+      conversation_id: "conversation-1",
+      event_time_us: 41,
+      event_counter: 2,
+    }),
+    { conversationId: "conversation-1", timeUs: 41, counter: 2 },
   );
-  assert.deepEqual(eventCursor({ conversation_id: 'conversation-2', time_us: 82, counter: 5 }), {
-    conversationId: 'conversation-2',
-    timeUs: 82,
-    counter: 5,
-  });
   assert.deepEqual(
-    eventCursor({ conversation_id: 'conversation-3', eventTimeUs: 120, eventCounter: 9 }),
-    { conversationId: 'conversation-3', timeUs: 120, counter: 9 }
+    eventCursor({ conversation_id: "conversation-2", time_us: 82, counter: 5 }),
+    {
+      conversationId: "conversation-2",
+      timeUs: 82,
+      counter: 5,
+    },
+  );
+  assert.deepEqual(
+    eventCursor({
+      conversation_id: "conversation-3",
+      eventTimeUs: 120,
+      eventCounter: 9,
+    }),
+    { conversationId: "conversation-3", timeUs: 120, counter: 9 },
   );
 });
 
-test('socketEventKey and reconnectDelay support replay dedupe and bounded backoff', () => {
-  assert.equal(socketEventKey({ event_id: '10-0' }), 'event:10-0');
+test("socketEventKey and reconnectDelay support replay dedupe and bounded backoff", () => {
+  assert.equal(socketEventKey({ event_id: "10-0" }), "event:10-0");
   assert.equal(
-    socketEventKey({ conversation_id: 'c1', event_time_us: 41, event_counter: 2 }),
-    'cursor:c1:41:2'
+    socketEventKey({
+      conversation_id: "c1",
+      event_time_us: 41,
+      event_counter: 2,
+    }),
+    "cursor:c1:41:2",
   );
   assert.equal(reconnectDelay(0), 500);
   assert.equal(reconnectDelay(8), 15_000);
 });
 
-test('socketEventsSince returns every coalesced event once in arrival order', () => {
-  const oldest = { event_id: 'event-1' };
-  const middle = { event_id: 'event-2' };
-  const newest = { event_id: 'event-3' };
+test("socketEventsSince returns every coalesced event once in arrival order", () => {
+  const oldest = { event_id: "event-1" };
+  const middle = { event_id: "event-2" };
+  const newest = { event_id: "event-3" };
   const events = [newest, middle, oldest];
 
   assert.deepEqual(socketEventsSince(events, null), [oldest, middle, newest]);
   assert.deepEqual(socketEventsSince(events, oldest), [middle, newest]);
   assert.deepEqual(socketEventsSince(events, newest), []);
-  assert.deepEqual(socketEventsSince(events, { event_id: 'evicted' }), [oldest, middle, newest]);
+  assert.deepEqual(socketEventsSince(events, { event_id: "evicted" }), [
+    oldest,
+    middle,
+    newest,
+  ]);
   assert.deepEqual(socketEventsSince([], newest), []);
 });
 
-test('workspace context changes clear every replay and subscription cursor', () => {
+test("workspace context changes clear every replay and subscription cursor", () => {
   const state = createAgentSocketContextState();
-  state.conversationCursors.set('conversation-1', {
-    conversationId: 'conversation-1',
+  state.conversationCursors.set("conversation-1", {
+    conversationId: "conversation-1",
     timeUs: 41,
     counter: 2,
   });
-  state.subscribedConversations.add('conversation-1');
-  state.workspaceEventId = 'workspace-event-9';
-  state.seenEventKeys.add('event:workspace-event-9');
+  state.subscribedConversations.add("conversation-1");
+  state.workspaceEventId = "workspace-event-9";
+  state.seenEventKeys.add("event:workspace-event-9");
 
   resetAgentSocketContextState(state);
 
@@ -381,31 +485,34 @@ test('workspace context changes clear every replay and subscription cursor', () 
   assert.equal(state.seenEventKeys.size, 0);
 });
 
-test('active conversation transition replaces stale subscriptions without clearing replay cursors', () => {
+test("active conversation transition replaces stale subscriptions without clearing replay cursors", () => {
   const state = createAgentSocketContextState();
-  state.subscribedConversations.add('conversation-old');
-  state.conversationCursors.set('conversation-new', {
-    conversationId: 'conversation-new',
+  state.subscribedConversations.add("conversation-old");
+  state.conversationCursors.set("conversation-new", {
+    conversationId: "conversation-new",
     timeUs: 82,
     counter: 5,
   });
 
-  const selected = transitionAgentSocketConversationSelection(state, ' conversation-new ');
+  const selected = transitionAgentSocketConversationSelection(
+    state,
+    " conversation-new ",
+  );
 
   assert.deepEqual(selected, {
-    unsubscribeConversationIds: ['conversation-old'],
-    subscribeConversationId: 'conversation-new',
+    unsubscribeConversationIds: ["conversation-old"],
+    subscribeConversationId: "conversation-new",
   });
-  assert.deepEqual([...state.subscribedConversations], ['conversation-new']);
-  assert.deepEqual(state.conversationCursors.get('conversation-new'), {
-    conversationId: 'conversation-new',
+  assert.deepEqual([...state.subscribedConversations], ["conversation-new"]);
+  assert.deepEqual(state.conversationCursors.get("conversation-new"), {
+    conversationId: "conversation-new",
     timeUs: 82,
     counter: 5,
   });
   assert.deepEqual(conversationSubscriptionMessages(state), [
     {
-      type: 'subscribe',
-      conversation_id: 'conversation-new',
+      type: "subscribe",
+      conversation_id: "conversation-new",
       from_time_us: 82,
       from_counter: 6,
     },
@@ -413,7 +520,7 @@ test('active conversation transition replaces stale subscriptions without cleari
 
   const cleared = transitionAgentSocketConversationSelection(state, null);
   assert.deepEqual(cleared, {
-    unsubscribeConversationIds: ['conversation-new'],
+    unsubscribeConversationIds: ["conversation-new"],
     subscribeConversationId: null,
   });
   assert.equal(state.subscribedConversations.size, 0);

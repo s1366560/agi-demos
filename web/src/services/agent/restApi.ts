@@ -62,6 +62,9 @@ export const restApi = {
     if (options?.groupByWorkspace) {
       params.group_by_workspace = true;
     }
+    if (options?.unboundOnly) {
+      params.unbound_only = true;
+    }
     return await api.get<PaginatedConversationsResponse>('/agent/conversations', {
       params,
       ...(signal ? { signal } : {}),

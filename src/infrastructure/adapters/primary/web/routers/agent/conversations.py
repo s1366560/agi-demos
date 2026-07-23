@@ -9,10 +9,13 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import String, and_, case, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql import ColumnElement, Select, Subquery
+from sqlalchemy.sql.compiler import SQLCompiler
+from sqlalchemy.sql.functions import FunctionElement
 
 from src.application.constants.error_ids import AGENT_CONVERSATION_CREATE_FAILED
 from src.application.services.conversation_events import publish_conversation_created
@@ -61,6 +64,75 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 CONVERSATION_LIST_DEFAULT_LIMIT = 10
 WORKSPACE_GROUP_EXPANSION_HARD_LIMIT = 25
+
+
+class _LegacyWorkspaceId(FunctionElement[str]):
+    type = String()
+    inherit_cache = True
+
+
+class _MetadataWorkspaceId(FunctionElement[str]):
+    type = String()
+    inherit_cache = True
+
+
+@compiles(_MetadataWorkspaceId, "postgresql")
+def _compile_metadata_workspace_id_postgresql(  # pyright: ignore[reportUnusedFunction]
+    element: _MetadataWorkspaceId,
+    compiler: SQLCompiler,
+    **_kwargs: object,
+) -> str:
+    metadata = next(iter(element.clauses))
+    compiled_metadata = compiler.process(metadata)
+    return (
+        "CASE "
+        f"WHEN json_typeof({compiled_metadata} -> 'workspace_id') = 'string' "
+        f"THEN NULLIF(TRIM({compiled_metadata} ->> 'workspace_id'), '') "
+        "ELSE NULL END"
+    )
+
+
+@compiles(_MetadataWorkspaceId, "sqlite")
+def _compile_metadata_workspace_id_sqlite(  # pyright: ignore[reportUnusedFunction]
+    element: _MetadataWorkspaceId,
+    compiler: SQLCompiler,
+    **_kwargs: object,
+) -> str:
+    metadata = next(iter(element.clauses))
+    compiled_metadata = compiler.process(metadata)
+    return (
+        "CASE "
+        f"WHEN json_type({compiled_metadata}, '$.workspace_id') = 'text' "
+        f"THEN NULLIF(TRIM(json_extract({compiled_metadata}, '$.workspace_id')), '') "
+        "ELSE NULL END"
+    )
+
+
+@compiles(_LegacyWorkspaceId, "postgresql")
+def _compile_legacy_workspace_id_postgresql(  # pyright: ignore[reportUnusedFunction]
+    element: _LegacyWorkspaceId,
+    compiler: SQLCompiler,
+    **_kwargs: object,
+) -> str:
+    conversation_id = next(iter(element.clauses))
+    compiled_id = compiler.process(conversation_id)
+    return f"NULLIF(TRIM(SPLIT_PART({compiled_id}, ':', 2)), '')"
+
+
+@compiles(_LegacyWorkspaceId, "sqlite")
+def _compile_legacy_workspace_id_sqlite(  # pyright: ignore[reportUnusedFunction]
+    element: _LegacyWorkspaceId,
+    compiler: SQLCompiler,
+    **_kwargs: object,
+) -> str:
+    conversation_id = next(iter(element.clauses))
+    compiled_id = compiler.process(conversation_id)
+    remainder = f"SUBSTR({compiled_id}, INSTR({compiled_id}, ':') + 1)"
+    segment_length = (
+        f"CASE INSTR({remainder}, ':') "
+        f"WHEN 0 THEN LENGTH({remainder}) ELSE INSTR({remainder}, ':') - 1 END"
+    )
+    return f"NULLIF(TRIM(SUBSTR({remainder}, 1, {segment_length})), '')"
 
 
 def _workspace_group_expansion_limit(page_limit: int) -> int:
@@ -127,14 +199,46 @@ def _ordered_conversation_query() -> Select[tuple[ConversationModel]]:
 
 
 def _workspace_link_filter(workspace_ids: set[str]) -> ColumnElement[bool]:
-    conditions = [
-        ConversationModel.workspace_id.in_(workspace_ids),
-        ConversationModel.meta["workspace_id"].as_string().in_(workspace_ids),
-    ]
-    conditions.extend(
-        ConversationModel.id.like(f"workspace-%:{workspace_id}:%") for workspace_id in workspace_ids
+    return _effective_workspace_id_expression().in_(workspace_ids)
+
+
+def _effective_workspace_id_expression() -> ColumnElement[str | None]:
+    persisted_workspace_id = func.nullif(func.trim(ConversationModel.workspace_id), "")
+    metadata_workspace_id = _MetadataWorkspaceId(ConversationModel.meta)
+    legacy_workspace_id = case(
+        (
+            ConversationModel.id.like("workspace-%:%"),
+            _LegacyWorkspaceId(ConversationModel.id),
+        ),
+        else_=None,
     )
-    return or_(*conditions)
+    return cast(
+        "ColumnElement[str | None]",
+        func.coalesce(
+            persisted_workspace_id,
+            metadata_workspace_id,
+            legacy_workspace_id,
+        ),
+    )
+
+
+def _unbound_workspace_filter() -> ColumnElement[bool]:
+    return _effective_workspace_id_expression().is_(None)
+
+
+def _conversation_list_filters(
+    workspace_id: str | None,
+    *,
+    unbound_only: bool,
+) -> tuple[str | None, bool]:
+    requested_workspace_id = workspace_id.strip() if workspace_id else None
+    requested_unbound_only = unbound_only is True
+    if requested_workspace_id and requested_unbound_only:
+        raise HTTPException(
+            status_code=422,
+            detail=_("Workspace and unbound filters cannot be combined"),
+        )
+    return requested_workspace_id, requested_unbound_only
 
 
 async def _ensure_project_access(
@@ -416,6 +520,55 @@ async def _count_workspace_conversations(
     return result.scalar() or 0
 
 
+async def _list_unbound_conversations(
+    db: AsyncSession,
+    *,
+    project_id: str,
+    tenant_id: str,
+    user_id: str,
+    status: ConversationStatus | None,
+    limit: int,
+    offset: int,
+) -> list["Conversation"]:
+    query = _ordered_conversation_query().where(
+        ConversationModel.project_id == project_id,
+        ConversationModel.tenant_id == tenant_id,
+        ConversationModel.user_id == user_id,
+        _unbound_workspace_filter(),
+    )
+    if status is not None:
+        query = query.where(ConversationModel.status == status.value)
+    query = query.offset(offset).limit(limit)
+
+    result = await db.execute(refresh_select_statement(query))
+    repo = SqlConversationRepository(db)
+    return [d for c in result.scalars().all() if (d := repo._to_domain(c)) is not None]
+
+
+async def _count_unbound_conversations(
+    db: AsyncSession,
+    *,
+    project_id: str,
+    tenant_id: str,
+    user_id: str,
+    status: ConversationStatus | None,
+) -> int:
+    query = (
+        select(func.count())
+        .select_from(ConversationModel)
+        .where(
+            ConversationModel.project_id == project_id,
+            ConversationModel.tenant_id == tenant_id,
+            ConversationModel.user_id == user_id,
+            _unbound_workspace_filter(),
+        )
+    )
+    if status is not None:
+        query = query.where(ConversationModel.status == status.value)
+    result = await db.execute(refresh_select_statement(query))
+    return result.scalar() or 0
+
+
 def _merge_workspace_groups(
     base_conversations: list["Conversation"],
     workspace_conversations: list["Conversation"],
@@ -604,6 +757,10 @@ async def list_conversations(
     ),
     offset: int = Query(0, ge=0, description="Number of results to skip"),
     workspace_id: str | None = Query(None, description="Filter by workspace ID"),
+    unbound_only: bool = Query(
+        False,
+        description="Return only conversations without an effective workspace binding",
+    ),
     group_by_workspace: bool = Query(
         False,
         description="Expand paged workspace entries so each returned workspace group is complete",
@@ -632,9 +789,29 @@ async def list_conversations(
         )
 
         conv_status = ConversationStatus(status) if status else None
-        requested_workspace_id = workspace_id.strip() if workspace_id else None
+        requested_workspace_id, requested_unbound_only = _conversation_list_filters(
+            workspace_id,
+            unbound_only=unbound_only,
+        )
 
-        if requested_workspace_id:
+        if requested_unbound_only:
+            conversations = await _list_unbound_conversations(
+                db,
+                project_id=project_id,
+                tenant_id=tenant_id,
+                user_id=current_user.id,
+                status=conv_status,
+                limit=limit,
+                offset=offset,
+            )
+            total = await _count_unbound_conversations(
+                db,
+                project_id=project_id,
+                tenant_id=tenant_id,
+                user_id=current_user.id,
+                status=conv_status,
+            )
+        elif requested_workspace_id:
             await _ensure_workspace_access(
                 db,
                 current_user=current_user,

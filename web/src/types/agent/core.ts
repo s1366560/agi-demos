@@ -153,6 +153,7 @@ export interface Conversation {
 
 export interface ListConversationsRequestOptions {
   groupByWorkspace?: boolean | undefined;
+  unboundOnly?: boolean | undefined;
   workspaceId?: string | null | undefined;
 }
 

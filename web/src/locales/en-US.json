@@ -7314,6 +7314,7 @@
       "online": "Online",
       "aiAssistant": "AI Assistant",
       "noConversations": "No conversations yet",
+      "tasks": "Tasks",
       "conversationCount": "{{count}} conversations",
       "startNewChat": "Start a new chat to begin",
       "selectProject": "Select a project",

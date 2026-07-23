@@ -1209,6 +1209,12 @@ describe('TenantChatSidebar', () => {
       route: '/tenant/tenant-1/agent-workspace?projectId=project-1&workspaceId=ws-current',
     });
 
+    const tasksGroup = screen.getByRole('button', { name: /Tasks/ });
+    const workspaceGroup = screen.getByRole('button', { name: /Workspace Alpha/ });
+    expect(tasksGroup).toHaveTextContent('0');
+    expect(
+      tasksGroup.compareDocumentPosition(workspaceGroup) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
     expect(screen.getByRole('button', { name: /Workspace Alpha/ })).toHaveAttribute(
       'aria-expanded',
       'true'
@@ -1228,7 +1234,7 @@ describe('TenantChatSidebar', () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByText('node-b2768f4c07e7')).not.toBeInTheDocument();
 
-    const groupButton = screen.getByRole('button', { name: /Workspace Alpha/ });
+    const groupButton = workspaceGroup;
     expect(groupButton).not.toBeNull();
     fireEvent.click(groupButton as HTMLElement);
 
@@ -1238,6 +1244,47 @@ describe('TenantChatSidebar', () => {
     expect(screen.queryByText('Verifier')).not.toBeInTheDocument();
     expect(screen.queryByText('Supervisor')).not.toBeInTheDocument();
     expect(screen.queryByText('Chat')).not.toBeInTheDocument();
+  });
+
+  it('groups unbound task sessions before workspaces without carrying workspace routing', () => {
+    conversationsState.conversations = [
+      {
+        id: 'workspace-chat:ws-current:agent-1',
+        title: 'Workspace Chat - Verifier',
+        created_at: '2026-04-17T03:00:00.000Z',
+        status: 'active',
+        workspace_id: 'ws-current',
+      },
+      {
+        id: 'task-session',
+        title: 'Research session',
+        created_at: '2026-04-17T02:00:00.000Z',
+        status: 'idle',
+        workspace_id: null,
+      },
+    ];
+
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace?projectId=project-1&workspaceId=ws-current',
+    });
+
+    const tasksGroup = screen.getByRole('button', { name: /Tasks/ });
+    const workspaceGroup = screen.getByRole('button', { name: /Workspace Alpha/ });
+
+    expect(tasksGroup).toHaveAttribute('aria-expanded', 'true');
+    expect(
+      tasksGroup.compareDocumentPosition(workspaceGroup) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(screen.getByText('Research session')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Research session/ })).toHaveAttribute(
+      'href',
+      '/tenant/tenant-1/agent-workspace/task-session?projectId=project-1'
+    );
+
+    fireEvent.click(tasksGroup);
+
+    expect(tasksGroup).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Research session')).not.toBeInTheDocument();
   });
 
   it('does not re-clean collapsed workspace groups when group ids are unchanged', () => {
@@ -1298,7 +1345,7 @@ describe('TenantChatSidebar', () => {
     expect(screen.queryByText('Unknown workspace')).not.toBeInTheDocument();
   });
 
-  it('does not move later workspace conversations ahead of newer normal conversations', () => {
+  it('keeps unbound tasks before workspace groups across activity interleaving', () => {
     conversationsState.conversations = [
       {
         id: 'workspace-verifier:ws-current:node-b2768f4c07e7:agent-1:attempt-1',
@@ -1329,11 +1376,8 @@ describe('TenantChatSidebar', () => {
     });
 
     const sidebarText = container.textContent ?? '';
-    expect(sidebarText.indexOf('Fix Drone deploy pipeline')).toBeLessThan(
-      sidebarText.indexOf('Recent normal conversation')
-    );
     expect(sidebarText.indexOf('Recent normal conversation')).toBeLessThan(
-      sidebarText.lastIndexOf('Fix Drone deploy pipeline')
+      sidebarText.indexOf('Fix Drone deploy pipeline')
     );
   });
 

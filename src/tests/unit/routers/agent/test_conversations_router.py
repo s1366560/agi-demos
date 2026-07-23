@@ -374,6 +374,394 @@ async def test_list_conversations_caps_workspace_group_expansion(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_list_conversations_filters_unbound_before_pagination(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = datetime.now(UTC)
+    db_session.add_all(
+        [
+            DBConversation(
+                id=f"conversation-unbound-{index}",
+                project_id="project-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+                title=f"Unbound {index}",
+                status=ConversationStatus.ACTIVE.value,
+                agent_config={},
+                meta={},
+                message_count=0,
+                created_at=now - timedelta(minutes=index),
+                current_mode="build",
+                participant_agents=[],
+            )
+            for index in range(3)
+        ]
+    )
+    db_session.add_all(
+        [
+            DBConversation(
+                id="conversation-unbound-blank-metadata",
+                project_id="project-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+                title="Blank metadata is unbound",
+                status=ConversationStatus.ACTIVE.value,
+                agent_config={},
+                meta={"workspace_id": "   "},
+                message_count=0,
+                created_at=now - timedelta(minutes=3),
+                current_mode="build",
+                participant_agents=[],
+            ),
+            DBConversation(
+                id="workspace-orphan",
+                project_id="project-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+                title="Legacy prefix without delimiter is unbound",
+                status=ConversationStatus.ACTIVE.value,
+                agent_config={},
+                meta={},
+                message_count=0,
+                created_at=now - timedelta(minutes=4),
+                current_mode="build",
+                participant_agents=[],
+            ),
+            DBConversation(
+                id="conversation-bound-metadata",
+                project_id="project-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+                title="Metadata bound",
+                status=ConversationStatus.ACTIVE.value,
+                agent_config={},
+                meta={"workspace_id": "ws-metadata"},
+                message_count=0,
+                created_at=now + timedelta(minutes=1),
+                current_mode="build",
+                participant_agents=[],
+            ),
+            DBConversation(
+                id="workspace-worker:ws-legacy:task-1:agent-1:attempt-1",
+                project_id="project-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+                title="Legacy bound",
+                status=ConversationStatus.ACTIVE.value,
+                agent_config={},
+                meta={},
+                message_count=0,
+                created_at=now + timedelta(minutes=2),
+                current_mode="build",
+                participant_agents=[],
+            ),
+            DBConversation(
+                id="conversation-unbound-archived",
+                project_id="project-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+                title="Archived unbound",
+                status=ConversationStatus.ARCHIVED.value,
+                agent_config={},
+                meta={},
+                message_count=0,
+                created_at=now + timedelta(minutes=3),
+                current_mode="build",
+                participant_agents=[],
+            ),
+            DBConversation(
+                id="conversation-unbound-other-user",
+                project_id="project-1",
+                tenant_id="tenant-1",
+                user_id="user-2",
+                title="Another user's unbound conversation",
+                status=ConversationStatus.ACTIVE.value,
+                agent_config={},
+                meta={},
+                message_count=0,
+                created_at=now + timedelta(minutes=4),
+                current_mode="build",
+                participant_agents=[],
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    use_case = ListUseCase([], total=6)
+    container = SimpleNamespace(list_conversations_use_case=lambda _llm: use_case)
+    monkeypatch.setattr(
+        conversations_router, "get_container_with_db", lambda _request, _db: container
+    )
+    monkeypatch.setattr(
+        conversations_router, "_ensure_project_access", AsyncMock(return_value="tenant-1")
+    )
+
+    response = await conversations_router.list_conversations(
+        request=_request_with_container(container),
+        project_id="project-1",
+        status="active",
+        limit=2,
+        offset=1,
+        workspace_id=None,
+        unbound_only=True,
+        group_by_workspace=False,
+        current_user=SimpleNamespace(id="user-1"),
+        tenant_id="tenant-1",
+        db=db_session,
+    )
+
+    assert [item.id for item in response.items] == [
+        "conversation-unbound-1",
+        "conversation-unbound-2",
+    ]
+    assert {item.workspace_id for item in response.items} == {None}
+    assert response.total == 5
+    assert response.offset == 1
+    assert response.limit == 2
+    assert response.next_offset == 3
+    assert response.has_more is True
+
+    final_page = await conversations_router.list_conversations(
+        request=_request_with_container(container),
+        project_id="project-1",
+        status="active",
+        limit=2,
+        offset=3,
+        workspace_id=None,
+        unbound_only=True,
+        group_by_workspace=False,
+        current_user=SimpleNamespace(id="user-1"),
+        tenant_id="tenant-1",
+        db=db_session,
+    )
+
+    assert [item.id for item in final_page.items] == [
+        "conversation-unbound-blank-metadata",
+        "workspace-orphan",
+    ]
+    assert final_page.total == 5
+    assert final_page.next_offset == 5
+    assert final_page.has_more is False
+    conversations_router.create_llm_client.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_unbound_filter_ignores_non_string_metadata_and_uses_legacy_fallback(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = datetime.now(UTC)
+    malformed_metadata_values: list[object] = [
+        7,
+        {"nested": "ws-object"},
+        ["ws-array"],
+        True,
+    ]
+    db_session.add_all(
+        [
+            DBConversation(
+                id=f"conversation-unbound-malformed-{index}",
+                project_id="project-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+                title=f"Malformed metadata {index}",
+                status=ConversationStatus.ACTIVE.value,
+                agent_config={},
+                meta={"workspace_id": value},
+                message_count=0,
+                created_at=now - timedelta(minutes=index),
+                current_mode="build",
+                participant_agents=[],
+            )
+            for index, value in enumerate(malformed_metadata_values)
+        ]
+    )
+    db_session.add(
+        DBConversation(
+            id="workspace-worker:ws-legacy-malformed:task-1:agent-1:attempt-1",
+            project_id="project-1",
+            tenant_id="tenant-1",
+            user_id="user-1",
+            title="Legacy fallback with malformed metadata",
+            status=ConversationStatus.ACTIVE.value,
+            agent_config={},
+            meta={"workspace_id": {"not": "text"}},
+            message_count=0,
+            created_at=now + timedelta(minutes=1),
+            current_mode="build",
+            participant_agents=[],
+        )
+    )
+    await db_session.flush()
+
+    container = SimpleNamespace(list_conversations_use_case=lambda _llm: ListUseCase([], total=5))
+    monkeypatch.setattr(
+        conversations_router, "get_container_with_db", lambda _request, _db: container
+    )
+    monkeypatch.setattr(
+        conversations_router, "_ensure_project_access", AsyncMock(return_value="tenant-1")
+    )
+
+    response = await conversations_router.list_conversations(
+        request=_request_with_container(container),
+        project_id="project-1",
+        status="active",
+        limit=10,
+        offset=0,
+        workspace_id=None,
+        unbound_only=True,
+        group_by_workspace=False,
+        current_user=SimpleNamespace(id="user-1"),
+        tenant_id="tenant-1",
+        db=db_session,
+    )
+
+    assert {item.id for item in response.items} == {
+        "conversation-unbound-malformed-0",
+        "conversation-unbound-malformed-1",
+        "conversation-unbound-malformed-2",
+        "conversation-unbound-malformed-3",
+    }
+    assert {item.workspace_id for item in response.items} == {None}
+    assert response.total == 4
+
+    legacy_rows = await conversations_router._list_workspace_conversations(
+        db_session,
+        project_id="project-1",
+        tenant_id="tenant-1",
+        workspace_ids={"ws-legacy-malformed"},
+        status=ConversationStatus.ACTIVE,
+    )
+    assert [conversation.id for conversation in legacy_rows] == [
+        "workspace-worker:ws-legacy-malformed:task-1:agent-1:attempt-1"
+    ]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_list_conversations_rejects_combined_workspace_and_unbound_filters(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        conversations_router, "_ensure_project_access", AsyncMock(return_value="tenant-1")
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await conversations_router.list_conversations(
+            request=MagicMock(),
+            project_id="project-1",
+            status=None,
+            limit=10,
+            offset=0,
+            workspace_id="ws-1",
+            unbound_only=True,
+            group_by_workspace=False,
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-1",
+            db=db_session,
+        )
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == "Workspace and unbound filters cannot be combined"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_workspace_filter_uses_same_precedence_as_response_projection(
+    db_session: AsyncSession,
+) -> None:
+    workspace_column = WorkspaceModel(
+        id="ws-column",
+        tenant_id="tenant-1",
+        project_id="project-1",
+        name="Column workspace",
+        created_by="user-1",
+    )
+    now = datetime.now(UTC)
+    db_session.add(workspace_column)
+    db_session.add_all(
+        [
+            DBConversation(
+                id="conversation-column-wins",
+                project_id="project-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+                title="Column wins",
+                status=ConversationStatus.ACTIVE.value,
+                agent_config={},
+                meta={"workspace_id": "ws-metadata"},
+                message_count=0,
+                created_at=now,
+                current_mode="build",
+                participant_agents=[],
+                workspace_id="ws-column",
+            ),
+            DBConversation(
+                id="workspace-worker:ws-legacy:task-1:agent-1:attempt-1",
+                project_id="project-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+                title="Metadata wins",
+                status=ConversationStatus.ACTIVE.value,
+                agent_config={},
+                meta={"workspace_id": "ws-metadata"},
+                message_count=0,
+                created_at=now - timedelta(minutes=1),
+                current_mode="build",
+                participant_agents=[],
+            ),
+            DBConversation(
+                id="workspace-chat:ws-legacy",
+                project_id="project-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+                title="Legacy fallback",
+                status=ConversationStatus.ACTIVE.value,
+                agent_config={},
+                meta={},
+                message_count=0,
+                created_at=now - timedelta(minutes=2),
+                current_mode="build",
+                participant_agents=[],
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    column_rows = await conversations_router._list_workspace_conversations(
+        db_session,
+        project_id="project-1",
+        tenant_id="tenant-1",
+        workspace_ids={"ws-column"},
+        status=ConversationStatus.ACTIVE,
+    )
+    metadata_rows = await conversations_router._list_workspace_conversations(
+        db_session,
+        project_id="project-1",
+        tenant_id="tenant-1",
+        workspace_ids={"ws-metadata"},
+        status=ConversationStatus.ACTIVE,
+    )
+    legacy_rows = await conversations_router._list_workspace_conversations(
+        db_session,
+        project_id="project-1",
+        tenant_id="tenant-1",
+        workspace_ids={"ws-legacy"},
+        status=ConversationStatus.ACTIVE,
+    )
+
+    assert [conversation.id for conversation in column_rows] == ["conversation-column-wins"]
+    assert [conversation.id for conversation in metadata_rows] == [
+        "workspace-worker:ws-legacy:task-1:agent-1:attempt-1"
+    ]
+    assert [conversation.id for conversation in legacy_rows] == ["workspace-chat:ws-legacy"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_grouped_workspace_conversations_use_stable_activity_order(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,

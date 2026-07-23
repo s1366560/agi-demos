@@ -61,4 +61,27 @@ describe('agent restApi', () => {
       { params: { project_id: 'project-1' } }
     );
   });
+
+  it('requests conversations without workspace bindings explicitly', async () => {
+    mockHttpClient.get.mockResolvedValue({
+      items: [],
+      total: 0,
+      has_more: false,
+      offset: 0,
+      limit: 10,
+    });
+
+    await restApi.listConversations('project-1', undefined, 10, 0, undefined, {
+      unboundOnly: true,
+    });
+
+    expect(mockHttpClient.get).toHaveBeenCalledWith('/agent/conversations', {
+      params: {
+        project_id: 'project-1',
+        limit: 10,
+        offset: 0,
+        unbound_only: true,
+      },
+    });
+  });
 });
