@@ -4,6 +4,19 @@ export type PromptTemplateCategory = 'analysis' | 'code' | 'writing' | 'general'
 export type PromptTemplateCategoryFilter = PromptTemplateCategory | 'all';
 export type PromptTemplateSource = 'builtin' | 'custom';
 export type PromptTemplateSourceFilter = PromptTemplateSource | 'all';
+export type PromptTemplateDraftValidation =
+  | {
+      ok: true;
+      value: {
+        title: string;
+        content: string;
+        category: PromptTemplateCategory;
+      };
+    }
+  | {
+      ok: false;
+      errorKey: string;
+    };
 
 export type PromptTemplateListItem = {
   key: string;
@@ -212,4 +225,36 @@ export function promptTemplateErrorKey(status: number | undefined): string {
   if (status === 409) return 'chat.templates.conflict';
   if (status === 422) return 'chat.templates.validationFailed';
   return 'chat.templates.loadFailed';
+}
+
+export function validatePromptTemplateDraft(input: {
+  title: string;
+  content: string;
+  category: PromptTemplateCategory;
+}): PromptTemplateDraftValidation {
+  const title = input.title.trim();
+  if (!title) return { ok: false, errorKey: 'chat.templates.saveTitleRequired' };
+  if (!input.content.trim()) {
+    return { ok: false, errorKey: 'chat.templates.saveContentRequired' };
+  }
+  return {
+    ok: true,
+    value: {
+      title,
+      content: input.content,
+      category: input.category,
+    },
+  };
+}
+
+export function promptTemplatePreview(content: string): string {
+  return content.length > 200 ? `${content.slice(0, 200)}…` : content;
+}
+
+export function promptTemplateSaveErrorKey(status: number | undefined): string {
+  if (status === 401) return 'chat.templates.authenticationRequired';
+  if (status === 403) return 'chat.templates.permissionDenied';
+  if (status === 409) return 'chat.templates.conflict';
+  if (status === 422) return 'chat.templates.validationFailed';
+  return 'chat.templates.saveFailed';
 }

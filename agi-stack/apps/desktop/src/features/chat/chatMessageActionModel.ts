@@ -6,6 +6,7 @@ export type VisibleMessageActionAvailability = {
   edit: boolean;
   retry: boolean;
   retryDisabled: boolean;
+  saveTemplate: boolean;
 };
 
 export type VisibleMessageForRetry = {
@@ -34,6 +35,7 @@ export function messageActionsForVisibleMessage(
     edit: isUser,
     retry: isAgent,
     retryDisabled: isAgent && streaming,
+    saveTemplate: isAgent && !streaming,
   };
 }
 

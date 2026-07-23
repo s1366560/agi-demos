@@ -279,6 +279,12 @@ export type PromptTemplateRecord = {
   updated_at: string;
 };
 
+export type PromptTemplateCreateInput = {
+  title: string;
+  content: string;
+  category: string;
+};
+
 export type AgentInputFileMetadata = {
   filename: string;
   sandbox_path: string;

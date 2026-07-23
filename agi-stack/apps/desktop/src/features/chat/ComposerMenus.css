@@ -205,7 +205,8 @@
 }
 
 .prompt-template-dialog,
-.prompt-template-variable-dialog {
+.prompt-template-variable-dialog,
+.save-prompt-template-dialog {
   max-height: min(760px, calc(100vh - 48px));
   overflow: hidden;
   border: 1px solid #273644;
@@ -537,6 +538,40 @@
   justify-content: flex-end;
   gap: 8px;
   margin-top: 18px;
+}
+
+.save-prompt-template-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.save-prompt-template-form > label {
+  display: grid;
+  gap: 6px;
+  color: #9dafbf;
+  font-size: 10px;
+}
+
+.save-prompt-template-form > label > span {
+  color: #aebdca;
+  font-weight: 600;
+}
+
+.save-prompt-template-form [data-radix-themes-component='select-trigger'] {
+  width: 100%;
+}
+
+.save-prompt-template-form textarea {
+  color: #91a3b3;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.save-prompt-template-form > .prompt-template-field-error {
+  margin-top: -9px;
+  color: #e98598;
+  font-size: 9px;
 }
 
 @media (max-width: 720px) {

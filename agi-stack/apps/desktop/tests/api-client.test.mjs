@@ -3114,7 +3114,7 @@ test('updateAgentConversationConfig persists and clears a scoped model override'
   }
 });
 
-test('prompt template catalog and deletion preserve the authenticated tenant contract', async () => {
+test('prompt template catalog, creation, and deletion preserve the authenticated tenant contract', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
   const controller = new AbortController();
@@ -3139,9 +3139,24 @@ test('prompt template catalog and deletion preserve the authenticated tenant con
     created_at: '2026-07-24T00:00:00Z',
     updated_at: '2026-07-24T00:00:00Z',
   };
+  const createdTemplate = {
+    ...template,
+    id: 'template-created',
+    title: 'Saved answer',
+    content: 'Exact assistant answer',
+    category: 'analysis',
+    variables: [],
+    usage_count: 0,
+  };
   globalThis.fetch = async (input, init) => {
     calls.push({ input: String(input), init });
     if (init?.method === 'DELETE') return new Response(null, { status: 204 });
+    if (init?.method === 'POST') {
+      return new Response(JSON.stringify(createdTemplate), {
+        status: 201,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
     return new Response(JSON.stringify([template]), {
       status: 200,
       headers: { 'content-type': 'application/json' },
@@ -3161,6 +3176,18 @@ test('prompt template catalog and deletion preserve the authenticated tenant con
       await client.listPromptTemplates('tenant / one', controller.signal),
       [template],
     );
+    assert.deepEqual(
+      await client.createPromptTemplate(
+        'tenant / one',
+        {
+          title: 'Saved answer',
+          content: 'Exact assistant answer',
+          category: 'analysis',
+        },
+        controller.signal,
+      ),
+      createdTemplate,
+    );
     await client.deletePromptTemplate('template / one', controller.signal);
 
     assert.equal(
@@ -3171,10 +3198,21 @@ test('prompt template catalog and deletion preserve the authenticated tenant con
     assert.equal(calls[0].init.headers.get('Authorization'), 'Bearer cloud-session');
     assert.equal(
       calls[1].input,
+      'https://api.memstack.test/api/v1/agent/templates?tenant_id=tenant+%2F+one',
+    );
+    assert.equal(calls[1].init.method, 'POST');
+    assert.equal(calls[1].init.signal, controller.signal);
+    assert.deepEqual(JSON.parse(String(calls[1].init.body)), {
+      title: 'Saved answer',
+      content: 'Exact assistant answer',
+      category: 'analysis',
+    });
+    assert.equal(
+      calls[2].input,
       'https://api.memstack.test/api/v1/agent/templates/template%20%2F%20one',
     );
-    assert.equal(calls[1].init.method, 'DELETE');
-    assert.equal(calls[1].init.signal, controller.signal);
+    assert.equal(calls[2].init.method, 'DELETE');
+    assert.equal(calls[2].init.signal, controller.signal);
 
     for (const invalidTemplate of [
       { ...template, tenant_id: 'tenant-two' },
@@ -3193,6 +3231,24 @@ test('prompt template catalog and deletion preserve the authenticated tenant con
           error.message === 'Invalid prompt template catalog response',
       );
     }
+
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ ...createdTemplate, is_system: true }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' },
+      });
+    await assert.rejects(
+      () =>
+        client.createPromptTemplate('tenant / one', {
+          title: 'Saved answer',
+          content: 'Exact assistant answer',
+          category: 'analysis',
+        }),
+      (error) =>
+        error instanceof DesktopApiError &&
+        error.status === 502 &&
+        error.message === 'Invalid prompt template response',
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

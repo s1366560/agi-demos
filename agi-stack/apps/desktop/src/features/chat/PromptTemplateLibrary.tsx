@@ -31,6 +31,7 @@ type PromptTemplateLibraryProps = {
   tenantId: string;
   projectId: string;
   conversationId: string;
+  refreshToken?: number;
   disabled?: boolean;
   onInsert: (prompt: string) => void;
 };
@@ -55,6 +56,7 @@ export function PromptTemplateLibrary({
   tenantId,
   projectId,
   conversationId,
+  refreshToken = 0,
   disabled = false,
   onInsert,
 }: PromptTemplateLibraryProps) {
@@ -197,7 +199,7 @@ export function PromptTemplateLibrary({
       controller.abort();
       if (listRequestRef.current === controller) listRequestRef.current = null;
     };
-  }, [api, open, retryRevision, scopeKey, scopeReady, tenantId]);
+  }, [api, open, refreshToken, retryRevision, scopeKey, scopeReady, tenantId]);
 
   useEffect(
     () => () => {

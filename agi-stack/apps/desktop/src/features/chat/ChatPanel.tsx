@@ -62,6 +62,10 @@ import { ConversationSearch } from './ConversationSearch';
 import { ConversationExportMenu } from './ConversationExportMenu';
 import { PinnedMessages } from './PinnedMessages';
 import { PromptTemplateLibrary } from './PromptTemplateLibrary';
+import {
+  SavePromptTemplateDialog,
+  type SavePromptTemplateTarget,
+} from './SavePromptTemplateDialog';
 import { AgentTimeline, TIMELINE_RENDER_STEP } from './ChatTimeline';
 import {
   isImportantTimelineItem,
@@ -308,6 +312,9 @@ export const ChatPanel = memo(function ChatPanel({
   const [composerDraftRequest, setComposerDraftRequest] =
     useState<ComposerDraftRequest | null>(null);
   const [messageActionNotice, setMessageActionNotice] = useState<string | null>(null);
+  const [saveTemplateRequest, setSaveTemplateRequest] =
+    useState<SavePromptTemplateTarget | null>(null);
+  const [promptTemplateRefreshToken, setPromptTemplateRefreshToken] = useState(0);
   const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
   const [conversationSearchVisible, setConversationSearchVisible] = useState(false);
   const [conversationComparisonVisible, setConversationComparisonVisible] = useState(false);
@@ -372,6 +379,11 @@ export const ChatPanel = memo(function ChatPanel({
   const hasTimelineState = timelineState !== null;
   const messageActionConversationId =
     timelineConversationId || selectedConversationId || messages[0]?.workspace_id || '';
+  const messageActionConversation =
+    conversations.find((conversation) => conversation.id === messageActionConversationId) ?? null;
+  const messageActionScopeKey = `${messageActionConversation?.tenant_id ?? ''}:${
+    messageActionConversation?.project_id ?? ''
+  }:${messageActionConversationId}`;
   const conversationExportSnapshot = useMemo(
     () =>
       timelineState && messageActionConversationId
@@ -523,6 +535,7 @@ export const ChatPanel = memo(function ChatPanel({
   useEffect(() => {
     setComposerDraftRequest(null);
     setMessageActionNotice(null);
+    setSaveTemplateRequest(null);
     setConversationSearchVisible(false);
     setConversationComparisonVisible(false);
     setConversationComparisonPickerOpen(false);
@@ -531,7 +544,7 @@ export const ChatPanel = memo(function ChatPanel({
     setPinnedMessagesCollapsed(false);
     clearPinnedJumpTarget();
     clearRetryDispatch();
-  }, [clearPinnedJumpTarget, clearRetryDispatch, messageActionConversationId]);
+  }, [clearPinnedJumpTarget, clearRetryDispatch, messageActionScopeKey]);
 
   useEffect(() => {
     setPinnedMessageIds((current) => {
@@ -852,6 +865,49 @@ export const ChatPanel = memo(function ChatPanel({
     },
     [messageActionConversationId, retryVisibleMessage],
   );
+  const saveVisibleMessageAsTemplate = useCallback(
+    (message: VisibleMessageForRetry, returnFocus: HTMLElement) => {
+      if (
+        message.kind !== 'agent' ||
+        !message.content.trim() ||
+        message.conversationId !== messageActionConversationId ||
+        !messageActionConversation?.tenant_id ||
+        !messageActionConversation.project_id
+      ) {
+        return;
+      }
+      setMessageActionNotice(null);
+      setSaveTemplateRequest({
+        messageId: message.id,
+        tenantId: messageActionConversation.tenant_id,
+        projectId: messageActionConversation.project_id,
+        conversationId: messageActionConversation.id,
+        content: message.content,
+        returnFocus,
+      });
+    },
+    [messageActionConversation, messageActionConversationId],
+  );
+  const saveTimelineMessageAsTemplate = useCallback(
+    (item: AgentTimelineItem, returnFocus: HTMLElement) => {
+      const message = timelineVisibleMessage(item, messageActionConversationId);
+      if (message) saveVisibleMessageAsTemplate(message, returnFocus);
+    },
+    [messageActionConversationId, saveVisibleMessageAsTemplate],
+  );
+  const closeSaveTemplateDialog = useCallback(() => {
+    const returnFocus = saveTemplateRequest?.returnFocus ?? null;
+    setSaveTemplateRequest(null);
+    if (returnFocus) {
+      window.requestAnimationFrame(() => {
+        if (returnFocus.isConnected) returnFocus.focus();
+      });
+    }
+  }, [saveTemplateRequest]);
+  const completeSaveTemplate = useCallback(() => {
+    setPromptTemplateRefreshToken((current) => current + 1);
+    setMessageActionNotice(t('chat.templates.saved'));
+  }, [t]);
   const togglePinnedVisibleMessage = useCallback(
     (message: VisibleMessageForRetry) => {
       if (
@@ -1075,6 +1131,7 @@ export const ChatPanel = memo(function ChatPanel({
                 onReplyMessage={replyToTimelineMessage}
                 onEditMessage={editTimelineMessage}
                 onRetryMessage={retryTimelineMessage}
+                onSaveTemplateMessage={saveTimelineMessageAsTemplate}
                 pinnedMessageIds={pinnedMessageIds}
                 onPinMessage={togglePinnedTimelineMessage}
                 retryDisabled={disabled || sending || Boolean(retryingMessageId)}
@@ -1114,6 +1171,12 @@ export const ChatPanel = memo(function ChatPanel({
                   onPin={
                     visibleMessage.kind === 'agent'
                       ? () => togglePinnedVisibleMessage(visibleMessage)
+                      : undefined
+                  }
+                  onSaveTemplate={
+                    visibleMessage.kind === 'agent'
+                      ? (returnFocus) =>
+                          saveVisibleMessageAsTemplate(visibleMessage, returnFocus)
                       : undefined
                   }
                   retryDisabled={disabled || sending || Boolean(retryingMessageId)}
@@ -1193,12 +1256,13 @@ export const ChatPanel = memo(function ChatPanel({
         </div>
       ) : null}
       <ChatComposer
+        key={composerResetKey}
         api={api}
         conversations={conversations}
         selectedConversationId={selectedConversationId}
         activeConversationId={messageActionConversationId}
+        promptTemplateRefreshToken={promptTemplateRefreshToken}
         draftRequest={composerDraftRequest}
-        key={composerResetKey}
         composerVariant={composerVariant}
         initialInput={initialInput}
         sending={sending}
@@ -1235,6 +1299,14 @@ export const ChatPanel = memo(function ChatPanel({
         composeAheadEnabled={composeAheadEnabled}
         responseStreaming={responseStreaming}
       />
+      {saveTemplateRequest ? (
+        <SavePromptTemplateDialog
+          api={api}
+          target={saveTemplateRequest}
+          onClose={closeSaveTemplateDialog}
+          onSaved={completeSaveTemplate}
+        />
+      ) : null}
         </>
       )}
       {conversationComparisonVisible && comparisonClient && composeAheadConversation ? (
@@ -1284,6 +1356,7 @@ type ChatComposerProps = {
   conversations: readonly AgentConversation[];
   selectedConversationId?: string | null;
   activeConversationId: string;
+  promptTemplateRefreshToken: number;
   draftRequest: ComposerDraftRequest | null;
   composerVariant: ChatComposerVariant;
   initialInput?: string;
@@ -1331,6 +1404,7 @@ function ChatComposer({
   conversations,
   selectedConversationId,
   activeConversationId,
+  promptTemplateRefreshToken,
   draftRequest,
   composerVariant,
   initialInput = '',
@@ -1806,6 +1880,7 @@ function ChatComposer({
               tenantId={promptTemplateConversation?.tenant_id ?? ''}
               projectId={promptTemplateConversation?.project_id ?? ''}
               conversationId={promptTemplateConversation?.id ?? ''}
+              refreshToken={promptTemplateRefreshToken}
               disabled={disabled}
               onInsert={insertPromptTemplate}
             />
@@ -1835,6 +1910,7 @@ function ChatComposer({
             tenantId={promptTemplateConversation?.tenant_id ?? ''}
             projectId={promptTemplateConversation?.project_id ?? ''}
             conversationId={promptTemplateConversation?.id ?? ''}
+            refreshToken={promptTemplateRefreshToken}
             disabled={disabled}
             onInsert={insertPromptTemplate}
           />

@@ -76,6 +76,7 @@ import type {
   PluginConfigSchema,
   PaginatedConversationsResponse,
   PlanSnapshot,
+  PromptTemplateCreateInput,
   PromptTemplateRecord,
   PromptTemplateVariable,
   ProjectMyWorkResponse,
@@ -2069,6 +2070,41 @@ export class DesktopApiClient {
     return requirePromptTemplateCatalog(payload, requiredTenantId);
   }
 
+  async createPromptTemplate(
+    tenantId: string,
+    input: PromptTemplateCreateInput,
+    signal?: AbortSignal,
+  ): Promise<PromptTemplateRecord> {
+    const requiredTenantId = requireValue(tenantId, 'tenant id');
+    const request = {
+      title: requireValue(input.title, 'template title'),
+      content: requireValue(input.content, 'template content'),
+      category: requireValue(input.category, 'template category'),
+    };
+    const params = new URLSearchParams({ tenant_id: requiredTenantId });
+    const payload = await this.request<unknown>(
+      `/api/v1/agent/templates?${params.toString()}`,
+      {
+        method: 'POST',
+        body: request,
+        signal,
+      },
+    );
+    const template = normalizePromptTemplate(payload, requiredTenantId);
+    if (
+      !template ||
+      template.is_system ||
+      template.project_id !== null ||
+      template.title !== request.title ||
+      template.content !== request.content ||
+      template.category !== request.category ||
+      template.variables.length !== 0
+    ) {
+      throw invalidPromptTemplateResponse(payload);
+    }
+    return template;
+  }
+
   async deletePromptTemplate(templateId: string, signal?: AbortSignal): Promise<void> {
     await this.request<unknown>(
       `/api/v1/agent/templates/${encodeURIComponent(requireValue(templateId, 'template id'))}`,
@@ -2609,6 +2645,10 @@ function normalizePromptTemplateVariable(value: unknown): PromptTemplateVariable
 
 function invalidPromptTemplateCatalogResponse(payload: unknown): DesktopApiError {
   return new DesktopApiError('Invalid prompt template catalog response', 502, payload);
+}
+
+function invalidPromptTemplateResponse(payload: unknown): DesktopApiError {
+  return new DesktopApiError('Invalid prompt template response', 502, payload);
 }
 
 async function loadPagedIdentityCatalog<T extends { id: string }>(

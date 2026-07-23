@@ -6,15 +6,19 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const {
   filterPromptTemplates,
+  promptTemplatePreview,
   promptTemplateErrorKey,
   promptTemplateRequestMatches,
+  promptTemplateSaveErrorKey,
   promptTemplateVariableFields,
   resolvePromptTemplate,
+  validatePromptTemplateDraft,
 } = require('/tmp/agistack-desktop-test-dist/src/features/chat/promptTemplateModel.js');
 
 const readSource = (path) => readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8');
 
 const templateLibrarySource = readSource('features/chat/PromptTemplateLibrary.tsx');
+const saveDialogSource = readSource('features/chat/SavePromptTemplateDialog.tsx');
 const chatPanelSource = readSource('features/chat/ChatPanel.tsx');
 const catalogSource = readSource('features/chat/composerCatalogModel.ts');
 const chatStyles = readSource('features/chat/ComposerMenus.css');
@@ -191,10 +195,56 @@ test('template failures map protocol status to localized actionable states', () 
   assert.equal(promptTemplateErrorKey(undefined), 'chat.templates.loadFailed');
 });
 
+test('save-template drafts require a trimmed title and exact non-empty assistant content', () => {
+  assert.deepEqual(
+    validatePromptTemplateDraft({
+      title: '  Release answer  ',
+      content: 'Exact assistant answer\nwith details.',
+      category: 'analysis',
+    }),
+    {
+      ok: true,
+      value: {
+        title: 'Release answer',
+        content: 'Exact assistant answer\nwith details.',
+        category: 'analysis',
+      },
+    },
+  );
+  assert.deepEqual(
+    validatePromptTemplateDraft({
+      title: '   ',
+      content: 'Assistant answer',
+      category: 'general',
+    }),
+    { ok: false, errorKey: 'chat.templates.saveTitleRequired' },
+  );
+  assert.deepEqual(
+    validatePromptTemplateDraft({
+      title: 'Answer',
+      content: '   ',
+      category: 'general',
+    }),
+    { ok: false, errorKey: 'chat.templates.saveContentRequired' },
+  );
+});
+
+test('save-template preview and failure mapping match the Web-visible contract', () => {
+  assert.equal(promptTemplatePreview('x'.repeat(199)), 'x'.repeat(199));
+  assert.equal(promptTemplatePreview('x'.repeat(201)), `${'x'.repeat(200)}…`);
+  assert.equal(promptTemplateSaveErrorKey(401), 'chat.templates.authenticationRequired');
+  assert.equal(promptTemplateSaveErrorKey(403), 'chat.templates.permissionDenied');
+  assert.equal(promptTemplateSaveErrorKey(409), 'chat.templates.conflict');
+  assert.equal(promptTemplateSaveErrorKey(422), 'chat.templates.validationFailed');
+  assert.equal(promptTemplateSaveErrorKey(500), 'chat.templates.saveFailed');
+  assert.equal(promptTemplateSaveErrorKey(undefined), 'chat.templates.saveFailed');
+});
+
 test('Desktop template library preserves Web behavior and renderer security boundaries', () => {
   assert.match(chatPanelSource, /<PromptTemplateLibrary/);
   assert.match(templateLibrarySource, /new AbortController\(\)/);
   assert.match(templateLibrarySource, /requestGenerationRef/);
+  assert.match(templateLibrarySource, /refreshToken/);
   assert.match(templateLibrarySource, /listPromptTemplates/);
   assert.match(templateLibrarySource, /deletePromptTemplate/);
   assert.match(templateLibrarySource, /<Dialog\.Root/);
@@ -209,10 +259,28 @@ test('Desktop template library preserves Web behavior and renderer security boun
     /\[variable\.name\]: event\.currentTarget\.value/,
   );
   assert.match(catalogSource, /listPromptTemplates\?/);
+  assert.match(catalogSource, /createPromptTemplate\?/);
   assert.match(catalogSource, /deletePromptTemplate\?/);
   assert.match(chatStyles, /\.prompt-template-library/);
   assert.equal(i18nSource.match(/'chat\.templates\.title':/g)?.length, 2);
   assert.equal(i18nSource.match(/'chat\.templates\.useTemplate':/g)?.length, 2);
   assert.equal(i18nSource.match(/'chat\.templates\.deleteConfirmTitle':/g)?.length, 2);
   assert.doesNotMatch(templateLibrarySource, /ipcRenderer|window\.desktop|window\.electron/);
+});
+
+test('Desktop save-template dialog preserves exact content and isolates asynchronous writes', () => {
+  assert.match(saveDialogSource, /new AbortController\(\)/);
+  assert.match(saveDialogSource, /requestGenerationRef/);
+  assert.match(saveDialogSource, /promptTemplateRequestMatches\(/);
+  assert.match(saveDialogSource, /validatePromptTemplateDraft\(/);
+  assert.match(saveDialogSource, /promptTemplatePreview\(target\.content\)/);
+  assert.match(saveDialogSource, /createPromptTemplate/);
+  assert.match(saveDialogSource, /autoFocus/);
+  assert.match(saveDialogSource, /aria-live="polite"/);
+  assert.match(saveDialogSource, /role="alert"/);
+  assert.match(saveDialogSource, /const nextTitle = event\.currentTarget\.value/);
+  assert.doesNotMatch(saveDialogSource, /setTitle\(event\.currentTarget\.value\)/);
+  assert.doesNotMatch(saveDialogSource, /ipcRenderer|window\.desktop|window\.electron/);
+  assert.equal(i18nSource.match(/'chat\.templates\.saveAsTemplate':/g)?.length, 2);
+  assert.equal(i18nSource.match(/'chat\.templates\.saved':/g)?.length, 2);
 });

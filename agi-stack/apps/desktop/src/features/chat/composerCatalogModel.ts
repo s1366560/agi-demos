@@ -6,6 +6,7 @@ import type {
   ManagedSkill,
   ManagedSubAgent,
   PaginatedConversationsResponse,
+  PromptTemplateCreateInput,
   PromptTemplateRecord,
   WorkspaceAgentBinding,
 } from '../../types';
@@ -20,6 +21,11 @@ export type ComposerCatalogClient = {
     tenantId: string,
     signal?: AbortSignal,
   ) => Promise<PromptTemplateRecord[]>;
+  createPromptTemplate?: (
+    tenantId: string,
+    input: PromptTemplateCreateInput,
+    signal?: AbortSignal,
+  ) => Promise<PromptTemplateRecord>;
   deletePromptTemplate?: (templateId: string, signal?: AbortSignal) => Promise<void>;
   listConversations?: (
     projectId?: string,
@@ -77,6 +83,7 @@ export function unboundComposerCatalogClient(
 ): ComposerCatalogClient {
   const listManagedSubAgents = api.listManagedSubAgents?.bind(api);
   const listPromptTemplates = api.listPromptTemplates?.bind(api);
+  const createPromptTemplate = api.createPromptTemplate?.bind(api);
   const deletePromptTemplate = api.deletePromptTemplate?.bind(api);
   const listConversations = api.listConversations?.bind(api);
   const getConversationMessages = api.getConversationMessages?.bind(api);
@@ -88,6 +95,7 @@ export function unboundComposerCatalogClient(
     listManagedPlugins: (signal) => api.listManagedPlugins(signal),
     ...(listManagedSubAgents ? { listManagedSubAgents } : {}),
     ...(listPromptTemplates ? { listPromptTemplates } : {}),
+    ...(createPromptTemplate ? { createPromptTemplate } : {}),
     ...(deletePromptTemplate ? { deletePromptTemplate } : {}),
     ...(listConversations ? { listConversations } : {}),
     ...(getConversationMessages ? { getConversationMessages } : {}),

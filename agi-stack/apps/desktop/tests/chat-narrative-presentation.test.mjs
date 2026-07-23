@@ -48,6 +48,7 @@ test('message action availability matches the Web role and streaming contract', 
     edit: true,
     retry: false,
     retryDisabled: false,
+    saveTemplate: false,
   });
   assert.deepEqual(messageActionsForVisibleMessage('agent', false), {
     copy: true,
@@ -55,6 +56,7 @@ test('message action availability matches the Web role and streaming contract', 
     edit: false,
     retry: true,
     retryDisabled: false,
+    saveTemplate: true,
   });
   assert.deepEqual(messageActionsForVisibleMessage('agent', true), {
     copy: true,
@@ -62,6 +64,7 @@ test('message action availability matches the Web role and streaming contract', 
     edit: false,
     retry: true,
     retryDisabled: true,
+    saveTemplate: false,
   });
   assert.deepEqual(messageActionsForVisibleMessage('runtime', false), {
     copy: true,
@@ -69,6 +72,7 @@ test('message action availability matches the Web role and streaming contract', 
     edit: false,
     retry: false,
     retryDisabled: false,
+    saveTemplate: false,
   });
 });
 
@@ -147,6 +151,9 @@ test('Desktop wires message actions through the scoped composer and send authori
   assert.match(chatSource, /onReplyMessage=\{replyToTimelineMessage\}/);
   assert.match(chatSource, /onEditMessage=\{editTimelineMessage\}/);
   assert.match(chatSource, /onRetryMessage=\{retryTimelineMessage\}/);
+  assert.match(chatSource, /onSaveTemplateMessage=\{saveTimelineMessageAsTemplate\}/);
+  assert.match(chatSource, /<SavePromptTemplateDialog/);
+  assert.match(chatSource, /target=\{saveTemplateRequest\}/);
   assert.match(chatSource, /findRetryMessageContent\(/);
   assert.match(chatSource, /resolveRetryDispatch\(/);
   assert.match(chatSource, /handleComposerSend\(retryContent, \[\]\)/);

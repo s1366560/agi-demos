@@ -147,6 +147,7 @@ export function AgentTimeline({
   onReplyMessage,
   onEditMessage,
   onRetryMessage,
+  onSaveTemplateMessage,
   pinnedMessageIds = EMPTY_PINNED_MESSAGE_IDS,
   onPinMessage,
   retryDisabled = false,
@@ -165,6 +166,7 @@ export function AgentTimeline({
   onReplyMessage?: (item: AgentTimelineItem) => void;
   onEditMessage?: (item: AgentTimelineItem) => void;
   onRetryMessage?: (item: AgentTimelineItem) => void;
+  onSaveTemplateMessage?: (item: AgentTimelineItem, returnFocus: HTMLElement) => void;
   pinnedMessageIds?: readonly string[];
   onPinMessage?: (item: AgentTimelineItem) => void;
   retryDisabled?: boolean;
@@ -489,6 +491,7 @@ export function AgentTimeline({
                 onReplyMessage={onReplyMessage}
                 onEditMessage={onEditMessage}
                 onRetryMessage={onRetryMessage}
+                onSaveTemplateMessage={onSaveTemplateMessage}
                 isPinned={pinnedMessageIdSet.has(item.id)}
                 onPinMessage={onPinMessage}
                 retryDisabled={retryDisabled}
@@ -716,6 +719,7 @@ function TimelineItemView({
   onReplyMessage,
   onEditMessage,
   onRetryMessage,
+  onSaveTemplateMessage,
   isPinned = false,
   onPinMessage,
   retryDisabled = false,
@@ -730,6 +734,7 @@ function TimelineItemView({
   onReplyMessage?: (item: AgentTimelineItem) => void;
   onEditMessage?: (item: AgentTimelineItem) => void;
   onRetryMessage?: (item: AgentTimelineItem) => void;
+  onSaveTemplateMessage?: (item: AgentTimelineItem, returnFocus: HTMLElement) => void;
   isPinned?: boolean;
   onPinMessage?: (item: AgentTimelineItem) => void;
   retryDisabled?: boolean;
@@ -768,6 +773,14 @@ function TimelineItemView({
         onPin={
           kind === 'agent' && item.content?.trim() && onPinMessage
             ? () => onPinMessage(item)
+            : undefined
+        }
+        onSaveTemplate={
+          kind === 'agent' &&
+          !item.metadata?.streaming &&
+          item.content?.trim() &&
+          onSaveTemplateMessage
+            ? (returnFocus) => onSaveTemplateMessage(item, returnFocus)
             : undefined
         }
         retryDisabled={retryDisabled || Boolean(item.metadata?.streaming)}

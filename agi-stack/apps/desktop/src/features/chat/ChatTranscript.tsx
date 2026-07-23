@@ -6,6 +6,7 @@ import {
   CopyIcon,
   DotsHorizontalIcon,
   DrawingPinIcon,
+  FileTextIcon,
   Pencil1Icon,
   ReloadIcon,
 } from '@radix-ui/react-icons';
@@ -42,6 +43,7 @@ export const WorkspaceTranscriptMessage = memo(function WorkspaceTranscriptMessa
   onRetry,
   isPinned = false,
   onPin,
+  onSaveTemplate,
   retryDisabled = false,
 }: {
   message: WorkspaceMessage;
@@ -50,6 +52,7 @@ export const WorkspaceTranscriptMessage = memo(function WorkspaceTranscriptMessa
   onRetry?: () => void;
   isPinned?: boolean;
   onPin?: () => void;
+  onSaveTemplate?: (returnFocus: HTMLElement) => void;
   retryDisabled?: boolean;
 }) {
   const { t } = useI18n();
@@ -74,6 +77,7 @@ export const WorkspaceTranscriptMessage = memo(function WorkspaceTranscriptMessa
       onRetry={onRetry}
       isPinned={isPinned}
       onPin={onPin}
+      onSaveTemplate={onSaveTemplate}
       retryDisabled={retryDisabled}
     >
       <MarkdownContent content={message.content} className="transcript-content" />
@@ -95,6 +99,7 @@ export function NarrativeMessageFrame({
   onRetry,
   isPinned = false,
   onPin,
+  onSaveTemplate,
   retryDisabled = false,
   children,
 }: {
@@ -111,6 +116,7 @@ export function NarrativeMessageFrame({
   onRetry?: () => void;
   isPinned?: boolean;
   onPin?: () => void;
+  onSaveTemplate?: (returnFocus: HTMLElement) => void;
   retryDisabled?: boolean;
   children: ReactNode;
 }) {
@@ -136,6 +142,7 @@ export function NarrativeMessageFrame({
             onRetry={onRetry}
             isPinned={isPinned}
             onPin={onPin}
+            onSaveTemplate={onSaveTemplate}
             retryDisabled={retryDisabled}
           />
         </header>
@@ -200,6 +207,7 @@ function MessageActionMenu({
   onRetry,
   isPinned,
   onPin,
+  onSaveTemplate,
   retryDisabled,
 }: {
   content: string;
@@ -210,6 +218,7 @@ function MessageActionMenu({
   onRetry?: () => void;
   isPinned: boolean;
   onPin?: () => void;
+  onSaveTemplate?: (returnFocus: HTMLElement) => void;
   retryDisabled: boolean;
 }) {
   const { t } = useI18n();
@@ -224,6 +233,14 @@ function MessageActionMenu({
   const invoke = (action: (() => void) | undefined) => {
     action?.();
     closeMenu();
+  };
+  const invokeSaveTemplate = (
+    action: ((returnFocus: HTMLElement) => void) | undefined,
+    fallback: HTMLButtonElement,
+  ) => {
+    const returnFocus = detailsRef.current?.querySelector<HTMLElement>('summary') ?? fallback;
+    closeMenu();
+    action?.(returnFocus);
   };
 
   return (
@@ -276,6 +293,16 @@ function MessageActionMenu({
           >
             <DrawingPinIcon aria-hidden="true" />
             {t(isPinned ? 'chat.unpinMessage' : 'chat.pinMessage')}
+          </button>
+        ) : null}
+        {availability.saveTemplate && onSaveTemplate ? (
+          <button
+            type="button"
+            aria-label={t('chat.templates.saveAsTemplate')}
+            onClick={(event) => invokeSaveTemplate(onSaveTemplate, event.currentTarget)}
+          >
+            <FileTextIcon aria-hidden="true" />
+            {t('chat.templates.saveAsTemplate')}
           </button>
         ) : null}
       </div>
