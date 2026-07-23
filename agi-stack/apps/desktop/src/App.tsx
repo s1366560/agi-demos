@@ -286,14 +286,16 @@ import {
 } from './features/workspace/workspaceActivityEventModel';
 import { beginDesktopRuntimeScopeTransition } from './features/workspace/workspaceOverviewModel';
 import {
+  UNBOUND_CONVERSATIONS_KEY,
   beginWorkspaceConversationRequest,
+  filterUnboundConversations,
   isCurrentWorkspaceConversationRequest,
+  projectConversationLoadTargets,
   reconcileExpandedWorkspaceIds,
   reconcileWorkspaceConversationRowsAfterRefresh,
   shouldClearConversationSelectionAfterRefresh,
   shouldLoadWorkspaceConversations,
   supersedeWorkspaceConversationRequests,
-  workspaceConversationLoadTargets,
   workspaceTreeRefreshFailed,
 } from './features/workspace/workspaceTreeModel';
 import { socketEventsSince, useAgentSocket } from './hooks/useAgentSocket';
@@ -3083,7 +3085,7 @@ export function App() {
           workspaceId,
           expandSelectedWorkspace,
         );
-        const conversationLoadTargets = workspaceConversationLoadTargets(
+        const conversationLoadTargets = projectConversationLoadTargets(
           projectWorkspaces,
           workspaceId,
           nextExpandedWorkspaceIds,
@@ -3142,19 +3144,22 @@ export function App() {
         const conversationResultsPromise = Promise.all(
           conversationLoadTargets.map(async (targetWorkspaceId) => {
             const requestGeneration = conversationRequestGenerations.get(targetWorkspaceId);
+            const isUnboundGroup = targetWorkspaceId === UNBOUND_CONVERSATIONS_KEY;
             const client = new DesktopApiClient({
               ...resolvedConfig,
-              workspaceId: targetWorkspaceId,
+              workspaceId: isUnboundGroup ? '' : targetWorkspaceId,
             });
             try {
               const response = await client.listConversations(
                 resolvedProjectId,
-                targetWorkspaceId,
+                isUnboundGroup ? null : targetWorkspaceId,
               );
               return {
                 workspaceId: targetWorkspaceId,
                 requestGeneration,
-                conversations: response.items,
+                conversations: isUnboundGroup
+                  ? filterUnboundConversations(response.items)
+                  : response.items,
                 error: null,
               };
             } catch (caught) {
@@ -3199,7 +3204,10 @@ export function App() {
           conversationResultsPromise,
         ]);
         if (!contextIsCurrent()) return false;
-        const validWorkspaceIds = new Set(projectWorkspaces.map((workspace) => workspace.id));
+        const validConversationGroupIds = new Set([
+          UNBOUND_CONVERSATIONS_KEY,
+          ...projectWorkspaces.map((workspace) => workspace.id),
+        ]);
         const currentConversationResults = conversationResults.filter(
           (result) =>
             result.requestGeneration !== undefined &&
@@ -3216,7 +3224,7 @@ export function App() {
           const conversationsByWorkspace = {
             ...Object.fromEntries(
               Object.entries(current.conversationsByWorkspace).filter(([targetWorkspaceId]) =>
-                validWorkspaceIds.has(targetWorkspaceId),
+                validConversationGroupIds.has(targetWorkspaceId),
               ),
             ),
             ...Object.fromEntries(
@@ -3236,7 +3244,7 @@ export function App() {
           const workspaceNodeState = {
             ...Object.fromEntries(
               Object.entries(current.nodeState.workspaces).filter(([targetWorkspaceId]) =>
-                validWorkspaceIds.has(targetWorkspaceId),
+                validConversationGroupIds.has(targetWorkspaceId),
               ),
             ),
             ...Object.fromEntries(
@@ -3266,7 +3274,10 @@ export function App() {
           if (result.error !== null) continue;
           clearMissingConversationSelection(
             selectionAtRequest,
-            agentConversationScopeKeyFor(resolvedProjectId, result.workspaceId),
+            agentConversationScopeKeyFor(
+              resolvedProjectId,
+              result.workspaceId === UNBOUND_CONVERSATIONS_KEY ? '' : result.workspaceId,
+            ),
             result.conversations,
           );
         }
@@ -3403,9 +3414,12 @@ export function App() {
     const projectId = requestConfig.projectId.trim();
     const tenantId = requestConfig.tenantId.trim();
     const currentDataset = datasetRef.current;
-    const workspaceExists = (currentDataset.workspacesByProject[projectId] ?? []).some(
-      (workspace) => workspace.id === workspaceId,
-    );
+    const isUnboundGroup = workspaceId === UNBOUND_CONVERSATIONS_KEY;
+    const workspaceExists =
+      isUnboundGroup ||
+      (currentDataset.workspacesByProject[projectId] ?? []).some(
+        (workspace) => workspace.id === workspaceId,
+      );
     if (!tenantId || !projectId || !workspaceExists) return;
     if (!shouldLoadWorkspaceConversations(currentDataset.nodeState.workspaces[workspaceId])) {
       return;
@@ -3439,15 +3453,25 @@ export function App() {
     }));
 
     try {
-      const client = new DesktopApiClient({ ...requestConfig, workspaceId });
-      const response = await client.listConversations(projectId, workspaceId);
+      const client = new DesktopApiClient({
+        ...requestConfig,
+        workspaceId: isUnboundGroup ? '' : workspaceId,
+      });
+      const response = await client.listConversations(
+        projectId,
+        isUnboundGroup ? null : workspaceId,
+      );
+      const refreshedConversations = isUnboundGroup
+        ? filterUnboundConversations(response.items)
+        : response.items;
       if (!requestIsCurrent()) return;
       updateDataset((current) => {
         if (
           !requestIsCurrent() ||
-          !(current.workspacesByProject[projectId] ?? []).some(
-            (workspace) => workspace.id === workspaceId,
-          )
+          (!isUnboundGroup &&
+            !(current.workspacesByProject[projectId] ?? []).some(
+              (workspace) => workspace.id === workspaceId,
+            ))
         ) {
           return current;
         }
@@ -3456,7 +3480,7 @@ export function App() {
           conversationsByWorkspace: {
             ...current.conversationsByWorkspace,
             [workspaceId]: mergeConversationListWithCurrentRunAuthority(
-              response.items,
+              refreshedConversations,
               current.conversationsByWorkspace[workspaceId] ?? [],
             ),
           },
@@ -3472,17 +3496,18 @@ export function App() {
       });
       clearMissingConversationSelection(
         selectionAtRequest,
-        agentConversationScopeKeyFor(projectId, workspaceId),
-        response.items,
+        agentConversationScopeKeyFor(projectId, isUnboundGroup ? '' : workspaceId),
+        refreshedConversations,
       );
     } catch (caught) {
       if (!requestIsCurrent()) return;
       updateDataset((current) => {
         if (
           !requestIsCurrent() ||
-          !(current.workspacesByProject[projectId] ?? []).some(
-            (workspace) => workspace.id === workspaceId,
-          )
+          (!isUnboundGroup &&
+            !(current.workspacesByProject[projectId] ?? []).some(
+              (workspace) => workspace.id === workspaceId,
+            ))
         ) {
           return current;
         }
@@ -4342,10 +4367,10 @@ export function App() {
       projectId,
       workspaceId,
     };
-    const requiresRuntimeRefresh = sessionSelectionRequiresRuntimeRefresh(
-      configRef.current,
-      nextConfig,
-    );
+    const isUnboundConversation = !workspaceId.trim();
+    const requiresRuntimeRefresh =
+      !isUnboundConversation &&
+      sessionSelectionRequiresRuntimeRefresh(configRef.current, nextConfig);
     commitRuntimeConfig(nextConfig);
     setAgentConversationSession({
       scopeKey: agentConversationScopeKeyFor(projectId, workspaceId),
@@ -4353,7 +4378,9 @@ export function App() {
     });
     setAgentTaskSignals([]);
     setReviewTab('overview');
-    setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
+    if (workspaceId) {
+      setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
+    }
     applySectionSideEffects(targetSection);
     void loadConversationTimeline(conversation, projectId, nextConfig);
     if (requiresRuntimeRefresh) void refreshRuntime(nextConfig);
@@ -4642,20 +4669,19 @@ export function App() {
         )
       : created;
     setAgentConversationSession({ scopeKey, conversation });
-    if (config.workspaceId.trim()) {
-      setDataset((current) => ({
-        ...current,
-        conversationsByWorkspace: {
-          ...current.conversationsByWorkspace,
-          [config.workspaceId.trim()]: [
-            conversation,
-            ...(current.conversationsByWorkspace[config.workspaceId.trim()] ?? []).filter(
-              (item) => item.id !== conversation.id,
-            ),
-          ],
-        },
-      }));
-    }
+    const conversationGroupKey = config.workspaceId.trim();
+    setDataset((current) => ({
+      ...current,
+      conversationsByWorkspace: {
+        ...current.conversationsByWorkspace,
+        [conversationGroupKey]: [
+          conversation,
+          ...(current.conversationsByWorkspace[conversationGroupKey] ?? []).filter(
+            (item) => item.id !== conversation.id,
+          ),
+        ],
+      },
+    }));
     void loadConversationTimeline(conversation, config.projectId);
     return conversation;
   };

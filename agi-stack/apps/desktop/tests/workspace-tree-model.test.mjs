@@ -11,14 +11,17 @@ const { WorkspaceDock } = require(
   '/tmp/agistack-desktop-test-dist/src/features/workspace/WorkspaceDock.js'
 );
 const {
+  UNBOUND_CONVERSATIONS_KEY,
   beginWorkspaceConversationRequest,
   buildWorkspaceTree,
   conversationTreeMetadataSummary,
   conversationTreeStatusPresentation,
   conversationTreeStatusValue,
+  filterUnboundConversations,
   isWorkspaceConversationSelected,
   isCurrentWorkspaceConversationRequest,
   isWorkspaceOverviewSelected,
+  projectConversationLoadTargets,
   reconcileExpandedWorkspaceIds,
   reconcileWorkspaceConversationRowsAfterRefresh,
   shouldClearConversationSelectionAfterRefresh,
@@ -99,6 +102,50 @@ test('workspace tree preserves the authoritative server order within the current
     ['conversation-z', 'conversation-a']
   );
   assert.equal(tree.some((node) => 'project' in node), false);
+});
+
+test('unbound conversation group contains only sessions without a workspace binding', () => {
+  const rows = [
+    { ...conversation('conversation-null', 'Null workspace', null), workspace_id: null },
+    { ...conversation('conversation-blank', 'Blank workspace', null), workspace_id: '   ' },
+    { ...conversation('conversation-missing', 'Missing workspace', null) },
+    {
+      ...conversation('conversation-bound', 'Bound workspace', null),
+      workspace_id: 'workspace-a',
+    },
+  ];
+
+  assert.deepEqual(
+    filterUnboundConversations(rows).map((item) => item.id),
+    ['conversation-null', 'conversation-blank', 'conversation-missing']
+  );
+});
+
+test('workspace dock renders unbound sessions in a task group before workspace roots', () => {
+  const markup = renderWorkspaceDock(
+    {
+      projects: { 'project-1': { loading: false, error: null } },
+      workspaces: {
+        [UNBOUND_CONVERSATIONS_KEY]: { loading: false, error: null },
+        'workspace-a': { loading: false, error: null },
+      },
+    },
+    {
+      [UNBOUND_CONVERSATIONS_KEY]: [
+        conversation('conversation-unbound', 'Unbound task session', '2026-07-04T00:00:00Z'),
+      ],
+      'workspace-a': [
+        {
+          ...conversation('conversation-bound', 'Bound workspace session', '2026-07-03T00:00:00Z'),
+          workspace_id: 'workspace-a',
+        },
+      ],
+    }
+  );
+
+  assert.match(markup, />Tasks</);
+  assert.match(markup, /Unbound task session/);
+  assert.ok(markup.indexOf('Unbound task session') < markup.indexOf('Desktop Client'));
 });
 
 test('recent grouping orders workspaces and conversations by authoritative timestamps', () => {
@@ -274,6 +321,20 @@ test('conversation hydration targets only the selected and expanded workspace ro
     ['workspace-a', 'workspace-b']
   );
   assert.deepEqual(workspaceConversationLoadTargets(workspaces, '', new Set()), []);
+});
+
+test('project conversation hydration always includes the unbound task group', () => {
+  assert.deepEqual(
+    projectConversationLoadTargets(
+      [
+        { id: 'workspace-a' },
+        { id: 'workspace-b' },
+      ],
+      'workspace-a',
+      new Set(['workspace-b'])
+    ),
+    [UNBOUND_CONVERSATIONS_KEY, 'workspace-a', 'workspace-b']
+  );
 });
 
 test('workspace conversations load once and can retry after a node error', () => {

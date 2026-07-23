@@ -52,6 +52,8 @@ export type WorkspaceTreeStatusPresentation = {
   labelKey: string;
 };
 
+export const UNBOUND_CONVERSATIONS_KEY = '';
+
 const CONVERSATION_STATUS_PRESENTATIONS: Readonly<
   Record<string, WorkspaceTreeStatusPresentation>
 > = {
@@ -167,6 +169,21 @@ export function workspaceConversationLoadTargets(
   return workspaces
     .map((workspace) => workspace.id)
     .filter((workspaceId) => requestedWorkspaceIds.has(workspaceId));
+}
+
+export function projectConversationLoadTargets(
+  workspaces: WorkspaceSummary[],
+  selectedWorkspaceId: string,
+  expandedWorkspaceIds: ReadonlySet<string>,
+): string[] {
+  return [
+    UNBOUND_CONVERSATIONS_KEY,
+    ...workspaceConversationLoadTargets(
+      workspaces,
+      selectedWorkspaceId,
+      expandedWorkspaceIds,
+    ),
+  ];
 }
 
 export function shouldLoadWorkspaceConversations(
@@ -396,6 +413,12 @@ export function buildWorkspaceTree(
     workspace,
     conversations: conversationsByWorkspace[workspace.id] ?? [],
   }));
+}
+
+export function filterUnboundConversations(
+  conversations: readonly AgentConversation[],
+): AgentConversation[] {
+  return conversations.filter((conversation) => !conversation.workspace_id?.trim());
 }
 
 function latestWorkspaceTimestamp(

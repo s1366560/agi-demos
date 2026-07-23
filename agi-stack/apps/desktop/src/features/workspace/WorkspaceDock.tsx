@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import { ScrollArea } from '@radix-ui/themes';
 import {
@@ -8,6 +8,7 @@ import {
   ChevronRightIcon,
   CodeIcon,
   CubeIcon,
+  DashboardIcon,
   ExclamationTriangleIcon,
 } from '@radix-ui/react-icons';
 
@@ -24,6 +25,7 @@ import {
   conversationTreeStatusValue,
   isWorkspaceConversationSelected,
   isWorkspaceOverviewSelected,
+  UNBOUND_CONVERSATIONS_KEY,
   workspaceTreeAvailability,
   workspaceTreeRootStatusPresentation,
   workspaceTreeSessionAvailability,
@@ -70,6 +72,7 @@ export function WorkspaceDock({
   const { t } = useI18n();
   const navigationRef = useRef<HTMLElement>(null);
   const workspaceToggleRefs = useRef(new Map<string, HTMLButtonElement>());
+  const [unboundTasksExpanded, setUnboundTasksExpanded] = useState(true);
   const projectState = nodeState.projects[currentProjectId];
   // The dock re-renders with the App on every socket flush; the tree only
   // changes with the workspace/conversation data, so rebuild it only then.
@@ -79,6 +82,15 @@ export function WorkspaceDock({
   );
   const availability = workspaceTreeAvailability(projectState, tree.length);
   const hasProjectScope = Boolean(currentProjectId.trim());
+  const unboundConversations = conversationsByWorkspace[UNBOUND_CONVERSATIONS_KEY] ?? [];
+  const unboundState = nodeState.workspaces[UNBOUND_CONVERSATIONS_KEY] ?? {
+    loading: false,
+    error: null,
+  };
+  const unboundAvailability = workspaceTreeSessionAvailability(
+    unboundState,
+    unboundConversations.length,
+  );
 
   return (
     <nav
@@ -103,6 +115,91 @@ export function WorkspaceDock({
                 onRetryProject();
               }}
             />
+          ) : null}
+          {hasProjectScope &&
+          availability !== 'unavailable' &&
+          availability !== 'loading' &&
+          availability !== 'error' ? (
+            <section className="workspace-tree-root-node workspace-tree-task-group">
+              <div className="workspace-tree-workspace-row">
+                <button
+                  type="button"
+                  className="workspace-tree-toggle"
+                  aria-expanded={unboundTasksExpanded}
+                  aria-label={
+                    unboundTasksExpanded
+                      ? t('workspaceTree.collapse', { name: t('workspaceTree.tasks') })
+                      : t('workspaceTree.expand', { name: t('workspaceTree.tasks') })
+                  }
+                  onClick={() => setUnboundTasksExpanded((expanded) => !expanded)}
+                >
+                  {unboundTasksExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+                </button>
+                <div className="workspace-tree-workspace-action">
+                  <DashboardIcon />
+                  <span>
+                    <strong>{t('workspaceTree.tasks')}</strong>
+                    <small>
+                      {t('workspaceTree.sessionCount', { count: unboundConversations.length })}
+                    </small>
+                  </span>
+                  <i
+                    data-status={
+                      workspaceTreeRootStatusPresentation(null, unboundConversations).tone
+                    }
+                    aria-hidden="true"
+                  />
+                </div>
+              </div>
+
+              {unboundTasksExpanded ? (
+                <div className="workspace-tree-session-children">
+                  {unboundAvailability === 'refreshing' ? (
+                    <WorkspaceTreeState compact title={t('workspaceTree.refreshingSessions')} />
+                  ) : unboundAvailability === 'stale-error' ? (
+                    <WorkspaceTreeState
+                      compact
+                      title={t('workspaceTree.sessionRefreshFailed')}
+                      detail={unboundState.error ?? undefined}
+                      actionLabel={t('workspaceTree.retry')}
+                      onAction={() => onRetryWorkspace(UNBOUND_CONVERSATIONS_KEY)}
+                    />
+                  ) : null}
+                  {unboundAvailability === 'loading' ? (
+                    <WorkspaceTreeState compact title={t('workspaceTree.loadingTasks')} />
+                  ) : unboundAvailability === 'error' ? (
+                    <WorkspaceTreeState
+                      compact
+                      title={t('workspaceTree.tasksUnavailable')}
+                      detail={unboundState.error ?? undefined}
+                      actionLabel={t('workspaceTree.retry')}
+                      onAction={() => onRetryWorkspace(UNBOUND_CONVERSATIONS_KEY)}
+                    />
+                  ) : unboundAvailability === 'empty' ? (
+                    <WorkspaceTreeState
+                      compact
+                      title={t('workspaceTree.noTasks')}
+                      detail={t('workspaceTree.noTasksDescription')}
+                    />
+                  ) : (
+                    unboundConversations.map((conversation) => (
+                      <ConversationTreeRow
+                        key={conversation.id}
+                        conversation={conversation}
+                        selected={isWorkspaceConversationSelected(
+                          currentConversationId,
+                          conversation.id,
+                          selectionMode,
+                        )}
+                        onSelect={() =>
+                          onSelectConversation(currentProjectId, '', conversation)
+                        }
+                      />
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </section>
           ) : null}
           {!hasProjectScope ? (
             <WorkspaceTreeState
@@ -262,42 +359,20 @@ export function WorkspaceDock({
                           detail={t('workspaceTree.noSessionsDescription')}
                         />
                       ) : (
-                        conversations.map((conversation) => {
-                          const selected = isWorkspaceConversationSelected(
-                            currentConversationId,
-                            conversation.id,
-                            selectionMode,
-                          );
-                          const CapabilityIcon = conversationIcon(conversation);
-                          const status = conversationTreeStatusValue(conversation);
-                          const statusPresentation = conversationTreeStatusPresentation(status);
-                          const statusLabel = t(statusPresentation.labelKey);
-                          const sessionSummary =
-                            conversationTreeMetadataSummary(conversation) ?? statusLabel;
-                          const StatusIcon = conversationStatusIcon(statusPresentation.tone);
-
-                          return (
-                            <button
-                              className={`workspace-tree-session-row ${selected ? 'selected' : ''}`}
-                              type="button"
-                              key={conversation.id}
-                              aria-current={selected ? 'page' : undefined}
-                              onClick={() =>
-                                onSelectConversation(currentProjectId, workspace.id, conversation)
-                              }
-                            >
-                              <CapabilityIcon />
-                              <span>
-                                <strong>{conversation.title || conversation.id}</strong>
-                                <small>{sessionSummary}</small>
-                              </span>
-                              <StatusIcon
-                                data-status={statusPresentation.tone}
-                                aria-label={statusLabel}
-                              />
-                            </button>
-                          );
-                        })
+                        conversations.map((conversation) => (
+                          <ConversationTreeRow
+                            key={conversation.id}
+                            conversation={conversation}
+                            selected={isWorkspaceConversationSelected(
+                              currentConversationId,
+                              conversation.id,
+                              selectionMode,
+                            )}
+                            onSelect={() =>
+                              onSelectConversation(currentProjectId, workspace.id, conversation)
+                            }
+                          />
+                        ))
                       )}
                     </div>
                   ) : null}
@@ -308,6 +383,40 @@ export function WorkspaceDock({
         </div>
       </ScrollArea>
     </nav>
+  );
+}
+
+function ConversationTreeRow({
+  conversation,
+  selected,
+  onSelect,
+}: {
+  conversation: AgentConversation;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const { t } = useI18n();
+  const CapabilityIcon = conversationIcon(conversation);
+  const status = conversationTreeStatusValue(conversation);
+  const statusPresentation = conversationTreeStatusPresentation(status);
+  const statusLabel = t(statusPresentation.labelKey);
+  const sessionSummary = conversationTreeMetadataSummary(conversation) ?? statusLabel;
+  const StatusIcon = conversationStatusIcon(statusPresentation.tone);
+
+  return (
+    <button
+      className={`workspace-tree-session-row ${selected ? 'selected' : ''}`}
+      type="button"
+      aria-current={selected ? 'page' : undefined}
+      onClick={onSelect}
+    >
+      <CapabilityIcon />
+      <span>
+        <strong>{conversation.title || conversation.id}</strong>
+        <small>{sessionSummary}</small>
+      </span>
+      <StatusIcon data-status={statusPresentation.tone} aria-label={statusLabel} />
+    </button>
   );
 }
 

@@ -294,13 +294,14 @@ test('an authoritative context switch closes settings even when workspace hydrat
   );
 });
 
-test('runtime refresh hydrates conversations only for selected or expanded workspaces', () => {
+test('runtime refresh hydrates unbound tasks plus selected or expanded workspaces', () => {
   const refreshRuntime =
     appSource.match(
       /const refreshRuntime = useCallback\([\s\S]*?\n  const refreshMyWork = useCallback/
     )?.[0] ?? '';
 
-  assert.match(refreshRuntime, /workspaceConversationLoadTargets\(/);
+  assert.match(refreshRuntime, /projectConversationLoadTargets\(/);
+  assert.match(refreshRuntime, /filterUnboundConversations\(/);
   assert.doesNotMatch(refreshRuntime, /workspaces\.map\(async \(workspace\) => \{/);
   assert.match(appSource, /loadWorkspaceConversations/);
   assert.match(appSource, /if \(!wasExpanded\) void loadWorkspaceConversations\(workspaceId\)/);
