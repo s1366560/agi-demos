@@ -795,6 +795,42 @@ test('multiple live assistants reconcile to persisted rows by cursor without swa
   );
 });
 
+test('replayed text_end reconciles a canonical assistant at the same event cursor', () => {
+  const canonical = {
+    id: 'assistant-response-1',
+    type: 'assistant_message',
+    role: 'assistant',
+    message_id: 'response-message-1',
+    content: 'Persisted response',
+    eventTimeUs: 2_000_000,
+    eventCounter: 2,
+    metadata: { streaming: false },
+  };
+
+  const items = mergeAssistantTextStreamChunk([canonical], {
+    kind: 'complete',
+    messageId: 'execution-message-1',
+    content: 'Authoritative text end',
+    eventTimeUs: 2_000_000,
+    eventCounter: 2,
+  });
+
+  assert.deepEqual(
+    items.filter((item) => item.role === 'assistant').map((item) => ({
+      id: item.id,
+      content: item.content,
+      streaming: item.metadata.streaming,
+    })),
+    [
+      {
+        id: 'assistant-response-1',
+        content: 'Persisted response',
+        streaming: false,
+      },
+    ],
+  );
+});
+
 test('assistant reconciliation never crosses a user-turn boundary', () => {
   const firstUser = {
     id: 'user-1',

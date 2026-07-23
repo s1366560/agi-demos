@@ -34,6 +34,8 @@ const sessionAuthorityEventTypes = new Set([
   'task_updated',
   'task_execution_session_updated',
   'workspace_plan_updated',
+  'complete',
+  'error',
 ]);
 const workspaceOnlyAuthorityEventTypes = new Set(['workspace_plan_updated']);
 

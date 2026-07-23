@@ -373,21 +373,21 @@ export function mergeAssistantTextStreamChunk(
   }
 
   if (chunk.kind === 'complete' && !chunk.content) return existing;
-  return sortTimelineItems([
-    ...existing,
-    {
-      id: `streaming-assistant-${chunk.messageId}`,
-      type: 'assistant_message',
-      eventTimeUs: chunk.eventTimeUs,
-      eventCounter: chunk.eventCounter,
-      timestamp: Math.floor(chunk.eventTimeUs / 1000),
-      message_id: chunk.messageId,
-      role: 'assistant',
-      content: chunk.content,
-      payload: chunk.payload,
-      metadata: { streaming: chunk.kind !== 'complete' },
-    },
-  ]);
+  const incoming: AgentTimelineItem = {
+    id: `streaming-assistant-${chunk.messageId}`,
+    type: 'assistant_message',
+    eventTimeUs: chunk.eventTimeUs,
+    eventCounter: chunk.eventCounter,
+    timestamp: Math.floor(chunk.eventTimeUs / 1000),
+    message_id: chunk.messageId,
+    role: 'assistant',
+    content: chunk.content,
+    payload: chunk.payload,
+    metadata: { streaming: chunk.kind !== 'complete' },
+  };
+  return chunk.kind === 'complete'
+    ? mergeConversationTimelineItems(existing, [incoming])
+    : sortTimelineItems([...existing, incoming]);
 }
 
 /**

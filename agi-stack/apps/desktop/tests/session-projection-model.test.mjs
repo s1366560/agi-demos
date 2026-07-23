@@ -810,6 +810,8 @@ test('session authority invalidation reads nested envelopes and ignores narrativ
     'model_override_rejected',
     'workspace_plan_updated',
     'task_execution_session_updated',
+    'complete',
+    'error',
   ]) {
     assert.equal(socketEventInvalidatesSessionProjection({ event_type: eventType }), true);
   }
@@ -855,6 +857,20 @@ test('session authority invalidation accepts exact workspace plan events and rej
   assert.equal(
     socketEventInvalidatesSessionProjectionForScope(
       { event_type: 'task_updated', workspace_id: 'workspace-1' },
+      scope,
+    ),
+    false,
+  );
+  assert.equal(
+    socketEventInvalidatesSessionProjectionForScope(
+      { event_type: 'complete', conversation_id: 'conversation-1' },
+      scope,
+    ),
+    true,
+  );
+  assert.equal(
+    socketEventInvalidatesSessionProjectionForScope(
+      { event_type: 'error', conversation_id: 'conversation-2' },
       scope,
     ),
     false,
