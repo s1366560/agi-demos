@@ -1816,6 +1816,87 @@ def test_build_timeline_replays_workspace_execution_events_for_desktop_history()
     assert [item["payload"] for item in timeline] == [data for _, data in execution_events]
 
 
+def test_build_timeline_replays_session_state_events_for_desktop_history() -> None:
+    session_events = [
+        (
+            "session_forked",
+            {
+                "parent_conversation_id": "conversation-parent",
+                "child_conversation_id": "conversation-child",
+            },
+        ),
+        (
+            "session_merged",
+            {
+                "parent_conversation_id": "conversation-parent",
+                "child_conversation_id": "conversation-child",
+                "merge_strategy": "result_only",
+            },
+        ),
+        (
+            "elicitation_asked",
+            {
+                "request_id": "elicitation-release-region",
+                "server_id": "release-tools",
+                "server_name": "Release MCP",
+                "message": "Choose the release region",
+                "requested_schema": {
+                    "type": "object",
+                    "properties": {"region": {"type": "string"}},
+                },
+            },
+        ),
+        (
+            "elicitation_answered",
+            {
+                "request_id": "elicitation-release-region",
+                "response": {"region": "eu-west"},
+            },
+        ),
+        (
+            "a2ui_action_answered",
+            {
+                "request_id": "a2ui-approve-release",
+                "action_name": "approve_release",
+                "source_component_id": "approve-button",
+                "context": {"release_id": "release-1"},
+            },
+        ),
+        (
+            "task_list_updated",
+            {
+                "conversation_id": "conversation-release",
+                "tasks": [{"id": "release-task", "content": "Verify release", "status": "pending"}],
+            },
+        ),
+        (
+            "task_updated",
+            {
+                "conversation_id": "conversation-release",
+                "task_id": "release-task",
+                "status": "running",
+                "content": "Verify release",
+            },
+        ),
+    ]
+    assert {event_type for event_type, _ in session_events} <= _DISPLAYABLE_EVENTS
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(event_type=event_type, event_data=data, event_time_us=index * 1_000)
+            for index, (event_type, data) in enumerate(session_events, start=1)
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert [item["type"] for item in timeline] == [event_type for event_type, _ in session_events]
+    assert [item["payload"] for item in timeline] == [data for _, data in session_events]
+
+
 def test_build_timeline_replays_complete_skill_execution_for_desktop_history() -> None:
     skill_events = [
         (

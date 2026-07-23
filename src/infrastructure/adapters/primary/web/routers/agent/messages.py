@@ -1049,6 +1049,11 @@ def _build_workspace_execution_event(data: dict[str, Any], **_kwargs: Any) -> di
     return {"payload": dict(data)}
 
 
+def _build_session_state_event(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    """Preserve session lifecycle, HITL response, and task state for Desktop history replay."""
+    return {"payload": dict(data)}
+
+
 def _build_agent_spawned(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {
         "agentId": data.get("agent_id", ""),
@@ -1147,6 +1152,13 @@ _EVENT_BUILDERS: dict[str, Any] = {
     "task_execution_incident_opened": _build_workspace_execution_event,
     "task_recovery_action_started": _build_workspace_execution_event,
     "task_recovery_action_completed": _build_workspace_execution_event,
+    "session_forked": _build_session_state_event,
+    "session_merged": _build_session_state_event,
+    "elicitation_asked": _build_session_state_event,
+    "elicitation_answered": _build_session_state_event,
+    "a2ui_action_answered": _build_session_state_event,
+    "task_list_updated": _build_session_state_event,
+    "task_updated": _build_session_state_event,
     "clarification_asked": _build_clarification_asked,
     "clarification_answered": _build_clarification_answered,
     "decision_asked": _build_decision_asked,
