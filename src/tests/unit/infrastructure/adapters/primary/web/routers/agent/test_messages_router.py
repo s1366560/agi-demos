@@ -1692,6 +1692,130 @@ def test_build_timeline_replays_agent_governance_events_for_desktop_history() ->
     assert [item["payload"] for item in timeline] == [data for _, data in governance_events]
 
 
+def test_build_timeline_replays_workspace_execution_events_for_desktop_history() -> None:
+    execution_events = [
+        (
+            "workspace_goal_materialized",
+            {
+                "workspace_id": "workspace-release",
+                "goal_id": "goal-release",
+                "goal_description": "Validate and publish the release.",
+            },
+        ),
+        (
+            "workspace_decomposition_complete",
+            {
+                "workspace_id": "workspace-release",
+                "goal_id": "goal-release",
+                "subtask_ids": ["task-security-review", "task-publish"],
+                "subtask_count": 2,
+            },
+        ),
+        (
+            "workspace_worker_dispatched",
+            {
+                "workspace_id": "workspace-release",
+                "task_id": "task-security-review",
+                "worker_agent_id": "agent-security",
+                "attempt_id": "attempt-1",
+            },
+        ),
+        (
+            "workspace_worker_report_submitted",
+            {
+                "workspace_id": "workspace-release",
+                "task_id": "task-security-review",
+                "worker_agent_id": "agent-security",
+                "attempt_id": "attempt-1",
+                "status": "completed",
+            },
+        ),
+        (
+            "workspace_adjudication_complete",
+            {
+                "workspace_id": "workspace-release",
+                "task_id": "task-security-review",
+                "attempt_id": "attempt-1",
+                "verdict": "accepted",
+                "next_task_id": "task-publish",
+            },
+        ),
+        (
+            "workspace_goal_completed",
+            {
+                "workspace_id": "workspace-release",
+                "goal_id": "goal-release",
+                "final_status": "completed",
+                "completed_subtask_count": 2,
+                "total_subtask_count": 2,
+            },
+        ),
+        (
+            "task_execution_session_updated",
+            {
+                "workspace_id": "workspace-release",
+                "task_id": "task-security-review",
+                "health": "degraded",
+                "session_status": "initialization_failed",
+                "attempt_id": "attempt-1",
+                "recommended_recovery_action": "new_attempt",
+            },
+        ),
+        (
+            "task_execution_incident_opened",
+            {
+                "workspace_id": "workspace-release",
+                "task_id": "task-security-review",
+                "conversation_id": "conversation-release",
+                "attempt_id": "attempt-1",
+                "incident": {
+                    "type": "no_assistant_response",
+                    "severity": "error",
+                    "summary": "Conversation produced no assistant output.",
+                },
+            },
+        ),
+        (
+            "task_recovery_action_started",
+            {
+                "workspace_id": "workspace-release",
+                "task_id": "task-security-review",
+                "action": "new_attempt",
+                "status": "queued",
+                "message": "Fresh worker attempt queued.",
+                "attempt_id": "attempt-1",
+            },
+        ),
+        (
+            "task_recovery_action_completed",
+            {
+                "workspace_id": "workspace-release",
+                "task_id": "task-security-review",
+                "action": "new_attempt",
+                "status": "queued",
+                "message": "Fresh worker attempt queued.",
+                "attempt_id": "attempt-1",
+            },
+        ),
+    ]
+    assert {event_type for event_type, _ in execution_events} <= _DISPLAYABLE_EVENTS
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(event_type=event_type, event_data=data, event_time_us=index * 1_000)
+            for index, (event_type, data) in enumerate(execution_events, start=1)
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert [item["type"] for item in timeline] == [event_type for event_type, _ in execution_events]
+    assert [item["payload"] for item in timeline] == [data for _, data in execution_events]
+
+
 def test_build_timeline_replays_complete_skill_execution_for_desktop_history() -> None:
     skill_events = [
         (

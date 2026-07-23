@@ -1044,6 +1044,11 @@ def _build_agent_governance_event(data: dict[str, Any], **_kwargs: Any) -> dict[
     return {"payload": dict(data)}
 
 
+def _build_workspace_execution_event(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    """Preserve workspace orchestration and task recovery evidence for Desktop history replay."""
+    return {"payload": dict(data)}
+
+
 def _build_agent_spawned(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {
         "agentId": data.get("agent_id", ""),
@@ -1132,6 +1137,16 @@ _EVENT_BUILDERS: dict[str, Any] = {
     "agent_decision_logged": _build_agent_governance_event,
     "agent_goal_completed": _build_agent_governance_event,
     "agent_conversation_finished": _build_agent_governance_event,
+    "workspace_goal_materialized": _build_workspace_execution_event,
+    "workspace_decomposition_complete": _build_workspace_execution_event,
+    "workspace_worker_dispatched": _build_workspace_execution_event,
+    "workspace_worker_report_submitted": _build_workspace_execution_event,
+    "workspace_adjudication_complete": _build_workspace_execution_event,
+    "workspace_goal_completed": _build_workspace_execution_event,
+    "task_execution_session_updated": _build_workspace_execution_event,
+    "task_execution_incident_opened": _build_workspace_execution_event,
+    "task_recovery_action_started": _build_workspace_execution_event,
+    "task_recovery_action_completed": _build_workspace_execution_event,
     "clarification_asked": _build_clarification_asked,
     "clarification_answered": _build_clarification_answered,
     "decision_asked": _build_decision_asked,
