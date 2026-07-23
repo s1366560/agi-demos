@@ -655,6 +655,12 @@ class AgentService(AgentServicePort):
                 str(event.event_type),
                 event.event_data,
             )
+            execution_message_id = getattr(event, "message_id", None)
+            if isinstance(event_data, Mapping) and isinstance(execution_message_id, str):
+                event_data = {
+                    **event_data,
+                    "execution_message_id": execution_message_id,
+                }
             yielded.append(
                 {
                     "type": event_type,

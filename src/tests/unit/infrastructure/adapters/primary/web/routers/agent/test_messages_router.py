@@ -712,6 +712,31 @@ def test_build_timeline_merges_complete_metadata_into_assistant_message() -> Non
     }
 
 
+def test_build_timeline_exposes_assistant_response_and_execution_message_ids() -> None:
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(
+                event_type="assistant_message",
+                event_data={
+                    "message_id": "response-uuid",
+                    "content": "Done",
+                    "role": "assistant",
+                },
+                message_id="execution-message-id",
+            )
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert timeline[0]["message_id"] == "response-uuid"
+    assert timeline[0]["executionMessageId"] == "execution-message-id"
+
+
 def test_build_completion_map_targets_only_last_assistant_message_for_turn() -> None:
     first_assistant = _StubEvent(
         event_type="assistant_message",

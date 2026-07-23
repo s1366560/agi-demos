@@ -1462,6 +1462,12 @@ fn assistant_fields(
         ),
         ("role", "assistant".into()),
     ]);
+    if let Some(execution_message_id) = &event.message_id {
+        fields.insert(
+            "executionMessageId".to_string(),
+            Value::String(execution_message_id.clone()),
+        );
+    }
     let completion = completion_map.get(&timeline_event_id(event));
     if let Some(artifacts) = value_from(data, "artifacts").or_else(|| {
         completion
@@ -2166,6 +2172,35 @@ mod tests {
         assert_eq!(timeline[0].timeline_type, "user_message");
         assert_eq!(timeline[0].fields["role"], "user");
         assert_eq!(timeline[1].fields["content"], "hi");
+    }
+
+    #[test]
+    fn assistant_history_exposes_response_and_execution_message_ids() {
+        let timeline = build_timeline(
+            &[AgentExecutionEventRecord {
+                message_id: Some("execution-message-id".to_string()),
+                event_type: "assistant_message".to_string(),
+                event_data: json!({
+                    "message_id": "response-uuid",
+                    "content": "Done",
+                }),
+                event_time_us: 20,
+                event_counter: 1,
+                created_at: None,
+            }],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        );
+
+        assert_eq!(timeline[0].fields["message_id"], "response-uuid");
+        assert_eq!(
+            timeline[0].fields["executionMessageId"],
+            "execution-message-id"
+        );
     }
 
     #[test]

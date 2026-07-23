@@ -369,6 +369,53 @@ async def test_persist_tool_execution_event_strips_nul_bytes() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_replay_db_events_preserves_execution_identity_beside_response_id() -> None:
+    service = _build_service()
+    created_at = datetime.now(UTC)
+    event_data = {
+        "message_id": "response-message-1",
+        "content": "Persisted response",
+    }
+    service._agent_execution_event_repo.get_events_by_message.return_value = [
+        SimpleNamespace(
+            message_id="execution-message-1",
+            event_type="assistant_message",
+            event_data=event_data,
+            created_at=created_at,
+            event_time_us=34,
+            event_counter=1,
+        )
+    ]
+
+    events, last_event_time_us, last_event_counter, saw_complete = await service._replay_db_events(
+        "conv-1",
+        "execution-message-1",
+    )
+
+    assert events == [
+        {
+            "type": "assistant_message",
+            "data": {
+                "message_id": "response-message-1",
+                "execution_message_id": "execution-message-1",
+                "content": "Persisted response",
+            },
+            "timestamp": created_at.isoformat(),
+            "event_time_us": 34,
+            "event_counter": 1,
+        }
+    ]
+    assert event_data == {
+        "message_id": "response-message-1",
+        "content": "Persisted response",
+    }
+    assert last_event_time_us == 34
+    assert last_event_counter == 1
+    assert saw_complete is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_replay_db_events_repairs_malformed_task_list_updated_payload() -> None:
     service = _build_service()
     created_at = datetime.now(UTC)

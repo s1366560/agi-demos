@@ -409,6 +409,8 @@ def _build_assistant_message(
         "content": data.get("content", ""),
         "role": "assistant",
     }
+    if event.message_id:
+        item["executionMessageId"] = event.message_id
     if artifacts:
         item["artifacts"] = artifacts
     metadata: dict[str, Any] = {}
