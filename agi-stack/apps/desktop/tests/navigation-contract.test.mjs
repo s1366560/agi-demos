@@ -27,7 +27,7 @@ test('primary navigation opens section-based auxiliary views', () => {
     appSource.match(/onNavigate=\{\(section\) => \{[\s\S]*?\n\s*\}\}/)?.[0] ?? '';
   const renderWorkbench =
     appSource.match(
-      /const renderWorkbench = [\s\S]*?\n  \};\n\n  if \(!identityAuthenticated\)/,
+      /const renderWorkbench = [\s\S]*?\n  \};[\s\S]*?\n  if \(!identityAuthenticated\)/,
     )?.[0] ?? '';
 
   assert.match(appSource, /from '\.\/features\/navigation\/AuxiliaryView'/);

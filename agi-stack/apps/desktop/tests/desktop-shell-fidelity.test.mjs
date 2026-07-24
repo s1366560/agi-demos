@@ -99,7 +99,7 @@ test('workspace tree gives the Radix viewport the full available navigation heig
 test('authenticated identities without a project remain inside the desktop shell', () => {
   const renderWorkbench =
     appSource.match(
-      /const renderWorkbench = [\s\S]*?\n  \};\n\n  if \(!identityAuthenticated\)/
+      /const renderWorkbench = [\s\S]*?\n  \};[\s\S]*?\n  if \(!identityAuthenticated\)/
     )?.[0] ?? '';
 
   assert.match(appSource, /const identityAuthenticated = isIdentityAuthenticated\(auth\)/);

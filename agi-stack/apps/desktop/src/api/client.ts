@@ -29,6 +29,7 @@ import type {
   DeviceCodeView,
   DeviceTokenView,
   DesktopRuntimeConfig,
+  ForcePasswordChangeOutcome,
   ForkRecoveryOutcome,
   HitlResponseOutcome,
   HitlResponseSubmission,
@@ -261,6 +262,19 @@ export class DesktopApiClient {
       body,
       contentType: 'application/x-www-form-urlencoded;charset=UTF-8',
       skipAuth: true,
+    });
+  }
+
+  async forceChangePassword(
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<ForcePasswordChangeOutcome> {
+    return this.request<ForcePasswordChangeOutcome>('/api/v1/auth/force-change-password', {
+      method: 'POST',
+      body: {
+        old_password: currentPassword,
+        new_password: newPassword,
+      },
     });
   }
 

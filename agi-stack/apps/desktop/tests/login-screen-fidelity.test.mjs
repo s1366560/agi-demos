@@ -219,7 +219,7 @@ test('device grant cleanup covers cancellation, expiry, retry, supersession, unm
   assert.doesNotMatch(appSource, /(?:localStorage|sessionStorage)[\s\S]{0,160}?device_code/);
 });
 
-test('email login revokes a token that fails before session adoption', () => {
+test('email login revokes failed tokens while retaining only the guarded password-change token', () => {
   const loginStart = appSource.indexOf('const login = async (trustedDevice: boolean) =>');
   const loginEnd = appSource.indexOf('const hydrateLocalSession = async', loginStart);
   const emailLoginSource = appSource.slice(loginStart, loginEnd);
@@ -227,9 +227,12 @@ test('email login revokes a token that fails before session adoption', () => {
   assert.match(emailLoginSource, /issuedAccessToken = outcome\.access_token;/);
   assert.match(emailLoginSource, /let tokenAdopted = false;/);
   assert.match(emailLoginSource, /tokenAdopted = true;/);
+  assert.match(emailLoginSource, /let passwordChangeTokenRetained = false;/);
+  assert.match(emailLoginSource, /passwordChangeTokenRetained = true;/);
+  assert.match(emailLoginSource, /pendingPasswordChangeRef\.current = \{/);
   assert.match(
     emailLoginSource,
-    /finally \{\s*if \(issuedAccessToken && !tokenAdopted\) \{\s*await revokeUnadoptedDeviceToken/,
+    /finally \{\s*if \(issuedAccessToken && !tokenAdopted && !passwordChangeTokenRetained\) \{\s*await revokeUnadoptedDeviceToken/,
   );
 });
 

@@ -67,6 +67,7 @@ const testFiles = [
   'automation-model.test.mjs',
   'auxiliary-view.test.mjs',
   'auth-context-model.test.mjs',
+  'force-password-change.test.mjs',
   'chat-composer-model.test.mjs',
   'voice-transcription.test.mjs',
   'voice-call.test.mjs',

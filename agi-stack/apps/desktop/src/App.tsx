@@ -73,6 +73,12 @@ import {
   resolveSignOutDisposition,
   workspaceContextMatchesSelection,
 } from './features/auth/authContextModel';
+import { ForcePasswordChangeScreen } from './features/auth/ForcePasswordChangeScreen';
+import {
+  completeForcedPasswordChangeOutcome,
+  passwordChangeGateAuthState,
+  type PendingPasswordChangeAttempt,
+} from './features/auth/forcePasswordChangeModel';
 import {
   LoginScreen,
   type WorkspaceSsoPresentation,
@@ -1760,6 +1766,7 @@ export function App() {
   const workspaceExpansionScopeRef = useRef('');
   const localResumeAttemptRef = useRef('');
   const authAttemptRevisionRef = useRef(0);
+  const pendingPasswordChangeRef = useRef<PendingPasswordChangeAttempt | null>(null);
   const deviceAuthAttemptIdRef = useRef(0);
   const deviceAuthAttemptRef = useRef<{
     attemptId: number;
@@ -1801,6 +1808,16 @@ export function App() {
     () => () => {
       deviceAuthAttemptRef.current?.controller.abort();
       deviceAuthAttemptRef.current = null;
+      const pendingPasswordChange = pendingPasswordChangeRef.current;
+      pendingPasswordChangeRef.current = null;
+      if (pendingPasswordChange) {
+        void new DesktopApiClient({
+          ...pendingPasswordChange.runtimeConfig,
+          apiKey: pendingPasswordChange.outcome.access_token,
+        })
+          .signOut()
+          .catch(() => undefined);
+      }
     },
     [],
   );
@@ -4079,6 +4096,7 @@ export function App() {
     let persistenceWarning: string | null = null;
     let issuedAccessToken = '';
     let tokenAdopted = false;
+    let passwordChangeTokenRetained = false;
     try {
       if (hasNativeTrustedSessionBroker()) {
         try {
@@ -4094,7 +4112,18 @@ export function App() {
       issuedAccessToken = outcome.access_token;
       if (authAttemptRevisionRef.current !== authAttemptRevision) return;
       if (outcome.must_change_password) {
-        throw new Error(t('login.passwordChangeRequired'));
+        pendingPasswordChangeRef.current = {
+          outcome,
+          runtimeConfig,
+          trustedDevice,
+          authRevision: authAttemptRevision,
+        };
+        passwordChangeTokenRetained = true;
+        setLoginPassword('');
+        setAuth(passwordChangeGateAuthState(false, null));
+        setConnection('idle');
+        setError(null);
+        return;
       }
       if (trustedDevice && hasNativeTrustedSessionBroker()) {
         const trustedSession: NativeTrustedSession = {
@@ -4130,10 +4159,130 @@ export function App() {
       setConnection('error');
       setError(message);
     } finally {
-      if (issuedAccessToken && !tokenAdopted) {
+      if (issuedAccessToken && !tokenAdopted && !passwordChangeTokenRetained) {
         await revokeUnadoptedDeviceToken(issuedAccessToken, runtimeConfig);
       }
     }
+  };
+
+  const submitForcedPasswordChange = async (
+    currentPassword: string,
+    newPassword: string,
+  ) => {
+    const pending = pendingPasswordChangeRef.current;
+    if (
+      !pending ||
+      (auth.status !== 'password_change_required' && auth.status !== 'changing_password') ||
+      authAttemptRevisionRef.current !== pending.authRevision
+    ) {
+      return;
+    }
+
+    setAuth(passwordChangeGateAuthState(true, null));
+    setConnection('loading');
+    setError(null);
+    let passwordChanged = false;
+    let tokenAdopted = false;
+    let persistedNativeSession = false;
+    try {
+      const passwordClient = new DesktopApiClient({
+        ...pending.runtimeConfig,
+        apiKey: pending.outcome.access_token,
+      });
+      await passwordClient.forceChangePassword(currentPassword, newPassword);
+      passwordChanged = true;
+      if (authAttemptRevisionRef.current !== pending.authRevision) {
+        await revokeUnadoptedDeviceToken(
+          pending.outcome.access_token,
+          pending.runtimeConfig,
+        );
+        return;
+      }
+
+      let persistenceWarning: string | null = null;
+      if (pending.trustedDevice && hasNativeTrustedSessionBroker()) {
+        try {
+          await saveNativeTrustedSession({
+            version: 1,
+            api_base_url: pending.runtimeConfig.apiBaseUrl,
+            runtime_mode: 'cloud',
+            credential_kind: 'cloud_bearer',
+            credential: pending.outcome.access_token,
+            expires_at: pending.outcome.session?.expires_at ?? null,
+          });
+          persistedNativeSession = true;
+        } catch {
+          persistenceWarning = t('login.persistenceUnavailable');
+        }
+        if (authAttemptRevisionRef.current !== pending.authRevision) {
+          if (persistedNativeSession) {
+            await clearNativeTrustedSession().catch(() => undefined);
+          }
+          await revokeUnadoptedDeviceToken(
+            pending.outcome.access_token,
+            pending.runtimeConfig,
+          );
+          return;
+        }
+      }
+
+      const hydrated = await hydrateCloudSession(
+        completeForcedPasswordChangeOutcome(pending.outcome),
+        pending.runtimeConfig,
+        pending.authRevision,
+      );
+      if (!hydrated) {
+        if (persistedNativeSession) {
+          await clearNativeTrustedSession().catch(() => undefined);
+        }
+        await revokeUnadoptedDeviceToken(
+          pending.outcome.access_token,
+          pending.runtimeConfig,
+        );
+        return;
+      }
+      tokenAdopted = true;
+      pendingPasswordChangeRef.current = null;
+      if (persistenceWarning) setError(persistenceWarning);
+    } catch (caught) {
+      if (authAttemptRevisionRef.current !== pending.authRevision) return;
+      if (passwordChanged) {
+        pendingPasswordChangeRef.current = null;
+        if (persistedNativeSession) {
+          await clearNativeTrustedSession().catch(() => undefined);
+        }
+        if (!tokenAdopted) {
+          await revokeUnadoptedDeviceToken(
+            pending.outcome.access_token,
+            pending.runtimeConfig,
+          );
+        }
+        const message = t('forcePassword.changedSignInFailed');
+        setAuth({ ...emptyAuthState, error: message });
+        setConnection('error');
+        setError(message);
+        return;
+      }
+      const message = formatLoginError(caught, pending.runtimeConfig.apiBaseUrl);
+      setAuth(passwordChangeGateAuthState(false, message));
+      setConnection('idle');
+      setError(null);
+    }
+  };
+
+  const cancelForcedPasswordChange = () => {
+    const pending = pendingPasswordChangeRef.current;
+    if (!pending) return;
+    authAttemptRevisionRef.current += 1;
+    pendingPasswordChangeRef.current = null;
+    setLoginPassword('');
+    setAuth(emptyAuthState);
+    setConnection('idle');
+    setError(null);
+    void revokeUnadoptedDeviceToken(
+      pending.outcome.access_token,
+      pending.runtimeConfig,
+    );
   };
 
   const hydrateLocalSession = async (
@@ -7287,6 +7436,24 @@ export function App() {
     if (activeSection === 'search') return renderSearchPage();
     return renderWorkspaceOverview();
   };
+
+  if (
+    auth.status === 'password_change_required' ||
+    auth.status === 'changing_password'
+  ) {
+    return (
+      <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+        <ForcePasswordChangeScreen
+          busy={auth.status === 'changing_password'}
+          error={auth.error}
+          onSubmit={(currentPassword, newPassword) =>
+            void submitForcedPasswordChange(currentPassword, newPassword)
+          }
+          onSignOut={cancelForcedPasswordChange}
+        />
+      </Theme>
+    );
+  }
 
   if (!identityAuthenticated) {
     return (

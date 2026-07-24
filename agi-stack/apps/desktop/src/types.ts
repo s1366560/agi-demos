@@ -2,7 +2,13 @@ export type RuntimeMode = 'local' | 'cloud';
 
 export type ConnectionState = 'idle' | 'loading' | 'ready' | 'error';
 
-export type AuthStatus = 'signed_out' | 'signing_in' | 'signed_in' | 'manual';
+export type AuthStatus =
+  | 'signed_out'
+  | 'signing_in'
+  | 'password_change_required'
+  | 'changing_password'
+  | 'signed_in'
+  | 'manual';
 
 export type CredentialKind = 'cloud_session' | 'manual_api_key' | 'local_session';
 
@@ -89,6 +95,11 @@ export type LoginOutcome = {
   must_change_password: boolean;
   session?: AuthSessionDescriptor;
   context?: WorkspaceContextSnapshot;
+};
+
+export type ForcePasswordChangeOutcome = {
+  success: boolean;
+  message: string;
 };
 
 export type DeviceCodeView = {
