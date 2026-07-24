@@ -1,0 +1,35 @@
+.voice-transcription-qa-rail {
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+}
+
+.voice-transcription-qa-rail section .rt-Button {
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.voice-transcription-qa-diagnostics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.voice-transcription-qa-diagnostics div {
+  display: grid;
+  gap: 2px;
+  padding: 7px;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.voice-transcription-qa-diagnostics dt {
+  color: var(--desktop-faint);
+  font-size: 8px;
+}
+
+.voice-transcription-qa-diagnostics dd {
+  margin: 0;
+  color: var(--desktop-text);
+  font: 650 11px/1.2 inherit;
+}

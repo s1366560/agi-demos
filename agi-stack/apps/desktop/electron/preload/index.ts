@@ -13,6 +13,7 @@ const allowedCommands = new Set([
   'open_device_authorization_url',
   'local_runtime_status',
   'local_runtime_configure',
+  'request_microphone_access',
 ]);
 
 async function invokeDesktopCommand<T = unknown>(

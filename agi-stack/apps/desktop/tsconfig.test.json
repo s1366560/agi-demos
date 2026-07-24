@@ -12,6 +12,7 @@
   "include": [
     "tests/css.d.ts",
     "electron/main/automaticUpdateLoop.ts",
+    "electron/main/mediaPermissionPolicy.ts",
     "electron/main/rendererProtocol.ts",
     "electron/main/sidecarSupervisor.ts",
     "electron/main/updatePolicy.ts",
@@ -28,6 +29,8 @@
     "src/features/chat/agentTaskSignalModel.ts",
     "src/features/chat/agentLifecyclePresentationModel.ts",
     "src/features/chat/chatComposerModel.ts",
+    "src/features/chat/voiceTranscriptionModel.ts",
+    "src/features/chat/voiceTranscriptionRuntime.ts",
     "src/features/chat/conversationSearchModel.ts",
     "src/features/chat/pinnedMessageModel.ts",
     "src/features/chat/conversationExportModel.ts",

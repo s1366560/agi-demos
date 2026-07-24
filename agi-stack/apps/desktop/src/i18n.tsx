@@ -2999,6 +2999,23 @@ const enUS: Record<string, string> = {
   'composer.attachmentOnlyMessage': 'Attached files: {filenames}',
   'composer.screenshot': 'Screenshot',
   'composer.screenshotUnavailable': 'Screen capture is unavailable in this runtime',
+  'composer.voice.start': 'Voice input',
+  'composer.voice.stop': 'Stop voice input',
+  'composer.voice.unavailable.local_runtime': 'Voice input is available in cloud sessions.',
+  'composer.voice.unavailable.authentication_required':
+    'Sign in to a cloud session before using voice input.',
+  'composer.voice.unavailable.conversation_required':
+    'Open a cloud conversation before using voice input.',
+  'composer.voice.error.permission_denied':
+    'Microphone access was denied. Review the system permission and try again.',
+  'composer.voice.error.capture_unsupported':
+    'Microphone capture is unavailable in this environment.',
+  'composer.voice.error.connection_failed':
+    'Voice transcription could not connect. Check the cloud connection and try again.',
+  'composer.voice.error.connection_closed': 'The voice transcription connection closed.',
+  'composer.voice.error.capture_failed':
+    'Voice capture stopped unexpectedly. Check the microphone and try again.',
+  'composer.voice.error.service_error': 'The voice transcription service returned an error.',
   'composer.noResources': 'No enabled resources',
   'composer.loadingResources': 'Loading available resources…',
   'composer.commandPlanDescription': 'Draft or revise the plan before acting',
@@ -5895,6 +5912,17 @@ const zhCN: Record<string, string> = {
   'composer.attachmentOnlyMessage': '已附加文件：{filenames}',
   'composer.screenshot': '截图',
   'composer.screenshotUnavailable': '当前运行时不支持屏幕捕获',
+  'composer.voice.start': '语音输入',
+  'composer.voice.stop': '停止语音输入',
+  'composer.voice.unavailable.local_runtime': '语音输入仅适用于云端会话。',
+  'composer.voice.unavailable.authentication_required': '请先登录云端会话，再使用语音输入。',
+  'composer.voice.unavailable.conversation_required': '请先打开云端会话，再使用语音输入。',
+  'composer.voice.error.permission_denied': '麦克风权限被拒绝，请检查系统权限后重试。',
+  'composer.voice.error.capture_unsupported': '当前环境无法使用麦克风采集。',
+  'composer.voice.error.connection_failed': '无法连接语音转写服务，请检查云端连接后重试。',
+  'composer.voice.error.connection_closed': '语音转写连接已关闭。',
+  'composer.voice.error.capture_failed': '语音采集意外停止，请检查麦克风后重试。',
+  'composer.voice.error.service_error': '语音转写服务返回了错误。',
   'composer.noResources': '没有已启用资源',
   'composer.loadingResources': '正在加载可用资源…',
   'composer.commandPlanDescription': '执行前创建或修改计划',

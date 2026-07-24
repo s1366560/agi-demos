@@ -7,6 +7,7 @@ import {
   protocol,
   session,
   shell,
+  systemPreferences,
   type IpcMainInvokeEvent,
 } from 'electron';
 import { existsSync } from 'node:fs';
@@ -21,6 +22,7 @@ import {
   RendererProtocolError,
   resolveRendererAsset,
 } from './rendererProtocol';
+import { isTrustedAudioMediaPermission } from './mediaPermissionPolicy';
 import { SidecarSupervisor } from './sidecarSupervisor';
 import { startAutomaticUpdates } from './updater';
 
@@ -127,6 +129,10 @@ async function executeDesktopCommand(
     case 'open_device_authorization_url':
       await shell.openExternal(validateDeviceAuthorizationUrl(args), { activate: true });
       return undefined;
+    case 'request_microphone_access':
+      return process.platform === 'darwin'
+        ? systemPreferences.askForMediaAccess('microphone')
+        : true;
     default:
       if (SIDECAR_COMMANDS.has(command)) {
         if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
@@ -238,6 +244,35 @@ function installRendererProtocol(): void {
   protocol.handle(RENDERER_PROTOCOL_SCHEME, handleRendererRequest);
 }
 
+function installMediaPermissionPolicy(): void {
+  const developmentUrl = rendererDevelopmentUrl();
+  const allowedOrigin =
+    developmentUrl?.origin ?? `${RENDERER_PROTOCOL_SCHEME}://${RENDERER_PROTOCOL_HOST}`;
+  session.defaultSession.setPermissionCheckHandler(
+    (webContents, permission, requestingOrigin, details) =>
+      isTrustedAudioMediaPermission({
+        senderIsMainWindow: webContents !== null && webContents === mainWindow?.webContents,
+        permission,
+        requestingUrl: requestingOrigin || webContents?.getURL() || '',
+        allowedOrigin,
+        mediaTypes: details.mediaType ? [details.mediaType] : [],
+      }),
+  );
+  session.defaultSession.setPermissionRequestHandler(
+    (webContents, permission, callback, details) => {
+      callback(
+        isTrustedAudioMediaPermission({
+          senderIsMainWindow: webContents === mainWindow?.webContents,
+          permission,
+          requestingUrl: details.requestingUrl || webContents.getURL(),
+          allowedOrigin,
+          mediaTypes: 'mediaTypes' in details ? (details.mediaTypes ?? []) : [],
+        }),
+      );
+    },
+  );
+}
+
 function installNavigationPolicy(window: BrowserWindow, developmentUrl: URL | null): void {
   window.webContents.setWindowOpenHandler(({ url }) => {
     try {
@@ -315,9 +350,7 @@ function handleFatalStartup(error: unknown): void {
 
 async function bootstrapApplication(): Promise<void> {
   installRendererProtocol();
-  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
-    callback(false);
-  });
+  installMediaPermissionPolicy();
   sidecarSupervisor = createSidecarSupervisor();
   await sidecarSupervisor.start();
   ipcMain.handle(DESKTOP_COMMAND_CHANNEL, executeDesktopCommand);

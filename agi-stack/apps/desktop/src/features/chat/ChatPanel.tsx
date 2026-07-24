@@ -44,6 +44,7 @@ import type {
   HitlResponseSubmission,
   CodeRangeReference,
   DesktopRunInput,
+  DesktopRuntimeConfig,
   RunInputDelivery,
   RuntimeMode,
   WorkspaceMessage,
@@ -127,6 +128,16 @@ import {
 import { useComposerFileDrop } from './useComposerFileDrop';
 import { useComposerFileUpload } from './useComposerFileUpload';
 import { useTimelineTurnCollapse } from './useTimelineTurnCollapse';
+import { useVoiceTranscription } from './useVoiceTranscription';
+import {
+  applyVoiceTranscriptMessage,
+  initialVoiceTranscriptDraft,
+  resolveVoiceTranscriptionConnection,
+  voiceTranscriptDraftValue,
+  voiceTranscriptionFailureKey,
+  type VoiceTranscriptionConnection,
+} from './voiceTranscriptionModel';
+import type { VoiceTranscriptionRuntime } from './voiceTranscriptionRuntime';
 import type {
   AgentTaskSignal,
   AgentTaskSignalStatus,
@@ -167,6 +178,8 @@ type ChatPanelProps = {
     tenantId: string;
     projectId: string;
   };
+  voiceTranscriptionConfig?: DesktopRuntimeConfig;
+  voiceTranscriptionRuntime?: VoiceTranscriptionRuntime;
   activityPresence: SessionActivityPresence;
   activityStructuredEvidence: SessionActivityStructuredEvidence | null;
   composerVariant?: ChatComposerVariant;
@@ -293,6 +306,8 @@ export const ChatPanel = memo(function ChatPanel({
   sessionTitle,
   scopeLabel,
   turnCollapseRuntime = DEFAULT_TURN_COLLAPSE_RUNTIME,
+  voiceTranscriptionConfig,
+  voiceTranscriptionRuntime,
   activityPresence,
   activityStructuredEvidence,
   composerVariant = 'workspace',
@@ -1553,6 +1568,8 @@ export const ChatPanel = memo(function ChatPanel({
         composeAheadScope={composeAheadScope}
         composeAheadEnabled={composeAheadEnabled}
         responseStreaming={responseStreaming}
+        voiceTranscriptionConfig={voiceTranscriptionConfig}
+        voiceTranscriptionRuntime={voiceTranscriptionRuntime}
       />
       {messageDeleteRequest ? (
         <MessageDeleteDialog
@@ -1659,6 +1676,8 @@ type ChatComposerProps = {
   composeAheadScope: string | null;
   composeAheadEnabled: boolean;
   responseStreaming: boolean;
+  voiceTranscriptionConfig?: DesktopRuntimeConfig;
+  voiceTranscriptionRuntime?: VoiceTranscriptionRuntime;
 };
 
 function ChatComposer({
@@ -1703,6 +1722,8 @@ function ChatComposer({
   composeAheadScope,
   composeAheadEnabled,
   responseStreaming,
+  voiceTranscriptionConfig,
+  voiceTranscriptionRuntime,
 }: ChatComposerProps) {
   const { t } = useI18n();
   const [input, setInput] = useState(initialInput);
@@ -1720,10 +1741,49 @@ function ChatComposer({
   const disabled = Boolean(disabledReason);
   const promptTemplateConversation =
     conversations.find((conversation) => conversation.id === activeConversationId) ?? null;
-  const insertPromptTemplate = useCallback((prompt: string) => {
-    setInput(prompt);
-    window.requestAnimationFrame(() => composerInputRef.current?.focus());
-  }, []);
+  const voiceConnection = useMemo<VoiceTranscriptionConnection>(
+    () =>
+      voiceTranscriptionConfig
+        ? resolveVoiceTranscriptionConnection(
+            voiceTranscriptionConfig,
+            promptTemplateConversation?.project_id ?? voiceTranscriptionConfig.projectId,
+            promptTemplateConversation?.id ?? activeConversationId,
+          )
+        : { availability: 'local_runtime' },
+    [activeConversationId, promptTemplateConversation, voiceTranscriptionConfig],
+  );
+  const voiceDraftRef = useRef(initialVoiceTranscriptDraft(''));
+  const applyVoiceMessage = useCallback(
+    (message: Parameters<typeof applyVoiceTranscriptMessage>[1]) => {
+      const nextDraft = applyVoiceTranscriptMessage(voiceDraftRef.current, message);
+      voiceDraftRef.current = nextDraft;
+      setInput(voiceTranscriptDraftValue(nextDraft));
+    },
+    [],
+  );
+  const voice = useVoiceTranscription({
+    connection: voiceConnection,
+    runtime: voiceTranscriptionRuntime,
+    onInterim: (text) => applyVoiceMessage({ kind: 'interim', text }),
+    onFinal: (text) => applyVoiceMessage({ kind: 'final', text }),
+  });
+  const voiceActive = voice.state === 'connecting' || voice.state === 'listening';
+  const voiceDisabledReason =
+    voiceConnection.availability === 'available'
+      ? null
+      : t(`composer.voice.unavailable.${voiceConnection.availability}`);
+  const toggleVoice = useCallback(async () => {
+    if (!voiceActive) voiceDraftRef.current = initialVoiceTranscriptDraft(input);
+    await voice.toggle();
+  }, [input, voice.toggle, voiceActive]);
+  const insertPromptTemplate = useCallback(
+    (prompt: string) => {
+      voice.stop();
+      setInput(prompt);
+      window.requestAnimationFrame(() => composerInputRef.current?.focus());
+    },
+    [voice.stop],
+  );
   const addContextItem = useCallback((item: ComposerContextItem) => {
     setContextItems((current) => appendComposerContextItem(current, item));
   }, []);
@@ -1771,6 +1831,7 @@ function ChatComposer({
     window.requestAnimationFrame(() => composerInputRef.current?.focus());
   }, [activeConversationId, draftRequest]);
   const handleSend = useCallback(() => {
+    voice.stop();
     if (composeAheadQueueEligibility.canQueue && composeAheadScope) {
       composeAheadQueueStore.enqueue(composeAheadScope, {
         text: input,
@@ -1802,6 +1863,7 @@ function ChatComposer({
     input,
     onSend,
     t,
+    voice.stop,
   ]);
   useEffect(() => {
     return () => {
@@ -2060,6 +2122,11 @@ function ChatComposer({
             ))}
           </div>
         ) : null}
+        {voice.errorCode ? (
+          <div className="composer-voice-error" role="alert">
+            {t(voiceTranscriptionFailureKey(voice.errorCode))}
+          </div>
+        ) : null}
         {contextItems.length ? (
           <div className="composer-context-chips" aria-label={t('composer.addedContext')}>
             {contextItems.map((item) => (
@@ -2177,6 +2244,34 @@ function ChatComposer({
             onInsert={insertPromptTemplate}
           />
         ) : null}
+        {voiceTranscriptionConfig ? (
+          <button
+            className={`composer-voice-button is-${voice.state}`}
+            type="button"
+            aria-label={t(voiceActive ? 'composer.voice.stop' : 'composer.voice.start')}
+            aria-pressed={voiceActive}
+            title={
+              voiceDisabledReason ??
+              t(voiceActive ? 'composer.voice.stop' : 'composer.voice.start')
+            }
+            disabled={
+              disabled ||
+              sending ||
+              uploadingAttachments ||
+              voiceConnection.availability !== 'available'
+            }
+            onClick={() => void toggleVoice()}
+          >
+            <VoiceMicrophoneIcon active={voiceActive} />
+            {voiceActive ? (
+              <span className="composer-voice-wave" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+            ) : null}
+          </button>
+        ) : null}
         {composerPresentation.showCommands ? (
           <button
             className="composer-slash-button"
@@ -2266,6 +2361,37 @@ function ChatComposer({
         </Flex>
       </div>
     </form>
+  );
+}
+
+function VoiceMicrophoneIcon({ active }: { active: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      width="18"
+      height="18"
+      fill="none"
+    >
+      <rect
+        x="7"
+        y="2.5"
+        width="6"
+        height="9"
+        rx="3"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+      <path
+        d="M4.8 9.5a5.2 5.2 0 0 0 10.4 0M10 14.7v2.8M7.5 17.5h5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      {active ? (
+        <path d="M3 4.5 17 15.5" stroke="currentColor" strokeWidth="1.6" />
+      ) : null}
+    </svg>
   );
 }
 

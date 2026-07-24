@@ -2719,7 +2719,8 @@
 }
 
 .session-chat-narrative .composer-file-upload-status,
-.session-chat-narrative .composer-file-upload-errors {
+.session-chat-narrative .composer-file-upload-errors,
+.session-chat-narrative .composer-voice-error {
   display: grid;
   gap: 3px;
   padding: 7px 9px 0;
@@ -2731,8 +2732,92 @@
   color: var(--desktop-muted);
 }
 
-.session-chat-narrative .composer-file-upload-errors {
+.session-chat-narrative .composer-file-upload-errors,
+.session-chat-narrative .composer-voice-error {
   color: #d6ad70;
+}
+
+.composer-voice-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  gap: 4px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--desktop-muted);
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.composer-voice-button:hover:not(:disabled),
+.composer-voice-button:focus-visible {
+  border-color: rgba(83, 208, 239, 0.24);
+  background: rgba(83, 208, 239, 0.08);
+  color: var(--desktop-text);
+  outline: none;
+}
+
+.composer-voice-button:focus-visible {
+  box-shadow: 0 0 0 2px rgba(83, 208, 239, 0.18);
+}
+
+.composer-voice-button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.composer-voice-button.is-connecting,
+.composer-voice-button.is-listening {
+  border-color: rgba(34, 211, 238, 0.3);
+  background: rgba(16, 98, 117, 0.22);
+  color: var(--desktop-cyan);
+}
+
+.composer-voice-wave {
+  display: inline-flex;
+  align-items: center;
+  height: 12px;
+  gap: 2px;
+}
+
+.composer-voice-wave i {
+  width: 2px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: composer-voice-pulse 780ms ease-in-out infinite alternate;
+}
+
+.composer-voice-wave i:nth-child(2) {
+  height: 9px;
+  animation-delay: 130ms;
+}
+
+.composer-voice-wave i:nth-child(3) {
+  height: 7px;
+  animation-delay: 260ms;
+}
+
+@keyframes composer-voice-pulse {
+  to {
+    transform: scaleY(0.45);
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-voice-button,
+  .composer-voice-wave i {
+    transition: none;
+    animation: none;
+  }
 }
 
 .session-chat-narrative .composer-reference-chips {

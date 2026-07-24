@@ -32,6 +32,8 @@ mac:
   notarize: true
   entitlements: electron/resources/entitlements.mac.plist
   entitlementsInherit: electron/resources/entitlements.mac.inherit.plist
+  extendInfo:
+    NSMicrophoneUsageDescription: Voice input uses the microphone only while you are dictating a chat draft.
   binaries:
     - Contents/Resources/sidecar/agistack-desktop-sidecar
 win:

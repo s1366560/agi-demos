@@ -6899,6 +6899,7 @@ export function App() {
         tenantId: config.tenantId,
         projectId: config.projectId,
       }}
+      voiceTranscriptionConfig={config}
       composerVariant={selectedConversation ? 'session' : 'workspace'}
       composerResetKey={selectedConversation?.id ?? config.workspaceId}
       activityPresence={sessionActivityState}
