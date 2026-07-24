@@ -15,6 +15,7 @@ const STORAGE_KEY = 'agistack.desktop.locale';
 const enUS: Record<string, string> = {
   'common.close': 'Close',
   'common.cancel': 'Cancel',
+  'common.delete': 'Delete',
   'common.save': 'Save changes',
   'common.create': 'Create',
   'common.edit': 'Edit',
@@ -2391,6 +2392,13 @@ const enUS: Record<string, string> = {
   'chat.copyMessage': 'Copy message',
   'chat.replyMessage': 'Reply',
   'chat.editMessage': 'Edit message',
+  'chat.deleteMessage': 'Delete message',
+  'chat.deleteMessageTitle': 'Delete this message?',
+  'chat.deleteMessageBody': 'Remove "{excerpt}" from this conversation view.',
+  'chat.deleteMessageBodyEmpty': 'Remove this message from this conversation view.',
+  'chat.deleteMessageRestorationNote':
+    'This only changes the current view. Reloading the conversation may restore the message.',
+  'chat.messageRemoved': 'Message removed from this conversation view.',
   'chat.retryMessage': 'Retry response',
   'chat.pinnedMessages': 'Pinned messages',
   'chat.pinMessage': 'Pin message',
@@ -3137,6 +3145,7 @@ const enUS: Record<string, string> = {
 const zhCN: Record<string, string> = {
   'common.close': '关闭',
   'common.cancel': '取消',
+  'common.delete': '删除',
   'common.save': '保存更改',
   'common.create': '创建',
   'common.edit': '编辑',
@@ -5303,6 +5312,13 @@ const zhCN: Record<string, string> = {
   'chat.copyMessage': '复制消息',
   'chat.replyMessage': '引用回复',
   'chat.editMessage': '编辑消息',
+  'chat.deleteMessage': '删除消息',
+  'chat.deleteMessageTitle': '删除这条消息？',
+  'chat.deleteMessageBody': '将“{excerpt}”从当前会话视图中移除。',
+  'chat.deleteMessageBodyEmpty': '将此消息从当前会话视图中移除。',
+  'chat.deleteMessageRestorationNote':
+    '此操作仅影响当前视图；重新加载会话后，这条消息可能会恢复。',
+  'chat.messageRemoved': '已从当前会话视图中移除该消息。',
   'chat.retryMessage': '重试回复',
   'chat.pinnedMessages': '置顶消息',
   'chat.pinMessage': '置顶消息',

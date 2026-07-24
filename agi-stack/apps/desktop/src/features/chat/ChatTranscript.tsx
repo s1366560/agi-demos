@@ -9,6 +9,7 @@ import {
   FileTextIcon,
   Pencil1Icon,
   ReloadIcon,
+  TrashIcon,
 } from '@radix-ui/react-icons';
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
@@ -40,6 +41,7 @@ export const WorkspaceTranscriptMessage = memo(function WorkspaceTranscriptMessa
   message,
   onReply,
   onEdit,
+  onDelete,
   onRetry,
   isPinned = false,
   onPin,
@@ -49,6 +51,7 @@ export const WorkspaceTranscriptMessage = memo(function WorkspaceTranscriptMessa
   message: WorkspaceMessage;
   onReply?: () => void;
   onEdit?: () => void;
+  onDelete?: (returnFocus: HTMLElement) => void;
   onRetry?: () => void;
   isPinned?: boolean;
   onPin?: () => void;
@@ -74,6 +77,7 @@ export const WorkspaceTranscriptMessage = memo(function WorkspaceTranscriptMessa
       timelineItemId={message.id}
       onReply={onReply}
       onEdit={onEdit}
+      onDelete={onDelete}
       onRetry={onRetry}
       isPinned={isPinned}
       onPin={onPin}
@@ -96,6 +100,7 @@ export function NarrativeMessageFrame({
   streaming = false,
   onReply,
   onEdit,
+  onDelete,
   onRetry,
   isPinned = false,
   onPin,
@@ -113,6 +118,7 @@ export function NarrativeMessageFrame({
   streaming?: boolean;
   onReply?: () => void;
   onEdit?: () => void;
+  onDelete?: (returnFocus: HTMLElement) => void;
   onRetry?: () => void;
   isPinned?: boolean;
   onPin?: () => void;
@@ -139,6 +145,7 @@ export function NarrativeMessageFrame({
             streaming={streaming}
             onReply={onReply}
             onEdit={onEdit}
+            onDelete={onDelete}
             onRetry={onRetry}
             isPinned={isPinned}
             onPin={onPin}
@@ -204,6 +211,7 @@ function MessageActionMenu({
   streaming,
   onReply,
   onEdit,
+  onDelete,
   onRetry,
   isPinned,
   onPin,
@@ -215,6 +223,7 @@ function MessageActionMenu({
   streaming: boolean;
   onReply?: () => void;
   onEdit?: () => void;
+  onDelete?: (returnFocus: HTMLElement) => void;
   onRetry?: () => void;
   isPinned: boolean;
   onPin?: () => void;
@@ -234,7 +243,7 @@ function MessageActionMenu({
     action?.();
     closeMenu();
   };
-  const invokeSaveTemplate = (
+  const invokeWithReturnFocus = (
     action: ((returnFocus: HTMLElement) => void) | undefined,
     fallback: HTMLButtonElement,
   ) => {
@@ -273,6 +282,16 @@ function MessageActionMenu({
             {t('chat.editMessage')}
           </button>
         ) : null}
+        {availability.delete && onDelete ? (
+          <button
+            type="button"
+            aria-label={t('chat.deleteMessage')}
+            onClick={(event) => invokeWithReturnFocus(onDelete, event.currentTarget)}
+          >
+            <TrashIcon aria-hidden="true" />
+            {t('chat.deleteMessage')}
+          </button>
+        ) : null}
         {availability.retry && onRetry ? (
           <button
             type="button"
@@ -299,7 +318,7 @@ function MessageActionMenu({
           <button
             type="button"
             aria-label={t('chat.templates.saveAsTemplate')}
-            onClick={(event) => invokeSaveTemplate(onSaveTemplate, event.currentTarget)}
+            onClick={(event) => invokeWithReturnFocus(onSaveTemplate, event.currentTarget)}
           >
             <FileTextIcon aria-hidden="true" />
             {t('chat.templates.saveAsTemplate')}

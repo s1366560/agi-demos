@@ -115,7 +115,11 @@ test('desktop conversation search mirrors the Web keyboard, focus, count, and an
     chatPanelSource,
     /\(event\.metaKey \|\| event\.ctrlKey\)[\s\S]*?event\.key\.toLowerCase\(\) === 'f'[\s\S]*?preventDefault\(\)[\s\S]*?setConversationSearchVisible/,
   );
-  assert.match(chatPanelSource, /<ConversationSearch[\s\S]*?items=\{timelineItems \?\? \[\]\}/);
+  assert.match(chatPanelSource, /<ConversationSearch[\s\S]*?items=\{visibleTimelineItems\}/);
+  assert.match(
+    chatPanelSource,
+    /filterHiddenMessages\([\s\S]*?timelineItems \?\? \[\],[\s\S]*?messageActionScopeKey/,
+  );
   assert.match(conversationSearchSource, /event\.key === 'Escape'[\s\S]*?onClose\(\)/);
   assert.match(
     conversationSearchSource,

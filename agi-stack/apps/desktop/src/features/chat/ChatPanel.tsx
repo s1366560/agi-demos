@@ -67,6 +67,10 @@ import {
   SavePromptTemplateDialog,
   type SavePromptTemplateTarget,
 } from './SavePromptTemplateDialog';
+import {
+  MessageDeleteDialog,
+  type MessageDeleteDialogTarget,
+} from './MessageDeleteDialog';
 import { AgentTimeline, TIMELINE_RENDER_STEP } from './ChatTimeline';
 import {
   isImportantTimelineItem,
@@ -92,11 +96,16 @@ import {
 } from './composeAheadModel';
 import type { ComposeAheadPrompt } from './composeAheadModel';
 import {
+  canConfirmMessageDeletion,
+  filterHiddenMessages,
   findRetryMessageContent,
+  hideMessageInScope,
+  messageDeletionFocusNeighborId,
   quoteMessageForComposer,
   resolveRetryDispatch,
 } from './chatMessageActionModel';
 import type {
+  LocalMessageVisibilityState,
   VisibleMessageForRetry,
   VisibleMessageKind,
 } from './chatMessageActionModel';
@@ -217,6 +226,12 @@ type ComposerDraftRequest = {
   content: string;
 };
 
+type MessageDeleteRequest = MessageDeleteDialogTarget & {
+  scopeKey: string;
+  returnFocus: HTMLElement;
+  focusNeighborId: string | null;
+};
+
 function timelineVisibleMessage(
   item: AgentTimelineItem,
   conversationId: string,
@@ -334,6 +349,10 @@ export const ChatPanel = memo(function ChatPanel({
   const [messageActionNotice, setMessageActionNotice] = useState<string | null>(null);
   const [saveTemplateRequest, setSaveTemplateRequest] =
     useState<SavePromptTemplateTarget | null>(null);
+  const [messageDeleteRequest, setMessageDeleteRequest] =
+    useState<MessageDeleteRequest | null>(null);
+  const [localMessageVisibility, setLocalMessageVisibility] =
+    useState<LocalMessageVisibilityState | null>(null);
   const [promptTemplateRefreshToken, setPromptTemplateRefreshToken] = useState(0);
   const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
   const [conversationSearchVisible, setConversationSearchVisible] = useState(false);
@@ -376,10 +395,6 @@ export const ChatPanel = memo(function ChatPanel({
   const timelineItemCount = timelineState?.items.length ?? 0;
   const timelineConversationId = timelineState?.conversationId ?? '';
   const timelineFirstId = timelineState?.items[0]?.id ?? '';
-  const agentSuggestions = useMemo(
-    () => latestAgentSuggestions(timelineState?.items ?? []),
-    [timelineState?.items],
-  );
   const timelineTailItem = timelineState?.items[timelineItemCount - 1];
   const timelineLastId = timelineTailItem?.id ?? '';
   const timelineTailRevision =
@@ -402,6 +417,36 @@ export const ChatPanel = memo(function ChatPanel({
     timelineConversationId || selectedConversationId || messages[0]?.workspace_id || '';
   const messageActionConversation =
     conversations.find((conversation) => conversation.id === messageActionConversationId) ?? null;
+  const messageActionScopeKey = `${messageActionConversation?.tenant_id ?? ''}:${
+    messageActionConversation?.project_id ?? ''
+  }:${messageActionConversationId}`;
+  const visibleTimelineItems = useMemo(
+    () =>
+      filterHiddenMessages(
+        timelineItems ?? [],
+        localMessageVisibility,
+        messageActionScopeKey,
+      ),
+    [localMessageVisibility, messageActionScopeKey, timelineItems],
+  );
+  const visibleWorkspaceMessages = useMemo(
+    () => filterHiddenMessages(messages, localMessageVisibility, messageActionScopeKey),
+    [localMessageVisibility, messageActionScopeKey, messages],
+  );
+  const visibleTimelineState = useMemo(
+    () =>
+      timelineState
+        ? {
+            ...timelineState,
+            items: visibleTimelineItems,
+          }
+        : null,
+    [timelineState, visibleTimelineItems],
+  );
+  const agentSuggestions = useMemo(
+    () => latestAgentSuggestions(visibleTimelineItems),
+    [visibleTimelineItems],
+  );
   const turnCollapseScope = useMemo(
     () => ({
       ...turnCollapseRuntime,
@@ -412,8 +457,8 @@ export const ChatPanel = memo(function ChatPanel({
     [messageActionConversation, messageActionConversationId, turnCollapseRuntime],
   );
   const timelineDisplayItems = useMemo(
-    () => timelineItemsForDisplay(timelineItems ?? []),
-    [timelineItems],
+    () => timelineItemsForDisplay(visibleTimelineItems),
+    [visibleTimelineItems],
   );
   const timelineTurns = useMemo(
     () => computeTimelineTurns(timelineDisplayItems),
@@ -431,19 +476,16 @@ export const ChatPanel = memo(function ChatPanel({
     },
     [expandTimelineTurn, timelineTurns],
   );
-  const messageActionScopeKey = `${messageActionConversation?.tenant_id ?? ''}:${
-    messageActionConversation?.project_id ?? ''
-  }:${messageActionConversationId}`;
   const conversationExportSnapshot = useMemo(
     () =>
-      timelineState && messageActionConversationId
+      visibleTimelineState && messageActionConversationId
         ? createConversationExportSnapshot({
             conversationId: messageActionConversationId,
             title: sessionTitle,
-            items: timelineState.items,
+            items: visibleTimelineState.items,
           })
         : null,
-    [messageActionConversationId, sessionTitle, timelineState],
+    [messageActionConversationId, sessionTitle, visibleTimelineState],
   );
   const conversationSearchScopeId = timelineConversationId || selectedConversationId || '';
   const composeAheadConversation = useMemo(
@@ -481,29 +523,57 @@ export const ChatPanel = memo(function ChatPanel({
     });
   const visibleActionMessages = useMemo<VisibleMessageForRetry[]>(
     () =>
-      timelineState
-        ? timelineState.items.flatMap((item) => {
+      visibleTimelineState
+        ? visibleTimelineState.items.flatMap((item) => {
             const message = timelineVisibleMessage(item, timelineConversationId);
             return message ? [message] : [];
           })
-        : messages.map((message) =>
+        : visibleWorkspaceMessages.map((message) =>
             workspaceVisibleMessage(message, messageActionConversationId),
           ),
-    [messageActionConversationId, messages, timelineConversationId, timelineState],
+    [
+      messageActionConversationId,
+      timelineConversationId,
+      visibleTimelineState,
+      visibleWorkspaceMessages,
+    ],
+  );
+  const deletionFocusMessages = useMemo<VisibleMessageForRetry[]>(
+    () =>
+      visibleTimelineState
+        ? visibleTimelineState.items.map((item) => {
+            const kind = timelineKind(item);
+            return {
+              id: item.id,
+              conversationId: timelineConversationId,
+              kind: kind === 'user' || kind === 'agent' ? kind : 'runtime',
+              content: item.content ?? '',
+            };
+          })
+        : visibleWorkspaceMessages.map((message) =>
+            workspaceVisibleMessage(message, messageActionConversationId),
+          ),
+    [
+      messageActionConversationId,
+      timelineConversationId,
+      visibleTimelineState,
+      visibleWorkspaceMessages,
+    ],
   );
   const pinnedMessages = useMemo(
     () => pinnedMessagesInTimelineOrder(visibleActionMessages, pinnedMessageIds),
     [pinnedMessageIds, visibleActionMessages],
   );
-  const workspaceFirstMessageId = messages[0]?.id ?? '';
-  const workspaceLastMessageId = messages[messages.length - 1]?.id ?? '';
+  const workspaceFirstMessageId = visibleWorkspaceMessages[0]?.id ?? '';
+  const workspaceLastMessageId =
+    visibleWorkspaceMessages[visibleWorkspaceMessages.length - 1]?.id ?? '';
   const activitySummary = useMemo(() => {
-    if (!timelineItems?.length) return null;
+    if (!visibleTimelineItems.length) return null;
     return sessionActivitySummary({
-      items: timelineItems,
+      items: visibleTimelineItems,
       structuredEvidence: activityStructuredEvidence,
     });
-  }, [activityStructuredEvidence, timelineItems]);
+  }, [activityStructuredEvidence, visibleTimelineItems]);
   const activityEvidence = useMemo(() => {
     if (!activitySummary) return '';
     if (activitySummary.evidence.kind === 'structured') {
@@ -590,6 +660,8 @@ export const ChatPanel = memo(function ChatPanel({
     setComposerDraftRequest(null);
     setMessageActionNotice(null);
     setSaveTemplateRequest(null);
+    setMessageDeleteRequest(null);
+    setLocalMessageVisibility(null);
     setConversationSearchVisible(false);
     setConversationComparisonVisible(false);
     setConversationComparisonPickerOpen(false);
@@ -671,7 +743,7 @@ export const ChatPanel = memo(function ChatPanel({
       sessionTitle,
       workspaceFirstMessageId,
       workspaceLastMessageId,
-      messages.length,
+      visibleWorkspaceMessages.length,
       signalStateKey,
     ].join(':');
     const workspaceTailChanged = workspaceTailKeyRef.current !== workspaceTailKey;
@@ -682,7 +754,7 @@ export const ChatPanel = memo(function ChatPanel({
       setShowJumpToLatest(true);
     }
   }, [
-    messages.length,
+    visibleWorkspaceMessages.length,
     scrollToLatest,
     sessionTitle,
     signalStateKey,
@@ -858,6 +930,100 @@ export const ChatPanel = memo(function ChatPanel({
     },
     [requestComposerDraft],
   );
+  const requestVisibleMessageDeletion = useCallback(
+    (message: VisibleMessageForRetry, returnFocus: HTMLElement) => {
+      const target = {
+        scopeKey: messageActionScopeKey,
+        messageId: message.id,
+      };
+      if (
+        message.conversationId !== messageActionConversationId ||
+        !canConfirmMessageDeletion(target, messageActionScopeKey, visibleActionMessages)
+      ) {
+        return;
+      }
+      setMessageActionNotice(null);
+      setMessageDeleteRequest({
+        ...target,
+        content: message.content,
+        returnFocus,
+        focusNeighborId: messageDeletionFocusNeighborId(
+          deletionFocusMessages,
+          message.id,
+        ),
+      });
+    },
+    [
+      deletionFocusMessages,
+      messageActionConversationId,
+      messageActionScopeKey,
+      visibleActionMessages,
+    ],
+  );
+  const cancelMessageDeletion = useCallback(() => {
+    const returnFocus = messageDeleteRequest?.returnFocus ?? null;
+    setMessageDeleteRequest(null);
+    if (returnFocus) {
+      window.requestAnimationFrame(() => {
+        if (returnFocus.isConnected) returnFocus.focus();
+      });
+    }
+  }, [messageDeleteRequest]);
+  const confirmMessageDeletion = useCallback(() => {
+    const request = messageDeleteRequest;
+    if (
+      !request ||
+      !canConfirmMessageDeletion(
+        request,
+        messageActionScopeKey,
+        visibleActionMessages,
+      )
+    ) {
+      setMessageDeleteRequest(null);
+      return;
+    }
+
+    setLocalMessageVisibility((current) =>
+      hideMessageInScope(current, request.scopeKey, request.messageId),
+    );
+    setPinnedMessageIds((current) =>
+      current.includes(request.messageId)
+        ? current.filter((candidate) => candidate !== request.messageId)
+        : current,
+    );
+    setMessageActionNotice(t('chat.messageRemoved'));
+    setMessageDeleteRequest(null);
+
+    const focusNeighborId = request.focusNeighborId;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const viewport = scrollViewport();
+        const anchors = viewport
+          ? Array.from(
+              viewport.querySelectorAll<HTMLElement>('[data-timeline-anchor-id]'),
+            )
+          : [];
+        const anchor = focusNeighborId
+          ? anchors.find(
+              (candidate) =>
+                candidate.dataset.timelineAnchorId === focusNeighborId ||
+                timelineAnchorMemberIds(candidate).includes(focusNeighborId),
+            )
+          : null;
+        const focusTarget =
+          anchor instanceof HTMLDetailsElement
+            ? anchor.querySelector<HTMLElement>('summary')
+            : anchor;
+        (focusTarget ?? scrollAreaRef.current)?.focus();
+      });
+    });
+  }, [
+    messageActionScopeKey,
+    messageDeleteRequest,
+    scrollViewport,
+    t,
+    visibleActionMessages,
+  ]);
   const retryVisibleMessage = useCallback(
     (message: VisibleMessageForRetry) => {
       const retryContent = findRetryMessageContent(
@@ -911,6 +1077,13 @@ export const ChatPanel = memo(function ChatPanel({
       if (message) editVisibleMessage(message);
     },
     [editVisibleMessage, messageActionConversationId],
+  );
+  const requestTimelineMessageDeletion = useCallback(
+    (item: AgentTimelineItem, returnFocus: HTMLElement) => {
+      const message = timelineVisibleMessage(item, messageActionConversationId);
+      if (message) requestVisibleMessageDeletion(message, returnFocus);
+    },
+    [messageActionConversationId, requestVisibleMessageDeletion],
   );
   const retryTimelineMessage = useCallback(
     (item: AgentTimelineItem) => {
@@ -1188,7 +1361,7 @@ export const ChatPanel = memo(function ChatPanel({
                 </section>
               ) : null}
               <AgentTimeline
-                state={timelineState}
+                state={visibleTimelineState ?? timelineState}
                 expandedItems={expandedTimelineItems}
                 onToggleItem={toggleTimelineItem}
                 onLoadEarlier={requestEarlierTimeline}
@@ -1201,6 +1374,7 @@ export const ChatPanel = memo(function ChatPanel({
                 onOpenMCPAppResult={onOpenMCPAppResult}
                 onReplyMessage={replyToTimelineMessage}
                 onEditMessage={editTimelineMessage}
+                onDeleteMessage={requestTimelineMessageDeletion}
                 onRetryMessage={retryTimelineMessage}
                 onSaveTemplateMessage={saveTimelineMessageAsTemplate}
                 pinnedMessageIds={pinnedMessageIds}
@@ -1211,10 +1385,10 @@ export const ChatPanel = memo(function ChatPanel({
                 onToggleTurn={toggleTimelineTurn}
               />
             </>
-          ) : messages.length === 0 ? (
+          ) : visibleWorkspaceMessages.length === 0 ? (
             <SessionEmptyState />
           ) : (
-            messages.map((message) => {
+            visibleWorkspaceMessages.map((message) => {
               const visibleMessage = workspaceVisibleMessage(
                 message,
                 messageActionConversationId,
@@ -1231,6 +1405,12 @@ export const ChatPanel = memo(function ChatPanel({
                   onEdit={
                     visibleMessage.kind === 'user'
                       ? () => editVisibleMessage(visibleMessage)
+                      : undefined
+                  }
+                  onDelete={
+                    visibleMessage.kind === 'user'
+                      ? (returnFocus) =>
+                          requestVisibleMessageDeletion(visibleMessage, returnFocus)
                       : undefined
                   }
                   onRetry={
@@ -1307,7 +1487,7 @@ export const ChatPanel = memo(function ChatPanel({
         </div>
       </ScrollArea>
       <ConversationSearch
-        items={timelineItems ?? []}
+        items={visibleTimelineItems}
         visible={conversationSearchVisible}
         getViewport={scrollViewport}
         onRevealItem={revealTimelineMember}
@@ -1374,6 +1554,13 @@ export const ChatPanel = memo(function ChatPanel({
         composeAheadEnabled={composeAheadEnabled}
         responseStreaming={responseStreaming}
       />
+      {messageDeleteRequest ? (
+        <MessageDeleteDialog
+          target={messageDeleteRequest}
+          onCancel={cancelMessageDeletion}
+          onConfirm={confirmMessageDeletion}
+        />
+      ) : null}
       {saveTemplateRequest ? (
         <SavePromptTemplateDialog
           api={api}

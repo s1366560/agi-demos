@@ -149,6 +149,7 @@ export function AgentTimeline({
   onOpenMCPAppResult,
   onReplyMessage,
   onEditMessage,
+  onDeleteMessage,
   onRetryMessage,
   onSaveTemplateMessage,
   pinnedMessageIds = EMPTY_PINNED_MESSAGE_IDS,
@@ -171,6 +172,7 @@ export function AgentTimeline({
   onOpenMCPAppResult?: (item: AgentTimelineItem) => void;
   onReplyMessage?: (item: AgentTimelineItem) => void;
   onEditMessage?: (item: AgentTimelineItem) => void;
+  onDeleteMessage?: (item: AgentTimelineItem, returnFocus: HTMLElement) => void;
   onRetryMessage?: (item: AgentTimelineItem) => void;
   onSaveTemplateMessage?: (item: AgentTimelineItem, returnFocus: HTMLElement) => void;
   pinnedMessageIds?: readonly string[];
@@ -585,6 +587,7 @@ export function AgentTimeline({
                 )}
                 onReplyMessage={onReplyMessage}
                 onEditMessage={onEditMessage}
+                onDeleteMessage={onDeleteMessage}
                 onRetryMessage={onRetryMessage}
                 onSaveTemplateMessage={onSaveTemplateMessage}
                 isPinned={pinnedMessageIdSet.has(item.id)}
@@ -838,6 +841,7 @@ function TimelineItemView({
   approvalRequest,
   onReplyMessage,
   onEditMessage,
+  onDeleteMessage,
   onRetryMessage,
   onSaveTemplateMessage,
   isPinned = false,
@@ -853,6 +857,7 @@ function TimelineItemView({
   approvalRequest?: DesktopApprovalRequest;
   onReplyMessage?: (item: AgentTimelineItem) => void;
   onEditMessage?: (item: AgentTimelineItem) => void;
+  onDeleteMessage?: (item: AgentTimelineItem, returnFocus: HTMLElement) => void;
   onRetryMessage?: (item: AgentTimelineItem) => void;
   onSaveTemplateMessage?: (item: AgentTimelineItem, returnFocus: HTMLElement) => void;
   isPinned?: boolean;
@@ -882,6 +887,11 @@ function TimelineItemView({
         onEdit={
           kind === 'user' && item.content?.trim() && onEditMessage
             ? () => onEditMessage(item)
+            : undefined
+        }
+        onDelete={
+          kind === 'user' && onDeleteMessage
+            ? (returnFocus) => onDeleteMessage(item, returnFocus)
             : undefined
         }
         onRetry={
@@ -928,6 +938,7 @@ function TimelineItemView({
         approvalRequest ? 'has-approval-evidence' : ''
       }`}
       data-timeline-anchor-id={item.id}
+      tabIndex={-1}
     >
       {hasDetails ? (
         <button

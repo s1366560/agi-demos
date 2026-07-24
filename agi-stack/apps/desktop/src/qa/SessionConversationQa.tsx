@@ -4,7 +4,21 @@ import { createRoot, type Root } from 'react-dom/client';
 import { Theme } from '@radix-ui/themes';
 
 import { AgentTimeline } from '../features/chat/ChatTimeline';
-import { isTimelineItemInitiallyExpanded } from '../features/chat/chatTimelinePresentation';
+import { MessageDeleteDialog } from '../features/chat/MessageDeleteDialog';
+import {
+  canConfirmMessageDeletion,
+  filterHiddenMessages,
+  hideMessageInScope,
+  messageDeletionFocusNeighborId,
+} from '../features/chat/chatMessageActionModel';
+import type {
+  LocalMessageVisibilityState,
+  VisibleMessageForRetry,
+} from '../features/chat/chatMessageActionModel';
+import {
+  isTimelineItemInitiallyExpanded,
+  timelineKind,
+} from '../features/chat/chatTimelinePresentation';
 import { computeTimelineTurns } from '../features/chat/timelineTurnCollapseModel';
 import { useTimelineTurnCollapse } from '../features/chat/useTimelineTurnCollapse';
 import { I18nProvider } from '../i18n';
@@ -832,38 +846,125 @@ function TimelineFixture({
   state: ConversationTimelineState;
   presence: 'live' | 'recorded';
 }) {
+  const conversationId = state.conversationId ?? 'conversation-qa';
+  const scopeKey = `qa-tenant:qa-project:${conversationId}`;
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
-  const turns = useMemo(() => computeTimelineTurns(state.items), [state.items]);
+  const [visibility, setVisibility] = useState<LocalMessageVisibilityState | null>(null);
+  const [deleteRequest, setDeleteRequest] = useState<{
+    scopeKey: string;
+    messageId: string;
+    content: string;
+    returnFocus: HTMLElement;
+    focusNeighborId: string | null;
+  } | null>(null);
+  const visibleItems = useMemo(
+    () => filterHiddenMessages(state.items, visibility, scopeKey),
+    [scopeKey, state.items, visibility],
+  );
+  const visibleMessages = useMemo<VisibleMessageForRetry[]>(
+    () =>
+      visibleItems.map((timelineItem) => {
+        const kind = timelineKind(timelineItem);
+        return {
+          id: timelineItem.id,
+          conversationId,
+          kind: kind === 'user' || kind === 'agent' ? kind : 'runtime',
+          content: timelineItem.content ?? '',
+        };
+      }),
+    [conversationId, visibleItems],
+  );
+  const visibleState = useMemo(
+    () => ({ ...state, items: visibleItems }),
+    [state, visibleItems],
+  );
+  const turns = useMemo(() => computeTimelineTurns(visibleItems), [visibleItems]);
   const { collapsedTurnIds, toggleTurn } = useTimelineTurnCollapse({
     mode: 'local',
     apiBaseUrl: 'http://session-conversation.qa',
     tenantId: 'qa-tenant',
     projectId: 'qa-project',
-    conversationId: `${state.conversationId}:${state.items[0]?.id ?? 'empty'}`,
+    conversationId: `${conversationId}:${state.items[0]?.id ?? 'empty'}`,
   });
   return (
-    <AgentTimeline
-      state={state}
-      expandedItems={expandedItems}
-      onToggleItem={(toggleItem) =>
-        setExpandedItems((current) => ({
-          ...current,
-          [toggleItem.id]: !(
-            current[toggleItem.id] ?? isTimelineItemInitiallyExpanded(toggleItem)
-          ),
-        }))
-      }
-      onLoadEarlier={() => {}}
-      onShowEarlier={() => {}}
-      earlierRenderAllowance={0}
-      onRetry={() => {}}
-      onRespondToHitl={() => Promise.resolve()}
-      respondableHitlRequestIds={[]}
-      activityPresence={presence}
-      turns={turns}
-      collapsedTurnIds={collapsedTurnIds}
-      onToggleTurn={toggleTurn}
-    />
+    <>
+      <AgentTimeline
+        state={visibleState}
+        expandedItems={expandedItems}
+        onToggleItem={(toggleItem) =>
+          setExpandedItems((current) => ({
+            ...current,
+            [toggleItem.id]: !(
+              current[toggleItem.id] ?? isTimelineItemInitiallyExpanded(toggleItem)
+            ),
+          }))
+        }
+        onLoadEarlier={() => {}}
+        onShowEarlier={() => {}}
+        earlierRenderAllowance={0}
+        onRetry={() => {}}
+        onRespondToHitl={() => Promise.resolve()}
+        respondableHitlRequestIds={[]}
+        activityPresence={presence}
+        onDeleteMessage={(timelineItem, returnFocus) => {
+          const target = { scopeKey, messageId: timelineItem.id };
+          if (!canConfirmMessageDeletion(target, scopeKey, visibleMessages)) return;
+          setDeleteRequest({
+            ...target,
+            content: timelineItem.content ?? '',
+            returnFocus,
+            focusNeighborId: messageDeletionFocusNeighborId(
+              visibleMessages,
+              timelineItem.id,
+            ),
+          });
+        }}
+        turns={turns}
+        collapsedTurnIds={collapsedTurnIds}
+        onToggleTurn={toggleTurn}
+      />
+      <span
+        aria-hidden="true"
+        data-testid="message-delete-qa-state"
+        data-visible-ids={visibleItems.map((timelineItem) => timelineItem.id).join(',')}
+        data-hidden-ids={
+          visibility?.scopeKey === scopeKey ? visibility.hiddenMessageIds.join(',') : ''
+        }
+      />
+      {deleteRequest ? (
+        <MessageDeleteDialog
+          target={deleteRequest}
+          onCancel={() => {
+            const returnFocus = deleteRequest.returnFocus;
+            setDeleteRequest(null);
+            window.requestAnimationFrame(() => {
+              if (returnFocus.isConnected) returnFocus.focus();
+            });
+          }}
+          onConfirm={() => {
+            if (!canConfirmMessageDeletion(deleteRequest, scopeKey, visibleMessages)) {
+              setDeleteRequest(null);
+              return;
+            }
+            const focusNeighborId = deleteRequest.focusNeighborId;
+            setVisibility((current) =>
+              hideMessageInScope(
+                current,
+                deleteRequest.scopeKey,
+                deleteRequest.messageId,
+              ),
+            );
+            setDeleteRequest(null);
+            window.requestAnimationFrame(() => {
+              const focusTarget = Array.from(
+                document.querySelectorAll<HTMLElement>('[data-timeline-anchor-id]'),
+              ).find((candidate) => candidate.dataset.timelineAnchorId === focusNeighborId);
+              focusTarget?.focus();
+            });
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 

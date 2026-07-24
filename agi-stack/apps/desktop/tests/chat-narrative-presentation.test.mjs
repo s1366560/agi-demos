@@ -5,8 +5,13 @@ import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const {
+  canConfirmMessageDeletion,
+  filterHiddenMessages,
   findRetryMessageContent,
+  hideMessageInScope,
   messageActionsForVisibleMessage,
+  messageDeletionExcerpt,
+  messageDeletionFocusNeighborId,
   quoteMessageForComposer,
   resolveRetryDispatch,
 } = require(
@@ -46,6 +51,7 @@ test('message action availability matches the Web role and streaming contract', 
     copy: true,
     reply: true,
     edit: true,
+    delete: true,
     retry: false,
     retryDisabled: false,
     saveTemplate: false,
@@ -54,6 +60,7 @@ test('message action availability matches the Web role and streaming contract', 
     copy: true,
     reply: true,
     edit: false,
+    delete: false,
     retry: true,
     retryDisabled: false,
     saveTemplate: true,
@@ -62,6 +69,7 @@ test('message action availability matches the Web role and streaming contract', 
     copy: true,
     reply: true,
     edit: false,
+    delete: false,
     retry: true,
     retryDisabled: true,
     saveTemplate: false,
@@ -70,10 +78,80 @@ test('message action availability matches the Web role and streaming contract', 
     copy: true,
     reply: false,
     edit: false,
+    delete: false,
     retry: false,
     retryDisabled: false,
     saveTemplate: false,
   });
+});
+
+test('local deletion is exact, idempotent, scoped, and preserves neighboring events', () => {
+  const messages = [
+    {
+      id: 'user-1',
+      conversationId: 'conversation-1',
+      kind: 'user',
+      content: 'First prompt',
+    },
+    {
+      id: 'agent-1',
+      conversationId: 'conversation-1',
+      kind: 'agent',
+      content: 'First answer',
+    },
+    {
+      id: 'user-2',
+      conversationId: 'conversation-1',
+      kind: 'user',
+      content: 'Delete this prompt',
+    },
+    {
+      id: 'runtime-2',
+      conversationId: 'conversation-1',
+      kind: 'runtime',
+      content: 'Tool activity',
+    },
+    {
+      id: 'agent-2',
+      conversationId: 'conversation-1',
+      kind: 'agent',
+      content: 'Keep this later answer',
+    },
+  ];
+  const scopeKey = 'tenant-1:project-1:conversation-1';
+  const target = {
+    scopeKey,
+    messageId: 'user-2',
+  };
+
+  assert.equal(canConfirmMessageDeletion(target, scopeKey, messages), true);
+  assert.equal(
+    canConfirmMessageDeletion(target, 'tenant-1:project-1:conversation-2', messages),
+    false,
+  );
+  assert.equal(
+    canConfirmMessageDeletion({ ...target, messageId: 'agent-2' }, scopeKey, messages),
+    false,
+  );
+  assert.equal(messageDeletionFocusNeighborId(messages, 'user-2'), 'runtime-2');
+
+  const first = hideMessageInScope(null, scopeKey, 'user-2');
+  const duplicate = hideMessageInScope(first, scopeKey, 'user-2');
+  assert.equal(duplicate, first);
+  assert.deepEqual(
+    filterHiddenMessages(messages, duplicate, scopeKey).map((message) => message.id),
+    ['user-1', 'agent-1', 'runtime-2', 'agent-2'],
+  );
+  assert.deepEqual(hideMessageInScope(duplicate, 'other-scope', 'user-3'), {
+    scopeKey: 'other-scope',
+    hiddenMessageIds: ['user-3'],
+  });
+});
+
+test('local deletion confirmation uses the Web-compatible 80 character excerpt', () => {
+  assert.equal(messageDeletionExcerpt('  keep surrounding spaces  '), '  keep surrounding spaces  ');
+  assert.equal(messageDeletionExcerpt('x'.repeat(81)), `${'x'.repeat(80)}…`);
+  assert.equal(messageDeletionExcerpt(''), '');
 });
 
 test('reply drafts quote visible multiline text and cap the Web-compatible excerpt', () => {
@@ -150,8 +228,14 @@ test('Desktop wires message actions through the scoped composer and send authori
   assert.match(chatSource, /messageActionsForVisibleMessage\(kind, streaming\)/);
   assert.match(chatSource, /onReplyMessage=\{replyToTimelineMessage\}/);
   assert.match(chatSource, /onEditMessage=\{editTimelineMessage\}/);
+  assert.match(chatSource, /onDeleteMessage=\{requestTimelineMessageDeletion\}/);
   assert.match(chatSource, /onRetryMessage=\{retryTimelineMessage\}/);
   assert.match(chatSource, /onSaveTemplateMessage=\{saveTimelineMessageAsTemplate\}/);
+  assert.match(chatSource, /<MessageDeleteDialog/);
+  assert.match(chatSource, /canConfirmMessageDeletion\(/);
+  assert.match(chatSource, /hideMessageInScope\(/);
+  assert.match(chatSource, /filterHiddenMessages\(/);
+  assert.match(chatSource, /messageDeletionFocusNeighborId\(/);
   assert.match(chatSource, /<SavePromptTemplateDialog/);
   assert.match(chatSource, /target=\{saveTemplateRequest\}/);
   assert.match(chatSource, /findRetryMessageContent\(/);
@@ -165,6 +249,15 @@ test('Desktop wires message actions through the scoped composer and send authori
   assert.match(chatSource, /retryDisabled=\{disabled \|\| sending \|\| Boolean\(retryingMessageId\)\}/);
   assert.match(chatStyles, /\.session-message-actions button:disabled/);
   assert.match(chatStyles, /\.session-message-action-notice/);
+  assert.match(chatStyles, /\.message-delete-dialog-note/);
+  assert.match(
+    chatSource,
+    /data-timeline-anchor-id=\{item\.id\}\s+tabIndex=\{-1\}\s+>/,
+  );
+  assert.match(i18nSource, /deleteMessageRestorationNote/);
+  assert.match(i18nSource, /messageRemoved/);
+  assert.match(sessionConversationQaSource, /MessageDeleteDialog/);
+  assert.doesNotMatch(chatSource, /api\.(delete|remove)Message/);
 });
 
 test('assistant execution summaries render structured input, output, and reasoning tokens', () => {
