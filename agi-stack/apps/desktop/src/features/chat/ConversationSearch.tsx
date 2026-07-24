@@ -19,6 +19,7 @@ type ConversationSearchProps = {
   items: readonly AgentTimelineItem[];
   visible: boolean;
   getViewport: () => HTMLElement | null;
+  onRevealItem?: (itemId: string) => boolean;
   onClose: () => void;
 };
 
@@ -26,6 +27,7 @@ export function ConversationSearch({
   items,
   visible,
   getViewport,
+  onRevealItem,
   onClose,
 }: ConversationSearchProps) {
   const { t } = useI18n();
@@ -81,22 +83,39 @@ export function ConversationSearch({
     const match = matches[currentIndex];
     if (!match) return undefined;
     selectedAnchorRef.current = match.anchorId;
-    const anchors = Array.from(
-      viewport.querySelectorAll<HTMLElement>('[data-timeline-anchor-id]'),
-    );
-    const target =
-      anchors.find((anchor) => anchor.dataset.timelineAnchorId === match.anchorId) ??
-      anchors.find((anchor) => anchorContainsSearchMember(anchor, match.anchorId));
-    if (!target) return undefined;
+    let firstFrame: number | null = null;
+    let secondFrame: number | null = null;
+    let target: HTMLElement | null = null;
+    const scrollToMatch = () => {
+      const anchors = Array.from(
+        viewport.querySelectorAll<HTMLElement>('[data-timeline-anchor-id]'),
+      );
+      target =
+        anchors.find((anchor) => anchor.dataset.timelineAnchorId === match.anchorId) ??
+        anchors.find((anchor) => anchorContainsSearchMember(anchor, match.anchorId)) ??
+        null;
+      if (!target) return;
 
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    target.scrollIntoView({
-      behavior: reducedMotion ? 'auto' : 'smooth',
-      block: 'center',
-    });
-    target.classList.add('chat-search-highlight');
-    return () => target.classList.remove('chat-search-highlight');
-  }, [currentIndex, getViewport, matches, visible]);
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      target.scrollIntoView({
+        behavior: reducedMotion ? 'auto' : 'smooth',
+        block: 'center',
+      });
+      target.classList.add('chat-search-highlight');
+    };
+    if (onRevealItem?.(match.anchorId)) {
+      firstFrame = window.requestAnimationFrame(() => {
+        secondFrame = window.requestAnimationFrame(scrollToMatch);
+      });
+    } else {
+      scrollToMatch();
+    }
+    return () => {
+      if (firstFrame !== null) window.cancelAnimationFrame(firstFrame);
+      if (secondFrame !== null) window.cancelAnimationFrame(secondFrame);
+      target?.classList.remove('chat-search-highlight');
+    };
+  }, [currentIndex, getViewport, matches, onRevealItem, visible]);
 
   if (!visible) return null;
 

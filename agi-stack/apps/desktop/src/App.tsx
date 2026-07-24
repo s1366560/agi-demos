@@ -6893,6 +6893,12 @@ export function App() {
           ? `Agent session / ${workspaceLabel(selectedWorkspace ?? undefined)}`
           : 'Workspace conversation'
       }
+      turnCollapseRuntime={{
+        mode: config.mode,
+        apiBaseUrl: config.apiBaseUrl,
+        tenantId: config.tenantId,
+        projectId: config.projectId,
+      }}
       composerVariant={selectedConversation ? 'session' : 'workspace'}
       composerResetKey={selectedConversation?.id ?? config.workspaceId}
       activityPresence={sessionActivityState}

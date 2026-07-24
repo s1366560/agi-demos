@@ -45,6 +45,7 @@ import type {
   CodeRangeReference,
   DesktopRunInput,
   RunInputDelivery,
+  RuntimeMode,
   WorkspaceMessage,
 } from '../../types';
 import { runInputReferenceLabel } from '../session/sessionChangesModel';
@@ -104,14 +105,19 @@ import {
   reconcilePinnedMessageIds,
   togglePinnedMessageId,
 } from './pinnedMessageModel';
-import { latestAgentSuggestions } from './chatTimelineModel';
+import { latestAgentSuggestions, timelineItemsForDisplay } from './chatTimelineModel';
 import { createConversationExportSnapshot } from './conversationExportModel';
 import {
   conversationComparisonAvailable,
   conversationComparisonScope,
 } from './conversationComparisonModel';
+import {
+  computeTimelineTurns,
+  timelineTurnForMember,
+} from './timelineTurnCollapseModel';
 import { useComposerFileDrop } from './useComposerFileDrop';
 import { useComposerFileUpload } from './useComposerFileUpload';
+import { useTimelineTurnCollapse } from './useTimelineTurnCollapse';
 import type {
   AgentTaskSignal,
   AgentTaskSignalStatus,
@@ -129,6 +135,13 @@ type ChatAuthorityNotice = {
   actionLabel?: string;
 } | null;
 
+const DEFAULT_TURN_COLLAPSE_RUNTIME = {
+  mode: 'local',
+  apiBaseUrl: 'http://desktop.invalid',
+  tenantId: '',
+  projectId: '',
+} as const;
+
 type ChatPanelProps = {
   api: ComposerCatalogClient;
   conversations: readonly AgentConversation[];
@@ -139,6 +152,12 @@ type ChatPanelProps = {
   workflowCounts?: Partial<Record<ChatWorkflowTarget, number | string>>;
   sessionTitle: string;
   scopeLabel: string;
+  turnCollapseRuntime?: {
+    mode: RuntimeMode;
+    apiBaseUrl: string;
+    tenantId: string;
+    projectId: string;
+  };
   activityPresence: SessionActivityPresence;
   activityStructuredEvidence: SessionActivityStructuredEvidence | null;
   composerVariant?: ChatComposerVariant;
@@ -258,6 +277,7 @@ export const ChatPanel = memo(function ChatPanel({
   workflowCounts,
   sessionTitle,
   scopeLabel,
+  turnCollapseRuntime = DEFAULT_TURN_COLLAPSE_RUNTIME,
   activityPresence,
   activityStructuredEvidence,
   composerVariant = 'workspace',
@@ -329,6 +349,7 @@ export const ChatPanel = memo(function ChatPanel({
   const retryDispatchSawSendingRef = useRef(false);
   const retryUnlockTimerRef = useRef<number | null>(null);
   const pinnedJumpTimerRef = useRef<number | null>(null);
+  const pinnedJumpFrameRef = useRef<number | null>(null);
   const pinnedJumpTargetRef = useRef<HTMLElement | null>(null);
   const comparisonTriggerRef = useRef<HTMLButtonElement>(null);
   const sendingRef = useRef(sending);
@@ -381,6 +402,35 @@ export const ChatPanel = memo(function ChatPanel({
     timelineConversationId || selectedConversationId || messages[0]?.workspace_id || '';
   const messageActionConversation =
     conversations.find((conversation) => conversation.id === messageActionConversationId) ?? null;
+  const turnCollapseScope = useMemo(
+    () => ({
+      ...turnCollapseRuntime,
+      tenantId: messageActionConversation?.tenant_id || turnCollapseRuntime.tenantId,
+      projectId: messageActionConversation?.project_id || turnCollapseRuntime.projectId,
+      conversationId: messageActionConversationId,
+    }),
+    [messageActionConversation, messageActionConversationId, turnCollapseRuntime],
+  );
+  const timelineDisplayItems = useMemo(
+    () => timelineItemsForDisplay(timelineItems ?? []),
+    [timelineItems],
+  );
+  const timelineTurns = useMemo(
+    () => computeTimelineTurns(timelineDisplayItems),
+    [timelineDisplayItems],
+  );
+  const {
+    collapsedTurnIds,
+    toggleTurn: toggleTimelineTurn,
+    expandTurn: expandTimelineTurn,
+  } = useTimelineTurnCollapse(turnCollapseScope);
+  const revealTimelineMember = useCallback(
+    (memberId: string): boolean => {
+      const turn = timelineTurnForMember(timelineTurns, memberId);
+      return turn ? expandTimelineTurn(turn.id) : false;
+    },
+    [expandTimelineTurn, timelineTurns],
+  );
   const messageActionScopeKey = `${messageActionConversation?.tenant_id ?? ''}:${
     messageActionConversation?.project_id ?? ''
   }:${messageActionConversationId}`;
@@ -485,6 +535,10 @@ export const ChatPanel = memo(function ChatPanel({
     );
   }, []);
   const clearPinnedJumpTarget = useCallback(() => {
+    if (pinnedJumpFrameRef.current !== null) {
+      window.cancelAnimationFrame(pinnedJumpFrameRef.current);
+      pinnedJumpFrameRef.current = null;
+    }
     pinnedJumpTargetRef.current?.classList.remove('chat-pinned-jump-target');
     pinnedJumpTargetRef.current = null;
     if (pinnedJumpTimerRef.current !== null) {
@@ -937,35 +991,52 @@ export const ChatPanel = memo(function ChatPanel({
   const jumpToPinnedMessage = useCallback(
     (message: VisibleMessageForRetry) => {
       if (message.conversationId !== messageActionConversationId) return;
-      const viewport = scrollViewport();
-      if (!viewport) return;
-      const candidates = Array.from(
-        viewport.querySelectorAll<HTMLElement>('[data-timeline-anchor-id]'),
-      );
-      const target =
-        candidates.find(
-          (candidate) => candidate.dataset.timelineAnchorId === message.id,
-        ) ??
-        candidates.find((candidate) =>
-          timelineAnchorMemberIds(candidate).includes(message.id),
-        );
-      if (!target) return;
-
       clearPinnedJumpTarget();
-      pinnedToLatestRef.current = false;
-      setShowJumpToLatest(viewport.scrollHeight > viewport.clientHeight);
-      target.scrollIntoView({
-        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
-          ? 'auto'
-          : 'smooth',
-        block: 'center',
-      });
-      target.classList.add('chat-pinned-jump-target');
-      target.focus({ preventScroll: true });
-      pinnedJumpTargetRef.current = target;
-      pinnedJumpTimerRef.current = window.setTimeout(clearPinnedJumpTarget, 1_800);
+      const scrollToMessage = () => {
+        const viewport = scrollViewport();
+        if (!viewport) return;
+        const candidates = Array.from(
+          viewport.querySelectorAll<HTMLElement>('[data-timeline-anchor-id]'),
+        );
+        const target =
+          candidates.find(
+            (candidate) => candidate.dataset.timelineAnchorId === message.id,
+          ) ??
+          candidates.find((candidate) =>
+            timelineAnchorMemberIds(candidate).includes(message.id),
+          );
+        if (!target) return;
+
+        pinnedToLatestRef.current = false;
+        setShowJumpToLatest(viewport.scrollHeight > viewport.clientHeight);
+        target.scrollIntoView({
+          behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+            ? 'auto'
+            : 'smooth',
+          block: 'center',
+        });
+        target.classList.add('chat-pinned-jump-target');
+        target.focus({ preventScroll: true });
+        pinnedJumpTargetRef.current = target;
+        pinnedJumpTimerRef.current = window.setTimeout(clearPinnedJumpTarget, 1_800);
+      };
+      if (revealTimelineMember(message.id)) {
+        pinnedJumpFrameRef.current = window.requestAnimationFrame(() => {
+          pinnedJumpFrameRef.current = window.requestAnimationFrame(() => {
+            pinnedJumpFrameRef.current = null;
+            scrollToMessage();
+          });
+        });
+        return;
+      }
+      scrollToMessage();
     },
-    [clearPinnedJumpTarget, messageActionConversationId, scrollViewport],
+    [
+      clearPinnedJumpTarget,
+      messageActionConversationId,
+      revealTimelineMember,
+      scrollViewport,
+    ],
   );
   const toggleTimelineItem = useCallback((item: AgentTimelineItem) => {
     setExpandedTimelineItems((current) => {
@@ -1135,6 +1206,9 @@ export const ChatPanel = memo(function ChatPanel({
                 pinnedMessageIds={pinnedMessageIds}
                 onPinMessage={togglePinnedTimelineMessage}
                 retryDisabled={disabled || sending || Boolean(retryingMessageId)}
+                turns={timelineTurns}
+                collapsedTurnIds={collapsedTurnIds}
+                onToggleTurn={toggleTimelineTurn}
               />
             </>
           ) : messages.length === 0 ? (
@@ -1236,6 +1310,7 @@ export const ChatPanel = memo(function ChatPanel({
         items={timelineItems ?? []}
         visible={conversationSearchVisible}
         getViewport={scrollViewport}
+        onRevealItem={revealTimelineMember}
         onClose={() => setConversationSearchVisible(false)}
       />
       {showJumpToLatest ? (

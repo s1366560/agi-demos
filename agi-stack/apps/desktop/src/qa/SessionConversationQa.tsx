@@ -1,10 +1,12 @@
 import '@radix-ui/themes/styles.css';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Theme } from '@radix-ui/themes';
 
 import { AgentTimeline } from '../features/chat/ChatTimeline';
 import { isTimelineItemInitiallyExpanded } from '../features/chat/chatTimelinePresentation';
+import { computeTimelineTurns } from '../features/chat/timelineTurnCollapseModel';
+import { useTimelineTurnCollapse } from '../features/chat/useTimelineTurnCollapse';
 import { I18nProvider } from '../i18n';
 import type { AgentTimelineItem, ConversationTimelineState } from '../types';
 import '../styles.css';
@@ -831,6 +833,14 @@ function TimelineFixture({
   presence: 'live' | 'recorded';
 }) {
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
+  const turns = useMemo(() => computeTimelineTurns(state.items), [state.items]);
+  const { collapsedTurnIds, toggleTurn } = useTimelineTurnCollapse({
+    mode: 'local',
+    apiBaseUrl: 'http://session-conversation.qa',
+    tenantId: 'qa-tenant',
+    projectId: 'qa-project',
+    conversationId: `${state.conversationId}:${state.items[0]?.id ?? 'empty'}`,
+  });
   return (
     <AgentTimeline
       state={state}
@@ -850,6 +860,9 @@ function TimelineFixture({
       onRespondToHitl={() => Promise.resolve()}
       respondableHitlRequestIds={[]}
       activityPresence={presence}
+      turns={turns}
+      collapsedTurnIds={collapsedTurnIds}
+      onToggleTurn={toggleTurn}
     />
   );
 }

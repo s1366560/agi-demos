@@ -76,6 +76,7 @@ import type { MCPAppTimelineGroup } from './mcpAppTimelineModel';
 import { SkillTimelineCard } from './SkillTimelineCard';
 import { groupSkillTimelineItems } from './skillTimelineGroupModel';
 import type { SkillTimelineGroup } from './skillTimelineGroupModel';
+import type { TimelineTurn } from './timelineTurnCollapseModel';
 import {
   MarkdownContent,
   NarrativeMessageFrame,
@@ -86,6 +87,8 @@ const TIMELINE_RENDER_THRESHOLD = 150;
 const TIMELINE_RENDER_WINDOW = 100;
 export const TIMELINE_RENDER_STEP = 100;
 const EMPTY_PINNED_MESSAGE_IDS: readonly string[] = [];
+const EMPTY_TIMELINE_TURNS: readonly TimelineTurn[] = [];
+const EMPTY_COLLAPSED_TURN_IDS: readonly string[] = [];
 
 type TimelineActivityGroupNode = {
   kind: 'activity_group';
@@ -151,6 +154,9 @@ export function AgentTimeline({
   pinnedMessageIds = EMPTY_PINNED_MESSAGE_IDS,
   onPinMessage,
   retryDisabled = false,
+  turns = EMPTY_TIMELINE_TURNS,
+  collapsedTurnIds = EMPTY_COLLAPSED_TURN_IDS,
+  onToggleTurn = () => undefined,
 }: {
   state: ConversationTimelineState;
   expandedItems: Record<string, boolean>;
@@ -170,6 +176,9 @@ export function AgentTimeline({
   pinnedMessageIds?: readonly string[];
   onPinMessage?: (item: AgentTimelineItem) => void;
   retryDisabled?: boolean;
+  turns?: readonly TimelineTurn[];
+  collapsedTurnIds?: readonly string[];
+  onToggleTurn?: (turnId: string) => void;
 }) {
   const { t } = useI18n();
   const respondableHitlRequestIdSet = useMemo(
@@ -200,6 +209,18 @@ export function AgentTimeline({
   const renderWindow = useMemo(
     () => resolveTimelineRenderWindow(narrative, displayItems.length, earlierRenderAllowance),
     [narrative, displayItems.length, earlierRenderAllowance],
+  );
+  const collapsedTurnIdSet = useMemo(
+    () => new Set(collapsedTurnIds),
+    [collapsedTurnIds],
+  );
+  const turnByUserItemId = useMemo(
+    () => new Map(turns.map((turn) => [turn.userItemId, turn] as const)),
+    [turns],
+  );
+  const turnCollapsePresentation = useMemo(
+    () => timelineTurnCollapsePresentation(narrative, turns, renderWindow.startIndex),
+    [narrative, renderWindow.startIndex, turns],
   );
   const [expandedGroupItems, setExpandedGroupItems] = useState<Record<string, boolean>>({});
   const showWorkingIndicator = shouldShowAgentWorkingIndicator({
@@ -293,6 +314,17 @@ export function AgentTimeline({
       ) : (
         narrative.map((node, index) => {
           if (index < renderWindow.startIndex) return null;
+          const responseTurnId = turnCollapsePresentation.nodeTurnIds[index];
+          const responseCollapsed = Boolean(
+            responseTurnId && collapsedTurnIdSet.has(responseTurnId),
+          );
+          if (
+            responseCollapsed &&
+            responseTurnId &&
+            turnCollapsePresentation.firstVisibleNodeIndex.get(responseTurnId) !== index
+          ) {
+            return null;
+          }
           const nodeTimeUs =
             node.kind === 'item' ? node.item.eventTimeUs : node.items[0]?.eventTimeUs;
           const dayKey = timelineDayKey(nodeTimeUs);
@@ -301,10 +333,61 @@ export function AgentTimeline({
               <TimelineDayDivider key={`day-${dayKey}`} timeUs={nodeTimeUs} />
             ) : null;
           if (dayKey) lastRenderedDayKey = dayKey;
+          if (responseCollapsed && responseTurnId) {
+            const turn = turns.find((candidate) => candidate.id === responseTurnId);
+            const regionId = timelineTurnResponseRegionId(responseTurnId);
+            const controlId = timelineTurnControlId(responseTurnId);
+            const count =
+              turnCollapsePresentation.responsePresentationCounts.get(responseTurnId) ?? 0;
+            const membersJson = JSON.stringify(turn?.responseItemIds ?? []);
+            return (
+              <Fragment key={`collapsed-turn:${responseTurnId}`}>
+                {dayDivider}
+                <div
+                  id={regionId}
+                  className="timeline-turn-placeholder-shell"
+                  role="group"
+                  aria-label={t('session.turnItemsHidden', { count })}
+                >
+                  <button
+                    type="button"
+                    className="timeline-turn-placeholder"
+                    data-timeline-anchor-id={`collapsed-turn:${responseTurnId}`}
+                    data-timeline-anchor-members={membersJson}
+                    aria-expanded={false}
+                    aria-controls={regionId}
+                    aria-label={t('session.expandTurn', { count })}
+                    onClick={() => {
+                      onToggleTurn(responseTurnId);
+                      window.requestAnimationFrame(() => {
+                        window.requestAnimationFrame(() => {
+                          document.getElementById(controlId)?.focus();
+                        });
+                      });
+                    }}
+                  >
+                    <ChevronRightIcon aria-hidden="true" />
+                    <span>{t('session.turnItemsHidden', { count })}</span>
+                  </button>
+                </div>
+              </Fragment>
+            );
+          }
+          const responseRegionMarker =
+            responseTurnId &&
+            turnCollapsePresentation.firstVisibleNodeIndex.get(responseTurnId) === index ? (
+              <span
+                id={timelineTurnResponseRegionId(responseTurnId)}
+                className="timeline-turn-response-anchor"
+                role="group"
+                aria-label={t('session.turnResponseGroup')}
+              />
+            ) : null;
           if (node.kind === 'item' && isMemoryTimelineEvent(node.item)) {
             return (
               <Fragment key={node.id}>
                 {dayDivider}
+                {responseRegionMarker}
                 <MemoryTimelineEvent
                   key={`${state.conversationId ?? 'unscoped'}:${node.item.id}`}
                   item={node.item}
@@ -323,6 +406,7 @@ export function AgentTimeline({
             return (
               <Fragment key={groupId}>
                 {dayDivider}
+                {responseRegionMarker}
                 <SubAgentGroupView
                   group={node.group}
                   expanded={open}
@@ -342,6 +426,7 @@ export function AgentTimeline({
             return (
               <Fragment key={groupId}>
                 {dayDivider}
+                {responseRegionMarker}
                 <SkillTimelineCard
                   skill={node.group}
                   expanded={open}
@@ -362,6 +447,7 @@ export function AgentTimeline({
             return (
               <Fragment key={groupId}>
                 {dayDivider}
+                {responseRegionMarker}
                 <MCPAppTimelineCard
                   app={node.group}
                   expanded={open}
@@ -378,6 +464,7 @@ export function AgentTimeline({
             return (
               <Fragment key={groupId}>
                 {dayDivider}
+                {responseRegionMarker}
                 <details
                   className="timeline-debug-group"
                   data-timeline-anchor-id={groupId}
@@ -422,6 +509,7 @@ export function AgentTimeline({
             return (
               <Fragment key={groupId}>
                 {dayDivider}
+                {responseRegionMarker}
                 <details
                   className={`timeline-tool-group status-${node.status}`}
                   data-timeline-anchor-id={groupId}
@@ -473,9 +561,16 @@ export function AgentTimeline({
           }
           const item = node.item;
           const requestId = timelineHitlRequestId(item);
+          const turn = turnByUserItemId.get(item.id);
+          const turnResponseCount = turn
+            ? turnCollapsePresentation.responsePresentationCounts.get(turn.id) ?? 0
+            : 0;
+          const collapsed = Boolean(turn && collapsedTurnIdSet.has(turn.id));
+          const regionId = turn ? timelineTurnResponseRegionId(turn.id) : '';
           return (
             <Fragment key={node.id}>
               {dayDivider}
+              {responseRegionMarker}
               <TimelineItemView
                 item={item}
                 expanded={expandedItems[item.id] ?? isTimelineItemInitiallyExpanded(item)}
@@ -496,6 +591,31 @@ export function AgentTimeline({
                 onPinMessage={onPinMessage}
                 retryDisabled={retryDisabled}
               />
+              {turn && turnResponseCount > 0 ? (
+                <button
+                  id={timelineTurnControlId(turn.id)}
+                  type="button"
+                  className="timeline-turn-collapse-control"
+                  aria-expanded={!collapsed}
+                  aria-controls={regionId}
+                  aria-label={t(collapsed ? 'session.expandTurn' : 'session.collapseTurn', {
+                    count: turnResponseCount,
+                  })}
+                  title={t(collapsed ? 'session.expandTurn' : 'session.collapseTurn', {
+                    count: turnResponseCount,
+                  })}
+                  onClick={() => onToggleTurn(turn.id)}
+                >
+                  {collapsed ? (
+                    <ChevronRightIcon aria-hidden="true" />
+                  ) : (
+                    <ChevronDownIcon aria-hidden="true" />
+                  )}
+                  <span>
+                    {t(collapsed ? 'session.expandTurnShort' : 'session.collapseTurnShort')}
+                  </span>
+                </button>
+              ) : null}
             </Fragment>
           );
         })
@@ -1354,6 +1474,53 @@ function timelineGroupIdentity(narrative: AnnotatedTimelineNode[], index: number
   const node = narrative[index];
   if (!node || node.kind === 'item') return node?.id ?? `timeline-node:${index}`;
   return node.groupId;
+}
+
+function timelineTurnCollapsePresentation(
+  narrative: readonly AnnotatedTimelineNode[],
+  turns: readonly TimelineTurn[],
+  startIndex: number,
+): {
+  nodeTurnIds: Array<string | null>;
+  responsePresentationCounts: Map<string, number>;
+  firstVisibleNodeIndex: Map<string, number>;
+} {
+  const responseTurnByItemId = new Map<string, string>();
+  turns.forEach((turn) => {
+    turn.responseItemIds.forEach((itemId) => responseTurnByItemId.set(itemId, turn.id));
+  });
+  const responsePresentationCounts = new Map<string, number>();
+  const firstVisibleNodeIndex = new Map<string, number>();
+  const nodeTurnIds = narrative.map((node, index) => {
+    const memberIds = timelineNodeMemberIds(node);
+    const turnId = memberIds.length ? responseTurnByItemId.get(memberIds[0]) : undefined;
+    const sharedTurn =
+      turnId && memberIds.every((memberId) => responseTurnByItemId.get(memberId) === turnId)
+        ? turnId
+        : null;
+    if (!sharedTurn) return null;
+    responsePresentationCounts.set(
+      sharedTurn,
+      (responsePresentationCounts.get(sharedTurn) ?? 0) + 1,
+    );
+    if (index >= startIndex && !firstVisibleNodeIndex.has(sharedTurn)) {
+      firstVisibleNodeIndex.set(sharedTurn, index);
+    }
+    return sharedTurn;
+  });
+  return { nodeTurnIds, responsePresentationCounts, firstVisibleNodeIndex };
+}
+
+function timelineNodeMemberIds(node: AnnotatedTimelineNode): string[] {
+  return node.kind === 'item' ? [node.item.id] : node.items.map((item) => item.id);
+}
+
+function timelineTurnResponseRegionId(turnId: string): string {
+  return `timeline-turn-response-${encodeURIComponent(turnId)}`;
+}
+
+function timelineTurnControlId(turnId: string): string {
+  return `timeline-turn-control-${encodeURIComponent(turnId)}`;
 }
 
 function resolveTimelineRenderWindow(

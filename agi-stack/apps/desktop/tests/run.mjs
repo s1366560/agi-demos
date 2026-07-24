@@ -73,6 +73,7 @@ const testFiles = [
   'composer-mentions.test.mjs',
   'composer-context.test.mjs',
   'chat-narrative-presentation.test.mjs',
+  'timeline-turn-collapse-model.test.mjs',
   'conversation-search-model.test.mjs',
   'pinned-message-model.test.mjs',
   'conversation-export-model.test.mjs',
