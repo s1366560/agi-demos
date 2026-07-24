@@ -128,7 +128,14 @@ import {
 import { useComposerFileDrop } from './useComposerFileDrop';
 import { useComposerFileUpload } from './useComposerFileUpload';
 import { useTimelineTurnCollapse } from './useTimelineTurnCollapse';
+import { useVoiceCall } from './useVoiceCall';
 import { useVoiceTranscription } from './useVoiceTranscription';
+import { VoiceCallPanel } from './VoiceCallPanel';
+import {
+  resolveVoiceCallConnection,
+  type VoiceCallConnection,
+} from './voiceCallModel';
+import type { VoiceCallRuntime } from './voiceCallRuntime';
 import {
   applyVoiceTranscriptMessage,
   initialVoiceTranscriptDraft,
@@ -180,6 +187,7 @@ type ChatPanelProps = {
   };
   voiceTranscriptionConfig?: DesktopRuntimeConfig;
   voiceTranscriptionRuntime?: VoiceTranscriptionRuntime;
+  voiceCallRuntime?: VoiceCallRuntime;
   activityPresence: SessionActivityPresence;
   activityStructuredEvidence: SessionActivityStructuredEvidence | null;
   composerVariant?: ChatComposerVariant;
@@ -308,6 +316,7 @@ export const ChatPanel = memo(function ChatPanel({
   turnCollapseRuntime = DEFAULT_TURN_COLLAPSE_RUNTIME,
   voiceTranscriptionConfig,
   voiceTranscriptionRuntime,
+  voiceCallRuntime,
   activityPresence,
   activityStructuredEvidence,
   composerVariant = 'workspace',
@@ -1570,6 +1579,7 @@ export const ChatPanel = memo(function ChatPanel({
         responseStreaming={responseStreaming}
         voiceTranscriptionConfig={voiceTranscriptionConfig}
         voiceTranscriptionRuntime={voiceTranscriptionRuntime}
+        voiceCallRuntime={voiceCallRuntime}
       />
       {messageDeleteRequest ? (
         <MessageDeleteDialog
@@ -1678,6 +1688,7 @@ type ChatComposerProps = {
   responseStreaming: boolean;
   voiceTranscriptionConfig?: DesktopRuntimeConfig;
   voiceTranscriptionRuntime?: VoiceTranscriptionRuntime;
+  voiceCallRuntime?: VoiceCallRuntime;
 };
 
 function ChatComposer({
@@ -1724,6 +1735,7 @@ function ChatComposer({
   responseStreaming,
   voiceTranscriptionConfig,
   voiceTranscriptionRuntime,
+  voiceCallRuntime,
 }: ChatComposerProps) {
   const { t } = useI18n();
   const [input, setInput] = useState(initialInput);
@@ -1752,6 +1764,17 @@ function ChatComposer({
         : { availability: 'local_runtime' },
     [activeConversationId, promptTemplateConversation, voiceTranscriptionConfig],
   );
+  const voiceCallConnection = useMemo<VoiceCallConnection>(
+    () =>
+      voiceTranscriptionConfig
+        ? resolveVoiceCallConnection(
+            voiceTranscriptionConfig,
+            promptTemplateConversation?.project_id ?? voiceTranscriptionConfig.projectId,
+            promptTemplateConversation?.id ?? activeConversationId,
+          )
+        : { availability: 'local_runtime' },
+    [activeConversationId, promptTemplateConversation, voiceTranscriptionConfig],
+  );
   const voiceDraftRef = useRef(initialVoiceTranscriptDraft(''));
   const applyVoiceMessage = useCallback(
     (message: Parameters<typeof applyVoiceTranscriptMessage>[1]) => {
@@ -1767,15 +1790,36 @@ function ChatComposer({
     onInterim: (text) => applyVoiceMessage({ kind: 'interim', text }),
     onFinal: (text) => applyVoiceMessage({ kind: 'final', text }),
   });
+  const voiceCall = useVoiceCall({
+    connection: voiceCallConnection,
+    runtime: voiceCallRuntime,
+  });
   const voiceActive = voice.state === 'connecting' || voice.state === 'listening';
+  const voiceCallActive =
+    voiceCall.status === 'connecting' ||
+    voiceCall.status === 'connected' ||
+    voiceCall.status === 'error';
   const voiceDisabledReason =
     voiceConnection.availability === 'available'
       ? null
       : t(`composer.voice.unavailable.${voiceConnection.availability}`);
+  const voiceCallDisabledReason =
+    voiceCallConnection.availability === 'available'
+      ? null
+      : t(`composer.voiceCall.unavailable.${voiceCallConnection.availability}`);
   const toggleVoice = useCallback(async () => {
+    if (voiceCallActive) return;
     if (!voiceActive) voiceDraftRef.current = initialVoiceTranscriptDraft(input);
     await voice.toggle();
-  }, [input, voice.toggle, voiceActive]);
+  }, [input, voice.toggle, voiceActive, voiceCallActive]);
+  const toggleVoiceCall = useCallback(async () => {
+    if (voiceCallActive) {
+      voiceCall.end();
+      return;
+    }
+    voice.stop();
+    await voiceCall.start();
+  }, [voice.stop, voiceCall, voiceCallActive]);
   const insertPromptTemplate = useCallback(
     (prompt: string) => {
       voice.stop();
@@ -2258,6 +2302,7 @@ function ChatComposer({
               disabled ||
               sending ||
               uploadingAttachments ||
+              voiceCallActive ||
               voiceConnection.availability !== 'available'
             }
             onClick={() => void toggleVoice()}
@@ -2270,6 +2315,33 @@ function ChatComposer({
                 <i />
               </span>
             ) : null}
+          </button>
+        ) : null}
+        {voiceTranscriptionConfig ? (
+          <button
+            className={`composer-voice-button composer-call-button is-${voiceCall.status}`}
+            type="button"
+            aria-label={t(
+              voiceCallActive ? 'composer.voiceCall.end' : 'composer.voiceCall.start',
+            )}
+            aria-pressed={voiceCallActive}
+            title={
+              voiceCallActive
+                ? t('composer.voiceCall.end')
+                : voiceCallDisabledReason ?? t('composer.voiceCall.start')
+            }
+            disabled={
+              !voiceCallActive &&
+              (disabled ||
+                sending ||
+                responseStreaming ||
+                uploadingAttachments ||
+                voiceActive ||
+                voiceCallConnection.availability !== 'available')
+            }
+            onClick={() => void toggleVoiceCall()}
+          >
+            <VoiceCallIcon active={voiceCallActive} />
           </button>
         ) : null}
         {composerPresentation.showCommands ? (
@@ -2360,7 +2432,41 @@ function ChatComposer({
         </Flex>
         </Flex>
       </div>
+      {voiceCallActive ? (
+        <VoiceCallPanel
+          status={voiceCall.status}
+          transcript={voiceCall.transcript}
+          errorCode={voiceCall.errorCode}
+          isMuted={voiceCall.isMuted}
+          isSpeaking={voiceCall.isSpeaking}
+          startedAt={voiceCall.startedAt}
+          onToggleMute={() => void voiceCall.toggleMute()}
+          onEnd={voiceCall.end}
+        />
+      ) : null}
     </form>
+  );
+}
+
+function VoiceCallIcon({ active }: { active: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      width="18"
+      height="18"
+      fill="none"
+    >
+      <path
+        d="M5.2 4.1 7.6 3l2.1 4.2-1.5 1.2a10.8 10.8 0 0 0 3.4 3.4l1.2-1.5 4.2 2.1-1.1 2.4c-.4.8-1.3 1.3-2.2 1.1A12.9 12.9 0 0 1 4.1 6.3c-.2-.9.3-1.8 1.1-2.2Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      {active ? (
+        <path d="m4 4 12 12" stroke="currentColor" strokeWidth="1.5" />
+      ) : null}
+    </svg>
   );
 }
 

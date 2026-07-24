@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { constants, readdirSync } from 'node:fs';
 import { access, readdir, readFile, stat } from 'node:fs/promises';
-import { constants } from 'node:fs';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseDocument } from 'yaml';
@@ -10,6 +10,7 @@ const scriptPath = fileURLToPath(import.meta.url);
 const desktopRoot = resolve(dirname(scriptPath), '..');
 const defaultReleaseRoot = resolve(desktopRoot, 'release');
 const packageJsonPath = resolve(desktopRoot, 'package.json');
+const MAC_AUDIO_INPUT_ENTITLEMENT = 'com.apple.security.device.audio-input';
 const DIAGNOSTIC_ROOT_FILES = new Set([
   'builder-debug.yml',
   'builder-effective-config.yaml',
@@ -362,6 +363,40 @@ function expectedMacTeamIdentifier() {
   return expected;
 }
 
+export function assertMacAudioInputEntitlement(path, entitlements) {
+  const enabledAudioInputPattern = new RegExp(
+    `<key>\\s*${escapeRegExp(MAC_AUDIO_INPUT_ENTITLEMENT)}\\s*<\\/key>\\s*<true\\s*\\/>`,
+    'u',
+  );
+  if (!enabledAudioInputPattern.test(entitlements)) {
+    throw new Error(`microphone audio-input entitlement is missing for ${path}`);
+  }
+}
+
+function inspectMacAudioInputEntitlement(path) {
+  const result = spawnSync(
+    '/usr/bin/codesign',
+    ['--display', '--entitlements', ':-', path],
+    { encoding: 'utf8' },
+  );
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`codesign entitlement inspection failed for ${path}: ${result.stderr}`);
+  }
+  assertMacAudioInputEntitlement(path, `${result.stdout}\n${result.stderr}`);
+}
+
+function requireMacRendererHelper(appPath) {
+  const frameworksPath = join(appPath, 'Contents', 'Frameworks');
+  const rendererHelpers = readdirSync(frameworksPath, { withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isDirectory() && entry.name.endsWith(' Helper (Renderer).app'),
+    )
+    .map((entry) => join(frameworksPath, entry.name));
+  return requireUniquePath(rendererHelpers, 'packaged macOS Renderer Helper');
+}
+
 function verifyMacSignatures(appPath, sidecarPath) {
   execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', appPath], {
     stdio: 'inherit',
@@ -386,6 +421,8 @@ function verifyMacSignatures(appPath, sidecarPath) {
       'app and sidecar TeamIdentifier values do not match the configured release team',
     );
   }
+  inspectMacAudioInputEntitlement(appPath);
+  inspectMacAudioInputEntitlement(requireMacRendererHelper(appPath));
   if (process.env.AGISTACK_REQUIRE_NOTARIZATION === '1') {
     execFileSync(
       '/usr/sbin/spctl',

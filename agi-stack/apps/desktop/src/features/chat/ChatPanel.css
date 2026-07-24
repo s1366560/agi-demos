@@ -2780,6 +2780,14 @@
   color: var(--desktop-cyan);
 }
 
+.composer-call-button.is-connecting,
+.composer-call-button.is-connected,
+.composer-call-button.is-error {
+  border-color: rgba(52, 211, 153, 0.32);
+  background: rgba(16, 113, 84, 0.2);
+  color: #6ee7b7;
+}
+
 .composer-voice-wave {
   display: inline-flex;
   align-items: center;
@@ -2814,9 +2822,296 @@
 
 @media (prefers-reduced-motion: reduce) {
   .composer-voice-button,
-  .composer-voice-wave i {
+  .composer-voice-wave i,
+  .voice-call-avatar,
+  .voice-call-avatar span i,
+  .voice-call-agent-text > span,
+  .voice-call-presence {
     transition: none;
     animation: none;
+  }
+}
+
+.voice-call-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1200;
+  display: grid;
+  width: min(360px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 1px solid #2b4857;
+  border-radius: 13px;
+  background: rgba(10, 20, 28, 0.98);
+  color: var(--desktop-text, #d8e3ec);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.48),
+    0 0 0 1px rgba(45, 212, 191, 0.04);
+  backdrop-filter: blur(18px);
+}
+
+.voice-call-panel:focus-visible {
+  outline: 2px solid rgba(83, 208, 239, 0.55);
+  outline-offset: 3px;
+}
+
+.voice-call-panel.is-minimized {
+  display: flex;
+  width: min(310px, calc(100vw - 32px));
+  min-height: 54px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px 7px 12px;
+  cursor: grab;
+}
+
+.voice-call-panel.is-minimized button,
+.voice-call-header button,
+.voice-call-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #9db0c1;
+  cursor: pointer;
+}
+
+.voice-call-panel.is-minimized button,
+.voice-call-header button {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+}
+
+.voice-call-panel button:hover:not(:disabled),
+.voice-call-panel button:focus-visible {
+  border-color: rgba(83, 208, 239, 0.25);
+  background: rgba(83, 208, 239, 0.09);
+  color: #e7f7fb;
+  outline: none;
+}
+
+.voice-call-minimized-status {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
+.voice-call-minimized-status strong {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-call-minimized-status small {
+  color: #71879a;
+  font-size: 9px;
+}
+
+.voice-call-presence {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #2dd4bf;
+  box-shadow: 0 0 0 4px rgba(45, 212, 191, 0.1);
+}
+
+.voice-call-presence.is-speaking {
+  animation: voice-call-presence 900ms ease-in-out infinite alternate;
+}
+
+.voice-call-header {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px 10px 15px;
+  border-bottom: 1px solid rgba(56, 81, 96, 0.72);
+  cursor: grab;
+}
+
+.voice-call-header > span:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.voice-call-header strong {
+  font-size: 11px;
+}
+
+.voice-call-header small,
+.voice-call-header time {
+  color: #71879a;
+  font-size: 9px;
+}
+
+.voice-call-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.voice-call-header time {
+  margin-right: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.voice-call-error {
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(245, 158, 11, 0.16);
+  background: rgba(245, 158, 11, 0.08);
+  color: #e1b674;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.voice-call-avatar {
+  display: grid;
+  justify-items: center;
+  gap: 17px;
+  padding: 28px 20px 24px;
+}
+
+.voice-call-avatar > span {
+  display: flex;
+  width: 104px;
+  height: 104px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 2px solid #263f4f;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 50% 40%, rgba(45, 212, 191, 0.14), transparent 58%),
+    #111f2a;
+  box-shadow: inset 0 0 24px rgba(34, 211, 238, 0.04);
+}
+
+.voice-call-avatar.is-speaking > span {
+  border-color: rgba(45, 212, 191, 0.72);
+  box-shadow:
+    0 0 28px rgba(45, 212, 191, 0.16),
+    inset 0 0 24px rgba(34, 211, 238, 0.08);
+  animation: voice-call-presence 900ms ease-in-out infinite alternate;
+}
+
+.voice-call-avatar span i {
+  width: 4px;
+  height: 18px;
+  border-radius: 999px;
+  background: #65d7d2;
+}
+
+.voice-call-avatar.is-speaking span i {
+  animation: composer-voice-pulse 650ms ease-in-out infinite alternate;
+}
+
+.voice-call-avatar span i:nth-child(2) {
+  height: 32px;
+  animation-delay: 110ms;
+}
+
+.voice-call-avatar span i:nth-child(3) {
+  height: 25px;
+  animation-delay: 220ms;
+}
+
+.voice-call-avatar span i:nth-child(4) {
+  height: 12px;
+  animation-delay: 330ms;
+}
+
+.voice-call-avatar strong {
+  color: #9fb4c4;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.voice-call-transcript {
+  display: grid;
+  min-height: 92px;
+  max-height: 150px;
+  gap: 7px;
+  overflow-y: auto;
+  padding: 12px 15px;
+  border-top: 1px solid rgba(56, 81, 96, 0.58);
+  background: rgba(5, 13, 19, 0.34);
+}
+
+.voice-call-transcript p {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.voice-call-user-text {
+  color: #c1d0dc;
+}
+
+.voice-call-interim-text,
+.voice-call-empty-text {
+  color: #63788a;
+  font-style: italic;
+}
+
+.voice-call-agent-text {
+  color: #7dd3cf;
+}
+
+.voice-call-agent-text > span {
+  animation: voice-call-presence 650ms ease-in-out infinite alternate;
+}
+
+.voice-call-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 14px;
+  border-top: 1px solid rgba(56, 81, 96, 0.58);
+}
+
+.voice-call-controls button {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: #1a2b37;
+}
+
+.voice-call-controls button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.voice-call-controls button.is-active {
+  border-color: rgba(245, 158, 11, 0.34);
+  background: rgba(146, 64, 14, 0.3);
+  color: #f8c273;
+}
+
+.voice-call-panel .voice-call-end-button {
+  border-color: rgba(248, 113, 113, 0.22);
+  background: rgba(153, 27, 27, 0.38);
+  color: #fecaca;
+}
+
+.voice-call-panel .voice-call-end-button:hover,
+.voice-call-panel .voice-call-end-button:focus-visible {
+  border-color: rgba(248, 113, 113, 0.46);
+  background: rgba(185, 28, 28, 0.58);
+  color: #fff;
+}
+
+@keyframes voice-call-presence {
+  to {
+    transform: scale(1.07);
+    opacity: 0.62;
   }
 }
 

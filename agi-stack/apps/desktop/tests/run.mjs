@@ -69,6 +69,7 @@ const testFiles = [
   'auth-context-model.test.mjs',
   'chat-composer-model.test.mjs',
   'voice-transcription.test.mjs',
+  'voice-call.test.mjs',
   'compose-ahead-model.test.mjs',
   'composer-catalog-model.test.mjs',
   'composer-mentions.test.mjs',

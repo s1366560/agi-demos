@@ -43,6 +43,28 @@ if [[ -n "$app_dir" ]]; then
     echo "macOS bundle Info.plist does not contain identifier $EXPECTED_ID" >&2
     exit 1
   }
+  microphone_usage="$(
+    /usr/bin/plutil -extract NSMicrophoneUsageDescription raw -o - "$info_plist"
+  )"
+  test -n "$microphone_usage" || {
+    echo "macOS bundle Info.plist has no microphone usage description" >&2
+    exit 1
+  }
+  renderer_helper="$(
+    find "$app_dir/Contents/Frameworks" \
+      -name '* Helper (Renderer).app' -type d -print -quit
+  )"
+  test -n "$renderer_helper" || {
+    echo "macOS bundle has no Renderer Helper application" >&2
+    exit 1
+  }
+  for entitlement_target in "$app_dir" "$renderer_helper"; do
+    entitlements="$(codesign --display --entitlements :- "$entitlement_target" 2>&1)"
+    grep -q 'com.apple.security.device.audio-input' <<<"$entitlements" || {
+      echo "macOS bundle is missing audio-input entitlement: $entitlement_target" >&2
+      exit 1
+    }
+  done
   codesign --verify --deep --strict "$app_dir"
   codesign --verify --strict "$sidecar_bin"
 fi

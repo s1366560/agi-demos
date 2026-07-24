@@ -1,0 +1,38 @@
+.voice-call-qa-rail section {
+  display: grid;
+  gap: 8px;
+}
+
+.voice-call-qa-rail section > span {
+  color: #657a8c;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+}
+
+.voice-call-qa-diagnostics {
+  display: grid;
+  gap: 5px;
+  margin: auto 0 0;
+  padding-top: 10px;
+  border-top: 1px solid #273947;
+}
+
+.voice-call-qa-diagnostics div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.voice-call-qa-diagnostics dt {
+  color: #71869a;
+  font-size: 9px;
+}
+
+.voice-call-qa-diagnostics dd {
+  margin: 0;
+  color: #b8cad7;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}

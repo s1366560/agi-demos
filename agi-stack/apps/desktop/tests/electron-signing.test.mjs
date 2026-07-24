@@ -17,6 +17,10 @@ const inheritedMacEntitlements = readFileSync(
   new URL('../electron/resources/entitlements.mac.inherit.plist', import.meta.url),
   'utf8',
 );
+const localMacEntitlements = readFileSync(
+  new URL('../electron/resources/entitlements.mac.local.plist', import.meta.url),
+  'utf8',
+);
 const stageScript = readFileSync(
   new URL('../scripts/stage-sidecar.mjs', import.meta.url),
   'utf8',
@@ -91,6 +95,13 @@ test('macOS packaging signs the sidecar and enables hardened notarized builds', 
   );
   assert.doesNotMatch(macEntitlements, /disable-library-validation/u);
   assert.doesNotMatch(inheritedMacEntitlements, /disable-library-validation/u);
+  for (const entitlements of [
+    macEntitlements,
+    inheritedMacEntitlements,
+    localMacEntitlements,
+  ]) {
+    assert.match(entitlements, /com\.apple\.security\.device\.audio-input/u);
+  }
 });
 
 test('packaging configuration, signing scripts, icons, and entitlements are tracked', () => {
@@ -259,6 +270,7 @@ test('tag releases fail closed and publish only after native verification', () =
   assert.match(releaseVerification, /Developer ID Authority is missing/u);
   assert.match(releaseVerification, /TeamIdentifier is missing/u);
   assert.match(releaseVerification, /AGISTACK_EXPECTED_MAC_TEAM_ID/u);
+  assert.match(releaseVerification, /com\.apple\.security\.device\.audio-input/u);
   assert.match(
     releaseVerification,
     /appSignature\.developerIdAuthority\s*!==\s*sidecarSignature\.developerIdAuthority/u,

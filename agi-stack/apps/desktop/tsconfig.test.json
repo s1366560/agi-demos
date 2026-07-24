@@ -31,6 +31,8 @@
     "src/features/chat/chatComposerModel.ts",
     "src/features/chat/voiceTranscriptionModel.ts",
     "src/features/chat/voiceTranscriptionRuntime.ts",
+    "src/features/chat/voiceCallModel.ts",
+    "src/features/chat/voiceCallRuntime.ts",
     "src/features/chat/conversationSearchModel.ts",
     "src/features/chat/pinnedMessageModel.ts",
     "src/features/chat/conversationExportModel.ts",

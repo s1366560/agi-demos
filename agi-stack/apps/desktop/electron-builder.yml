@@ -33,7 +33,7 @@ mac:
   entitlements: electron/resources/entitlements.mac.plist
   entitlementsInherit: electron/resources/entitlements.mac.inherit.plist
   extendInfo:
-    NSMicrophoneUsageDescription: Voice input uses the microphone only while you are dictating a chat draft.
+    NSMicrophoneUsageDescription: Voice input and voice calls use the microphone only while you are actively interacting with a conversation.
   binaries:
     - Contents/Resources/sidecar/agistack-desktop-sidecar
 win:

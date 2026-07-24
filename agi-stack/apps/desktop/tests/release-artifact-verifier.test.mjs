@@ -10,7 +10,10 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { stringify } from 'yaml';
 
-import { verifyReleaseRootMetadata } from '../scripts/verify-release-artifacts.mjs';
+import {
+  assertMacAudioInputEntitlement,
+  verifyReleaseRootMetadata,
+} from '../scripts/verify-release-artifacts.mjs';
 
 const VERSION = '0.1.0';
 const PLATFORM_FIXTURES = Object.freeze({
@@ -87,6 +90,24 @@ for (const platform of Object.keys(PLATFORM_FIXTURES)) {
     });
   });
 }
+
+test('macOS release validation requires a true audio input entitlement', () => {
+  assert.doesNotThrow(() => {
+    assertMacAudioInputEntitlement(
+      '/Applications/AGI Stack Desktop.app',
+      '<key>com.apple.security.device.audio-input</key><true/>',
+    );
+  });
+  assert.throws(
+    () => {
+      assertMacAudioInputEntitlement(
+        '/Applications/AGI Stack Desktop.app',
+        '<key>com.apple.security.device.audio-input</key><false/>',
+      );
+    },
+    /audio-input entitlement is missing/u,
+  );
+});
 
 test('release metadata rejects package/tag version drift', async () => {
   await withFixture('darwin', async ({ releaseRoot }) => {

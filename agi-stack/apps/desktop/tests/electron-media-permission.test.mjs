@@ -14,6 +14,18 @@ const preloadSource = readFileSync(
   'utf8',
 );
 const builderConfig = readFileSync(new URL('../electron-builder.yml', import.meta.url), 'utf8');
+const macEntitlements = readFileSync(
+  new URL('../electron/resources/entitlements.mac.plist', import.meta.url),
+  'utf8',
+);
+const inheritedMacEntitlements = readFileSync(
+  new URL('../electron/resources/entitlements.mac.inherit.plist', import.meta.url),
+  'utf8',
+);
+const localMacEntitlements = readFileSync(
+  new URL('../electron/resources/entitlements.mac.local.plist', import.meta.url),
+  'utf8',
+);
 
 const trustedRequest = {
   senderIsMainWindow: true,
@@ -75,5 +87,12 @@ test('Electron brokers microphone access without widening the preload or media p
 
 test('macOS packages explain microphone usage and ship the AudioWorklet asset', () => {
   assert.match(builderConfig, /NSMicrophoneUsageDescription:/);
+  for (const entitlements of [
+    macEntitlements,
+    inheritedMacEntitlements,
+    localMacEntitlements,
+  ]) {
+    assert.match(entitlements, /com\.apple\.security\.device\.audio-input/);
+  }
   assert.equal(existsSync(new URL('../public/audio-processor.js', import.meta.url)), true);
 });

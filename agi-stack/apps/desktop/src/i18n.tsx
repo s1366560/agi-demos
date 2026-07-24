@@ -3016,6 +3016,39 @@ const enUS: Record<string, string> = {
   'composer.voice.error.capture_failed':
     'Voice capture stopped unexpectedly. Check the microphone and try again.',
   'composer.voice.error.service_error': 'The voice transcription service returned an error.',
+  'composer.voiceCall.start': 'Start voice call',
+  'composer.voiceCall.end': 'End voice call',
+  'composer.voiceCall.title': 'Voice call',
+  'composer.voiceCall.region': 'Voice call controls',
+  'composer.voiceCall.connecting': 'Connecting…',
+  'composer.voiceCall.connected': 'Connected',
+  'composer.voiceCall.ended': 'Call ended',
+  'composer.voiceCall.error': 'Call error',
+  'composer.voiceCall.aiSpeaking': 'AI is speaking',
+  'composer.voiceCall.listening': 'Listening for your voice…',
+  'composer.voiceCall.mute': 'Mute microphone',
+  'composer.voiceCall.unmute': 'Unmute microphone',
+  'composer.voiceCall.minimize': 'Minimize voice call',
+  'composer.voiceCall.expand': 'Expand voice call',
+  'composer.voiceCall.duration': 'Call duration',
+  'composer.voiceCall.unavailable.local_runtime':
+    'Voice calls are available in cloud sessions.',
+  'composer.voiceCall.unavailable.authentication_required':
+    'Sign in to a cloud session before starting a voice call.',
+  'composer.voiceCall.unavailable.conversation_required':
+    'Open a cloud conversation before starting a voice call.',
+  'composer.voiceCall.error.permission_denied':
+    'Microphone access was denied. Check system permissions and try again.',
+  'composer.voiceCall.error.capture_unsupported':
+    'This environment cannot capture microphone audio.',
+  'composer.voiceCall.error.connection_failed':
+    'The voice call could not connect. Check the cloud connection and try again.',
+  'composer.voiceCall.error.connection_closed': 'The voice call connection closed.',
+  'composer.voiceCall.error.capture_failed':
+    'Voice capture stopped unexpectedly. Check the microphone and try again.',
+  'composer.voiceCall.error.playback_failed':
+    'The synthesized response could not be played.',
+  'composer.voiceCall.error.service_error': 'The voice call service returned an error.',
   'composer.noResources': 'No enabled resources',
   'composer.loadingResources': 'Loading available resources…',
   'composer.commandPlanDescription': 'Draft or revise the plan before acting',
@@ -5923,6 +5956,35 @@ const zhCN: Record<string, string> = {
   'composer.voice.error.connection_closed': '语音转写连接已关闭。',
   'composer.voice.error.capture_failed': '语音采集意外停止，请检查麦克风后重试。',
   'composer.voice.error.service_error': '语音转写服务返回了错误。',
+  'composer.voiceCall.start': '开始语音通话',
+  'composer.voiceCall.end': '结束语音通话',
+  'composer.voiceCall.title': '语音通话',
+  'composer.voiceCall.region': '语音通话控制',
+  'composer.voiceCall.connecting': '正在连接…',
+  'composer.voiceCall.connected': '已连接',
+  'composer.voiceCall.ended': '通话已结束',
+  'composer.voiceCall.error': '通话错误',
+  'composer.voiceCall.aiSpeaking': 'AI 正在说话',
+  'composer.voiceCall.listening': '正在聆听你的语音…',
+  'composer.voiceCall.mute': '麦克风静音',
+  'composer.voiceCall.unmute': '取消麦克风静音',
+  'composer.voiceCall.minimize': '最小化语音通话',
+  'composer.voiceCall.expand': '展开语音通话',
+  'composer.voiceCall.duration': '通话时长',
+  'composer.voiceCall.unavailable.local_runtime': '语音通话仅适用于云端会话。',
+  'composer.voiceCall.unavailable.authentication_required':
+    '请先登录云端会话，再开始语音通话。',
+  'composer.voiceCall.unavailable.conversation_required':
+    '请先打开云端会话，再开始语音通话。',
+  'composer.voiceCall.error.permission_denied':
+    '麦克风权限被拒绝，请检查系统权限后重试。',
+  'composer.voiceCall.error.capture_unsupported': '当前环境无法使用麦克风采集。',
+  'composer.voiceCall.error.connection_failed':
+    '无法连接语音通话服务，请检查云端连接后重试。',
+  'composer.voiceCall.error.connection_closed': '语音通话连接已关闭。',
+  'composer.voiceCall.error.capture_failed': '语音采集意外停止，请检查麦克风后重试。',
+  'composer.voiceCall.error.playback_failed': '无法播放合成语音回复。',
+  'composer.voiceCall.error.service_error': '语音通话服务返回了错误。',
   'composer.noResources': '没有已启用资源',
   'composer.loadingResources': '正在加载可用资源…',
   'composer.commandPlanDescription': '执行前创建或修改计划',
