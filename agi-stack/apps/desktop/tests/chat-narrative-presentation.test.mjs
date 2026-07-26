@@ -17,6 +17,9 @@ const {
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/chat/chatMessageActionModel.js',
 );
+const { markdownLinkPresentation } = require(
+  '/tmp/agistack-desktop-test-dist/src/features/chat/markdownLinkModel.js',
+);
 
 const readSource = (path) =>
   readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8');
@@ -671,5 +674,57 @@ test('narrative content is bounded without discarding authoritative markdown', (
   assert.match(
     chatSource,
     /<ReactMarkdown[\s\S]*remarkPlugins=\{remarkPlugins\}[\s\S]*rehypePlugins=\{rehypePlugins\}[\s\S]*components=\{MARKDOWN_COMPONENTS\}/,
+  );
+});
+
+test('shared Markdown links use the native external-navigation boundary', () => {
+  assert.deepEqual(markdownLinkPresentation('https://docs.memstack.ai/guide#usage'), {
+    kind: 'external',
+    href: 'https://docs.memstack.ai/guide#usage',
+  });
+  assert.deepEqual(markdownLinkPresentation('http://127.0.0.1:8000/docs'), {
+    kind: 'external',
+    href: 'http://127.0.0.1:8000/docs',
+  });
+  assert.deepEqual(markdownLinkPresentation('http://docs.example.test/guide'), {
+    kind: 'external',
+    href: 'http://docs.example.test/guide',
+  });
+
+  for (const href of [
+    undefined,
+    '',
+    '#local-heading',
+    '/relative/path',
+    '//docs.example.test/guide',
+    'mailto:help@example.test',
+    'javascript:alert(1)',
+    'data:text/html,unsafe',
+    'file:///tmp/report.txt',
+    'agistack://renderer/escape',
+    'https://user:secret@docs.example.test/guide',
+    ' https://docs.example.test/guide',
+    'http://[::1',
+  ]) {
+    assert.deepEqual(markdownLinkPresentation(href), { kind: 'blocked' }, String(href));
+  }
+
+  assert.match(chatSource, /a: MarkdownLink/);
+  assert.match(
+    chatSource,
+    /function MarkdownLink[\s\S]*markdownLinkPresentation\(href\)[\s\S]*target="_blank"[\s\S]*rel="noopener noreferrer"/,
+  );
+  assert.match(chatSource, /markdown-link-blocked/);
+  assert.doesNotMatch(
+    chatSource,
+    /function MarkdownLink[\s\S]*(?:shell\.openExternal|ipcRenderer|window\.location)/,
+  );
+  assert.match(
+    chatStyles,
+    /\.markdown-content \.markdown-external-link:focus-visible[\s\S]*outline/,
+  );
+  assert.match(
+    chatStyles,
+    /\.markdown-content \.markdown-external-link[\s\S]*overflow-wrap: anywhere/,
   );
 });

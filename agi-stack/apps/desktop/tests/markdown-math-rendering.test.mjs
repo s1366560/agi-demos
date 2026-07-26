@@ -79,6 +79,16 @@ test('math QA covers lazy, valid, incomplete, code, theme, and narrow states', (
   assert.match(qaSource, /data-testid="math-qa-scenario"/);
 });
 
+test('shared Markdown QA exposes external, restricted, and blocked link fixtures', () => {
+  assert.match(qaSource, /onClick=\{\(\) => setScenario\('links'\)\}/);
+  assert.match(qaSource, /\[HTTPS documentation\]\(https:\/\/docs\.example\.test/);
+  assert.match(qaSource, /\[Loopback HTTP\]\(http:\/\/127\.0\.0\.1:5173/);
+  assert.match(qaSource, /\[Restricted HTTP\]\(http:\/\/docs\.example\.test/);
+  assert.match(qaSource, /\[Relative route\]\(\/relative\/path\)/);
+  assert.match(qaSource, /\[Unsafe protocol\]\(javascript:alert\(1\)\)/);
+  assert.match(qaSource, /\[Formatted \*\*documentation\*\*\]/);
+});
+
 test('desktop declares the same direct math rendering dependencies as Web', () => {
   assert.match(packageSource, /"katex":\s*"\^0\.16\.28"/);
   assert.match(packageSource, /"rehype-katex":\s*"\^7\.0\.1"/);

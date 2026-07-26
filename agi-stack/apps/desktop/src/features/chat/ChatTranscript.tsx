@@ -34,6 +34,7 @@ import {
   formatWorkspaceMessageTime,
   workspaceMessageSenderLabel,
 } from './messageIdentityModel';
+import { markdownLinkPresentation } from './markdownLinkModel';
 import { shouldRenderMermaidDiagram } from './mermaidDiagramModel';
 import { useMarkdownMathPlugins } from './useMarkdownMathPlugins';
 
@@ -201,6 +202,7 @@ const MARKDOWN_COMPONENTS: Components = {
   // copy affordance; inline `code` keeps the default renderer and styling.
   pre: MarkdownPreBlock,
   img: MarkdownArtifactImage,
+  a: MarkdownLink,
 };
 
 export const MarkdownContent = memo(function MarkdownContent({
@@ -223,6 +225,42 @@ export const MarkdownContent = memo(function MarkdownContent({
     </div>
   );
 });
+
+function MarkdownLink({
+  href,
+  children,
+  className,
+  title,
+}: {
+  href?: string;
+  children?: ReactNode;
+  className?: string;
+  title?: string;
+}) {
+  const presentation = markdownLinkPresentation(href);
+  if (presentation.kind === 'blocked') {
+    return (
+      <span
+        className={`markdown-link-blocked${className ? ` ${className}` : ''}`}
+        title={title}
+      >
+        {children}
+      </span>
+    );
+  }
+
+  return (
+    <a
+      className={`markdown-external-link${className ? ` ${className}` : ''}`}
+      href={presentation.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={title}
+    >
+      {children}
+    </a>
+  );
+}
 
 function MarkdownPreBlock({ children }: { children?: ReactNode }) {
   const codeElement = isValidElement(children) ? children : null;

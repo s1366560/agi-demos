@@ -12,7 +12,7 @@ declare global {
   var __markdownMathRenderingQaRoot: Root | undefined;
 }
 
-type QaScenario = 'plain' | 'valid' | 'incomplete' | 'code';
+type QaScenario = 'plain' | 'valid' | 'incomplete' | 'code' | 'links';
 type QaAppearance = 'dark' | 'light';
 
 const LONG_DISPLAY_MATH = [
@@ -44,6 +44,19 @@ const CONTENT: Record<QaScenario, string> = {
     '```typescript',
     'const price = "$5";',
     '```',
+  ].join('\n'),
+  links: [
+    '[HTTPS documentation](https://docs.example.test/guide#usage)',
+    '',
+    '[Loopback HTTP](http://127.0.0.1:5173/qa/markdown-math-rendering.html)',
+    '',
+    '[Restricted HTTP](http://docs.example.test/guide)',
+    '',
+    '[Relative route](/relative/path)',
+    '',
+    '[Unsafe protocol](javascript:alert(1))',
+    '',
+    '[Formatted **documentation**](https://docs.example.test/nested)',
   ].join('\n'),
 };
 
@@ -77,6 +90,9 @@ function MarkdownMathRenderingQa() {
             </Button>
             <Button type="button" onClick={() => setScenario('code')}>
               Code dollar
+            </Button>
+            <Button type="button" onClick={() => setScenario('links')}>
+              Links
             </Button>
             <Button
               type="button"
