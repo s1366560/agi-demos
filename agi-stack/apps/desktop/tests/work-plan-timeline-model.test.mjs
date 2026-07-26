@@ -96,6 +96,65 @@ test('normalizes live payload steps and filters malformed entries', () => {
   });
 });
 
+test('normalizes a durable task-list snapshot into ordered work-plan steps', () => {
+  const plan = workPlanTimelinePresentation({
+    id: 'task-list-plan',
+    type: 'task_list_updated',
+    payload: {
+      tasks: [
+        {
+          id: 'task-3',
+          content: ' Output the conclusion. ',
+          status: 'pending',
+          order_index: 2,
+        },
+        {
+          id: 'task-1',
+          content: 'Inspect the input.',
+          status: 'completed',
+          order_index: 0,
+        },
+        {
+          id: 'task-2',
+          title: 'A shorter Desktop-only title must not replace Web content.',
+          content: 'Summarize the evidence.',
+          status: 'in_progress',
+          order_index: 1,
+        },
+        {
+          id: 'task-invalid',
+          content: '   ',
+          status: 'pending',
+          order_index: 3,
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(plan, {
+    steps: [
+      {
+        stepNumber: 1,
+        description: 'Inspect the input.',
+        expectedOutput: null,
+      },
+      {
+        stepNumber: 2,
+        description: 'Summarize the evidence.',
+        expectedOutput: null,
+      },
+      {
+        stepNumber: 3,
+        description: 'Output the conclusion.',
+        expectedOutput: null,
+      },
+    ],
+    totalSteps: 3,
+    currentStep: 2,
+    status: 'in_progress',
+  });
+});
+
 test('prefers direct history steps and rejects plans without valid structured steps', () => {
   assert.deepEqual(
     workPlanTimelinePresentation({

@@ -4498,6 +4498,7 @@ test('UI-state events stay out of the visible conversation timeline', () => {
       'user-message-1',
       'assistant-message-1',
       'reflection-complete-1',
+      'task-list-updated-1',
       'task-start-1',
       'task-complete-1',
     ],

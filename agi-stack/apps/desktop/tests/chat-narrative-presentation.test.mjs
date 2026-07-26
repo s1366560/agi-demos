@@ -714,7 +714,14 @@ test('reasoning and tool disclosures follow the Web transcript defaults', () => 
 });
 
 test('work plans use structured steps instead of raw timeline payloads', () => {
-  assert.match(chatSource, /item\.type === 'work_plan'[\s\S]*<WorkPlanTimelineCard/);
+  assert.match(
+    chatSource,
+    /item\.type === 'work_plan' \|\| item\.type === 'task_list_updated'[\s\S]*<WorkPlanTimelineCard/,
+  );
+  assert.match(
+    chatSource,
+    /node\.item\.type === 'work_plan' \|\|[\s\S]*node\.item\.type === 'task_list_updated'[\s\S]*flushActivityItems\(\)[\s\S]*grouped\.push\(node\)[\s\S]*isCollapsibleRuntimeItem/,
+  );
   assert.match(
     workPlanTimelineCardSource,
     /export function WorkPlanTimelineCard[\s\S]*workPlanTimelinePresentation\(item\)/,
@@ -734,6 +741,10 @@ test('work plans use structured steps instead of raw timeline payloads', () => {
   assert.match(
     workPlanTimelineModelSource,
     /Array\.isArray\(item\.steps\)[\s\S]*Array\.isArray\(payload\?\.steps\)/,
+  );
+  assert.match(
+    workPlanTimelineModelSource,
+    /item\.type === 'task_list_updated'[\s\S]*Array\.isArray\(payload\?\.tasks\)/,
   );
   assert.match(
     workPlanTimelineModelSource,

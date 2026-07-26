@@ -17,6 +17,12 @@ export function workPlanTimelinePresentation(
   item: AgentTimelineItem,
 ): WorkPlanTimelinePresentation | null {
   const payload = isRecord(item.payload) ? item.payload : null;
+  if (item.type === 'task_list_updated') {
+    const directTasks = Array.isArray(item.tasks) ? item.tasks : null;
+    const payloadTasks = Array.isArray(payload?.tasks) ? payload.tasks : null;
+    return taskListTimelinePresentation(directTasks ?? payloadTasks ?? []);
+  }
+
   const directSteps = Array.isArray(item.steps) ? item.steps : null;
   const payloadSteps = Array.isArray(payload?.steps) ? payload.steps : null;
   const steps = normalizeSteps(directSteps ?? payloadSteps ?? []);
@@ -33,6 +39,61 @@ export function workPlanTimelinePresentation(
     currentStep: currentStep && currentStep > 0 ? currentStep : null,
     status,
   };
+}
+
+type NormalizedTaskStep = WorkPlanTimelineStep & {
+  orderIndex: number;
+  status: string | null;
+  sourceIndex: number;
+};
+
+function taskListTimelinePresentation(values: unknown[]): WorkPlanTimelinePresentation | null {
+  const tasks = values
+    .map((value, sourceIndex) => normalizeTaskStep(value, sourceIndex))
+    .filter((task): task is NormalizedTaskStep => task !== null)
+    .sort(
+      (left, right) =>
+        left.orderIndex - right.orderIndex || left.sourceIndex - right.sourceIndex,
+    );
+  if (!tasks.length) return null;
+
+  const steps = tasks.map(({ description, expectedOutput }, index) => ({
+    stepNumber: index + 1,
+    description,
+    expectedOutput,
+  }));
+  const currentTaskIndex = tasks.findIndex((task) => task.status === 'in_progress');
+
+  return {
+    steps,
+    totalSteps: steps.length,
+    currentStep: currentTaskIndex >= 0 ? currentTaskIndex + 1 : null,
+    status: taskListStatus(tasks.map((task) => task.status)),
+  };
+}
+
+function normalizeTaskStep(value: unknown, sourceIndex: number): NormalizedTaskStep | null {
+  if (!isRecord(value)) return null;
+  const description = readString(value.content) ?? readString(value.title);
+  if (!description) return null;
+  const orderIndex = readInteger(value.order_index) ?? readInteger(value.orderIndex);
+  return {
+    stepNumber: sourceIndex + 1,
+    description,
+    expectedOutput: null,
+    orderIndex: orderIndex !== null && orderIndex >= 0 ? orderIndex : sourceIndex,
+    status: readString(value.status),
+    sourceIndex,
+  };
+}
+
+function taskListStatus(statuses: Array<string | null>): string | null {
+  if (statuses.includes('failed')) return 'failed';
+  if (statuses.includes('in_progress')) return 'in_progress';
+  if (statuses.every((status) => status === 'completed')) return 'completed';
+  if (statuses.every((status) => status === 'cancelled')) return 'cancelled';
+  if (statuses.some((status) => status === 'pending')) return 'pending';
+  return null;
 }
 
 function normalizeSteps(values: unknown[]): WorkPlanTimelineStep[] {

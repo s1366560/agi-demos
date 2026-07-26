@@ -889,7 +889,7 @@ function TimelineItemView({
   if (item.type === 'thought') {
     return <ThoughtTimelineCard item={item} expanded={expanded} onToggle={onToggle} />;
   }
-  if (item.type === 'work_plan') {
+  if (item.type === 'work_plan' || item.type === 'task_list_updated') {
     return <WorkPlanTimelineCard item={item} expanded={expanded} onToggle={onToggle} />;
   }
   if (kind === 'user' || kind === 'agent') {
@@ -1498,6 +1498,15 @@ function groupNarrativeActivity(narrative: SessionNarrativeNode[]): TimelinePres
     // Reasoning traces stay first-class, collapsible rows instead of being
     // folded into the debug activity group.
     if (node.kind === 'item' && node.item.type === 'thought') {
+      flushActivityItems();
+      grouped.push(node);
+      return;
+    }
+    if (
+      node.kind === 'item' &&
+      (node.item.type === 'work_plan' ||
+        node.item.type === 'task_list_updated')
+    ) {
       flushActivityItems();
       grouped.push(node);
       return;
