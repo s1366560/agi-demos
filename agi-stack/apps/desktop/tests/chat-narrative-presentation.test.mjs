@@ -43,6 +43,12 @@ const conversationSummaryQaSource = readOptionalSource(
 const lifecycleVisibilityQaSource = readOptionalSource(
   'qa/LifecycleVisibilityQa.tsx',
 );
+const aggregatedSourcesSource = readOptionalSource(
+  'features/chat/AggregatedSourcesCard.tsx',
+);
+const aggregatedSourcesQaSource = readOptionalSource(
+  'qa/AggregatedSourcesQa.tsx',
+);
 const sessionConversationQaSource = readSource('qa/SessionConversationQa.tsx');
 
 test('session messages use the mission-control narrative hierarchy', () => {
@@ -142,6 +148,26 @@ test('lifecycle visibility QA replays Web-hidden Agent state events through the 
   assert.match(lifecycleVisibilityQaSource, /Replay live lifecycle burst/);
   assert.match(lifecycleVisibilityQaSource, /data-testid="visible-message-order"/);
   assert.match(lifecycleVisibilityQaSource, /qa-user[\s\S]*qa-assistant/);
+});
+
+test('Desktop renders structured multi-call sources as one accessible aggregated card', () => {
+  assert.match(chatSource, /<AggregatedSourcesCard items=\{node\.items\} \/>/);
+  assert.match(aggregatedSourcesSource, /aggregateStructuredToolSources\(items\)/);
+  assert.match(aggregatedSourcesSource, /data-testid="aggregated-sources-card"/);
+  assert.match(aggregatedSourcesSource, /<details[\s\S]*<summary/);
+  assert.match(aggregatedSourcesSource, /target="_blank"/);
+  assert.match(aggregatedSourcesSource, /rel="noopener noreferrer"/);
+  assert.match(chatStyles, /\.aggregated-sources-card/);
+  for (const key of [
+    'chat.aggregatedSources.title',
+    'chat.aggregatedSources.metrics',
+    'chat.aggregatedSources.other',
+    'chat.aggregatedSources.open',
+  ]) {
+    assert.match(i18nSource, new RegExp(`'${key.replaceAll('.', '\\.')}'`));
+  }
+  assert.match(aggregatedSourcesQaSource, /<AgentTimeline/);
+  assert.match(aggregatedSourcesQaSource, /data-testid="source-qa-authority"/);
 });
 
 test('local deletion is exact, idempotent, scoped, and preserves neighboring events', () => {

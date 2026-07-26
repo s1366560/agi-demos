@@ -66,6 +66,7 @@ import {
   ToolFileMetadataView,
 } from './chatTimelinePresentation';
 import type { TimelineKind } from './chatTimelinePresentation';
+import { AggregatedSourcesCard } from './AggregatedSourcesCard';
 import { CodeBlockFrame } from './HighlightedCode';
 import { HitlResponseCard } from './HitlResponseCard';
 import { MCPAppTimelineCard } from './MCPAppTimelineCard';
@@ -537,6 +538,7 @@ export function AgentTimeline({
                     <ChevronRightIcon className="timeline-tool-group-chevron" aria-hidden />
                   </summary>
                   <div className="timeline-tool-group-items">
+                    <AggregatedSourcesCard items={node.items} />
                     {toolActivityRows(node.items).map((row) =>
                       row.kind === 'thought' ? (
                         <TimelineItemView

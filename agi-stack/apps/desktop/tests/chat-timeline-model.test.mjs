@@ -13,6 +13,9 @@ const { groupSubAgentTimelineItems } = require(
 const { coalesceStreamingTextEvents } = require(
   '/tmp/agistack-desktop-test-dist/src/features/chat/streamingTextEventModel.js',
 );
+const { aggregateStructuredToolSources } = require(
+  '/tmp/agistack-desktop-test-dist/src/features/chat/toolSourceAggregationModel.js',
+);
 const {
   assistantCostTracking,
   assistantExecutionSummary,
@@ -4826,6 +4829,262 @@ test('tool activity rows preserve structured thinking ahead of paired tool calls
   assert.equal(rows[1].kind, 'tool_call');
   assert.equal(rows[1].pair.call.id, 'act-1');
   assert.equal(rows[1].pair.result.id, 'observe-1');
+});
+
+test('structured sources aggregate across calls, deduplicate URLs, and keep stable groups', () => {
+  const model = aggregateStructuredToolSources([
+    {
+      id: 'act-search-1',
+      type: 'act',
+      display: { kind: 'search', metadata: { source_type: 'web' } },
+      eventTimeUs: 1,
+    },
+    {
+      id: 'observe-search-1',
+      type: 'observe',
+      toolOutput: {
+        results: [
+          {
+            title: 'OpenAI documentation',
+            url: 'https://www.openai.com/docs/',
+            snippet: 'Primary documentation.',
+            score: 0.91,
+          },
+          {
+            title: 'Protocol notes',
+            url: 'https://example.com/protocol',
+          },
+        ],
+      },
+      eventTimeUs: 2,
+    },
+    {
+      id: 'act-search-2',
+      type: 'act',
+      display: { kind: 'search' },
+      eventTimeUs: 3,
+    },
+    {
+      id: 'observe-search-2',
+      type: 'observe',
+      toolOutput: JSON.stringify({
+        sources: [
+          {
+            title: 'OpenAI documentation duplicate',
+            url: 'https://openai.com/docs#overview',
+          },
+          {
+            title: 'Workspace handbook',
+            source_type: 'rag',
+            provider_label: 'Project knowledge',
+          },
+        ],
+      }),
+      eventTimeUs: 4,
+    },
+  ]);
+
+  assert.equal(model.callCount, 2);
+  assert.equal(model.sourceCount, 3);
+  assert.deepEqual(
+    model.groups.map((group) => ({
+      key: group.key,
+      label: group.label,
+      titles: group.sources.map((source) => source.title),
+    })),
+    [
+      {
+        key: 'web:openai.com',
+        label: 'openai.com',
+        titles: ['OpenAI documentation'],
+      },
+      {
+        key: 'web:example.com',
+        label: 'example.com',
+        titles: ['Protocol notes'],
+      },
+      {
+        key: 'provider:project knowledge',
+        label: 'Project knowledge',
+        titles: ['Workspace handbook'],
+      },
+    ],
+  );
+});
+
+test('structured source aggregation refuses one call and unmarked generic result arrays', () => {
+  const oneCall = aggregateStructuredToolSources([
+    {
+      id: 'act-one',
+      type: 'act',
+      display: { kind: 'search' },
+      eventTimeUs: 1,
+    },
+    {
+      id: 'observe-one',
+      type: 'observe',
+      toolOutput: { sources: [{ title: 'Only source', url: 'https://example.com/only' }] },
+      eventTimeUs: 2,
+    },
+  ]);
+  const genericResults = aggregateStructuredToolSources([
+    {
+      id: 'act-generic-1',
+      type: 'act',
+      toolName: 'search_everything',
+      eventTimeUs: 1,
+    },
+    {
+      id: 'observe-generic-1',
+      type: 'observe',
+      toolOutput: { results: [{ title: 'Looks like a source', url: 'https://example.com/a' }] },
+      eventTimeUs: 2,
+    },
+    {
+      id: 'act-generic-2',
+      type: 'act',
+      toolName: 'retrieval_keyword_should_not_decide',
+      eventTimeUs: 3,
+    },
+    {
+      id: 'observe-generic-2',
+      type: 'observe',
+      toolOutput: { results: [{ title: 'Another result', url: 'https://example.com/b' }] },
+      eventTimeUs: 4,
+    },
+  ]);
+  const thoughtAndOneCall = aggregateStructuredToolSources([
+    {
+      id: 'thought-with-sources',
+      type: 'thought',
+      payload: {
+        sources: [{ title: 'Reasoning reference', url: 'https://example.com/reasoning' }],
+      },
+      eventTimeUs: 1,
+    },
+    {
+      id: 'act-only-source-call',
+      type: 'act',
+      display: { kind: 'search' },
+      eventTimeUs: 2,
+    },
+    {
+      id: 'observe-only-source-call',
+      type: 'observe',
+      toolOutput: {
+        sources: [{ title: 'Tool source', url: 'https://example.com/tool' }],
+      },
+      eventTimeUs: 3,
+    },
+  ]);
+
+  assert.equal(oneCall, null);
+  assert.equal(genericResults, null);
+  assert.equal(thoughtAndOneCall, null);
+});
+
+test('structured source aggregation accepts explicit source lists in display metadata', () => {
+  const model = aggregateStructuredToolSources([
+    {
+      id: 'act-display-1',
+      type: 'act',
+      display: {
+        metadata: {
+          provider_label: 'Agent research',
+          sources: [{ title: 'Display source', url: 'https://example.com/display' }],
+        },
+      },
+      eventTimeUs: 1,
+    },
+    {
+      id: 'observe-display-1',
+      type: 'observe',
+      eventTimeUs: 2,
+    },
+    {
+      id: 'act-display-2',
+      type: 'act',
+      eventTimeUs: 3,
+    },
+    {
+      id: 'observe-display-2',
+      type: 'observe',
+      display: {
+        metadata: {
+          source_type: 'rag',
+          citations: [{ title: 'Display citation' }],
+        },
+      },
+      eventTimeUs: 4,
+    },
+  ]);
+
+  assert.equal(model.callCount, 2);
+  assert.equal(model.sourceCount, 2);
+  assert.deepEqual(
+    model.groups.map((group) => group.sources.map((source) => source.title)),
+    [['Display source'], ['Display citation']],
+  );
+});
+
+test('structured source aggregation ignores malformed candidates and unsafe links', () => {
+  const model = aggregateStructuredToolSources([
+    {
+      id: 'act-safe-1',
+      type: 'act',
+      display: { kind: 'search' },
+      eventTimeUs: 1,
+    },
+    {
+      id: 'observe-safe-1',
+      type: 'observe',
+      toolOutput: {
+        citations: [
+          null,
+          { url: 'https://example.com/no-title' },
+          { title: 'Unsafe link', url: 'javascript:alert(1)', score: Number.NaN },
+          { title: 'Insecure remote link', url: 'http://example.com/insecure' },
+          { title: 'Safe source', url: 'https://example.com/safe', score: 'excellent' },
+        ],
+      },
+      eventTimeUs: 2,
+    },
+    {
+      id: 'act-safe-2',
+      type: 'act',
+      display: { metadata: { source_type: 'rag', provider_label: 'Knowledge base' } },
+      eventTimeUs: 3,
+    },
+    {
+      id: 'observe-safe-2',
+      type: 'observe',
+      toolOutput: {
+        documents: [
+          { title: '' },
+          { title: 'Internal guide', snippet: 42 },
+        ],
+      },
+      eventTimeUs: 4,
+    },
+  ]);
+
+  assert.equal(model.callCount, 2);
+  assert.equal(model.sourceCount, 4);
+  assert.deepEqual(
+    model.groups.flatMap((group) =>
+      group.sources.map((source) => ({
+        title: source.title,
+        url: source.url,
+        score: source.score,
+      })),
+    ),
+    [
+      { title: 'Unsafe link', url: undefined, score: undefined },
+      { title: 'Insecure remote link', url: undefined, score: undefined },
+      { title: 'Safe source', url: 'https://example.com/safe', score: undefined },
+      { title: 'Internal guide', url: undefined, score: undefined },
+    ],
+  );
 });
 
 test('a trailing act without its observe renders as a running call', () => {
