@@ -79,6 +79,7 @@ const testFiles = [
   'chat-narrative-presentation.test.mjs',
   'mermaid-rendering.test.mjs',
   'markdown-math-rendering.test.mjs',
+  'assistant-artifact-references.test.mjs',
   'timeline-turn-collapse-model.test.mjs',
   'conversation-search-model.test.mjs',
   'pinned-message-model.test.mjs',

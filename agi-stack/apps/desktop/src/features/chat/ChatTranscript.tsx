@@ -18,6 +18,7 @@ import { useI18n } from '../../i18n';
 import type { WorkspaceMessage } from '../../types';
 import { messageActionsForVisibleMessage } from './chatMessageActionModel';
 import type { VisibleMessageKind } from './chatMessageActionModel';
+import { AssistantArtifactReferences } from './AssistantArtifactReferences';
 import { CodeBlockFrame } from './HighlightedCode';
 import { MermaidBlock } from './MermaidBlock';
 import { shouldRenderMermaidDiagram } from './mermaidDiagramModel';
@@ -87,6 +88,7 @@ export const WorkspaceTranscriptMessage = memo(function WorkspaceTranscriptMessa
       retryDisabled={retryDisabled}
     >
       <MarkdownContent content={message.content} className="transcript-content" />
+      {kind === 'agent' ? <AssistantArtifactReferences metadata={message.metadata} /> : null}
     </NarrativeMessageFrame>
   );
 });

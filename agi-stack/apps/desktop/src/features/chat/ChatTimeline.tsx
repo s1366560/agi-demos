@@ -67,6 +67,7 @@ import {
 } from './chatTimelinePresentation';
 import type { TimelineKind } from './chatTimelinePresentation';
 import { AggregatedSourcesCard } from './AggregatedSourcesCard';
+import { AssistantArtifactReferences } from './AssistantArtifactReferences';
 import { CodeBlockFrame } from './HighlightedCode';
 import { HitlResponseCard } from './HitlResponseCard';
 import { MCPAppTimelineCard } from './MCPAppTimelineCard';
@@ -1115,7 +1116,10 @@ function TimelineItemBody({
     );
   }
 
-  const content = item.content || timelinePayloadPreview(item);
+  const content =
+    kind === 'user' || kind === 'agent'
+      ? (item.content ?? '')
+      : item.content || timelinePayloadPreview(item);
   if (item.type === 'thought') {
     return <MarkdownContent content={content} className="transcript-content thought-content" />;
   }
@@ -1124,6 +1128,9 @@ function TimelineItemBody({
       <>
         {kind === 'agent' ? <AssistantExecutionSummary item={item} /> : null}
         <MarkdownContent content={content} className="transcript-content" />
+        {kind === 'agent' ? (
+          <AssistantArtifactReferences artifacts={item.artifacts} metadata={item.metadata} />
+        ) : null}
         {kind === 'user' ? <MessageAttachments item={item} /> : null}
       </>
     );
