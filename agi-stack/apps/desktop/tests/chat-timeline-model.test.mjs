@@ -23,6 +23,7 @@ const {
   '/tmp/agistack-desktop-test-dist/src/features/chat/messageAttachmentModel.js',
 );
 const {
+  assistantDisplayDuplicateItems,
   assistantCostTracking,
   assistantExecutionSummary,
   detectPayloadLanguage,
@@ -3370,6 +3371,188 @@ test('history hydration hides the same protocol control events as the live Web t
     timelineItemsForDisplay([user, ...controls, assistant]).map((item) => item.id),
     [user.id, assistant.id],
   );
+});
+
+test('display folds persisted assistant duplicates only within one execution and user turn', () => {
+  const user = {
+    id: 'user-duplicate-execution',
+    type: 'user_message',
+    role: 'user',
+    content: 'Create the story',
+    eventTimeUs: 1,
+    eventCounter: 1,
+  };
+  const first = {
+    id: 'assistant-duplicate-execution-1',
+    type: 'assistant_message',
+    role: 'assistant',
+    message_id: 'persisted-message-1',
+    executionMessageId: 'execution-story-1',
+    content: '```canonical-story\nstory: exact\n```',
+    eventTimeUs: 2,
+    eventCounter: 1,
+  };
+  const second = {
+    ...first,
+    id: 'assistant-duplicate-execution-2',
+    message_id: 'persisted-message-2',
+    eventTimeUs: 3,
+  };
+  const third = {
+    ...first,
+    id: 'assistant-duplicate-execution-3',
+    message_id: 'persisted-message-3',
+    eventTimeUs: 4,
+  };
+
+  const visible = timelineItemsForDisplay([user, first, second, third]);
+
+  assert.deepEqual(
+    visible.map((item) => item.id),
+    [user.id, first.id],
+  );
+  assert.deepEqual(
+    assistantDisplayDuplicateItems(visible[1]).map((item) => item.id),
+    [first.id, second.id, third.id],
+  );
+  assert.deepEqual(assistantDisplayDuplicateItems(first), []);
+  assert.deepEqual([first, second, third].map((item) => item.id), [
+    first.id,
+    second.id,
+    third.id,
+  ]);
+});
+
+test('display duplicate folding fails open across protocol identity boundaries', () => {
+  const userOne = {
+    id: 'user-boundary-1',
+    type: 'user_message',
+    role: 'user',
+    content: 'First turn',
+    eventTimeUs: 1,
+    eventCounter: 1,
+  };
+  const baseline = {
+    id: 'assistant-boundary-1',
+    type: 'assistant_message',
+    role: 'assistant',
+    message_id: 'persisted-boundary-1',
+    executionMessageId: 'execution-boundary',
+    content: 'same bytes',
+    eventTimeUs: 2,
+    eventCounter: 1,
+  };
+  const differentExecution = {
+    ...baseline,
+    id: 'assistant-boundary-2',
+    message_id: 'persisted-boundary-2',
+    executionMessageId: 'execution-other',
+    eventTimeUs: 3,
+  };
+  const differentContent = {
+    ...baseline,
+    id: 'assistant-boundary-3',
+    message_id: 'persisted-boundary-3',
+    content: 'same bytes ',
+    eventTimeUs: 4,
+  };
+  const missingExecution = {
+    ...baseline,
+    id: 'assistant-boundary-4',
+    message_id: 'persisted-boundary-4',
+    executionMessageId: '',
+    eventTimeUs: 5,
+  };
+  const transient = {
+    ...baseline,
+    id: 'completed-assistant-execution-boundary',
+    message_id: 'execution-boundary',
+    eventTimeUs: 6,
+  };
+  const userTwo = {
+    ...userOne,
+    id: 'user-boundary-2',
+    content: 'Second turn',
+    eventTimeUs: 7,
+  };
+  const crossTurn = {
+    ...baseline,
+    id: 'assistant-boundary-5',
+    message_id: 'persisted-boundary-5',
+    eventTimeUs: 8,
+  };
+
+  const visible = timelineItemsForDisplay([
+    userOne,
+    baseline,
+    differentExecution,
+    differentContent,
+    missingExecution,
+    transient,
+    userTwo,
+    crossTurn,
+  ]);
+
+  assert.deepEqual(
+    visible.map((item) => item.id),
+    [
+      userOne.id,
+      baseline.id,
+      differentExecution.id,
+      differentContent.id,
+      missingExecution.id,
+      transient.id,
+      userTwo.id,
+      crossTurn.id,
+    ],
+  );
+});
+
+test('display duplicate folding preserves assistants with conflicting explicit sources', () => {
+  const user = {
+    id: 'user-source-conflict',
+    type: 'user_message',
+    role: 'user',
+    content: 'Ask both agents',
+    eventTimeUs: 1,
+    eventCounter: 1,
+  };
+  const first = {
+    id: 'assistant-source-a',
+    type: 'assistant_message',
+    role: 'assistant',
+    message_id: 'persisted-source-a',
+    executionMessageId: 'execution-shared',
+    content: 'same bytes',
+    eventTimeUs: 2,
+    eventCounter: 1,
+    metadata: { agent_id: 'agent-a', source: 'agent_runtime' },
+  };
+  const second = {
+    ...first,
+    id: 'assistant-source-b',
+    message_id: 'persisted-source-b',
+    eventTimeUs: 3,
+    metadata: { agent_id: 'agent-b', source: 'agent_runtime' },
+  };
+  const sameSource = {
+    ...first,
+    id: 'assistant-source-a-repeat',
+    message_id: 'persisted-source-a-repeat',
+    eventTimeUs: 4,
+  };
+
+  const visible = timelineItemsForDisplay([user, first, second, sameSource]);
+
+  assert.deepEqual(
+    visible.map((item) => item.id),
+    [user.id, first.id, second.id],
+  );
+  assert.deepEqual(
+    assistantDisplayDuplicateItems(visible[1]).map((item) => item.id),
+    [first.id, sameSource.id],
+  );
+  assert.deepEqual(assistantDisplayDuplicateItems(visible[2]), []);
 });
 
 test('MCP App events expose the registered app and interactive tool result', () => {

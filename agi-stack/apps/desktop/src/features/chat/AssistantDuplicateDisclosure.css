@@ -1,0 +1,108 @@
+.assistant-duplicate-disclosure {
+  max-width: 100%;
+  margin-top: 10px;
+  border: 1px solid rgba(83, 208, 239, 0.16);
+  border-radius: 8px;
+  background: rgba(83, 208, 239, 0.04);
+  color: var(--desktop-muted);
+  font-size: 10px;
+}
+
+.assistant-duplicate-disclosure > summary {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 9px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.assistant-duplicate-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.assistant-duplicate-disclosure > summary:hover {
+  color: var(--desktop-text);
+}
+
+.assistant-duplicate-disclosure > summary > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.assistant-duplicate-disclosure > summary > span:last-child {
+  flex: 0 0 auto;
+  color: var(--desktop-faint);
+}
+
+.assistant-duplicate-disclosure > summary svg {
+  width: 13px;
+  height: 13px;
+}
+
+.assistant-duplicate-disclosure > summary > span:last-child svg {
+  transition: transform 120ms ease;
+}
+
+.assistant-duplicate-disclosure[open] > summary > span:last-child svg {
+  transform: rotate(90deg);
+}
+
+.assistant-duplicate-disclosure ol {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0 9px 9px;
+  list-style: none;
+}
+
+.assistant-duplicate-disclosure li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.assistant-duplicate-disclosure li > span,
+.assistant-duplicate-disclosure li > time,
+.assistant-duplicate-disclosure li > small {
+  color: var(--desktop-faint);
+  white-space: nowrap;
+}
+
+.assistant-duplicate-disclosure li > code {
+  min-width: 0;
+  overflow: hidden;
+  color: #8eb7c2;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-duplicate-disclosure li > small {
+  grid-column: 2 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@container (max-width: 520px) {
+  .assistant-duplicate-disclosure > summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .assistant-duplicate-disclosure li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .assistant-duplicate-disclosure li > span {
+    grid-column: 1 / -1;
+  }
+}

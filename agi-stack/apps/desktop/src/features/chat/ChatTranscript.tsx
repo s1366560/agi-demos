@@ -18,6 +18,8 @@ import type { Components } from 'react-markdown';
 
 import { useI18n } from '../../i18n';
 import type { WorkspaceMessage } from '../../types';
+import { canonicalStoryRenderDecision } from './canonicalStoryModel';
+import { CanonicalStoryCard } from './CanonicalStoryCard';
 import { messageActionsForVisibleMessage } from './chatMessageActionModel';
 import type { VisibleMessageKind } from './chatMessageActionModel';
 import { AssistantArtifactReferences } from './AssistantArtifactReferences';
@@ -231,6 +233,8 @@ function MarkdownPreBlock({ children }: { children?: ReactNode }) {
   const className = typeof codeProps.className === 'string' ? codeProps.className : '';
   const language = /language-([\w-]+)/.exec(className)?.[1] ?? 'text';
   const code = reactNodeToText(codeProps.children);
+  const decision = canonicalStoryRenderDecision(language, code);
+  if (decision.kind === 'card') return <CanonicalStoryCard result={decision.result} />;
   if (shouldRenderMermaidDiagram(language)) return <MermaidBlock chart={code} />;
   return <CodeBlockFrame code={code} language={language} />;
 }

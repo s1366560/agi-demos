@@ -78,6 +78,7 @@ const testFiles = [
   'composer-context.test.mjs',
   'chat-narrative-presentation.test.mjs',
   'message-identity-model.test.mjs',
+  'canonical-story-rendering.test.mjs',
   'mermaid-rendering.test.mjs',
   'markdown-math-rendering.test.mjs',
   'assistant-artifact-references.test.mjs',

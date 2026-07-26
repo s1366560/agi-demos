@@ -1,5 +1,8 @@
 import type { AgentTimelineItem } from '../../types';
+import { foldAssistantExecutionDuplicatesForDisplay } from './assistantDuplicateDisplayModel';
 import { foldHitlResponseTimelineItems } from './hitlResponseEventModel';
+
+export { assistantDisplayDuplicateItems } from './assistantDuplicateDisplayModel';
 
 // Pure presentation logic for the agent conversation timeline. Kept free of
 // React/JSX so the node:test harness can compile and exercise it directly
@@ -189,7 +192,7 @@ const NON_TIMELINE_EVENT_TYPES = new Set([
 
 /** UI-state events drive affordances or replay and are not conversation log rows. */
 export function timelineItemsForDisplay(items: AgentTimelineItem[]): AgentTimelineItem[] {
-  return foldHitlResponseTimelineItems(items).flatMap((item) => {
+  const visibleItems = foldHitlResponseTimelineItems(items).flatMap((item) => {
     if (
       SKIPPED_LIVE_TIMELINE_EVENT_TYPES.has(item.type) ||
       NON_TIMELINE_EVENT_TYPES.has(item.type)
@@ -200,6 +203,7 @@ export function timelineItemsForDisplay(items: AgentTimelineItem[]): AgentTimeli
     const message = channelInboundMessageForDisplay(item);
     return message ? [message] : [];
   });
+  return foldAssistantExecutionDuplicatesForDisplay(visibleItems);
 }
 
 function channelInboundMessageForDisplay(item: AgentTimelineItem): AgentTimelineItem | null {

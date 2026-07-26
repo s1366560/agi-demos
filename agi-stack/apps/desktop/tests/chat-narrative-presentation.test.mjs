@@ -32,6 +32,9 @@ const chatSource = [
   'features/chat/chatTimelinePresentation.tsx',
 ].map(readSource).join('\n');
 const chatStyles = readSource('features/chat/ChatPanel.css');
+const duplicateDisclosureStyles = readSource(
+  'features/chat/AssistantDuplicateDisclosure.css',
+);
 const i18nSource = readSource('i18n.tsx');
 const appSource = readSource('App.tsx');
 const conversationSummarySource = readOptionalSource(
@@ -73,6 +76,23 @@ test('session messages use the mission-control narrative hierarchy', () => {
   assert.match(
     chatStyles,
     /\.session-chat-narrative \.message\.session-thread-message\.user \{[\s\S]*width: fit-content;[\s\S]*margin-left: auto;/,
+  );
+});
+
+test('execution duplicate recovery stays auditable without repeating the reply surface', () => {
+  assert.match(chatSource, /assistantDisplayDuplicateItems\(item\)/);
+  assert.match(chatSource, /<details className="assistant-duplicate-disclosure">/);
+  assert.match(chatSource, /original\.message_id \|\| original\.id/);
+  assert.match(chatSource, /formatTimelineTime\(original\)/);
+  assert.match(i18nSource, /'chat\.duplicateAssistantReplies'/);
+  assert.match(i18nSource, /'chat\.duplicateAssistantRepliesAudit'/);
+  assert.match(
+    duplicateDisclosureStyles,
+    /\.assistant-duplicate-disclosure > summary \{[\s\S]*cursor: pointer/,
+  );
+  assert.match(
+    duplicateDisclosureStyles,
+    /@container \(max-width: 520px\)[\s\S]*flex-direction: column/,
   );
 });
 

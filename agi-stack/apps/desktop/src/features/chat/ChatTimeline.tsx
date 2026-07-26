@@ -29,6 +29,7 @@ import { resolveA2UIActionView } from './a2uiAction';
 import type { A2UIActionView } from './a2uiAction';
 import {
   assistantCostTracking,
+  assistantDisplayDuplicateItems,
   assistantExecutionSummary,
   detectPayloadLanguage,
   formatToolCallDuration,
@@ -88,6 +89,7 @@ import {
   NarrativeMessageFrame,
   SessionEmptyState,
 } from './ChatTranscript';
+import './AssistantDuplicateDisclosure.css';
 
 const TIMELINE_RENDER_THRESHOLD = 150;
 const TIMELINE_RENDER_WINDOW = 100;
@@ -1121,6 +1123,7 @@ function TimelineItemBody({
       <>
         {kind === 'agent' ? <AssistantExecutionSummary item={item} /> : null}
         <MarkdownContent content={content} className="transcript-content" />
+        {kind === 'agent' ? <AssistantDuplicateDisclosure item={item} /> : null}
         {kind === 'agent' ? (
           <AssistantArtifactReferences artifacts={item.artifacts} metadata={item.metadata} />
         ) : null}
@@ -1143,6 +1146,67 @@ function TimelineItemBody({
       {content}
     </Text>
   );
+}
+
+function AssistantDuplicateDisclosure({ item }: { item: AgentTimelineItem }) {
+  const { t } = useI18n();
+  const originals = assistantDisplayDuplicateItems(item);
+  if (originals.length < 2) return null;
+
+  return (
+    <details className="assistant-duplicate-disclosure">
+      <summary>
+        <span>
+          <UpdateIcon aria-hidden="true" />
+          <strong>{t('chat.duplicateAssistantReplies', { count: originals.length })}</strong>
+        </span>
+        <span>
+          {t('chat.duplicateAssistantRepliesAudit')}
+          <CaretRightIcon aria-hidden="true" />
+        </span>
+      </summary>
+      <ol>
+        {originals.map((original, index) => {
+          const source = assistantDuplicateSourceLabel(original);
+          return (
+            <li key={original.id}>
+              <span>{t('chat.duplicateAssistantReply', { index: index + 1 })}</span>
+              <code>{original.message_id || original.id}</code>
+              <time>{formatTimelineTime(original)}</time>
+              {source ? <small>{source}</small> : null}
+            </li>
+          );
+        })}
+      </ol>
+    </details>
+  );
+}
+
+function assistantDuplicateSourceLabel(item: AgentTimelineItem): string {
+  const payload = isTimelineRecord(item.payload) ? item.payload : null;
+  const payloadMetadata =
+    payload && isTimelineRecord(payload.metadata) ? payload.metadata : null;
+  const records = [item.metadata, payload, payloadMetadata].filter(isTimelineRecord);
+  const keys = [
+    'agent_id',
+    'agentId',
+    'source_agent_id',
+    'sourceAgentId',
+    'sender_id',
+    'senderId',
+    'source',
+  ];
+  for (const record of records) {
+    for (const key of keys) {
+      const value = record[key];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+  }
+  return '';
+}
+
+function isTimelineRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function AssistantExecutionSummary({ item }: { item: AgentTimelineItem }) {
