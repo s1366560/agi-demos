@@ -3,10 +3,12 @@ import type { ReactNode } from 'react';
 import {
   ActivityLogIcon,
   ChatBubbleIcon,
+  ClockIcon,
   CopyIcon,
   DotsHorizontalIcon,
   DrawingPinIcon,
   FileTextIcon,
+  PersonIcon,
   Pencil1Icon,
   ReloadIcon,
   TrashIcon,
@@ -26,6 +28,10 @@ import {
 } from './MarkdownArtifactImage';
 import { MermaidBlock } from './MermaidBlock';
 import { MessageForcedSkillBadge } from './MessageForcedSkillBadge';
+import {
+  formatWorkspaceMessageTime,
+  workspaceMessageSenderLabel,
+} from './messageIdentityModel';
 import { shouldRenderMermaidDiagram } from './mermaidDiagramModel';
 import { useMarkdownMathPlugins } from './useMarkdownMathPlugins';
 
@@ -138,6 +144,8 @@ export function NarrativeMessageFrame({
   retryDisabled?: boolean;
   children: ReactNode;
 }) {
+  const RoleIcon =
+    kind === 'user' ? PersonIcon : kind === 'runtime' ? ActivityLogIcon : ChatBubbleIcon;
   return (
     <article
       className={`message transcript-message session-thread-message ${className} ${kind}${
@@ -146,10 +154,22 @@ export function NarrativeMessageFrame({
       data-timeline-anchor-id={timelineItemId}
       tabIndex={-1}
     >
+      <span className="session-thread-avatar" aria-hidden="true">
+        <RoleIcon />
+      </span>
       <div className="session-message-body">
         <header className="transcript-meta">
-          <span className="session-message-context sr-only">
-            {[label, badge, time].filter(Boolean).join(' · ')}
+          <span className="session-message-identity">
+            <strong className="session-message-label" title={label}>
+              {label}
+            </strong>
+            {badge ? <span className="session-message-badge">{badge}</span> : null}
+            {time ? (
+              <time className="session-message-time" title={time}>
+                <ClockIcon aria-hidden="true" />
+                <span>{time}</span>
+              </time>
+            ) : null}
           </span>
           <MessageActionMenu
             content={content}
@@ -165,8 +185,10 @@ export function NarrativeMessageFrame({
             retryDisabled={retryDisabled}
           />
         </header>
-        {children}
-        {streaming ? <span className="streaming-caret" aria-hidden="true" /> : null}
+        <div className="session-message-surface">
+          {children}
+          {streaming ? <span className="streaming-caret" aria-hidden="true" /> : null}
+        </div>
       </div>
     </article>
   );
@@ -351,10 +373,11 @@ function messageSenderLabel(
   message: WorkspaceMessage,
   t: (key: string) => string,
 ): string {
-  const sender = (message.sender_type ?? '').toLowerCase();
-  if (sender === 'human' || sender === 'user') return t('chat.you');
-  if (sender === 'runtime' || sender === 'system') return t('chat.system');
-  return message.sender_type ?? t('chat.agent');
+  return workspaceMessageSenderLabel(message, {
+    agent: t('chat.agent'),
+    system: t('chat.system'),
+    you: t('chat.you'),
+  });
 }
 
 function messageKind(message: WorkspaceMessage): 'user' | 'agent' | 'runtime' {
@@ -365,8 +388,5 @@ function messageKind(message: WorkspaceMessage): 'user' | 'agent' | 'runtime' {
 }
 
 function formatTime(value: string | undefined): string {
-  if (!value) return '';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return formatWorkspaceMessageTime(value);
 }

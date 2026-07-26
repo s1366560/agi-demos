@@ -60,12 +60,16 @@ const sessionConversationQaSource = readSource('qa/SessionConversationQa.tsx');
 test('session messages use the mission-control narrative hierarchy', () => {
   assert.match(chatSource, /function NarrativeMessageFrame/);
   assert.match(chatSource, /className="session-message-body"/);
+  assert.match(chatSource, /className="session-thread-avatar"/);
+  assert.match(chatSource, /className="session-message-identity"/);
+  assert.match(chatSource, /<time[\s\S]*className="session-message-time"/);
   assert.match(chatSource, /<MessageActionMenu[\s\S]*content=\{content\}/);
-  assert.doesNotMatch(chatSource, /className="session-thread-avatar"/);
-  assert.match(chatSource, /className="session-message-context sr-only"/);
-  assert.match(chatStyles, /\.session-thread-message\.user \{[\s\S]*background: #161d27/);
+  assert.doesNotMatch(chatSource, /className="session-message-context sr-only"/);
+  assert.match(chatStyles, /\.session-thread-avatar \{[\s\S]*display: grid/);
+  assert.match(chatStyles, /\.session-thread-message\.user \.session-message-surface \{[\s\S]*background: #161d27/);
   assert.match(chatStyles, /\.session-thread-message\.agent \{[\s\S]*background: transparent/);
-  assert.match(chatStyles, /\.session-thread-message\.agent \.transcript-meta \{[\s\S]*opacity: 0/);
+  assert.match(chatStyles, /\.session-message-actions \{[\s\S]*opacity: 0/);
+  assert.doesNotMatch(chatStyles, /\.session-thread-message\.agent \.transcript-meta \{[\s\S]*opacity: 0/);
   assert.match(
     chatStyles,
     /\.session-chat-narrative \.message\.session-thread-message\.user \{[\s\S]*width: fit-content;[\s\S]*margin-left: auto;/,

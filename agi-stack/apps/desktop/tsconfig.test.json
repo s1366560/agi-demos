@@ -41,6 +41,7 @@
     "src/features/chat/conversationComparisonModel.ts",
     "src/features/chat/composeAheadModel.ts",
     "src/features/chat/chatMessageActionModel.ts",
+    "src/features/chat/messageIdentityModel.ts",
     "src/features/chat/timelineTurnCollapseModel.ts",
     "src/features/chat/composerFileDropModel.ts",
     "src/features/chat/composerCatalogModel.ts",

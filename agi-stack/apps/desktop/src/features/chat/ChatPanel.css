@@ -1207,9 +1207,11 @@
 
 .session-chat-narrative .message.session-thread-message {
   position: relative;
-  display: block;
+  display: flex;
   width: fit-content;
   max-width: 100%;
+  align-items: flex-start;
+  gap: 10px;
   margin: 22px 0 0;
   padding: 0;
   overflow: visible;
@@ -1220,13 +1222,9 @@
 
 .session-chat-narrative .message.session-thread-message.user {
   width: fit-content;
-  max-width: 75%;
+  max-width: 82%;
   margin-right: 0;
   margin-left: auto;
-  padding: 12px 14px;
-  border: 1px solid #2a3542;
-  border-radius: 12px;
-  background: #161d27;
 }
 
 .session-chat-narrative .timeline-turn-collapse-control {
@@ -1311,35 +1309,132 @@
   background: transparent;
 }
 
+.session-thread-avatar {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border: 1px solid #263746;
+  border-radius: 8px;
+  background: #111923;
+  color: #53d0ef;
+}
+
+.session-thread-avatar svg {
+  width: 14px;
+  height: 14px;
+}
+
+.session-thread-message.user .session-thread-avatar {
+  order: 2;
+  color: #91a4b7;
+}
+
+.session-thread-message.runtime .session-thread-avatar {
+  color: #8c9baa;
+}
+
 .session-message-body {
   min-width: 0;
   max-width: 100%;
+  flex: 1 1 auto;
   overflow: visible;
 }
 
+.session-thread-message.user .session-message-body {
+  order: 1;
+}
+
 .session-thread-message .transcript-meta {
-  position: absolute;
-  top: -3px;
-  right: 0;
-  z-index: 2;
+  display: flex;
+  min-width: 0;
   min-height: 24px;
-  opacity: 0;
-  transition: opacity 120ms ease;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
 }
 
-.session-thread-message.agent .transcript-meta {
-  opacity: 0;
+.session-thread-message.user .transcript-meta {
+  flex-direction: row-reverse;
 }
 
-.session-thread-message:hover .transcript-meta,
-.session-thread-message:focus-within .transcript-meta {
-  opacity: 1;
+.session-message-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 4px 7px;
+  color: #718395;
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.session-thread-message.user .session-message-identity {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.session-message-label {
+  max-width: min(28ch, 42vw);
+  overflow: hidden;
+  color: #9eb0bf;
+  font-size: inherit;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-message-badge {
+  padding: 1px 5px;
+  border: 1px solid rgba(83, 208, 239, 0.22);
+  border-radius: 999px;
+  background: rgba(83, 208, 239, 0.07);
+  color: #78adba;
+  white-space: nowrap;
+}
+
+.session-message-time {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+  color: #607181;
+  white-space: nowrap;
+}
+
+.session-message-time svg {
+  width: 11px;
+  height: 11px;
+}
+
+.session-message-surface {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.session-thread-message.user .session-message-surface {
+  padding: 12px 14px;
+  border: 1px solid #2a3542;
+  border-radius: 12px 12px 3px;
+  background: #161d27;
 }
 
 .session-message-actions {
   position: relative;
   width: 24px;
   height: 24px;
+  flex: 0 0 24px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.session-thread-message:hover .session-message-actions,
+.session-thread-message:focus-within .session-message-actions,
+.session-message-actions[open] {
+  opacity: 1;
 }
 
 .session-message-actions > summary {
