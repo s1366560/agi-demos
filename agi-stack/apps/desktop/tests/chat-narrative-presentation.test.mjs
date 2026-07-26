@@ -61,6 +61,12 @@ const attachmentSource = readOptionalSource(
 const attachmentQaSource = readOptionalSource(
   'qa/AttachmentTimelineQa.tsx',
 );
+const thoughtTimelineCardSource = readOptionalSource(
+  'features/chat/ThoughtTimelineCard.tsx',
+);
+const thoughtTimelineCardQaSource = readOptionalSource(
+  'qa/ThoughtTimelineCardQa.tsx',
+);
 const sessionConversationQaSource = readSource('qa/SessionConversationQa.tsx');
 
 test('session messages use the mission-control narrative hierarchy', () => {
@@ -656,10 +662,42 @@ test('reasoning and tool disclosures follow the Web transcript defaults', () => 
     chatSource,
     /className="timeline-tool-group-summary"[\s\S]*aria-expanded=\{open\}/,
   );
+  assert.match(chatSource, /item\.type === 'thought'[\s\S]*<ThoughtTimelineCard/);
   assert.match(
-    chatSource,
-    /\{isThought \? null : <span className="timeline-row-summary">\{summary\}<\/span>\}/,
+    thoughtTimelineCardSource,
+    /export function ThoughtTimelineCard[\s\S]*className=\{`thought-timeline-card/,
   );
+  assert.match(
+    thoughtTimelineCardSource,
+    /const streaming = Boolean\(item\.metadata\?\.streaming\)/,
+  );
+  assert.match(
+    thoughtTimelineCardSource,
+    /aria-expanded=\{expanded\}[\s\S]*aria-controls=\{contentId\}/,
+  );
+  assert.match(
+    thoughtTimelineCardSource,
+    /role="region"[\s\S]*<MarkdownContent[\s\S]*content=\{item\.content \?\? ''\}/,
+  );
+  assert.match(
+    thoughtTimelineCardSource,
+    /const time = formatTimelineTime\(item\)[\s\S]*className="thought-timeline-time"/,
+  );
+  assert.match(
+    thoughtTimelineCardSource,
+    /streaming[\s\S]*className="thought-timeline-streaming-dots"[\s\S]*aria-hidden="true"/,
+  );
+  assert.doesNotMatch(thoughtTimelineCardSource, /steps|currentStep|progressbar/);
+  assert.match(chatStyles, /\.thought-timeline-card \{/);
+  assert.match(chatStyles, /\.thought-timeline-card\.is-streaming/);
+  assert.match(
+    chatStyles,
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.thought-timeline-streaming-dots/,
+  );
+  assert.match(thoughtTimelineCardQaSource, /type: 'thought'/);
+  assert.match(thoughtTimelineCardQaSource, /metadata: \{ streaming: true \}/);
+  assert.match(thoughtTimelineCardQaSource, /DESKTOP_THOUGHT_COMPLETED_QA/);
+  assert.match(thoughtTimelineCardQaSource, /DESKTOP_THOUGHT_STREAMING_QA/);
   assert.match(
     sessionConversationQaSource,
     /current\[toggleItem\.id\]\s*\?\?\s*isTimelineItemInitiallyExpanded\(toggleItem\)/,

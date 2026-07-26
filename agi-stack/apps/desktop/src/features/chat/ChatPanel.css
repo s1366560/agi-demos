@@ -1083,24 +1083,166 @@
   }
 }
 
-.session-chat-narrative .agent-timeline > .message.timeline-row.thought {
+.thought-timeline-card {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
   margin-top: 14px;
-  padding: 9px 10px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 8px;
-  background: rgba(30, 41, 59, 0.34);
 }
 
-.session-chat-narrative .agent-timeline > .message.timeline-row.thought .timeline-row-title {
+.thought-timeline-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 8px;
+  background: rgba(30, 41, 59, 0.7);
+  color: #8796a9;
+}
+
+.thought-timeline-icon > svg {
+  width: 15px;
+  height: 15px;
+}
+
+.thought-timeline-icon.is-streaming {
+  color: var(--desktop-cyan);
+  animation: thought-timeline-icon-pulse 1.4s ease-in-out infinite;
+}
+
+.thought-timeline-surface {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  background: rgba(30, 41, 59, 0.4);
+}
+
+.thought-timeline-card.is-streaming .thought-timeline-surface {
+  border-color: rgba(83, 208, 239, 0.24);
+  background: rgba(20, 40, 52, 0.5);
+}
+
+.thought-timeline-toggle {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+
+.thought-timeline-toggle:hover {
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.thought-timeline-toggle:focus-visible {
+  outline: 2px solid rgba(83, 208, 239, 0.6);
+  outline-offset: -2px;
+}
+
+.thought-timeline-toggle > svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  color: #718091;
+}
+
+.thought-timeline-title {
+  flex: 0 0 auto;
   color: #9aa8bb;
   font-size: 10px;
+  font-weight: 650;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
-.session-chat-narrative .agent-timeline > .message.timeline-row.thought .timeline-row-summary {
+.thought-timeline-live {
+  color: var(--desktop-cyan);
+  font-size: 9px;
+}
+
+.thought-timeline-streaming-dots {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+}
+
+.thought-timeline-streaming-dots > i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentcolor;
+  animation: thought-timeline-dot 900ms ease-in-out infinite alternate;
+}
+
+.thought-timeline-streaming-dots > i:nth-child(2) {
+  animation-delay: 150ms;
+}
+
+.thought-timeline-streaming-dots > i:nth-child(3) {
+  animation-delay: 300ms;
+}
+
+.thought-timeline-preview {
+  min-width: 0;
+  overflow: hidden;
   color: #718091;
+  font-size: 10px;
   font-style: italic;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thought-timeline-time {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: #607182;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.thought-timeline-content {
+  max-height: 360px;
+  overflow: auto;
+  padding: 0 12px 12px 30px;
+}
+
+.thought-timeline-content .thought-content {
+  color: #97a6b8;
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+@keyframes thought-timeline-icon-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes thought-timeline-dot {
+  to {
+    opacity: 0.28;
+    transform: translateY(-1px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thought-timeline-icon.is-streaming,
+  .thought-timeline-streaming-dots > i {
+    animation: none;
+  }
 }
 
 .session-chat-narrative .timeline-loading {
@@ -2512,18 +2654,8 @@
   border-radius: 0;
 }
 
-.session-chat-narrative .timeline-tool-group-items .message.timeline-row.thought {
-  min-height: 32px;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
-  gap: 8px;
-  padding: 4px 6px;
-  background: transparent;
-}
-
-.session-chat-narrative .timeline-tool-group-items .message.timeline-row.thought
-  .timeline-row-summary {
-  color: #718091;
-  font-style: italic;
+.session-chat-narrative .timeline-tool-group-items .thought-timeline-card {
+  margin: 6px;
 }
 
 .session-chat-narrative .timeline-tool-group-items .message.timeline-row:last-child,

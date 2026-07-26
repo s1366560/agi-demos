@@ -12,7 +12,6 @@ import {
   MagnifyingGlassIcon,
   Pencil1Icon,
   ReloadIcon,
-  StarIcon,
   UpdateIcon,
 } from '@radix-ui/react-icons';
 
@@ -83,6 +82,7 @@ import type { MCPAppTimelineGroup } from './mcpAppTimelineModel';
 import { SkillTimelineCard } from './SkillTimelineCard';
 import { groupSkillTimelineItems } from './skillTimelineGroupModel';
 import type { SkillTimelineGroup } from './skillTimelineGroupModel';
+import { ThoughtTimelineCard } from './ThoughtTimelineCard';
 import type { TimelineTurn } from './timelineTurnCollapseModel';
 import {
   MarkdownContent,
@@ -885,6 +885,9 @@ function TimelineItemView({
   if (kind === 'artifact') {
     return <ArtifactTimelineCard item={item} />;
   }
+  if (item.type === 'thought') {
+    return <ThoughtTimelineCard item={item} expanded={expanded} onToggle={onToggle} />;
+  }
   if (kind === 'user' || kind === 'agent') {
     return (
       <NarrativeMessageFrame
@@ -946,12 +949,9 @@ function TimelineItemView({
 
   const hasDetails = timelineHasDetails(item, kind);
   const status = timelineStatus(item);
-  const isThought = item.type === 'thought';
   return (
     <article
-      className={`message timeline-row timeline-item ${kind}${isThought ? ' thought' : ''} ${
-        expanded ? 'is-expanded' : ''
-      } ${
+      className={`message timeline-row timeline-item ${kind} ${expanded ? 'is-expanded' : ''} ${
         approvalRequest ? 'has-approval-evidence' : ''
       }`}
       data-timeline-anchor-id={item.id}
@@ -975,12 +975,10 @@ function TimelineItemView({
       <div className="timeline-row-main">
         <div className="timeline-row-line">
           <span className="timeline-row-icon" aria-hidden="true">
-            {isThought ? <StarIcon /> : timelineIcon(kind, item)}
+            {timelineIcon(kind, item)}
           </span>
-          <span className="timeline-row-title">
-            {isThought ? t('session.thinking') : timelineTitle(item, t)}
-          </span>
-          {isThought ? null : <span className="timeline-row-summary">{summary}</span>}
+          <span className="timeline-row-title">{timelineTitle(item, t)}</span>
+          <span className="timeline-row-summary">{summary}</span>
         </div>
         {expanded && hasDetails ? (
           <TimelineItemBody
