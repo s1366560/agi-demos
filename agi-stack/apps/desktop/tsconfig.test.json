@@ -51,6 +51,7 @@
     "src/features/chat/mermaidDiagramModel.ts",
     "src/features/chat/markdownMathModel.ts",
     "src/features/chat/markdownLinkModel.ts",
+    "src/features/chat/workPlanTimelineModel.ts",
     "src/features/chat/assistantArtifactReferenceModel.ts",
     "src/features/chat/artifactTimelineCardModel.ts",
     "src/features/chat/markdownArtifactImageModel.ts",

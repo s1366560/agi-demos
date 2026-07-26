@@ -84,6 +84,7 @@ import { groupSkillTimelineItems } from './skillTimelineGroupModel';
 import type { SkillTimelineGroup } from './skillTimelineGroupModel';
 import { ThoughtTimelineCard } from './ThoughtTimelineCard';
 import type { TimelineTurn } from './timelineTurnCollapseModel';
+import { WorkPlanTimelineCard } from './WorkPlanTimelineCard';
 import {
   MarkdownContent,
   NarrativeMessageFrame,
@@ -887,6 +888,9 @@ function TimelineItemView({
   }
   if (item.type === 'thought') {
     return <ThoughtTimelineCard item={item} expanded={expanded} onToggle={onToggle} />;
+  }
+  if (item.type === 'work_plan') {
+    return <WorkPlanTimelineCard item={item} expanded={expanded} onToggle={onToggle} />;
   }
   if (kind === 'user' || kind === 'agent') {
     return (

@@ -67,6 +67,15 @@ const thoughtTimelineCardSource = readOptionalSource(
 const thoughtTimelineCardQaSource = readOptionalSource(
   'qa/ThoughtTimelineCardQa.tsx',
 );
+const workPlanTimelineCardSource = readOptionalSource(
+  'features/chat/WorkPlanTimelineCard.tsx',
+);
+const workPlanTimelineModelSource = readOptionalSource(
+  'features/chat/workPlanTimelineModel.ts',
+);
+const workPlanTimelineCardQaSource = readOptionalSource(
+  'qa/WorkPlanTimelineCardQa.tsx',
+);
 const sessionConversationQaSource = readSource('qa/SessionConversationQa.tsx');
 
 test('session messages use the mission-control narrative hierarchy', () => {
@@ -702,6 +711,39 @@ test('reasoning and tool disclosures follow the Web transcript defaults', () => 
     sessionConversationQaSource,
     /current\[toggleItem\.id\]\s*\?\?\s*isTimelineItemInitiallyExpanded\(toggleItem\)/,
   );
+});
+
+test('work plans use structured steps instead of raw timeline payloads', () => {
+  assert.match(chatSource, /item\.type === 'work_plan'[\s\S]*<WorkPlanTimelineCard/);
+  assert.match(
+    workPlanTimelineCardSource,
+    /export function WorkPlanTimelineCard[\s\S]*workPlanTimelinePresentation\(item\)/,
+  );
+  assert.match(
+    workPlanTimelineCardSource,
+    /aria-expanded=\{expanded\}[\s\S]*aria-controls=\{contentId\}/,
+  );
+  assert.match(
+    workPlanTimelineCardSource,
+    /chat\.stepsCount[\s\S]*plan\.steps\.map/,
+  );
+  assert.match(
+    workPlanTimelineCardSource,
+    /step\.expectedOutput[\s\S]*task\.expectedOutput/,
+  );
+  assert.match(
+    workPlanTimelineModelSource,
+    /Array\.isArray\(item\.steps\)[\s\S]*Array\.isArray\(payload\?\.steps\)/,
+  );
+  assert.match(
+    workPlanTimelineModelSource,
+    /!Number\.isInteger\(stepNumber\)[\s\S]*stepNumber as number\) < 1[\s\S]*typeof description !== 'string'/,
+  );
+  assert.doesNotMatch(workPlanTimelineModelSource, /item\.content|RegExp|match\(/);
+  assert.match(chatStyles, /\.work-plan-timeline-card \{/);
+  assert.match(chatStyles, /\.work-plan-timeline-step\.is-current/);
+  assert.match(workPlanTimelineCardQaSource, /DESKTOP_WORK_PLAN_DIRECT_QA/);
+  assert.match(workPlanTimelineCardQaSource, /DESKTOP_WORK_PLAN_PAYLOAD_QA/);
 });
 
 test('narrative content is bounded without discarding authoritative markdown', () => {
