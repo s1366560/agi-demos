@@ -378,6 +378,7 @@ async def _apply_policy_selection(
         policy.permission_mode = selection.permission_mode
         policy.updated_by = actor_id
     await db.flush()
+    await db.refresh(policy)
     return policy
 
 

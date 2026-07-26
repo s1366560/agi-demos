@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from pydantic import ValidationError
 
@@ -14,14 +16,20 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Tenant,
     UserProject,
     UserTenant,
+    WorkspaceAgentPolicyModel,
     WorkspaceMemberModel,
     WorkspaceModel,
+)
+from src.infrastructure.persistence.llm_providers_models import (
+    LLMProvider,
+    TenantProviderMapping,
 )
 
 TENANT_ID = "tenant-task-session"
 PROJECT_ID = "project-task-session"
 WORKSPACE_ID = "workspace-task-session"
 USER_ID = "550e8400-e29b-41d4-a716-446655440000"
+PROVIDER_ID = uuid.UUID("d9e5b8e7-a691-4fe8-9605-b9f0b6276186")
 
 
 async def _seed_task_session_scope(test_db) -> None:
@@ -149,6 +157,84 @@ async def test_create_cloud_task_session_accepts_empty_composer_context(
 
     assert response.status_code == 200
     assert response.json()["initial_message"]["metadata"]["context_items"] == []
+
+
+@pytest.mark.unit
+async def test_create_cloud_task_session_refreshes_updated_workspace_policy(
+    test_db,
+    client,
+    test_user,
+) -> None:
+    await _seed_task_session_scope(test_db)
+    test_db.add_all(
+        [
+            LLMProvider(
+                id=PROVIDER_ID,
+                name="Task session provider",
+                provider_type="minimax",
+                operation_type="llm",
+                api_key_encrypted="encrypted",
+                llm_model="MiniMax-M3",
+                is_active=True,
+                is_enabled=True,
+            ),
+            TenantProviderMapping(
+                id=uuid.UUID("3666e92c-facf-4c0a-9004-b3b9698da77e"),
+                tenant_id=TENANT_ID,
+                operation_type="llm",
+                provider_id=PROVIDER_ID,
+                priority=0,
+            ),
+            WorkspaceAgentPolicyModel(
+                workspace_id=WORKSPACE_ID,
+                tenant_id=TENANT_ID,
+                project_id=PROJECT_ID,
+                revision=1,
+                roles_json={
+                    "default": {
+                        "provider_id": str(PROVIDER_ID),
+                        "model_id": "MiniMax-M3",
+                    },
+                    "fast": None,
+                    "coding": None,
+                    "vision": None,
+                },
+                fallbacks_json=[],
+                reasoning_effort="medium",
+                permission_mode="ask",
+                updated_by=USER_ID,
+            ),
+        ]
+    )
+    await test_db.commit()
+
+    response = client.post(
+        f"/api/v1/tenants/{TENANT_ID}/projects/{PROJECT_ID}/task-sessions",
+        json={
+            "idempotency_key": "desktop-cloud-session-policy-1",
+            "workspace": {"kind": "existing", "workspace_id": WORKSPACE_ID},
+            "conversation": {"title": "Start cloud work", "capability_mode": "work"},
+            "initial_message": {
+                "content": "Start cloud work",
+                "context_items": [],
+            },
+            "workspace_policy": {
+                "expected_revision": 1,
+                "route": {
+                    "provider_id": str(PROVIDER_ID),
+                    "model_id": "MiniMax-M3",
+                },
+                "reasoning_effort": "high",
+                "permission_mode": "automatic",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    policy = response.json()["policy"]
+    assert policy["revision"] == 2
+    assert policy["reasoning_effort"] == "high"
+    assert policy["permission_mode"] == "automatic"
 
 
 @pytest.mark.unit
