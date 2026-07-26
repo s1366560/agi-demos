@@ -17,6 +17,12 @@ const { aggregateStructuredToolSources } = require(
   '/tmp/agistack-desktop-test-dist/src/features/chat/toolSourceAggregationModel.js',
 );
 const {
+  formatTimelineAttachmentSize,
+  timelineMessageAttachments,
+} = require(
+  '/tmp/agistack-desktop-test-dist/src/features/chat/messageAttachmentModel.js',
+);
+const {
   assistantCostTracking,
   assistantExecutionSummary,
   detectPayloadLanguage,
@@ -736,6 +742,167 @@ test('send acknowledgement rebinds an optimistic user to its canonical execution
       ],
     );
   }
+});
+
+test('user attachment metadata survives optimistic acknowledgement and authoritative replacement', () => {
+  const attachments = [
+    {
+      filename: 'roadmap.pdf',
+      sandbox_path: '/workspace/uploads/roadmap.pdf',
+      mime_type: 'application/pdf',
+      size_bytes: 1536,
+    },
+    {
+      filename: 'diagram.png',
+      sandbox_path: '/workspace/uploads/diagram.png',
+      mime_type: 'image/png',
+      size_bytes: 2_621_440,
+    },
+  ];
+  const optimistic = {
+    id: 'optimistic-user-attachment-request',
+    type: 'user_message',
+    role: 'user',
+    message_id: 'attachment-request',
+    content: 'Review these files',
+    eventTimeUs: 1_000_000,
+    eventCounter: 0,
+    metadata: { optimistic: true, fileMetadata: attachments },
+  };
+  const canonical = {
+    id: 'persisted-user-attachment-message',
+    type: 'user_message',
+    role: 'user',
+    message_id: 'attachment-execution',
+    content: 'Review these files',
+    eventTimeUs: 1_000_001,
+    eventCounter: 1,
+    metadata: { source: 'history', file_metadata: attachments },
+  };
+
+  const rebound = mergeAgentSendAcknowledgement(
+    [optimistic],
+    'attachment-request',
+    'attachment-execution',
+  );
+  const merged = mergeConversationTimelineItems(rebound, [canonical]);
+
+  assert.equal(merged.length, 1);
+  assert.deepEqual(timelineMessageAttachments(merged[0]), [
+    {
+      filename: 'roadmap.pdf',
+      sandboxPath: '/workspace/uploads/roadmap.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: 1536,
+    },
+    {
+      filename: 'diagram.png',
+      sandboxPath: '/workspace/uploads/diagram.png',
+      mimeType: 'image/png',
+      sizeBytes: 2_621_440,
+    },
+  ]);
+});
+
+test('message attachments normalize supported protocol aliases and deduplicate exact files', () => {
+  assert.deepEqual(
+    timelineMessageAttachments({
+      id: 'history-user-attachment',
+      type: 'user_message',
+      role: 'user',
+      eventTimeUs: 1,
+      eventCounter: 1,
+      metadata: {
+        fileMetadata: [
+          {
+            filename: 'notes.txt',
+            sandbox_path: '/workspace/uploads/notes.txt',
+            mime_type: 'text/plain',
+            size_bytes: 42,
+          },
+        ],
+      },
+      payload: {
+        file_metadata: [
+          {
+            filename: 'notes.txt',
+            sandboxPath: '/workspace/uploads/notes.txt',
+            mimeType: 'text/plain',
+            sizeBytes: 42,
+          },
+          {
+            filename: 'archive.custom',
+            mimeType: 'application/x-custom',
+            sizeBytes: 2048,
+          },
+        ],
+      },
+    }),
+    [
+      {
+        filename: 'notes.txt',
+        sandboxPath: '/workspace/uploads/notes.txt',
+        mimeType: 'text/plain',
+        sizeBytes: 42,
+      },
+      {
+        filename: 'archive.custom',
+        sandboxPath: null,
+        mimeType: 'application/x-custom',
+        sizeBytes: 2048,
+      },
+    ],
+  );
+});
+
+test('message attachments ignore malformed records without filename or valid byte size', () => {
+  assert.deepEqual(
+    timelineMessageAttachments({
+      id: 'malformed-user-attachment',
+      type: 'user_message',
+      role: 'user',
+      eventTimeUs: 1,
+      eventCounter: 1,
+      metadata: {
+        fileMetadata: [
+          null,
+          'report.pdf',
+          { filename: '', mime_type: 'application/pdf', size_bytes: 1 },
+          { filename: 'missing-mime.pdf', size_bytes: 1 },
+          { filename: 'negative.pdf', mime_type: 'application/pdf', size_bytes: -1 },
+          { filename: 'fractional.pdf', mime_type: 'application/pdf', size_bytes: 1.5 },
+          { filename: 'valid.bin', mime_type: 'application/octet-stream', size_bytes: 0 },
+        ],
+      },
+    }),
+    [
+      {
+        filename: 'valid.bin',
+        sandboxPath: null,
+        mimeType: 'application/octet-stream',
+        sizeBytes: 0,
+      },
+    ],
+  );
+});
+
+test('message attachment sizes match the Web conversation formatter', () => {
+  assert.equal(formatTimelineAttachmentSize(0), '0 B');
+  assert.equal(formatTimelineAttachmentSize(1023), '1023 B');
+  assert.equal(formatTimelineAttachmentSize(1536), '1.5 KB');
+  assert.equal(formatTimelineAttachmentSize(2_621_440), '2.5 MB');
+  assert.equal(formatTimelineAttachmentSize(2_684_354_560), '2.5 GB');
+});
+
+test('optimistic user rows preserve authoritative composer file metadata', () => {
+  assert.match(
+    appSource,
+    /optimisticUserTimelineItem\(messageId, content, execution\.fileMetadata\)/,
+  );
+  assert.match(
+    appSource,
+    /metadata:\s*\{[\s\S]*optimistic:\s*true[\s\S]*fileMetadata/,
+  );
 });
 
 test('optimistic user rows never reconcile by cursor alone before acknowledgement', () => {

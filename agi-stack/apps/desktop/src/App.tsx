@@ -354,6 +354,7 @@ import { useTerminalProxy } from './hooks/useTerminalProxy';
 import { useI18n } from './i18n';
 import type {
   AgentConversation,
+  AgentInputFileMetadata,
   AgentTimelineItem,
   AgentWsEvent,
   AuthState,
@@ -794,7 +795,11 @@ function timelineCursorFromLast(items: AgentTimelineItem[]): ConversationTimelin
   return { timeUs: last.eventTimeUs, counter: last.eventCounter };
 }
 
-function optimisticUserTimelineItem(messageId: string, content: string): AgentTimelineItem {
+function optimisticUserTimelineItem(
+  messageId: string,
+  content: string,
+  fileMetadata?: readonly AgentInputFileMetadata[],
+): AgentTimelineItem {
   const nowMs = Date.now();
   return {
     id: `optimistic-user-${messageId}`,
@@ -805,7 +810,10 @@ function optimisticUserTimelineItem(messageId: string, content: string): AgentTi
     message_id: messageId,
     role: 'user',
     content,
-    metadata: { optimistic: true },
+    metadata: {
+      optimistic: true,
+      ...(fileMetadata?.length ? { fileMetadata: [...fileMetadata] } : {}),
+    },
   };
 }
 
@@ -5592,7 +5600,7 @@ export function App() {
     setConversationTimeline((current) => {
       if (current.conversationId !== conversation.id) return current;
       const items = mergeTimelineItems(current.items, [
-        optimisticUserTimelineItem(messageId, content),
+        optimisticUserTimelineItem(messageId, content, execution.fileMetadata),
       ]);
       return {
         ...current,

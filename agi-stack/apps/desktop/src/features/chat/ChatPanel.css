@@ -1481,6 +1481,60 @@
   color: #d5dce5;
 }
 
+.message-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 9px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.message-attachment {
+  display: inline-grid;
+  min-width: 0;
+  max-width: min(360px, 100%);
+  min-height: 31px;
+  grid-template-columns: 20px minmax(0, auto) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px 5px 6px;
+  border: 1px solid rgba(92, 155, 181, 0.28);
+  border-radius: 7px;
+  background: rgba(8, 21, 29, 0.42);
+  color: #b9c8d3;
+}
+
+.message-attachment-icon {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 5px;
+  background: rgba(83, 208, 239, 0.1);
+  color: #69c9dd;
+}
+
+.message-attachment-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.message-attachment-name {
+  overflow: hidden;
+  min-width: 0;
+  font-size: 10px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-attachment-size {
+  color: #6f8392;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
 .session-chat-narrative .session-thread-message.agent .markdown-content strong {
   color: #dde4ec;
   font-weight: 650;

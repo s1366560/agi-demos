@@ -49,6 +49,12 @@ const aggregatedSourcesSource = readOptionalSource(
 const aggregatedSourcesQaSource = readOptionalSource(
   'qa/AggregatedSourcesQa.tsx',
 );
+const attachmentSource = readOptionalSource(
+  'features/chat/MessageAttachments.tsx',
+);
+const attachmentQaSource = readOptionalSource(
+  'qa/AttachmentTimelineQa.tsx',
+);
 const sessionConversationQaSource = readSource('qa/SessionConversationQa.tsx');
 
 test('session messages use the mission-control narrative hierarchy', () => {
@@ -168,6 +174,21 @@ test('Desktop renders structured multi-call sources as one accessible aggregated
   }
   assert.match(aggregatedSourcesQaSource, /<AgentTimeline/);
   assert.match(aggregatedSourcesQaSource, /data-testid="source-qa-authority"/);
+});
+
+test('Desktop renders structured user attachments through the real narrative timeline', () => {
+  assert.match(chatSource, /<MessageAttachments item=\{item\} \/>/);
+  assert.match(attachmentSource, /timelineMessageAttachments\(item\)/);
+  assert.match(attachmentSource, /data-testid="message-attachment"/);
+  assert.match(attachmentSource, /aria-label=\{t\('composer\.attachments'\)\}/);
+  assert.match(attachmentSource, /<FileIcon \/>/);
+  assert.match(chatStyles, /\.message-attachments/);
+  assert.match(chatStyles, /\.message-attachment-name/);
+  assert.match(attachmentQaSource, /<AgentTimeline/);
+  assert.match(attachmentQaSource, /Replace with live authority/);
+  assert.match(attachmentQaSource, /Reopen history/);
+  assert.match(attachmentQaSource, /Malformed metadata/);
+  assert.match(attachmentQaSource, /data-testid="attachment-qa-count"/);
 });
 
 test('local deletion is exact, idempotent, scoped, and preserves neighboring events', () => {

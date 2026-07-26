@@ -72,6 +72,7 @@ import { HitlResponseCard } from './HitlResponseCard';
 import { MCPAppTimelineCard } from './MCPAppTimelineCard';
 import { MemoryTimelineEvent } from './MemoryTimelineCards';
 import { isMemoryTimelineEvent } from './memoryTimelineModel';
+import { MessageAttachments } from './MessageAttachments';
 import { groupMCPAppTimelineItems } from './mcpAppTimelineModel';
 import type { MCPAppTimelineGroup } from './mcpAppTimelineModel';
 import { SkillTimelineCard } from './SkillTimelineCard';
@@ -1123,6 +1124,7 @@ function TimelineItemBody({
       <>
         {kind === 'agent' ? <AssistantExecutionSummary item={item} /> : null}
         <MarkdownContent content={content} className="transcript-content" />
+        {kind === 'user' ? <MessageAttachments item={item} /> : null}
       </>
     );
   }
