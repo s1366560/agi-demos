@@ -10,7 +10,13 @@
 //! the same WebSocket transport without broad workspace endpoint takeover.
 
 pub(crate) mod subscriptions;
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+};
 
 use async_trait::async_trait;
 use axum::{
@@ -23,11 +29,15 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
-use tokio::time::{self, Duration};
+use tokio::{
+    sync::Mutex as AsyncMutex,
+    time::{self, Duration},
+};
 
 use agistack_adapters_postgres::AgentExecutionEventInsertRecord;
 use agistack_core::agent::{HitlRequest, ReActObserver, SessionStatus};
 use agistack_core::ports::CoreResult;
+use futures_util::future::{AbortHandle, Abortable};
 
 use crate::agent_conversations_api::{AgentConversationsApiError, ConversationSocketAccess};
 use crate::auth::{AuthRejection, Identity};
@@ -38,6 +48,54 @@ use subscriptions::{flush_event_subscriptions, ConnectionSubscriptions};
 
 const WEBSOCKET_AUTH_SUBPROTOCOL: &str = "memstack.auth";
 const EVENT_STREAM_MAX_LEN: usize = 1000;
+
+#[derive(Clone, Default)]
+pub(crate) struct ActiveAgentRuns {
+    runs: Arc<AsyncMutex<HashMap<String, ActiveAgentRun>>>,
+    generation: Arc<AtomicU64>,
+}
+
+struct ActiveAgentRun {
+    generation: u64,
+    abort_handle: AbortHandle,
+}
+
+impl ActiveAgentRuns {
+    async fn register(&self, conversation_id: &str, abort_handle: AbortHandle) -> u64 {
+        let generation = self.generation.fetch_add(1, Ordering::Relaxed) + 1;
+        let previous = self.runs.lock().await.insert(
+            conversation_id.to_string(),
+            ActiveAgentRun {
+                generation,
+                abort_handle,
+            },
+        );
+        if let Some(previous) = previous {
+            previous.abort_handle.abort();
+        }
+        generation
+    }
+
+    async fn cancel(&self, conversation_id: &str) -> bool {
+        let Some(active) = self.runs.lock().await.remove(conversation_id) else {
+            return false;
+        };
+        active.abort_handle.abort();
+        true
+    }
+
+    async fn finish(&self, conversation_id: &str, generation: u64) -> bool {
+        let mut runs = self.runs.lock().await;
+        if runs
+            .get(conversation_id)
+            .is_none_or(|active| active.generation != generation)
+        {
+            return false;
+        }
+        runs.remove(conversation_id);
+        true
+    }
+}
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct AgentWsQuery {
@@ -521,16 +579,24 @@ async fn handle_client_message(
             let run_conversation_id = conversation_id.clone();
             let run_project_id = project_id.clone();
             let run_message_id = message_id.clone();
+            let (abort_handle, abort_registration) = AbortHandle::new_pair();
+            let run_generation = app
+                .active_agent_runs
+                .register(&conversation_id, abort_handle)
+                .await;
             tokio::spawn(async move {
-                if let Err(err) = run_agent_message(
-                    &run_app,
-                    &run_conversation_id,
-                    &run_project_id,
-                    run_message_id.as_deref(),
-                    &message,
+                let result = Abortable::new(
+                    run_agent_message(
+                        &run_app,
+                        &run_conversation_id,
+                        &run_project_id,
+                        run_message_id.as_deref(),
+                        &message,
+                    ),
+                    abort_registration,
                 )
-                .await
-                {
+                .await;
+                if let Ok(Err(err)) = result {
                     let data = agent_error_event_data(
                         &run_conversation_id,
                         &run_project_id,
@@ -541,6 +607,10 @@ async fn handle_client_message(
                         append_event(&run_app, &run_conversation_id, AgentEventType::Error, data)
                             .await;
                 }
+                run_app
+                    .active_agent_runs
+                    .finish(&run_conversation_id, run_generation)
+                    .await;
             });
         }
         ClientMessage::StopSession { conversation_id } => {
@@ -552,6 +622,16 @@ async fn handle_client_message(
                 == ConversationAccessOutcome::AccessDenied
             {
                 let _ = send_error(socket, "Access denied").await;
+                return true;
+            }
+            if !app.active_agent_runs.cancel(&conversation_id).await {
+                let _ = send_stop_error(
+                    socket,
+                    "No running session found to stop",
+                    "SESSION_NOT_RUNNING",
+                    &conversation_id,
+                )
+                .await;
                 return true;
             }
             let data = json!({"conversation_id": conversation_id, "cancelled": true});
@@ -566,7 +646,13 @@ async fn handle_client_message(
                 )
                 .await;
             } else {
-                let _ = send_error(socket, "Failed to stop session").await;
+                let _ = send_stop_error(
+                    socket,
+                    "Failed to stop session",
+                    "STOP_SESSION_FAILED",
+                    &conversation_id,
+                )
+                .await;
             }
         }
         ClientMessage::ClarificationRespond { request_id, answer } => {
@@ -1187,6 +1273,26 @@ async fn send_error(socket: &mut WebSocket, message: &str) -> Result<(), axum::E
     .await
 }
 
+async fn send_stop_error(
+    socket: &mut WebSocket,
+    message: &str,
+    code: &str,
+    conversation_id: &str,
+) -> Result<(), axum::Error> {
+    send_json(
+        socket,
+        json!({
+            "type": "error",
+            "conversation_id": conversation_id,
+            "data": {
+                "message": message,
+                "code": code,
+            },
+        }),
+    )
+    .await
+}
+
 async fn send_json(socket: &mut WebSocket, value: Value) -> Result<(), axum::Error> {
     socket.send(Message::Text(value.to_string())).await
 }
@@ -1283,6 +1389,30 @@ mod tests {
             None
         );
         assert_eq!(agent_terminal_event_type(SessionStatus::Running), None);
+    }
+
+    #[tokio::test]
+    async fn active_agent_runs_abort_replacements_and_ignore_stale_cleanup() {
+        let registry = ActiveAgentRuns::default();
+        let (first_handle, first_registration) = AbortHandle::new_pair();
+        let first_generation = registry.register("conversation-1", first_handle).await;
+        let (second_handle, second_registration) = AbortHandle::new_pair();
+        let second_generation = registry.register("conversation-1", second_handle).await;
+
+        assert!(
+            Abortable::new(std::future::pending::<()>(), first_registration)
+                .await
+                .is_err()
+        );
+        assert!(!registry.finish("conversation-1", first_generation).await);
+        assert!(registry.cancel("conversation-1").await);
+        assert!(
+            Abortable::new(std::future::pending::<()>(), second_registration)
+                .await
+                .is_err()
+        );
+        assert!(!registry.cancel("conversation-1").await);
+        assert_ne!(first_generation, second_generation);
     }
 
     #[test]

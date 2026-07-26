@@ -7055,6 +7055,7 @@ export function App() {
       activityStructuredEvidence={sessionActivityStructuredEvidence}
       sending={sending}
       disabledReason={sessionChatDisabledReason}
+      agentControlEvents={socket.events}
       activeWorkflowTarget={chatWorkflowTargetForReviewTab(reviewTab)}
       modelLabel={chatRuntimeModelSelection.displayLabel}
       modelOptions={runtimeModelOptions}
@@ -7075,6 +7076,7 @@ export function App() {
       onPromoteRunInput={promoteQueuedRunInput}
       onRemoveReference={handleChatRemoveReference}
       onSend={sendChatMessage}
+      onStopResponse={socket.stopAgentResponse}
       onRefresh={handleChatRefresh}
       onLoadEarlier={loadEarlierTimeline}
       onRespondToHitl={respondToHitl}

@@ -2062,6 +2062,12 @@ const enUS: Record<string, string> = {
   'session.sendQueuedInput': 'Queue input for the next task',
   'session.sendMessage': 'Send message',
   'session.sendShortcut': 'Press Command or Control plus Enter to send',
+  'session.stopResponse': 'Stop response',
+  'session.stoppingResponse': 'Stopping response…',
+  'session.stopResponseDisconnected':
+    'The response could not be stopped because the live Agent connection is unavailable.',
+  'session.stopResponseFailed': 'The Agent runtime could not stop this response. Try again.',
+  'session.stopResponseNotRunning': 'This response is no longer running.',
   'session.composerBlockedByRunState':
     'This run is not accepting ordinary input. Use the visible review, approval, or recovery action.',
   'session.steeringAccepted': 'Steering persisted and will apply at the next durable run boundary.',
@@ -5075,6 +5081,11 @@ const zhCN: Record<string, string> = {
   'session.sendQueuedInput': '将输入排入下一任务',
   'session.sendMessage': '发送消息',
   'session.sendShortcut': '按 Command 或 Control 加 Enter 发送',
+  'session.stopResponse': '停止回复',
+  'session.stoppingResponse': '正在停止回复…',
+  'session.stopResponseDisconnected': '实时 Agent 连接不可用，无法停止当前回复。',
+  'session.stopResponseFailed': 'Agent 运行时无法停止当前回复，请重试。',
+  'session.stopResponseNotRunning': '当前回复已不再运行。',
   'session.composerBlockedByRunState':
     '此运行当前不接受普通输入，请使用页面中显示的审查、审批或恢复操作。',
   'session.steeringAccepted': '引导已持久化，将在下一个安全运行边界应用。',

@@ -81,6 +81,20 @@ test('desktop shell mounts only the prototype sidebar and page-owned headers', (
   assert.equal((appSource.match(/<DesktopSidebar\b/g) ?? []).length, 1);
 });
 
+test('streaming conversation replies expose a dedicated stop-session control', () => {
+  assert.match(appSource, /onStopResponse=\{socket\.stopAgentResponse\}/);
+  assert.match(chatPanelSource, /responseStreaming[\s\S]*session\.stopResponse/);
+  assert.match(chatPanelSource, /<StopIcon\s*\/>/);
+  assert.match(
+    chatPanelSource,
+    /rawResponseStreaming[\s\S]*!agentStopRequestSettlesStreaming\([\s\S]*stopRequest/,
+  );
+  assert.match(
+    chatPanelSource,
+    /handleComposerSend[\s\S]*setStopRequest\([\s\S]*status === 'stopped'/,
+  );
+});
+
 test('hierarchy pages remove the legacy pane inset around prototype-owned canvases', () => {
   assert.match(
     sidebarStyles,

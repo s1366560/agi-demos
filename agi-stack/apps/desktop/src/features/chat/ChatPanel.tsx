@@ -21,10 +21,12 @@ import {
   MixerHorizontalIcon,
   ReloadIcon,
   RocketIcon,
+  StopIcon,
   UploadIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
+import { socketEventsSince } from '../../hooks/useAgentSocket';
 import { sessionActivitySummary } from '../session/sessionNarrativeModel';
 import type {
   SessionActivityPresence,
@@ -39,6 +41,7 @@ import type { SessionTimelineWindow } from '../session/sessionTimelineScrollMode
 import type {
   AgentTimelineItem,
   AgentConversation,
+  AgentWsEvent,
   ComposerContextItem,
   ConversationTimelineState,
   HitlResponseSubmission,
@@ -149,6 +152,15 @@ import type {
   AgentTaskSignal,
   AgentTaskSignalStatus,
 } from './agentTaskSignalModel';
+import {
+  agentStopRequestSettlesStreaming,
+  applyAgentStopEvent,
+  beginAgentStopRequest,
+  EMPTY_AGENT_STOP_REQUEST,
+  reconcileAgentStopScope,
+  type AgentStopErrorCode,
+  type AgentStopRequestState,
+} from './agentStopResponseModel';
 import './ChatPanel.css';
 import './ComposerMenus.css';
 
@@ -168,6 +180,7 @@ const DEFAULT_TURN_COLLAPSE_RUNTIME = {
   tenantId: '',
   projectId: '',
 } as const;
+const EMPTY_AGENT_CONTROL_EVENTS: readonly AgentWsEvent[] = [];
 
 type ChatPanelProps = {
   api: ComposerCatalogClient;
@@ -195,6 +208,7 @@ type ChatPanelProps = {
   initialInput?: string;
   sending: boolean;
   disabledReason: string | null;
+  agentControlEvents?: readonly AgentWsEvent[];
   activeWorkflowTarget: ChatWorkflowTarget;
   modelLabel?: string;
   modelOptions?: readonly ComposerModelOption[];
@@ -219,6 +233,7 @@ type ChatPanelProps = {
     contextItems: ComposerContextItem[],
     onWorkspaceMessageSaved?: () => void,
   ) => void;
+  onStopResponse?: (conversationId: string) => boolean;
   onRefresh: () => void;
   onLoadEarlier: () => void;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
@@ -324,6 +339,7 @@ export const ChatPanel = memo(function ChatPanel({
   initialInput,
   sending,
   disabledReason,
+  agentControlEvents = EMPTY_AGENT_CONTROL_EVENTS,
   activeWorkflowTarget,
   modelLabel,
   modelOptions,
@@ -344,6 +360,7 @@ export const ChatPanel = memo(function ChatPanel({
   onPromoteRunInput,
   onRemoveReference,
   onSend,
+  onStopResponse,
   onRefresh,
   onLoadEarlier,
   onRespondToHitl,
@@ -387,6 +404,8 @@ export const ChatPanel = memo(function ChatPanel({
   );
   const [pinnedMessageIds, setPinnedMessageIds] = useState<string[]>([]);
   const [pinnedMessagesCollapsed, setPinnedMessagesCollapsed] = useState(false);
+  const [stopRequest, setStopRequest] =
+    useState<AgentStopRequestState>(EMPTY_AGENT_STOP_REQUEST);
   const composerDraftSequenceRef = useRef(0);
   const retryDispatchLockRef = useRef<string | null>(null);
   const retryDispatchSawSendingRef = useRef(false);
@@ -395,6 +414,9 @@ export const ChatPanel = memo(function ChatPanel({
   const pinnedJumpFrameRef = useRef<number | null>(null);
   const pinnedJumpTargetRef = useRef<HTMLElement | null>(null);
   const comparisonTriggerRef = useRef<HTMLButtonElement>(null);
+  const stopEventHeadRef = useRef<AgentWsEvent | null>(null);
+  const agentControlEventsRef = useRef(agentControlEvents);
+  agentControlEventsRef.current = agentControlEvents;
   const sendingRef = useRef(sending);
   sendingRef.current = sending;
   const visibleAgentTaskSignals = useMemo(() => {
@@ -536,15 +558,63 @@ export const ChatPanel = memo(function ChatPanel({
   );
   const composeAheadEnabled =
     Boolean(composeAheadScope) && runInputDeliveryOptions.length === 0;
+  const rawResponseStreaming = conversationResponseIsStreaming({
+    activeConversationId: selectedConversationId ?? '',
+    sending,
+    activityPresence,
+    signals: agentTaskSignals,
+    timelineItems: timelineState?.items ?? [],
+  });
   const responseStreaming =
-    composeAheadEnabled &&
-    conversationResponseIsStreaming({
-      activeConversationId: selectedConversationId ?? '',
-      sending,
-      activityPresence,
-      signals: agentTaskSignals,
-      timelineItems: timelineState?.items ?? [],
-    });
+    rawResponseStreaming &&
+    !agentStopRequestSettlesStreaming(stopRequest, selectedConversationId ?? '');
+  useEffect(() => {
+    stopEventHeadRef.current = agentControlEventsRef.current[0] ?? null;
+    setStopRequest((current) =>
+      reconcileAgentStopScope(current, selectedConversationId),
+    );
+  }, [selectedConversationId]);
+  useEffect(() => {
+    if (stopRequest.status !== 'stopping') return;
+    const events = socketEventsSince(agentControlEvents, stopEventHeadRef.current);
+    stopEventHeadRef.current = agentControlEvents[0] ?? null;
+    if (!events.length) return;
+    setStopRequest((current) =>
+      events.reduce(
+        (next, event) => applyAgentStopEvent(next, event),
+        current,
+      ),
+    );
+  }, [agentControlEvents, stopRequest.status]);
+  useEffect(() => {
+    if (rawResponseStreaming || stopRequest.status === 'idle') return;
+    setStopRequest(EMPTY_AGENT_STOP_REQUEST);
+  }, [rawResponseStreaming, stopRequest.status]);
+  const stopResponse = useCallback(() => {
+    const conversationId = selectedConversationId?.trim() ?? '';
+    if (
+      !conversationId ||
+      !responseStreaming ||
+      stopRequest.status === 'stopping' ||
+      !onStopResponse
+    ) {
+      return;
+    }
+    stopEventHeadRef.current = agentControlEvents[0] ?? null;
+    setStopRequest(
+      beginAgentStopRequest(conversationId, onStopResponse(conversationId)),
+    );
+  }, [
+    agentControlEvents,
+    onStopResponse,
+    responseStreaming,
+    selectedConversationId,
+    stopRequest.status,
+  ]);
+  const stopResponseError =
+    stopRequest.status === 'error' && stopRequest.errorCode
+      ? t(agentStopErrorTranslationKey(stopRequest.errorCode))
+      : null;
   const visibleActionMessages = useMemo<VisibleMessageForRetry[]>(
     () =>
       visibleTimelineState
@@ -917,6 +987,9 @@ export const ChatPanel = memo(function ChatPanel({
     ) => {
       pinnedToLatestRef.current = true;
       setShowJumpToLatest(false);
+      setStopRequest((current) =>
+        current.status === 'stopped' ? EMPTY_AGENT_STOP_REQUEST : current,
+      );
       onSend(content, contextItems, onWorkspaceMessageSaved);
       window.requestAnimationFrame(scrollToLatest);
     },
@@ -1534,6 +1607,11 @@ export const ChatPanel = memo(function ChatPanel({
           {messageActionNotice}
         </div>
       ) : null}
+      {stopResponseError ? (
+        <div className="session-stop-response-error" role="alert">
+          {stopResponseError}
+        </div>
+      ) : null}
       <ChatComposer
         key={composerResetKey}
         api={api}
@@ -1574,9 +1652,12 @@ export const ChatPanel = memo(function ChatPanel({
         onModelReset={onModelReset}
         onOpenCommands={onOpenCommands}
         onSend={handleComposerSend}
+        onStopResponse={stopResponse}
         composeAheadScope={composeAheadScope}
         composeAheadEnabled={composeAheadEnabled}
         responseStreaming={responseStreaming}
+        stopResponseAvailable={Boolean(onStopResponse)}
+        stopResponseStatus={stopRequest.status}
         voiceTranscriptionConfig={voiceTranscriptionConfig}
         voiceTranscriptionRuntime={voiceTranscriptionRuntime}
         voiceCallRuntime={voiceCallRuntime}
@@ -1683,9 +1764,12 @@ type ChatComposerProps = {
     contextItems: ComposerContextItem[],
     onWorkspaceMessageSaved?: () => void,
   ) => void;
+  onStopResponse: () => void;
   composeAheadScope: string | null;
   composeAheadEnabled: boolean;
   responseStreaming: boolean;
+  stopResponseAvailable: boolean;
+  stopResponseStatus: AgentStopRequestState['status'];
   voiceTranscriptionConfig?: DesktopRuntimeConfig;
   voiceTranscriptionRuntime?: VoiceTranscriptionRuntime;
   voiceCallRuntime?: VoiceCallRuntime;
@@ -1730,9 +1814,12 @@ function ChatComposer({
   onModelReset,
   onOpenCommands,
   onSend,
+  onStopResponse,
   composeAheadScope,
   composeAheadEnabled,
   responseStreaming,
+  stopResponseAvailable,
+  stopResponseStatus,
   voiceTranscriptionConfig,
   voiceTranscriptionRuntime,
   voiceCallRuntime,
@@ -2400,6 +2487,30 @@ function ChatComposer({
               title={disabledReason ?? t('session.runtimeAvailable')}
             />
           ) : null}
+          {responseStreaming && stopResponseAvailable && stopResponseStatus !== 'stopped' ? (
+            <Button
+              size="2"
+              color="red"
+              variant="soft"
+              className="stop-response-pill"
+              type="button"
+              aria-label={
+                stopResponseStatus === 'stopping'
+                  ? t('session.stoppingResponse')
+                  : t('session.stopResponse')
+              }
+              title={
+                stopResponseStatus === 'stopping'
+                  ? t('session.stoppingResponse')
+                  : t('session.stopResponse')
+              }
+              loading={stopResponseStatus === 'stopping'}
+              disabled={stopResponseStatus === 'stopping'}
+              onClick={onStopResponse}
+            >
+              <StopIcon />
+            </Button>
+          ) : null}
           <Button
             size="2"
             color="green"
@@ -2446,6 +2557,17 @@ function ChatComposer({
       ) : null}
     </form>
   );
+}
+
+function agentStopErrorTranslationKey(errorCode: AgentStopErrorCode): string {
+  switch (errorCode) {
+    case 'SESSION_NOT_RUNNING':
+      return 'session.stopResponseNotRunning';
+    case 'STOP_SESSION_FAILED':
+      return 'session.stopResponseFailed';
+    case 'socket_unavailable':
+      return 'session.stopResponseDisconnected';
+  }
 }
 
 function VoiceCallIcon({ active }: { active: boolean }) {

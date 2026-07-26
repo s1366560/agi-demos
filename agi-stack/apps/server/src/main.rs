@@ -210,6 +210,7 @@ pub(crate) struct AppState {
     /// immutable, so parsing is shared across connections instead of repeated
     /// per subscriber per flush). See [`crate::agent_ws::subscriptions`].
     pub(crate) ws_messages: agent_ws::subscriptions::WsMessageCache,
+    pub(crate) active_agent_runs: agent_ws::ActiveAgentRuns,
     registry: HotPlugRegistry,
     plugins: Arc<PluginHost>,
     control: Arc<Mutex<ControlPlane>>,
@@ -1125,6 +1126,7 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
         agent_event_writer,
         event_counter: Arc::new(AtomicU64::new(0)),
         ws_messages: Default::default(),
+        active_agent_runs: Default::default(),
         registry,
         plugins,
         control,

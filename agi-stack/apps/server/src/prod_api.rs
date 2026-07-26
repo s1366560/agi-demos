@@ -886,6 +886,7 @@ mod unit {
             agent_event_writer: None,
             event_counter: Arc::new(AtomicU64::new(0)),
             ws_messages: Default::default(),
+            active_agent_runs: Default::default(),
             registry: registry.clone(),
             plugins: Arc::new(PluginHost::new(registry.clone())),
             control: Arc::new(Mutex::new(ControlPlane::new())),

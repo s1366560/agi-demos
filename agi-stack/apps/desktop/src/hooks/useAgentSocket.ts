@@ -42,6 +42,7 @@ type AgentSocketState = {
   error: string | null;
   events: AgentWsEvent[];
   sendAgentMessage: (message: AgentRunMessage) => boolean;
+  stopAgentResponse: (conversationId: string) => boolean;
   respondToHitl: (submission: HitlResponseSubmission) => boolean;
 };
 
@@ -74,6 +75,11 @@ export type AgentRunSocketMessage = {
   mentions?: string[];
   file_metadata?: AgentInputFileMetadata[];
   app_model_context?: Record<string, unknown>;
+};
+
+export type AgentStopSocketMessage = {
+  type: "stop_session";
+  conversation_id: string;
 };
 
 export type PendingAgentMessageQueue = Map<string, AgentRunSocketMessage>;
@@ -163,6 +169,18 @@ export function deliverAgentRunMessage(
   if (!enqueuePendingAgentSocketMessage(queue, payload)) return false;
   if (!message.deferUntilNextConnection) send(payload);
   return true;
+}
+
+export function deliverAgentStopSession(
+  conversationId: string,
+  send: (message: AgentStopSocketMessage) => boolean,
+): boolean {
+  const normalizedConversationId = conversationId.trim();
+  if (!normalizedConversationId) return false;
+  return send({
+    type: "stop_session",
+    conversation_id: normalizedConversationId,
+  });
 }
 
 function enqueuePendingAgentSocketMessage(
@@ -337,6 +355,12 @@ export function useAgentSocket(
   const respondToHitl = useCallback(
     (submission: HitlResponseSubmission) =>
       sendSocketMessage(buildHitlSocketMessage(submission)),
+    [sendSocketMessage],
+  );
+
+  const stopAgentResponse = useCallback(
+    (conversationId: string) =>
+      deliverAgentStopSession(conversationId, sendSocketMessage),
     [sendSocketMessage],
   );
 
@@ -580,6 +604,7 @@ export function useAgentSocket(
     error,
     events,
     sendAgentMessage,
+    stopAgentResponse,
     respondToHitl,
   };
 }

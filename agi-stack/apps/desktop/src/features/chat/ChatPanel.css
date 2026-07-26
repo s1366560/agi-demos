@@ -1274,6 +1274,16 @@
   font-size: 10px;
 }
 
+.session-stop-response-error {
+  margin: 0 14px 8px;
+  padding: 7px 9px;
+  border: 1px solid rgba(248, 113, 113, 0.34);
+  border-radius: 7px;
+  background: rgba(127, 29, 29, 0.16);
+  color: #fca5a5;
+  font-size: 11px;
+}
+
 .message-delete-dialog-note {
   margin: 12px 0 0;
   padding: 9px 10px;
@@ -3229,6 +3239,13 @@
   border-radius: 6px;
   background: #173541;
   color: var(--desktop-cyan);
+}
+
+.session-chat-narrative .stop-response-pill {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 6px;
 }
 
 .session-chat-narrative .session-authority-notice,

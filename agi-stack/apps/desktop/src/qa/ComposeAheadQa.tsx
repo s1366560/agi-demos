@@ -11,6 +11,7 @@ import { I18nProvider } from '../i18n';
 import type {
   AgentConversation,
   AgentTimelineItem,
+  AgentWsEvent,
   ComposerContextItem,
   ConversationTimelineState,
 } from '../types';
@@ -98,6 +99,8 @@ function ComposeAheadQa() {
   const [items, setItems] = useState<AgentTimelineItem[]>(initialItems);
   const [streaming, setStreaming] = useState(true);
   const [dispatches, setDispatches] = useState<string[]>([]);
+  const [stopRequests, setStopRequests] = useState<string[]>([]);
+  const [agentControlEvents, setAgentControlEvents] = useState<AgentWsEvent[]>([]);
 
   const signals = useMemo<AgentTaskSignal[]>(
     () =>
@@ -165,6 +168,27 @@ function ComposeAheadQa() {
     [dispatches.length],
   );
 
+  const stopResponse = useCallback(
+    (conversationId: string) => {
+      setStopRequests((current) => [
+        ...current,
+        JSON.stringify({ type: 'stop_session', conversation_id: conversationId }),
+      ]);
+      window.setTimeout(() => {
+        setAgentControlEvents([
+          {
+            type: 'ack',
+            action: 'stop_session',
+            conversation_id: conversationId,
+          },
+        ]);
+        completeResponse();
+      }, 400);
+      return true;
+    },
+    [completeResponse],
+  );
+
   return (
     <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="large">
       <div className="session-steering-qa-shell">
@@ -191,8 +215,10 @@ function ComposeAheadQa() {
               {streaming ? 'Complete current response' : 'Response complete'}
             </Button>
             <small data-testid="response-state">
-              {streaming ? 'Streaming' : 'Terminal'} · dispatched {dispatches.length}
+              {streaming ? 'Streaming' : 'Terminal'} · dispatched {dispatches.length} · stopped{' '}
+              {stopRequests.length}
             </small>
+            <output data-testid="stop-log">{stopRequests.at(-1) ?? 'No stop request'}</output>
             <ol data-testid="dispatch-log">
               {dispatches.map((content, index) => (
                 <li key={`${index}-${content}`}>
@@ -229,6 +255,7 @@ function ComposeAheadQa() {
               activityStructuredEvidence={null}
               sending={false}
               disabledReason={null}
+              agentControlEvents={agentControlEvents}
               activeWorkflowTarget="plan"
               modelLabel="gpt-5.5"
               selectedModelValue="gpt-5.5"
@@ -246,6 +273,7 @@ function ComposeAheadQa() {
               onPromoteRunInput={() => undefined}
               onRemoveReference={() => undefined}
               onSend={sendMessage}
+              onStopResponse={stopResponse}
               onRefresh={() => undefined}
               onLoadEarlier={() => undefined}
               onRespondToHitl={async () => undefined}

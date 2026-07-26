@@ -10,6 +10,7 @@ const {
   createPendingAgentMessageQueue,
   conversationSubscriptionMessages,
   createAgentSocketContextState,
+  deliverAgentStopSession,
   deliverAgentRunMessage,
   enqueuePendingAgentRunMessage,
   eventCursor,
@@ -21,6 +22,33 @@ const {
   socketEventKey,
   socketEventsSince,
 } = require("/tmp/agistack-desktop-test-dist/src/hooks/useAgentSocket.js");
+
+test("a stop request is scoped, immediate, and never enters the reconnect outbox", () => {
+  const queue = createPendingAgentMessageQueue();
+  enqueuePendingAgentRunMessage(queue, {
+    conversationId: "conversation-queued",
+    projectId: "project-1",
+    message: "Keep this durable turn",
+    messageId: "message-queued",
+  });
+  const sent = [];
+
+  assert.equal(
+    deliverAgentStopSession("  conversation-streaming  ", (payload) => {
+      sent.push(payload);
+      return true;
+    }),
+    true,
+  );
+  assert.deepEqual(sent, [
+    {
+      type: "stop_session",
+      conversation_id: "conversation-streaming",
+    },
+  ]);
+  assert.equal(queue.size, 1);
+  assert.equal(deliverAgentStopSession(" ", () => true), false);
+});
 
 test("only an authenticated cloud socket may retain a turn for reconnect", () => {
   assert.equal(
