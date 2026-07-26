@@ -3355,6 +3355,134 @@ test('conversation title mutation rejects a response outside the requested hiera
   }
 });
 
+test('conversation summary regeneration posts the exact scoped cloud contract', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    return new Response(
+      JSON.stringify(
+        conversationRecord(1, {
+          id: 'conversation/1',
+          tenant_id: 'tenant/1',
+          project_id: 'project/1',
+          workspace_id: 'workspace/1',
+          summary: 'Fresh authoritative summary.',
+        }),
+      ),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'cloud',
+      apiBaseUrl: 'https://api.memstack.test',
+      apiKey: 'cloud-session',
+      tenantId: 'tenant/1',
+      projectId: 'project/1',
+      workspaceId: 'workspace/1',
+    });
+
+    const updated = await client.generateAgentConversationSummary(
+      'conversation/1',
+      'project/1',
+      'workspace/1',
+    );
+
+    assert.equal(updated.summary, 'Fresh authoritative summary.');
+    assert.equal(
+      String(calls[0]?.input),
+      'https://api.memstack.test/api/v1/agent/conversations/conversation%2F1/summary?project_id=project%2F1',
+    );
+    assert.equal(calls[0]?.init?.method, 'POST');
+    assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {});
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('conversation summary regeneration rejects cross-scope responses', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify(
+        conversationRecord(1, {
+          tenant_id: 'tenant-other',
+          project_id: 'project/1',
+          workspace_id: 'workspace/1',
+          summary: 'Wrong tenant summary.',
+        }),
+      ),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'cloud',
+      apiBaseUrl: 'https://api.memstack.test',
+      apiKey: 'cloud-session',
+      tenantId: 'tenant/1',
+      projectId: 'project/1',
+      workspaceId: 'workspace/1',
+    });
+
+    await assert.rejects(
+      client.generateAgentConversationSummary(
+        'conversation/1',
+        'project/1',
+        'workspace/1',
+      ),
+      (error) =>
+        error instanceof DesktopApiError &&
+        error.status === 502 &&
+        error.message === 'Invalid agent conversation response',
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('conversation summary regeneration preserves an unbound conversation scope', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify(
+        conversationRecord(1, {
+          id: 'conversation-unbound',
+          tenant_id: 'tenant-1',
+          project_id: 'project-1',
+          workspace_id: null,
+          summary: 'Authoritative unbound summary.',
+        }),
+      ),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'cloud',
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
+      workspaceId: '',
+    });
+
+    const updated = await client.generateAgentConversationSummary(
+      'conversation-unbound',
+      'project-1',
+      '',
+    );
+
+    assert.equal(updated.workspace_id, null);
+    assert.equal(updated.summary, 'Authoritative unbound summary.');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('createTaskSession posts one strictly scoped atomic task-session contract', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;

@@ -65,6 +65,7 @@ import { ConversationComparison, ConversationComparisonPicker } from './Conversa
 import type { ConversationComparisonClient } from './ConversationComparison';
 import { ConversationSearch } from './ConversationSearch';
 import { ConversationExportMenu } from './ConversationExportMenu';
+import { ConversationSummaryCard } from './ConversationSummaryCard';
 import { PinnedMessages } from './PinnedMessages';
 import { PromptTemplateLibrary } from './PromptTemplateLibrary';
 import {
@@ -233,6 +234,7 @@ type ChatPanelProps = {
     contextItems: ComposerContextItem[],
     onWorkspaceMessageSaved?: () => void,
   ) => void;
+  onRegenerateConversationSummary?: (conversationId: string) => Promise<void>;
   onStopResponse?: (conversationId: string) => boolean;
   onRefresh: () => void;
   onLoadEarlier: () => void;
@@ -360,6 +362,7 @@ export const ChatPanel = memo(function ChatPanel({
   onPromoteRunInput,
   onRemoveReference,
   onSend,
+  onRegenerateConversationSummary,
   onStopResponse,
   onRefresh,
   onLoadEarlier,
@@ -1410,6 +1413,15 @@ export const ChatPanel = memo(function ChatPanel({
           onJump={jumpToPinnedMessage}
           onUnpin={unpinVisibleMessage}
         />
+        {composeAheadConversation ? (
+          <ConversationSummaryCard
+            key={composeAheadConversation.id}
+            conversationId={composeAheadConversation.id}
+            summary={composeAheadConversation?.summary ?? null}
+            regenerationAvailable={turnCollapseRuntime.mode === 'cloud'}
+            onRegenerate={onRegenerateConversationSummary}
+          />
+        ) : null}
         <div className="message-stack">
           {timelineState ? (
             <>

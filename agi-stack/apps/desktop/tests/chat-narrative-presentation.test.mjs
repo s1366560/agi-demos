@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
@@ -20,6 +20,10 @@ const {
 
 const readSource = (path) =>
   readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8');
+const readOptionalSource = (path) => {
+  const url = new URL(`../src/${path}`, import.meta.url);
+  return existsSync(url) ? readFileSync(url, 'utf8') : '';
+};
 
 const chatSource = [
   'features/chat/ChatPanel.tsx',
@@ -29,6 +33,13 @@ const chatSource = [
 ].map(readSource).join('\n');
 const chatStyles = readSource('features/chat/ChatPanel.css');
 const i18nSource = readSource('i18n.tsx');
+const appSource = readSource('App.tsx');
+const conversationSummarySource = readOptionalSource(
+  'features/chat/ConversationSummaryCard.tsx',
+);
+const conversationSummaryQaSource = readOptionalSource(
+  'qa/ConversationSummaryQa.tsx',
+);
 const sessionConversationQaSource = readSource('qa/SessionConversationQa.tsx');
 
 test('session messages use the mission-control narrative hierarchy', () => {
@@ -44,6 +55,35 @@ test('session messages use the mission-control narrative hierarchy', () => {
     chatStyles,
     /\.session-chat-narrative \.message\.session-thread-message\.user \{[\s\S]*width: fit-content;[\s\S]*margin-left: auto;/,
   );
+});
+
+test('selected cloud conversations expose the Web-compatible summary surface', () => {
+  assert.match(chatSource, /<ConversationSummaryCard/);
+  assert.match(
+    chatSource,
+    /summary=\{composeAheadConversation\?\.summary \?\? null\}/,
+  );
+  assert.match(
+    chatSource,
+    /regenerationAvailable=\{turnCollapseRuntime\.mode === 'cloud'\}/,
+  );
+  assert.match(
+    appSource,
+    /onRegenerateConversationSummary=\{regenerateConversationSummary\}/,
+  );
+  const summaryHandlerSource =
+    appSource.match(
+      /const regenerateConversationSummary = async[\s\S]*?\n  };\n\n  const deleteConversation/,
+    )?.[0] ?? '';
+  assert.doesNotMatch(summaryHandlerSource, /!normalizedWorkspaceId/);
+  assert.match(conversationSummarySource, /aria-expanded=\{expanded\}/);
+  assert.match(conversationSummarySource, /role="alert"/);
+  assert.match(conversationSummarySource, /session\.conversationSummaryRegenerate/);
+  assert.match(conversationSummarySource, /session\.conversationSummaryLocalOnly/);
+  assert.match(chatStyles, /\.conversation-summary-card/);
+  assert.match(i18nSource, /'session\.conversationSummaryTitle'/);
+  assert.match(conversationSummaryQaSource, /data-testid="summary-request-log"/);
+  assert.match(conversationSummaryQaSource, /data-testid="summary-selection"/);
 });
 
 test('message action availability matches the Web role and streaming contract', () => {

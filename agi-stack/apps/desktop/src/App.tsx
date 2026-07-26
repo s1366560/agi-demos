@@ -1760,6 +1760,7 @@ export function App() {
   const expandedWorkspaceIdsRef = useRef(expandedWorkspaceIds);
   const runtimeRefreshRequestRef = useRef(0);
   const conversationModelMutationRequestRef = useRef(0);
+  const conversationSummaryMutationRequestRef = useRef(0);
   const activeRuntimeConversationRequestsRef = useRef(new Map<string, number>());
   const workspaceConversationRequestGenerationsRef = useRef(new Map<string, number>());
   const configScopeEpochRef = useRef(0);
@@ -4937,6 +4938,63 @@ export function App() {
     setAgentConversationSession(nextSession);
   };
 
+  const regenerateConversationSummary = async (conversationId: string) => {
+    const requestConfig = configRef.current;
+    const currentSession = agentConversationSessionRef.current;
+    const requiredConversationId = conversationId.trim();
+    const normalizedWorkspaceId = requestConfig.workspaceId.trim();
+    const expectedScopeEpoch = configScopeEpochRef.current;
+    const expectedContextRevision = contextRevisionRef.current;
+    const expectedScopeKey = agentConversationScopeKey(requestConfig);
+    const requestGeneration = conversationSummaryMutationRequestRef.current + 1;
+    conversationSummaryMutationRequestRef.current = requestGeneration;
+    if (
+      requestConfig.mode !== 'cloud' ||
+      !requiredConversationId ||
+      !requestConfig.tenantId ||
+      !requestConfig.projectId ||
+      currentSession?.scopeKey !== expectedScopeKey ||
+      currentSession.conversation.id !== requiredConversationId ||
+      currentSession.conversation.tenant_id !== requestConfig.tenantId ||
+      currentSession.conversation.project_id !== requestConfig.projectId ||
+      (currentSession.conversation.workspace_id?.trim() ?? '') !== normalizedWorkspaceId
+    ) {
+      throw new Error('Invalid conversation summary scope');
+    }
+    const apiClient = new DesktopApiClient({
+      ...requestConfig,
+      workspaceId: normalizedWorkspaceId,
+    });
+    const updated = await apiClient.generateAgentConversationSummary(
+      requiredConversationId,
+      requestConfig.projectId,
+      normalizedWorkspaceId,
+    );
+    const latestSession = agentConversationSessionRef.current;
+    if (
+      conversationSummaryMutationRequestRef.current !== requestGeneration ||
+      expectedScopeEpoch !== configScopeEpochRef.current ||
+      expectedContextRevision !== contextRevisionRef.current ||
+      !isSameDesktopProjectRequestScope(requestConfig, configRef.current) ||
+      latestSession?.scopeKey !== expectedScopeKey ||
+      latestSession.conversation.id !== requiredConversationId
+    ) {
+      return;
+    }
+    updateDataset((current) => {
+      const conversationsByWorkspace = replaceConversationInWorkspaceRows(
+        current.conversationsByWorkspace,
+        updated,
+      );
+      return conversationsByWorkspace === current.conversationsByWorkspace
+        ? current
+        : { ...current, conversationsByWorkspace };
+    });
+    const nextSession = { ...latestSession, conversation: updated };
+    agentConversationSessionRef.current = nextSession;
+    setAgentConversationSession(nextSession);
+  };
+
   const deleteConversation = async (
     projectId: string,
     workspaceId: string,
@@ -7076,6 +7134,7 @@ export function App() {
       onPromoteRunInput={promoteQueuedRunInput}
       onRemoveReference={handleChatRemoveReference}
       onSend={sendChatMessage}
+      onRegenerateConversationSummary={regenerateConversationSummary}
       onStopResponse={socket.stopAgentResponse}
       onRefresh={handleChatRefresh}
       onLoadEarlier={loadEarlierTimeline}

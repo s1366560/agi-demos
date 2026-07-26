@@ -1093,6 +1093,37 @@ export class DesktopApiClient {
     return conversation;
   }
 
+  async generateAgentConversationSummary(
+    conversationId: string,
+    projectId = this.config.projectId,
+    workspaceId = this.config.workspaceId,
+  ): Promise<AgentConversation> {
+    const requiredTenantId = requireValue(this.config.tenantId, 'tenant id');
+    const requiredConversationId = requireValue(conversationId, 'conversation id');
+    const requiredProjectId = requireValue(projectId, 'project id');
+    const normalizedWorkspaceId = workspaceId.trim() || null;
+    const payload = await this.request<unknown>(
+      `/api/v1/agent/conversations/${encodeURIComponent(
+        requiredConversationId,
+      )}/summary?project_id=${encodeURIComponent(requiredProjectId)}`,
+      {
+        method: 'POST',
+        body: {},
+      },
+    );
+    const conversation = normalizeAgentConversation(
+      payload,
+      requiredTenantId,
+      requiredProjectId,
+      normalizedWorkspaceId,
+      normalizedWorkspaceId === null,
+    );
+    if (!conversation || conversation.id !== requiredConversationId) {
+      throw new DesktopApiError('Invalid agent conversation response', 502, payload);
+    }
+    return conversation;
+  }
+
   async deleteAgentConversation(
     conversationId: string,
     projectId = this.config.projectId,
