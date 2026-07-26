@@ -72,6 +72,7 @@ import { ArtifactTimelineCard } from './ArtifactTimelineCard';
 import { CodeBlockFrame } from './HighlightedCode';
 import { HitlResponseCard } from './HitlResponseCard';
 import { MCPAppTimelineCard } from './MCPAppTimelineCard';
+import { MarkdownArtifactImageProvider } from './MarkdownArtifactImage';
 import { MemoryTimelineEvent } from './MemoryTimelineCards';
 import { MessageForcedSkillBadge } from './MessageForcedSkillBadge';
 import { isMemoryTimelineEvent } from './memoryTimelineModel';
@@ -265,7 +266,7 @@ export function AgentTimeline({
 
   let lastRenderedDayKey = '';
 
-  return (
+  const timeline = (
     <div className="agent-timeline" aria-label={t('session.conversationTimeline')}>
       {state.error ? (
         <div className="timeline-error" role="alert" aria-live="assertive">
@@ -633,6 +634,11 @@ export function AgentTimeline({
         <TimelineWorkingRow items={state.items} />
       ) : null}
     </div>
+  );
+  return (
+    <MarkdownArtifactImageProvider carriers={state.items}>
+      {timeline}
+    </MarkdownArtifactImageProvider>
   );
 }
 

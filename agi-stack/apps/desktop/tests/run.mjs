@@ -81,6 +81,7 @@ const testFiles = [
   'markdown-math-rendering.test.mjs',
   'assistant-artifact-references.test.mjs',
   'artifact-timeline-card.test.mjs',
+  'markdown-artifact-image.test.mjs',
   'forced-skill-message-badge.test.mjs',
   'timeline-turn-collapse-model.test.mjs',
   'conversation-search-model.test.mjs',

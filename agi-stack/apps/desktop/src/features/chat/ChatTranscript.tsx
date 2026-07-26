@@ -20,6 +20,10 @@ import { messageActionsForVisibleMessage } from './chatMessageActionModel';
 import type { VisibleMessageKind } from './chatMessageActionModel';
 import { AssistantArtifactReferences } from './AssistantArtifactReferences';
 import { CodeBlockFrame } from './HighlightedCode';
+import {
+  MarkdownArtifactImage,
+  MarkdownArtifactImageProvider,
+} from './MarkdownArtifactImage';
 import { MermaidBlock } from './MermaidBlock';
 import { MessageForcedSkillBadge } from './MessageForcedSkillBadge';
 import { shouldRenderMermaidDiagram } from './mermaidDiagramModel';
@@ -88,7 +92,9 @@ export const WorkspaceTranscriptMessage = memo(function WorkspaceTranscriptMessa
       onSaveTemplate={onSaveTemplate}
       retryDisabled={retryDisabled}
     >
-      <MarkdownContent content={message.content} className="transcript-content" />
+      <MarkdownArtifactImageProvider carriers={[message]}>
+        <MarkdownContent content={message.content} className="transcript-content" />
+      </MarkdownArtifactImageProvider>
       {kind === 'user' ? <MessageForcedSkillBadge message={message} /> : null}
       {kind === 'agent' ? <AssistantArtifactReferences metadata={message.metadata} /> : null}
     </NarrativeMessageFrame>
@@ -170,6 +176,7 @@ const MARKDOWN_COMPONENTS: Components = {
   // Fenced code blocks render as framed, syntax-highlighted blocks with a
   // copy affordance; inline `code` keeps the default renderer and styling.
   pre: MarkdownPreBlock,
+  img: MarkdownArtifactImage,
 };
 
 export const MarkdownContent = memo(function MarkdownContent({

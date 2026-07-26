@@ -1661,6 +1661,61 @@
   color: #173b4b;
 }
 
+.markdown-artifact-image-shell {
+  display: grid;
+  width: min(680px, 100%);
+  max-width: 100%;
+  min-height: 96px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(98, 144, 139, 0.24);
+  border-radius: 8px;
+  background: rgba(4, 13, 16, 0.72);
+}
+
+.markdown-artifact-image-shell.is-loading,
+.markdown-artifact-image-shell.is-unavailable {
+  align-content: center;
+  gap: 4px;
+  padding: 14px;
+  color: #8ea4ad;
+  text-align: center;
+}
+
+.markdown-artifact-image-shell.is-unavailable {
+  border-color: rgba(130, 148, 157, 0.22);
+  color: #758a94;
+}
+
+.markdown-artifact-image-shell > span {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.markdown-artifact-image-shell > small {
+  color: #647985;
+  font-size: 9px;
+}
+
+.markdown-artifact-image {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 480px;
+  object-fit: contain;
+}
+
+.radix-themes.light .markdown-artifact-image-shell {
+  border-color: rgba(31, 116, 145, 0.22);
+  background: rgba(238, 247, 250, 0.82);
+  color: #365361;
+}
+
 .artifact-timeline-card {
   display: grid;
   width: min(680px, 100%);
