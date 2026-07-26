@@ -13,7 +13,6 @@ import {
 } from '@radix-ui/react-icons';
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 
 import { useI18n } from '../../i18n';
 import type { WorkspaceMessage } from '../../types';
@@ -22,6 +21,7 @@ import type { VisibleMessageKind } from './chatMessageActionModel';
 import { CodeBlockFrame } from './HighlightedCode';
 import { MermaidBlock } from './MermaidBlock';
 import { shouldRenderMermaidDiagram } from './mermaidDiagramModel';
+import { useMarkdownMathPlugins } from './useMarkdownMathPlugins';
 
 export function SessionEmptyState() {
   const { t } = useI18n();
@@ -162,8 +162,6 @@ export function NarrativeMessageFrame({
   );
 }
 
-const REMARK_PLUGINS = [remarkGfm];
-
 const MARKDOWN_COMPONENTS: Components = {
   // Fenced code blocks render as framed, syntax-highlighted blocks with a
   // copy affordance; inline `code` keeps the default renderer and styling.
@@ -177,9 +175,14 @@ export const MarkdownContent = memo(function MarkdownContent({
   content: string;
   className: string;
 }) {
+  const { remarkPlugins, rehypePlugins } = useMarkdownMathPlugins(content);
   return (
     <div className={`markdown-content ${className}`}>
-      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={MARKDOWN_COMPONENTS}>
+      <ReactMarkdown
+        remarkPlugins={remarkPlugins}
+        rehypePlugins={rehypePlugins}
+        components={MARKDOWN_COMPONENTS}
+      >
         {content}
       </ReactMarkdown>
     </div>

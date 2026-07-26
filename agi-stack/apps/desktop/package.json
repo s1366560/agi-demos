@@ -35,11 +35,14 @@
     "electron-updater": "6.8.9",
     "highlight.js": "^11.11.1",
     "html2pdf.js": "^0.14.0",
+    "katex": "^0.16.28",
     "mermaid": "^11.12.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
     "yaml": "2.8.1"
   },
   "devDependencies": {

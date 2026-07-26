@@ -1668,6 +1668,17 @@
   white-space: normal;
 }
 
+.markdown-content .katex {
+  color: inherit;
+}
+
+.markdown-content .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 2px;
+}
+
 .session-chat-narrative .timeline-tool-group,
 .session-chat-narrative .timeline-debug-group {
   margin: 20px 0 0;
