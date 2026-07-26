@@ -30,7 +30,7 @@ function safeDecodeURIComponent(value: string): string {
   }
 }
 
-function isSafeArtifactUrl(value: string): boolean {
+export function isSafeArtifactUrl(value: string): boolean {
   if (/\s/u.test(value)) return false;
   try {
     const url = new URL(value);

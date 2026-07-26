@@ -1624,6 +1624,260 @@
   color: #173b4b;
 }
 
+.artifact-timeline-card {
+  display: grid;
+  width: min(680px, 100%);
+  max-width: 100%;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(45, 176, 138, 0.34);
+  border-radius: 9px;
+  background: rgba(8, 27, 25, 0.76);
+  color: #c6d5d4;
+}
+
+.artifact-timeline-card.status-error {
+  border-color: rgba(212, 92, 101, 0.44);
+  background: rgba(34, 16, 20, 0.76);
+}
+
+.artifact-timeline-card > header {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+}
+
+.artifact-timeline-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 7px;
+  background: rgba(45, 176, 138, 0.12);
+  color: #4fd1a7;
+}
+
+.artifact-timeline-icon > svg {
+  width: 15px;
+  height: 15px;
+}
+
+.artifact-timeline-heading {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.artifact-timeline-heading > strong {
+  color: #d7e6e3;
+  font-size: 11px;
+}
+
+.artifact-timeline-heading > small {
+  overflow: hidden;
+  color: #6f9089;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-timeline-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #71867f;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.artifact-timeline-status.ready {
+  color: #55c9a3;
+}
+
+.artifact-timeline-status.error {
+  color: #df7d85;
+}
+
+.artifact-timeline-status > svg {
+  width: 12px;
+  height: 12px;
+}
+
+.artifact-timeline-spin {
+  animation: artifact-timeline-spin 1s linear infinite;
+}
+
+@keyframes artifact-timeline-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artifact-timeline-spin {
+    animation: none;
+  }
+}
+
+.artifact-timeline-image {
+  display: grid;
+  min-height: 120px;
+  max-height: 300px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(98, 144, 139, 0.22);
+  border-radius: 7px;
+  background: rgba(4, 13, 16, 0.72);
+}
+
+.artifact-timeline-image > img {
+  display: block;
+  max-width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+}
+
+.artifact-timeline-preview-failed {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(212, 92, 101, 0.3);
+  border-radius: 7px;
+  background: rgba(47, 19, 24, 0.5);
+  color: #d98087;
+  font-size: 10px;
+}
+
+.artifact-timeline-file {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 9px;
+  border: 1px solid rgba(98, 144, 139, 0.2);
+  border-radius: 7px;
+  background: rgba(6, 19, 22, 0.58);
+}
+
+.artifact-timeline-file > span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.artifact-timeline-file > span > svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  color: #4fc29e;
+}
+
+.artifact-timeline-file strong {
+  overflow: hidden;
+  color: #c9dbd7;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-timeline-file > small {
+  color: #708881;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.artifact-timeline-file > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 4px;
+  color: #55c9a3;
+  font-size: 9px;
+  text-decoration: none;
+}
+
+.artifact-timeline-file > a:hover {
+  color: #85e1c3;
+}
+
+.artifact-timeline-file > a:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 2px rgba(79, 209, 167, 0.5);
+}
+
+.artifact-timeline-file > a > svg {
+  width: 12px;
+  height: 12px;
+}
+
+.artifact-timeline-error {
+  margin: 0;
+  color: #df7d85;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.artifact-timeline-card > footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.artifact-timeline-card > footer > span {
+  padding: 2px 5px;
+  border: 1px solid rgba(98, 144, 139, 0.18);
+  border-radius: 4px;
+  color: #678079;
+  font-size: 8px;
+}
+
+.radix-themes.light .artifact-timeline-card {
+  border-color: rgba(26, 132, 103, 0.26);
+  background: #f1f8f6;
+  color: #38574e;
+}
+
+.radix-themes.light .artifact-timeline-card.status-error {
+  border-color: rgba(173, 56, 67, 0.3);
+  background: #fff5f5;
+}
+
+.radix-themes.light .artifact-timeline-heading > strong,
+.radix-themes.light .artifact-timeline-file strong {
+  color: #24463c;
+}
+
+.radix-themes.light .artifact-timeline-image,
+.radix-themes.light .artifact-timeline-file {
+  border-color: rgba(26, 132, 103, 0.18);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+@media (max-width: 520px) {
+  .artifact-timeline-card > header {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .artifact-timeline-status {
+    grid-column: 2;
+  }
+
+  .artifact-timeline-file {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .artifact-timeline-file > a {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+
 .session-chat-narrative .session-thread-message.agent .markdown-content strong {
   color: #dde4ec;
   font-weight: 650;

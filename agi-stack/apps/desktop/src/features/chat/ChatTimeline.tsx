@@ -68,6 +68,7 @@ import {
 import type { TimelineKind } from './chatTimelinePresentation';
 import { AggregatedSourcesCard } from './AggregatedSourcesCard';
 import { AssistantArtifactReferences } from './AssistantArtifactReferences';
+import { ArtifactTimelineCard } from './ArtifactTimelineCard';
 import { CodeBlockFrame } from './HighlightedCode';
 import { HitlResponseCard } from './HitlResponseCard';
 import { MCPAppTimelineCard } from './MCPAppTimelineCard';
@@ -872,6 +873,9 @@ function TimelineItemView({
   const kind = timelineKind(item);
   const lineCount = useMemo(() => timelineDetailLineCount(item, kind), [item, kind]);
   const summary = useMemo(() => timelineSummary(item, kind, t), [item, kind, t]);
+  if (kind === 'artifact') {
+    return <ArtifactTimelineCard item={item} />;
+  }
   if (kind === 'user' || kind === 'agent') {
     return (
       <NarrativeMessageFrame
@@ -1063,24 +1067,6 @@ function TimelineItemBody({
         ) : null}
         {item.toolOutput !== undefined ? (
           <TimelinePayloadBlock label={t('chat.output')} value={item.toolOutput} />
-        ) : null}
-        {item.payload !== undefined ? (
-          <TimelinePayloadBlock label={t('chat.payload')} value={item.payload} />
-        ) : null}
-      </div>
-    );
-  }
-
-  if (kind === 'artifact') {
-    return (
-      <div className="timeline-details">
-        <Text as="p" size="2" className="timeline-detail-summary">
-          {item.filename || item.artifactId || t('chat.artifact')}
-        </Text>
-        {item.error ? (
-          <Text size="1" color="red">
-            {item.error}
-          </Text>
         ) : null}
         {item.payload !== undefined ? (
           <TimelinePayloadBlock label={t('chat.payload')} value={item.payload} />
@@ -1420,6 +1406,16 @@ function groupNarrativeActivity(narrative: SessionNarrativeNode[]): TimelinePres
         return;
       }
       if (claimedSubagentItemIds.has(node.item.id)) return;
+    }
+    if (
+      node.kind === 'item' &&
+      (node.item.type === 'artifact_created' ||
+        node.item.type === 'artifact_ready' ||
+        node.item.type === 'artifact_error')
+    ) {
+      flushActivityItems();
+      grouped.push(node);
+      return;
     }
     // Reasoning traces stay first-class, collapsible rows instead of being
     // folded into the debug activity group.
