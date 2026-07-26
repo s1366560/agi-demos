@@ -1556,6 +1556,112 @@
   word-break: normal;
 }
 
+.mermaid-block {
+  max-width: 100%;
+  margin: 10px 0;
+  overflow: hidden;
+  border: 1px solid rgba(73, 177, 207, 0.24);
+  border-radius: 8px;
+  background: rgba(8, 17, 24, 0.84);
+}
+
+.mermaid-block-head {
+  display: flex;
+  min-height: 31px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 7px 4px 10px;
+  border-bottom: 1px solid rgba(73, 177, 207, 0.18);
+  background: rgba(25, 42, 53, 0.72);
+  color: #718797;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mermaid-block-copy {
+  display: inline-flex;
+  min-height: 23px;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #8298a8;
+  font: inherit;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+}
+
+.mermaid-block-copy:hover,
+.mermaid-block-copy:focus-visible {
+  outline: 0;
+  background: rgba(83, 208, 239, 0.1);
+  color: #c8edf4;
+}
+
+.mermaid-block-copy:focus-visible {
+  box-shadow: 0 0 0 2px rgba(83, 208, 239, 0.58);
+}
+
+.mermaid-block-copy svg {
+  width: 12px;
+  height: 12px;
+}
+
+.mermaid-block-canvas {
+  display: grid;
+  min-height: 112px;
+  max-width: 100%;
+  place-items: center;
+  overflow-x: auto;
+  padding: 18px;
+  background: #0b1219;
+  color: #718797;
+  font-size: 10px;
+}
+
+.radix-themes.light .mermaid-block-canvas {
+  background: #f8fafc;
+}
+
+.mermaid-block-canvas > div {
+  min-width: min-content;
+  max-width: 100%;
+}
+
+.mermaid-block-canvas svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-block-error {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  border-bottom: 1px solid rgba(248, 113, 113, 0.24);
+  background: rgba(127, 29, 29, 0.16);
+  color: #fca5a5;
+  font-size: 10px;
+}
+
+.mermaid-block-error svg {
+  flex: 0 0 auto;
+}
+
+.mermaid-block.is-error .code-block-frame {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
 .session-chat-narrative .session-thread-message .markdown-content th,
 .session-chat-narrative .session-thread-message .markdown-content td {
   min-width: 96px;

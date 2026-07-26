@@ -20,6 +20,8 @@ import type { WorkspaceMessage } from '../../types';
 import { messageActionsForVisibleMessage } from './chatMessageActionModel';
 import type { VisibleMessageKind } from './chatMessageActionModel';
 import { CodeBlockFrame } from './HighlightedCode';
+import { MermaidBlock } from './MermaidBlock';
+import { shouldRenderMermaidDiagram } from './mermaidDiagramModel';
 
 export function SessionEmptyState() {
   const { t } = useI18n();
@@ -192,7 +194,9 @@ function MarkdownPreBlock({ children }: { children?: ReactNode }) {
   };
   const className = typeof codeProps.className === 'string' ? codeProps.className : '';
   const language = /language-([\w-]+)/.exec(className)?.[1] ?? 'text';
-  return <CodeBlockFrame code={reactNodeToText(codeProps.children)} language={language} />;
+  const code = reactNodeToText(codeProps.children);
+  if (shouldRenderMermaidDiagram(language)) return <MermaidBlock chart={code} />;
+  return <CodeBlockFrame code={code} language={language} />;
 }
 
 function reactNodeToText(node: ReactNode): string {
