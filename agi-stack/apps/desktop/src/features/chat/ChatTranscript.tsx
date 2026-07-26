@@ -21,6 +21,7 @@ import type { VisibleMessageKind } from './chatMessageActionModel';
 import { AssistantArtifactReferences } from './AssistantArtifactReferences';
 import { CodeBlockFrame } from './HighlightedCode';
 import { MermaidBlock } from './MermaidBlock';
+import { MessageForcedSkillBadge } from './MessageForcedSkillBadge';
 import { shouldRenderMermaidDiagram } from './mermaidDiagramModel';
 import { useMarkdownMathPlugins } from './useMarkdownMathPlugins';
 
@@ -88,6 +89,7 @@ export const WorkspaceTranscriptMessage = memo(function WorkspaceTranscriptMessa
       retryDisabled={retryDisabled}
     >
       <MarkdownContent content={message.content} className="transcript-content" />
+      {kind === 'user' ? <MessageForcedSkillBadge message={message} /> : null}
       {kind === 'agent' ? <AssistantArtifactReferences metadata={message.metadata} /> : null}
     </NarrativeMessageFrame>
   );

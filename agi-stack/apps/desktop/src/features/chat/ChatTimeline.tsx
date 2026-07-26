@@ -73,6 +73,7 @@ import { CodeBlockFrame } from './HighlightedCode';
 import { HitlResponseCard } from './HitlResponseCard';
 import { MCPAppTimelineCard } from './MCPAppTimelineCard';
 import { MemoryTimelineEvent } from './MemoryTimelineCards';
+import { MessageForcedSkillBadge } from './MessageForcedSkillBadge';
 import { isMemoryTimelineEvent } from './memoryTimelineModel';
 import { MessageAttachments } from './MessageAttachments';
 import { groupMCPAppTimelineItems } from './mcpAppTimelineModel';
@@ -1117,7 +1118,12 @@ function TimelineItemBody({
         {kind === 'agent' ? (
           <AssistantArtifactReferences artifacts={item.artifacts} metadata={item.metadata} />
         ) : null}
-        {kind === 'user' ? <MessageAttachments item={item} /> : null}
+        {kind === 'user' ? (
+          <>
+            <MessageForcedSkillBadge message={item} />
+            <MessageAttachments item={item} />
+          </>
+        ) : null}
       </>
     );
   }

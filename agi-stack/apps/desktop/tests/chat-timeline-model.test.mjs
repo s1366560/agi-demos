@@ -897,7 +897,7 @@ test('message attachment sizes match the Web conversation formatter', () => {
 test('optimistic user rows preserve authoritative composer file metadata', () => {
   assert.match(
     appSource,
-    /optimisticUserTimelineItem\(messageId, content, execution\.fileMetadata\)/,
+    /optimisticUserTimelineItem\(\s*messageId,\s*content,\s*execution\.forcedSkillName,\s*execution\.fileMetadata,\s*\)/,
   );
   assert.match(
     appSource,

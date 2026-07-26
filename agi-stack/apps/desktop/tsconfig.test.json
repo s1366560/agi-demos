@@ -51,6 +51,7 @@
     "src/features/chat/markdownMathModel.ts",
     "src/features/chat/assistantArtifactReferenceModel.ts",
     "src/features/chat/artifactTimelineCardModel.ts",
+    "src/features/chat/messageForcedSkillModel.ts",
     "src/features/chat/toolSourceAggregationModel.ts",
     "src/features/chat/artifactCanvasEventModel.ts",
     "src/features/chat/mcpAppCanvasEventModel.ts",

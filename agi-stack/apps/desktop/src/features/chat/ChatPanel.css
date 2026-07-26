@@ -1481,6 +1481,43 @@
   color: #d5dce5;
 }
 
+.forced-skill-message-badge {
+  display: inline-flex;
+  max-width: min(100%, 280px);
+  min-height: 20px;
+  align-items: center;
+  gap: 5px;
+  margin: 9px 0 0;
+  padding: 3px 7px;
+  border: 1px solid rgba(83, 208, 239, 0.34);
+  border-radius: 999px;
+  background: rgba(25, 114, 136, 0.16);
+  color: #7ed8e9;
+  font-size: 9px;
+  font-weight: 650;
+  line-height: 1.2;
+  vertical-align: middle;
+}
+
+.forced-skill-message-badge > svg {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+}
+
+.forced-skill-message-badge > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.radix-themes.light .forced-skill-message-badge {
+  border-color: rgba(7, 126, 154, 0.28);
+  background: rgba(7, 126, 154, 0.08);
+  color: #116981;
+}
+
 .message-attachments {
   display: flex;
   flex-wrap: wrap;

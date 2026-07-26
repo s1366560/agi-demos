@@ -798,6 +798,7 @@ function timelineCursorFromLast(items: AgentTimelineItem[]): ConversationTimelin
 function optimisticUserTimelineItem(
   messageId: string,
   content: string,
+  forcedSkillName?: string,
   fileMetadata?: readonly AgentInputFileMetadata[],
 ): AgentTimelineItem {
   const nowMs = Date.now();
@@ -812,6 +813,7 @@ function optimisticUserTimelineItem(
     content,
     metadata: {
       optimistic: true,
+      ...(forcedSkillName?.trim() ? { forcedSkillName: forcedSkillName.trim() } : {}),
       ...(fileMetadata?.length ? { fileMetadata: [...fileMetadata] } : {}),
     },
   };
@@ -5600,7 +5602,12 @@ export function App() {
     setConversationTimeline((current) => {
       if (current.conversationId !== conversation.id) return current;
       const items = mergeTimelineItems(current.items, [
-        optimisticUserTimelineItem(messageId, content, execution.fileMetadata),
+        optimisticUserTimelineItem(
+          messageId,
+          content,
+          execution.forcedSkillName,
+          execution.fileMetadata,
+        ),
       ]);
       return {
         ...current,
