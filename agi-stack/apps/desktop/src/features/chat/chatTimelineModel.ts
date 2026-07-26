@@ -135,8 +135,10 @@ export function latestAgentSuggestions(items: AgentTimelineItem[]): string[] {
 
 // These protocol events are consumed as UI state or retained only for legacy
 // SSE compatibility by the Web client. Keep them in the authoritative timeline
-// state, but do not expose them as conversation rows. reflection_complete is
-// intentionally absent because Web queues it into the visible timeline.
+// state, but do not expose them as conversation rows. L4 Agent lifecycle events
+// likewise belong to the Agent state surface, not the message transcript.
+// reflection_complete is intentionally absent because Web queues it into the
+// visible timeline.
 const NON_TIMELINE_EVENT_TYPES = new Set([
   'suggestions',
   'context_status',
@@ -178,6 +180,11 @@ const NON_TIMELINE_EVENT_TYPES = new Set([
   'adjustment_applied',
   'task_list_updated',
   'task_updated',
+  'agent_spawned',
+  'agent_completed',
+  'agent_stopped',
+  'agent_message_sent',
+  'agent_message_received',
 ]);
 
 /** UI-state events drive affordances or replay and are not conversation log rows. */

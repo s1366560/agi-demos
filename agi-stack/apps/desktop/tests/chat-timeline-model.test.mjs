@@ -4267,6 +4267,23 @@ test('the reported Web-parity turn renders only user, memory, and final assistan
       eventTimeUs: 5,
       eventCounter: 5,
     },
+    ...[
+      'agent_spawned',
+      'agent_message_sent',
+      'agent_message_received',
+      'agent_completed',
+      'agent_stopped',
+    ].map((type, index) => ({
+      id: `l4-lifecycle-${type}`,
+      type,
+      eventTimeUs: 5 + index / 10,
+      eventCounter: 50 + index,
+      payload: {
+        agent_name: 'General Agent',
+        from_agent_name: 'General Agent',
+        to_agent_name: 'General Agent',
+      },
+    })),
     {
       id: 'assistant-1',
       type: 'assistant_message',
@@ -4293,6 +4310,38 @@ test('the reported Web-parity turn renders only user, memory, and final assistan
   assert.deepEqual(
     timelineItemsForDisplay(items).map((item) => item.type),
     ['user_message', 'memory_recalled', 'assistant_message'],
+  );
+});
+
+test('L4 Agent state events stay out of conversation rows without hiding user-visible work', () => {
+  const hiddenTypes = [
+    'agent_spawned',
+    'agent_completed',
+    'agent_stopped',
+    'agent_message_sent',
+    'agent_message_received',
+  ];
+  const visibleTypes = [
+    'thought',
+    'act',
+    'observe',
+    'subagent_started',
+    'subagent_completed',
+    'clarification_needed',
+    'artifact_created',
+    'error',
+  ];
+  const items = [...hiddenTypes, ...visibleTypes].map((type, index) => ({
+    id: `${type}-${index}`,
+    type,
+    eventTimeUs: index + 1,
+    eventCounter: index + 1,
+    payload: {},
+  }));
+
+  assert.deepEqual(
+    timelineItemsForDisplay(items).map((item) => item.type),
+    visibleTypes,
   );
 });
 

@@ -40,6 +40,9 @@ const conversationSummarySource = readOptionalSource(
 const conversationSummaryQaSource = readOptionalSource(
   'qa/ConversationSummaryQa.tsx',
 );
+const lifecycleVisibilityQaSource = readOptionalSource(
+  'qa/LifecycleVisibilityQa.tsx',
+);
 const sessionConversationQaSource = readSource('qa/SessionConversationQa.tsx');
 
 test('session messages use the mission-control narrative hierarchy', () => {
@@ -123,6 +126,22 @@ test('message action availability matches the Web role and streaming contract', 
     retryDisabled: false,
     saveTemplate: false,
   });
+});
+
+test('lifecycle visibility QA replays Web-hidden Agent state events through the real timeline', () => {
+  for (const type of [
+    'agent_spawned',
+    'agent_completed',
+    'agent_stopped',
+    'agent_message_sent',
+    'agent_message_received',
+  ]) {
+    assert.match(lifecycleVisibilityQaSource, new RegExp(`'${type}'`));
+  }
+  assert.match(lifecycleVisibilityQaSource, /<AgentTimeline/);
+  assert.match(lifecycleVisibilityQaSource, /Replay live lifecycle burst/);
+  assert.match(lifecycleVisibilityQaSource, /data-testid="visible-message-order"/);
+  assert.match(lifecycleVisibilityQaSource, /qa-user[\s\S]*qa-assistant/);
 });
 
 test('local deletion is exact, idempotent, scoped, and preserves neighboring events', () => {
