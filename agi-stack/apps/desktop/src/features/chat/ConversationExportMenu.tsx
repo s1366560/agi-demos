@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronDownIcon, DownloadIcon, FileTextIcon } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
@@ -72,13 +72,41 @@ export function ConversationExportMenu({
   const { t } = useI18n();
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const summaryRef = useRef<HTMLElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null);
   const [notice, setNotice] = useState<ExportNotice | null>(null);
+
+  const closeMenu = (restoreFocus = false) => {
+    detailsRef.current?.removeAttribute('open');
+    setMenuOpen(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => summaryRef.current?.focus());
+    }
+  };
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const closeIfOutside = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && !detailsRef.current?.contains(target)) closeMenu();
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      closeMenu(true);
+    };
+    document.addEventListener('pointerdown', closeIfOutside, true);
+    document.addEventListener('keydown', closeOnEscape, true);
+    return () => {
+      document.removeEventListener('pointerdown', closeIfOutside, true);
+      document.removeEventListener('keydown', closeOnEscape, true);
+    };
+  }, [menuOpen]);
 
   const exportConversation = async (format: ExportFormat) => {
     if (exportingFormat !== null) return;
     const invocationSnapshot = cloneConversationExportSnapshot(snapshot);
-    detailsRef.current?.removeAttribute('open');
+    closeMenu();
     setExportingFormat(format);
     setNotice(null);
     try {
@@ -98,7 +126,10 @@ export function ConversationExportMenu({
 
   return (
     <div className="chat-conversation-export" aria-busy={exportingFormat !== null}>
-      <details ref={detailsRef}>
+      <details
+        ref={detailsRef}
+        onToggle={(event) => setMenuOpen(event.currentTarget.open)}
+      >
         <summary ref={summaryRef} aria-label={t('chat.exportConversation')}>
           <DownloadIcon aria-hidden="true" />
           <span>{t('chat.exportConversation')}</span>

@@ -145,3 +145,24 @@ test('Desktop exposes localized, accessible renderer-only Markdown and PDF contr
   assert.match(packageSource, /"html2pdf\.js": "\^0\.14\.0"/);
   assert.doesNotMatch(exportMenuSource, /ipcRenderer|window\.desktop|window\.electron/);
 });
+
+test('conversation export menu dismisses outside and restores focus on Escape', () => {
+  assert.match(exportMenuSource, /const \[menuOpen, setMenuOpen\] = useState\(false\)/);
+  assert.match(
+    exportMenuSource,
+    /document\.addEventListener\('pointerdown', closeIfOutside, true\)/,
+  );
+  assert.match(
+    exportMenuSource,
+    /document\.addEventListener\('keydown', closeOnEscape, true\)/,
+  );
+  assert.match(exportMenuSource, /event\.preventDefault\(\);[\s\S]{0,80}closeMenu\(true\)/);
+  assert.match(
+    exportMenuSource,
+    /window\.requestAnimationFrame\(\(\) => summaryRef\.current\?\.focus\(\)\)/,
+  );
+  assert.match(
+    exportMenuSource,
+    /onToggle=\{\(event\) => setMenuOpen\(event\.currentTarget\.open\)\}/,
+  );
+});
