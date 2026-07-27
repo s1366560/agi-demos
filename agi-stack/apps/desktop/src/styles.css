@@ -3,12 +3,14 @@
   --desktop-bg: #080c12;
   --desktop-panel: #0f141d;
   --desktop-panel-2: #151a24;
+  --desktop-panel-raised: #151a24;
   --desktop-border: #242b36;
   --desktop-border-soft: #1b222e;
   --desktop-text: #e7edf6;
   --desktop-muted: #9aa5b5;
   --desktop-faint: #687386;
   --desktop-cyan: #38d6ff;
+  --desktop-accent: #38d6ff;
   --desktop-green: #35d399;
   --desktop-amber: #f0b35a;
   --desktop-red: #ff6978;

@@ -128,3 +128,16 @@ test('every rgba(var(--desktop-*-rgb), ...) reference targets a defined channel 
   }
   assert.deepEqual(missing, []);
 });
+
+test('every var(--desktop-*) reference targets a token defined in :root', () => {
+  // Guards against dropped declarations: a var() reference to a token that was
+  // never defined is invalid at computed-value time and silently discarded.
+  const missing = [];
+  for (const file of cssFiles) {
+    const css = blankComments(readSrc(file));
+    for (const match of css.matchAll(/\bvar\((--desktop-[\w-]+)/g)) {
+      if (!definedTokens.has(match[1])) missing.push(`${file}: ${match[1]}`);
+    }
+  }
+  assert.deepEqual(missing, []);
+});
