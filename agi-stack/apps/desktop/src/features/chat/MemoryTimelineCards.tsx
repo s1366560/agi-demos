@@ -10,6 +10,8 @@ import {
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
+import { formatToastErrorDetail } from '../feedback/toastModel';
+import { useToast } from '../feedback/ToastCenter';
 import type { AgentTimelineItem } from '../../types';
 import {
   memoryCapturePresentation,
@@ -195,6 +197,7 @@ function MemoryHit({
   onTogglePin: () => void;
 }) {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const truncated = memory.content.length > MEMORY_SNIPPET_LIMIT;
   const displayContent =
     expanded || !truncated
@@ -203,7 +206,18 @@ function MemoryHit({
   const source = memory.source || t('chat.memoryUnknownSource');
   const category = memory.category || t('chat.memoryUnknownCategory');
   const copyMemory = () => {
-    if (navigator.clipboard?.writeText) void navigator.clipboard.writeText(memory.content);
+    if (!navigator.clipboard?.writeText) {
+      showToast('error', t('toast.copyMemoryError', { detail: t('toast.clipboardUnavailable') }));
+      return;
+    }
+    void navigator.clipboard.writeText(memory.content).then(
+      () => showToast('success', t('toast.copyMemorySuccess')),
+      (caught: unknown) =>
+        showToast(
+          'error',
+          t('toast.copyMemoryError', { detail: formatToastErrorDetail(caught) }),
+        ),
+    );
   };
   return (
     <li className={`memory-hit${pinned ? ' is-pinned' : ''}`}>

@@ -6,6 +6,7 @@ import { Button, Theme } from '@radix-ui/themes';
 import { MarkdownContent } from '../features/chat/ChatTranscript';
 import { sanitizeMermaidSvg } from '../features/chat/mermaidSvgSanitizer';
 import { I18nProvider } from '../i18n';
+import { ToastProvider } from '../features/feedback/ToastCenter';
 import '../styles.css';
 import '../features/chat/ChatPanel.css';
 
@@ -164,7 +165,9 @@ function mount() {
   globalThis.__mermaidRenderingQaRoot.render(
     <React.StrictMode>
       <I18nProvider>
-        <MermaidRenderingQa />
+        <ToastProvider>
+          <MermaidRenderingQa />
+        </ToastProvider>
       </I18nProvider>
     </React.StrictMode>,
   );

@@ -6,6 +6,7 @@ import { Button, Theme } from '@radix-ui/themes';
 import { AgentTimeline } from '../features/chat/ChatTimeline';
 import { WorkspaceTranscriptMessage } from '../features/chat/ChatTranscript';
 import { I18nProvider } from '../i18n';
+import { ToastProvider } from '../features/feedback/ToastCenter';
 import type { AgentTimelineItem, ConversationTimelineState, WorkspaceMessage } from '../types';
 import '../styles.css';
 import '../features/chat/ChatPanel.css';
@@ -176,7 +177,9 @@ function mount() {
   }
   globalThis.__markdownArtifactImageQaRoot.render(
     <I18nProvider>
-      <MarkdownArtifactImageQa />
+      <ToastProvider>
+        <MarkdownArtifactImageQa />
+      </ToastProvider>
     </I18nProvider>,
   );
 }

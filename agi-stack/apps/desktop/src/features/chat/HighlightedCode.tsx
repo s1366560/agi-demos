@@ -3,6 +3,8 @@ import { CheckIcon, CopyIcon } from '@radix-ui/react-icons';
 import hljs from 'highlight.js/lib/common';
 
 import { useI18n } from '../../i18n';
+import { formatToastErrorDetail } from '../feedback/toastModel';
+import { useToast } from '../feedback/ToastCenter';
 
 // highlight.js token colors are themed in styles.css (`.hljs-*`) so code in
 // chat matches the desktop dark palette instead of a stock theme.
@@ -65,6 +67,7 @@ export const CodeBlockFrame = memo(function CodeBlockFrame({
   className?: string;
 }) {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const copyResetRef = useRef<number | null>(null);
@@ -85,7 +88,13 @@ export const CodeBlockFrame = memo(function CodeBlockFrame({
   }, []);
 
   const copyCode = () => {
-    if (navigator.clipboard) void navigator.clipboard.writeText(code);
+    if (!navigator.clipboard) {
+      showToast('error', t('toast.copyCodeError', { detail: t('toast.clipboardUnavailable') }));
+      return;
+    }
+    void navigator.clipboard.writeText(code).catch((caught: unknown) => {
+      showToast('error', t('toast.copyCodeError', { detail: formatToastErrorDetail(caught) }));
+    });
     setCopied(true);
     if (copyResetRef.current !== null) window.clearTimeout(copyResetRef.current);
     copyResetRef.current = window.setTimeout(() => setCopied(false), 1400);

@@ -22,6 +22,23 @@ const toastCssSource = readFileSync(
   'utf8',
 );
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const chatTranscriptSource = readFileSync(
+  new URL('../src/features/chat/ChatTranscript.tsx', import.meta.url),
+  'utf8',
+);
+const highlightedCodeSource = readFileSync(
+  new URL('../src/features/chat/HighlightedCode.tsx', import.meta.url),
+  'utf8',
+);
+const mermaidBlockSource = readFileSync(
+  new URL('../src/features/chat/MermaidBlock.tsx', import.meta.url),
+  'utf8',
+);
+const memoryTimelineCardsSource = readFileSync(
+  new URL('../src/features/chat/MemoryTimelineCards.tsx', import.meta.url),
+  'utf8',
+);
 
 function sequentialOrdinal(start = 0) {
   let ordinal = start;
@@ -169,6 +186,13 @@ test('toast copy is centralized in both i18n dictionaries', () => {
     'toast.conversationRenameError',
     'toast.conversationDeleteSuccess',
     'toast.conversationDeleteError',
+    'toast.copyMessageSuccess',
+    'toast.copyMessageError',
+    'toast.copyCodeError',
+    'toast.copyMemorySuccess',
+    'toast.copyMemoryError',
+    'toast.clipboardUnavailable',
+    'toast.sessionRunActionSuccess',
   ]) {
     assert.equal(
       (i18nSource.match(new RegExp(`'${key.replaceAll('.', '\\.')}'`, 'g')) ?? []).length,
@@ -177,12 +201,74 @@ test('toast copy is centralized in both i18n dictionaries', () => {
   }
 });
 
+test('formatToastErrorDetail extracts error messages and stringifies the rest', () => {
+  assert.equal(toastModel.formatToastErrorDetail(new Error('denied')), 'denied');
+  assert.equal(toastModel.formatToastErrorDetail('plain'), 'plain');
+  assert.equal(toastModel.formatToastErrorDetail(42), '42');
+});
+
 test('ToastCenter source keeps user-visible strings behind t()', () => {
   assert.match(toastCenterSource, /t\('toast\.viewportLabel'\)/);
   assert.match(toastCenterSource, /t\('toast\.dismiss'\)/);
   assert.doesNotMatch(toastCenterSource, /aria-label="[A-Za-z]/);
   assert.doesNotMatch(toastCenterSource, /placeholder="[A-Za-z]/);
   assert.doesNotMatch(toastCenterSource, />[A-Z][a-z]+ [a-z]+</);
+});
+
+test('chat message copy surfaces success and clipboard failure via toasts', () => {
+  assert.match(chatTranscriptSource, /const \{ showToast \} = useToast\(\);/);
+  assert.match(
+    chatTranscriptSource,
+    /showToast\('error', t\('toast\.copyMessageError', \{ detail: t\('toast\.clipboardUnavailable'\) \}\)\)/,
+  );
+  assert.match(chatTranscriptSource, /showToast\('success', t\('toast\.copyMessageSuccess'\)\)/);
+  assert.match(
+    chatTranscriptSource,
+    /showToast\(\s*'error',\s*t\('toast\.copyMessageError', \{ detail: formatToastErrorDetail\(caught\) \}\),?\s*\)/,
+  );
+});
+
+test('code block copy keeps inline success and surfaces clipboard failure via toast', () => {
+  assert.match(highlightedCodeSource, /const \{ showToast \} = useToast\(\);/);
+  assert.match(
+    highlightedCodeSource,
+    /writeText\(code\)\.catch\(\(caught: unknown\) => \{\s*showToast\('error', t\('toast\.copyCodeError', \{ detail: formatToastErrorDetail\(caught\) \}\)\);/,
+  );
+  assert.match(
+    highlightedCodeSource,
+    /showToast\('error', t\('toast\.copyCodeError', \{ detail: t\('toast\.clipboardUnavailable'\) \}\)\)/,
+  );
+});
+
+test('mermaid source copy surfaces clipboard failure via toast', () => {
+  assert.match(mermaidBlockSource, /const \{ showToast \} = useToast\(\);/);
+  assert.match(
+    mermaidBlockSource,
+    /\} catch \(caught\) \{\s*setCopied\(false\);\s*showToast\('error', t\('toast\.copyCodeError', \{ detail: formatToastErrorDetail\(caught\) \}\)\);/,
+  );
+});
+
+test('memory copy surfaces success and clipboard failure via toasts', () => {
+  assert.match(memoryTimelineCardsSource, /const \{ showToast \} = useToast\(\);/);
+  assert.match(memoryTimelineCardsSource, /showToast\('success', t\('toast\.copyMemorySuccess'\)\)/);
+  assert.match(
+    memoryTimelineCardsSource,
+    /showToast\('error', t\('toast\.copyMemoryError', \{ detail: t\('toast\.clipboardUnavailable'\) \}\)\)/,
+  );
+  assert.match(
+    memoryTimelineCardsSource,
+    /t\('toast\.copyMemoryError', \{ detail: formatToastErrorDetail\(caught\) \}\)/,
+  );
+});
+
+test('session run actions announce success via toast while errors stay inline', () => {
+  assert.match(
+    appSource,
+    /showToast\(\s*'success',\s*t\('toast\.sessionRunActionSuccess', \{ action: t\(SESSION_RUN_ACTION_LABEL_KEY\[action\]\) \}\),?\s*\)/,
+  );
+  assert.match(appSource, /pause: 'session\.pauseRun'/);
+  assert.match(appSource, /approve: 'session\.approveRun'/);
+  assert.match(appSource, /request_changes: 'session\.requestChanges'/);
 });
 
 test('ToastCenter styles use desktop tokens and honor reduced motion', () => {

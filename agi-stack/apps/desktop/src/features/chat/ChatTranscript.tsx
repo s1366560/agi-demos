@@ -17,6 +17,8 @@ import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 
 import { useI18n } from '../../i18n';
+import { formatToastErrorDetail } from '../feedback/toastModel';
+import { useToast } from '../feedback/ToastCenter';
 import type { WorkspaceMessage } from '../../types';
 import { canonicalStoryRenderDecision } from './canonicalStoryModel';
 import { CanonicalStoryCard } from './CanonicalStoryCard';
@@ -313,6 +315,7 @@ function MessageActionMenu({
   retryDisabled: boolean;
 }) {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const summaryRef = useRef<HTMLElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -345,8 +348,19 @@ function MessageActionMenu({
   }, [menuOpen]);
 
   const copyContent = () => {
-    if (navigator.clipboard) void navigator.clipboard.writeText(content);
     closeMenu();
+    if (!navigator.clipboard) {
+      showToast('error', t('toast.copyMessageError', { detail: t('toast.clipboardUnavailable') }));
+      return;
+    }
+    void navigator.clipboard.writeText(content).then(
+      () => showToast('success', t('toast.copyMessageSuccess')),
+      (caught: unknown) =>
+        showToast(
+          'error',
+          t('toast.copyMessageError', { detail: formatToastErrorDetail(caught) }),
+        ),
+    );
   };
   const invoke = (action: (() => void) | undefined) => {
     action?.();

@@ -9,6 +9,7 @@ import {
   WorkspaceTranscriptMessage,
 } from '../features/chat/ChatTranscript';
 import { I18nProvider } from '../i18n';
+import { ToastProvider } from '../features/feedback/ToastCenter';
 import type { WorkspaceMessage } from '../types';
 import '../styles.css';
 import '../features/chat/ChatPanel.css';
@@ -101,9 +102,11 @@ function mount() {
   globalThis.__messageIdentityQaRoot.render(
     <React.StrictMode>
       <I18nProvider>
-        <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium">
-          <MessageIdentityQa />
-        </Theme>
+        <ToastProvider>
+          <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium">
+            <MessageIdentityQa />
+          </Theme>
+        </ToastProvider>
       </I18nProvider>
     </React.StrictMode>,
   );

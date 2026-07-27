@@ -5,6 +5,7 @@ import { Button, Theme } from '@radix-ui/themes';
 
 import { MarkdownContent } from '../features/chat/ChatTranscript';
 import { I18nProvider } from '../i18n';
+import { ToastProvider } from '../features/feedback/ToastCenter';
 import '../styles.css';
 import '../features/chat/ChatPanel.css';
 
@@ -136,7 +137,9 @@ function mount() {
   globalThis.__markdownMathRenderingQaRoot.render(
     <React.StrictMode>
       <I18nProvider>
-        <MarkdownMathRenderingQa />
+        <ToastProvider>
+          <MarkdownMathRenderingQa />
+        </ToastProvider>
       </I18nProvider>
     </React.StrictMode>,
   );

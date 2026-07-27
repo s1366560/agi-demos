@@ -6,6 +6,7 @@ import { Button, Theme } from '@radix-ui/themes';
 import { AgentTimeline } from '../features/chat/ChatTimeline';
 import { WorkspaceTranscriptMessage } from '../features/chat/ChatTranscript';
 import { I18nProvider } from '../i18n';
+import { ToastProvider } from '../features/feedback/ToastCenter';
 import type {
   AgentTimelineItem,
   ConversationTimelineState,
@@ -182,7 +183,9 @@ function mount() {
   }
   globalThis.__forcedSkillMessageBadgeQaRoot.render(
     <I18nProvider>
-      <ForcedSkillMessageBadgeQa />
+      <ToastProvider>
+        <ForcedSkillMessageBadgeQa />
+      </ToastProvider>
     </I18nProvider>,
   );
 }

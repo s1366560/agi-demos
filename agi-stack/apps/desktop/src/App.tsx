@@ -657,6 +657,16 @@ function agentConversationScopeKeyFor(projectId: string, workspaceId: string): s
   return `${projectId.trim()}::${workspaceId.trim()}`;
 }
 
+const SESSION_RUN_ACTION_LABEL_KEY: Readonly<Record<SessionRunAction, string>> = {
+  pause: 'session.pauseRun',
+  resume: 'session.resumeRun',
+  cancel: 'session.cancelAction',
+  reconnect: 'session.reconnectRun',
+  fork: 'session.forkRecovery',
+  request_changes: 'session.requestChanges',
+  approve: 'session.approveRun',
+};
+
 function agentTaskUpdateFromSocketEvent(
   event: unknown,
 ): null | {
@@ -6361,13 +6371,17 @@ export function App() {
                   });
         applyAuthoritativeRun(outcome.run);
         invalidateSessionAuthority();
+        showToast(
+          'success',
+          t('toast.sessionRunActionSuccess', { action: t(SESSION_RUN_ACTION_LABEL_KEY[action]) }),
+        );
       } catch (caught) {
         setError(formatError(caught));
       } finally {
         setSessionRunActionPending(null);
       }
     },
-    [api, applyAuthoritativeRun, invalidateSessionAuthority, sessionDetailViewModel, t],
+    [api, applyAuthoritativeRun, invalidateSessionAuthority, sessionDetailViewModel, showToast, t],
   );
   const handleArtifactAction = useCallback(
     async (

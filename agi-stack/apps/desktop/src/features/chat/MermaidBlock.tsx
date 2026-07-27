@@ -2,6 +2,8 @@ import { memo, useEffect, useId, useRef, useState } from 'react';
 import { CheckIcon, CopyIcon, ExclamationTriangleIcon } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
+import { formatToastErrorDetail } from '../feedback/toastModel';
+import { useToast } from '../feedback/ToastCenter';
 import { CodeBlockFrame } from './HighlightedCode';
 import {
   mermaidThemeForAppearance,
@@ -22,6 +24,7 @@ function appearanceFromThemeElement(element: Element | null): DesktopAppearance 
 
 export const MermaidBlock = memo(function MermaidBlock({ chart }: { chart: string }) {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const diagramId = `desktop-mermaid-${useId().replace(/:/g, '')}`;
   const rootRef = useRef<HTMLDivElement>(null);
   const copyResetRef = useRef<number | null>(null);
@@ -88,8 +91,9 @@ export const MermaidBlock = memo(function MermaidBlock({ chart }: { chart: strin
       setCopied(true);
       if (copyResetRef.current !== null) window.clearTimeout(copyResetRef.current);
       copyResetRef.current = window.setTimeout(() => setCopied(false), 4000);
-    } catch {
+    } catch (caught) {
       setCopied(false);
+      showToast('error', t('toast.copyCodeError', { detail: formatToastErrorDetail(caught) }));
     }
   };
 

@@ -52,3 +52,8 @@ export function dismissToastFromQueue(queue: readonly Toast[], id: string): read
     ? queue.filter((toast) => toast.id !== id)
     : queue;
 }
+
+export function formatToastErrorDetail(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
