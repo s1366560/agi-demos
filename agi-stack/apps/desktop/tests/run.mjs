@@ -211,6 +211,11 @@ const run = spawnSync(process.execPath, ['--test', ...testFiles], {
   cwd: desktopRoot,
   env: {
     ...process.env,
+    // Pin the ambient locale so render tests are host-locale independent:
+    // Node's navigator.language derives from these variables and
+    // I18nProvider falls back to it when no stored locale exists.
+    LANG: 'en_US.UTF-8',
+    LC_ALL: 'en_US.UTF-8',
     NODE_PATH: join(desktopRoot, 'node_modules'),
   },
   stdio: 'inherit',
