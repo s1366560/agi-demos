@@ -124,6 +124,7 @@ const testFiles = [
   'desktop-search-model.test.mjs',
   'desktop-search.test.mjs',
   'desktop-a11y-i18n.test.mjs',
+  'design-tokens.test.mjs',
   'electron-vite-integration.test.mjs',
   'electron-media-permission.test.mjs',
   'hitl-response-events.test.mjs',

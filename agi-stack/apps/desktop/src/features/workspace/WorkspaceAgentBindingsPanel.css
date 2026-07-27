@@ -3,9 +3,9 @@
   gap: 14px;
   margin-top: 14px;
   padding: 15px;
-  border: 1px solid rgba(71, 113, 135, 0.4);
+  border: 1px solid rgba(var(--desktop-steel-1-rgb), 0.4);
   border-radius: 10px;
-  background: rgba(8, 15, 23, 0.62);
+  background: rgba(var(--desktop-overlay-2-rgb), 0.62);
 }
 
 .workspace-agents-panel > header {
@@ -13,7 +13,7 @@
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: start;
   gap: 9px;
-  color: var(--desktop-cyan, #38d6ff);
+  color: var(--desktop-cyan, var(--desktop-cyan));
 }
 
 .workspace-agents-panel > header > svg {
@@ -28,12 +28,12 @@
 }
 
 .workspace-agents-panel > header strong {
-  color: var(--desktop-text, #edf6fb);
+  color: var(--desktop-text, var(--desktop-text-bright));
   font-size: 12px;
 }
 
 .workspace-agents-panel > header small {
-  color: var(--desktop-faint, #637786);
+  color: var(--desktop-faint, var(--desktop-gray-9));
   font-size: 10px;
   font-weight: 500;
 }
@@ -44,10 +44,10 @@
 .workspace-agents-definition-error {
   margin: 0;
   padding: 12px;
-  color: var(--desktop-muted, #8ca0af);
-  border: 1px solid rgba(71, 113, 135, 0.36);
+  color: var(--desktop-muted, var(--desktop-gray-13));
+  border: 1px solid rgba(var(--desktop-steel-1-rgb), 0.36);
   border-radius: 8px;
-  background: rgba(13, 24, 34, 0.66);
+  background: rgba(var(--desktop-overlay-6-rgb), 0.66);
   font-size: 11px;
   line-height: 1.55;
 }
@@ -69,7 +69,7 @@
 
 .workspace-agents-authority.error,
 .workspace-agents-definition-error {
-  color: #e58b95;
+  color: var(--desktop-red-soft);
   border-color: rgba(229, 139, 149, 0.35);
 }
 
@@ -94,9 +94,9 @@
   align-items: center;
   gap: 12px;
   padding: 11px 12px;
-  border: 1px solid rgba(71, 113, 135, 0.36);
+  border: 1px solid rgba(var(--desktop-steel-1-rgb), 0.36);
   border-radius: 8px;
-  background: rgba(13, 24, 34, 0.66);
+  background: rgba(var(--desktop-overlay-6-rgb), 0.66);
 }
 
 .workspace-agents-list article > div {
@@ -107,7 +107,7 @@
 
 .workspace-agents-list article strong {
   overflow: hidden;
-  color: var(--desktop-text, #edf6fb);
+  color: var(--desktop-text, var(--desktop-text-bright));
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -117,7 +117,7 @@
 .workspace-agents-list article p {
   margin: 0;
   overflow: hidden;
-  color: var(--desktop-faint, #637786);
+  color: var(--desktop-faint, var(--desktop-gray-9));
   font-size: 10px;
   line-height: 1.45;
   text-overflow: ellipsis;
@@ -132,32 +132,32 @@
 }
 
 .workspace-agents-list article > span.active {
-  color: #4cd6a3;
+  color: var(--desktop-green-bright);
   background: rgba(76, 214, 163, 0.12);
 }
 
 .workspace-agents-list article > span.inactive {
-  color: var(--desktop-faint, #637786);
+  color: var(--desktop-faint, var(--desktop-gray-9));
   background: rgba(99, 119, 134, 0.12);
 }
 
 .workspace-agents-feedback {
   min-height: 18px;
-  color: var(--desktop-muted, #8ca0af);
+  color: var(--desktop-muted, var(--desktop-gray-13));
   font-size: 11px;
 }
 
 .workspace-agents-feedback.error {
-  color: #e58b95;
+  color: var(--desktop-red-soft);
 }
 
 .workspace-agents-feedback.success {
-  color: #4cd6a3;
+  color: var(--desktop-green-bright);
 }
 
 .workspace-agents-selector {
-  border: 1px solid rgba(71, 113, 135, 0.7);
-  background: #0b1119;
+  border: 1px solid rgba(var(--desktop-steel-1-rgb), 0.7);
+  background: var(--desktop-surface-10);
 }
 
 .workspace-agents-selector-fields {
@@ -169,7 +169,7 @@
 .workspace-agents-selector-fields label {
   display: grid;
   gap: 7px;
-  color: var(--desktop-muted, #8ca0af);
+  color: var(--desktop-muted, var(--desktop-gray-13));
   font-size: 11px;
   font-weight: 700;
 }
@@ -179,15 +179,15 @@
   width: 100%;
   min-height: 34px;
   padding: 0 10px;
-  color: var(--desktop-text, #edf6fb);
-  border: 1px solid rgba(71, 113, 135, 0.58);
+  color: var(--desktop-text, var(--desktop-text-bright));
+  border: 1px solid rgba(var(--desktop-steel-1-rgb), 0.58);
   border-radius: 6px;
-  background: rgba(8, 15, 23, 0.8);
+  background: rgba(var(--desktop-overlay-2-rgb), 0.8);
   font: inherit;
 }
 
 .workspace-agents-selector select:focus-visible {
-  outline: 2px solid var(--desktop-cyan, #38d6ff);
+  outline: 2px solid var(--desktop-cyan, var(--desktop-cyan));
   outline-offset: 2px;
 }
 

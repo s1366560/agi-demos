@@ -3,7 +3,7 @@
   height: 100%;
   padding: 34px clamp(28px, 4.5vw, 64px) 46px;
   overflow: auto;
-  background: #090e15;
+  background: var(--desktop-surface-3);
   color: var(--desktop-text);
   font-size: 16px;
   line-height: normal;
@@ -63,8 +63,8 @@
 
 .workspace-design-title-line em[data-status='offline'],
 .workspace-design-title-line em[data-status='unknown'] {
-  border-color: rgba(148, 163, 184, 0.2);
-  background: rgba(148, 163, 184, 0.05);
+  border-color: rgba(var(--desktop-slate-rgb), 0.2);
+  background: rgba(var(--desktop-slate-rgb), 0.05);
   color: var(--desktop-muted);
 }
 
@@ -108,7 +108,7 @@
   padding: 22px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 8px;
-  background: rgba(10, 16, 25, 0.9);
+  background: rgba(var(--desktop-overlay-3-rgb), 0.9);
 }
 
 .workspace-design-context-empty > span {
@@ -116,9 +116,9 @@
   width: 44px;
   height: 44px;
   place-items: center;
-  border: 1px solid rgba(56, 214, 255, 0.28);
+  border: 1px solid rgba(var(--desktop-cyan-rgb), 0.28);
   border-radius: 9px;
-  background: rgba(56, 214, 255, 0.08);
+  background: rgba(var(--desktop-cyan-rgb), 0.08);
   color: var(--desktop-cyan);
 }
 
@@ -150,7 +150,7 @@
 }
 
 .workspace-design-context-empty[data-state='error'] {
-  border-color: rgba(240, 179, 90, 0.28);
+  border-color: rgba(var(--desktop-amber-rgb), 0.28);
 }
 
 .workspace-design-context-detail {
@@ -194,7 +194,7 @@
   min-width: 0;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 8px;
-  background: rgba(10, 16, 25, 0.9);
+  background: rgba(var(--desktop-overlay-3-rgb), 0.9);
 }
 
 .workspace-design-goal-card {
@@ -213,9 +213,9 @@
   width: 34px;
   height: 34px;
   place-items: center;
-  border: 1px solid rgba(56, 214, 255, 0.28);
+  border: 1px solid rgba(var(--desktop-cyan-rgb), 0.28);
   border-radius: 8px;
-  background: rgba(56, 214, 255, 0.08);
+  background: rgba(var(--desktop-cyan-rgb), 0.08);
   color: var(--desktop-cyan);
 }
 
@@ -277,8 +277,8 @@
 }
 
 .workspace-design-metric[data-tone='amber'] {
-  border-color: rgba(240, 179, 90, 0.34);
-  background: rgba(240, 179, 90, 0.05);
+  border-color: rgba(var(--desktop-amber-rgb), 0.34);
+  background: rgba(var(--desktop-amber-rgb), 0.05);
 }
 
 .workspace-design-metric > span {
@@ -359,7 +359,7 @@
   padding: 8px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 5px;
-  background: rgba(148, 163, 184, 0.025);
+  background: rgba(var(--desktop-slate-rgb), 0.025);
 }
 
 .workspace-design-knowledge-metrics b { font-size: 12px; }
@@ -470,16 +470,16 @@
   cursor: pointer;
 }
 
-.workspace-design-sessions-card > div > button:hover { background: rgba(56, 214, 255, 0.045); }
+.workspace-design-sessions-card > div > button:hover { background: rgba(var(--desktop-cyan-rgb), 0.045); }
 
 .workspace-design-session-icon {
   display: grid;
   width: 28px;
   height: 28px;
   place-items: center;
-  border: 1px solid rgba(56, 214, 255, 0.24);
+  border: 1px solid rgba(var(--desktop-cyan-rgb), 0.24);
   border-radius: 8px;
-  background: rgba(56, 214, 255, 0.07);
+  background: rgba(var(--desktop-cyan-rgb), 0.07);
   color: var(--desktop-cyan);
 }
 
@@ -511,14 +511,14 @@
 .workspace-design-sessions-card button em {
   padding: 4px 7px;
   border-radius: 999px;
-  background: rgba(56, 214, 255, 0.07);
+  background: rgba(var(--desktop-cyan-rgb), 0.07);
   color: var(--desktop-cyan);
   font-size: 10px;
   font-style: normal;
 }
 
 .workspace-design-sessions-card button em[data-status='attention'] {
-  background: rgba(240, 179, 90, 0.08);
+  background: rgba(var(--desktop-amber-rgb), 0.08);
   color: var(--desktop-amber);
 }
 
@@ -529,7 +529,7 @@
 }
 
 .workspace-design-sessions-card button em[data-status='danger'] {
-  background: rgba(255, 105, 120, 0.08);
+  background: rgba(var(--desktop-red-rgb), 0.08);
   color: #ff8793;
 }
 
@@ -558,7 +558,7 @@
   place-items: center;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
-  background: rgba(56, 214, 255, 0.06);
+  background: rgba(var(--desktop-cyan-rgb), 0.06);
   color: var(--desktop-cyan);
 }
 

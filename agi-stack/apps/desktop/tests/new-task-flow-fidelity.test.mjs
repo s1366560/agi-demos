@@ -68,7 +68,7 @@ test('human plan review retains the prototype split and step rhythm', () => {
   );
   assert.match(
     reviewStyles,
-    /\.new-task-review-heading h2\[data-keyboard-focus='true'\]:focus\s*\{[\s\S]*?outline:\s*2px solid #55d8f7;/,
+    /\.new-task-review-heading h2\[data-keyboard-focus='true'\]:focus\s*\{[\s\S]*?outline:\s*2px solid var\(--desktop-cyan-bright\);/,
   );
 });
 

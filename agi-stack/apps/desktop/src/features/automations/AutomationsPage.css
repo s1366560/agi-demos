@@ -155,8 +155,8 @@
 
 .automation-list-item:hover,
 .automation-list-item.selected {
-  border-color: rgba(56, 214, 255, 0.24);
-  background: rgba(56, 214, 255, 0.08);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.24);
+  background: rgba(var(--desktop-cyan-rgb), 0.08);
 }
 
 .automation-list-item:focus-visible {
@@ -203,9 +203,9 @@
   display: grid;
   gap: 4px;
   padding: 10px 12px;
-  border: 1px solid rgba(240, 179, 90, 0.3);
+  border: 1px solid rgba(var(--desktop-amber-rgb), 0.3);
   border-radius: 7px;
-  background: rgba(240, 179, 90, 0.08);
+  background: rgba(var(--desktop-amber-rgb), 0.08);
   color: var(--desktop-muted);
   font-size: 11px;
   line-height: 1.45;
@@ -216,8 +216,8 @@
 }
 
 .automation-inline-error {
-  border-color: rgba(248, 113, 113, 0.32);
-  background: rgba(248, 113, 113, 0.08);
+  border-color: rgba(var(--desktop-red-bright-rgb), 0.32);
+  background: rgba(var(--desktop-red-bright-rgb), 0.08);
   color: #ffaaaa;
 }
 

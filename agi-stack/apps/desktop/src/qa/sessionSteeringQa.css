@@ -4,7 +4,7 @@
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  background: #080d14;
+  background: var(--desktop-surface-2);
   color: var(--desktop-text);
 }
 
@@ -70,8 +70,8 @@
 
 .session-steering-qa-rail button.selected {
   color: var(--desktop-text);
-  border-color: rgba(56, 214, 255, 0.22);
-  background: rgba(56, 214, 255, 0.09);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.22);
+  background: rgba(var(--desktop-cyan-rgb), 0.09);
 }
 
 .session-steering-qa-shell > main {

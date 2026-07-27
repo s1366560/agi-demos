@@ -32,8 +32,8 @@
 
 .workspace-tree-workspace-row:hover,
 .workspace-tree-workspace-row.selected {
-  border-color: rgba(56, 214, 255, 0.22);
-  background: rgba(56, 214, 255, 0.06);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.22);
+  background: rgba(var(--desktop-cyan-rgb), 0.06);
 }
 
 .workspace-tree-workspace-row.selected {
@@ -123,8 +123,8 @@
 }
 
 .workspace-tree-workspace-action > i[data-status='danger'] {
-  background: #ff6978;
-  box-shadow: 0 0 8px rgba(255, 105, 120, 0.42);
+  background: var(--desktop-red);
+  box-shadow: 0 0 8px rgba(var(--desktop-red-rgb), 0.42);
 }
 
 .workspace-tree-workspace-action > i[data-status='ready'],
@@ -167,11 +167,11 @@
 .workspace-tree-session-row:hover,
 .workspace-tree-session-row.selected,
 .workspace-tree-session-row-shell:focus-within {
-  background: rgba(148, 163, 184, 0.07);
+  background: rgba(var(--desktop-slate-rgb), 0.07);
 }
 
 .workspace-tree-session-row.selected {
-  outline: 1px solid rgba(56, 214, 255, 0.24);
+  outline: 1px solid rgba(var(--desktop-cyan-rgb), 0.24);
   color: var(--desktop-cyan);
 }
 
@@ -202,7 +202,7 @@
 }
 
 .workspace-tree-session-row > svg:last-child[data-status='danger'] {
-  color: #ff6978;
+  color: var(--desktop-red);
 }
 
 .workspace-tree-session-row > svg:last-child[data-status='paused'],
@@ -244,7 +244,7 @@
 .workspace-tree-session-actions > summary:hover,
 .workspace-tree-session-actions > summary:focus-visible,
 .workspace-tree-session-actions[open] > summary {
-  background: rgba(56, 214, 255, 0.12);
+  background: rgba(var(--desktop-cyan-rgb), 0.12);
   color: var(--desktop-text);
 }
 
@@ -264,7 +264,7 @@
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
   background: var(--desktop-panel);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
+  box-shadow: 0 14px 34px rgba(var(--desktop-black-rgb), 0.38);
 }
 
 .workspace-tree-session-actions button {
@@ -284,7 +284,7 @@
 
 .workspace-tree-session-actions button:hover,
 .workspace-tree-session-actions button:focus-visible {
-  background: rgba(148, 163, 184, 0.1);
+  background: rgba(var(--desktop-slate-rgb), 0.1);
   color: var(--desktop-text);
   outline: none;
 }

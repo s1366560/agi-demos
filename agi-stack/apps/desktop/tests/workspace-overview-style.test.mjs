@@ -149,7 +149,7 @@ test('workspace overview keeps the prototype flat canvas without an invented gra
   const overviewRule = cssRule('.workspace-design-overview');
 
   assert.doesNotMatch(overviewRule, /gradient\(/);
-  assert.match(overviewRule, /background:\s*#090e15\s*;/);
+  assert.match(overviewRule, /background:\s*var\(--desktop-surface-3\)\s*;/);
 });
 
 test('workspace overview QA canvas uses the production prototype sidebar width', () => {

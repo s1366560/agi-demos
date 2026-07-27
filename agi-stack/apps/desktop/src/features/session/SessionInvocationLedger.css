@@ -56,7 +56,7 @@
 }
 
 .session-invocation-ledger-header > strong.blocked {
-  border-color: rgba(248, 113, 113, 0.42);
+  border-color: rgba(var(--desktop-red-bright-rgb), 0.42);
   background: rgba(127, 29, 29, 0.18);
   color: var(--red-9);
 }
@@ -67,7 +67,7 @@
   align-items: center;
   gap: 10px;
   padding: 11px 12px;
-  border: 1px solid rgba(248, 113, 113, 0.46);
+  border: 1px solid rgba(var(--desktop-red-bright-rgb), 0.46);
   border-radius: 7px;
   background: rgba(127, 29, 29, 0.16);
   color: var(--red-9);
@@ -104,7 +104,7 @@
   gap: 5px;
   border: 1px solid var(--desktop-border);
   border-radius: 5px;
-  background: rgba(255, 255, 255, 0.035);
+  background: rgba(var(--desktop-white-rgb), 0.035);
   color: var(--desktop-text);
   font: inherit;
   cursor: pointer;
@@ -113,7 +113,7 @@
 .session-invocation-blocker button {
   min-height: 29px;
   padding: 0 9px;
-  border-color: rgba(248, 113, 113, 0.38);
+  border-color: rgba(var(--desktop-red-bright-rgb), 0.38);
   color: #fecaca;
   font-size: 10px;
   font-weight: 650;
@@ -121,7 +121,7 @@
 
 .session-invocation-blocker button:hover,
 .session-invocation-inspect:hover {
-  background: rgba(255, 255, 255, 0.075);
+  background: rgba(var(--desktop-white-rgb), 0.075);
 }
 
 .session-invocation-blocker button:focus-visible,
@@ -182,7 +182,7 @@
 }
 
 .session-invocation-row.status-unknown_outcome {
-  border-color: rgba(248, 113, 113, 0.42);
+  border-color: rgba(var(--desktop-red-bright-rgb), 0.42);
 }
 
 .session-invocation-row-main {
@@ -200,7 +200,7 @@
   height: 25px;
   place-items: center;
   border-radius: 5px;
-  background: rgba(148, 163, 184, 0.08);
+  background: rgba(var(--desktop-slate-rgb), 0.08);
   color: var(--desktop-muted);
 }
 

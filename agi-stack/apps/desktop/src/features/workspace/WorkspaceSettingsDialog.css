@@ -1,22 +1,22 @@
 .workspace-settings-dialog {
   max-height: min(90vh, 920px);
   overflow-y: auto;
-  border: 1px solid rgba(71, 113, 135, 0.7);
+  border: 1px solid rgba(var(--desktop-steel-1-rgb), 0.7);
   background:
-    radial-gradient(circle at top right, rgba(34, 211, 238, 0.08), transparent 28rem),
-    #0b1119;
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.56);
+    radial-gradient(circle at top right, rgba(var(--desktop-cyan-alt-rgb), 0.08), transparent 28rem),
+    var(--desktop-surface-10);
+  box-shadow: 0 28px 80px rgba(var(--desktop-black-rgb), 0.56);
 }
 
 .workspace-settings-dialog .rt-DialogTitle {
   margin: 0;
-  color: var(--desktop-text, #edf6fb);
+  color: var(--desktop-text, var(--desktop-text-bright));
   font-size: 19px;
 }
 
 .workspace-settings-dialog .rt-DialogDescription {
   margin-top: 7px;
-  color: var(--desktop-muted, #8ca0af);
+  color: var(--desktop-muted, var(--desktop-gray-13));
   line-height: 1.55;
 }
 
@@ -30,16 +30,16 @@
   display: grid;
   gap: 14px;
   padding: 15px;
-  border: 1px solid rgba(71, 113, 135, 0.4);
+  border: 1px solid rgba(var(--desktop-steel-1-rgb), 0.4);
   border-radius: 10px;
-  background: rgba(8, 15, 23, 0.62);
+  background: rgba(var(--desktop-overlay-2-rgb), 0.62);
 }
 
 .workspace-settings-form > section > header {
   display: flex;
   align-items: flex-start;
   gap: 9px;
-  color: var(--desktop-cyan, #38d6ff);
+  color: var(--desktop-cyan, var(--desktop-cyan));
 }
 
 .workspace-settings-form > section > header > svg {
@@ -54,12 +54,12 @@
 }
 
 .workspace-settings-form > section > header strong {
-  color: var(--desktop-text, #edf6fb);
+  color: var(--desktop-text, var(--desktop-text-bright));
   font-size: 12px;
 }
 
 .workspace-settings-form > section > header small {
-  color: var(--desktop-faint, #637786);
+  color: var(--desktop-faint, var(--desktop-gray-9));
   font-size: 10px;
   font-weight: 500;
 }
@@ -73,7 +73,7 @@
 .workspace-settings-form label {
   display: grid;
   gap: 7px;
-  color: var(--desktop-muted, #8ca0af);
+  color: var(--desktop-muted, var(--desktop-gray-13));
   font-size: 11px;
   font-weight: 700;
 }
@@ -81,14 +81,14 @@
 .workspace-settings-form .rt-TextFieldRoot,
 .workspace-settings-form .rt-TextAreaRoot,
 .workspace-settings-form select {
-  border-color: rgba(71, 113, 135, 0.58);
-  background: rgba(8, 15, 23, 0.8);
+  border-color: rgba(var(--desktop-steel-1-rgb), 0.58);
+  background: rgba(var(--desktop-overlay-2-rgb), 0.8);
 }
 
 .workspace-settings-form .rt-TextFieldInput,
 .workspace-settings-form .rt-TextAreaInput,
 .workspace-settings-form select {
-  color: var(--desktop-text, #edf6fb);
+  color: var(--desktop-text, var(--desktop-text-bright));
 }
 
 .workspace-settings-form select {
@@ -96,13 +96,13 @@
   width: 100%;
   min-height: 32px;
   padding: 0 10px;
-  border: 1px solid rgba(71, 113, 135, 0.58);
+  border: 1px solid rgba(var(--desktop-steel-1-rgb), 0.58);
   border-radius: 6px;
   font: inherit;
 }
 
 .workspace-settings-form select:focus-visible {
-  outline: 2px solid var(--desktop-cyan, #38d6ff);
+  outline: 2px solid var(--desktop-cyan, var(--desktop-cyan));
   outline-offset: 2px;
 }
 
@@ -121,7 +121,7 @@
 }
 
 .workspace-settings-field-heading small {
-  color: var(--desktop-faint, #637786);
+  color: var(--desktop-faint, var(--desktop-gray-9));
   font-variant-numeric: tabular-nums;
 }
 
@@ -130,9 +130,9 @@
   min-height: 34px;
   align-self: end;
   padding: 7px 10px;
-  border: 1px solid rgba(71, 113, 135, 0.45);
+  border: 1px solid rgba(var(--desktop-steel-1-rgb), 0.45);
   border-radius: 7px;
-  background: rgba(13, 24, 34, 0.72);
+  background: rgba(var(--desktop-overlay-6-rgb), 0.72);
 }
 
 .workspace-settings-archive > span {
@@ -140,7 +140,7 @@
 }
 
 .workspace-settings-archive > span > svg {
-  color: var(--desktop-cyan, #38d6ff);
+  color: var(--desktop-cyan, var(--desktop-cyan));
 }
 
 .workspace-settings-archive > span > span {
@@ -150,27 +150,27 @@
 
 .workspace-settings-archive small,
 .workspace-settings-form label > small {
-  color: var(--desktop-faint, #637786);
+  color: var(--desktop-faint, var(--desktop-gray-9));
   font-size: 10px;
   font-weight: 500;
 }
 
 .workspace-settings-form label > small.error {
-  color: #e58b95;
+  color: var(--desktop-red-soft);
 }
 
 .workspace-settings-feedback {
   min-height: 18px;
-  color: var(--desktop-muted, #8ca0af);
+  color: var(--desktop-muted, var(--desktop-gray-13));
   font-size: 11px;
 }
 
 .workspace-settings-feedback.error {
-  color: #e58b95;
+  color: var(--desktop-red-soft);
 }
 
 .workspace-settings-feedback.success {
-  color: #4cd6a3;
+  color: var(--desktop-green-bright);
 }
 
 .workspace-settings-actions {

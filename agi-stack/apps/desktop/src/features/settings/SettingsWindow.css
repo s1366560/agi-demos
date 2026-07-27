@@ -16,7 +16,7 @@
   grid-template-rows: 48px minmax(0, 1fr);
   overflow: hidden;
   color: var(--desktop-text);
-  background: #090e15;
+  background: var(--desktop-surface-3);
   border: 1px solid #384657;
   border-radius: 11px;
   box-shadow: 0 30px 80px rgb(0 0 0 / 55%);
@@ -29,7 +29,7 @@
   gap: 14px;
   padding: 0 10px 0 13px;
   background: #111821;
-  border-bottom: 1px solid #293442;
+  border-bottom: 1px solid var(--desktop-border-5);
 }
 
 .settings-window-brand,
@@ -86,8 +86,8 @@
   height: 29px;
   gap: 6px;
   padding: 0 8px;
-  color: #647386;
-  background: #0a0f15;
+  color: var(--desktop-gray-6);
+  background: var(--desktop-surface-5);
   border: 1px solid #2f3b49;
   border-radius: 6px;
 }
@@ -127,8 +127,8 @@
   gap: 0;
   padding: 9px 9px 12px;
   overflow: auto;
-  background: #0b1017;
-  border-right: 1px solid #242d3a;
+  background: var(--desktop-surface-7);
+  border-right: 1px solid var(--desktop-border-4);
 }
 
 .settings-rail-group {

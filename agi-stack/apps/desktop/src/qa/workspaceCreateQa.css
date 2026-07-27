@@ -62,15 +62,15 @@ body {
   color: var(--desktop-muted);
   border: 1px solid var(--desktop-border-soft);
   border-radius: 999px;
-  background: rgba(9, 17, 27, 0.7);
+  background: rgba(var(--desktop-overlay-4-rgb), 0.7);
   font: 600 11px/1 inherit;
   cursor: pointer;
 }
 
 .workspace-create-qa-shell > nav button.selected {
   color: var(--desktop-cyan);
-  border-color: rgba(56, 214, 255, 0.42);
-  background: rgba(56, 214, 255, 0.1);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.42);
+  background: rgba(var(--desktop-cyan-rgb), 0.1);
 }
 
 .workspace-create-qa-status {
@@ -81,7 +81,7 @@ body {
   padding: 14px 18px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 12px;
-  background: rgba(9, 17, 27, 0.72);
+  background: rgba(var(--desktop-overlay-4-rgb), 0.72);
 }
 
 .workspace-create-qa-status span {

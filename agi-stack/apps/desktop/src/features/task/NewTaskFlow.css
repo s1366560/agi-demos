@@ -2,7 +2,7 @@
   position: fixed;
   inset: 0;
   z-index: 120;
-  background: #090e15;
+  background: var(--desktop-surface-3);
 }
 
 .new-task-window {
@@ -14,7 +14,7 @@
   grid-template-rows: 64px minmax(0, 1fr) 70px;
   overflow: hidden;
   color: #dce5ef;
-  background: #090e15;
+  background: var(--desktop-surface-3);
 }
 
 .new-task-window button,
@@ -35,7 +35,7 @@
 }
 
 .new-task-window :is(button, input, textarea, select):focus-visible {
-  outline: 2px solid #55d8f7;
+  outline: 2px solid var(--desktop-cyan-bright);
   outline-offset: 2px;
 }
 
@@ -47,7 +47,7 @@
   min-width: 0;
   padding: 0 20px;
   border-bottom: 1px solid #1b2531;
-  background: #0b1017;
+  background: var(--desktop-surface-7);
 }
 
 .new-task-brand {
@@ -138,7 +138,7 @@
 
 .new-task-steps li.active > span,
 .new-task-steps li.done > span {
-  color: #55d8f7;
+  color: var(--desktop-cyan-bright);
   border-color: #246b80;
   background: #0d2029;
 }
@@ -164,7 +164,7 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  background: #090e15;
+  background: var(--desktop-surface-3);
 }
 
 .new-task-define {
@@ -192,7 +192,7 @@
   padding-right: 30px;
   padding-left: 30px;
   border-left: 1px solid #1b2531;
-  background: #080d14;
+  background: var(--desktop-surface-2);
 }
 
 .new-task-stage-heading {
@@ -270,7 +270,7 @@
   outline: none;
   border: 1px solid #263343;
   border-radius: 6px;
-  background: #0b1018;
+  background: var(--desktop-surface-8);
   color: #d8e2ed;
 }
 
@@ -311,9 +311,9 @@
   align-items: center;
   gap: 10px;
   padding: 12px;
-  border: 1px solid #202c3a;
+  border: 1px solid var(--desktop-border-3);
   border-radius: 7px;
-  background: #0b1018;
+  background: var(--desktop-surface-8);
   color: #768699;
   text-align: left;
 }
@@ -370,9 +370,9 @@
   align-items: center;
   gap: 10px;
   padding: 10px 11px;
-  border: 1px solid #202c3a;
+  border: 1px solid var(--desktop-border-3);
   border-radius: 6px;
-  background: #0b1018;
+  background: var(--desktop-surface-8);
   color: #5e6d80;
   text-align: left;
 }
@@ -465,7 +465,7 @@
   border: 1px solid #286a80;
   border-radius: 13px;
   background: #10202a;
-  color: #55d8f7;
+  color: var(--desktop-cyan-bright);
 }
 
 .new-task-planning-icon.code {
@@ -500,9 +500,9 @@
   align-items: center;
   gap: 10px;
   padding: 8px 12px;
-  border: 1px solid #202c3a;
+  border: 1px solid var(--desktop-border-3);
   border-radius: 6px;
-  background: #0a1017;
+  background: var(--desktop-surface-6);
   color: #526174;
 }
 
@@ -513,7 +513,7 @@
 .new-task-planning-checks > div.active {
   border-color: #25536a;
   background: #101923;
-  color: #55d8f7;
+  color: var(--desktop-cyan-bright);
 }
 
 .new-task-planning-checks > div > span {
@@ -573,12 +573,12 @@
   padding: 22px;
   border: 1px solid #24303f;
   border-radius: 9px;
-  background: #0b1018;
+  background: var(--desktop-surface-8);
 }
 
 .new-task-brief-card h3 {
   margin: 13px 0 8px;
-  color: #dbe5ef;
+  color: var(--desktop-text-soft);
   font-size: 14px;
 }
 
@@ -605,7 +605,7 @@
 }
 
 .new-task-brief-card dt {
-  color: #536174;
+  color: var(--desktop-gray-1);
 }
 
 .new-task-brief-card dd {

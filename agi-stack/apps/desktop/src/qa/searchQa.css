@@ -38,6 +38,6 @@ body {
 
 .search-qa-shell > nav button.selected {
   color: var(--desktop-cyan);
-  border-color: rgba(56, 214, 255, 0.35);
-  background: rgba(56, 214, 255, 0.1);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.35);
+  background: rgba(var(--desktop-cyan-rgb), 0.1);
 }

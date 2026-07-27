@@ -1,9 +1,9 @@
 .assistant-duplicate-disclosure {
   max-width: 100%;
   margin-top: 10px;
-  border: 1px solid rgba(83, 208, 239, 0.16);
+  border: 1px solid rgba(var(--desktop-cyan-soft-rgb), 0.16);
   border-radius: 8px;
-  background: rgba(83, 208, 239, 0.04);
+  background: rgba(var(--desktop-cyan-soft-rgb), 0.04);
   color: var(--desktop-muted);
   font-size: 10px;
 }
@@ -66,7 +66,7 @@
   align-items: center;
   gap: 6px;
   padding-top: 6px;
-  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  border-top: 1px solid rgba(var(--desktop-slate-rgb), 0.1);
 }
 
 .assistant-duplicate-disclosure li > span,

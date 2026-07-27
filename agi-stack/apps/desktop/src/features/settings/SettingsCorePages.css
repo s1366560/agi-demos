@@ -1,7 +1,7 @@
 .settings-panel {
   overflow: hidden;
   background: #0d121a;
-  border: 1px solid #242d3a;
+  border: 1px solid var(--desktop-border-4);
   border-radius: 8px;
 }
 
@@ -46,7 +46,7 @@
   gap: 9px;
   padding: 12px 14px;
   background: #0f151e;
-  border-bottom: 1px solid #242d3a;
+  border-bottom: 1px solid var(--desktop-border-4);
 }
 
 .settings-panel > header > svg {
@@ -93,7 +93,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  border-bottom: 1px solid #202a36;
+  border-bottom: 1px solid var(--desktop-border-2);
 }
 
 .settings-row:last-child {
@@ -113,7 +113,7 @@
 }
 
 .settings-row > span small {
-  color: #667588;
+  color: var(--desktop-gray-8);
   font-size: 8px;
 }
 
@@ -140,7 +140,7 @@
   gap: 12px;
   padding: 15px;
   background: #0f151e;
-  border-bottom: 1px solid #242d3a;
+  border-bottom: 1px solid var(--desktop-border-4);
 }
 
 .settings-account-hero > div {
@@ -230,7 +230,7 @@
 .settings-context-step {
   padding: 14px;
   background: #0d121a;
-  border: 1px solid #242d3a;
+  border: 1px solid var(--desktop-border-4);
   border-radius: 8px;
 }
 
@@ -240,7 +240,7 @@
   align-items: center;
   gap: 9px;
   padding-bottom: 11px;
-  border-bottom: 1px solid #202a36;
+  border-bottom: 1px solid var(--desktop-border-2);
 }
 
 .settings-context-step > header > span {
@@ -262,7 +262,7 @@
 
 .settings-context-step p {
   margin: 0;
-  color: #667588;
+  color: var(--desktop-gray-8);
   font-size: 7px;
   line-height: 1.4;
 }
@@ -290,8 +290,8 @@
   gap: 10px;
   padding: 10px;
   margin-top: 11px;
-  color: #657487;
-  background: #0a0f15;
+  color: var(--desktop-gray-7);
+  background: var(--desktop-surface-5);
   border: 1px solid #2b3643;
   border-radius: 7px;
 }
@@ -321,9 +321,9 @@
   align-items: center;
   gap: 8px;
   padding: 8px;
-  color: #657487;
+  color: var(--desktop-gray-7);
   text-align: left;
-  background: #0a0f15;
+  background: var(--desktop-surface-5);
   border: 1px solid #2b3643;
   border-radius: 7px;
 }
@@ -342,7 +342,7 @@
 
 .settings-tenant-list > button.active,
 .settings-project-grid > button.active {
-  background: #10232c;
+  background: var(--desktop-surface-cyan);
   border-color: #2c7084;
 }
 
@@ -476,13 +476,13 @@ button.active > .settings-choice-icon {
   padding: 10px;
   color: #718196;
   text-align: left;
-  background: #0a0f15;
-  border: 1px solid #242d3a;
+  background: var(--desktop-surface-5);
+  border: 1px solid var(--desktop-border-4);
   border-radius: 7px;
 }
 
 .settings-language-options > button.active {
-  background: #10232c;
+  background: var(--desktop-surface-cyan);
   border-color: #2a7185;
 }
 
@@ -516,7 +516,7 @@ button.active > .settings-choice-icon {
 }
 
 .settings-language-options small {
-  color: #647386;
+  color: var(--desktop-gray-6);
   font-size: 8px;
 }
 
@@ -540,8 +540,8 @@ button.active > .settings-choice-icon {
   padding: 10px;
   color: #718196;
   text-align: left;
-  background: #0a0f15;
-  border: 1px solid #242d3a;
+  background: var(--desktop-surface-5);
+  border: 1px solid var(--desktop-border-4);
   border-radius: 7px;
 }
 
@@ -569,7 +569,7 @@ button.active > .settings-choice-icon {
 }
 
 .settings-resource-entry-grid small {
-  color: #657487;
+  color: var(--desktop-gray-7);
   font-size: 7px;
   line-height: 1.4;
 }

@@ -20,7 +20,7 @@
 }
 
 .new-task-review-heading h2[data-keyboard-focus='true']:focus {
-  outline: 2px solid #55d8f7;
+  outline: 2px solid var(--desktop-cyan-bright);
   outline-offset: 4px;
 }
 
@@ -44,9 +44,9 @@
   gap: 12px;
   margin-top: 20px;
   padding: 12px;
-  border: 1px solid #202c3a;
+  border: 1px solid var(--desktop-border-3);
   border-radius: 6px;
-  background: #0a1017;
+  background: var(--desktop-surface-6);
 }
 
 .new-task-plan-objective > span {
@@ -57,7 +57,7 @@
   border: 1px solid #25536a;
   border-radius: 6px;
   background: #10202a;
-  color: #55d8f7;
+  color: var(--desktop-cyan-bright);
 }
 
 .new-task-plan-objective > div {
@@ -134,9 +134,9 @@
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid #202c3a;
+  border: 1px solid var(--desktop-border-3);
   border-radius: 6px;
-  background: #0a1017;
+  background: var(--desktop-surface-6);
 }
 
 .new-task-plan-step.disabled {
@@ -199,7 +199,7 @@
   height: 28px;
   border: 1px solid #273444;
   border-radius: 5px;
-  background: #101720;
+  background: var(--desktop-surface-14);
   color: #77879a;
 }
 
@@ -235,7 +235,7 @@
   padding: 0 10px;
   border: 1px solid #273444;
   border-radius: 5px;
-  background: #101720;
+  background: var(--desktop-surface-14);
   color: #98a8ba;
   font-size: 8px;
 }
@@ -263,7 +263,7 @@
   gap: 20px;
   padding: 30px 26px 42px;
   border-left: 1px solid #1b2531;
-  background: #080d14;
+  background: var(--desktop-surface-2);
 }
 
 .new-task-preview-stats {
@@ -276,13 +276,13 @@
   display: grid;
   gap: 5px;
   padding: 11px;
-  border: 1px solid #202c3a;
+  border: 1px solid var(--desktop-border-3);
   border-radius: 6px;
-  background: #0b1018;
+  background: var(--desktop-surface-8);
 }
 
 .new-task-preview-stats small {
-  color: #536174;
+  color: var(--desktop-gray-1);
   font-size: 7px;
 }
 
@@ -330,7 +330,7 @@
   padding: 6px 7px;
   border: 1px solid #273444;
   border-radius: 5px;
-  background: #0b1018;
+  background: var(--desktop-surface-8);
   color: #718195;
   font-size: 7px;
 }
@@ -346,9 +346,9 @@
   align-items: center;
   gap: 8px;
   padding: 9px 10px;
-  border: 1px solid #202c3a;
+  border: 1px solid var(--desktop-border-3);
   border-radius: 6px;
-  background: #0b1018;
+  background: var(--desktop-surface-8);
   color: #718195;
   text-align: left;
 }
@@ -435,7 +435,7 @@
   gap: 18px;
   padding: 0 24px;
   border-top: 1px solid #1b2531;
-  background: #0b1017;
+  background: var(--desktop-surface-7);
 }
 
 .new-task-footer > span {
@@ -455,7 +455,7 @@
   padding: 0 14px;
   border: 1px solid #273444;
   border-radius: 6px;
-  background: #101720;
+  background: var(--desktop-surface-14);
   color: #98a8ba;
   font-size: 9px;
 }

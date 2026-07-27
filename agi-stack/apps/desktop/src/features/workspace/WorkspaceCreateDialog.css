@@ -1,20 +1,20 @@
 .workspace-create-dialog {
-  border: 1px solid rgba(71, 113, 135, 0.7);
+  border: 1px solid rgba(var(--desktop-steel-1-rgb), 0.7);
   background:
-    radial-gradient(circle at top right, rgba(34, 211, 238, 0.08), transparent 28rem),
-    #0b1119;
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.56);
+    radial-gradient(circle at top right, rgba(var(--desktop-cyan-alt-rgb), 0.08), transparent 28rem),
+    var(--desktop-surface-10);
+  box-shadow: 0 28px 80px rgba(var(--desktop-black-rgb), 0.56);
 }
 
 .workspace-create-dialog .rt-DialogTitle {
   margin: 0;
-  color: var(--desktop-text, #edf6fb);
+  color: var(--desktop-text, var(--desktop-text-bright));
   font-size: 19px;
 }
 
 .workspace-create-dialog .rt-DialogDescription {
   margin-top: 7px;
-  color: var(--desktop-muted, #8ca0af);
+  color: var(--desktop-muted, var(--desktop-gray-13));
   line-height: 1.55;
 }
 
@@ -33,20 +33,20 @@
 .workspace-create-form label {
   display: grid;
   gap: 7px;
-  color: var(--desktop-muted, #8ca0af);
+  color: var(--desktop-muted, var(--desktop-gray-13));
   font-size: 11px;
   font-weight: 700;
 }
 
 .workspace-create-form .rt-TextFieldRoot,
 .workspace-create-form .rt-TextAreaRoot {
-  border-color: rgba(71, 113, 135, 0.58);
-  background: rgba(8, 15, 23, 0.8);
+  border-color: rgba(var(--desktop-steel-1-rgb), 0.58);
+  background: rgba(var(--desktop-overlay-2-rgb), 0.8);
 }
 
 .workspace-create-form .rt-TextFieldInput,
 .workspace-create-form .rt-TextAreaInput {
-  color: var(--desktop-text, #edf6fb);
+  color: var(--desktop-text, var(--desktop-text-bright));
 }
 
 .workspace-create-field-heading {
@@ -57,12 +57,12 @@
 }
 
 .workspace-create-field-heading small {
-  color: var(--desktop-faint, #637786);
+  color: var(--desktop-faint, var(--desktop-gray-9));
   font-variant-numeric: tabular-nums;
 }
 
 .workspace-create-field-heading small.ready {
-  color: #4cd6a3;
+  color: var(--desktop-green-bright);
 }
 
 .workspace-create-option-fieldset {
@@ -74,7 +74,7 @@
 
 .workspace-create-option-fieldset legend {
   margin-bottom: 8px;
-  color: var(--desktop-muted, #8ca0af);
+  color: var(--desktop-muted, var(--desktop-gray-13));
   font-size: 11px;
   font-weight: 700;
 }
@@ -93,10 +93,10 @@
   align-items: start;
   gap: 8px;
   padding: 12px 10px;
-  border: 1px solid rgba(71, 113, 135, 0.42);
+  border: 1px solid rgba(var(--desktop-steel-1-rgb), 0.42);
   border-radius: 9px;
-  background: rgba(13, 24, 34, 0.72);
-  color: var(--desktop-muted, #8ca0af);
+  background: rgba(var(--desktop-overlay-6-rgb), 0.72);
+  color: var(--desktop-muted, var(--desktop-gray-13));
   text-align: left;
   transition:
     border-color 120ms ease,
@@ -105,20 +105,20 @@
 }
 
 .workspace-create-option-grid button:hover:not(:disabled) {
-  border-color: rgba(56, 214, 255, 0.6);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.6);
   background: rgba(24, 47, 60, 0.72);
   transform: translateY(-1px);
 }
 
 .workspace-create-option-grid button:focus-visible {
-  outline: 2px solid var(--desktop-cyan, #38d6ff);
+  outline: 2px solid var(--desktop-cyan, var(--desktop-cyan));
   outline-offset: 2px;
 }
 
 .workspace-create-option-grid button.selected {
-  border-color: rgba(56, 214, 255, 0.86);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.86);
   background: rgba(30, 108, 133, 0.2);
-  box-shadow: inset 0 0 0 1px rgba(56, 214, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(var(--desktop-cyan-rgb), 0.12);
 }
 
 .workspace-create-option-grid button > span:first-child {
@@ -127,8 +127,8 @@
   height: 26px;
   place-items: center;
   border-radius: 7px;
-  background: rgba(56, 214, 255, 0.1);
-  color: var(--desktop-cyan, #38d6ff);
+  background: rgba(var(--desktop-cyan-rgb), 0.1);
+  color: var(--desktop-cyan, var(--desktop-cyan));
 }
 
 .workspace-create-option-grid button svg {
@@ -144,39 +144,39 @@
 
 .workspace-create-option-grid strong {
   overflow: hidden;
-  color: var(--desktop-text, #edf6fb);
+  color: var(--desktop-text, var(--desktop-text-bright));
   font-size: 11px;
   line-height: 1.2;
   text-overflow: ellipsis;
 }
 
 .workspace-create-option-grid small {
-  color: var(--desktop-faint, #637786);
+  color: var(--desktop-faint, var(--desktop-gray-9));
   font-size: 9px;
   line-height: 1.35;
 }
 
 .workspace-create-code-root small {
-  color: var(--desktop-faint, #637786);
+  color: var(--desktop-faint, var(--desktop-gray-9));
   font-weight: 500;
 }
 
 .workspace-create-code-root small.error {
-  color: #e58b95;
+  color: var(--desktop-red-soft);
 }
 
 .workspace-create-feedback {
   min-height: 18px;
-  color: var(--desktop-muted, #8ca0af);
+  color: var(--desktop-muted, var(--desktop-gray-13));
   font-size: 11px;
 }
 
 .workspace-create-feedback.error {
-  color: #e58b95;
+  color: var(--desktop-red-soft);
 }
 
 .workspace-create-feedback.success {
-  color: #4cd6a3;
+  color: var(--desktop-green-bright);
 }
 
 .workspace-create-actions {

@@ -63,15 +63,15 @@ body {
   color: var(--desktop-muted);
   border: 1px solid var(--desktop-border-soft);
   border-radius: 999px;
-  background: rgba(9, 17, 27, 0.7);
+  background: rgba(var(--desktop-overlay-4-rgb), 0.7);
   font: 600 11px/1 inherit;
   cursor: pointer;
 }
 
 .workspace-settings-qa-shell > nav button.selected {
   color: var(--desktop-cyan);
-  border-color: rgba(56, 214, 255, 0.42);
-  background: rgba(56, 214, 255, 0.1);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.42);
+  background: rgba(var(--desktop-cyan-rgb), 0.1);
 }
 
 .workspace-settings-qa-projection,
@@ -79,7 +79,7 @@ body {
   padding: 16px 18px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 12px;
-  background: rgba(9, 17, 27, 0.72);
+  background: rgba(var(--desktop-overlay-4-rgb), 0.72);
 }
 
 .workspace-settings-qa-projection {
@@ -114,7 +114,7 @@ body {
   display: grid;
   gap: 4px;
   padding: 9px 11px;
-  border: 1px solid rgba(71, 113, 135, 0.36);
+  border: 1px solid rgba(var(--desktop-steel-1-rgb), 0.36);
   border-radius: 8px;
 }
 

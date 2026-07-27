@@ -273,7 +273,7 @@ test('login geometry and primary action colors match the approved prototype', ()
     /grid-template-columns: minmax\(430px, 0\.78fr\) minmax\(560px, 1\.22fr\)/,
   );
   assert.match(loginStyles, /min-height: 720px/);
-  assert.match(loginStyles, /color: #e7edf6/);
+  assert.match(loginStyles, /color: var\(--desktop-text\)/);
   assert.doesNotMatch(loginStyles, /min-width: 1100px/);
   assert.match(loginStyles, /\.desktop-login-card \{[\s\S]*width: min\(430px, 100%\)/);
   assert.match(

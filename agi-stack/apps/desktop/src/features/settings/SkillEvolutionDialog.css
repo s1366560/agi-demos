@@ -31,13 +31,13 @@
 }
 
 .skill-evolution-toolbar strong {
-  color: #dbe5ef;
+  color: var(--desktop-text-soft);
   font-size: 12px;
 }
 
 .skill-evolution-toolbar span,
 .skill-evolution-entry-copy small {
-  color: #657487;
+  color: var(--desktop-gray-7);
   font-size: 8px;
 }
 
@@ -78,13 +78,13 @@
   justify-content: center;
   gap: 6px;
   padding: 10px 12px;
-  background: #0c131c;
-  border: 1px solid #293442;
+  background: var(--desktop-surface-11);
+  border: 1px solid var(--desktop-border-5);
   border-radius: 7px;
 }
 
 .skill-evolution-metrics span {
-  color: #657487;
+  color: var(--desktop-gray-7);
   font-size: 7px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -93,7 +93,7 @@
 
 .skill-evolution-metrics strong {
   overflow: hidden;
-  color: #dbe5ef;
+  color: var(--desktop-text-soft);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -106,8 +106,8 @@
   padding: 9px 11px;
   color: #8493a5;
   font-size: 8px;
-  background: #0b1119;
-  border: 1px solid #293442;
+  background: var(--desktop-surface-10);
+  border: 1px solid var(--desktop-border-5);
   border-radius: 7px;
 }
 
@@ -141,8 +141,8 @@
   align-items: center;
   gap: 11px;
   padding: 11px 12px;
-  background: #0c131c;
-  border: 1px solid #293442;
+  background: var(--desktop-surface-11);
+  border: 1px solid var(--desktop-border-5);
   border-radius: 8px;
 }
 
@@ -153,7 +153,7 @@
   place-items: center;
   color: #a58cff;
   background: #211c37;
-  border: 1px solid #5a4f83;
+  border: 1px solid var(--desktop-purple);
   border-radius: 50%;
 }
 
@@ -177,7 +177,7 @@
 }
 
 .skill-evolution-entry-copy strong {
-  color: #dbe5ef;
+  color: var(--desktop-text-soft);
   font-size: 10px;
 }
 
@@ -201,7 +201,7 @@
 }
 
 .skill-evolution-status.pending_review {
-  color: #e8ad5b;
+  color: var(--desktop-amber-dim);
   background: #231d15;
   border-color: #5a4930;
 }
@@ -219,7 +219,7 @@
   align-items: center;
   gap: 5px;
   padding: 0 8px;
-  color: #cbd7e3;
+  color: var(--desktop-text-pale);
   font-size: 8px;
   background: #162330;
   border: 1px solid #345066;
@@ -232,13 +232,13 @@
 }
 
 .skill-evolution-entry-actions button.reject {
-  color: #ffadb6;
+  color: var(--desktop-red-light);
   border-color: #6d313d;
 }
 
 .skill-evolution-confirm span {
   max-width: 150px;
-  color: #e8ad5b;
+  color: var(--desktop-amber-dim);
   font-size: 8px;
 }
 

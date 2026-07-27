@@ -25,11 +25,11 @@
 }
 
 .canonical-story-toggle:hover {
-  background: rgba(83, 208, 239, 0.06);
+  background: rgba(var(--desktop-cyan-soft-rgb), 0.06);
 }
 
 .canonical-story-toggle:focus-visible {
-  outline: 2px solid rgba(83, 208, 239, 0.72);
+  outline: 2px solid rgba(var(--desktop-cyan-soft-rgb), 0.72);
   outline-offset: -2px;
 }
 
@@ -37,7 +37,7 @@
   display: inline-flex;
   flex: 0 0 auto;
   margin-top: 2px;
-  color: #718797;
+  color: var(--desktop-gray-10);
 }
 
 .canonical-story-heading {
@@ -66,7 +66,7 @@
 }
 
 .canonical-story-eyebrow {
-  color: #718797;
+  color: var(--desktop-gray-10);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -142,7 +142,7 @@
 .canonical-story-section {
   min-width: 0;
   padding: 9px 0;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  border-bottom: 1px solid rgba(var(--desktop-slate-rgb), 0.12);
 }
 
 .canonical-story-section:last-child {
@@ -151,7 +151,7 @@
 
 .canonical-story-section h4 {
   margin: 0 0 5px;
-  color: #718797;
+  color: var(--desktop-gray-10);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -211,7 +211,7 @@
 }
 
 .canonical-story-dependencies dt {
-  color: #718797;
+  color: var(--desktop-gray-10);
 }
 
 .canonical-story-dependencies dd {
@@ -239,7 +239,7 @@
 }
 
 .canonical-story-empty {
-  color: #718797;
+  color: var(--desktop-gray-10);
 }
 
 .canonical-story-card.is-invalid {

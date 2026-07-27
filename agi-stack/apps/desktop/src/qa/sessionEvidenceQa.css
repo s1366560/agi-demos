@@ -7,7 +7,7 @@
   place-items: stretch;
   background:
     radial-gradient(circle at 50% -20%, rgba(27, 111, 148, 0.18), transparent 42%),
-    #080c12;
+    var(--desktop-bg);
 }
 
 .qa-evidence-panel {
@@ -16,7 +16,7 @@
   margin: auto;
   border: 1px solid var(--desktop-border);
   border-radius: 7px;
-  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 24px 72px rgba(var(--desktop-black-rgb), 0.28);
 }
 
 .qa-evidence-head {

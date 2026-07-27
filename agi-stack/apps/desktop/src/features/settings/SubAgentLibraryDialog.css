@@ -23,7 +23,7 @@
   align-items: center;
   gap: 12px;
   padding: 14px;
-  background: #0a1017;
+  background: var(--desktop-surface-6);
   border: 1px solid #263443;
   border-radius: 8px;
 }

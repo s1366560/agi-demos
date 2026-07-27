@@ -36,7 +36,7 @@
   width: 42px;
   height: 42px;
   place-items: center;
-  color: #e8ad5b;
+  color: var(--desktop-amber-dim);
   background: #2a2014;
   border: 1px solid #6d5334;
   border-radius: 10px;
@@ -88,7 +88,7 @@
 
 .agent-definition-dialog-tabs button.active {
   color: #dce8f2;
-  border-bottom-color: #38d6ff;
+  border-bottom-color: var(--desktop-cyan);
 }
 
 .agent-definition-dialog-body {

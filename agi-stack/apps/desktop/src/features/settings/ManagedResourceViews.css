@@ -5,14 +5,14 @@
   min-width: 0;
   grid-template-columns: 282px minmax(0, 1fr);
   overflow: hidden;
-  background: #090e15;
+  background: var(--desktop-surface-3);
 }
 
 .managed-resource-catalog {
   min-width: 0;
   overflow: hidden;
-  background: #0d131b;
-  border-right: 1px solid #293442;
+  background: var(--desktop-surface-12);
+  border-right: 1px solid var(--desktop-border-5);
 }
 
 .managed-resource-catalog > header {
@@ -25,7 +25,7 @@
 .managed-resource-catalog > header span,
 .managed-resource-identity > div:nth-child(2) > span,
 .managed-resource-card header span {
-  color: #607083;
+  color: var(--desktop-gray-3);
   font-size: 7px;
   font-weight: 800;
   letter-spacing: 0.13em;
@@ -71,7 +71,7 @@
   display: flex;
   gap: 2px;
   padding: 0 12px 10px;
-  border-bottom: 1px solid #293442;
+  border-bottom: 1px solid var(--desktop-border-5);
 }
 
 .managed-resource-filters button {
@@ -85,7 +85,7 @@
 }
 
 .managed-resource-filters button.active {
-  color: #dbe5ef;
+  color: var(--desktop-text-soft);
   background: #19232f;
 }
 
@@ -96,7 +96,7 @@
 .managed-resource-reload:focus-visible,
 .managed-resource-create:focus-visible,
 .managed-resource-catalog-state button:focus-visible {
-  outline: 2px solid #38d6ff;
+  outline: 2px solid var(--desktop-cyan);
   outline-offset: 2px;
 }
 
@@ -106,7 +106,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 13px;
-  color: #607083;
+  color: var(--desktop-gray-3);
   font-size: 7px;
 }
 
@@ -140,7 +140,7 @@
 .managed-resource-item.selected {
   background: #14222b;
   border-color: #285265;
-  box-shadow: inset 2px 0 #38d6ff;
+  box-shadow: inset 2px 0 var(--desktop-cyan);
 }
 
 .managed-resource-item-icon {
@@ -155,7 +155,7 @@
 }
 
 .managed-resource-item.selected .managed-resource-item-icon {
-  color: #38d6ff;
+  color: var(--desktop-cyan);
   background: #13303c;
   border-color: #28667a;
 }
@@ -163,7 +163,7 @@
 .managed-resource-workspace.skills .managed-resource-item.selected .managed-resource-item-icon {
   color: #a58cff;
   background: #211c37;
-  border-color: #5a4f83;
+  border-color: var(--desktop-purple);
 }
 
 .managed-resource-workspace.plugins .managed-resource-item.selected .managed-resource-item-icon {
@@ -212,7 +212,7 @@
   display: inline-flex;
   gap: 7px;
   align-items: center;
-  border: 1px solid rgba(124, 150, 177, 0.25);
+  border: 1px solid rgba(var(--desktop-steel-3-rgb), 0.25);
   border-radius: 9px;
   padding: 0 12px;
   color: #b9c9d8;
@@ -224,13 +224,13 @@
   border: 1px solid rgba(255, 108, 124, 0.35);
   border-radius: 8px;
   padding: 0 12px;
-  color: #ffadb6;
+  color: var(--desktop-red-light);
   background: rgba(111, 25, 37, 0.18);
 }
 
 .managed-resource-workspace.agents .managed-resource-item.selected .managed-resource-item-icon,
 .managed-resource-workspace.subagents .managed-resource-item.selected .managed-resource-item-icon {
-  color: #e8ad5b;
+  color: var(--desktop-amber-dim);
   background: #2a2014;
   border-color: #6d5334;
 }
@@ -264,7 +264,7 @@
 .managed-resource-item-copy em {
   margin-top: 6px;
   overflow: hidden;
-  color: #59687a;
+  color: var(--desktop-gray-2);
   font-size: 7px;
   font-style: normal;
   text-overflow: ellipsis;
@@ -305,7 +305,7 @@
 }
 
 .managed-resource-status.attention {
-  color: #e8ad5b;
+  color: var(--desktop-amber-dim);
   background: #231d15;
   border-color: #5a4930;
 }
@@ -316,7 +316,7 @@
   min-height: 0;
   grid-template-rows: 48px minmax(0, 1fr);
   overflow: hidden;
-  background: #090e15;
+  background: var(--desktop-surface-3);
 }
 
 .managed-resource-detail-topbar {
@@ -325,8 +325,8 @@
   justify-content: space-between;
   gap: 12px;
   padding: 0 14px;
-  background: #0b1017;
-  border-bottom: 1px solid #293442;
+  background: var(--desktop-surface-7);
+  border-bottom: 1px solid var(--desktop-border-5);
 }
 
 .managed-resource-detail-topbar > div,
@@ -339,7 +339,7 @@
 
 .managed-resource-breadcrumb {
   overflow: hidden;
-  color: #657487;
+  color: var(--desktop-gray-7);
   font-size: 7px;
   white-space: nowrap;
 }
@@ -373,14 +373,14 @@
   color: #effbff;
   font-size: 8px;
   font-weight: 650;
-  background: #145f73;
-  border: 1px solid #287d94;
+  background: var(--desktop-cyan-dark);
+  border: 1px solid var(--desktop-cyan-mid);
   border-radius: 5px;
 }
 
 .managed-resource-primary-action:hover:not(:disabled) {
   background: #176e84;
-  border-color: #38d6ff;
+  border-color: var(--desktop-cyan);
 }
 
 .managed-resource-primary-action:disabled {
@@ -416,7 +416,7 @@
   width: 46px;
   height: 46px;
   place-items: center;
-  color: #38d6ff;
+  color: var(--desktop-cyan);
   background: #112d37;
   border: 1px solid #2a6376;
   border-radius: 10px;
@@ -430,7 +430,7 @@
 .managed-resource-identity-icon.skills {
   color: #a58cff;
   background: #211c37;
-  border-color: #5a4f83;
+  border-color: var(--desktop-purple);
 }
 
 .managed-resource-identity-icon.plugins {
@@ -441,7 +441,7 @@
 
 .managed-resource-identity-icon.agents,
 .managed-resource-identity-icon.subagents {
-  color: #e8ad5b;
+  color: var(--desktop-amber-dim);
   background: #2a2014;
   border-color: #6d5334;
 }
@@ -521,10 +521,10 @@
   padding: 0 28px;
   color: #e9f0f7;
   font-size: 8px;
-  background: #0d131b;
-  border-top: 1px solid #293442;
-  border-bottom: 1px solid #293442;
-  box-shadow: inset 0 -2px #38d6ff;
+  background: var(--desktop-surface-12);
+  border-top: 1px solid var(--desktop-border-5);
+  border-bottom: 1px solid var(--desktop-border-5);
+  box-shadow: inset 0 -2px var(--desktop-cyan);
 }
 
 .managed-resource-overview {
@@ -542,7 +542,7 @@
   padding: 9px 11px;
   color: #e58b96;
   font-size: 8px;
-  background: #241419;
+  background: var(--desktop-surface-red);
   border: 1px solid #5d3239;
   border-radius: 6px;
 }
@@ -557,14 +557,14 @@
 .managed-resource-fact-grid > div {
   min-width: 0;
   padding: 11px;
-  background: #0d131b;
-  border: 1px solid #293442;
+  background: var(--desktop-surface-12);
+  border: 1px solid var(--desktop-border-5);
   border-radius: 6px;
 }
 
 .managed-resource-fact-grid span {
   display: block;
-  color: #667588;
+  color: var(--desktop-gray-8);
   font-size: 7px;
 }
 
@@ -582,8 +582,8 @@
   grid-column: span 6;
   min-width: 0;
   padding: 13px;
-  background: #0d131b;
-  border: 1px solid #293442;
+  background: var(--desktop-surface-12);
+  border: 1px solid var(--desktop-border-5);
   border-radius: 7px;
 }
 
@@ -593,7 +593,7 @@
   justify-content: space-between;
   gap: 12px;
   padding-bottom: 10px;
-  border-bottom: 1px solid #202a36;
+  border-bottom: 1px solid var(--desktop-border-2);
 }
 
 .managed-resource-card h2 {
@@ -614,7 +614,7 @@
   grid-column: 1 / -1;
   align-items: flex-start;
   gap: 10px;
-  color: #647386;
+  color: var(--desktop-gray-6);
 }
 
 .managed-resource-card-empty div {

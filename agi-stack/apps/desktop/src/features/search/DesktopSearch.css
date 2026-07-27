@@ -1,6 +1,6 @@
 .desktop-search {
   --search-panel: rgba(10, 18, 29, 0.82);
-  --search-border: rgba(118, 145, 170, 0.22);
+  --search-border: rgba(var(--desktop-steel-2-rgb), 0.22);
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -76,7 +76,7 @@
   border: 1px solid var(--search-border);
   border-radius: 15px;
   background: var(--search-panel);
-  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 16px 50px rgba(var(--desktop-black-rgb), 0.16);
 }
 
 .desktop-search__modes {
@@ -108,8 +108,8 @@
 .desktop-search__modes button.is-active,
 .desktop-search__modes button[aria-pressed="true"] {
   color: #dffaff;
-  border-color: rgba(56, 214, 255, 0.48);
-  background: rgba(56, 214, 255, 0.12);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.48);
+  background: rgba(var(--desktop-cyan-rgb), 0.12);
 }
 
 .desktop-search__query {
@@ -127,7 +127,7 @@
   gap: 10px;
   min-height: 48px;
   padding-left: 14px;
-  border: 1px solid rgba(118, 145, 170, 0.32);
+  border: 1px solid rgba(var(--desktop-steel-2-rgb), 0.32);
   border-radius: 11px;
   background: rgba(4, 10, 17, 0.74);
 }
@@ -151,7 +151,7 @@
   color: #03141a;
   border: 0;
   border-radius: 0 10px 10px 0;
-  background: linear-gradient(135deg, #38d6ff, #53f0cf);
+  background: linear-gradient(135deg, var(--desktop-cyan), #53f0cf);
   font-size: 12px;
   font-weight: 750;
   cursor: pointer;
@@ -204,7 +204,7 @@
 
 .desktop-search__config input:focus,
 .desktop-search__config select:focus {
-  border-color: rgba(56, 214, 255, 0.5);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.5);
 }
 
 .desktop-search__checkbox {
@@ -255,8 +255,8 @@
 
 .desktop-search__view-switch button[aria-pressed="true"] {
   color: var(--desktop-cyan);
-  border-color: rgba(56, 214, 255, 0.4);
-  background: rgba(56, 214, 255, 0.1);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.4);
+  background: rgba(var(--desktop-cyan-rgb), 0.1);
 }
 
 .desktop-search__feedback {
@@ -339,7 +339,7 @@
   place-items: center;
   align-content: center;
   color: var(--desktop-faint);
-  border: 1px dashed rgba(118, 145, 170, 0.24);
+  border: 1px dashed rgba(var(--desktop-steel-2-rgb), 0.24);
   border-radius: 14px;
   background: rgba(9, 16, 26, 0.44);
   text-align: center;
@@ -347,7 +347,7 @@
 
 .desktop-search__state-card > svg {
   margin-bottom: 10px;
-  color: rgba(56, 214, 255, 0.72);
+  color: rgba(var(--desktop-cyan-rgb), 0.72);
 }
 
 .desktop-search__state-card h1,
@@ -425,7 +425,7 @@
   padding: 0;
   place-items: center;
   color: #041410;
-  border: 1px solid rgba(118, 145, 170, 0.35);
+  border: 1px solid rgba(var(--desktop-steel-2-rgb), 0.35);
   border-radius: 6px;
   background: rgba(5, 12, 19, 0.8);
   cursor: pointer;
@@ -447,7 +447,7 @@
 .desktop-search__tags span {
   padding: 3px 6px;
   color: var(--desktop-faint);
-  border: 1px solid rgba(118, 145, 170, 0.18);
+  border: 1px solid rgba(var(--desktop-steel-2-rgb), 0.18);
   border-radius: 999px;
   font-size: 9px;
 }

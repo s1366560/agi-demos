@@ -23,7 +23,7 @@
 
 .session-recovery-qa-thread article.from-user {
   margin-left: 42px;
-  border-color: rgba(56, 214, 255, 0.22);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.22);
 }
 .session-recovery-qa-thread article b { color: var(--desktop-text); font-size: 10px; }
 .session-recovery-qa-thread article p {
@@ -43,9 +43,9 @@
 .session-recovery-qa-thread > section {
   padding: 10px 12px;
   color: var(--amber-9);
-  border: 1px solid rgba(245, 158, 11, 0.22);
+  border: 1px solid rgba(var(--desktop-amber-alt-rgb), 0.22);
   border-radius: 8px;
-  background: rgba(245, 158, 11, 0.055);
+  background: rgba(var(--desktop-amber-alt-rgb), 0.055);
 }
 
 .session-recovery-qa-thread span,
@@ -65,7 +65,7 @@
   padding: 10px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: #0c131c;
+  background: var(--desktop-surface-11);
 }
 .session-recovery-qa-canvas dt { color: var(--desktop-faint); font-size: 9px; }
 .session-recovery-qa-canvas dd { margin: 5px 0 0; color: var(--desktop-text); font-size: 11px; }

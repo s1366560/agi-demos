@@ -13,6 +13,83 @@
   --desktop-amber: #f0b35a;
   --desktop-red: #ff6978;
   --desktop-sidebar-width: 220px;
+  /* Surface ladder (dark to light by luminance) */
+  --desktop-surface-1: #060a11;
+  --desktop-surface-2: #080d14;
+  --desktop-surface-3: #090e15;
+  --desktop-surface-4: #090e16;
+  --desktop-surface-5: #0a0f15;
+  --desktop-surface-6: #0a1017;
+  --desktop-surface-7: #0b1017;
+  --desktop-surface-8: #0b1018;
+  --desktop-surface-9: #0b1118;
+  --desktop-surface-10: #0b1119;
+  --desktop-surface-11: #0c131c;
+  --desktop-surface-12: #0d131b;
+  --desktop-surface-13: #0d141c;
+  --desktop-surface-14: #101720;
+  --desktop-surface-15: #111923;
+  /* Tinted surfaces */
+  --desktop-surface-red: #241419;
+  --desktop-surface-cyan: #10232c;
+  /* Border ladder (dark to light by luminance) */
+  --desktop-border-1: #202a35;
+  --desktop-border-2: #202a36;
+  --desktop-border-3: #202c3a;
+  --desktop-border-4: #242d3a;
+  --desktop-border-5: #293442;
+  --desktop-border-6: #334052;
+  /* Gray ladder (dark to light by luminance) */
+  --desktop-gray-1: #536174;
+  --desktop-gray-2: #59687a;
+  --desktop-gray-3: #607083;
+  --desktop-gray-4: #617083;
+  --desktop-gray-5: #637285;
+  --desktop-gray-6: #647386;
+  --desktop-gray-7: #657487;
+  --desktop-gray-8: #667588;
+  --desktop-gray-9: #637786;
+  --desktop-gray-10: #718797;
+  --desktop-gray-11: #7f91a3;
+  --desktop-gray-12: #8290a2;
+  --desktop-gray-13: #8ca0af;
+  /* Light text + white */
+  --desktop-text-pale: #cbd7e3;
+  --desktop-text-soft: #dbe5ef;
+  --desktop-text-bright: #edf6fb;
+  --desktop-white: #fff;
+  /* Accent variants */
+  --desktop-red-soft: #e58b95;
+  --desktop-red-pale: #ff9aa4;
+  --desktop-red-light: #ffadb6;
+  --desktop-purple: #5a4f83;
+  --desktop-cyan-dark: #145f73;
+  --desktop-cyan-mid: #287d94;
+  --desktop-cyan-bright: #55d8f7;
+  --desktop-green-bright: #4cd6a3;
+  --desktop-amber-dim: #e8ad5b;
+  /* RGB channel tokens for rgba(var(...), alpha) usage */
+  --desktop-cyan-rgb: 56, 214, 255;
+  --desktop-slate-rgb: 148, 163, 184;
+  --desktop-amber-rgb: 240, 179, 90;
+  --desktop-green-rgb: 53, 211, 153;
+  --desktop-red-rgb: 255, 105, 120;
+  --desktop-red-bright-rgb: 248, 113, 113;
+  --desktop-black-rgb: 0, 0, 0;
+  --desktop-white-rgb: 255, 255, 255;
+  --desktop-steel-1-rgb: 71, 113, 135;
+  --desktop-steel-2-rgb: 118, 145, 170;
+  --desktop-steel-3-rgb: 124, 150, 177;
+  --desktop-overlay-1-rgb: 3, 7, 12;
+  --desktop-overlay-2-rgb: 8, 15, 23;
+  --desktop-overlay-3-rgb: 10, 16, 25;
+  --desktop-overlay-4-rgb: 9, 17, 27;
+  --desktop-overlay-5-rgb: 13, 19, 29;
+  --desktop-overlay-6-rgb: 13, 24, 34;
+  --desktop-cyan-alt-rgb: 34, 211, 238;
+  --desktop-cyan-soft-rgb: 83, 208, 239;
+  --desktop-amber-alt-rgb: 245, 158, 11;
+  --desktop-amber-soft-rgb: 245, 183, 71;
 }
 
 * {
@@ -51,9 +128,9 @@ select {
   width: min(720px, calc(100vw - 48px));
   margin: 48px auto;
   padding: 18px;
-  border: 1px solid rgba(255, 105, 120, 0.45);
+  border: 1px solid rgba(var(--desktop-red-rgb), 0.45);
   border-radius: 8px;
-  background: rgba(255, 105, 120, 0.12);
+  background: rgba(var(--desktop-red-rgb), 0.12);
   color: var(--desktop-text);
 }
 
@@ -143,7 +220,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   gap: 10px;
   min-width: 0;
   padding: 0 10px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+  border-bottom: 1px solid rgba(var(--desktop-slate-rgb), 0.08);
   background: #0b0f16;
 }
 
@@ -199,7 +276,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .session-info-button:hover {
   border-color: var(--desktop-border-soft);
-  background: rgba(148, 163, 184, 0.1);
+  background: rgba(var(--desktop-slate-rgb), 0.1);
   color: var(--desktop-text);
 }
 
@@ -212,7 +289,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 0 8px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.08);
+  background: rgba(var(--desktop-slate-rgb), 0.08);
   color: var(--desktop-muted);
   font-size: 11px;
   line-height: 1;
@@ -223,47 +300,47 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   height: 7px;
   border-radius: 50%;
   background: var(--desktop-muted);
-  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.08);
+  box-shadow: 0 0 0 3px rgba(var(--desktop-slate-rgb), 0.08);
 }
 
 .titlebar-run-status.run-state-running {
-  border-color: rgba(53, 211, 153, 0.26);
+  border-color: rgba(var(--desktop-green-rgb), 0.26);
   color: #bff8df;
 }
 
 .titlebar-run-status.run-state-running i {
   background: var(--desktop-green);
-  box-shadow: 0 0 0 3px rgba(53, 211, 153, 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--desktop-green-rgb), 0.12);
 }
 
 .titlebar-run-status.run-state-planning {
-  border-color: rgba(56, 214, 255, 0.3);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.3);
   color: #b8efff;
 }
 
 .titlebar-run-status.run-state-planning i {
   background: var(--desktop-cyan);
-  box-shadow: 0 0 0 3px rgba(56, 214, 255, 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--desktop-cyan-rgb), 0.12);
 }
 
 .titlebar-run-status.run-state-paused {
-  border-color: rgba(240, 179, 90, 0.3);
+  border-color: rgba(var(--desktop-amber-rgb), 0.3);
   color: #f6d5a3;
 }
 
 .titlebar-run-status.run-state-paused i {
   background: var(--desktop-amber);
-  box-shadow: 0 0 0 3px rgba(240, 179, 90, 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--desktop-amber-rgb), 0.12);
 }
 
 .titlebar-run-status.run-state-stopped {
-  border-color: rgba(255, 105, 120, 0.3);
+  border-color: rgba(var(--desktop-red-rgb), 0.3);
   color: #ffb6be;
 }
 
 .titlebar-run-status.run-state-stopped i {
   background: var(--desktop-red);
-  box-shadow: 0 0 0 3px rgba(255, 105, 120, 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--desktop-red-rgb), 0.12);
 }
 
 .titlebar-run-clock {
@@ -275,7 +352,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 0 8px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.08);
+  background: rgba(var(--desktop-slate-rgb), 0.08);
   color: var(--desktop-muted);
   font-size: 11px;
   line-height: 1;
@@ -338,7 +415,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   place-items: center;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
-  background: #090e16;
+  background: var(--desktop-surface-4);
   color: var(--desktop-muted);
   cursor: pointer;
   font: inherit;
@@ -347,8 +424,8 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .run-actions-button:hover,
 .run-actions-button:focus-visible,
 .run-actions-button[aria-expanded="true"] {
-  border-color: rgba(56, 214, 255, 0.35);
-  background: rgba(56, 214, 255, 0.11);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.35);
+  background: rgba(var(--desktop-cyan-rgb), 0.11);
   color: var(--desktop-text);
   outline: none;
 }
@@ -365,7 +442,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   border: 1px solid var(--desktop-border);
   border-radius: 8px;
   background: #111821;
-  box-shadow: 0 18px 58px rgba(0, 0, 0, 0.52);
+  box-shadow: 0 18px 58px rgba(var(--desktop-black-rgb), 0.52);
 }
 
 .run-actions-menu button {
@@ -385,8 +462,8 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .run-actions-menu button:hover:not(:disabled),
 .run-actions-menu button:focus-visible {
-  border-color: rgba(56, 214, 255, 0.28);
-  background: rgba(56, 214, 255, 0.1);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.28);
+  background: rgba(var(--desktop-cyan-rgb), 0.1);
   color: var(--desktop-text);
   outline: none;
 }
@@ -449,7 +526,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   background:
     linear-gradient(45deg, transparent 50%, var(--desktop-faint) 50%),
     linear-gradient(135deg, var(--desktop-faint) 50%, transparent 50%),
-    #090e16;
+    var(--desktop-surface-4);
   background-position:
     calc(100% - 13px) 11px,
     calc(100% - 8px) 11px,
@@ -474,7 +551,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   overflow: hidden;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
-  background: #090e16;
+  background: var(--desktop-surface-4);
 }
 
 .titlebar-live-toggle button {
@@ -487,7 +564,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .titlebar-live-toggle button:hover,
 .titlebar-live-toggle button.active {
-  background: rgba(56, 214, 255, 0.12);
+  background: rgba(var(--desktop-cyan-rgb), 0.12);
   color: var(--desktop-text);
 }
 
@@ -595,7 +672,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   max-height: 112px;
   overflow: auto;
   border-top: 1px solid var(--desktop-border-soft);
-  background: #0b1119;
+  background: var(--desktop-surface-10);
 }
 
 .quick-links,
@@ -643,13 +720,13 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .sidebar-run-row:hover,
 .sidebar-run-row.selected {
-  border-color: rgba(56, 214, 255, 0.14);
-  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.14);
+  background: rgba(var(--desktop-slate-rgb), 0.1);
   color: var(--desktop-text);
 }
 
 .sidebar-run-row.selected {
-  background: rgba(56, 214, 255, 0.12);
+  background: rgba(var(--desktop-cyan-rgb), 0.12);
 }
 
 .run-dot {
@@ -657,37 +734,37 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   height: 8px;
   border-radius: 50%;
   background: var(--desktop-faint);
-  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.08);
+  box-shadow: 0 0 0 3px rgba(var(--desktop-slate-rgb), 0.08);
 }
 
 .run-dot.run-state-running {
   background: var(--desktop-green);
-  box-shadow: 0 0 0 3px rgba(53, 211, 153, 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--desktop-green-rgb), 0.12);
 }
 
 .run-dot.run-state-planning {
   background: var(--desktop-cyan);
-  box-shadow: 0 0 0 3px rgba(56, 214, 255, 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--desktop-cyan-rgb), 0.12);
 }
 
 .run-dot.run-state-paused {
   background: var(--desktop-amber);
-  box-shadow: 0 0 0 3px rgba(240, 179, 90, 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--desktop-amber-rgb), 0.12);
 }
 
 .run-dot.run-state-stopped {
   background: var(--desktop-red);
-  box-shadow: 0 0 0 3px rgba(255, 105, 120, 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--desktop-red-rgb), 0.12);
 }
 
 .run-dot.run-state-completed {
   background: var(--desktop-green);
-  box-shadow: 0 0 0 3px rgba(53, 211, 153, 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--desktop-green-rgb), 0.12);
 }
 
 .run-dot.run-state-failed {
   background: var(--desktop-red);
-  box-shadow: 0 0 0 3px rgba(255, 105, 120, 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--desktop-red-rgb), 0.12);
 }
 
 .sidebar-run-copy,
@@ -754,9 +831,9 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   width: 28px;
   height: 28px;
   place-items: center;
-  border: 1px solid rgba(56, 214, 255, 0.18);
+  border: 1px solid rgba(var(--desktop-cyan-rgb), 0.18);
   border-radius: 7px;
-  background: rgba(56, 214, 255, 0.08);
+  background: rgba(var(--desktop-cyan-rgb), 0.08);
   color: var(--desktop-cyan);
 }
 
@@ -843,13 +920,13 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .runtime-monitor-action:hover,
 .runtime-monitor-action:focus-visible {
-  border-color: rgba(56, 214, 255, 0.36);
-  background: rgba(56, 214, 255, 0.09);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.36);
+  background: rgba(var(--desktop-cyan-rgb), 0.09);
   color: var(--desktop-text);
 }
 
 .runtime-monitor-action:focus-visible {
-  outline: 2px solid rgba(56, 214, 255, 0.34);
+  outline: 2px solid rgba(var(--desktop-cyan-rgb), 0.34);
   outline-offset: 2px;
 }
 
@@ -925,13 +1002,13 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .sidebar-row:hover,
 .sidebar-row.selected {
-  border-color: rgba(56, 214, 255, 0.12);
-  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.12);
+  background: rgba(var(--desktop-slate-rgb), 0.1);
   color: var(--desktop-text);
 }
 
 .sidebar-row.selected {
-  background: rgba(56, 214, 255, 0.12);
+  background: rgba(var(--desktop-cyan-rgb), 0.12);
 }
 
 .sidebar-row span:nth-child(2) {
@@ -996,14 +1073,14 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .runtime-local-presets .rt-Button {
   min-width: 0;
   justify-content: center;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(148, 163, 184, 0.06);
+  border: 1px solid rgba(var(--desktop-slate-rgb), 0.18);
+  background: rgba(var(--desktop-slate-rgb), 0.06);
   color: var(--desktop-muted);
 }
 
 .runtime-local-presets .rt-Button[aria-pressed='true'] {
-  border-color: rgba(56, 214, 255, 0.42);
-  background: rgba(56, 214, 255, 0.12);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.42);
+  background: rgba(var(--desktop-cyan-rgb), 0.12);
   color: var(--desktop-text);
 }
 
@@ -1048,8 +1125,8 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .account-profile-button:hover .account-avatar {
-  border-color: rgba(148, 163, 184, 0.42);
-  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(var(--desktop-slate-rgb), 0.42);
+  background: rgba(var(--desktop-slate-rgb), 0.12);
 }
 
 .account-avatar {
@@ -1059,7 +1136,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   place-items: center;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 50%;
-  background: rgba(56, 214, 255, 0.1);
+  background: rgba(var(--desktop-cyan-rgb), 0.1);
   color: var(--desktop-cyan);
 }
 
@@ -1093,7 +1170,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(3, 7, 12, 0.64);
+  background: rgba(var(--desktop-overlay-1-rgb), 0.64);
   backdrop-filter: blur(8px);
 }
 
@@ -1107,7 +1184,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   border-radius: 8px;
   background: #151a22;
   color: var(--desktop-text);
-  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.52);
+  box-shadow: 0 24px 90px rgba(var(--desktop-black-rgb), 0.52);
 }
 
 .auth-modal .rt-Text {
@@ -1160,7 +1237,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .auth-manual-fallback {
   width: 100%;
   border: 1px solid var(--desktop-border);
-  background: rgba(148, 163, 184, 0.08);
+  background: rgba(var(--desktop-slate-rgb), 0.08);
   box-shadow: none;
   color: var(--desktop-text);
   justify-content: center;
@@ -1180,20 +1257,20 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .auth-modal-actions .rt-Button:hover,
 .auth-manual-fallback:hover {
-  border-color: rgba(148, 163, 184, 0.42);
-  background: rgba(148, 163, 184, 0.14);
+  border-color: rgba(var(--desktop-slate-rgb), 0.42);
+  background: rgba(var(--desktop-slate-rgb), 0.14);
 }
 
 .auth-modal-actions .auth-login-button:not(:disabled) {
-  border-color: rgba(56, 214, 255, 0.48);
-  background: rgba(56, 214, 255, 0.18);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.48);
+  background: rgba(var(--desktop-cyan-rgb), 0.18);
   color: var(--desktop-text);
 }
 
 .auth-modal-actions .rt-Button:disabled,
 .auth-manual-fallback:disabled {
-  border-color: rgba(148, 163, 184, 0.12);
-  background: rgba(148, 163, 184, 0.05);
+  border-color: rgba(var(--desktop-slate-rgb), 0.12);
+  background: rgba(var(--desktop-slate-rgb), 0.05);
   color: var(--desktop-faint);
   opacity: 1;
 }
@@ -1217,7 +1294,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .auth-modal .auth-hint {
-  background: rgba(240, 179, 90, 0.12);
+  background: rgba(var(--desktop-amber-rgb), 0.12);
   color: #e7c48d;
 }
 
@@ -1236,19 +1313,19 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   width: 100%;
   min-width: 0;
   justify-content: center;
-  border: 1px solid rgba(240, 179, 90, 0.24);
-  background: rgba(240, 179, 90, 0.08);
+  border: 1px solid rgba(var(--desktop-amber-rgb), 0.24);
+  background: rgba(var(--desktop-amber-rgb), 0.08);
   color: #e7c48d;
 }
 
 .auth-fill-dev-button:hover {
-  border-color: rgba(240, 179, 90, 0.42);
-  background: rgba(240, 179, 90, 0.14);
+  border-color: rgba(var(--desktop-amber-rgb), 0.42);
+  background: rgba(var(--desktop-amber-rgb), 0.14);
 }
 
 .auth-fill-dev-button[aria-pressed='true'] {
-  border-color: rgba(56, 214, 255, 0.48);
-  background: rgba(56, 214, 255, 0.13);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.48);
+  background: rgba(var(--desktop-cyan-rgb), 0.13);
   color: var(--desktop-text);
 }
 
@@ -1260,7 +1337,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   align-items: start;
   justify-items: center;
   padding: 84px 24px 24px;
-  background: rgba(3, 7, 12, 0.42);
+  background: rgba(var(--desktop-overlay-1-rgb), 0.42);
   backdrop-filter: blur(5px);
 }
 
@@ -1274,7 +1351,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   border: 1px solid var(--desktop-border);
   border-radius: 10px;
   background: #121820;
-  box-shadow: 0 26px 90px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 26px 90px rgba(var(--desktop-black-rgb), 0.55);
 }
 
 .command-search {
@@ -1329,14 +1406,14 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .command-row:not(:disabled):hover,
 .command-row.selected {
-  border-color: rgba(56, 214, 255, 0.22);
-  background: rgba(56, 214, 255, 0.1);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.22);
+  background: rgba(var(--desktop-cyan-rgb), 0.1);
   color: var(--desktop-text);
 }
 
 .command-row.selected {
-  border-color: rgba(56, 214, 255, 0.42);
-  box-shadow: inset 0 0 0 1px rgba(56, 214, 255, 0.08);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.42);
+  box-shadow: inset 0 0 0 1px rgba(var(--desktop-cyan-rgb), 0.08);
 }
 
 .command-row.disabled {
@@ -1411,7 +1488,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 10px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
-  background: rgba(56, 214, 255, 0.06);
+  background: rgba(var(--desktop-cyan-rgb), 0.06);
 }
 
 .auth-selection {
@@ -1451,14 +1528,14 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 7px 8px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
-  background: rgba(240, 179, 90, 0.08);
+  background: rgba(var(--desktop-amber-rgb), 0.08);
 }
 
 .auth-error {
   padding: 7px 8px;
-  border: 1px solid rgba(255, 105, 120, 0.42);
+  border: 1px solid rgba(var(--desktop-red-rgb), 0.42);
   border-radius: 6px;
-  background: rgba(255, 105, 120, 0.1);
+  background: rgba(var(--desktop-red-rgb), 0.1);
   color: #ffb6be !important;
   line-height: 1.4;
 }
@@ -1552,8 +1629,8 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .dock-row.selected,
 .dock-row:hover {
-  border-color: rgba(56, 214, 255, 0.38);
-  background: rgba(56, 214, 255, 0.08);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.38);
+  background: rgba(var(--desktop-cyan-rgb), 0.08);
 }
 
 .dock-row strong {
@@ -1679,7 +1756,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   min-height: 0;
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
-  background: #080c12;
+  background: var(--desktop-bg);
 }
 
 .workbench-layout {
@@ -1702,9 +1779,9 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   max-width: min(520px, 58vw);
   padding: 6px 9px;
   overflow: hidden;
-  border: 1px solid rgba(255, 105, 120, 0.34);
+  border: 1px solid rgba(var(--desktop-red-rgb), 0.34);
   border-radius: 6px;
-  background: rgba(255, 105, 120, 0.1);
+  background: rgba(var(--desktop-red-rgb), 0.1);
   color: #ffb6be;
   font-size: 11px;
   text-overflow: ellipsis;
@@ -1721,14 +1798,14 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 3px 7px;
   border: 1px solid rgba(255, 182, 190, 0.38);
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--desktop-white-rgb), 0.05);
   color: inherit;
   font: inherit;
   cursor: pointer;
 }
 
 .workbench-error > button:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--desktop-white-rgb), 0.1);
 }
 
 .pane-stage {
@@ -1781,7 +1858,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   grid-template-rows: auto auto minmax(0, 1fr);
   overflow: hidden;
   border-left: 1px solid var(--desktop-border);
-  background: #090e16;
+  background: var(--desktop-surface-4);
 }
 
 .review-panel-session {
@@ -1798,7 +1875,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   min-height: 40px;
   overflow: visible;
   border-bottom: 1px solid var(--desktop-border-soft);
-  background: #0b1018;
+  background: var(--desktop-surface-8);
 }
 
 .review-tab-scroll {
@@ -1853,7 +1930,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .review-tab:hover,
 .review-tab.selected {
   color: var(--desktop-text);
-  background: rgba(148, 163, 184, 0.07);
+  background: rgba(var(--desktop-slate-rgb), 0.07);
 }
 
 .review-tab.selected {
@@ -1868,7 +1945,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   height: 40px;
   padding: 0 7px;
   border-left: 1px solid var(--desktop-border-soft);
-  background: #0b1018;
+  background: var(--desktop-surface-8);
 }
 
 .review-tab-actions .rt-IconButton {
@@ -1958,7 +2035,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 10px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 8px;
-  background: rgba(13, 19, 29, 0.68);
+  background: rgba(var(--desktop-overlay-5-rgb), 0.68);
 }
 
 .session-plan-task-index {
@@ -1966,7 +2043,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   place-items: center;
   width: 24px;
   height: 24px;
-  border: 1px solid rgba(53, 211, 153, 0.3);
+  border: 1px solid rgba(var(--desktop-green-rgb), 0.3);
   border-radius: 50%;
   color: var(--desktop-green);
   font-size: 11px;
@@ -2000,7 +2077,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   display: grid;
   gap: 12px;
   padding: 13px;
-  border: 1px solid rgba(34, 211, 238, 0.28);
+  border: 1px solid rgba(var(--desktop-cyan-alt-rgb), 0.28);
   border-radius: 9px;
   background: rgba(8, 28, 37, 0.42);
 }
@@ -2017,9 +2094,9 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   place-items: center;
   width: 28px;
   height: 28px;
-  border: 1px solid rgba(34, 211, 238, 0.3);
+  border: 1px solid rgba(var(--desktop-cyan-alt-rgb), 0.3);
   border-radius: 7px;
-  background: rgba(34, 211, 238, 0.08);
+  background: rgba(var(--desktop-cyan-alt-rgb), 0.08);
   color: var(--desktop-cyan);
 }
 
@@ -2082,9 +2159,9 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   align-items: flex-start;
   gap: 9px;
   padding: 11px;
-  border: 1px solid rgba(53, 211, 153, 0.22);
+  border: 1px solid rgba(var(--desktop-green-rgb), 0.22);
   border-radius: 8px;
-  background: rgba(53, 211, 153, 0.05);
+  background: rgba(var(--desktop-green-rgb), 0.05);
   color: var(--desktop-green);
 }
 
@@ -2117,7 +2194,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   gap: 8px;
   margin-left: 10px;
   padding-left: 18px;
-  border-left: 1px solid rgba(53, 211, 153, 0.34);
+  border-left: 1px solid rgba(var(--desktop-green-rgb), 0.34);
 }
 
 .plan-node,
@@ -2180,7 +2257,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 10px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(13, 19, 29, 0.68);
+  background: rgba(var(--desktop-overlay-5-rgb), 0.68);
 }
 
 .review-json,
@@ -2192,7 +2269,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   overflow: auto;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: #060a11;
+  background: var(--desktop-surface-1);
   color: #b7c8d9;
   font-size: 11px;
   line-height: 1.55;
@@ -2223,8 +2300,8 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .decision-section-head button:hover {
-  border-color: rgba(56, 214, 255, 0.36);
-  background: rgba(56, 214, 255, 0.09);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.36);
+  background: rgba(var(--desktop-cyan-rgb), 0.09);
   color: var(--desktop-text);
 }
 
@@ -2257,7 +2334,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 12px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(13, 19, 29, 0.68);
+  background: rgba(var(--desktop-overlay-5-rgb), 0.68);
 }
 
 .decision-summary-head,
@@ -2316,7 +2393,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 9px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: #060a11;
+  background: var(--desktop-surface-1);
 }
 
 .decision-risk-strip svg {
@@ -2386,7 +2463,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 10px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: #060a11;
+  background: var(--desktop-surface-1);
 }
 
 .decision-file-list {
@@ -2402,7 +2479,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 9px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: #090e16;
+  background: var(--desktop-surface-4);
 }
 
 .decision-file-row small {
@@ -2416,7 +2493,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .decision-actions-panel {
-  background: #0b1018;
+  background: var(--desktop-surface-8);
 }
 
 .decision-actions-panel > div:first-child {
@@ -2445,13 +2522,13 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .decision-approve-button {
-  border-color: rgba(53, 211, 153, 0.32);
-  background: rgba(53, 211, 153, 0.1);
+  border-color: rgba(var(--desktop-green-rgb), 0.32);
+  background: rgba(var(--desktop-green-rgb), 0.1);
 }
 
 .decision-request-button {
-  border-color: rgba(240, 179, 90, 0.32);
-  background: rgba(240, 179, 90, 0.1);
+  border-color: rgba(var(--desktop-amber-rgb), 0.32);
+  background: rgba(var(--desktop-amber-rgb), 0.1);
 }
 
 .decision-feedback-field {
@@ -2469,7 +2546,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
   outline: none;
-  background: #060a11;
+  background: var(--desktop-surface-1);
   color: var(--desktop-text);
   font: inherit;
   line-height: 1.4;
@@ -2595,7 +2672,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 8px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: #060a11;
+  background: var(--desktop-surface-1);
 }
 
 .decision-history-row span,
@@ -2654,7 +2731,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   min-width: 18px;
   padding: 1px 5px;
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.14);
+  background: rgba(var(--desktop-slate-rgb), 0.14);
   color: var(--desktop-faint);
   font-size: 10px;
   line-height: 1.4;
@@ -2662,14 +2739,14 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .review-event-filters button:hover,
 .review-event-filters button.selected {
-  border-color: rgba(56, 214, 255, 0.36);
-  background: rgba(56, 214, 255, 0.09);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.36);
+  background: rgba(var(--desktop-cyan-rgb), 0.09);
   color: var(--desktop-text);
 }
 
 .review-event-filters button:hover strong,
 .review-event-filters button.selected strong {
-  background: rgba(56, 214, 255, 0.18);
+  background: rgba(var(--desktop-cyan-rgb), 0.18);
   color: var(--desktop-text);
 }
 
@@ -2682,7 +2759,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 0 9px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: #060a11;
+  background: var(--desktop-surface-1);
   color: var(--desktop-faint);
 }
 
@@ -2727,7 +2804,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   height: 18px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 999px;
-  background: #060a11;
+  background: var(--desktop-surface-1);
   cursor: pointer;
 }
 
@@ -2744,8 +2821,8 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .review-event-switch.on {
-  border-color: rgba(53, 211, 153, 0.38);
-  background: rgba(53, 211, 153, 0.13);
+  border-color: rgba(var(--desktop-green-rgb), 0.38);
+  background: rgba(var(--desktop-green-rgb), 0.13);
 }
 
 .review-event-switch.on::after {
@@ -2767,8 +2844,8 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .review-event-clear:hover:not(:disabled) {
-  border-color: rgba(56, 214, 255, 0.36);
-  background: rgba(56, 214, 255, 0.09);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.36);
+  background: rgba(var(--desktop-cyan-rgb), 0.09);
   color: var(--desktop-text);
 }
 
@@ -2792,7 +2869,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 9px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(13, 19, 29, 0.68);
+  background: rgba(var(--desktop-overlay-5-rgb), 0.68);
   color: var(--desktop-muted);
   cursor: pointer;
   font: inherit;
@@ -2801,8 +2878,8 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .review-event-summary-item:hover,
 .review-event-summary-item.selected {
-  border-color: rgba(56, 214, 255, 0.36);
-  background: rgba(56, 214, 255, 0.08);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.36);
+  background: rgba(var(--desktop-cyan-rgb), 0.08);
   color: var(--desktop-text);
 }
 
@@ -2834,23 +2911,23 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .review-event-summary-item.tools {
-  border-left-color: rgba(53, 211, 153, 0.44);
+  border-left-color: rgba(var(--desktop-green-rgb), 0.44);
 }
 
 .review-event-summary-item.reasoning {
-  border-left-color: rgba(240, 179, 90, 0.46);
+  border-left-color: rgba(var(--desktop-amber-rgb), 0.46);
 }
 
 .review-event-summary-item.messages {
-  border-left-color: rgba(56, 214, 255, 0.44);
+  border-left-color: rgba(var(--desktop-cyan-rgb), 0.44);
 }
 
 .review-event-summary-item.system {
-  border-left-color: rgba(148, 163, 184, 0.36);
+  border-left-color: rgba(var(--desktop-slate-rgb), 0.36);
 }
 
 .review-event-summary-item.errors {
-  border-left-color: rgba(255, 105, 120, 0.48);
+  border-left-color: rgba(var(--desktop-red-rgb), 0.48);
 }
 
 .review-event-list {
@@ -2864,17 +2941,17 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 10px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(13, 19, 29, 0.68);
+  background: rgba(var(--desktop-overlay-5-rgb), 0.68);
 }
 
 .review-event-row:hover,
 .review-event-row.selected {
-  border-color: rgba(56, 214, 255, 0.36);
-  background: rgba(56, 214, 255, 0.08);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.36);
+  background: rgba(var(--desktop-cyan-rgb), 0.08);
 }
 
 .review-event-row.errors {
-  border-color: rgba(255, 105, 120, 0.28);
+  border-color: rgba(var(--desktop-red-rgb), 0.28);
 }
 
 .review-event-button {
@@ -2895,7 +2972,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .review-event-button:focus-visible {
-  outline: 2px solid rgba(56, 214, 255, 0.34);
+  outline: 2px solid rgba(var(--desktop-cyan-rgb), 0.34);
   outline-offset: 3px;
 }
 
@@ -2979,7 +3056,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   overflow: auto;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: #060a11;
+  background: var(--desktop-surface-1);
   color: #b7c8d9;
   font-size: 11px;
   line-height: 1.5;
@@ -3031,8 +3108,8 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .review-artifact-filters button:hover,
 .review-artifact-filters button.selected {
-  border-color: rgba(56, 214, 255, 0.36);
-  background: rgba(56, 214, 255, 0.09);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.36);
+  background: rgba(var(--desktop-cyan-rgb), 0.09);
   color: var(--desktop-text);
 }
 
@@ -3045,7 +3122,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 0 9px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: #060a11;
+  background: var(--desktop-surface-1);
   color: var(--desktop-faint);
 }
 
@@ -3086,7 +3163,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   background:
     linear-gradient(45deg, transparent 50%, var(--desktop-faint) 50%),
     linear-gradient(135deg, var(--desktop-faint) 50%, transparent 50%),
-    #060a11;
+    var(--desktop-surface-1);
   background-position:
     calc(100% - 14px) 12px,
     calc(100% - 9px) 12px,
@@ -3117,8 +3194,8 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .review-artifact-view-button:hover,
 .review-artifact-view-button[aria-pressed='true'] {
-  border-color: rgba(56, 214, 255, 0.36);
-  background: rgba(56, 214, 255, 0.09);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.36);
+  background: rgba(var(--desktop-cyan-rgb), 0.09);
   color: var(--desktop-text);
 }
 
@@ -3145,7 +3222,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 10px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(13, 19, 29, 0.68);
+  background: rgba(var(--desktop-overlay-5-rgb), 0.68);
   color: inherit;
   cursor: pointer;
   font: inherit;
@@ -3155,12 +3232,12 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .review-artifact-row:hover,
 .review-artifact-row:focus-visible,
 .review-artifact-row.selected {
-  border-color: rgba(56, 214, 255, 0.36);
-  background: rgba(56, 214, 255, 0.08);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.36);
+  background: rgba(var(--desktop-cyan-rgb), 0.08);
 }
 
 .review-artifact-row:focus-visible {
-  outline: 2px solid rgba(56, 214, 255, 0.34);
+  outline: 2px solid rgba(var(--desktop-cyan-rgb), 0.34);
   outline-offset: 2px;
 }
 
@@ -3184,7 +3261,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   height: 28px;
   place-items: center;
   border-radius: 7px;
-  background: rgba(148, 163, 184, 0.08);
+  background: rgba(var(--desktop-slate-rgb), 0.08);
   color: var(--desktop-muted);
 }
 
@@ -3325,7 +3402,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 9px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(13, 19, 29, 0.68);
+  background: rgba(var(--desktop-overlay-5-rgb), 0.68);
   color: inherit;
   font: inherit;
   text-align: left;
@@ -3335,12 +3412,12 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .artifact-lifecycle-list > button:hover,
 .artifact-lifecycle-list > button.selected,
 .artifact-lifecycle-list > button:focus-visible {
-  border-color: rgba(56, 214, 255, 0.38);
-  background: rgba(56, 214, 255, 0.08);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.38);
+  background: rgba(var(--desktop-cyan-rgb), 0.08);
 }
 
 .artifact-lifecycle-list > button:focus-visible {
-  outline: 2px solid rgba(56, 214, 255, 0.3);
+  outline: 2px solid rgba(var(--desktop-cyan-rgb), 0.3);
   outline-offset: 2px;
 }
 
@@ -3438,7 +3515,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 0 8px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
-  background: #090e16;
+  background: var(--desktop-surface-4);
   color: var(--desktop-text);
   font: inherit;
   font-size: 11px;
@@ -3462,7 +3539,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .artifact-status-track > span.reached {
-  border-color: rgba(53, 211, 153, 0.26);
+  border-color: rgba(var(--desktop-green-rgb), 0.26);
   color: #7fe6bd;
 }
 
@@ -3593,15 +3670,15 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   gap: 8px;
   min-width: 0;
   padding: 9px;
-  border: 1px solid rgba(245, 183, 71, 0.25);
+  border: 1px solid rgba(var(--desktop-amber-soft-rgb), 0.25);
   border-radius: 7px;
-  background: rgba(245, 183, 71, 0.06);
+  background: rgba(var(--desktop-amber-soft-rgb), 0.06);
   color: #f5b747;
 }
 
 .artifact-delivery-receipt {
-  border-color: rgba(53, 211, 153, 0.25);
-  background: rgba(53, 211, 153, 0.06);
+  border-color: rgba(var(--desktop-green-rgb), 0.25);
+  background: rgba(var(--desktop-green-rgb), 0.06);
   color: #55d69a;
 }
 
@@ -3633,9 +3710,9 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   display: grid;
   gap: 7px;
   padding: 9px;
-  border: 1px solid rgba(245, 183, 71, 0.28);
+  border: 1px solid rgba(var(--desktop-amber-soft-rgb), 0.28);
   border-radius: 7px;
-  background: rgba(245, 183, 71, 0.05);
+  background: rgba(var(--desktop-amber-soft-rgb), 0.05);
 }
 
 .artifact-feedback-form label {
@@ -3659,7 +3736,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .artifact-feedback-form textarea:focus {
-  border-color: rgba(56, 214, 255, 0.42);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.42);
 }
 
 .artifact-feedback-form > div,
@@ -3747,7 +3824,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 8px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(13, 19, 29, 0.68);
+  background: rgba(var(--desktop-overlay-5-rgb), 0.68);
 }
 
 .terminal-authority-facts dt {
@@ -3768,7 +3845,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   display: grid;
   gap: 4px;
   padding: 9px 10px;
-  border: 1px solid rgba(248, 113, 113, 0.28);
+  border: 1px solid rgba(var(--desktop-red-bright-rgb), 0.28);
   border-radius: 7px;
   background: rgba(127, 29, 29, 0.14);
   color: #fecaca;
@@ -3808,7 +3885,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   place-items: center;
   border: 1px solid var(--desktop-border);
   border-radius: 7px;
-  background: rgba(148, 163, 184, 0.07);
+  background: rgba(var(--desktop-slate-rgb), 0.07);
   color: var(--desktop-muted);
 }
 
@@ -3832,7 +3909,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   min-height: 46px;
   padding: 8px 10px;
   border-bottom: 1px solid var(--desktop-border-soft);
-  background: #101720;
+  background: var(--desktop-surface-14);
 }
 
 .chat-shell,
@@ -3901,17 +3978,17 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .message.agent {
-  border-color: rgba(56, 214, 255, 0.35);
-  background: rgba(56, 214, 255, 0.08);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.35);
+  background: rgba(var(--desktop-cyan-rgb), 0.08);
 }
 
 .message.user {
   margin-left: 28px;
-  border-color: rgba(53, 211, 153, 0.32);
+  border-color: rgba(var(--desktop-green-rgb), 0.32);
 }
 
 .message.runtime {
-  border-color: rgba(240, 179, 90, 0.34);
+  border-color: rgba(var(--desktop-amber-rgb), 0.34);
 }
 
 .agent-run-stack {
@@ -3940,7 +4017,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .timeline-history-action {
   min-height: 28px;
-  border-color: rgba(148, 163, 184, 0.18);
+  border-color: rgba(var(--desktop-slate-rgb), 0.18);
   color: var(--desktop-muted);
 }
 
@@ -3950,9 +4027,9 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   justify-content: space-between;
   gap: 12px;
   padding: 8px 10px;
-  border: 1px solid rgba(255, 105, 120, 0.36);
+  border: 1px solid rgba(var(--desktop-red-rgb), 0.36);
   border-radius: 7px;
-  background: rgba(255, 105, 120, 0.08);
+  background: rgba(var(--desktop-red-rgb), 0.08);
 }
 
 .timeline-error > :first-child {
@@ -3962,12 +4039,12 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .timeline-error .timeline-history-action {
   flex: 0 0 auto;
-  border-color: rgba(255, 105, 120, 0.3);
+  border-color: rgba(var(--desktop-red-rgb), 0.3);
 }
 
 .message.timeline-item.tool {
-  border-color: rgba(240, 179, 90, 0.34);
-  background: rgba(240, 179, 90, 0.07);
+  border-color: rgba(var(--desktop-amber-rgb), 0.34);
+  background: rgba(var(--desktop-amber-rgb), 0.07);
 }
 
 .message.timeline-item.artifact {
@@ -3983,19 +4060,19 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .message.transcript-message.agent {
-  border-left: 2px solid rgba(56, 214, 255, 0.32);
-  background: rgba(56, 214, 255, 0.025);
+  border-left: 2px solid rgba(var(--desktop-cyan-rgb), 0.32);
+  background: rgba(var(--desktop-cyan-rgb), 0.025);
 }
 
 .message.transcript-message.user {
   margin-left: 28px;
-  border-left: 2px solid rgba(53, 211, 153, 0.34);
-  background: rgba(53, 211, 153, 0.025);
+  border-left: 2px solid rgba(var(--desktop-green-rgb), 0.34);
+  background: rgba(var(--desktop-green-rgb), 0.025);
 }
 
 .message.transcript-message.runtime {
-  border-left: 2px solid rgba(240, 179, 90, 0.34);
-  background: rgba(240, 179, 90, 0.025);
+  border-left: 2px solid rgba(var(--desktop-amber-rgb), 0.34);
+  background: rgba(var(--desktop-amber-rgb), 0.025);
 }
 
 .transcript-meta {
@@ -4088,7 +4165,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   overflow: auto;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
-  background: rgba(3, 7, 12, 0.42);
+  background: rgba(var(--desktop-overlay-1-rgb), 0.42);
   color: #b8c4d4;
   font-size: 0.92em;
   line-height: 1.5;
@@ -4098,7 +4175,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .markdown-content code {
   border-radius: 4px;
-  background: rgba(148, 163, 184, 0.12);
+  background: rgba(var(--desktop-slate-rgb), 0.12);
   color: #dce7f5;
   font-size: 0.94em;
 }
@@ -4110,7 +4187,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .markdown-content blockquote {
   margin: 0;
   padding-left: 10px;
-  border-left: 2px solid rgba(148, 163, 184, 0.28);
+  border-left: 2px solid rgba(var(--desktop-slate-rgb), 0.28);
   color: var(--desktop-muted);
 }
 
@@ -4142,8 +4219,8 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .message.timeline-row:hover,
 .message.timeline-row.is-expanded {
-  border-color: rgba(148, 163, 184, 0.14);
-  background: rgba(148, 163, 184, 0.055);
+  border-color: rgba(var(--desktop-slate-rgb), 0.14);
+  background: rgba(var(--desktop-slate-rgb), 0.055);
 }
 
 .message.timeline-row.tool,
@@ -4155,8 +4232,8 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .message.timeline-row.tool:hover,
 .message.timeline-row.tool.is-expanded {
-  border-color: rgba(240, 179, 90, 0.22);
-  background: rgba(240, 179, 90, 0.055);
+  border-color: rgba(var(--desktop-amber-rgb), 0.22);
+  background: rgba(var(--desktop-amber-rgb), 0.055);
 }
 
 .message.timeline-row.artifact:hover,
@@ -4184,7 +4261,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .timeline-row-toggle:hover {
-  background: rgba(148, 163, 184, 0.12);
+  background: rgba(var(--desktop-slate-rgb), 0.12);
   color: var(--desktop-text);
 }
 
@@ -4264,27 +4341,27 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   align-items: center;
   height: 18px;
   padding: 0 6px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
+  border: 1px solid rgba(var(--desktop-slate-rgb), 0.16);
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.06);
+  background: rgba(var(--desktop-slate-rgb), 0.06);
   color: var(--desktop-muted);
 }
 
 .timeline-status.ok {
-  border-color: rgba(53, 211, 153, 0.2);
-  background: rgba(53, 211, 153, 0.08);
+  border-color: rgba(var(--desktop-green-rgb), 0.2);
+  background: rgba(var(--desktop-green-rgb), 0.08);
   color: #86e9c2;
 }
 
 .timeline-status.error {
-  border-color: rgba(255, 105, 120, 0.24);
-  background: rgba(255, 105, 120, 0.09);
+  border-color: rgba(var(--desktop-red-rgb), 0.24);
+  background: rgba(var(--desktop-red-rgb), 0.09);
   color: #ffadb7;
 }
 
 .timeline-status.waiting {
-  border-color: rgba(240, 179, 90, 0.24);
-  background: rgba(240, 179, 90, 0.09);
+  border-color: rgba(var(--desktop-amber-rgb), 0.24);
+  background: rgba(var(--desktop-amber-rgb), 0.09);
   color: #f6c983;
 }
 
@@ -4343,7 +4420,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   overflow: auto;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
-  background: rgba(3, 7, 12, 0.42);
+  background: rgba(var(--desktop-overlay-1-rgb), 0.42);
   color: var(--desktop-muted);
   font-size: 12px;
   line-height: 1.45;
@@ -4356,9 +4433,9 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
   padding: 8px;
-  border: 1px solid rgba(240, 179, 90, 0.22);
+  border: 1px solid rgba(var(--desktop-amber-rgb), 0.22);
   border-radius: 7px;
-  background: rgba(240, 179, 90, 0.06);
+  background: rgba(var(--desktop-amber-rgb), 0.06);
 }
 
 .timeline-approval-evidence > div {
@@ -4403,9 +4480,9 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   min-width: 0;
   max-width: 100%;
   padding: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
+  border: 1px solid rgba(var(--desktop-slate-rgb), 0.14);
   border-radius: 6px;
-  background: rgba(148, 163, 184, 0.045);
+  background: rgba(var(--desktop-slate-rgb), 0.045);
 }
 
 .tool-file-metadata-head,
@@ -4502,7 +4579,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   max-width: 100%;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(3, 7, 12, 0.55);
+  background: rgba(var(--desktop-overlay-1-rgb), 0.55);
   overflow: hidden;
 }
 
@@ -4514,7 +4591,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   gap: 8px;
   padding: 3px 4px 3px 9px;
   border-bottom: 1px solid var(--desktop-border-soft);
-  background: rgba(148, 163, 184, 0.05);
+  background: rgba(var(--desktop-slate-rgb), 0.05);
 }
 
 .code-block-lang {
@@ -4543,7 +4620,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .code-block-copy:hover {
-  background: rgba(148, 163, 184, 0.12);
+  background: rgba(var(--desktop-slate-rgb), 0.12);
   color: var(--desktop-text);
 }
 
@@ -4594,14 +4671,14 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   min-height: 24px;
   border: 0;
   border-top: 1px solid var(--desktop-border-soft);
-  background: rgba(148, 163, 184, 0.045);
+  background: rgba(var(--desktop-slate-rgb), 0.045);
   color: var(--desktop-muted);
   font: 600 10px/1 inherit;
   cursor: pointer;
 }
 
 .code-block-toggle:hover {
-  background: rgba(148, 163, 184, 0.1);
+  background: rgba(var(--desktop-slate-rgb), 0.1);
   color: var(--desktop-text);
 }
 
@@ -4628,7 +4705,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .hljs-literal,
 .hljs-symbol,
 .hljs-bullet {
-  color: #f0b35a;
+  color: var(--desktop-amber);
 }
 
 .hljs-title,
@@ -4814,11 +4891,11 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 @keyframes tool-group-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(56, 214, 255, 0);
+    box-shadow: 0 0 0 0 rgba(var(--desktop-cyan-rgb), 0);
   }
 
   50% {
-    box-shadow: 0 0 0 3px rgba(56, 214, 255, 0.18);
+    box-shadow: 0 0 0 3px rgba(var(--desktop-cyan-rgb), 0.18);
   }
 }
 
@@ -4833,18 +4910,18 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .message.agent-run {
   margin-left: 0;
-  border-color: rgba(56, 214, 255, 0.32);
-  background: rgba(56, 214, 255, 0.07);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.32);
+  background: rgba(var(--desktop-cyan-rgb), 0.07);
 }
 
 .message.agent-run.acknowledged {
-  border-color: rgba(53, 211, 153, 0.36);
-  background: rgba(53, 211, 153, 0.07);
+  border-color: rgba(var(--desktop-green-rgb), 0.36);
+  background: rgba(var(--desktop-green-rgb), 0.07);
 }
 
 .message.agent-run.failed {
-  border-color: rgba(255, 105, 120, 0.42);
-  background: rgba(255, 105, 120, 0.08);
+  border-color: rgba(var(--desktop-red-rgb), 0.42);
+  background: rgba(var(--desktop-red-rgb), 0.08);
 }
 
 .agent-run-title {
@@ -4938,7 +5015,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .composer-slash-button:hover,
 .composer-slash-button:focus-visible {
-  background: rgba(148, 163, 184, 0.12);
+  background: rgba(var(--desktop-slate-rgb), 0.12);
   color: var(--desktop-text);
   outline: none;
 }
@@ -4949,8 +5026,8 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   flex: 0 0 14px;
   border-radius: 50%;
   box-shadow:
-    inset 0 0 0 1px rgba(148, 163, 184, 0.24),
-    0 0 0 4px rgba(148, 163, 184, 0.05);
+    inset 0 0 0 1px rgba(var(--desktop-slate-rgb), 0.24),
+    0 0 0 4px rgba(var(--desktop-slate-rgb), 0.05);
 }
 
 .composer-status-button {
@@ -4963,18 +5040,18 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .composer-status-button:focus-visible {
   box-shadow:
     inset 0 0 0 1px rgba(206, 219, 234, 0.42),
-    0 0 0 4px rgba(56, 214, 255, 0.12);
+    0 0 0 4px rgba(var(--desktop-cyan-rgb), 0.12);
 }
 
 .composer-status-dot.is-connected {
-  background: rgba(148, 163, 184, 0.22);
+  background: rgba(var(--desktop-slate-rgb), 0.22);
 }
 
 .composer-status-dot.is-blocked {
-  background: rgba(245, 158, 11, 0.58);
+  background: rgba(var(--desktop-amber-alt-rgb), 0.58);
   box-shadow:
     inset 0 0 0 1px rgba(251, 191, 36, 0.46),
-    0 0 0 4px rgba(245, 158, 11, 0.08);
+    0 0 0 4px rgba(var(--desktop-amber-alt-rgb), 0.08);
 }
 
 .board-toolbar {
@@ -5018,21 +5095,21 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .board-command-send {
   width: 34px;
   height: 34px;
-  border-color: rgba(53, 211, 153, 0.2);
+  border-color: rgba(var(--desktop-green-rgb), 0.2);
   background: #2dbf7f;
   color: #03120d;
 }
 
 .board-command-slash:hover,
 .board-command-slash:focus-visible {
-  background: rgba(148, 163, 184, 0.12);
+  background: rgba(var(--desktop-slate-rgb), 0.12);
   color: var(--desktop-text);
   outline: none;
 }
 
 .board-command-send:hover:not(:disabled),
 .board-command-send:focus-visible:not(:disabled) {
-  background: #35d399;
+  background: var(--desktop-green);
   outline: none;
 }
 
@@ -5076,7 +5153,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   background:
     linear-gradient(45deg, transparent 50%, var(--desktop-faint) 50%),
     linear-gradient(135deg, var(--desktop-faint) 50%, transparent 50%),
-    #060a11;
+    var(--desktop-surface-1);
   background-position:
     calc(100% - 14px) 13px,
     calc(100% - 9px) 13px,
@@ -5123,7 +5200,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   background:
     linear-gradient(45deg, transparent 50%, var(--desktop-faint) 50%),
     linear-gradient(135deg, var(--desktop-faint) 50%, transparent 50%),
-    #060a11;
+    var(--desktop-surface-1);
   background-position:
     calc(100% - 14px) 12px,
     calc(100% - 9px) 12px,
@@ -5147,7 +5224,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   height: 30px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: #060a11;
+  background: var(--desktop-surface-1);
 }
 
 .board-segmented {
@@ -5181,13 +5258,13 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .board-zoom-control button:disabled {
-  color: rgba(148, 163, 184, 0.34);
+  color: rgba(var(--desktop-slate-rgb), 0.34);
   cursor: default;
 }
 
 .board-segmented button.active,
 .board-settings-button.active {
-  background: rgba(56, 214, 255, 0.12);
+  background: rgba(var(--desktop-cyan-rgb), 0.12);
 }
 
 .board-zoom-control strong {
@@ -5203,7 +5280,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   width: 30px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: #060a11;
+  background: var(--desktop-surface-1);
 }
 
 .board-settings-panel {
@@ -5229,7 +5306,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 0 9px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.06);
+  background: rgba(var(--desktop-slate-rgb), 0.06);
   color: var(--desktop-muted);
   cursor: pointer;
   font: inherit;
@@ -5239,8 +5316,8 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .board-settings-panel button:hover,
 .board-settings-panel button:focus-visible,
 .board-settings-panel button.active {
-  border-color: rgba(56, 214, 255, 0.38);
-  background: rgba(56, 214, 255, 0.12);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.38);
+  background: rgba(var(--desktop-cyan-rgb), 0.12);
   color: var(--desktop-text);
   outline: none;
 }
@@ -5262,7 +5339,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 3px 7px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.06);
+  background: rgba(var(--desktop-slate-rgb), 0.06);
 }
 
 .board-time-scale {
@@ -5276,7 +5353,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   overflow-x: auto;
   border-bottom: 1px solid var(--desktop-border-soft);
   background:
-    linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--desktop-slate-rgb), 0.06) 1px, transparent 1px),
     rgba(4, 8, 14, 0.28);
   background-size: calc(100% / 7) 100%, 100% 100%;
   color: var(--desktop-faint);
@@ -5317,8 +5394,8 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   bottom: 0;
   left: calc((4 / 7) * 100%);
   width: 1px;
-  background: rgba(56, 214, 255, 0.52);
-  box-shadow: 0 0 14px rgba(56, 214, 255, 0.24);
+  background: rgba(var(--desktop-cyan-rgb), 0.52);
+  box-shadow: 0 0 14px rgba(var(--desktop-cyan-rgb), 0.24);
 }
 
 .board-now-line::before {
@@ -5329,7 +5406,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   height: 9px;
   border-radius: 50%;
   background: var(--desktop-cyan);
-  box-shadow: 0 0 0 4px rgba(56, 214, 255, 0.12);
+  box-shadow: 0 0 0 4px rgba(var(--desktop-cyan-rgb), 0.12);
   content: '';
 }
 
@@ -5359,10 +5436,10 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   pointer-events: none;
   background: repeating-linear-gradient(
     to bottom,
-    rgba(56, 214, 255, 0.62) 0 8px,
+    rgba(var(--desktop-cyan-rgb), 0.62) 0 8px,
     transparent 8px 14px
   );
-  box-shadow: 0 0 16px rgba(56, 214, 255, 0.22);
+  box-shadow: 0 0 16px rgba(var(--desktop-cyan-rgb), 0.22);
 }
 
 .board-lane-now-line::before {
@@ -5373,7 +5450,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   height: 9px;
   border-radius: 50%;
   background: var(--desktop-cyan);
-  box-shadow: 0 0 0 4px rgba(56, 214, 255, 0.12);
+  box-shadow: 0 0 0 4px rgba(var(--desktop-cyan-rgb), 0.12);
   content: '';
 }
 
@@ -5443,7 +5520,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
     90deg,
     transparent 0,
     transparent calc(20% - 1px),
-    rgba(148, 163, 184, 0.08) 20%
+    rgba(var(--desktop-slate-rgb), 0.08) 20%
   );
   background-size: 20% 100%;
 }
@@ -5548,7 +5625,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
     90deg,
     transparent 0,
     transparent calc(20% - 1px),
-    rgba(148, 163, 184, 0.08) 20%
+    rgba(var(--desktop-slate-rgb), 0.08) 20%
   );
   background-size: 20% 100%;
 }
@@ -5559,7 +5636,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   right: 8px;
   left: 8px;
   height: 1px;
-  background: rgba(148, 163, 184, 0.12);
+  background: rgba(var(--desktop-slate-rgb), 0.12);
   content: '';
 }
 
@@ -5574,13 +5651,13 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   gap: 2px;
   padding: 6px 8px;
   overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, 0.22);
+  border: 1px solid rgba(var(--desktop-slate-rgb), 0.22);
   border-radius: 7px;
   background: rgba(14, 22, 33, 0.92);
   color: var(--desktop-muted);
   cursor: pointer;
   text-align: left;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 8px 22px rgba(var(--desktop-black-rgb), 0.22);
 }
 
 .task-timeline-pill strong,
@@ -5604,8 +5681,8 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .task-timeline-pill:hover,
 .task-timeline-pill.selected {
-  border-color: rgba(56, 214, 255, 0.48);
-  background: rgba(56, 214, 255, 0.13);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.48);
+  background: rgba(var(--desktop-cyan-rgb), 0.13);
   color: var(--desktop-text);
 }
 
@@ -5615,23 +5692,23 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .task-timeline-planning {
-  border-color: rgba(148, 163, 184, 0.24);
+  border-color: rgba(var(--desktop-slate-rgb), 0.24);
 }
 
 .task-timeline-running {
-  border-color: rgba(53, 211, 153, 0.34);
+  border-color: rgba(var(--desktop-green-rgb), 0.34);
 }
 
 .task-timeline-review {
-  border-color: rgba(240, 179, 90, 0.4);
+  border-color: rgba(var(--desktop-amber-rgb), 0.4);
 }
 
 .task-timeline-blocked {
-  border-color: rgba(255, 105, 120, 0.4);
+  border-color: rgba(var(--desktop-red-rgb), 0.4);
 }
 
 .task-timeline-done {
-  border-color: rgba(56, 214, 255, 0.34);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.34);
 }
 
 .lane-grid.board-view-swimlane .lane-list.lane-timeline-track {
@@ -5671,8 +5748,8 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .task-card.selected,
 .task-row:hover,
 .task-row.selected {
-  border-color: rgba(56, 214, 255, 0.44);
-  background: rgba(56, 214, 255, 0.09);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.44);
+  background: rgba(var(--desktop-cyan-rgb), 0.09);
 }
 
 .task-card strong,
@@ -5751,9 +5828,9 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   display: grid;
   gap: 8px;
   padding: 12px;
-  border-color: rgba(240, 179, 90, 0.42);
+  border-color: rgba(var(--desktop-amber-rgb), 0.42);
   border-radius: 7px;
-  background: rgba(240, 179, 90, 0.12);
+  background: rgba(var(--desktop-amber-rgb), 0.12);
 }
 
 .metric-grid {
@@ -5836,8 +5913,8 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .overview-actions button:hover {
-  border-color: rgba(56, 214, 255, 0.44);
-  background: rgba(56, 214, 255, 0.1);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.44);
+  background: rgba(var(--desktop-cyan-rgb), 0.1);
   color: var(--desktop-text);
 }
 
@@ -5847,10 +5924,10 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   width: 30px;
   height: 30px;
   place-items: center;
-  border: 1px solid rgba(56, 214, 255, 0.34);
+  border: 1px solid rgba(var(--desktop-cyan-rgb), 0.34);
   border-radius: 7px;
   color: var(--desktop-cyan);
-  background: rgba(56, 214, 255, 0.1);
+  background: rgba(var(--desktop-cyan-rgb), 0.1);
 }
 
 .overview-actions button strong {
@@ -5872,7 +5949,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   grid-template-rows: auto minmax(0, 1fr);
   background:
     radial-gradient(circle at 72% -18%, rgba(32, 168, 207, 0.1), transparent 38%),
-    #080d14;
+    var(--desktop-surface-2);
 }
 
 .workspace-overview-head {
@@ -5938,11 +6015,11 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   align-items: start;
   gap: 12px;
   padding: 15px 16px;
-  border: 1px solid rgba(56, 214, 255, 0.2);
+  border: 1px solid rgba(var(--desktop-cyan-rgb), 0.2);
   border-radius: 9px;
   background:
-    linear-gradient(90deg, rgba(56, 214, 255, 0.08), rgba(56, 214, 255, 0.015) 52%),
-    rgba(10, 16, 25, 0.9);
+    linear-gradient(90deg, rgba(var(--desktop-cyan-rgb), 0.08), rgba(var(--desktop-cyan-rgb), 0.015) 52%),
+    rgba(var(--desktop-overlay-3-rgb), 0.9);
 }
 
 .workspace-goal-icon {
@@ -5950,9 +6027,9 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   width: 36px;
   height: 36px;
   place-items: center;
-  border: 1px solid rgba(56, 214, 255, 0.28);
+  border: 1px solid rgba(var(--desktop-cyan-rgb), 0.28);
   border-radius: 8px;
-  background: rgba(56, 214, 255, 0.09);
+  background: rgba(var(--desktop-cyan-rgb), 0.09);
   color: var(--desktop-cyan);
 }
 
@@ -5984,12 +6061,12 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   gap: 3px;
   padding: 12px 13px;
   border-color: var(--desktop-border-soft);
-  background: rgba(10, 16, 25, 0.9);
+  background: rgba(var(--desktop-overlay-3-rgb), 0.9);
 }
 
 .workspace-execution-metric[data-tone='warning'] {
-  border-color: rgba(240, 179, 90, 0.35);
-  background: rgba(240, 179, 90, 0.07);
+  border-color: rgba(var(--desktop-amber-rgb), 0.35);
+  background: rgba(var(--desktop-amber-rgb), 0.07);
 }
 
 .workspace-execution-metric > strong {
@@ -6025,7 +6102,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 13px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 9px;
-  background: rgba(10, 16, 25, 0.9);
+  background: rgba(var(--desktop-overlay-3-rgb), 0.9);
 }
 
 .workspace-active-sessions {
@@ -6066,7 +6143,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   height: 24px;
   place-items: center;
   border-radius: 6px;
-  background: rgba(56, 214, 255, 0.08);
+  background: rgba(var(--desktop-cyan-rgb), 0.08);
   color: var(--desktop-cyan);
 }
 
@@ -6107,15 +6184,15 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 9px;
   border: 1px solid transparent;
   border-radius: 7px;
-  background: rgba(148, 163, 184, 0.035);
+  background: rgba(var(--desktop-slate-rgb), 0.035);
   color: var(--desktop-muted);
   text-align: left;
   cursor: pointer;
 }
 
 .workspace-session-row:hover {
-  border-color: rgba(56, 214, 255, 0.26);
-  background: rgba(56, 214, 255, 0.06);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.26);
+  background: rgba(var(--desktop-cyan-rgb), 0.06);
 }
 
 .workspace-session-mode {
@@ -6189,7 +6266,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   min-width: 0;
   padding: 8px 6px;
   border: 0;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.09);
+  border-bottom: 1px solid rgba(var(--desktop-slate-rgb), 0.09);
   background: transparent;
   color: var(--desktop-muted);
   text-align: left;
@@ -6212,18 +6289,18 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   height: 7px;
   border-radius: 50%;
   background: var(--desktop-faint);
-  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.08);
+  box-shadow: 0 0 0 3px rgba(var(--desktop-slate-rgb), 0.08);
 }
 
 .workspace-task-state[data-status='in_progress'],
 .workspace-task-state[data-status='running'] {
   background: var(--desktop-cyan);
-  box-shadow: 0 0 0 3px rgba(56, 214, 255, 0.09);
+  box-shadow: 0 0 0 3px rgba(var(--desktop-cyan-rgb), 0.09);
 }
 
 .workspace-task-state[data-status='blocked'] {
   background: var(--desktop-amber);
-  box-shadow: 0 0 0 3px rgba(240, 179, 90, 0.09);
+  box-shadow: 0 0 0 3px rgba(var(--desktop-amber-rgb), 0.09);
 }
 
 .workspace-conversation-dot {
@@ -6244,7 +6321,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 9px 7px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(148, 163, 184, 0.035);
+  background: rgba(var(--desktop-slate-rgb), 0.035);
 }
 
 .workspace-evidence-stats strong {
@@ -6366,7 +6443,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   overflow: auto;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: #080d14;
+  background: var(--desktop-surface-2);
   color: #b7c8d9;
   font-size: 11px;
   line-height: 1.6;
@@ -6505,9 +6582,9 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .usage-account-card {
   padding: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
+  border: 1px solid rgba(var(--desktop-slate-rgb), 0.16);
   border-radius: 7px;
-  background: rgba(148, 163, 184, 0.05);
+  background: rgba(var(--desktop-slate-rgb), 0.05);
 }
 
 .usage-account-copy {
@@ -6530,7 +6607,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   height: 5px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.14);
+  background: rgba(var(--desktop-slate-rgb), 0.14);
 }
 
 .usage-plan-meter span {
@@ -6569,7 +6646,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .composer-add-button:hover:not(:disabled),
 .composer-mode-button:hover:not(:disabled) {
-  background: rgba(148, 163, 184, 0.12);
+  background: rgba(var(--desktop-slate-rgb), 0.12);
   color: var(--desktop-text);
 }
 
@@ -6597,7 +6674,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   border: 1px solid var(--desktop-border);
   border-radius: 8px;
   background: #121820;
-  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.42);
+  box-shadow: 0 16px 50px rgba(var(--desktop-black-rgb), 0.42);
 }
 
 .composer-control:last-child .composer-popover {
@@ -6628,7 +6705,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .composer-popover button:not(:disabled):hover,
 .composer-popover button.selected {
-  background: rgba(56, 214, 255, 0.1);
+  background: rgba(var(--desktop-cyan-rgb), 0.1);
   color: var(--desktop-text);
 }
 
@@ -6680,7 +6757,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .composer-model-combobox:hover,
 .composer-model-combobox:focus {
-  background-color: rgba(148, 163, 184, 0.12);
+  background-color: rgba(var(--desktop-slate-rgb), 0.12);
   color: var(--desktop-text);
   outline: none;
 }
@@ -6745,7 +6822,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 0 9px;
   border: 1px solid var(--desktop-border);
   border-radius: 6px;
-  background: #0b1118;
+  background: var(--desktop-surface-9);
   color: var(--desktop-faint);
 }
 
@@ -6861,8 +6938,8 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .chat-composer-workflows button.selected {
-  border-color: rgba(56, 214, 255, 0.38);
-  background: rgba(56, 214, 255, 0.12);
+  border-color: rgba(var(--desktop-cyan-rgb), 0.38);
+  background: rgba(var(--desktop-cyan-rgb), 0.12);
   color: var(--desktop-text);
 }
 
