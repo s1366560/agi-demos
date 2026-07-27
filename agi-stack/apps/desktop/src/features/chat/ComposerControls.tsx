@@ -52,6 +52,7 @@ export function ComposerControls({
   onRuntimeTargetChange,
 }: ComposerControlsProps) {
   const [openMenu, setOpenMenu] = useState<ComposerMenu | null>(null);
+  const { t } = useI18n();
   const [mode, setMode] = useState(modeLabel);
   const [effort, setEffort] = useState(effortLabel);
   const [runtimeTarget, setRuntimeTarget] = useState(runtimeTargetLabel);
@@ -104,15 +105,15 @@ export function ComposerControls({
       className="composer-control-tray"
       ref={trayRef}
       role="toolbar"
-      aria-label="Message composer tools"
+      aria-label={t('composer.toolsLabel')}
     >
       {onAddFiles ? (
         <div className="composer-control">
           <button
             className="composer-add-button"
             type="button"
-            aria-label="Add files or folders"
-            title="Add files or folders"
+            aria-label={t('composer.addFiles')}
+            title={t('composer.addFiles')}
             onClick={onAddFiles}
           >
             <PlusIcon />

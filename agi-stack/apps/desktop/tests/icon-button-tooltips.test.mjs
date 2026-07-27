@@ -92,8 +92,12 @@ test('search view switcher icon buttons expose localized tooltips', () => {
 test('composer add-files button keeps its tooltip identical to the aria label', () => {
   assert.match(
     composerControlsSource,
-    /aria-label="Add files or folders"\s*title="Add files or folders"/,
+    /aria-label=\{t\('composer\.addFiles'\)\}\s*title=\{t\('composer\.addFiles'\)\}/,
   );
+});
+
+test('composer toolbar landmark is localized', () => {
+  assert.match(composerControlsSource, /aria-label=\{t\('composer\.toolsLabel'\)\}/);
 });
 
 test('toast dismiss button exposes a localized tooltip', () => {
