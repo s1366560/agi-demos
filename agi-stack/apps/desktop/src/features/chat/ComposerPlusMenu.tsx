@@ -78,6 +78,7 @@ export function ComposerPlusMenu({
   const [catalog, setCatalog] = useState<ComposerCatalog | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -87,15 +88,17 @@ export function ComposerPlusMenu({
       if (target instanceof Node && !anchorRef.current?.contains(target)) close();
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') close();
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      close(true);
     };
     window.addEventListener('pointerdown', closeIfOutside, true);
     window.addEventListener('focusin', closeIfOutside);
-    window.addEventListener('keydown', closeOnEscape);
+    document.addEventListener('keydown', closeOnEscape, true);
     return () => {
       window.removeEventListener('pointerdown', closeIfOutside, true);
       window.removeEventListener('focusin', closeIfOutside);
-      window.removeEventListener('keydown', closeOnEscape);
+      document.removeEventListener('keydown', closeOnEscape, true);
     };
   }, [open]);
 
@@ -240,9 +243,12 @@ export function ComposerPlusMenu({
     ];
   }, [catalog, conversations, excludedConversationId, t]);
 
-  function close() {
+  function close(restoreFocus = false) {
     setOpen(false);
     setExpanded(null);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => triggerRef.current?.focus());
+    }
   }
 
   function pick(item: ComposerContextItem) {
@@ -260,6 +266,7 @@ export function ComposerPlusMenu({
   return (
     <div className="plus-menu-anchor" ref={anchorRef}>
       <button
+        ref={triggerRef}
         className={compact ? 'composer-plus-compact' : 'picker-chip composer-plus-button'}
         type="button"
         aria-haspopup="menu"

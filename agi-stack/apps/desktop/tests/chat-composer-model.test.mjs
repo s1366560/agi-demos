@@ -143,6 +143,26 @@ test('workspace mention routing suppresses the duplicate default Agent launch', 
   assert.match(appSource, /workspaceMessageRequiresDefaultAgentLaunch\(saved\)/);
 });
 
+test('composer plus menu captures Escape and restores focus to its trigger', () => {
+  assert.match(
+    composerPlusMenuSource,
+    /const triggerRef = useRef<HTMLButtonElement>\(null\)/,
+  );
+  assert.match(
+    composerPlusMenuSource,
+    /document\.addEventListener\('keydown', closeOnEscape, true\)/,
+  );
+  assert.match(
+    composerPlusMenuSource,
+    /event\.preventDefault\(\);[\s\S]{0,80}close\(true\)/,
+  );
+  assert.match(
+    composerPlusMenuSource,
+    /window\.requestAnimationFrame\(\(\) => triggerRef\.current\?\.focus\(\)\)/,
+  );
+  assert.match(composerPlusMenuSource, /ref=\{triggerRef\}/);
+});
+
 test('composer execution context routes selected Web resources into the cloud Agent turn', () => {
   const contextItems = [
     {
