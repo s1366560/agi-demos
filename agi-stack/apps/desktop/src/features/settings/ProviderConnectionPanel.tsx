@@ -422,6 +422,7 @@ export function ProviderConnectionPanel({
                   type="button"
                   disabled={!editing || busy === 'save' || !draft.apiKey}
                   aria-label={t(showSecret ? 'providers.hideSecret' : 'providers.showSecret')}
+                  title={t(showSecret ? 'providers.hideSecret' : 'providers.showSecret')}
                   onClick={() => setShowSecret((current) => !current)}
                 >
                   {showSecret ? <EyeClosedIcon /> : <EyeOpenIcon />}

@@ -1191,7 +1191,7 @@ export function NewTaskFlow({
                 done={phase === 'launching'}
               />
             </ol>
-            <button className="new-task-close" type="button" aria-label={t('task.close')} onClick={closeFlow}>
+            <button className="new-task-close" type="button" aria-label={t('task.close')} title={t('task.close')} onClick={closeFlow}>
               <Cross2Icon />
             </button>
           </header>

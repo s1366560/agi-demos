@@ -208,6 +208,11 @@ export function WorkspaceDock({
                       ? t('workspaceTree.collapse', { name: t('workspaceTree.tasks') })
                       : t('workspaceTree.expand', { name: t('workspaceTree.tasks') })
                   }
+                  title={
+                    unboundTasksExpanded
+                      ? t('workspaceTree.collapse', { name: t('workspaceTree.tasks') })
+                      : t('workspaceTree.expand', { name: t('workspaceTree.tasks') })
+                  }
                   onClick={() => setUnboundTasksExpanded((expanded) => !expanded)}
                 >
                   {unboundTasksExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
@@ -392,6 +397,11 @@ export function WorkspaceDock({
                       }}
                       aria-expanded={workspaceExpanded}
                       aria-label={
+                        workspaceExpanded
+                          ? t('workspaceTree.collapse', { name: workspaceLabel(workspace) })
+                          : t('workspaceTree.expand', { name: workspaceLabel(workspace) })
+                      }
+                      title={
                         workspaceExpanded
                           ? t('workspaceTree.collapse', { name: workspaceLabel(workspace) })
                           : t('workspaceTree.expand', { name: workspaceLabel(workspace) })

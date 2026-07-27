@@ -513,6 +513,7 @@ export function ModelProviderWorkspace({
             type="button"
             disabled={!canManage}
             aria-label={t('providers.addProvider')}
+            title={t('providers.addProvider')}
             onClick={() => setAdding(true)}
           >
             <PlusIcon />
@@ -607,6 +608,7 @@ export function ModelProviderWorkspace({
                 className="provider-icon-button"
                 type="button"
                 aria-label={t('providers.copyProviderId')}
+                title={t('providers.copyProviderId')}
                 onClick={() => void copyProviderId()}
               >
                 <CopyIcon />

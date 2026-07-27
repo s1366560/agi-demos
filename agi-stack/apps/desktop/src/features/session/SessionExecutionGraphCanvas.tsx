@@ -198,6 +198,7 @@ function GraphLayer({
                   type="button"
                   className="session-execution-graph-open-session"
                   aria-label={t('session.graph.openSessionFor', { node: node.label })}
+                  title={t('session.graph.openSessionFor', { node: node.label })}
                   onClick={() => onOpenSession(sessionId)}
                 >
                   <ExternalLinkIcon aria-hidden="true" />

@@ -15,7 +15,7 @@ export function Dialog({
       <section className="dialog-card" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
         <header>
           <div><span>MEMSTACK</span><h2>{title}</h2></div>
-          <button className="icon-button" type="button" onClick={onClose} aria-label="Close dialog"><Cross2Icon /></button>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Close dialog" title="Close dialog"><Cross2Icon /></button>
         </header>
         {children}
       </section>

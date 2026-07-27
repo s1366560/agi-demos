@@ -415,6 +415,7 @@ export function DesktopSearch({
             type="button"
             aria-pressed={viewMode === 'grid'}
             aria-label={t('search.view.grid')}
+            title={t('search.view.grid')}
             onClick={() => setViewMode('grid')}
           >
             <GridIcon aria-hidden="true" />
@@ -423,6 +424,7 @@ export function DesktopSearch({
             type="button"
             aria-pressed={viewMode === 'list'}
             aria-label={t('search.view.list')}
+            title={t('search.view.list')}
             onClick={() => setViewMode('list')}
           >
             <ListBulletIcon aria-hidden="true" />

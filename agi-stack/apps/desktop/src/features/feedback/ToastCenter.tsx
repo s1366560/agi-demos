@@ -63,6 +63,7 @@ export function ToastViewport({
             type="button"
             className="toast__dismiss"
             aria-label={t('toast.dismiss')}
+            title={t('toast.dismiss')}
             onClick={() => onDismiss(toast.id)}
           >
             <Cross2Icon aria-hidden="true" />

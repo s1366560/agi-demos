@@ -291,6 +291,7 @@ export function LoginScreen({
                     type="button"
                     onClick={() => setShowPassword((value) => !value)}
                     aria-label={t(showPassword ? 'login.hidePassword' : 'login.showPassword')}
+                    title={t(showPassword ? 'login.hidePassword' : 'login.showPassword')}
                   >
                     {showPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
                   </button>
@@ -364,6 +365,7 @@ export function LoginScreen({
               type="button"
               onClick={onCancelWorkspaceSso}
               aria-label={t('login.deviceCancel')}
+              title={t('login.deviceCancel')}
             >
               <Cross2Icon />
             </button>

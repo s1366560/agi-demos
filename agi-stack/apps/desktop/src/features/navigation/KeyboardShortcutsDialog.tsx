@@ -89,6 +89,7 @@ export function KeyboardShortcutsPanel({
             type="button"
             className="shortcuts-dialog__close"
             aria-label={t('common.close')}
+            title={t('common.close')}
             onClick={onClose}
           >
             <Cross2Icon aria-hidden="true" />

@@ -128,6 +128,7 @@ const testFiles = [
   'electron-vite-integration.test.mjs',
   'electron-media-permission.test.mjs',
   'hitl-response-events.test.mjs',
+  'icon-button-tooltips.test.mjs',
   'keyboard-shortcuts.test.mjs',
   'workspace-message-event-model.test.mjs',
   'workspace-task-event-model.test.mjs',

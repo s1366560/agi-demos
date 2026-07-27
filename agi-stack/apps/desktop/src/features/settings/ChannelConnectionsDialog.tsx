@@ -144,6 +144,7 @@ export function ChannelConnectionsDialog({
                           <button
                             type="button"
                             aria-label={t('settings.channels.editNamed', { name: channel.name })}
+                            title={t('settings.channels.editNamed', { name: channel.name })}
                             disabled={busy}
                             onClick={() => management.openEdit(channel)}
                           >
@@ -175,6 +176,7 @@ export function ChannelConnectionsDialog({
                               type="button"
                               className="danger-ghost"
                               aria-label={t('settings.channels.deleteNamed', { name: channel.name })}
+                              title={t('settings.channels.deleteNamed', { name: channel.name })}
                               disabled={busy}
                               onClick={() => setConfirmDeleteId(channel.id)}
                             >

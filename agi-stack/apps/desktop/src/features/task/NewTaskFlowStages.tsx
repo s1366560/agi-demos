@@ -725,6 +725,9 @@ function ReviewPlanStepRow({
         aria-label={t(step.enabled ? 'task.disableStep' : 'task.enableStep', {
           step: step.content,
         })}
+        title={t(step.enabled ? 'task.disableStep' : 'task.enableStep', {
+          step: step.content,
+        })}
         onClick={() => onChange({ ...step, enabled: !step.enabled })}
       >
         {step.enabled ? <CheckCircledIcon /> : <span aria-hidden />}
@@ -749,6 +752,7 @@ function ReviewPlanStepRow({
         type="button"
         disabled={disabled}
         aria-label={t('task.editStep', { step: step.content })}
+        title={t('task.editStep', { step: step.content })}
         onClick={onEdit}
       >
         <Pencil2Icon />

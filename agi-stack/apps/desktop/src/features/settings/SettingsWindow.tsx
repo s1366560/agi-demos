@@ -500,7 +500,7 @@ export function SettingsWindow({
                 placeholder={t('settings.search')}
               />
             </label>
-            <button type="button" aria-label={t('settings.close')} onClick={onClose}>
+            <button type="button" aria-label={t('settings.close')} title={t('settings.close')} onClick={onClose}>
               <Cross2Icon />
             </button>
           </header>

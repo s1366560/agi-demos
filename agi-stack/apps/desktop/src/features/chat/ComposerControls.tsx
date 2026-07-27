@@ -112,6 +112,7 @@ export function ComposerControls({
             className="composer-add-button"
             type="button"
             aria-label="Add files or folders"
+            title="Add files or folders"
             onClick={onAddFiles}
           >
             <PlusIcon />

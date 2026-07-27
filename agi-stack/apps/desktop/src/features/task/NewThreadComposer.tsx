@@ -353,6 +353,7 @@ export function NewThreadComposer({
               disabled={!canSend}
               onClick={send}
               aria-label={t('task.startThread')}
+              title={t('task.startThread')}
             >
               <ArrowRightIcon />
             </button>

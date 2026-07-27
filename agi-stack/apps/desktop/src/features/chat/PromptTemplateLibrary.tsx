@@ -484,6 +484,9 @@ export function PromptTemplateLibrary({
                       aria-label={t('chat.templates.deleteTemplate', {
                         title: template.title,
                       })}
+                      title={t('chat.templates.deleteTemplate', {
+                        title: template.title,
+                      })}
                       onClick={() =>
                         setDeleteSelection({
                           template,

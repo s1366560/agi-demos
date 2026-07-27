@@ -736,6 +736,7 @@ function ToolCallPairView({
           type="button"
           className="timeline-row-toggle"
           aria-label={t(expanded ? 'chat.collapseItem' : 'chat.expandItem', { item: title })}
+          title={t(expanded ? 'chat.collapseItem' : 'chat.expandItem', { item: title })}
           aria-expanded={expanded}
           onClick={onToggle}
         >
@@ -977,6 +978,9 @@ function TimelineItemView({
           type="button"
           className="timeline-row-toggle"
           aria-label={t(expanded ? 'chat.collapseItem' : 'chat.expandItem', {
+            item: timelineTitle(item, t),
+          })}
+          title={t(expanded ? 'chat.collapseItem' : 'chat.expandItem', {
             item: timelineTitle(item, t),
           })}
           aria-expanded={expanded}

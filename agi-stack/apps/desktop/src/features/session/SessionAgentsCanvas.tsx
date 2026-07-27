@@ -147,6 +147,9 @@ function SessionAgentTreeNode({
             aria-label={t(expanded ? 'session.agents.collapseChildren' : 'session.agents.expandChildren', {
               agent: label,
             })}
+            title={t(expanded ? 'session.agents.collapseChildren' : 'session.agents.expandChildren', {
+              agent: label,
+            })}
             aria-expanded={expanded}
             onClick={() => onExpandedChange(node.key, !expanded)}
           >
