@@ -97,6 +97,25 @@ test('session messages use the mission-control narrative hierarchy', () => {
   );
 });
 
+test('message action menu dismisses outside and restores trigger focus on Escape', () => {
+  assert.match(chatSource, /const \[menuOpen, setMenuOpen\] = useState\(false\)/);
+  assert.match(
+    chatSource,
+    /document\.addEventListener\('pointerdown', closeIfOutside, true\)/,
+  );
+  assert.match(
+    chatSource,
+    /document\.addEventListener\('keydown', closeOnEscape, true\)/,
+  );
+  assert.match(chatSource, /event\.preventDefault\(\);[\s\S]{0,80}closeMenu\(true\)/);
+  assert.match(
+    chatSource,
+    /window\.requestAnimationFrame\(\(\) => summaryRef\.current\?\.focus\(\)\)/,
+  );
+  assert.match(chatSource, /onToggle=\{\(event\) => setMenuOpen\(event\.currentTarget\.open\)\}/);
+  assert.match(chatSource, /<summary\s+ref=\{summaryRef\}/);
+});
+
 test('execution duplicate recovery stays auditable without repeating the reply surface', () => {
   assert.match(chatSource, /assistantDisplayDuplicateItems\(item\)/);
   assert.match(chatSource, /<details className="assistant-duplicate-disclosure">/);

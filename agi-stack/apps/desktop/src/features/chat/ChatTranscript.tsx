@@ -1,4 +1,4 @@
-import { isValidElement, memo, useRef } from 'react';
+import { isValidElement, memo, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   ActivityLogIcon,
@@ -314,8 +314,35 @@ function MessageActionMenu({
 }) {
   const { t } = useI18n();
   const detailsRef = useRef<HTMLDetailsElement>(null);
+  const summaryRef = useRef<HTMLElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const availability = messageActionsForVisibleMessage(kind, streaming);
-  const closeMenu = () => detailsRef.current?.removeAttribute('open');
+  const closeMenu = (restoreFocus = false) => {
+    detailsRef.current?.removeAttribute('open');
+    setMenuOpen(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => summaryRef.current?.focus());
+    }
+  };
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const closeIfOutside = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && !detailsRef.current?.contains(target)) closeMenu();
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      closeMenu(true);
+    };
+    document.addEventListener('pointerdown', closeIfOutside, true);
+    document.addEventListener('keydown', closeOnEscape, true);
+    return () => {
+      document.removeEventListener('pointerdown', closeIfOutside, true);
+      document.removeEventListener('keydown', closeOnEscape, true);
+    };
+  }, [menuOpen]);
 
   const copyContent = () => {
     if (navigator.clipboard) void navigator.clipboard.writeText(content);
@@ -335,8 +362,16 @@ function MessageActionMenu({
   };
 
   return (
-    <details className="session-message-actions" ref={detailsRef}>
-      <summary aria-label={t('chat.messageActions')} title={t('chat.messageActions')}>
+    <details
+      className="session-message-actions"
+      ref={detailsRef}
+      onToggle={(event) => setMenuOpen(event.currentTarget.open)}
+    >
+      <summary
+        ref={summaryRef}
+        aria-label={t('chat.messageActions')}
+        title={t('chat.messageActions')}
+      >
         <DotsHorizontalIcon />
       </summary>
       <div>
