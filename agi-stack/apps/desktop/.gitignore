@@ -1,7 +1,3 @@
-# The repo-root Python .gitignore excludes `dist/` (sdist build output).
-!dist/
-!dist/**
-
 # electron-vite build output. Electron runs from out/ for preview and packaging.
 out/
 release/
