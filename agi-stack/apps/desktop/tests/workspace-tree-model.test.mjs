@@ -39,6 +39,10 @@ const {
 } = require('/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceTreeModel.js');
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+const workspaceDockSource = readFileSync(
+  new URL('../src/features/workspace/WorkspaceDock.tsx', import.meta.url),
+  'utf8',
+);
 const sessionWorkspaceSource = readFileSync(
   new URL('../src/features/session/SessionWorkspace.tsx', import.meta.url),
   'utf8',
@@ -224,6 +228,24 @@ test('workspace dock exposes accessible persisted lifecycle actions for every co
   assert.equal((markup.match(/>Delete conversation</g) ?? []).length, 2);
   assert.match(markup, /aria-label="Actions for Unbound task session"/);
   assert.match(markup, /aria-label="Actions for Bound workspace session"/);
+});
+
+test('conversation lifecycle menus dismiss outside and restore focus on Escape', () => {
+  assert.match(
+    workspaceDockSource,
+    /details\.workspace-tree-session-actions\[open\]/,
+  );
+  assert.match(
+    workspaceDockSource,
+    /document\.addEventListener\('pointerdown', handleMenuPointerDown\)/,
+  );
+  assert.match(
+    workspaceDockSource,
+    /document\.addEventListener\('keydown', handleMenuKeyDown\)/,
+  );
+  assert.match(workspaceDockSource, /if \(event\.key !== 'Escape'\) return/);
+  assert.match(workspaceDockSource, /openMenu\.removeAttribute\('open'\)/);
+  assert.match(workspaceDockSource, /openMenu\.querySelector<HTMLElement>\('summary'\)\?\.focus\(\)/);
 });
 
 test('conversation lifecycle row updates are immutable and constrained to existing identities', () => {

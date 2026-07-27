@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ScrollArea } from '@radix-ui/themes';
 import {
@@ -136,6 +136,35 @@ export function WorkspaceDock({
       navigationRef.current?.focus();
     });
   };
+
+  useEffect(() => {
+    const openConversationMenu = () =>
+      navigationRef.current?.querySelector<HTMLDetailsElement>(
+        'details.workspace-tree-session-actions[open]',
+      ) ?? null;
+    const handleMenuPointerDown = (event: PointerEvent) => {
+      const openMenu = openConversationMenu();
+      if (!openMenu) return;
+      const target = event.target;
+      if (target instanceof Node && openMenu.contains(target)) return;
+      openMenu.removeAttribute('open');
+    };
+    const handleMenuKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      const openMenu = openConversationMenu();
+      if (!openMenu) return;
+      event.preventDefault();
+      openMenu.removeAttribute('open');
+      openMenu.querySelector<HTMLElement>('summary')?.focus();
+    };
+
+    document.addEventListener('pointerdown', handleMenuPointerDown);
+    document.addEventListener('keydown', handleMenuKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handleMenuPointerDown);
+      document.removeEventListener('keydown', handleMenuKeyDown);
+    };
+  }, []);
 
   return (
     <>
