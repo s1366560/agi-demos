@@ -630,6 +630,19 @@ test('profile menu keeps account and workspace switching as distinct settings en
   assert.match(appSource, /openSettingsEntry\('profile_workspace_switch'\)/);
 });
 
+test('profile menu dismisses on outside interaction and Escape with focus restoration', () => {
+  assert.match(sidebarSource, /profileMenuRef/);
+  assert.match(sidebarSource, /profileTriggerRef/);
+  assert.match(sidebarSource, /document\.addEventListener\('pointerdown', handlePointerDown\)/);
+  assert.match(sidebarSource, /document\.addEventListener\('keydown', handleKeyDown\)/);
+  assert.match(sidebarSource, /if \(event\.key !== 'Escape'\) return/);
+  assert.match(sidebarSource, /setProfileOpen\(false\)/);
+  assert.match(sidebarSource, /profileTriggerRef\.current\?\.focus\(\)/);
+  assert.match(sidebarSource, /role="menu"/);
+  assert.match(sidebarSource, /role="menuitem"/);
+  assert.match(sidebarSource, /aria-haspopup="menu"/);
+});
+
 test('selected conversations are declarative socket state across workspace reconnects', () => {
   assert.match(
     appSource,

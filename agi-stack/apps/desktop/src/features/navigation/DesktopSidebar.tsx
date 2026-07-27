@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   BellIcon,
@@ -107,6 +107,31 @@ export function DesktopSidebar({
 }: DesktopSidebarProps) {
   const { t } = useI18n();
   const [profileOpen, setProfileOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const profileTriggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!profileOpen) return undefined;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && profileMenuRef.current?.contains(target)) return;
+      setProfileOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setProfileOpen(false);
+      profileTriggerRef.current?.focus();
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [profileOpen]);
 
   return (
     <aside className="desktop-design-sidebar" aria-label={t('sidebar.primaryNavigation')}>
@@ -197,9 +222,14 @@ export function DesktopSidebar({
           </button>
         </nav>
 
-        <div className="desktop-design-profile-wrap">
+        <div ref={profileMenuRef} className="desktop-design-profile-wrap">
           {profileOpen ? (
-            <div className="desktop-design-profile-menu">
+            <div
+              id="desktop-profile-menu"
+              className="desktop-design-profile-menu"
+              role="menu"
+              aria-label={t('sidebar.account')}
+            >
               <div className="desktop-design-profile-menu-identity">
                 <span className="desktop-design-profile-avatar">
                   <PersonIcon />
@@ -211,6 +241,7 @@ export function DesktopSidebar({
               </div>
               <button
                 type="button"
+                role="menuitem"
                 onClick={() => {
                   setProfileOpen(false);
                   onOpenAccountSettings();
@@ -220,6 +251,7 @@ export function DesktopSidebar({
               </button>
               <button
                 type="button"
+                role="menuitem"
                 onClick={() => {
                   setProfileOpen(false);
                   onSwitchWorkspace();
@@ -230,6 +262,7 @@ export function DesktopSidebar({
               <button
                 className="danger"
                 type="button"
+                role="menuitem"
                 onClick={() => {
                   setProfileOpen(false);
                   onSignOut();
@@ -240,9 +273,12 @@ export function DesktopSidebar({
             </div>
           ) : null}
           <button
+            ref={profileTriggerRef}
             className="desktop-design-profile"
             type="button"
+            aria-haspopup="menu"
             aria-expanded={profileOpen}
+            aria-controls={profileOpen ? 'desktop-profile-menu' : undefined}
             onClick={() => setProfileOpen((open) => !open)}
           >
             <span className="desktop-design-profile-avatar">
