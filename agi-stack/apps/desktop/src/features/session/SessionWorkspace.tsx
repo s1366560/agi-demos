@@ -100,6 +100,8 @@ export function SessionWorkspace({
   const [lifecycleMode, setLifecycleMode] = useState<ConversationLifecycleMode>(null);
   const canvasTriggerRef = useRef<string | null>(null);
   const moreActionsRef = useRef<HTMLDetailsElement>(null);
+  const moreActionsSummaryRef = useRef<HTMLElement>(null);
+  const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   const statusPresentation = sessionStatusPresentation(viewModel.status);
   const runActions = viewModel.runActions;
   const reattachPresentation = sessionRecoveryPresentation('reconnect');
@@ -110,6 +112,33 @@ export function SessionWorkspace({
   const showStatusBanner = statusPresentation !== null && surface !== 'conversation';
   const conversationModePresentation = conversationModeLabel(viewModel.conversationMode, t);
   const evidenceSurface = viewModel.capabilityMode === 'code' ? 'checks' : 'verification';
+
+  const closeMoreActions = (restoreFocus = false) => {
+    moreActionsRef.current?.removeAttribute('open');
+    setMoreActionsOpen(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => moreActionsSummaryRef.current?.focus());
+    }
+  };
+
+  useEffect(() => {
+    if (!moreActionsOpen) return;
+    const closeIfOutside = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && !moreActionsRef.current?.contains(target)) closeMoreActions();
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      closeMoreActions(true);
+    };
+    document.addEventListener('pointerdown', closeIfOutside, true);
+    document.addEventListener('keydown', closeOnEscape, true);
+    return () => {
+      document.removeEventListener('pointerdown', closeIfOutside, true);
+      document.removeEventListener('keydown', closeOnEscape, true);
+    };
+  }, [moreActionsOpen]);
 
   const transitionSurface = (action: SessionSurfaceAction) => {
     setSurfaceState((current) => transitionSessionSurface(current, viewModel.id, action));
@@ -168,9 +197,7 @@ export function SessionWorkspace({
   const closeLifecycleDialog = () => {
     setLifecycleMode(null);
     if (typeof window === 'undefined') return;
-    window.requestAnimationFrame(() =>
-      moreActionsRef.current?.querySelector<HTMLElement>('summary')?.focus(),
-    );
+    window.requestAnimationFrame(() => moreActionsSummaryRef.current?.focus());
   };
 
   const canvasControls: SessionCanvasControls = {
@@ -358,19 +385,33 @@ export function SessionWorkspace({
               </AlertDialog.Content>
             </AlertDialog.Root>
           ) : null}
-          <details className="session-workspace-more" ref={moreActionsRef}>
-            <summary aria-label={t('session.moreActions')} title={t('session.moreActions')}>
+          <details
+            className="session-workspace-more"
+            ref={moreActionsRef}
+            onToggle={(event) => setMoreActionsOpen(event.currentTarget.open)}
+          >
+            <summary
+              ref={moreActionsSummaryRef}
+              aria-label={t('session.moreActions')}
+              title={t('session.moreActions')}
+            >
               <DotsHorizontalIcon />
             </summary>
             <div>
-              <button type="button" onClick={() => openCanvas('overview')}>
+              <button
+                type="button"
+                onClick={() => {
+                  closeMoreActions();
+                  openCanvas('overview');
+                }}
+              >
                 <ReaderIcon /> {t('session.canvasOverview')}
               </button>
               {onRenameConversation ? (
                 <button
                   type="button"
-                  onClick={(event) => {
-                    event.currentTarget.closest('details')?.removeAttribute('open');
+                  onClick={() => {
+                    closeMoreActions();
                     setLifecycleMode('rename');
                   }}
                 >
@@ -381,8 +422,8 @@ export function SessionWorkspace({
                 <button
                   type="button"
                   className="danger"
-                  onClick={(event) => {
-                    event.currentTarget.closest('details')?.removeAttribute('open');
+                  onClick={() => {
+                    closeMoreActions();
                     setLifecycleMode('delete');
                   }}
                 >
@@ -394,7 +435,10 @@ export function SessionWorkspace({
                   type="button"
                   className="danger"
                   disabled={actionDisabled}
-                  onClick={() => onRunAction('cancel')}
+                  onClick={() => {
+                    closeMoreActions();
+                    onRunAction('cancel');
+                  }}
                 >
                   <StopIcon />
                   {runActionPending === 'cancel' ? t('session.stopping') : t('session.stopRun')}

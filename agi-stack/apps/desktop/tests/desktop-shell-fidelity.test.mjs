@@ -540,6 +540,33 @@ test('conversation header and thread chrome follow the prototype hierarchy', () 
   assert.match(sessionWorkspaceSource, /viewModel\.participantCount/);
 });
 
+test('conversation more-actions menu dismisses outside and restores focus on Escape', () => {
+  assert.match(
+    sessionWorkspaceSource,
+    /const \[moreActionsOpen, setMoreActionsOpen\] = useState\(false\)/,
+  );
+  assert.match(
+    sessionWorkspaceSource,
+    /document\.addEventListener\('pointerdown', closeIfOutside, true\)/,
+  );
+  assert.match(
+    sessionWorkspaceSource,
+    /document\.addEventListener\('keydown', closeOnEscape, true\)/,
+  );
+  assert.match(
+    sessionWorkspaceSource,
+    /event\.preventDefault\(\);[\s\S]{0,80}closeMoreActions\(true\)/,
+  );
+  assert.match(
+    sessionWorkspaceSource,
+    /window\.requestAnimationFrame\(\(\) => moreActionsSummaryRef\.current\?\.focus\(\)\)/,
+  );
+  assert.match(
+    sessionWorkspaceSource,
+    /onToggle=\{\(event\) => setMoreActionsOpen\(event\.currentTarget\.open\)\}/,
+  );
+});
+
 test('conversation task navigation opens the exact linked task', () => {
   assert.match(
     appSource,
