@@ -31,6 +31,10 @@ copyFileSync(
   join(desktopRoot, 'src', 'features', 'navigation', 'AuxiliaryView.css'),
   join(compiledNavigationDirectory, 'AuxiliaryView.css'),
 );
+copyFileSync(
+  join(desktopRoot, 'src', 'features', 'navigation', 'KeyboardShortcutsDialog.css'),
+  join(compiledNavigationDirectory, 'KeyboardShortcutsDialog.css'),
+);
 
 const compiledMyWorkDirectory = join(compiledRoot, 'src', 'features', 'my-work');
 mkdirSync(compiledMyWorkDirectory, { recursive: true });
@@ -44,6 +48,20 @@ mkdirSync(compiledSearchDirectory, { recursive: true });
 copyFileSync(
   join(desktopRoot, 'src', 'features', 'search', 'DesktopSearch.css'),
   join(compiledSearchDirectory, 'DesktopSearch.css'),
+);
+
+const compiledFeedbackDirectory = join(compiledRoot, 'src', 'features', 'feedback');
+mkdirSync(compiledFeedbackDirectory, { recursive: true });
+copyFileSync(
+  join(desktopRoot, 'src', 'features', 'feedback', 'ToastCenter.css'),
+  join(compiledFeedbackDirectory, 'ToastCenter.css'),
+);
+
+const compiledComponentsDirectory = join(compiledRoot, 'src', 'components');
+mkdirSync(compiledComponentsDirectory, { recursive: true });
+copyFileSync(
+  join(desktopRoot, 'src', 'components', 'Skeleton.css'),
+  join(compiledComponentsDirectory, 'Skeleton.css'),
 );
 
 const compiledWorkspaceDirectory = join(compiledRoot, 'src', 'features', 'workspace');
@@ -100,6 +118,8 @@ const testFiles = [
   'skill-timeline-group-model.test.mjs',
   'cloud-session-queue-qa.test.mjs',
   'conversation-title-events.test.mjs',
+  'toast-center.test.mjs',
+  'skeleton.test.mjs',
   'desktop-shell-fidelity.test.mjs',
   'desktop-search-model.test.mjs',
   'desktop-search.test.mjs',
@@ -107,6 +127,7 @@ const testFiles = [
   'electron-vite-integration.test.mjs',
   'electron-media-permission.test.mjs',
   'hitl-response-events.test.mjs',
+  'keyboard-shortcuts.test.mjs',
   'workspace-message-event-model.test.mjs',
   'workspace-task-event-model.test.mjs',
   'workspace-roster-event-model.test.mjs',

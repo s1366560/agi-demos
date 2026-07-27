@@ -16,6 +16,8 @@ import {
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
+import { Skeleton, SkeletonGroup } from '../../components/Skeleton';
+import { messageSkeletonRows } from '../../components/skeletonModel';
 import type {
   AgentTimelineItem,
   ConversationTimelineState,
@@ -254,16 +256,21 @@ export function AgentTimeline({
 
   if (state.loading) {
     return (
-      <div
+      <SkeletonGroup
         className="chat-empty-state timeline-loading"
-        role="status"
-        aria-label={t('session.loadingHistory')}
+        label={t('session.loadingHistory')}
       >
-        <span className="timeline-skeleton-bar is-wide" aria-hidden="true" />
-        <span className="timeline-skeleton-bar" aria-hidden="true" />
-        <span className="timeline-skeleton-bar is-short" aria-hidden="true" />
-        <span className="sr-only">{t('session.loadingHistory')}</span>
-      </div>
+        {messageSkeletonRows(3).map((row) => (
+          <div className="skeleton-message-row" key={row.id}>
+            <Skeleton variant="circle" />
+            <div className="skeleton-column">
+              {row.barWidths.map((width) => (
+                <Skeleton key={width} variant="text" width={width} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </SkeletonGroup>
     );
   }
 
@@ -291,9 +298,13 @@ export function AgentTimeline({
       {!state.error && (state.hasMore || state.loadingEarlier) ? (
         <div className="timeline-history-control" aria-live="polite">
           {state.loadingEarlier ? (
-            <Text size="1" color="gray" role="status">
-              {t('session.loadingEarlierHistory')}
-            </Text>
+            <SkeletonGroup
+              className="timeline-earlier-loading"
+              label={t('session.loadingEarlierHistory')}
+            >
+              <Skeleton variant="text" width="42%" />
+              <Skeleton variant="text" width="28%" />
+            </SkeletonGroup>
           ) : (
             <Button
               type="button"

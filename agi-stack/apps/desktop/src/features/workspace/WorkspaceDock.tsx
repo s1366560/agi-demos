@@ -16,6 +16,8 @@ import {
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
+import { Skeleton, SkeletonGroup } from '../../components/Skeleton';
+import { treeSkeletonRows } from '../../components/skeletonModel';
 import type {
   AgentConversation,
   RuntimeNodeLoadState,
@@ -241,7 +243,7 @@ export function WorkspaceDock({
                     />
                   ) : null}
                   {unboundAvailability === 'loading' ? (
-                    <WorkspaceTreeState compact title={t('workspaceTree.loadingTasks')} />
+                    <WorkspaceTreeSkeleton label={t('workspaceTree.loadingTasks')} rows={2} />
                   ) : unboundAvailability === 'error' ? (
                     <WorkspaceTreeState
                       compact
@@ -318,10 +320,7 @@ export function WorkspaceDock({
               }}
             />
           ) : availability === 'loading' ? (
-            <WorkspaceTreeState
-              title={t('workspaceTree.loading')}
-              detail={t('workspaceTree.loadingDescription')}
-            />
+            <WorkspaceTreeSkeleton label={t('workspaceTree.loading')} rows={4} />
           ) : availability === 'error' ? (
             <WorkspaceTreeState
               title={t('workspaceTree.unavailable')}
@@ -443,7 +442,10 @@ export function WorkspaceDock({
                       {sessionAvailability === 'deferred' ? (
                         <WorkspaceTreeState compact title={t('workspaceTree.sessionsDeferred')} />
                       ) : sessionAvailability === 'loading' ? (
-                        <WorkspaceTreeState compact title={t('workspaceTree.loadingSessions')} />
+                        <WorkspaceTreeSkeleton
+                          label={t('workspaceTree.loadingSessions')}
+                          rows={2}
+                        />
                       ) : sessionAvailability === 'error' ? (
                         <WorkspaceTreeState
                           compact
@@ -632,6 +634,19 @@ function ConversationTreeRow({
         </details>
       ) : null}
     </div>
+  );
+}
+
+function WorkspaceTreeSkeleton({ label, rows = 3 }: { label: string; rows?: number }) {
+  return (
+    <SkeletonGroup className="skeleton-tree-rows" label={label}>
+      {treeSkeletonRows(rows).map((row) => (
+        <div className="skeleton-tree-row" data-depth={row.depth} key={row.id}>
+          <Skeleton variant="circle" />
+          <Skeleton variant="text" width={row.width} />
+        </div>
+      ))}
+    </SkeletonGroup>
   );
 }
 

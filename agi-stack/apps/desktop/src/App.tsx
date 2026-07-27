@@ -32,6 +32,7 @@ import {
   FileTextIcon,
   GearIcon,
   GridIcon,
+  KeyboardIcon,
   MagnifyingGlassIcon,
   MixerHorizontalIcon,
   ReloadIcon,
@@ -149,6 +150,7 @@ import {
   selectMCPAppCanvasTab,
   type MCPAppCanvasState,
 } from './features/chat/mcpAppCanvasEventModel';
+import { useToast } from './features/feedback/ToastCenter';
 import { SessionEvidenceCanvas } from './features/session/SessionEvidenceCanvas';
 import { SessionAgentsCanvas } from './features/session/SessionAgentsCanvas';
 import { SessionChangesCanvas } from './features/session/SessionChangesCanvas';
@@ -258,6 +260,12 @@ import {
 } from './features/my-work/myWorkModel';
 import { AuxiliaryView } from './features/navigation/AuxiliaryView';
 import { DesktopSidebar } from './features/navigation/DesktopSidebar';
+import { KeyboardShortcutsDialog } from './features/navigation/KeyboardShortcutsDialog';
+import {
+  detectShortcutPlatform,
+  shortcutById,
+  shortcutChordFor,
+} from './features/navigation/keyboardShortcutModel';
 import { DesktopSearch } from './features/search/DesktopSearch';
 import {
   settingsSectionForEntry,
@@ -1631,12 +1639,14 @@ class WorkspaceSsoFlowError extends Error {
 export function App() {
   const runsInNativeDesktop = detectNativeDesktopShell();
   const { t } = useI18n();
+  const { showToast } = useToast();
   const [config, setConfig] = useState<DesktopRuntimeConfig>(() =>
     initialDesktopRuntimeConfig(undefined, runsInNativeDesktop),
   );
   const [auth, setAuth] = useState<AuthState>(emptyAuthState);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [workspaceCreateOpen, setWorkspaceCreateOpen] = useState(false);
   const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(false);
@@ -1888,7 +1898,12 @@ export function App() {
     () => latestAgentDefinitionEvent(socket.events),
     [socket.events],
   );
-  const modalOpen = loginModalOpen || commandPaletteOpen || newTaskOpen || settingsWindowOpen;
+  const modalOpen =
+    loginModalOpen ||
+    commandPaletteOpen ||
+    newTaskOpen ||
+    settingsWindowOpen ||
+    shortcutsDialogOpen;
   const localRuntimeMode = config.mode === 'local' && runsInNativeDesktop;
   const localRuntimeAuthorityReady = isCurrentLocalRuntimeAuthority(
     config,
@@ -2530,6 +2545,7 @@ export function App() {
       (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     setRunActionsMenuOpen(false);
     setSessionMenuOpen(false);
+    setShortcutsDialogOpen(false);
     setCommandPaletteOpen(true);
   }, []);
 
@@ -2577,6 +2593,18 @@ export function App() {
         return;
       }
       if (
+        (event.metaKey || event.ctrlKey) &&
+        event.key === '/' &&
+        !commandPaletteOpen &&
+        !loginModalOpen &&
+        !newTaskOpen &&
+        !settingsWindowOpen
+      ) {
+        event.preventDefault();
+        setShortcutsDialogOpen((open) => !open);
+        return;
+      }
+      if (
         event.key === '/' &&
         !event.metaKey &&
         !event.ctrlKey &&
@@ -2593,6 +2621,10 @@ export function App() {
       if (event.key === 'Escape' && commandPaletteOpen) {
         event.preventDefault();
         closeCommandPalette(true);
+      }
+      if (event.key === 'Escape' && shortcutsDialogOpen) {
+        event.preventDefault();
+        setShortcutsDialogOpen(false);
       }
       if (event.key === 'Escape' && sessionMenuOpen) {
         event.preventDefault();
@@ -2612,9 +2644,12 @@ export function App() {
     closeCommandPalette,
     commandPaletteOpen,
     loginModalOpen,
+    newTaskOpen,
     openCommandPalette,
     runActionsMenuOpen,
     sessionMenuOpen,
+    settingsWindowOpen,
+    shortcutsDialogOpen,
   ]);
 
   useEffect(() => {
@@ -4899,53 +4934,60 @@ export function App() {
     conversation: AgentConversation,
     title: string,
   ) => {
-    const requestConfig = configRef.current;
-    const expectedScopeEpoch = configScopeEpochRef.current;
-    const expectedContextRevision = contextRevisionRef.current;
-    const normalizedWorkspaceId = workspaceId.trim();
-    if (
-      conversation.tenant_id !== requestConfig.tenantId ||
-      conversation.project_id !== projectId ||
-      projectId !== requestConfig.projectId ||
-      (conversation.workspace_id?.trim() ?? '') !== normalizedWorkspaceId
-    ) {
-      throw new Error('Invalid conversation lifecycle scope');
-    }
-    const apiClient = new DesktopApiClient({
-      ...requestConfig,
-      projectId,
-      workspaceId: normalizedWorkspaceId,
-    });
-    const mutationScopeIsCurrent = () =>
-      expectedScopeEpoch === configScopeEpochRef.current &&
-      expectedContextRevision === contextRevisionRef.current &&
-      isSameDesktopProjectRequestScope(requestConfig, configRef.current);
-    const updated = await apiClient.updateAgentConversationTitle(
-      conversation.id,
-      title,
-      projectId,
-      normalizedWorkspaceId,
-    );
-    if (!mutationScopeIsCurrent()) return;
-    updateDataset((current) => {
-      const conversationsByWorkspace = replaceConversationInWorkspaceRows(
-        current.conversationsByWorkspace,
-        updated,
+    try {
+      const requestConfig = configRef.current;
+      const expectedScopeEpoch = configScopeEpochRef.current;
+      const expectedContextRevision = contextRevisionRef.current;
+      const normalizedWorkspaceId = workspaceId.trim();
+      if (
+        conversation.tenant_id !== requestConfig.tenantId ||
+        conversation.project_id !== projectId ||
+        projectId !== requestConfig.projectId ||
+        (conversation.workspace_id?.trim() ?? '') !== normalizedWorkspaceId
+      ) {
+        throw new Error('Invalid conversation lifecycle scope');
+      }
+      const apiClient = new DesktopApiClient({
+        ...requestConfig,
+        projectId,
+        workspaceId: normalizedWorkspaceId,
+      });
+      const mutationScopeIsCurrent = () =>
+        expectedScopeEpoch === configScopeEpochRef.current &&
+        expectedContextRevision === contextRevisionRef.current &&
+        isSameDesktopProjectRequestScope(requestConfig, configRef.current);
+      const updated = await apiClient.updateAgentConversationTitle(
+        conversation.id,
+        title,
+        projectId,
+        normalizedWorkspaceId,
       );
-      return conversationsByWorkspace === current.conversationsByWorkspace
-        ? current
-        : { ...current, conversationsByWorkspace };
-    });
-    const currentSession = agentConversationSessionRef.current;
-    if (
-      currentSession?.scopeKey !== agentConversationScopeKeyFor(projectId, normalizedWorkspaceId) ||
-      currentSession.conversation.id !== updated.id
-    ) {
-      return;
+      if (!mutationScopeIsCurrent()) return;
+      updateDataset((current) => {
+        const conversationsByWorkspace = replaceConversationInWorkspaceRows(
+          current.conversationsByWorkspace,
+          updated,
+        );
+        return conversationsByWorkspace === current.conversationsByWorkspace
+          ? current
+          : { ...current, conversationsByWorkspace };
+      });
+      showToast('success', t('toast.conversationRenameSuccess'));
+      const currentSession = agentConversationSessionRef.current;
+      if (
+        currentSession?.scopeKey !==
+          agentConversationScopeKeyFor(projectId, normalizedWorkspaceId) ||
+        currentSession.conversation.id !== updated.id
+      ) {
+        return;
+      }
+      const nextSession = { ...currentSession, conversation: updated };
+      agentConversationSessionRef.current = nextSession;
+      setAgentConversationSession(nextSession);
+    } catch (caught) {
+      showToast('error', t('toast.conversationRenameError', { detail: formatError(caught) }));
+      throw caught;
     }
-    const nextSession = { ...currentSession, conversation: updated };
-    agentConversationSessionRef.current = nextSession;
-    setAgentConversationSession(nextSession);
   };
 
   const regenerateConversationSummary = async (conversationId: string) => {
@@ -5010,45 +5052,51 @@ export function App() {
     workspaceId: string,
     conversation: AgentConversation,
   ) => {
-    const requestConfig = configRef.current;
-    const expectedScopeEpoch = configScopeEpochRef.current;
-    const expectedContextRevision = contextRevisionRef.current;
-    const normalizedWorkspaceId = workspaceId.trim();
-    if (
-      conversation.tenant_id !== requestConfig.tenantId ||
-      conversation.project_id !== projectId ||
-      projectId !== requestConfig.projectId ||
-      (conversation.workspace_id?.trim() ?? '') !== normalizedWorkspaceId
-    ) {
-      throw new Error('Invalid conversation lifecycle scope');
-    }
-    const apiClient = new DesktopApiClient({
-      ...requestConfig,
-      projectId,
-      workspaceId: normalizedWorkspaceId,
-    });
-    const mutationScopeIsCurrent = () =>
-      expectedScopeEpoch === configScopeEpochRef.current &&
-      expectedContextRevision === contextRevisionRef.current &&
-      isSameDesktopProjectRequestScope(requestConfig, configRef.current);
-    await apiClient.deleteAgentConversation(conversation.id, projectId);
-    if (!mutationScopeIsCurrent()) return;
-    updateDataset((current) => {
-      const conversationsByWorkspace = removeConversationFromWorkspaceRows(
-        current.conversationsByWorkspace,
-        conversation.id,
-      );
-      return conversationsByWorkspace === current.conversationsByWorkspace
-        ? current
-        : { ...current, conversationsByWorkspace };
-    });
-    if (
-      agentConversationSessionRef.current?.scopeKey ===
-        agentConversationScopeKeyFor(projectId, normalizedWorkspaceId) &&
-      agentConversationSessionRef.current.conversation.id === conversation.id
-    ) {
-      agentConversationSessionRef.current = null;
-      selectWorkspace(normalizedWorkspaceId, projectId);
+    try {
+      const requestConfig = configRef.current;
+      const expectedScopeEpoch = configScopeEpochRef.current;
+      const expectedContextRevision = contextRevisionRef.current;
+      const normalizedWorkspaceId = workspaceId.trim();
+      if (
+        conversation.tenant_id !== requestConfig.tenantId ||
+        conversation.project_id !== projectId ||
+        projectId !== requestConfig.projectId ||
+        (conversation.workspace_id?.trim() ?? '') !== normalizedWorkspaceId
+      ) {
+        throw new Error('Invalid conversation lifecycle scope');
+      }
+      const apiClient = new DesktopApiClient({
+        ...requestConfig,
+        projectId,
+        workspaceId: normalizedWorkspaceId,
+      });
+      const mutationScopeIsCurrent = () =>
+        expectedScopeEpoch === configScopeEpochRef.current &&
+        expectedContextRevision === contextRevisionRef.current &&
+        isSameDesktopProjectRequestScope(requestConfig, configRef.current);
+      await apiClient.deleteAgentConversation(conversation.id, projectId);
+      if (!mutationScopeIsCurrent()) return;
+      updateDataset((current) => {
+        const conversationsByWorkspace = removeConversationFromWorkspaceRows(
+          current.conversationsByWorkspace,
+          conversation.id,
+        );
+        return conversationsByWorkspace === current.conversationsByWorkspace
+          ? current
+          : { ...current, conversationsByWorkspace };
+      });
+      showToast('success', t('toast.conversationDeleteSuccess'));
+      if (
+        agentConversationSessionRef.current?.scopeKey ===
+          agentConversationScopeKeyFor(projectId, normalizedWorkspaceId) &&
+        agentConversationSessionRef.current.conversation.id === conversation.id
+      ) {
+        agentConversationSessionRef.current = null;
+        selectWorkspace(normalizedWorkspaceId, projectId);
+      }
+    } catch (caught) {
+      showToast('error', t('toast.conversationDeleteError', { detail: formatError(caught) }));
+      throw caught;
     }
   };
 
@@ -7029,6 +7077,13 @@ export function App() {
     setRuntimeTarget(value === runtimeTargetLabels.staging ? 'staging' : 'local');
   }, []);
 
+  const showShortcutsDefinition = shortcutById('show-shortcuts');
+  const showShortcutsChord = showShortcutsDefinition
+    ? shortcutChordFor(
+        showShortcutsDefinition,
+        detectShortcutPlatform(navigator.userAgent, navigator.platform),
+      )
+    : undefined;
   const commandItems: CommandPaletteItem[] = [
     {
       id: 'home',
@@ -7091,6 +7146,14 @@ export function App() {
       icon: <RocketIcon />,
       disabled: Boolean(runtimeDisabledReason) || connection === 'loading',
       onSelect: () => void refreshRuntime(),
+    },
+    {
+      id: 'keyboard-shortcuts',
+      label: t('commandPalette.showShortcuts'),
+      description: t('shortcuts.description'),
+      icon: <KeyboardIcon />,
+      shortcut: showShortcutsChord,
+      onSelect: () => setShortcutsDialogOpen(true),
     },
   ];
   const normalizedCommandQuery = commandQuery.trim().toLowerCase();
@@ -7722,6 +7785,10 @@ export function App() {
               document.body,
             )
           : null}
+        <KeyboardShortcutsDialog
+          open={shortcutsDialogOpen}
+          onClose={() => setShortcutsDialogOpen(false)}
+        />
         <NewTaskFlow
           open={newTaskOpen}
           config={config}
@@ -9419,6 +9486,7 @@ function CommandPalette({
                   <strong>{item.label}</strong>
                   <em>{item.description}</em>
                 </span>
+                {item.shortcut ? <kbd className="command-shortcut">{item.shortcut}</kbd> : null}
               </button>
             ))
           )}

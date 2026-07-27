@@ -1386,6 +1386,19 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   -webkit-line-clamp: 2;
 }
 
+.command-shortcut {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border: 1px solid var(--desktop-border);
+  border-radius: 5px;
+  background: var(--desktop-panel-2);
+  color: var(--desktop-muted);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
 .command-empty {
   min-height: 90px;
   padding: 28px 12px;
@@ -4738,37 +4751,10 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 18px 6px;
 }
 
-.timeline-skeleton-bar {
-  display: block;
-  width: 58%;
-  height: 12px;
-  border-radius: 5px;
-  background: linear-gradient(
-    90deg,
-    rgba(148, 163, 184, 0.08) 25%,
-    rgba(148, 163, 184, 0.18) 50%,
-    rgba(148, 163, 184, 0.08) 75%
-  );
-  background-size: 200% 100%;
-  animation: timeline-skeleton-shimmer 1.4s linear infinite;
-}
-
-.timeline-skeleton-bar.is-wide {
-  width: 82%;
-}
-
-.timeline-skeleton-bar.is-short {
-  width: 34%;
-}
-
-@keyframes timeline-skeleton-shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-
-  100% {
-    background-position: -200% 0;
-  }
+.timeline-earlier-loading {
+  display: grid;
+  gap: 6px;
+  padding: 4px 6px;
 }
 
 /* Reasoning (thought) rows: second-class, muted presentation */
@@ -4839,7 +4825,6 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 @media (prefers-reduced-motion: reduce) {
   .streaming-caret,
   .timeline-working-dots > span,
-  .timeline-skeleton-bar,
   .tool-call-icon.is-running svg,
   .timeline-tool-group.status-running .timeline-tool-group-icon {
     animation: none;
