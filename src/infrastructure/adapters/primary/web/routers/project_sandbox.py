@@ -1601,11 +1601,15 @@ async def get_project_sandbox_runtime_capabilities(
     return {
         "service_version": "0.1.0",
         "contract_version": 2,
-        "terminal_interactive": dict(available),
+        "terminal_interactive": {
+            "availability": "degraded",
+            "contract_version": 1,
+            "reason_code": "terminal_interactive_canonical_run_authority_unavailable",
+        },
         "terminal_resume": {
             "availability": "unavailable",
             "contract_version": 2,
-            "reason_code": "terminal_session_v2_registry_unavailable",
+            "reason_code": "terminal_session_v2_canonical_run_authority_unavailable",
         },
         "files": dict(available),
         "kasm_vnc": dict(available),

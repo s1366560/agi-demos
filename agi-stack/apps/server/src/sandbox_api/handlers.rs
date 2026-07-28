@@ -260,6 +260,17 @@ pub(super) async fn stop_project_desktop(
     Ok(Json(SandboxServiceStopResponse { success: true }))
 }
 
+pub(super) async fn get_project_sandbox_runtime_capabilities(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path(project_id): Path<String>,
+) -> SandboxApiResult<Json<SandboxRuntimeCapabilitiesResponse>> {
+    ensure_project_access(&app, &identity, &project_id).await?;
+    Ok(Json(
+        SandboxRuntimeCapabilitiesResponse::canonical_run_authority_unavailable(),
+    ))
+}
+
 pub(super) async fn start_project_terminal(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,

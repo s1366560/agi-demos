@@ -18,6 +18,56 @@ const availableFiles = {
   reason_code: null,
 };
 
+test('cloud terminal operations fail closed without canonical run authority', async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    throw new Error('legacy project-only terminal routes must not be probed');
+  };
+  try {
+    const client = createSandboxRuntimeClient(
+      {
+        ...DEFAULT_CONFIG,
+        apiBaseUrl: 'https://api.memstack.test',
+        mode: 'cloud',
+        projectId: 'project-1',
+      },
+      {
+        ...SANDBOX_RUNTIME_CAPABILITIES_UNAVAILABLE,
+        terminal_interactive: {
+          availability: 'degraded',
+          contract_version: 1,
+          reason_code: 'terminal_interactive_canonical_run_authority_unavailable',
+        },
+        terminal_resume: {
+          availability: 'unavailable',
+          contract_version: 2,
+          reason_code: 'terminal_session_v2_canonical_run_authority_unavailable',
+        },
+      }
+    );
+
+    assert.deepEqual(
+      await client.createTerminalSession('project-1', 'run-1', 4),
+      {
+        status: 'unavailable',
+        reason_code: 'terminal_session_v2_canonical_run_authority_unavailable',
+      }
+    );
+    assert.deepEqual(
+      await client.resumeTerminalSession('project-1', 'session-1', 'resume-token'),
+      {
+        status: 'unavailable',
+        reason_code: 'terminal_session_v2_canonical_run_authority_unavailable',
+      }
+    );
+    assert.equal(calls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('sandbox file operations fail closed without a declared structured authority', async () => {
   const originalFetch = globalThis.fetch;
   let calls = 0;

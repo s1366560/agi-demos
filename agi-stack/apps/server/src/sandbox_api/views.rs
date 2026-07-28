@@ -12,6 +12,52 @@ fn default_auto_create() -> bool {
 }
 
 #[derive(Debug, Serialize, PartialEq)]
+pub(super) struct SandboxRuntimeCapabilityResponse {
+    pub(super) availability: &'static str,
+    pub(super) contract_version: u8,
+    pub(super) reason_code: Option<&'static str>,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub(super) struct SandboxRuntimeCapabilitiesResponse {
+    pub(super) service_version: &'static str,
+    pub(super) contract_version: u8,
+    pub(super) terminal_interactive: SandboxRuntimeCapabilityResponse,
+    pub(super) terminal_resume: SandboxRuntimeCapabilityResponse,
+    pub(super) files: SandboxRuntimeCapabilityResponse,
+    pub(super) kasm_vnc: SandboxRuntimeCapabilityResponse,
+}
+
+impl SandboxRuntimeCapabilitiesResponse {
+    pub(super) fn canonical_run_authority_unavailable() -> Self {
+        Self {
+            service_version: "0.1.0",
+            contract_version: 2,
+            terminal_interactive: SandboxRuntimeCapabilityResponse {
+                availability: "degraded",
+                contract_version: 1,
+                reason_code: Some("terminal_interactive_canonical_run_authority_unavailable"),
+            },
+            terminal_resume: SandboxRuntimeCapabilityResponse {
+                availability: "unavailable",
+                contract_version: 2,
+                reason_code: Some("terminal_session_v2_canonical_run_authority_unavailable"),
+            },
+            files: SandboxRuntimeCapabilityResponse {
+                availability: "unavailable",
+                contract_version: 1,
+                reason_code: Some("sandbox_file_api_unavailable"),
+            },
+            kasm_vnc: SandboxRuntimeCapabilityResponse {
+                availability: "unavailable",
+                contract_version: 1,
+                reason_code: Some("kasm_proxy_contract_unavailable"),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Serialize, PartialEq)]
 pub(super) struct ProjectSandboxResponse {
     pub(super) sandbox_id: String,
     pub(super) project_id: String,
