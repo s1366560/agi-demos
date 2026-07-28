@@ -53,6 +53,7 @@ mod http_proxy;
 mod http_registry;
 mod proxy_helpers;
 mod runtime_auth;
+mod sandbox_files;
 mod service_helpers;
 mod service_http;
 mod service_lifecycle;
@@ -698,6 +699,7 @@ pub(crate) fn router() -> Router<AppState> {
             "/api/v1/projects/:project_id/sandbox/sync",
             get(sync_project_sandbox_status),
         )
+        .merge(sandbox_files::router())
 }
 
 #[derive(Debug, Clone, Serialize)]

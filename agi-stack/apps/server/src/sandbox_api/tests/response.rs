@@ -96,6 +96,29 @@ fn sandbox_runtime_capabilities_publish_terminal_v2_only_when_authority_is_ready
 }
 
 #[test]
+fn sandbox_runtime_capabilities_publish_files_only_when_authority_is_ready() {
+    let unavailable = serde_json::to_value(
+        SandboxRuntimeCapabilitiesResponse::canonical_run_authority_unavailable()
+            .with_files_available(false),
+    )
+    .unwrap();
+    let available = serde_json::to_value(
+        SandboxRuntimeCapabilitiesResponse::canonical_run_authority_unavailable()
+            .with_files_available(true),
+    )
+    .unwrap();
+
+    assert_eq!(unavailable["files"]["availability"], "unavailable");
+    assert_eq!(
+        unavailable["files"]["reason_code"],
+        "sandbox_file_api_unavailable"
+    );
+    assert_eq!(available["files"]["availability"], "available");
+    assert_eq!(available["files"]["contract_version"], 1);
+    assert_eq!(available["files"]["reason_code"], Value::Null);
+}
+
+#[test]
 fn sandbox_profiles_match_python_wire_shape() {
     let response = SandboxProfilesResponse {
         profiles: SANDBOX_PROFILE_INFOS,

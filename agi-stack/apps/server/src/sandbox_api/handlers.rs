@@ -271,7 +271,8 @@ pub(super) async fn get_project_sandbox_runtime_capabilities(
             SandboxRuntimeCapabilitiesResponse::terminal_v2_available()
         }
         _ => SandboxRuntimeCapabilitiesResponse::canonical_run_authority_unavailable(),
-    };
+    }
+    .with_files_available(app.sandboxes.file_authority_available());
     Ok(Json(capabilities))
 }
 
