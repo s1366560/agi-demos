@@ -157,6 +157,7 @@
     "src/features/workspace/WorkspaceOverview.tsx",
     "src/features/workspace/capabilityWorkspaceCollaborationClient.ts",
     "src/features/workspace/httpWorkspaceCollaborationClient.ts",
+    "src/features/workspace/workspaceCollaborationAuthorityEvent.ts",
     "src/features/workspace/workspaceCollaborationClient.ts",
     "src/features/workspace/workspaceCollaborationModel.ts",
     "src/features/workspace/workspaceCreateModel.ts",

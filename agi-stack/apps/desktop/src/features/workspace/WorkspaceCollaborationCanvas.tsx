@@ -21,6 +21,7 @@ import {
   invalidateWorkspaceSurfaceAuthority,
   resolveWorkspaceSurfaceLoad,
   selectWorkspaceCollaborationTab,
+  type WorkspaceAuthorityInvalidation,
   type WorkspaceCollaborationCanvasState,
 } from './workspaceCollaborationModel';
 import {
@@ -50,6 +51,7 @@ export type WorkspaceCollaborationCanvasProps = {
     surface: WorkspaceCollaborationSurface,
     action: string,
   ) => string;
+  authorityInvalidation?: WorkspaceAuthorityInvalidation | null;
 };
 
 const AUTHORITY_STATES = ['loading', 'empty', 'stale', 'error', 'unavailable'] as const;
@@ -59,6 +61,7 @@ export function WorkspaceCollaborationCanvas({
   client,
   initialSurface = 'goals',
   createIdempotencyKey,
+  authorityInvalidation = null,
 }: WorkspaceCollaborationCanvasProps) {
   const { t } = useI18n();
   const [state, setState] = useState<WorkspaceCollaborationCanvasState>(() =>
@@ -69,6 +72,7 @@ export function WorkspaceCollaborationCanvas({
     Partial<Record<WorkspaceCollaborationSurface, AbortController>>
   >({});
   const mutationCounterRef = useRef(0);
+  const lastAuthorityInvalidationRef = useRef(authorityInvalidation?.sequence ?? 0);
   const tabRefs = useRef<Partial<Record<WorkspaceCollaborationSurface, HTMLButtonElement>>>({});
   const [pendingMutation, setPendingMutation] = useState<string | null>(null);
   const [mutationFailed, setMutationFailed] = useState(false);
@@ -154,6 +158,25 @@ export function WorkspaceCollaborationCanvas({
   }, [abortAll, commit, initialSurface, loadSurface, workspaceId, state.activeSurface]);
 
   useEffect(() => abortAll, [abortAll]);
+
+  useEffect(() => {
+    if (
+      !authorityInvalidation ||
+      authorityInvalidation.sequence <= lastAuthorityInvalidationRef.current
+    ) {
+      return;
+    }
+    lastAuthorityInvalidationRef.current = authorityInvalidation.sequence;
+    const surface = stateRef.current.activeSurface;
+    commit((current) =>
+      invalidateWorkspaceSurfaceAuthority(
+        current,
+        surface,
+        authorityInvalidation.trigger,
+      ),
+    );
+    loadSurface(surface, 'canonical');
+  }, [authorityInvalidation, commit, loadSurface]);
 
   const selectSurface = useCallback(
     (surface: WorkspaceCollaborationSurface) => {
@@ -466,8 +489,9 @@ function GoalsSurface(props: SurfaceProps) {
             const succeeded = await onMutate('create_objective', {
               title: objective.trim(),
             });
-            if (!succeeded) return;
+            if (!succeeded) return false;
             setObjective('');
+            return true;
           }}
         />
         <InlineCreate
@@ -478,8 +502,9 @@ function GoalsSurface(props: SurfaceProps) {
           busy={busy}
           onSubmit={async () => {
             const succeeded = await onMutate('create_task', { title: task.trim() });
-            if (!succeeded) return;
+            if (!succeeded) return false;
             setTask('');
+            return true;
           }}
         />
       </div>

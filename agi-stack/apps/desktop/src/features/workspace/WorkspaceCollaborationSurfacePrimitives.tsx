@@ -94,8 +94,9 @@ export function WorkspaceCollaborationTopologySurface({
               title: nodeLabel.trim(),
               node_type: 'workspace',
             });
-            if (!succeeded) return;
+            if (!succeeded) return false;
             setNodeLabel('');
+            return true;
           }}
         />
         <form

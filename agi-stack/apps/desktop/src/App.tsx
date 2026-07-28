@@ -341,6 +341,11 @@ import { WorkspaceCreateDialog } from './features/workspace/WorkspaceCreateDialo
 import { WorkspaceSettingsDialog } from './features/workspace/WorkspaceSettingsDialog';
 import { createCapabilityWorkspaceCollaborationClient } from './features/workspace/capabilityWorkspaceCollaborationClient';
 import { createHttpWorkspaceCollaborationClient } from './features/workspace/httpWorkspaceCollaborationClient';
+import { workspaceCollaborationAuthorityEvent } from './features/workspace/workspaceCollaborationAuthorityEvent';
+import type {
+  WorkspaceAuthorityInvalidation,
+  WorkspaceAuthorityInvalidationTrigger,
+} from './features/workspace/workspaceCollaborationModel';
 import {
   applyWorkspaceActivityStreamEvent,
   type WorkspaceLiveActivity,
@@ -1782,6 +1787,10 @@ export function App() {
     emptyMCPAppCanvasState(),
   );
   const [agentTaskSignals, setAgentTaskSignals] = useState<AgentTaskSignal[]>([]);
+  const [
+    workspaceCollaborationAuthorityInvalidation,
+    setWorkspaceCollaborationAuthorityInvalidation,
+  ] = useState<WorkspaceAuthorityInvalidation | null>(null);
   const pendingNewTaskAgentTurnsRef = useRef(
     new Map<
       string,
@@ -1816,6 +1825,13 @@ export function App() {
   const workspaceMessageEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const workspaceRosterEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const workspaceTaskEventsHeadRef = useRef<AgentWsEvent | null>(null);
+  const workspaceCollaborationEventsHeadRef = useRef<AgentWsEvent | null>(null);
+  const workspaceCollaborationEventsScopeRef = useRef('');
+  const workspaceCollaborationSocketRef = useRef({
+    connected: false,
+    seenConnected: false,
+    workspaceId: '',
+  });
   const myWorkRequestRef = useRef(0);
   const myWorkAbortRef = useRef<AbortController | null>(null);
   const myWorkRefreshTimerRef = useRef<number | null>(null);
@@ -1948,6 +1964,42 @@ export function App() {
     auth.context?.revision ?? null,
     scopedConversation?.id ?? null,
   );
+  const invalidateWorkspaceCollaborationAuthority = useCallback(
+    (trigger: WorkspaceAuthorityInvalidationTrigger) => {
+      setWorkspaceCollaborationAuthorityInvalidation((current) => ({
+        sequence: (current?.sequence ?? 0) + 1,
+        trigger,
+      }));
+    },
+    [],
+  );
+  useEffect(() => {
+    const workspaceId = config.workspaceId.trim();
+    const previous = workspaceCollaborationSocketRef.current;
+    if (previous.workspaceId !== workspaceId) {
+      workspaceCollaborationSocketRef.current = {
+        connected: socket.connected,
+        seenConnected: socket.connected,
+        workspaceId,
+      };
+      return;
+    }
+    const reconnect =
+      Boolean(workspaceId) &&
+      socket.connected &&
+      previous.seenConnected &&
+      !previous.connected;
+    workspaceCollaborationSocketRef.current = {
+      connected: socket.connected,
+      seenConnected: previous.seenConnected || socket.connected,
+      workspaceId,
+    };
+    if (reconnect) invalidateWorkspaceCollaborationAuthority('reconnect');
+  }, [
+    config.workspaceId,
+    invalidateWorkspaceCollaborationAuthority,
+    socket.connected,
+  ]);
   useEffect(() => {
     const emptyArtifactState = emptyArtifactCanvasState();
     const emptyMCPAppState = emptyMCPAppCanvasState();
@@ -2899,6 +2951,9 @@ export function App() {
     sessionEventsHeadRef.current = socket.events[0] ?? null;
     if (eventWindow.cursorGap) {
       invalidateSessionAuthority();
+      if (config.workspaceId.trim()) {
+        invalidateWorkspaceCollaborationAuthority('cursor_gap');
+      }
       const conversation = agentConversationSessionRef.current?.conversation;
       if (conversation) {
         void loadConversationTimeline(conversation, conversation.project_id);
@@ -2980,6 +3035,7 @@ export function App() {
   }, [
     config.workspaceId,
     invalidateSessionAuthority,
+    invalidateWorkspaceCollaborationAuthority,
     loadConversationTimeline,
     reviewTab,
     scopedConversation,
@@ -2995,6 +3051,32 @@ export function App() {
     },
     [scopedConversationId],
   );
+
+  useEffect(() => {
+    const workspaceId = config.workspaceId.trim();
+    if (workspaceCollaborationEventsScopeRef.current !== workspaceId) {
+      workspaceCollaborationEventsScopeRef.current = workspaceId;
+      workspaceCollaborationEventsHeadRef.current = socket.events[0] ?? null;
+      return;
+    }
+    const events = socketEventsSince(
+      socket.events,
+      workspaceCollaborationEventsHeadRef.current,
+    );
+    workspaceCollaborationEventsHeadRef.current = socket.events[0] ?? null;
+    if (
+      workspaceId &&
+      events.some((event) =>
+        workspaceCollaborationAuthorityEvent(event, workspaceId),
+      )
+    ) {
+      invalidateWorkspaceCollaborationAuthority('delta');
+    }
+  }, [
+    config.workspaceId,
+    invalidateWorkspaceCollaborationAuthority,
+    socket.events,
+  ]);
 
   useEffect(() => {
     const workspaceId = config.workspaceId.trim();
@@ -7535,6 +7617,7 @@ export function App() {
           <WorkspaceCollaborationCanvas
             workspaceId={config.workspaceId}
             client={workspaceCollaborationClient}
+            authorityInvalidation={workspaceCollaborationAuthorityInvalidation}
           />
         ) : null}
       </>
