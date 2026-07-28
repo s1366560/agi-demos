@@ -83,6 +83,11 @@ from src.tools.test_tools import (
     create_generate_tests_tool,
     create_run_tests_tool,
 )
+from src.tools.workspace_file_browser_tools import (
+    create_download_workspace_file_tool,
+    create_list_workspace_files_tool,
+    create_read_workspace_file_tool,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +148,9 @@ def get_tool_registry(workspace_dir: str = "/workspace") -> ToolRegistry:
     registry.register(create_grep_tool())
     registry.register(create_list_tool())
     registry.register(create_patch_tool())
+    registry.register(create_list_workspace_files_tool())
+    registry.register(create_read_workspace_file_tool())
+    registry.register(create_download_workspace_file_tool())
 
     # Register artifact tools
     registry.register(create_export_artifact_tool())
