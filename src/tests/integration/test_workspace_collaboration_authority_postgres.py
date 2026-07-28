@@ -20,6 +20,9 @@ from src.application.services.workspace_collaboration_authority import (
     WorkspaceCollaborationMutationCommand,
     WorkspaceCollaborationRevisionConflictError,
 )
+from src.infrastructure.adapters.secondary.persistence.models import (
+    WorkspaceCollaborationAuthorityModel,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_collaboration_authority_repository import (
     SqlWorkspaceCollaborationAuthorityRepository,
 )
@@ -263,11 +266,23 @@ async def _assert_concurrent_first_write(
         connect_args={"server_settings": {"search_path": schema}},
     )
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    workspace_lock_acquired = asyncio.Event()
+    continue_desktop = asyncio.Event()
 
     async def desktop_first_write() -> str:
+        class BarrierRepository(SqlWorkspaceCollaborationAuthorityRepository):
+            async def _ensure_authority(
+                self,
+                *,
+                actor: WorkspaceCollaborationActor,
+            ) -> WorkspaceCollaborationAuthorityModel:
+                workspace_lock_acquired.set()
+                await continue_desktop.wait()
+                return await super()._ensure_authority(actor=actor)
+
         try:
             async with session_factory() as session, session.begin():
-                repository = SqlWorkspaceCollaborationAuthorityRepository(session)
+                repository = BarrierRepository(session)
                 await repository.reserve(
                     actor=actor,
                     command=command,
@@ -291,14 +306,26 @@ async def _assert_concurrent_first_write(
         finally:
             await legacy_connection.close()
 
+    desktop_task: asyncio.Task[str] | None = None
+    legacy_task: asyncio.Task[None] | None = None
     try:
-        desktop_result, _legacy_result = await asyncio.gather(
-            desktop_first_write(),
-            legacy_first_write(),
-        )
+        desktop_task = asyncio.create_task(desktop_first_write())
+        await asyncio.wait_for(workspace_lock_acquired.wait(), timeout=5)
+        legacy_task = asyncio.create_task(legacy_first_write())
+        await asyncio.wait_for(asyncio.shield(legacy_task), timeout=5)
+        continue_desktop.set()
+        desktop_result = await asyncio.wait_for(desktop_task, timeout=5)
     finally:
+        continue_desktop.set()
+        pending_tasks = tuple(
+            task for task in (desktop_task, legacy_task) if task is not None and not task.done()
+        )
+        for task in pending_tasks:
+            task.cancel()
+        if pending_tasks:
+            await asyncio.gather(*pending_tasks, return_exceptions=True)
         await engine.dispose()
-    assert desktop_result in {"reserved", "revision_conflict"}
+    assert desktop_result == "revision_conflict"
     race_rows = await connection.fetch(
         """
         SELECT revision

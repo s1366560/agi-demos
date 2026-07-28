@@ -73,6 +73,12 @@ jobs:
         run: |
           uv sync --extra dev --extra neo4j
 
+      - name: Configure repository test database
+        env:
+          DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/memstack
+        run: |
+          printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > .env
+
       - name: Validate plugin template packaging
         run: |
           uv build examples/plugins/memstack-plugin-template --wheel --out-dir /tmp/plugin-template-wheels
@@ -126,12 +132,6 @@ jobs:
           assert all(d.code != "plugin_discovery_failed" for d in diagnostics)
           print("Local Feishu plugin discovery verified")
           PY
-
-      - name: Configure repository test database
-        env:
-          DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/memstack
-        run: |
-          printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > .env
 
       - name: Guard wrapped ORM select execute usage
         run: |

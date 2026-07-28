@@ -9,6 +9,7 @@ from sqlalchemy import insert, select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 from sqlalchemy.sql.dml import Insert
 
 from src.application.services.workspace_collaboration_authority import (
@@ -131,13 +132,13 @@ class SqlWorkspaceCollaborationAuthorityRepository:
         actor: WorkspaceCollaborationActor,
         lock: bool,
     ) -> None:
-        statement = select(WorkspaceModel.id).where(
-            WorkspaceModel.id == actor.workspace_id,
-            WorkspaceModel.tenant_id == actor.tenant_id,
-            WorkspaceModel.project_id == actor.project_id,
+        bind = self._session.get_bind()
+        dialect_name = getattr(getattr(bind, "dialect", None), "name", "")
+        statement = self._workspace_select_statement(
+            actor=actor,
+            lock=lock,
+            dialect_name=dialect_name,
         )
-        if lock:
-            statement = statement.with_for_update()
         workspace_id = (
             await self._session.execute(refresh_select_statement(statement))
         ).scalar_one_or_none()
@@ -145,6 +146,24 @@ class SqlWorkspaceCollaborationAuthorityRepository:
             raise WorkspaceCollaborationTargetNotFoundError(
                 "Workspace does not exist in the mutation scope"
             )
+
+    @staticmethod
+    def _workspace_select_statement(
+        *,
+        actor: WorkspaceCollaborationActor,
+        lock: bool,
+        dialect_name: str,
+    ) -> Select[tuple[str]]:
+        statement = select(WorkspaceModel.id).where(
+            WorkspaceModel.id == actor.workspace_id,
+            WorkspaceModel.tenant_id == actor.tenant_id,
+            WorkspaceModel.project_id == actor.project_id,
+        )
+        if lock:
+            if dialect_name == "postgresql":
+                return statement.with_for_update(key_share=True)
+            return statement.with_for_update()
+        return statement
 
     async def _find_authority(
         self,

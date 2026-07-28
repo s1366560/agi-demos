@@ -12,13 +12,66 @@ from fastapi.testclient import TestClient
 from starlette.requests import Request as StarletteRequest
 
 from src.application.services.workspace_collaboration_authority import (
+    WorkspaceCollaborationActor,
+    WorkspaceCollaborationMutationCommand,
     WorkspaceCollaborationMutationReceipt,
+    WorkspaceCollaborationMutationService,
     WorkspaceCollaborationRevisionConflictError,
 )
 from src.domain.model.workspace.actor_identity import ActorIdentity
 from src.domain.model.workspace.blackboard_file import BlackboardFile
 
 _BASE_PATH = "/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/collaboration"
+
+
+def _raw_multipart_request(
+    *,
+    boundary: str,
+    body: bytes,
+) -> StarletteRequest:
+    delivered = False
+
+    async def receive():
+        nonlocal delivered
+        if delivered:
+            return {"type": "http.disconnect"}
+        delivered = True
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    return StarletteRequest(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/upload",
+            "headers": [
+                (
+                    b"content-type",
+                    f"multipart/form-data; boundary={boundary}".encode(),
+                )
+            ],
+        },
+        receive,
+    )
+
+
+def _raw_upload_body(
+    *,
+    boundary: str,
+    file_first: bool,
+    parent_content_type: str | None,
+) -> bytes:
+    file_part = (
+        f"--{boundary}\r\n".encode()
+        + b'Content-Disposition: form-data; name="file"; filename="report.txt"\r\n'
+        + b"Content-Type: text/plain\r\n\r\n"
+        + b"bounded-content\r\n"
+    )
+    parent_headers = b'Content-Disposition: form-data; name="parent_path"\r\n'
+    if parent_content_type is not None:
+        parent_headers += f"Content-Type: {parent_content_type}\r\n".encode()
+    parent_part = f"--{boundary}\r\n".encode() + parent_headers + b"\r\n/docs\r\n"
+    ordered_parts = (file_part, parent_part) if file_first else (parent_part, file_part)
+    return b"".join((*ordered_parts, f"--{boundary}--\r\n".encode()))
 
 
 @pytest.fixture
@@ -355,6 +408,70 @@ async def test_workspace_upload_bounds_stream_without_content_length(
 
     assert exc_info.value.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
     assert exc_info.value.detail["reason_code"] == "workspace_collaboration_upload_too_large"
+
+
+@pytest.mark.unit
+async def test_workspace_upload_file_metadata_is_independent_of_part_order(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from src.application.services import blackboard_file_service as file_service_module
+    from src.infrastructure.adapters.primary.web.routers import (
+        workspace_collaboration_upload as upload_module,
+    )
+
+    monkeypatch.setattr(file_service_module, "STORAGE_ROOT", tmp_path)
+    cases = (
+        ("file-first", True, None),
+        ("parent-first", False, None),
+        ("file-first-parent-content-type", True, "application/x-parent-metadata"),
+    )
+    staged_uploads = []
+    try:
+        for boundary, file_first, parent_content_type in cases:
+            request = _raw_multipart_request(
+                boundary=boundary,
+                body=_raw_upload_body(
+                    boundary=boundary,
+                    file_first=file_first,
+                    parent_content_type=parent_content_type,
+                ),
+            )
+            staged_uploads.append(await upload_module.stage_workspace_upload_request(request))
+
+        assert {staged.content_type for staged in staged_uploads} == {"text/plain"}
+        assert {staged.parent_path for staged in staged_uploads} == {"/docs"}
+
+        actor = WorkspaceCollaborationActor(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            user_id="user-1",
+        )
+        semantic_hashes = {
+            WorkspaceCollaborationMutationService._request_hash(
+                actor=actor,
+                command=WorkspaceCollaborationMutationCommand(
+                    contract_version="2.0.0",
+                    surface="files",
+                    action="upload_file",
+                    expected_revision=7,
+                    idempotency_key="workspace-upload-order",
+                    payload={
+                        "parent_path": staged.parent_path,
+                        "filename": staged.filename,
+                        "content_type": staged.content_type,
+                        "size_bytes": staged.size_bytes,
+                        "checksum_sha256": staged.checksum_sha256,
+                    },
+                ),
+            )
+            for staged in staged_uploads
+        }
+        assert len(semantic_hashes) == 1
+    finally:
+        for staged in staged_uploads:
+            staged.path.unlink(missing_ok=True)
 
 
 @pytest.mark.unit

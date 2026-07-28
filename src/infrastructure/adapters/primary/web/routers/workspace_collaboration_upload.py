@@ -81,6 +81,7 @@ class _WorkspaceMultipartStream:
         self._header_value = bytearray()
         self._content_disposition = b""
         self._content_type = ""
+        self._file_content_type = ""
         self._part_name: str | None = None
         self._part_kind: str | None = None
         self._field_data = bytearray()
@@ -203,7 +204,7 @@ class _WorkspaceMultipartStream:
             path=self._staged_path,
             parent_path=self._parent_path,
             filename=self._filename,
-            content_type=self._content_type,
+            content_type=self._file_content_type,
             size_bytes=self._size_bytes,
             checksum_sha256=self._digest.hexdigest(),
         )
@@ -224,6 +225,7 @@ class _WorkspaceMultipartStream:
         self._file_seen = True
         self._part_kind = "file"
         self._filename = _decode_multipart_value(raw_filename, self._charset)
+        self._file_content_type = self._content_type
         self._staged_path = create_upload_staging_path()
         self._destination = self._staged_path.open("wb")
 

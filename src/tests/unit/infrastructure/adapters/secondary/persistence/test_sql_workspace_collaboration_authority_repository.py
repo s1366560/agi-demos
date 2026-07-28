@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects import postgresql, sqlite
+from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.workspace_collaboration_authority import (
@@ -178,3 +179,42 @@ def test_workspace_authority_initialization_is_postgresql_upsert() -> None:
     assert "'workspace-1'" in sql
     assert "'tenant-1'" in sql
     assert "'project-1'" in sql
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("dialect_name", "compile_dialect", "expected_lock"),
+    [
+        ("postgresql", postgresql.dialect(), "FOR NO KEY UPDATE"),
+        ("sqlite", sqlite.dialect(), None),
+        ("other", postgresql.dialect(), "FOR UPDATE"),
+    ],
+)
+def test_workspace_authority_lock_preserves_foreign_key_progress(
+    dialect_name: str,
+    compile_dialect: Dialect,
+    expected_lock: str | None,
+) -> None:
+    actor = WorkspaceCollaborationActor(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        user_id="user-1",
+    )
+
+    statement = SqlWorkspaceCollaborationAuthorityRepository._workspace_select_statement(
+        actor=actor,
+        lock=True,
+        dialect_name=dialect_name,
+    )
+    sql = str(
+        statement.compile(
+            dialect=compile_dialect,
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+
+    if expected_lock is None:
+        assert " FOR " not in sql
+    else:
+        assert expected_lock in sql
