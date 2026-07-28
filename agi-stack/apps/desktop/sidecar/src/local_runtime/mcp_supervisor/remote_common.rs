@@ -19,8 +19,8 @@ use zeroize::Zeroize;
 use crate::application_vault::ApplicationCredentialVault;
 
 use super::{
-    McpResult, McpScope, McpServerDefinition, McpServerDefinitionInput, McpSupervisorError,
-    McpTransport, SupervisorLimits,
+    valid_env_name, McpCredentialKind, McpResult, McpScope, McpServerDefinition,
+    McpServerDefinitionInput, McpSupervisorError, McpTransport, SupervisorLimits,
 };
 
 pub(super) const STREAMABLE_HTTP_PROTOCOL_VERSION: &str = "2025-03-26";
@@ -37,6 +37,7 @@ const RESERVED_REMOTE_HEADERS: [&str; 8] = [
     "transfer-encoding",
 ];
 const MCP_REMOTE_CREDENTIAL_PREFIX: &str = "mcp-remote-credential.v1";
+const MCP_STDIO_CREDENTIAL_PREFIX: &str = "mcp-stdio-credential.v1";
 
 #[derive(Clone)]
 pub(super) struct ResolvedEndpoint {
@@ -203,14 +204,20 @@ pub(super) fn validate_remote_credential_bindings(
     scope: &McpScope,
     input: &McpServerDefinitionInput,
 ) -> McpResult<()> {
-    let endpoint = input.command.first().ok_or_else(endpoint_invalid)?;
-    for (header_name, reference) in &input.vault_env_refs {
-        let expected = remote_credential_reference(
+    let kind = if input.transport == McpTransport::Stdio {
+        McpCredentialKind::Env
+    } else {
+        McpCredentialKind::Header
+    };
+    for (name, reference) in &input.vault_env_refs {
+        let expected = credential_reference(
             scope,
             &input.name,
             input.transport,
-            endpoint,
-            header_name,
+            &input.command,
+            input.cwd.as_deref(),
+            kind,
+            name,
         )?;
         if reference != &expected {
             return Err(remote_credential_scope_invalid());
@@ -226,23 +233,78 @@ pub(in crate::local_runtime) fn remote_credential_reference(
     endpoint: &str,
     header_name: &str,
 ) -> McpResult<String> {
-    let url = validate_remote_url(endpoint, transport, false)?;
-    let header_name = HeaderName::from_str(header_name).map_err(|_| remote_header_invalid())?;
+    credential_reference(
+        scope,
+        server_name,
+        transport,
+        &[endpoint.to_string()],
+        None,
+        McpCredentialKind::Header,
+        header_name,
+    )
+}
+
+pub(in crate::local_runtime) fn credential_reference(
+    scope: &McpScope,
+    server_name: &str,
+    transport: McpTransport,
+    command: &[String],
+    cwd: Option<&str>,
+    kind: McpCredentialKind,
+    name: &str,
+) -> McpResult<String> {
+    if server_name.is_empty()
+        || server_name.len() > 200
+        || server_name.chars().any(char::is_control)
+    {
+        return Err(remote_credential_scope_invalid());
+    }
+    let (prefix, domain, binding_target, canonical_name) = match (transport, kind) {
+        (
+            McpTransport::Http | McpTransport::Sse | McpTransport::Websocket,
+            McpCredentialKind::Header,
+        ) => {
+            let endpoint = command.first().ok_or_else(endpoint_invalid)?;
+            if command.len() != 1 || cwd.is_some() {
+                return Err(endpoint_invalid());
+            }
+            let url = validate_remote_url(endpoint, transport, false)?;
+            let header_name = HeaderName::from_str(name).map_err(|_| remote_header_invalid())?;
+            if RESERVED_REMOTE_HEADERS.contains(&header_name.as_str()) {
+                return Err(remote_header_invalid());
+            }
+            (
+                MCP_REMOTE_CREDENTIAL_PREFIX,
+                b"memstack-desktop-mcp-remote-credential-v1\0".as_slice(),
+                url.origin().ascii_serialization(),
+                header_name.as_str().to_string(),
+            )
+        }
+        (McpTransport::Stdio, McpCredentialKind::Env) => {
+            if command.is_empty() || !valid_env_name(name) {
+                return Err(remote_credential_scope_invalid());
+            }
+            (
+                MCP_STDIO_CREDENTIAL_PREFIX,
+                b"memstack-desktop-mcp-stdio-credential-v1\0".as_slice(),
+                serde_json::json!({"command": command, "cwd": cwd}).to_string(),
+                name.to_string(),
+            )
+        }
+        _ => return Err(remote_credential_scope_invalid()),
+    };
     let mut digest = Sha256::new();
-    digest.update(b"memstack-desktop-mcp-remote-credential-v1\0");
+    digest.update(domain);
     digest.update(scope.tenant_id.as_bytes());
     digest.update(b"\0");
     digest.update(scope.project_id.as_bytes());
     digest.update(b"\0");
     digest.update(server_name.as_bytes());
     digest.update(b"\0");
-    digest.update(url.origin().ascii_serialization().as_bytes());
+    digest.update(binding_target.as_bytes());
     digest.update(b"\0");
-    digest.update(header_name.as_str().as_bytes());
-    Ok(format!(
-        "{MCP_REMOTE_CREDENTIAL_PREFIX}.{:x}",
-        digest.finalize()
-    ))
+    digest.update(canonical_name.as_bytes());
+    Ok(format!("{prefix}.{:x}", digest.finalize()))
 }
 
 pub(super) async fn resolve_remote_endpoint(
@@ -399,6 +461,83 @@ pub(super) fn encode_message(message: &Value, limits: SupervisorLimits) -> McpRe
         ));
     }
     Ok(encoded)
+}
+
+pub(super) fn decode_json_rpc_messages(
+    payload: &[u8],
+    max_members: usize,
+) -> McpResult<Vec<Value>> {
+    let value: Value = serde_json::from_slice(payload).map_err(|_| malformed_response())?;
+    let messages = match value {
+        Value::Object(_) => vec![value],
+        Value::Array(messages) => {
+            if messages.is_empty() {
+                return Err(malformed_response());
+            }
+            if messages.len() > max_members {
+                return Err(response_too_large());
+            }
+            messages
+        }
+        _ => return Err(malformed_response()),
+    };
+    if messages.len() > max_members {
+        return Err(response_too_large());
+    }
+    for message in &messages {
+        validate_json_rpc_message(message)?;
+    }
+    Ok(messages)
+}
+
+fn validate_json_rpc_message(message: &Value) -> McpResult<()> {
+    let object = message.as_object().ok_or_else(malformed_response)?;
+    if object.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
+        return Err(malformed_response());
+    }
+    if let Some(method) = object.get("method") {
+        if !method.as_str().is_some_and(|value| !value.is_empty())
+            || object.contains_key("result")
+            || object.contains_key("error")
+        {
+            return Err(malformed_response());
+        }
+        if object
+            .get("params")
+            .is_some_and(|params| !params.is_object() && !params.is_array())
+            || object.get("id").is_some_and(|id| !valid_json_rpc_id(id))
+        {
+            return Err(malformed_response());
+        }
+        return Ok(());
+    }
+    let Some(id) = object.get("id") else {
+        return Err(malformed_response());
+    };
+    let has_result = object.contains_key("result");
+    let has_error = object.contains_key("error");
+    if !valid_json_rpc_id(id) || has_result == has_error {
+        return Err(malformed_response());
+    }
+    if has_error {
+        let error = object
+            .get("error")
+            .and_then(Value::as_object)
+            .ok_or_else(malformed_response)?;
+        if !error
+            .get("code")
+            .and_then(Value::as_number)
+            .is_some_and(|code| code.is_i64() || code.is_u64())
+            || error.get("message").and_then(Value::as_str).is_none()
+        {
+            return Err(malformed_response());
+        }
+    }
+    Ok(())
+}
+
+fn valid_json_rpc_id(value: &Value) -> bool {
+    value.is_string() || value.is_number() || value.is_null()
 }
 
 pub(super) fn correlated_result(message: &Value, request_id: u64) -> McpResult<Option<Value>> {

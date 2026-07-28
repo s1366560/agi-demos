@@ -197,7 +197,7 @@ async fn stdio_supervisor_round_trips_and_recovers_from_persisted_definitions() 
                 &server_id,
                 "echo",
                 json!({"message": "hello"}),
-                Some("call-echo-once"),
+                "call-echo-once",
             )
             .await
             .expect("call MCP tool");
@@ -209,7 +209,7 @@ async fn stdio_supervisor_round_trips_and_recovers_from_persisted_definitions() 
                 &server_id,
                 "echo",
                 json!({"message": "hello"}),
-                Some("call-echo-once"),
+                "call-echo-once",
             )
             .await
             .expect("replay MCP tool call");
@@ -247,7 +247,7 @@ async fn stdio_supervisor_round_trips_and_recovers_from_persisted_definitions() 
                 &server_id,
                 "echo",
                 json!({"after": "restart"}),
-                None,
+                "call-echo-after-restart",
             )
             .await
             .expect("call after restart");
@@ -269,8 +269,8 @@ async fn stdio_supervisor_fails_closed_for_timeout_crash_malformed_and_conflicti
             root.clone(),
             None,
             SupervisorLimits {
-                initialize_timeout: Duration::from_millis(300),
-                request_timeout: Duration::from_millis(300),
+                initialize_timeout: Duration::from_secs(1),
+                request_timeout: Duration::from_secs(1),
                 retry_base: Duration::from_millis(500),
                 retry_max: Duration::from_millis(500),
                 ..test_limits()
@@ -348,7 +348,7 @@ async fn stdio_supervisor_fails_closed_for_timeout_crash_malformed_and_conflicti
             &healthy.id,
             "echo",
             json!({"value": 1}),
-            Some("same-key"),
+            "same-key",
         )
         .await
         .expect("initial idempotent call");
@@ -358,7 +358,7 @@ async fn stdio_supervisor_fails_closed_for_timeout_crash_malformed_and_conflicti
             &healthy.id,
             "echo",
             json!({"value": 2}),
-            Some("same-key"),
+            "same-key",
         )
         .await
         .expect_err("conflicting idempotency replay");

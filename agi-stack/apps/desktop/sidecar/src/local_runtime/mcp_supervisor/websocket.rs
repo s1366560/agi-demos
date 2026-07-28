@@ -18,8 +18,8 @@ use crate::application_vault::ApplicationCredentialVault;
 
 use super::{
     remote_common::{
-        connection_closed, correlated_result, elicitation_unavailable, encode_message,
-        malformed_response, next_request_id, remote_headers, request_timeout,
+        connection_closed, correlated_result, decode_json_rpc_messages, elicitation_unavailable,
+        encode_message, malformed_response, next_request_id, remote_headers, request_timeout,
         resolve_remote_endpoint, response_too_large, restart_backoff, retry_delay,
         server_request_rejection, unsupported_client_request, InitializedServer,
         MAX_CORRELATION_MESSAGES, STREAMABLE_HTTP_PROTOCOL_VERSION,
@@ -206,6 +206,7 @@ impl WebSocketRuntime {
         limits: SupervisorLimits,
     ) -> McpResult<Value> {
         let mut aggregate = 0_usize;
+        let mut messages_seen = 0_usize;
         for _ in 0..MAX_CORRELATION_MESSAGES {
             let frame = self
                 .socket
@@ -238,18 +239,20 @@ impl WebSocketRuntime {
             if aggregate > limits.max_aggregate_bytes {
                 return Err(response_too_large());
             }
-            let message: Value =
-                serde_json::from_slice(&bytes).map_err(|_| malformed_response())?;
-            if let Some((rejection, elicitation)) = server_request_rejection(&message)? {
-                self.send_message(&rejection, limits).await?;
-                return Err(if elicitation {
-                    elicitation_unavailable()
-                } else {
-                    unsupported_client_request()
-                });
-            }
-            if let Some(result) = correlated_result(&message, request_id)? {
-                return Ok(result);
+            let remaining = MAX_CORRELATION_MESSAGES.saturating_sub(messages_seen);
+            for message in decode_json_rpc_messages(&bytes, remaining)? {
+                messages_seen = messages_seen.saturating_add(1);
+                if let Some((rejection, elicitation)) = server_request_rejection(&message)? {
+                    self.send_message(&rejection, limits).await?;
+                    return Err(if elicitation {
+                        elicitation_unavailable()
+                    } else {
+                        unsupported_client_request()
+                    });
+                }
+                if let Some(result) = correlated_result(&message, request_id)? {
+                    return Ok(result);
+                }
             }
         }
         Err(McpSupervisorError::new(

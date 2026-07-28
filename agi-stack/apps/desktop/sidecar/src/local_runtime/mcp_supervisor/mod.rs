@@ -27,6 +27,7 @@ mod tool_call_lease;
 mod websocket;
 
 use http::{HttpRuntime, SseRuntime};
+pub(super) use remote_common::credential_reference;
 #[cfg(test)]
 pub(super) use remote_common::remote_credential_reference;
 use remote_common::{
@@ -52,6 +53,13 @@ pub(super) enum McpTransport {
     Http,
     Sse,
     Websocket,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub(super) enum McpCredentialKind {
+    Env,
+    Header,
 }
 
 impl McpTransport {
@@ -96,6 +104,21 @@ pub(super) struct McpServerDefinitionInput {
     pub(super) cwd: Option<String>,
     pub(super) vault_env_refs: BTreeMap<String, String>,
     pub(super) enabled: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct McpCredentialProvisionInput {
+    pub(super) server_name: String,
+    pub(super) transport: McpTransport,
+    pub(super) command: Vec<String>,
+    pub(super) cwd: Option<String>,
+    pub(super) kind: McpCredentialKind,
+    pub(super) name: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct McpCredentialProvisionOutcome {
+    pub(super) duplicate: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -324,9 +347,7 @@ impl McpSupervisor {
     ) -> McpResult<McpServerDefinition> {
         validate_scope(scope)?;
         validate_definition(&input)?;
-        if input.transport != McpTransport::Stdio {
-            validate_remote_credential_bindings(scope, &input)?;
-        }
+        validate_remote_credential_bindings(scope, &input)?;
         validate_idempotency_key(idempotency_key)?;
         let request_hash = definition_hash(scope, &input);
         self.store
@@ -400,11 +421,9 @@ impl McpSupervisor {
     }
 
     pub(super) async fn recover_all_enabled(&self) -> McpResult<()> {
+        let servers = self.store.enabled_servers()?;
         let supervisor = self.clone();
         tokio::spawn(async move {
-            let Ok(servers) = supervisor.store.enabled_servers() else {
-                return;
-            };
             stream::iter(servers)
                 .for_each_concurrent(4, move |server| {
                     let supervisor = supervisor.clone();
@@ -417,6 +436,10 @@ impl McpSupervisor {
         Ok(())
     }
 
+    pub(super) fn prepare_startup_recovery(&self) -> McpResult<()> {
+        self.store.mark_enabled_recovery_pending()
+    }
+
     pub(super) fn install_credential_vault(
         &self,
         credential_vault: ApplicationCredentialVault,
@@ -424,6 +447,68 @@ impl McpSupervisor {
         let mut current = self.credential_vault.lock().map_err(|_| storage_error())?;
         *current = Some(credential_vault);
         Ok(())
+    }
+
+    pub(super) fn provision_credential(
+        &self,
+        scope: &McpScope,
+        input: &McpCredentialProvisionInput,
+        secret: &str,
+        idempotency_key: &str,
+    ) -> McpResult<McpCredentialProvisionOutcome> {
+        validate_scope(scope)?;
+        validate_identifier(&input.server_name, "local_mcp_server_name_invalid")?;
+        validate_idempotency_key(idempotency_key)?;
+        validate_credential_provision_input(input)?;
+        if secret.is_empty() || secret.len() > 64 * 1024 || secret.contains('\0') {
+            return Err(McpSupervisorError::new(
+                "local_mcp_credential_secret_invalid",
+                "MCP credential secret is invalid",
+            ));
+        }
+        if input.kind == McpCredentialKind::Header
+            && reqwest::header::HeaderValue::from_bytes(secret.as_bytes()).is_err()
+        {
+            return Err(McpSupervisorError::new(
+                "local_mcp_credential_secret_invalid",
+                "MCP credential secret is invalid",
+            ));
+        }
+        let reference = credential_reference(
+            scope,
+            &input.server_name,
+            input.transport,
+            &input.command,
+            input.cwd.as_deref(),
+            input.kind,
+            &input.name,
+        )?;
+        let request_hash = credential_provision_hash(scope, input, secret);
+        let vault_guard = self.credential_vault.lock().map_err(|_| storage_error())?;
+        let vault = vault_guard.as_ref().ok_or_else(|| {
+            McpSupervisorError::new(
+                "local_mcp_vault_reference_unavailable",
+                "MCP vault reference is unavailable",
+            )
+        })?;
+        if let Some((stored_hash, stored_reference, is_current_binding)) =
+            self.store.credential_receipt(scope, idempotency_key)?
+        {
+            if stored_hash != request_hash || stored_reference != reference {
+                return Err(McpSupervisorError::new(
+                    "local_mcp_idempotency_conflict",
+                    "MCP idempotency key is already bound to a different request",
+                ));
+            }
+            if is_current_binding {
+                vault.put(&reference, secret).map_err(|_| storage_error())?;
+            }
+            return Ok(McpCredentialProvisionOutcome { duplicate: true });
+        }
+        self.store
+            .record_credential_receipt(scope, idempotency_key, &request_hash, &reference)?;
+        vault.put(&reference, secret).map_err(|_| storage_error())?;
+        Ok(McpCredentialProvisionOutcome { duplicate: false })
     }
 
     #[cfg(test)]
@@ -462,7 +547,7 @@ impl McpSupervisor {
         server_id: &str,
         tool_name: &str,
         arguments: Value,
-        idempotency_key: Option<&str>,
+        idempotency_key: &str,
     ) -> McpResult<McpToolCallOutcome> {
         validate_identifier(tool_name, "local_mcp_tool_name_invalid")?;
         if !arguments.is_object() {
@@ -477,33 +562,17 @@ impl McpSupervisor {
             "tool_name": tool_name,
             "arguments": arguments,
         }));
-        if let Some(key) = idempotency_key {
-            validate_idempotency_key(key)?;
-            return tool_call_lease::execute_tool_call(
-                self,
-                scope,
-                &server,
-                tool_name,
-                arguments,
-                key,
-                &request_hash,
-            )
-            .await;
-        }
-        let result = self
-            .request(
-                &server,
-                "tools/call",
-                serde_json::json!({ "name": tool_name, "arguments": arguments }),
-            )
-            .await?;
-        let (content, is_error) = validate_tool_call_result(&result)?;
-        Ok(McpToolCallOutcome {
-            result,
-            content,
-            is_error,
-            duplicate: false,
-        })
+        validate_idempotency_key(idempotency_key)?;
+        tool_call_lease::execute_tool_call(
+            self,
+            scope,
+            &server,
+            tool_name,
+            arguments,
+            idempotency_key,
+            &request_hash,
+        )
+        .await
     }
 
     pub(super) async fn list_resources(
@@ -699,6 +768,43 @@ fn validate_definition(input: &McpServerDefinitionInput) -> McpResult<()> {
     Ok(())
 }
 
+fn validate_credential_provision_input(input: &McpCredentialProvisionInput) -> McpResult<()> {
+    let definition = McpServerDefinitionInput {
+        name: input.server_name.clone(),
+        description: None,
+        transport: input.transport,
+        command: input.command.clone(),
+        cwd: input.cwd.clone(),
+        vault_env_refs: BTreeMap::new(),
+        enabled: true,
+    };
+    validate_definition(&definition)?;
+    match (input.transport, input.kind) {
+        (McpTransport::Stdio, McpCredentialKind::Env) => {
+            if !valid_env_name(&input.name) {
+                return Err(McpSupervisorError::new(
+                    "local_mcp_environment_invalid",
+                    "MCP environment credential name is invalid",
+                ));
+            }
+        }
+        (
+            McpTransport::Http | McpTransport::Sse | McpTransport::Websocket,
+            McpCredentialKind::Header,
+        ) => {
+            let references = BTreeMap::from([(input.name.clone(), "pending".to_string())]);
+            validate_remote_header_names(&references)?;
+        }
+        _ => {
+            return Err(McpSupervisorError::new(
+                "local_mcp_credential_kind_invalid",
+                "MCP credential kind does not match the selected transport",
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn valid_env_name(name: &str) -> bool {
     let mut bytes = name.bytes();
     matches!(bytes.next(), Some(b'A'..=b'Z' | b'a'..=b'z' | b'_'))
@@ -792,6 +898,29 @@ fn value_hash(value: &Value) -> String {
     let mut hasher = Sha256::new();
     hasher.update(value.to_string());
     format!("{:x}", hasher.finalize())
+}
+
+fn credential_provision_hash(
+    scope: &McpScope,
+    input: &McpCredentialProvisionInput,
+    secret: &str,
+) -> String {
+    let secret_hash = {
+        let mut hasher = Sha256::new();
+        hasher.update(secret.as_bytes());
+        format!("{:x}", hasher.finalize())
+    };
+    value_hash(&serde_json::json!({
+        "tenant_id": scope.tenant_id,
+        "project_id": scope.project_id,
+        "server_name": input.server_name,
+        "transport": input.transport.as_str(),
+        "command": input.command,
+        "cwd": input.cwd,
+        "credential_kind": input.kind,
+        "credential_name": input.name,
+        "secret_hash": secret_hash,
+    }))
 }
 
 fn server_not_found() -> McpSupervisorError {

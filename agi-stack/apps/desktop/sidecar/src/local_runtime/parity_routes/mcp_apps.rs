@@ -10,11 +10,12 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
+use zeroize::Zeroizing;
 
 use super::super::*;
 use crate::local_runtime::mcp_supervisor::{
-    McpAppDefinition, McpScope, McpServerDefinition, McpServerDefinitionInput, McpSupervisorError,
-    McpTransport,
+    credential_reference, McpAppDefinition, McpCredentialKind, McpCredentialProvisionInput,
+    McpScope, McpServerDefinition, McpServerDefinitionInput, McpSupervisorError, McpTransport,
 };
 
 const CONTRACT_VERSION: &str = "desktop-local-mcp-v2";
@@ -23,6 +24,10 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
     Router::new()
         .route("/api/v1/mcp", get(list_servers).post(create_server))
         .route("/api/v1/mcp/create", post(create_server))
+        .route(
+            "/api/v1/mcp/credentials/provision",
+            post(provision_credential),
+        )
         .route("/api/v1/mcp/capabilities", get(capabilities))
         .route("/api/v1/mcp/tools/all", get(list_all_tools))
         .route("/api/v1/mcp/tools/call", post(call_tool_by_server_id))
@@ -88,6 +93,12 @@ async fn capabilities(
             "reason_code": "local_mcp_elicitation_bridge_unavailable",
         },
         "credential_authority": "application_vault",
+        "credential_provisioning": {
+            "availability": "available",
+            "reason_code": null,
+            "scope_binding": "tenant_project_server_target",
+            "renderer_receives_reference": false,
+        },
         "redirect_policy": "deny",
     })))
 }
@@ -123,12 +134,25 @@ struct TransportConfigBody {
     args: Vec<String>,
     cwd: Option<String>,
     #[serde(default)]
-    vault_env_refs: BTreeMap<String, String>,
+    credential_env_names: Vec<String>,
     #[serde(default)]
-    vault_header_refs: BTreeMap<String, String>,
+    credential_header_names: Vec<String>,
     environment: Option<Value>,
     env: Option<Value>,
     url: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProvisionCredentialBody {
+    project_id: String,
+    server_name: String,
+    server_type: McpTransport,
+    transport_config: TransportConfigBody,
+    credential_kind: McpCredentialKind,
+    credential_name: String,
+    secret: String,
+    idempotency_key: String,
 }
 
 #[derive(Deserialize)]
@@ -137,7 +161,7 @@ struct AppToolBody {
     tool_name: String,
     #[serde(default = "empty_object")]
     arguments: Value,
-    idempotency_key: Option<String>,
+    idempotency_key: String,
 }
 
 #[derive(Deserialize)]
@@ -148,7 +172,7 @@ struct DirectToolBody {
     tool_name: String,
     #[serde(default = "empty_object")]
     arguments: Value,
-    idempotency_key: Option<String>,
+    idempotency_key: String,
 }
 
 #[derive(Deserialize)]
@@ -158,7 +182,7 @@ struct ServerToolBody {
     tool_name: String,
     #[serde(default = "empty_object")]
     arguments: Value,
-    idempotency_key: Option<String>,
+    idempotency_key: String,
 }
 
 #[derive(Deserialize)]
@@ -201,13 +225,55 @@ async fn create_server(
                 "MCP server mutations require an idempotency key",
             )
         })?;
-    let input = definition_input(body)?;
     let scope = active_scope(&authenticated);
+    let input = definition_input(body, &scope)?;
     let server = state
         .mcp_supervisor
         .create_server(&scope, input, &idempotency_key)
         .map_err(mcp_error_tuple_for)?;
     Ok(Json(server_response(&server)))
+}
+
+async fn provision_credential(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Json(body): Json<ProvisionCredentialBody>,
+) -> LocalJsonResult {
+    ensure_project_scope(&authenticated, Some(&body.project_id))?;
+    ensure_managed_resource_manager(&authenticated)?;
+    let ProvisionCredentialBody {
+        project_id: _,
+        server_name,
+        server_type,
+        transport_config,
+        credential_kind,
+        credential_name,
+        secret,
+        idempotency_key,
+    } = body;
+    let input = credential_provision_input(
+        server_name,
+        server_type,
+        transport_config,
+        credential_kind,
+        credential_name,
+    )?;
+    let secret = Zeroizing::new(secret);
+    let outcome = state
+        .mcp_supervisor
+        .provision_credential(
+            &active_scope(&authenticated),
+            &input,
+            secret.as_str(),
+            &idempotency_key,
+        )
+        .map_err(mcp_error_tuple_for)?;
+    Ok(Json(json!({
+        "stored": true,
+        "credential_kind": input.kind,
+        "credential_name": input.name,
+        "duplicate": outcome.duplicate,
+    })))
 }
 
 async fn list_servers(
@@ -387,7 +453,7 @@ async fn call_tool_by_server_id(
             &body.server_id,
             &body.tool_name,
             body.arguments,
-            body.idempotency_key.as_deref(),
+            &body.idempotency_key,
         )
         .await
         .map_err(mcp_error_tuple_for)?;
@@ -449,7 +515,7 @@ async fn call_app_tool(
         &app.server_id,
         &body.tool_name,
         body.arguments,
-        body.idempotency_key.as_deref(),
+        &body.idempotency_key,
     )
     .await
 }
@@ -478,7 +544,7 @@ async fn call_direct_tool(
         &server.id,
         &body.tool_name,
         body.arguments,
-        body.idempotency_key.as_deref(),
+        &body.idempotency_key,
     )
     .await
 }
@@ -489,7 +555,7 @@ async fn tool_call_response(
     server_id: &str,
     tool_name: &str,
     arguments: Value,
-    idempotency_key: Option<&str>,
+    idempotency_key: &str,
 ) -> LocalJsonResult {
     let outcome = state
         .mcp_supervisor
@@ -549,44 +615,58 @@ async fn read_resource(
 
 fn definition_input(
     body: CreateServerBody,
+    scope: &McpScope,
 ) -> Result<McpServerDefinitionInput, (StatusCode, Json<Value>)> {
     let (command, cwd, vault_refs) = match body.server_type {
         McpTransport::Stdio => {
             if body.transport_config.url.is_some()
-                || !body.transport_config.vault_header_refs.is_empty()
+                || !body.transport_config.credential_header_names.is_empty()
             {
                 return Err(malformed(
                     "local_mcp_stdio_config_invalid",
-                    "MCP stdio transport accepts command argv and environment vault references",
+                    "MCP stdio transport accepts command argv and provisioned environment names",
                 ));
             }
-            (
-                direct_command(&body.transport_config)?,
-                body.transport_config.cwd,
-                body.transport_config.vault_env_refs,
-            )
+            let command = direct_command(&body.transport_config)?;
+            let cwd = body.transport_config.cwd.clone();
+            let bindings = credential_bindings(
+                scope,
+                &body.name,
+                body.server_type,
+                &command,
+                cwd.as_deref(),
+                McpCredentialKind::Env,
+                &body.transport_config.credential_env_names,
+            )?;
+            (command, cwd, bindings)
         }
         McpTransport::Http | McpTransport::Sse | McpTransport::Websocket => {
             if body.transport_config.command.is_some()
                 || !body.transport_config.args.is_empty()
                 || body.transport_config.cwd.is_some()
-                || !body.transport_config.vault_env_refs.is_empty()
+                || !body.transport_config.credential_env_names.is_empty()
             {
                 return Err(malformed(
                     "local_mcp_remote_config_invalid",
-                    "MCP remote transport accepts only a URL and vault header references",
+                    "MCP remote transport accepts only a URL and provisioned header names",
                 ));
             }
-            (
-                vec![body.transport_config.url.ok_or_else(|| {
-                    malformed(
-                        "local_mcp_endpoint_invalid",
-                        "MCP remote transport URL is required",
-                    )
-                })?],
+            let command = vec![body.transport_config.url.clone().ok_or_else(|| {
+                malformed(
+                    "local_mcp_endpoint_invalid",
+                    "MCP remote transport URL is required",
+                )
+            })?];
+            let bindings = credential_bindings(
+                scope,
+                &body.name,
+                body.server_type,
+                &command,
                 None,
-                body.transport_config.vault_header_refs,
-            )
+                McpCredentialKind::Header,
+                &body.transport_config.credential_header_names,
+            )?;
+            (command, None, bindings)
         }
     };
     Ok(McpServerDefinitionInput {
@@ -598,6 +678,94 @@ fn definition_input(
         vault_env_refs: vault_refs,
         enabled: body.enabled,
     })
+}
+
+fn credential_provision_input(
+    server_name: String,
+    server_type: McpTransport,
+    transport_config: TransportConfigBody,
+    kind: McpCredentialKind,
+    name: String,
+) -> Result<McpCredentialProvisionInput, (StatusCode, Json<Value>)> {
+    if transport_config.environment.is_some()
+        || transport_config.env.is_some()
+        || !transport_config.credential_env_names.is_empty()
+        || !transport_config.credential_header_names.is_empty()
+    {
+        return Err(malformed(
+            "local_mcp_credential_config_invalid",
+            "MCP credential provisioning accepts one explicit secret binding",
+        ));
+    }
+    let (command, cwd) = match server_type {
+        McpTransport::Stdio => {
+            if transport_config.url.is_some() {
+                return Err(malformed(
+                    "local_mcp_stdio_config_invalid",
+                    "MCP stdio credential binding requires command argv",
+                ));
+            }
+            let command = direct_command(&transport_config)?;
+            (command, transport_config.cwd)
+        }
+        McpTransport::Http | McpTransport::Sse | McpTransport::Websocket => {
+            if transport_config.command.is_some()
+                || !transport_config.args.is_empty()
+                || transport_config.cwd.is_some()
+            {
+                return Err(malformed(
+                    "local_mcp_remote_config_invalid",
+                    "MCP remote credential binding accepts only a URL",
+                ));
+            }
+            (
+                vec![transport_config.url.ok_or_else(|| {
+                    malformed(
+                        "local_mcp_endpoint_invalid",
+                        "MCP remote transport URL is required",
+                    )
+                })?],
+                None,
+            )
+        }
+    };
+    Ok(McpCredentialProvisionInput {
+        server_name,
+        transport: server_type,
+        command,
+        cwd,
+        kind,
+        name,
+    })
+}
+
+fn credential_bindings(
+    scope: &McpScope,
+    server_name: &str,
+    transport: McpTransport,
+    command: &[String],
+    cwd: Option<&str>,
+    kind: McpCredentialKind,
+    names: &[String],
+) -> Result<BTreeMap<String, String>, (StatusCode, Json<Value>)> {
+    let mut bindings = BTreeMap::new();
+    for name in names {
+        let reference =
+            credential_reference(scope, server_name, transport, command, cwd, kind, name)
+                .map_err(mcp_error_tuple_for)?;
+        if bindings.contains_key(name)
+            || bindings
+                .values()
+                .any(|existing_reference| existing_reference == &reference)
+        {
+            return Err(malformed(
+                "local_mcp_credential_name_duplicate",
+                "MCP credential names must be unique",
+            ));
+        }
+        bindings.insert(name.clone(), reference);
+    }
+    Ok(bindings)
 }
 
 fn direct_command(config: &TransportConfigBody) -> Result<Vec<String>, (StatusCode, Json<Value>)> {

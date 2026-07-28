@@ -55,6 +55,9 @@ enum MockMode {
     DisconnectOnce,
     Elicitation,
     PhasedDeadline,
+    Batch,
+    BatchSse,
+    LegacyRawBudget,
 }
 
 #[derive(Clone)]
@@ -178,7 +181,12 @@ async fn streamable_http(
             };
             tokio::time::sleep(delay).await;
         }
-        MockMode::Normal | MockMode::DisconnectOnce | MockMode::Elicitation => {}
+        MockMode::Normal
+        | MockMode::DisconnectOnce
+        | MockMode::Elicitation
+        | MockMode::Batch
+        | MockMode::BatchSse
+        | MockMode::LegacyRawBudget => {}
     }
 
     if method != Some("initialize")
@@ -198,6 +206,39 @@ async fn streamable_http(
     }
 
     let response = rpc_response(&state, &request, "2025-03-26");
+    if state.mode == MockMode::Batch {
+        let notification = json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/progress",
+            "params": {"progress": 1},
+        });
+        let mut response = (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "application/json")],
+            Value::Array(vec![notification, response]).to_string(),
+        )
+            .into_response();
+        if method == Some("initialize") {
+            response
+                .headers_mut()
+                .insert("mcp-session-id", HeaderValue::from_static("mock-session"));
+        }
+        return response;
+    }
+    if state.mode == MockMode::BatchSse {
+        let notification = json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/progress",
+            "params": {"progress": 1},
+        });
+        let mut response = sse_response([Value::Array(vec![notification, response])]);
+        if method == Some("initialize") {
+            response
+                .headers_mut()
+                .insert("mcp-session-id", HeaderValue::from_static("mock-session"));
+        }
+        return response;
+    }
     if state.mode == MockMode::Elicitation {
         let elicitation = json!({
             "jsonrpc": "2.0",
@@ -301,6 +342,27 @@ async fn legacy_sse(State(state): State<MockState>, headers: HeaderMap) -> Respo
     state.connections.fetch_add(1, Ordering::SeqCst);
     let (sender, receiver) = mpsc::channel::<Value>(16);
     *state.legacy_events.lock().await = Some(sender);
+    if state.mode == MockMode::LegacyRawBudget {
+        let endpoint = stream::once(async {
+            Ok::<Bytes, Infallible>(Bytes::from_static(
+                b"event: endpoint\ndata: /legacy-message?session=opaque\n\n",
+            ))
+        });
+        let events = stream::unfold(receiver, |mut receiver| async move {
+            receiver.recv().await.map(|message| {
+                let chunk = format!(
+                    ": {}\nevent: message\ndata: {message}\n\n",
+                    "padding".repeat(48),
+                );
+                (Ok::<Bytes, Infallible>(Bytes::from(chunk)), receiver)
+            })
+        });
+        return Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "text/event-stream")
+            .body(Body::from_stream(endpoint.chain(events)))
+            .expect("raw-budget SSE response");
+    }
     let endpoint = Event::default()
         .event("endpoint")
         .data("/legacy-message?session=opaque");
@@ -350,9 +412,31 @@ async fn legacy_message(
                 }))
                 .await;
         }
-        let _ = sender
-            .send(rpc_response(&state, &request, "2024-11-05"))
-            .await;
+        let response = rpc_response(&state, &request, "2024-11-05");
+        if state.mode == MockMode::LegacyRawBudget {
+            for progress in [1, 2] {
+                let _ = sender
+                    .send(json!({
+                        "jsonrpc": "2.0",
+                        "method": "notifications/progress",
+                        "params": {"progress": progress},
+                    }))
+                    .await;
+            }
+        }
+        let response = if state.mode == MockMode::Batch {
+            Value::Array(vec![
+                json!({
+                    "jsonrpc": "2.0",
+                    "method": "notifications/progress",
+                    "params": {"progress": 1},
+                }),
+                response,
+            ])
+        } else {
+            response
+        };
+        let _ = sender.send(response).await;
     }
     StatusCode::ACCEPTED.into_response()
 }
@@ -461,6 +545,18 @@ async fn websocket_connection(mut socket: WebSocket, state: MockState) {
             let _ = socket.send(Message::Text(wrong_id.to_string())).await;
         }
         let response = rpc_response(&state, &request, "2025-03-26");
+        let response = if state.mode == MockMode::Batch {
+            Value::Array(vec![
+                json!({
+                    "jsonrpc": "2.0",
+                    "method": "notifications/progress",
+                    "params": {"progress": 1},
+                }),
+                response,
+            ])
+        } else {
+            response
+        };
         let _ = socket.send(Message::Text(response.to_string())).await;
     }
 }
@@ -585,6 +681,89 @@ fn vault(root: &std::path::Path) -> ApplicationCredentialVault {
 }
 
 #[tokio::test]
+async fn remote_http_sse_and_websocket_accept_bounded_json_rpc_batches() {
+    let root = root("batch");
+    fs::create_dir_all(&root).expect("create batch MCP root");
+    let mock = MockRemoteServer::spawn(MockMode::Batch).await;
+    let http_sse_mock = MockRemoteServer::spawn(MockMode::BatchSse).await;
+    let active_scope = scope();
+    let credential_vault = vault(&root);
+    let supervisor = McpSupervisor::new(
+        DesktopSessionStore::in_memory().expect("batch session store"),
+        root.clone(),
+        Some(credential_vault.clone()),
+        limits(),
+    )
+    .expect("batch MCP supervisor");
+
+    for (name, transport, endpoint) in [
+        ("batch-http", McpTransport::Http, mock.http_url()),
+        (
+            "batch-http-sse",
+            McpTransport::Http,
+            http_sse_mock.http_url(),
+        ),
+        ("batch-sse", McpTransport::Sse, mock.sse_url()),
+        (
+            "batch-websocket",
+            McpTransport::Websocket,
+            mock.websocket_url(),
+        ),
+    ] {
+        let server = supervisor
+            .create_server(
+                &active_scope,
+                definition(&credential_vault, name, transport, endpoint),
+                &format!("create-{name}"),
+            )
+            .expect("create batch MCP server");
+        let tools = supervisor
+            .list_tools(&active_scope, &server.id)
+            .await
+            .expect("list tools from JSON-RPC batch");
+        assert_eq!(tools[0]["name"], "echo", "{name}");
+    }
+    fs::remove_dir_all(root).expect("remove batch MCP root");
+}
+
+#[tokio::test]
+async fn legacy_sse_raw_bytes_are_bounded_across_pending_events_for_one_request() {
+    let root = root("legacy-raw-budget");
+    fs::create_dir_all(&root).expect("create legacy raw budget root");
+    let mock = MockRemoteServer::spawn(MockMode::LegacyRawBudget).await;
+    let active_scope = scope();
+    let credential_vault = vault(&root);
+    let mut test_limits = limits();
+    test_limits.max_frame_bytes = 1024;
+    test_limits.max_aggregate_bytes = 512;
+    let supervisor = McpSupervisor::new(
+        DesktopSessionStore::in_memory().expect("legacy raw budget session store"),
+        root.clone(),
+        Some(credential_vault.clone()),
+        test_limits,
+    )
+    .expect("legacy raw budget supervisor");
+    let server = supervisor
+        .create_server(
+            &active_scope,
+            definition(
+                &credential_vault,
+                "legacy-raw-budget",
+                McpTransport::Sse,
+                mock.sse_url(),
+            ),
+            "create-legacy-raw-budget",
+        )
+        .expect("create legacy raw budget server");
+    let error = supervisor
+        .list_tools(&active_scope, &server.id)
+        .await
+        .expect_err("raw SSE bytes across pending events must be bounded");
+    assert_eq!(error.reason_code(), "local_mcp_response_too_large");
+    fs::remove_dir_all(root).expect("remove legacy raw budget root");
+}
+
+#[tokio::test]
 async fn remote_transports_round_trip_tools_resources_health_and_restart_recovery() {
     let root = root("round-trip");
     fs::create_dir_all(&root).expect("create remote MCP root");
@@ -627,7 +806,7 @@ async fn remote_transports_round_trip_tools_resources_health_and_restart_recover
                     &server.id,
                     "echo",
                     json!({"transport": name}),
-                    Some(&format!("call-{name}")),
+                    &format!("call-{name}"),
                 )
                 .await
                 .expect("call remote MCP tool");
@@ -798,7 +977,7 @@ async fn websocket_reconnects_after_disconnect_and_correlates_notifications_by_r
             &server.id,
             "echo",
             json!({"value": 1}),
-            Some("same-remote-key"),
+            "same-remote-key",
         )
         .await
         .expect("first idempotent remote call");
@@ -809,7 +988,7 @@ async fn websocket_reconnects_after_disconnect_and_correlates_notifications_by_r
             &server.id,
             "echo",
             json!({"value": 1}),
-            Some("same-remote-key"),
+            "same-remote-key",
         )
         .await
         .expect("replay remote call");
@@ -821,7 +1000,7 @@ async fn websocket_reconnects_after_disconnect_and_correlates_notifications_by_r
             &server.id,
             "echo",
             json!({"value": 2}),
-            Some("same-remote-key"),
+            "same-remote-key",
         )
         .await
         .expect_err("conflicting remote replay");

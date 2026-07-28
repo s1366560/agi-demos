@@ -172,6 +172,14 @@ export type DesktopMCPAppToolCallResponse = {
   error_code?: string | null;
 };
 
+export type DesktopMCPToolCallResponse = {
+  result: unknown;
+  is_error: boolean;
+  error_message?: string | null;
+  execution_time_ms: number;
+  duplicate?: boolean;
+};
+
 export type DesktopMCPAppResourceReadResponse = {
   contents: Array<{ uri: string; mimeType: string; text: string }>;
 };
@@ -183,6 +191,58 @@ export type DesktopMCPAppResourceListResponse = {
     mimeType?: string;
     description?: string;
   }>;
+};
+
+export type DesktopMCPTransport = 'stdio' | 'http' | 'sse' | 'websocket';
+
+export type DesktopMCPTransportConfig = {
+  command?: string | string[];
+  args?: string[];
+  cwd?: string;
+  url?: string;
+  credential_env_names?: string[];
+  credential_header_names?: string[];
+};
+
+export type DesktopMCPCredentialProvisionInput = {
+  project_id: string;
+  server_name: string;
+  server_type: DesktopMCPTransport;
+  transport_config: Omit<
+    DesktopMCPTransportConfig,
+    'credential_env_names' | 'credential_header_names'
+  >;
+  credential_kind: 'env' | 'header';
+  credential_name: string;
+  secret: string;
+  idempotency_key: string;
+};
+
+export type DesktopMCPCredentialProvisionResponse = {
+  stored: true;
+  credential_kind: 'env' | 'header';
+  credential_name: string;
+  duplicate: boolean;
+};
+
+export type DesktopMCPServerCreateInput = {
+  name: string;
+  description?: string;
+  server_type: DesktopMCPTransport;
+  transport_config: DesktopMCPTransportConfig;
+  enabled?: boolean;
+  project_id: string;
+  idempotency_key: string;
+};
+
+export type DesktopMCPServerSummary = {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  name: string;
+  server_type: DesktopMCPTransport;
+  enabled: boolean;
+  runtime_status: string;
 };
 
 const WORKSPACE_ROSTER_PAGE_SIZE = 500;
@@ -1835,10 +1895,32 @@ export class DesktopApiClient {
     return this.request<DesktopMCPAppSummary[]>(`/api/v1/mcp/apps?${params.toString()}`);
   }
 
+  async provisionMCPServerCredential(
+    input: DesktopMCPCredentialProvisionInput,
+  ): Promise<DesktopMCPCredentialProvisionResponse> {
+    return this.request<DesktopMCPCredentialProvisionResponse>(
+      '/api/v1/mcp/credentials/provision',
+      {
+        method: 'POST',
+        body: input,
+      },
+    );
+  }
+
+  async createMCPServer(
+    input: DesktopMCPServerCreateInput,
+  ): Promise<DesktopMCPServerSummary> {
+    return this.request<DesktopMCPServerSummary>('/api/v1/mcp', {
+      method: 'POST',
+      body: input,
+    });
+  }
+
   async callMCPAppTool(
     appId: string,
     toolName: string,
     argumentsValue: Record<string, unknown>,
+    idempotencyKey: string,
   ): Promise<DesktopMCPAppToolCallResponse> {
     return this.request<DesktopMCPAppToolCallResponse>(
       `/api/v1/mcp/apps/${encodeURIComponent(requireValue(appId, 'MCP App id'))}/tool-call`,
@@ -1847,9 +1929,27 @@ export class DesktopApiClient {
         body: {
           tool_name: requireValue(toolName, 'MCP tool name'),
           arguments: argumentsValue,
+          idempotency_key: requireValue(idempotencyKey, 'MCP idempotency key'),
         },
       },
     );
+  }
+
+  async callMCPToolByServerId(
+    serverId: string,
+    toolName: string,
+    argumentsValue: Record<string, unknown>,
+    idempotencyKey: string,
+  ): Promise<DesktopMCPToolCallResponse> {
+    return this.request<DesktopMCPToolCallResponse>('/api/v1/mcp/tools/call', {
+      method: 'POST',
+      body: {
+        server_id: requireValue(serverId, 'MCP server id'),
+        tool_name: requireValue(toolName, 'MCP tool name'),
+        arguments: argumentsValue,
+        idempotency_key: requireValue(idempotencyKey, 'MCP idempotency key'),
+      },
+    });
   }
 
   async callMCPAppToolDirect(
@@ -1857,6 +1957,7 @@ export class DesktopApiClient {
     serverName: string,
     toolName: string,
     argumentsValue: Record<string, unknown>,
+    idempotencyKey: string,
   ): Promise<DesktopMCPAppToolCallResponse> {
     return this.request<DesktopMCPAppToolCallResponse>('/api/v1/mcp/apps/proxy/tool-call', {
       method: 'POST',
@@ -1865,6 +1966,7 @@ export class DesktopApiClient {
         server_name: requireValue(serverName, 'MCP server name'),
         tool_name: requireValue(toolName, 'MCP tool name'),
         arguments: argumentsValue,
+        idempotency_key: requireValue(idempotencyKey, 'MCP idempotency key'),
       },
     });
   }

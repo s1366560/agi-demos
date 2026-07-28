@@ -15,11 +15,12 @@ use crate::application_vault::ApplicationCredentialVault;
 
 use super::{
     remote_common::{
-        bounded_body, build_client, connection_closed, correlated_result, elicitation_unavailable,
-        encode_message, is_content_type, malformed_response, next_request_id, remote_headers,
-        request_timeout, resolve_remote_endpoint, response_too_large, restart_backoff, retry_delay,
-        server_request_rejection, unsupported_client_request, validate_legacy_message_endpoint,
-        InitializedServer, ResolvedEndpoint, SseDecoder, SseEvent, MAX_CORRELATION_MESSAGES,
+        bounded_body, build_client, connection_closed, correlated_result, decode_json_rpc_messages,
+        elicitation_unavailable, encode_message, is_content_type, malformed_response,
+        next_request_id, remote_headers, request_timeout, resolve_remote_endpoint,
+        response_too_large, restart_backoff, retry_delay, server_request_rejection,
+        unsupported_client_request, validate_legacy_message_endpoint, InitializedServer,
+        ResolvedEndpoint, SseDecoder, SseEvent, MAX_CORRELATION_MESSAGES,
         STREAMABLE_HTTP_PROTOCOL_VERSION,
     },
     McpResult, McpServerDefinition, McpSupervisorError, SupervisorLimits, MCP_PROTOCOL_VERSION,
@@ -347,8 +348,14 @@ impl HttpRuntime {
 struct LegacyConnection {
     response: Response,
     decoder: SseDecoder,
-    pending: VecDeque<SseEvent>,
+    pending: VecDeque<LegacySseEvent>,
+    raw_bytes_since_event: usize,
     message_endpoint: Option<url::Url>,
+}
+
+struct LegacySseEvent {
+    event: SseEvent,
+    raw_bytes: usize,
 }
 
 pub(super) struct SseRuntime {
@@ -542,6 +549,7 @@ impl SseRuntime {
             response,
             decoder: SseDecoder::default(),
             pending: VecDeque::new(),
+            raw_bytes_since_event: 0,
             message_endpoint: None,
         });
         let endpoint_event = timeout(
@@ -550,14 +558,14 @@ impl SseRuntime {
         )
         .await
         .map_err(|_| request_timeout())??;
-        if endpoint_event.event.as_deref() != Some("endpoint") {
+        if endpoint_event.event.event.as_deref() != Some("endpoint") {
             return Err(McpSupervisorError::new(
                 "local_mcp_sse_endpoint_missing",
                 "MCP legacy SSE stream did not declare its message endpoint",
             ));
         }
         let endpoint_text =
-            std::str::from_utf8(&endpoint_event.data).map_err(|_| malformed_response())?;
+            std::str::from_utf8(&endpoint_event.event.data).map_err(|_| malformed_response())?;
         let message_endpoint =
             validate_legacy_message_endpoint(&endpoint_url, endpoint_text.trim())?;
         if let Some(connection) = self.connection.as_mut() {
@@ -585,31 +593,44 @@ impl SseRuntime {
         timeout(request_deadline, async {
             self.post_without_response(server, credential_vault, &request, limits)
                 .await?;
-            let mut aggregate = 0_usize;
+            let mut aggregate_raw_bytes = 0_usize;
+            let mut messages_seen = 0_usize;
             for _ in 0..MAX_CORRELATION_MESSAGES {
                 let event = self
-                    .next_legacy_event(limits, limits.max_aggregate_bytes.saturating_sub(aggregate))
+                    .next_legacy_event(
+                        limits,
+                        limits
+                            .max_aggregate_bytes
+                            .saturating_sub(aggregate_raw_bytes),
+                    )
                     .await?;
-                aggregate = aggregate.saturating_add(event.data.len());
-                if aggregate > limits.max_aggregate_bytes {
+                aggregate_raw_bytes = aggregate_raw_bytes.saturating_add(event.raw_bytes);
+                if aggregate_raw_bytes > limits.max_aggregate_bytes {
                     return Err(response_too_large());
                 }
-                if event.event.as_deref().is_some_and(|kind| kind != "message") {
+                if event
+                    .event
+                    .event
+                    .as_deref()
+                    .is_some_and(|kind| kind != "message")
+                {
                     continue;
                 }
-                let message: Value =
-                    serde_json::from_slice(&event.data).map_err(|_| malformed_response())?;
-                if let Some((rejection, elicitation)) = server_request_rejection(&message)? {
-                    self.post_without_response(server, credential_vault, &rejection, limits)
-                        .await?;
-                    return Err(if elicitation {
-                        elicitation_unavailable()
-                    } else {
-                        unsupported_client_request()
-                    });
-                }
-                if let Some(result) = correlated_result(&message, request_id)? {
-                    return Ok(result);
+                let remaining = MAX_CORRELATION_MESSAGES.saturating_sub(messages_seen);
+                for message in decode_json_rpc_messages(&event.event.data, remaining)? {
+                    messages_seen = messages_seen.saturating_add(1);
+                    if let Some((rejection, elicitation)) = server_request_rejection(&message)? {
+                        self.post_without_response(server, credential_vault, &rejection, limits)
+                            .await?;
+                        return Err(if elicitation {
+                            elicitation_unavailable()
+                        } else {
+                            unsupported_client_request()
+                        });
+                    }
+                    if let Some(result) = correlated_result(&message, request_id)? {
+                        return Ok(result);
+                    }
                 }
             }
             Err(McpSupervisorError::new(
@@ -667,12 +688,11 @@ impl SseRuntime {
         &mut self,
         limits: SupervisorLimits,
         aggregate_remaining: usize,
-    ) -> McpResult<SseEvent> {
+    ) -> McpResult<LegacySseEvent> {
         let connection = self.connection.as_mut().ok_or_else(connection_closed)?;
         if let Some(event) = connection.pending.pop_front() {
             return Ok(event);
         }
-        let mut received = 0_usize;
         loop {
             let chunk = connection
                 .response
@@ -680,15 +700,30 @@ impl SseRuntime {
                 .await
                 .map_err(|_| connection_closed())?
                 .ok_or_else(connection_closed)?;
-            received = received.saturating_add(chunk.len());
-            if received > aggregate_remaining {
+            connection.raw_bytes_since_event =
+                connection.raw_bytes_since_event.saturating_add(chunk.len());
+            if connection.raw_bytes_since_event > aggregate_remaining {
                 return Err(response_too_large());
             }
-            connection.pending.extend(connection.decoder.push(
+            let events = connection.decoder.push(
                 &chunk,
                 limits.max_frame_bytes,
                 limits.max_aggregate_bytes,
-            )?);
+            )?;
+            if !events.is_empty() {
+                let raw_bytes = std::mem::take(&mut connection.raw_bytes_since_event);
+                connection
+                    .pending
+                    .extend(
+                        events
+                            .into_iter()
+                            .enumerate()
+                            .map(|(index, event)| LegacySseEvent {
+                                event,
+                                raw_bytes: if index == 0 { raw_bytes } else { 0 },
+                            }),
+                    );
+            }
             if let Some(event) = connection.pending.pop_front() {
                 return Ok(event);
             }
@@ -743,9 +778,7 @@ async fn response_messages(
         if body.len() > limits.max_frame_bytes {
             return Err(response_too_large());
         }
-        return serde_json::from_slice(&body)
-            .map(|message| vec![message])
-            .map_err(|_| malformed_response());
+        return decode_json_rpc_messages(&body, MAX_CORRELATION_MESSAGES);
     }
     if content_type == "text/event-stream" {
         let mut decoder = SseDecoder::default();
@@ -762,18 +795,19 @@ async fn response_messages(
                 if event.event.as_deref().is_some_and(|kind| kind != "message") {
                     continue;
                 }
-                let message: Value =
-                    serde_json::from_slice(&event.data).map_err(|_| malformed_response())?;
-                let is_server_request =
-                    message.get("method").is_some() && message.get("id").is_some();
-                let is_expected_response = message.get("method").is_none()
-                    && message.get("id").and_then(Value::as_u64) == Some(request_id);
-                messages.push(message);
-                if is_server_request
-                    || is_expected_response
-                    || messages.len() >= MAX_CORRELATION_MESSAGES
-                {
-                    return Ok(messages);
+                let remaining = MAX_CORRELATION_MESSAGES.saturating_sub(messages.len());
+                for message in decode_json_rpc_messages(&event.data, remaining)? {
+                    let is_server_request =
+                        message.get("method").is_some() && message.get("id").is_some();
+                    let is_expected_response = message.get("method").is_none()
+                        && message.get("id").and_then(Value::as_u64) == Some(request_id);
+                    messages.push(message);
+                    if is_server_request
+                        || is_expected_response
+                        || messages.len() >= MAX_CORRELATION_MESSAGES
+                    {
+                        return Ok(messages);
+                    }
                 }
             }
         }

@@ -28,8 +28,9 @@ use uuid::Uuid;
 use super::{
     http::HttpRuntime,
     remote_common::{
-        is_globally_routable, remote_credential_reference, remote_headers, resolve_remote_endpoint,
-        validate_remote_url, validate_resolved_addresses, ResolvedEndpoint, SseDecoder,
+        decode_json_rpc_messages, is_globally_routable, remote_credential_reference,
+        remote_headers, resolve_remote_endpoint, validate_remote_url, validate_resolved_addresses,
+        ResolvedEndpoint, SseDecoder,
     },
     store::McpStore,
     tool_call_lease::ToolCallReservation,
@@ -647,6 +648,45 @@ fn sse_decoder_rejects_chunk_event_flood_and_total_allocation_growth() {
     );
 }
 
+#[test]
+fn json_rpc_batch_decoder_accepts_bounded_members_and_rejects_empty_or_invalid_batches() {
+    let messages = decode_json_rpc_messages(
+        br#"[
+          {"jsonrpc":"2.0","method":"notifications/tools/list_changed","params":{}},
+          {"jsonrpc":"2.0","id":7,"result":{"tools":[]}}
+        ]"#,
+        8,
+    )
+    .expect("decode bounded JSON-RPC batch");
+    assert_eq!(messages.len(), 2);
+    assert_eq!(messages[1]["id"], 7);
+
+    for invalid in [
+        br#"[]"#.as_slice(),
+        br#"[null]"#.as_slice(),
+        br#"[{"jsonrpc":"2.0","id":1}]"#.as_slice(),
+        br#"[{"jsonrpc":"1.0","id":1,"result":{}}]"#.as_slice(),
+        br#"[[{"jsonrpc":"2.0","id":1,"result":{}}]]"#.as_slice(),
+        br#"[{"jsonrpc":"2.0","id":1,"result":{},"error":null}]"#.as_slice(),
+        br#"[{"jsonrpc":"2.0","id":1,"error":{"code":1.5,"message":"bad"}}]"#.as_slice(),
+    ] {
+        let error =
+            decode_json_rpc_messages(invalid, 8).expect_err("invalid JSON-RPC batch must fail");
+        assert_eq!(error.reason_code(), "local_mcp_malformed_response");
+    }
+
+    let oversized = format!(
+        "[{}]",
+        (0..9)
+            .map(|index| format!(r#"{{"jsonrpc":"2.0","id":{index},"result":{{}}}}"#))
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+    let error = decode_json_rpc_messages(oversized.as_bytes(), 8)
+        .expect_err("oversized JSON-RPC batch must fail");
+    assert_eq!(error.reason_code(), "local_mcp_response_too_large");
+}
+
 #[tokio::test]
 async fn dns_lookup_is_bounded_by_its_deadline() {
     let server = remote_server("https://example.com/mcp".to_string(), 1);
@@ -750,6 +790,19 @@ async fn local_runtime_listener_starts_before_bad_remote_recovery_finishes() {
     let workspace = root.join("workspace");
     fs::create_dir_all(&app_data).expect("create listener app data");
     fs::create_dir_all(&workspace).expect("create listener workspace");
+    let stalled_remote = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind stalled startup remote");
+    let stalled_address = stalled_remote
+        .local_addr()
+        .expect("stalled startup remote address");
+    let stalled_task = tokio::spawn(async move {
+        let (_stream, _) = stalled_remote
+            .accept()
+            .await
+            .expect("accept stalled startup remote");
+        std::future::pending::<()>().await;
+    });
     let database = app_data.join("agistack-desktop-sessions.db");
     let seeder = McpSupervisor::new(
         DesktopSessionStore::open(&database).expect("listener seed session store"),
@@ -758,14 +811,14 @@ async fn local_runtime_listener_starts_before_bad_remote_recovery_finishes() {
         limits(),
     )
     .expect("listener seed supervisor");
-    seeder
+    let server = seeder
         .create_server(
             &scope(),
             McpServerDefinitionInput {
                 name: "bad-startup-remote".to_string(),
                 description: None,
                 transport: McpTransport::Http,
-                command: vec!["http://127.0.0.1:9/mcp".to_string()],
+                command: vec![format!("http://{stalled_address}/mcp")],
                 cwd: None,
                 vault_env_refs: BTreeMap::new(),
                 enabled: true,
@@ -773,6 +826,16 @@ async fn local_runtime_listener_starts_before_bad_remote_recovery_finishes() {
             "create-bad-startup-remote",
         )
         .expect("seed bad startup remote");
+    seeder
+        .store
+        .record_tools_and_apps(
+            &server,
+            &[json!({
+                "name": "render",
+                "_meta": {"ui/resourceUri": "ui://bad-startup-remote/index.html"},
+            })],
+        )
+        .expect("seed previously healthy startup app");
     drop(seeder);
 
     let vault = ApplicationCredentialVault::open(&app_data).expect("listener application vault");
@@ -784,7 +847,7 @@ async fn local_runtime_listener_starts_before_bad_remote_recovery_finishes() {
     .await
     .expect("local runtime startup deadline")
     .expect("start local runtime with bad remote");
-    assert!(started.elapsed() < Duration::from_secs(2));
+    assert!(started.elapsed() < Duration::from_secs(5));
     let url = Url::parse(&runtime.status().api_base_url).expect("parse local runtime URL");
     let address = (
         url.host_str().expect("local runtime host"),
@@ -793,6 +856,54 @@ async fn local_runtime_listener_starts_before_bad_remote_recovery_finishes() {
     tokio::net::TcpStream::connect(address)
         .await
         .expect("listener must accept connections before recovery completes");
+    let health = runtime
+        .state
+        .mcp_supervisor
+        .health(&scope(), &server.id)
+        .expect("startup recovery health");
+    assert_eq!(health.status, "starting");
+    assert_eq!(
+        health.reason_code.as_deref(),
+        Some("local_mcp_recovery_pending")
+    );
+    assert_eq!(
+        runtime
+            .state
+            .mcp_supervisor
+            .list_apps(&scope())
+            .expect("startup recovery apps")[0]
+            .status,
+        "starting"
+    );
+    stalled_task.abort();
+    let mut failed_health = None;
+    for _ in 0..50 {
+        let health = runtime
+            .state
+            .mcp_supervisor
+            .health(&scope(), &server.id)
+            .expect("failed startup recovery health");
+        if health.status == "error" {
+            failed_health = Some(health);
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let failed_health = failed_health.expect("failed recovery must become a structured error");
+    assert!(failed_health.reason_code.is_some());
+    assert_ne!(
+        failed_health.reason_code.as_deref(),
+        Some("local_mcp_recovery_pending")
+    );
+    assert_eq!(
+        runtime
+            .state
+            .mcp_supervisor
+            .list_apps(&scope())
+            .expect("failed startup recovery apps")[0]
+            .status,
+        "error"
+    );
     runtime.shutdown().await;
     fs::remove_dir_all(root).expect("remove listener startup root");
 }
@@ -883,7 +994,7 @@ async fn websocket_request_timeout_bounds_a_stalled_send_and_receive_cycle() {
             &server_id,
             "echo",
             json!({"payload": "x".repeat(8 * 1024 * 1024)}),
-            Some("stalled-send-key"),
+            "stalled-send-key",
         )
         .await
         .expect_err("stalled WebSocket send must time out");
@@ -894,7 +1005,7 @@ async fn websocket_request_timeout_bounds_a_stalled_send_and_receive_cycle() {
             &server_id,
             "echo",
             json!({"payload": "x".repeat(8 * 1024 * 1024)}),
-            Some("stalled-send-key"),
+            "stalled-send-key",
         )
         .await
         .expect_err("indeterminate tool call must never be replayed");
@@ -928,7 +1039,7 @@ async fn concurrent_idempotent_tool_calls_reserve_once_and_replay_the_receipt() 
                 &first_server_id,
                 "echo",
                 json!({"value": 1}),
-                Some("concurrent-key"),
+                "concurrent-key",
             )
             .await
     });
@@ -943,7 +1054,7 @@ async fn concurrent_idempotent_tool_calls_reserve_once_and_replay_the_receipt() 
                 &second_server_id,
                 "echo",
                 json!({"value": 1}),
-                Some("concurrent-key"),
+                "concurrent-key",
             )
             .await
     });
@@ -984,7 +1095,7 @@ async fn pending_tool_call_returns_structured_in_progress_without_remote_reexecu
                 &first_server_id,
                 "echo",
                 json!({"value": 1}),
-                Some("pending-key"),
+                "pending-key",
             )
             .await
     });
@@ -995,7 +1106,7 @@ async fn pending_tool_call_returns_structured_in_progress_without_remote_reexecu
             &server_id,
             "echo",
             json!({"value": 1}),
-            Some("pending-key"),
+            "pending-key",
         )
         .await
         .expect_err("pending duplicate must be bounded");

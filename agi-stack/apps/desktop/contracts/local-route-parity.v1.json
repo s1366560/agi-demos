@@ -742,13 +742,69 @@
     {
       "area": "mcp_apps",
       "method": "POST",
+      "uri": "/api/v1/mcp/credentials/provision",
+      "source": "client",
+      "source_marker": "/api/v1/mcp/credentials/provision",
+      "authority": "local_mcp_supervisor",
+      "body": {
+        "project_id": "local-project",
+        "server_name": "parity-remote",
+        "server_type": "http",
+        "transport_config": {
+          "url": "http://127.0.0.1:9/mcp"
+        },
+        "credential_kind": "header",
+        "credential_name": "authorization",
+        "secret": "route-parity-value",
+        "idempotency_key": "parity-mcp-credential"
+      }
+    },
+    {
+      "area": "mcp_apps",
+      "method": "POST",
+      "uri": "/api/v1/mcp",
+      "source": "client",
+      "source_marker": "this.request<DesktopMCPServerSummary>('/api/v1/mcp'",
+      "authority": "local_mcp_supervisor",
+      "body": {
+        "name": "parity-remote",
+        "server_type": "http",
+        "transport_config": {
+          "url": "http://127.0.0.1:9/mcp",
+          "credential_header_names": [
+            "authorization"
+          ]
+        },
+        "enabled": false,
+        "project_id": "local-project",
+        "idempotency_key": "parity-mcp-create"
+      }
+    },
+    {
+      "area": "mcp_apps",
+      "method": "POST",
       "uri": "/api/v1/mcp/apps/app-1/tool-call",
       "source": "client",
       "source_marker": "/api/v1/mcp/apps/${encodeURIComponent(requireValue(appId, 'MCP App id'))}/tool-call",
       "authority": "local_mcp_supervisor",
       "body": {
         "tool_name": "example",
-        "arguments": {}
+        "arguments": {},
+        "idempotency_key": "parity-mcp-app-call"
+      }
+    },
+    {
+      "area": "mcp_apps",
+      "method": "POST",
+      "uri": "/api/v1/mcp/tools/call",
+      "source": "client",
+      "source_marker": "/api/v1/mcp/tools/call",
+      "authority": "local_mcp_supervisor",
+      "body": {
+        "server_id": "route-contract-mcp-server",
+        "tool_name": "example",
+        "arguments": {},
+        "idempotency_key": "parity-mcp-server-call"
       }
     },
     {
@@ -762,7 +818,8 @@
         "project_id": "local-project",
         "server_name": "example",
         "tool_name": "example",
-        "arguments": {}
+        "arguments": {},
+        "idempotency_key": "parity-mcp-direct-call"
       }
     },
     {

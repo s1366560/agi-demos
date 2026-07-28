@@ -60,6 +60,24 @@ CREATE TABLE IF NOT EXISTS desktop_mcp_receipts_v1 (
   created_at TEXT NOT NULL,
   PRIMARY KEY(tenant_id, project_id, idempotency_key)
 );
+CREATE TABLE IF NOT EXISTS desktop_mcp_credential_receipts_v1 (
+  tenant_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  binding_reference TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(tenant_id, project_id, idempotency_key)
+);
+CREATE TABLE IF NOT EXISTS desktop_mcp_credential_bindings_v1 (
+  tenant_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  binding_reference TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY(tenant_id, project_id, binding_reference)
+);
 CREATE TABLE IF NOT EXISTS desktop_mcp_tool_call_leases_v2 (
   tenant_id TEXT NOT NULL,
   project_id TEXT NOT NULL,
@@ -272,6 +290,129 @@ impl McpStore {
                     .map_err(|error| error.to_string())?;
                 rows.collect::<rusqlite::Result<Vec<_>>>()
                     .map_err(|error| error.to_string())
+            })
+            .map_err(|_| storage_error())
+    }
+
+    pub(super) fn mark_enabled_recovery_pending(&self) -> McpResult<()> {
+        self.session_store
+            .with_local_mcp_connection(|connection| {
+                let transaction = connection
+                    .transaction_with_behavior(TransactionBehavior::Immediate)
+                    .map_err(|error| error.to_string())?;
+                let now = chrono::Utc::now().to_rfc3339();
+                transaction
+                    .execute(
+                        "UPDATE desktop_mcp_servers_v1
+                         SET runtime_status = 'starting',
+                             reason_code = 'local_mcp_recovery_pending',
+                             updated_at = ?1
+                         WHERE enabled = 1",
+                        params![now],
+                    )
+                    .map_err(|error| error.to_string())?;
+                transaction
+                    .execute(
+                        "UPDATE desktop_mcp_apps_v1
+                         SET status = 'starting', revision = revision + 1, updated_at = ?1
+                         WHERE server_id IN (
+                           SELECT id FROM desktop_mcp_servers_v1 WHERE enabled = 1
+                         )",
+                        params![now],
+                    )
+                    .map_err(|error| error.to_string())?;
+                transaction.commit().map_err(|error| error.to_string())
+            })
+            .map_err(|_| storage_error())
+    }
+
+    pub(super) fn credential_receipt(
+        &self,
+        scope: &McpScope,
+        idempotency_key: &str,
+    ) -> McpResult<Option<(String, String, bool)>> {
+        self.session_store
+            .with_local_mcp_connection(|connection| {
+                connection
+                    .query_row(
+                        "SELECT receipt.request_hash,
+                                receipt.binding_reference,
+                                CASE WHEN binding.idempotency_key = receipt.idempotency_key
+                                          AND binding.request_hash = receipt.request_hash
+                                     THEN 1 ELSE 0 END
+                         FROM desktop_mcp_credential_receipts_v1 AS receipt
+                         LEFT JOIN desktop_mcp_credential_bindings_v1 AS binding
+                           ON binding.tenant_id = receipt.tenant_id
+                          AND binding.project_id = receipt.project_id
+                          AND binding.binding_reference = receipt.binding_reference
+                         WHERE receipt.tenant_id = ?1
+                           AND receipt.project_id = ?2
+                           AND receipt.idempotency_key = ?3",
+                        params![scope.tenant_id, scope.project_id, idempotency_key],
+                        |row| {
+                            Ok((
+                                row.get::<_, String>(0)?,
+                                row.get::<_, String>(1)?,
+                                row.get::<_, i64>(2)? == 1,
+                            ))
+                        },
+                    )
+                    .optional()
+                    .map_err(|error| error.to_string())
+            })
+            .map_err(|_| storage_error())
+    }
+
+    pub(super) fn record_credential_receipt(
+        &self,
+        scope: &McpScope,
+        idempotency_key: &str,
+        request_hash: &str,
+        binding_reference: &str,
+    ) -> McpResult<()> {
+        self.session_store
+            .with_local_mcp_connection(|connection| {
+                let transaction = connection
+                    .transaction_with_behavior(TransactionBehavior::Immediate)
+                    .map_err(|error| error.to_string())?;
+                let now = chrono::Utc::now().to_rfc3339();
+                transaction
+                    .execute(
+                        "INSERT INTO desktop_mcp_credential_receipts_v1(
+                           tenant_id, project_id, idempotency_key, request_hash,
+                           binding_reference, created_at
+                         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                        params![
+                            scope.tenant_id,
+                            scope.project_id,
+                            idempotency_key,
+                            request_hash,
+                            binding_reference,
+                            now,
+                        ],
+                    )
+                    .map_err(|error| error.to_string())?;
+                transaction
+                    .execute(
+                        "INSERT INTO desktop_mcp_credential_bindings_v1(
+                           tenant_id, project_id, binding_reference, idempotency_key,
+                           request_hash, updated_at
+                         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                         ON CONFLICT(tenant_id, project_id, binding_reference)
+                         DO UPDATE SET idempotency_key = excluded.idempotency_key,
+                                       request_hash = excluded.request_hash,
+                                       updated_at = excluded.updated_at",
+                        params![
+                            scope.tenant_id,
+                            scope.project_id,
+                            binding_reference,
+                            idempotency_key,
+                            request_hash,
+                            now,
+                        ],
+                    )
+                    .map_err(|error| error.to_string())?;
+                transaction.commit().map_err(|error| error.to_string())
             })
             .map_err(|_| storage_error())
     }
