@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import status
 from sqlalchemy import delete
 
 from src.infrastructure.adapters.secondary.persistence.artifact_model import ArtifactModel
 from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentPlanRunModel,
+    AgentPlanVersionModel,
     AgentTaskModel,
     Conversation,
     HITLRequest,
@@ -18,6 +21,35 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     WorkspaceTaskModel,
     WorkspaceTaskSessionAttemptModel,
 )
+
+
+def _assert_current_run(
+    payload: dict[str, Any],
+    *,
+    plan_run: AgentPlanRunModel,
+    attempt_id: str,
+    conversation_id: str,
+    project_id: str,
+    plan_version_id: str,
+) -> None:
+    assert payload["schema_version"] == 2
+    assert payload["projection_kind"] == "workspace_session"
+    assert payload["authority_kind"] == "workspace_attempt"
+    assert payload["authority_id"] == attempt_id
+    current_run = payload["execution"]["current_run"]
+    assert current_run == payload["execution"]["run_history"][0]
+    assert current_run["id"] == plan_run.id
+    assert current_run["revision"] == 2
+    assert current_run["permission_profile"] == "full_access"
+    assert current_run["environment"]["id"] == "session-projection-sandbox"
+    assert current_run["environment"]["workspace_path"] == "/workspace"
+    assert current_run["authorization_snapshot"] == {
+        "conversation_id": conversation_id,
+        "project_id": project_id,
+        "plan_version_id": plan_version_id,
+        "permission_profile": "full_access",
+        "environment": current_run["environment"],
+    }
 
 
 async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtime_fields(
@@ -68,6 +100,46 @@ async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtim
         coordinator_agent_id="agent-leader",
         focused_agent_id="agent-worker",
     )
+    approved_plan = AgentPlanVersionModel(
+        id="session-projection-plan-version",
+        conversation_id=conversation.id,
+        version=1,
+        status="approved",
+        tasks_json=[],
+        approved_at=now - timedelta(minutes=3),
+    )
+    plan_run = AgentPlanRunModel(
+        id="session-projection-run",
+        conversation_id=conversation.id,
+        project_id=test_project_db.id,
+        plan_version_id=approved_plan.id,
+        idempotency_key="session-projection-approval",
+        message_id="session-projection-message",
+        request_message="Implement the scoped projection",
+        status="running",
+        revision=2,
+        permission_profile="full_access",
+        authorization_snapshot={
+            "conversation_id": conversation.id,
+            "project_id": test_project_db.id,
+            "plan_version_id": approved_plan.id,
+            "permission_profile": "full_access",
+            "environment": {
+                "id": "session-projection-sandbox",
+                "kind": "worktree",
+                "label": "session-projection-sandbox",
+                "workspace_path": "/workspace",
+                "repository_root": None,
+                "branch": None,
+                "base_commit": None,
+                "source_run_id": None,
+                "created_at": (now - timedelta(minutes=3)).isoformat(),
+            },
+            "raw_authorization_secret": "not projected",
+        },
+        created_at=now - timedelta(minutes=3),
+        updated_at=now - timedelta(seconds=10),
+    )
     attempts = [
         WorkspaceTaskSessionAttemptModel(
             id="session-projection-attempt-1",
@@ -102,6 +174,7 @@ async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtim
         id="session-projection-checklist",
         conversation_id=conversation.id,
         content="Write the endpoint",
+        title="Write the endpoint",
         status="in_progress",
         priority="high",
         order_index=0,
@@ -211,6 +284,8 @@ async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtim
             member,
             task,
             conversation,
+            approved_plan,
+            plan_run,
             *attempts,
             checklist,
             plan,
@@ -235,16 +310,20 @@ async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtim
 
     assert response.status_code == status.HTTP_200_OK
     payload = response.json()
-    assert payload["schema_version"] == 2
-    assert payload["projection_kind"] == "workspace_session"
-    assert payload["authority_kind"] == "workspace_attempt"
-    assert payload["authority_id"] == attempts[-1].id
     assert payload["conversation"]["capability_mode"] == "code"
     assert payload["conversation"]["workspace_name"] == workspace.name
     assert [item["id"] for item in payload["execution"]["attempt_history"]] == [
         attempts[-1].id,
         attempts[0].id,
     ]
+    _assert_current_run(
+        payload,
+        plan_run=plan_run,
+        attempt_id=attempts[-1].id,
+        conversation_id=conversation.id,
+        project_id=test_project_db.id,
+        plan_version_id=approved_plan.id,
+    )
     assert payload["conversation_tasks"][0]["id"] == checklist.id
     assert payload["workspace_plan_context"]["id"] == plan.id
     assert payload["workspace_plan_context"]["linked_nodes"][0] == {
@@ -299,14 +378,7 @@ async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtim
         "raw-tool-error-secret",
     ):
         assert secret not in serialized
-    for fabricated in (
-        '"run_id"',
-        '"revision"',
-        '"permission_profile"',
-        '"environment"',
-        '"plan_version"',
-        '"artifact_version"',
-    ):
+    for fabricated in ('"artifact_version"', '"raw_authorization_secret"'):
         assert fabricated not in serialized
 
     for bad_scope in (

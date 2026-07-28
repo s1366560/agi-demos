@@ -21,13 +21,18 @@ const CONTRACT_VERSION: u8 = 2;
 const INPUT_BUFFER_MESSAGES: usize = 256;
 const OUTPUT_BUFFER_MESSAGES: usize = 512;
 const REPLAY_BUFFER_BYTES: usize = 512 * 1024;
+const TERMINAL_FRAME_BYTES: usize = 64 * 1024;
+const INPUT_SEND_TIMEOUT_MILLIS: u64 = 250;
 const AUTHORITY_RECHECK_SECONDS: u64 = 5;
 const DEFAULT_DISCONNECT_GRACE_SECONDS: i64 = 30;
 const TERMINAL_RESUME_SUBPROTOCOL: &str = "memstack.terminal-v2";
 const TERMINAL_RUN_AUTHORITY_SQL: &str = "\
 SELECT c.tenant_id, c.user_id, apr.project_id, apr.conversation_id, apr.id AS run_id, \
        apr.revision AS run_revision, \
-       NULLIF(apr.authorization_snapshot -> 'environment' ->> 'kind', '') AS environment_kind \
+       NULLIF(apr.authorization_snapshot -> 'environment' ->> 'kind', '') AS environment_kind, \
+       NULLIF(apr.authorization_snapshot -> 'environment' ->> 'id', '') AS environment_id, \
+       NULLIF(apr.authorization_snapshot -> 'environment' ->> 'workspace_path', '') \
+         AS workspace_path \
 FROM agent_plan_runs apr \
 INNER JOIN conversations c ON c.id = apr.conversation_id \
 WHERE apr.id = $1 \
@@ -38,7 +43,17 @@ WHERE apr.id = $1 \
   AND c.project_id = apr.project_id \
   AND apr.status = 'running' \
   AND apr.permission_profile = 'full_access' \
-  AND NULLIF(apr.authorization_snapshot -> 'environment' ->> 'kind', '') IS NOT NULL";
+  AND apr.authorization_snapshot ->> 'conversation_id' = apr.conversation_id \
+  AND apr.authorization_snapshot ->> 'project_id' = apr.project_id \
+  AND apr.authorization_snapshot ->> 'plan_version_id' = apr.plan_version_id \
+  AND apr.authorization_snapshot ->> 'permission_profile' = apr.permission_profile \
+  AND apr.authorization_snapshot -> 'environment' ->> 'kind' IN ('local', 'worktree') \
+  AND NULLIF(apr.authorization_snapshot -> 'environment' ->> 'id', '') IS NOT NULL \
+  AND apr.authorization_snapshot -> 'environment' ->> 'workspace_path' = '/workspace' \
+  AND EXISTS (SELECT 1 FROM user_projects up \
+              WHERE up.project_id = apr.project_id AND up.user_id = c.user_id) \
+  AND EXISTS (SELECT 1 FROM user_tenants ut \
+              WHERE ut.tenant_id = c.tenant_id AND ut.user_id = c.user_id)";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TerminalSessionV2Record {
@@ -67,6 +82,8 @@ struct TerminalRunAuthority {
     run_id: String,
     run_revision: i32,
     environment_kind: String,
+    environment_id: String,
+    workspace_path: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -158,7 +175,7 @@ impl IntoResponse for TerminalV2Error {
 pub(super) struct TerminalV2Service {
     authority_pool: agistack_adapters_postgres::PgPool,
     registry: SharedHttpServiceRegistry,
-    hubs: TerminalHubManager,
+    hubs: Arc<TerminalHubManager>,
 }
 
 impl TerminalV2Service {
@@ -169,12 +186,16 @@ impl TerminalV2Service {
         Self {
             authority_pool,
             registry,
-            hubs: TerminalHubManager::default(),
+            hubs: Arc::new(TerminalHubManager::default()),
         }
     }
 
     pub(super) fn is_available(&self) -> bool {
         self.registry.is_durable()
+    }
+
+    pub(super) async fn registry_is_healthy(&self) -> bool {
+        self.registry.is_durable() && self.registry.health_check().await.is_ok()
     }
 
     async fn authority(
@@ -205,6 +226,7 @@ impl TerminalV2Service {
         if !self.is_available() {
             return Err(TerminalV2Error::unavailable());
         }
+        let environment = resolve_terminal_environment(info, &authority)?;
         let terminal_url = info
             .terminal_url
             .as_deref()
@@ -225,7 +247,6 @@ impl TerminalV2Service {
         let created_at_ms = now_ms();
         let ttl_seconds = terminal_session_ttl_seconds();
         let expires_at_ms = created_at_ms + ttl_seconds * 1_000;
-        let environment = resolve_terminal_environment(info, &authority.project_id)?;
         let hub = TerminalHub::connect(TerminalHubConnect {
             session_id: session_id.clone(),
             ws_target,
@@ -266,7 +287,13 @@ impl TerminalV2Service {
                 refetch: false,
             });
         }
-        self.hubs.insert(session_id, hub).await;
+        self.hubs.insert(session_id, Arc::clone(&hub)).await;
+        hub.install_cleanup(
+            Arc::clone(&self.registry),
+            authority.project_id,
+            Arc::downgrade(&self.hubs),
+        )
+        .await;
         Ok(response_from_record(record, resume_token))
     }
 
@@ -277,7 +304,7 @@ impl TerminalV2Service {
         session_id: &str,
         resume_token: &str,
         user_id: &str,
-        environment: &TerminalEnvironmentAuthority,
+        info: &ProjectSandboxInfo,
     ) -> Result<(TerminalSessionV2Record, Arc<TerminalHub>), TerminalV2Error> {
         if !self.is_available() {
             return Err(TerminalV2Error::unavailable());
@@ -313,18 +340,21 @@ impl TerminalV2Service {
                 .map_err(|_| TerminalV2Error::internal())?;
             return Err(TerminalV2Error::lost());
         };
+        let environment = match resolve_terminal_environment(info, &authority) {
+            Ok(environment) => environment,
+            Err(error) => {
+                hub.finalize_lost("terminal_authority_revoked").await;
+                return Err(error);
+            }
+        };
         if record.environment_id != environment.environment_id
             || record.cwd != environment.cwd
             || record.environment_source != environment.environment_source
             || record.cwd_source != environment.cwd_source
-            || hub.environment != *environment
+            || hub.environment != environment
         {
-            hub.mark_lost("terminal_session_lost");
-            self.registry
-                .remove_terminal_session_v2(project_id, session_id)
-                .await
-                .map_err(|_| TerminalV2Error::internal())?;
-            return Err(TerminalV2Error::lost());
+            hub.finalize_lost("terminal_authority_revoked").await;
+            return Err(TerminalV2Error::authority());
         }
         Ok((record, hub))
     }
@@ -372,50 +402,24 @@ fn response_from_record(
 
 fn resolve_terminal_environment(
     info: &ProjectSandboxInfo,
-    project_id: &str,
+    authority: &TerminalRunAuthority,
 ) -> Result<TerminalEnvironmentAuthority, TerminalV2Error> {
-    if info.project_id != project_id
+    if info.project_id != authority.project_id
+        || info.tenant_id != authority.tenant_id
+        || !info.sandbox_type.eq_ignore_ascii_case("cloud")
         || info.sandbox_id.trim().is_empty()
+        || info.sandbox_id != authority.environment_id
         || info.state != agistack_core::ports::ContainerState::Running
+        || authority.workspace_path != "/workspace"
     {
-        return Err(TerminalV2Error::lost());
+        return Err(TerminalV2Error::authority());
     }
-    let metadata_cwd = explicit_terminal_cwd(&info.metadata_json)?;
-    let local_cwd = explicit_terminal_cwd(&info.local_config)?;
-    let (cwd, cwd_source) = match (metadata_cwd, local_cwd) {
-        (Some(metadata), Some(local)) if metadata != local => {
-            return Err(TerminalV2Error::authority());
-        }
-        (Some(cwd), _) => (cwd, "project_sandbox_info.metadata.workspace_path"),
-        (_, Some(cwd)) => (cwd, "project_sandbox_info.local_config.workspace_path"),
-        (None, None) => (
-            format!("/workspace/{project_id}"),
-            "sandbox_protocol.project_workspace",
-        ),
-    };
     Ok(TerminalEnvironmentAuthority {
-        environment_id: info.sandbox_id.clone(),
-        cwd,
-        environment_source: "project_sandbox_info.sandbox_id".to_string(),
-        cwd_source: cwd_source.to_string(),
+        environment_id: authority.environment_id.clone(),
+        cwd: authority.workspace_path.clone(),
+        environment_source: "agent_plan_runs.authorization_snapshot.environment.id".to_string(),
+        cwd_source: "agent_plan_runs.authorization_snapshot.environment.workspace_path".to_string(),
     })
-}
-
-fn explicit_terminal_cwd(value: &serde_json::Value) -> Result<Option<String>, TerminalV2Error> {
-    let Some(raw) = value.get("workspace_path") else {
-        return Ok(None);
-    };
-    let Some(cwd) = raw.as_str().map(str::trim) else {
-        return Err(TerminalV2Error::authority());
-    };
-    if !cwd.starts_with('/')
-        || cwd.is_empty()
-        || cwd.len() > 4_096
-        || cwd.chars().any(char::is_control)
-    {
-        return Err(TerminalV2Error::authority());
-    }
-    Ok(Some(cwd.to_string()))
 }
 
 fn resume_token_hash(token: &str) -> String {
@@ -467,8 +471,8 @@ fn terminal_v2_service(app: &AppState) -> Result<Arc<TerminalV2Service>, Termina
         .ok_or_else(TerminalV2Error::unavailable)
 }
 
-fn terminal_resume_token(headers: &HeaderMap, query_token: Option<String>) -> Option<String> {
-    let protocol_token = headers
+fn terminal_resume_token(headers: &HeaderMap) -> Option<String> {
+    headers
         .get("sec-websocket-protocol")
         .and_then(|value| value.to_str().ok())
         .and_then(|protocols| {
@@ -477,8 +481,7 @@ fn terminal_resume_token(headers: &HeaderMap, query_token: Option<String>) -> Op
                 (pair[0] == TERMINAL_RESUME_SUBPROTOCOL && !pair[1].is_empty())
                     .then(|| pair[1].to_string())
             })
-        });
-    protocol_token.or(query_token.filter(|token| !token.trim().is_empty()))
+        })
 }
 
 pub(super) async fn create_terminal_session_v2(
@@ -505,9 +508,10 @@ pub(super) async fn create_terminal_session_v2(
         .await?;
     let info = app
         .sandboxes
-        .ensure(&project_id, &tenant_id, None)
+        .get(&project_id)
         .await
-        .map_err(|_| TerminalV2Error::internal())?;
+        .map_err(|_| TerminalV2Error::internal())?
+        .ok_or_else(TerminalV2Error::authority)?;
     service.create(&info, authority).await.map(Json)
 }
 
@@ -529,8 +533,7 @@ pub(super) async fn resume_terminal_session_v2(
         .get(&project_id)
         .await
         .map_err(|_| TerminalV2Error::internal())?
-        .ok_or_else(TerminalV2Error::lost)?;
-    let environment = resolve_terminal_environment(&info, &project_id)?;
+        .ok_or_else(TerminalV2Error::authority)?;
     let (record, _) = service
         .validate_resume(
             &tenant_id,
@@ -538,7 +541,7 @@ pub(super) async fn resume_terminal_session_v2(
             &session_id,
             &request.resume_token,
             &identity.user_id,
-            &environment,
+            &info,
         )
         .await?;
     Ok(Json(response_from_record(record, request.resume_token)))
@@ -564,10 +567,9 @@ pub(super) async fn terminal_session_v2_websocket(
         .get(&project_id)
         .await
         .map_err(|_| TerminalV2Error::internal())?
-        .ok_or_else(TerminalV2Error::lost)?;
-    let environment = resolve_terminal_environment(&info, &project_id)?;
-    let resume_token = terminal_resume_token(&headers, query.resume_token)
-        .ok_or_else(TerminalV2Error::invalid_resume_token)?;
+        .ok_or_else(TerminalV2Error::authority)?;
+    let resume_token =
+        terminal_resume_token(&headers).ok_or_else(TerminalV2Error::invalid_resume_token)?;
     let (_, hub) = service
         .validate_resume(
             &tenant_id,
@@ -575,11 +577,11 @@ pub(super) async fn terminal_session_v2_websocket(
             &session_id,
             &resume_token,
             &identity.user_id,
-            &environment,
+            &info,
         )
         .await?;
     Ok(websocket_upgrade_with_auth_protocol(ws, &headers)
-        .on_upgrade(move |socket| hub.attach(socket))
+        .on_upgrade(move |socket| hub.attach(socket, query.after_sequence.unwrap_or(0)))
         .into_response())
 }
 
@@ -612,6 +614,20 @@ mod tests {
         }
     }
 
+    fn terminal_authority() -> TerminalRunAuthority {
+        TerminalRunAuthority {
+            tenant_id: "t1".to_string(),
+            user_id: "u1".to_string(),
+            project_id: "p1".to_string(),
+            conversation_id: "c1".to_string(),
+            run_id: "r1".to_string(),
+            run_revision: 1,
+            environment_kind: "worktree".to_string(),
+            environment_id: "s1".to_string(),
+            workspace_path: "/workspace".to_string(),
+        }
+    }
+
     #[test]
     fn resume_token_storage_is_hash_only_and_constant_time_checked() {
         let token = "high-entropy-resume-token";
@@ -634,9 +650,10 @@ mod tests {
             run_id: "run-1".to_string(),
             run_revision: 7,
             environment_id: "environment-1".to_string(),
-            cwd: "/workspace/run-1".to_string(),
-            environment_source: "project_sandbox_info.sandbox_id".to_string(),
-            cwd_source: "sandbox_protocol.project_workspace".to_string(),
+            cwd: "/workspace".to_string(),
+            environment_source: "agent_plan_runs.authorization_snapshot.environment.id".to_string(),
+            cwd_source: "agent_plan_runs.authorization_snapshot.environment.workspace_path"
+                .to_string(),
             created_at_ms: 1_700_000_000_000,
             expires_at_ms: 1_700_000_300_000,
         };
@@ -645,7 +662,7 @@ mod tests {
         assert_eq!(response.run_id, "run-1");
         assert_eq!(response.run_revision, 7);
         assert_eq!(response.environment_id, "environment-1");
-        assert_eq!(response.cwd, "/workspace/run-1");
+        assert_eq!(response.cwd, "/workspace");
         assert_eq!(response.resume_token, "resume-1");
         assert!(response.resumable);
     }
@@ -659,28 +676,41 @@ mod tests {
     }
 
     #[test]
-    fn terminal_environment_uses_live_sandbox_id_and_audited_protocol_cwd_fallback() {
+    fn terminal_environment_requires_persisted_exact_sandbox_and_canonical_cwd() {
         let mut info = terminal_info();
-        let authority = resolve_terminal_environment(&info, "p1").unwrap();
-        assert_eq!(authority.environment_id, "s1");
+        let mut run_authority = terminal_authority();
+        let environment = resolve_terminal_environment(&info, &run_authority).unwrap();
+        assert_eq!(environment.environment_id, "s1");
         assert_eq!(
-            authority.environment_source,
-            "project_sandbox_info.sandbox_id"
+            environment.environment_source,
+            "agent_plan_runs.authorization_snapshot.environment.id"
         );
-        assert_eq!(authority.cwd, "/workspace/p1");
-        assert_eq!(authority.cwd_source, "sandbox_protocol.project_workspace");
-
-        info.metadata_json = json!({"workspace_path": "/workspace/explicit"});
-        let explicit = resolve_terminal_environment(&info, "p1").unwrap();
-        assert_eq!(explicit.cwd, "/workspace/explicit");
+        assert_eq!(environment.cwd, "/workspace");
         assert_eq!(
-            explicit.cwd_source,
-            "project_sandbox_info.metadata.workspace_path"
+            environment.cwd_source,
+            "agent_plan_runs.authorization_snapshot.environment.workspace_path"
+        );
+
+        info.sandbox_id = "different-live-sandbox".to_string();
+        assert_eq!(
+            resolve_terminal_environment(&info, &run_authority)
+                .unwrap_err()
+                .status,
+            StatusCode::CONFLICT
+        );
+
+        info.sandbox_id = "s1".to_string();
+        run_authority.workspace_path = "/workspace/guessed".to_string();
+        assert_eq!(
+            resolve_terminal_environment(&info, &run_authority)
+                .unwrap_err()
+                .status,
+            StatusCode::CONFLICT
         );
     }
 
     #[test]
-    fn websocket_resume_token_prefers_non_url_subprotocol_authority() {
+    fn websocket_resume_token_accepts_only_non_url_subprotocol_authority() {
         let mut headers = HeaderMap::new();
         headers.insert(
             "sec-websocket-protocol",
@@ -689,10 +719,10 @@ mod tests {
             ),
         );
         assert_eq!(
-            terminal_resume_token(&headers, Some("query-token".to_string())).as_deref(),
+            terminal_resume_token(&headers).as_deref(),
             Some("protocol-resume-token")
         );
-        assert!(terminal_resume_token(&HeaderMap::new(), None).is_none());
+        assert!(terminal_resume_token(&HeaderMap::new()).is_none());
     }
 
     #[test]
@@ -708,6 +738,10 @@ mod tests {
             "apr.status = 'running'",
             "apr.permission_profile = 'full_access'",
             "authorization_snapshot -> 'environment' ->> 'kind'",
+            "authorization_snapshot -> 'environment' ->> 'id'",
+            "authorization_snapshot -> 'environment' ->> 'workspace_path'",
+            "EXISTS (SELECT 1 FROM user_projects",
+            "EXISTS (SELECT 1 FROM user_tenants",
         ] {
             assert!(
                 TERMINAL_RUN_AUTHORITY_SQL.contains(clause),

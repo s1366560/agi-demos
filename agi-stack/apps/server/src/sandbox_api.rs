@@ -109,7 +109,7 @@ use views::{
     ResumeTerminalSessionV2Request, SandboxActionResponse, SandboxProxyAuthCookieResponse,
     SandboxRuntimeCapabilitiesResponse, SandboxServiceStopResponse, SandboxStatsResponse,
     StartDesktopQuery, TerminalServiceResponse, TerminalSessionV2Response,
-    TerminalSessionV2WsQuery, TerminalWsQuery,
+    TerminalSessionV2WsQuery, TerminalV2CapabilityState, TerminalWsQuery,
 };
 use ws_handlers::*;
 use ws_proxy::{

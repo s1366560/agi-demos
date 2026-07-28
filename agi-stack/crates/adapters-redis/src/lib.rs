@@ -450,6 +450,21 @@ impl RedisSandboxHttpRegistry {
         Ok(Self { conn })
     }
 
+    pub async fn health_check(&self) -> CoreResult<()> {
+        let mut conn = self.conn.clone();
+        let response: String = redis::cmd("PING")
+            .query_async(&mut conn)
+            .await
+            .map_err(gerr)?;
+        if response == "PONG" {
+            Ok(())
+        } else {
+            Err(CoreError::Event(
+                "Redis registry returned an invalid PING response".to_string(),
+            ))
+        }
+    }
+
     pub async fn upsert_http_service(
         &self,
         project_id: &str,

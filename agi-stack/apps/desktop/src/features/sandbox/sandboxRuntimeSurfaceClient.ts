@@ -16,7 +16,7 @@ export const SANDBOX_RUNTIME_CAPABILITY_CONTRACT_VERSION = 2 as const;
 
 export type SandboxRuntimeCapabilitySnapshot = SandboxRuntimeCapabilities & {
   service_version: string;
-  contract_version: typeof SANDBOX_RUNTIME_CAPABILITY_CONTRACT_VERSION;
+  contract_version: number;
 };
 
 export type RemoteDesktopResolution =
@@ -63,15 +63,9 @@ export function parseSandboxRuntimeCapabilitySnapshot(
   input: unknown,
 ): SandboxRuntimeCapabilitySnapshot | null {
   if (
-    !isExactRecord(input, [
-      'contract_version',
-      'files',
-      'kasm_vnc',
-      'service_version',
-      'terminal_interactive',
-      'terminal_resume',
-    ]) ||
-    input.contract_version !== SANDBOX_RUNTIME_CAPABILITY_CONTRACT_VERSION ||
+    !isRecord(input) ||
+    !Number.isSafeInteger(input.contract_version) ||
+    Number(input.contract_version) < SANDBOX_RUNTIME_CAPABILITY_CONTRACT_VERSION ||
     !isServiceVersion(input.service_version)
   ) {
     return null;
@@ -89,7 +83,7 @@ export function parseSandboxRuntimeCapabilitySnapshot(
 
   return {
     service_version: input.service_version,
-    contract_version: SANDBOX_RUNTIME_CAPABILITY_CONTRACT_VERSION,
+    contract_version: Number(input.contract_version),
     ...parsed,
   };
 }
@@ -166,12 +160,13 @@ export function remoteDesktopReconnectDelay(attempt: number): number {
 
 function parseCapability(
   input: unknown,
-  expectedContractVersion: number,
+  minimumContractVersion: number,
 ): SandboxRuntimeCapability | null {
   if (
-    !isExactRecord(input, ['availability', 'contract_version', 'reason_code']) ||
+    !isRecord(input) ||
     !isAvailability(input.availability) ||
-    input.contract_version !== expectedContractVersion
+    !Number.isSafeInteger(input.contract_version) ||
+    Number(input.contract_version) < minimumContractVersion
   ) {
     return null;
   }
@@ -182,7 +177,7 @@ function parseCapability(
   }
   return {
     availability: input.availability,
-    contract_version: expectedContractVersion,
+    contract_version: Number(input.contract_version),
     reason_code: input.reason_code,
   };
 }
@@ -288,15 +283,6 @@ function isServiceVersion(input: unknown): input is string {
   );
 }
 
-function isExactRecord(
-  input: unknown,
-  expectedKeys: readonly string[],
-): input is Record<string, unknown> {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) return false;
-  const actual = Object.keys(input).sort();
-  const expected = [...expectedKeys].sort();
-  return (
-    actual.length === expected.length &&
-    actual.every((key, index) => key === expected[index])
-  );
+function isRecord(input: unknown): input is Record<string, unknown> {
+  return typeof input === 'object' && input !== null && !Array.isArray(input);
 }

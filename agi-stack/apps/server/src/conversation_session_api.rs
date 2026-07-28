@@ -226,8 +226,89 @@ pub(super) struct SessionConversationResponse {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct SessionExecutionResponse {
+    current_run: Option<SessionPlanRunResponse>,
+    run_history: Vec<SessionPlanRunResponse>,
     current_attempt: Option<SessionWorkspaceAttemptResponse>,
     attempt_history: Vec<SessionWorkspaceAttemptResponse>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum SessionRunEnvironmentKind {
+    Local,
+    Worktree,
+}
+
+impl SessionRunEnvironmentKind {
+    pub(super) fn parse(value: &str) -> Option<Self> {
+        match value {
+            "local" => Some(Self::Local),
+            "worktree" => Some(Self::Worktree),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum SessionPermissionProfile {
+    ReadOnly,
+    WorkspaceWrite,
+    FullAccess,
+}
+
+impl SessionPermissionProfile {
+    pub(super) fn parse(value: &str) -> Option<Self> {
+        match value {
+            "read_only" => Some(Self::ReadOnly),
+            "workspace_write" => Some(Self::WorkspaceWrite),
+            "full_access" => Some(Self::FullAccess),
+            _ => None,
+        }
+    }
+
+    pub(super) const fn as_str(self) -> &'static str {
+        match self {
+            Self::ReadOnly => "read_only",
+            Self::WorkspaceWrite => "workspace_write",
+            Self::FullAccess => "full_access",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub(super) struct SessionRunEnvironmentResponse {
+    pub(super) id: String,
+    pub(super) kind: SessionRunEnvironmentKind,
+    pub(super) label: String,
+    pub(super) workspace_path: String,
+    pub(super) repository_root: Option<String>,
+    pub(super) branch: Option<String>,
+    pub(super) base_commit: Option<String>,
+    pub(super) source_run_id: Option<String>,
+    pub(super) created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub(super) struct SessionPlanRunResponse {
+    pub(super) id: String,
+    pub(super) conversation_id: String,
+    pub(super) project_id: String,
+    pub(super) plan_version_id: String,
+    pub(super) idempotency_key: String,
+    pub(super) message_id: String,
+    pub(super) request_message: String,
+    pub(super) status: String,
+    pub(super) revision: i32,
+    pub(super) created_at: DateTime<Utc>,
+    pub(super) updated_at: DateTime<Utc>,
+    pub(super) started_at: Option<DateTime<Utc>>,
+    pub(super) completed_at: Option<DateTime<Utc>>,
+    pub(super) last_heartbeat_at: Option<DateTime<Utc>>,
+    pub(super) error: Option<String>,
+    pub(super) environment: Option<SessionRunEnvironmentResponse>,
+    pub(super) permission_profile: SessionPermissionProfile,
+    pub(super) authorization_snapshot: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -384,6 +465,7 @@ pub(super) struct SessionMutationAuthority {
 pub(super) struct ConversationSessionAuthoritySnapshot {
     pub(super) conversation: SessionConversationResponse,
     pub(super) attempts: Vec<SessionWorkspaceAttemptResponse>,
+    pub(super) runs: Vec<SessionPlanRunResponse>,
     pub(super) conversation_tasks: Vec<SessionConversationTaskResponse>,
     pub(super) workspace_plan_context: Option<SessionWorkspacePlanContextResponse>,
     pub(super) pending_hitl: Vec<SessionPendingHitlResponse>,
@@ -441,6 +523,7 @@ pub(crate) fn standalone_projection(
             updated_at: source.updated_at,
         },
         attempts: Vec::new(),
+        runs: Vec::new(),
         conversation_tasks: Vec::new(),
         workspace_plan_context: None,
         pending_hitl: Vec::new(),
@@ -463,6 +546,7 @@ pub(super) fn build_projection(
     snapshot: ConversationSessionAuthoritySnapshot,
 ) -> Result<ConversationSessionProjectionResponse, ConversationSessionApiError> {
     let current_attempt = snapshot.attempts.first().cloned();
+    let current_run = snapshot.runs.first().cloned();
     let (authority_kind, authority_id) = current_attempt.as_ref().map_or_else(
         || {
             (
@@ -504,6 +588,8 @@ pub(super) fn build_projection(
         authority_id,
         conversation: snapshot.conversation,
         execution: SessionExecutionResponse {
+            current_run,
+            run_history: snapshot.runs,
             current_attempt,
             attempt_history: snapshot.attempts,
         },
@@ -571,6 +657,9 @@ fn projection_updated_at(snapshot: &ConversationSessionAuthoritySnapshot) -> Dat
                 .or(attempt.updated_at)
                 .unwrap_or(attempt.created_at),
         );
+    }
+    for run in &snapshot.runs {
+        latest = latest.max(run.completed_at.unwrap_or(run.updated_at));
     }
     for task in &snapshot.conversation_tasks {
         latest = latest.max(task.updated_at.unwrap_or(task.created_at));

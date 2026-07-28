@@ -122,3 +122,14 @@ test('cloud terminal start uses the narrow runtime client without probing the le
     /config\.mode !== 'local'[\s\S]*api\.seedProxyAuthCookie\(\)[\s\S]*api\.startTerminal/
   );
 });
+
+test('terminal authority is cleared at project, auth, and canonical run boundaries', () => {
+  assert.match(
+    appSource,
+    /const resetProjectScopedState = \(\) => \{[\s\S]*setTerminal\(null\);[\s\S]*setTerminalV2\(null\);/
+  );
+  assert.match(
+    appSource,
+    /useEffect\(\(\) => \{[\s\S]*terminalRunScopeKeyRef\.current === currentTerminalRunScopeKey[\s\S]*terminalStartGenerationRef\.current \+= 1;[\s\S]*setTerminal\(null\);[\s\S]*setTerminalV2\(null\);[\s\S]*\}, \[currentTerminalRunScopeKey\]\);/
+  );
+});

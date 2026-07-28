@@ -2,6 +2,9 @@ import type {
   AgentConversation,
   AgentRuntimeMode,
   DesktopApprovalRequest,
+  DesktopExecutionEnvironment,
+  DesktopRun,
+  DesktopRunStatus,
   PermissionRequestContext,
 } from '../../types';
 import type {
@@ -35,15 +38,31 @@ export function decodeCloudConversationSessionProjection(
   const attemptHistory = execution
     ? readArray(execution.attempt_history, (value) => readCloudAttempt(value, scope, conversation))
     : null;
+  const runHistory = execution
+    ? readArray(execution.run_history, (value) => readCloudRun(value, scope))
+    : null;
   const currentAttempt = execution
     ? readNullable(execution.current_attempt, (value) =>
         readCloudAttempt(value, scope, conversation),
       )
     : undefined;
-  if (!execution || !attemptHistory || currentAttempt === undefined) return null;
+  const currentRun = execution
+    ? readNullable(execution.current_run, (value) => readCloudRun(value, scope))
+    : undefined;
+  if (
+    !execution ||
+    !attemptHistory ||
+    !runHistory ||
+    currentAttempt === undefined ||
+    currentRun === undefined
+  ) {
+    return null;
+  }
   if ((currentAttempt === null) !== (attemptHistory.length === 0)) return null;
+  if ((currentRun === null) !== (runHistory.length === 0)) return null;
   if (currentAttempt && !sameJson(currentAttempt, attemptHistory[0])) return null;
-  if (!hasUniqueIds(attemptHistory)) return null;
+  if (currentRun && !sameJson(currentRun, runHistory[0])) return null;
+  if (!hasUniqueIds(attemptHistory) || !hasUniqueIds(runHistory)) return null;
 
   const authorityKind = nonEmptyString(root.authority_kind);
   const authorityId = nonEmptyString(root.authority_id);
@@ -99,15 +118,15 @@ export function decodeCloudConversationSessionProjection(
   const executionAuthority: ConversationSessionProjection['executionAuthority'] = currentAttempt
     ? ({
         kind: 'workspace_attempt',
-        currentRun: null,
-        runHistory: [],
+        currentRun,
+        runHistory,
         currentAttempt,
         attemptHistory,
       })
     : ({
         kind: 'conversation_record',
-        currentRun: null,
-        runHistory: [],
+        currentRun,
+        runHistory,
         currentAttempt: null,
         attemptHistory: [],
       });
@@ -132,8 +151,8 @@ export function decodeCloudConversationSessionProjection(
     artifactAuthority: { kind: 'unavailable', versions: [], deliveries: [] },
     activityAuthority,
     cloudEvidenceSummary,
-    currentRun: null,
-    runHistory: [],
+    currentRun,
+    runHistory,
     currentPlan: null,
     planHistory: [],
     tasks,
@@ -153,6 +172,132 @@ export function decodeCloudConversationSessionProjection(
     capabilities,
     snapshotRevision,
     updatedAt,
+  };
+}
+
+const cloudRunStatuses = new Set<DesktopRunStatus>([
+  'queued',
+  'running',
+  'needs_input',
+  'needs_approval',
+  'paused',
+  'ready_review',
+  'completed',
+  'failed',
+  'disconnected',
+  'interrupted',
+  'cancelled',
+]);
+
+function readCloudRun(value: unknown, scope: SessionProjectionScope): DesktopRun | null {
+  const run = recordValue(value);
+  const status = run ? nonEmptyString(run.status) : null;
+  const environment = run
+    ? readNullable(run.environment, (item) => readCloudRunEnvironment(item))
+    : undefined;
+  if (
+    !run ||
+    !nonEmptyString(run.id) ||
+    run.conversation_id !== scope.conversationId ||
+    !nonEmptyString(run.project_id) ||
+    !nonEmptyString(run.plan_version_id) ||
+    !nonEmptyString(run.idempotency_key) ||
+    !nonEmptyString(run.message_id) ||
+    typeof run.request_message !== 'string' ||
+    !status ||
+    !cloudRunStatuses.has(status as DesktopRunStatus) ||
+    !positiveInteger(run.revision) ||
+    !nonEmptyString(run.created_at) ||
+    !nonEmptyString(run.updated_at) ||
+    !Object.hasOwn(run, 'started_at') ||
+    !Object.hasOwn(run, 'completed_at') ||
+    !Object.hasOwn(run, 'last_heartbeat_at') ||
+    !Object.hasOwn(run, 'error') ||
+    !optionalString(run.started_at) ||
+    !optionalString(run.completed_at) ||
+    !optionalString(run.last_heartbeat_at) ||
+    !optionalString(run.error) ||
+    environment === undefined ||
+    !['read_only', 'workspace_write', 'full_access'].includes(
+      String(run.permission_profile),
+    )
+  ) {
+    return null;
+  }
+  if (scope.projectId && run.project_id !== scope.projectId) return null;
+
+  const authorizationSnapshot = recordValue(run.authorization_snapshot);
+  const expectedAuthorizationSnapshot = {
+    conversation_id: scope.conversationId,
+    project_id: run.project_id,
+    plan_version_id: run.plan_version_id,
+    permission_profile: run.permission_profile,
+    environment,
+  };
+  if (
+    !authorizationSnapshot ||
+    !sameJson(authorizationSnapshot, expectedAuthorizationSnapshot)
+  ) {
+    return null;
+  }
+
+  return {
+    id: run.id as string,
+    conversation_id: scope.conversationId,
+    project_id: run.project_id as string,
+    plan_version_id: run.plan_version_id as string,
+    idempotency_key: run.idempotency_key as string,
+    message_id: run.message_id as string,
+    request_message: run.request_message,
+    status: status as DesktopRunStatus,
+    revision: run.revision as number,
+    created_at: run.created_at as string,
+    updated_at: run.updated_at as string,
+    started_at: (run.started_at as string | null) ?? null,
+    completed_at: (run.completed_at as string | null) ?? null,
+    last_heartbeat_at: (run.last_heartbeat_at as string | null) ?? null,
+    error: (run.error as string | null) ?? null,
+    environment,
+    permission_profile: run.permission_profile as DesktopRun['permission_profile'],
+    authorization_snapshot: expectedAuthorizationSnapshot,
+  };
+}
+
+function readCloudRunEnvironment(value: unknown): DesktopExecutionEnvironment | null {
+  const environment = recordValue(value);
+  const id = nonEmptyString(environment?.id);
+  const kind = nonEmptyString(environment?.kind);
+  const label = nonEmptyString(environment?.label);
+  const createdAt = nonEmptyString(environment?.created_at);
+  if (
+    !environment ||
+    !id ||
+    !kind ||
+    !['local', 'worktree'].includes(kind) ||
+    !label ||
+    environment.workspace_path !== '/workspace' ||
+    !Object.hasOwn(environment, 'repository_root') ||
+    !Object.hasOwn(environment, 'branch') ||
+    !Object.hasOwn(environment, 'base_commit') ||
+    !Object.hasOwn(environment, 'source_run_id') ||
+    !optionalString(environment.repository_root) ||
+    !optionalString(environment.branch) ||
+    !optionalString(environment.base_commit) ||
+    !optionalString(environment.source_run_id) ||
+    !createdAt
+  ) {
+    return null;
+  }
+  return {
+    id,
+    kind: kind as DesktopExecutionEnvironment['kind'],
+    label,
+    workspace_path: '/workspace',
+    repository_root: (environment.repository_root as string | null) ?? null,
+    branch: (environment.branch as string | null) ?? null,
+    base_commit: (environment.base_commit as string | null) ?? null,
+    source_run_id: (environment.source_run_id as string | null) ?? null,
+    created_at: createdAt,
   };
 }
 
@@ -735,4 +880,8 @@ function stringArray(value: unknown): value is string[] {
 
 function nonNegativeInteger(value: unknown): boolean {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+function positiveInteger(value: unknown): boolean {
+  return nonNegativeInteger(value) && (value as number) > 0;
 }

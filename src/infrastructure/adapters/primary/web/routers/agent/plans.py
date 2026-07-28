@@ -196,6 +196,12 @@ class TaskListResponse(BaseModel):
     plan_version: PlanVersionResponse | None = None
 
 
+class ApprovePlanEnvironmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["local", "worktree"]
+
+
 class ApprovePlanAndStartRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -207,7 +213,7 @@ class ApprovePlanAndStartRequest(BaseModel):
     message: str = Field(min_length=1)
     message_id: str = Field(min_length=1, max_length=255)
     idempotency_key: str = Field(min_length=1, max_length=255)
-    environment: dict[str, Any] = Field(default_factory=dict)
+    environment: ApprovePlanEnvironmentRequest
 
 
 # === Task List Endpoints ===
@@ -319,6 +325,59 @@ async def get_tasks(
         raise HTTPException(status_code=500, detail=_("Failed to get tasks")) from exc
 
 
+async def _resolve_cloud_run_environment(
+    *,
+    base_container: DIContainer,
+    project_id: str,
+    tenant_id: str,
+    kind: Literal["local", "worktree"],
+    bound_at: datetime,
+) -> dict[str, Any]:
+    try:
+        async with async_session_factory() as sandbox_db:
+            lifecycle = base_container.with_db(sandbox_db).project_sandbox_lifecycle_service()
+            info = await lifecycle.ensure_sandbox_running(
+                project_id=project_id,
+                tenant_id=tenant_id,
+            )
+    except Exception as exc:
+        logger.warning(
+            "Failed to resolve approved run environment: has_project_id=%s error_type=%s",
+            bool(project_id),
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=_("Execution environment is unavailable"),
+        ) from exc
+
+    if (
+        info.project_id != project_id
+        or info.tenant_id != tenant_id
+        or not info.is_healthy
+        or not info.sandbox_id.strip()
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=_("Execution environment authority changed"),
+        )
+    created_at = info.created_at or bound_at
+    created_at = (
+        created_at.replace(tzinfo=UTC) if created_at.tzinfo is None else created_at.astimezone(UTC)
+    )
+    return {
+        "id": info.sandbox_id,
+        "kind": kind,
+        "label": info.sandbox_id,
+        "workspace_path": "/workspace",
+        "repository_root": None,
+        "branch": None,
+        "base_commit": None,
+        "source_run_id": None,
+        "created_at": created_at.isoformat(),
+    }
+
+
 @approval_router.post("/approve-and-start")
 async def approve_plan_and_start(
     body: ApprovePlanAndStartRequest,
@@ -396,6 +455,14 @@ async def approve_plan_and_start(
         "full_access": "full_access",
     }.get(policy.permission_mode if policy else "ask", "read_only")
     now = datetime.now(UTC)
+    base_container = cast(DIContainer, request.app.state.container)
+    environment = await _resolve_cloud_run_environment(
+        base_container=base_container,
+        project_id=conversation.project_id,
+        tenant_id=conversation.tenant_id,
+        kind=body.environment.kind,
+        bound_at=now,
+    )
     policy_snapshot = {
         "revision": policy.revision if policy else 0,
         "roles": dict(policy.roles_json) if policy else {},
@@ -427,7 +494,7 @@ async def approve_plan_and_start(
             "mode": "build",
             "policy": policy_snapshot,
             "permission_profile": permission_profile,
-            "environment": body.environment,
+            "environment": environment,
         },
         created_at=now,
         updated_at=now,
@@ -435,7 +502,6 @@ async def approve_plan_and_start(
     db.add(run)
     await db.commit()
     response = _approval_response(conversation, plan, run, created=True)
-    base_container = cast(DIContainer, request.app.state.container)
     task = asyncio.create_task(
         _execute_approved_plan(
             base_container=base_container,

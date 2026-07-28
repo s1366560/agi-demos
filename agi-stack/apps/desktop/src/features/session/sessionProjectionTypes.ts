@@ -151,15 +151,15 @@ export type SessionExecutionAuthority =
     }
   | {
       kind: 'workspace_attempt';
-      currentRun: null;
-      runHistory: [];
+      currentRun: DesktopRun | null;
+      runHistory: DesktopRun[];
       currentAttempt: CloudWorkspaceAttempt;
       attemptHistory: CloudWorkspaceAttempt[];
     }
   | {
       kind: 'conversation_record';
-      currentRun: null;
-      runHistory: [];
+      currentRun: DesktopRun | null;
+      runHistory: DesktopRun[];
       currentAttempt: null;
       attemptHistory: [];
     };

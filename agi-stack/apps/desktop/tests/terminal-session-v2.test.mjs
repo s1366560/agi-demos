@@ -4,7 +4,9 @@ import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const {
+  acceptTerminalSequence,
   parseTerminalSessionV2,
+  terminalAcknowledgementMatches,
   terminalReconnectDecision,
   terminalSessionV2SocketUrl,
 } = require(
@@ -20,7 +22,7 @@ const session = {
   run_id: 'run-1',
   run_revision: 7,
   environment_id: 'environment-1',
-  cwd: '/workspace/project',
+  cwd: '/workspace',
   created_at: '2026-07-28T02:00:00.000Z',
   expires_at: '2026-07-28T02:05:00.000Z',
   resumable: true,
@@ -35,9 +37,9 @@ test('TerminalSessionV2 requires the complete scoped resumable authority', () =>
     { ...session, contract_version: 1 },
     { ...session, resume_token: '' },
     { ...session, run_revision: 0 },
+    { ...session, cwd: '/workspace/guessed' },
     { ...session, resumable: false },
     { ...session, expires_at: 'invalid' },
-    { ...session, extra: 'not part of the contract' },
   ]) {
     assert.equal(
       parseTerminalSessionV2(invalid, Date.parse('2026-07-28T02:01:00.000Z')),
@@ -50,11 +52,40 @@ test('TerminalSessionV2 requires the complete scoped resumable authority', () =>
   );
 });
 
+test('TerminalSessionV2 negotiates the minimum compatible contract and ignores additions', () => {
+  const compatible = {
+    ...session,
+    contract_version: 3,
+    server_extension: { retained_sequences: 128 },
+  };
+  assert.deepEqual(
+    parseTerminalSessionV2(compatible, Date.parse('2026-07-28T02:01:00.000Z')),
+    {
+      ...session,
+      contract_version: 3,
+    }
+  );
+});
+
 test('TerminalSessionV2 socket URL carries only scoped session resume authority', () => {
   assert.equal(
-    terminalSessionV2SocketUrl('https://api.memstack.test', session),
-    'wss://api.memstack.test/api/v1/projects/project%2F1/sandbox/terminal/sessions/terminal-session-1/ws'
+    terminalSessionV2SocketUrl('https://api.memstack.test', session, 41),
+    'wss://api.memstack.test/api/v1/projects/project%2F1/sandbox/terminal/sessions/terminal-session-1/ws?after_sequence=41'
   );
+});
+
+test('terminal output sequence acceptance is idempotent across reconnect replay', () => {
+  assert.equal(terminalAcknowledgementMatches(41, 41), true);
+  assert.equal(terminalAcknowledgementMatches(41, 0), false);
+  assert.deepEqual(acceptTerminalSequence(0, 1), { accepted: true, next_sequence: 1 });
+  assert.deepEqual(acceptTerminalSequence(41, 41), { accepted: false, next_sequence: 41 });
+  assert.deepEqual(acceptTerminalSequence(41, 40), { accepted: false, next_sequence: 41 });
+  assert.deepEqual(acceptTerminalSequence(41, 42), { accepted: true, next_sequence: 42 });
+  assert.deepEqual(acceptTerminalSequence(41, 43), {
+    accepted: false,
+    next_sequence: 41,
+    gap: true,
+  });
 });
 
 test('terminal reconnect is bounded and never recreates a lost server session', () => {
@@ -74,6 +105,10 @@ test('terminal reconnect is bounded and never recreates a lost server session', 
   assert.deepEqual(terminalReconnectDecision(session, { kind: 'authority_revoked' }, 0, now), {
     action: 'refetch_run',
     reason_code: 'terminal_authority_revoked',
+  });
+  assert.deepEqual(terminalReconnectDecision(session, { kind: 'output_gap' }, 0, now), {
+    action: 'refetch_run',
+    reason_code: 'terminal_output_gap',
   });
   assert.deepEqual(terminalReconnectDecision(session, { kind: 'normal_close' }, 0, now), {
     action: 'stop',
