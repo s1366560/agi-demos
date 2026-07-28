@@ -2,6 +2,9 @@ use axum::extract::OriginalUri;
 
 use super::*;
 
+mod artifact_content;
+#[cfg(test)]
+mod artifact_content_tests;
 mod sandbox_files;
 #[cfg(test)]
 mod sandbox_files_tests;
@@ -13,6 +16,7 @@ const LOCAL_ROUTE_CONTRACT_VERSION: &str = "desktop-local-route-parity-v1";
 
 pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
     Router::new()
+        .merge(artifact_content::router())
         .merge(search::router())
         .route("/api/v1/skills/import", post(managed_mutation_unavailable))
         .route(

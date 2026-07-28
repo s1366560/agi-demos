@@ -81,18 +81,6 @@ export function createHttpDesktopArtifactClient(
   config: DesktopRuntimeConfig,
 ): DesktopArtifactClient {
   const runtimeConfig = Object.freeze({ ...config });
-  if (runtimeConfig.mode === 'local') {
-    const unavailable = async (): Promise<never> => {
-      throw new DesktopArtifactRequestError({
-        reasonCode: 'local_artifact_authority_unavailable',
-      });
-    };
-    return createDesktopArtifactClient({
-      loadContent: unavailable,
-      saveContent: unavailable,
-      download: unavailable,
-    });
-  }
   return createDesktopArtifactClient({
     async loadContent(artifactId, signal) {
       const payload = await requestArtifactJson(

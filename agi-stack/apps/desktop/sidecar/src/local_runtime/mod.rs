@@ -12287,7 +12287,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("migrated schema version");
-        assert_eq!(version, 20);
+        assert_eq!(version, 21);
         let selection_table: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
@@ -12376,13 +12376,13 @@ mod tests {
             let connection =
                 rusqlite::Connection::open(&future_path).expect("open future database");
             connection
-                .execute_batch("PRAGMA user_version = 21;")
+                .execute_batch("PRAGMA user_version = 22;")
                 .expect("mark future schema version");
         }
         let error = DesktopSessionStore::open(&future_path)
             .err()
             .expect("future schema must be rejected");
-        assert!(error.contains("newer than supported schema version 20"));
+        assert!(error.contains("newer than supported schema version 21"));
 
         std::fs::remove_dir_all(root).expect("remove schema test root");
     }
@@ -13171,7 +13171,7 @@ mod tests {
         let schema_version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("schema version");
-        assert_eq!(schema_version, 20);
+        assert_eq!(schema_version, 21);
         drop(connection);
         std::fs::remove_dir_all(root).expect("remove test root");
     }
