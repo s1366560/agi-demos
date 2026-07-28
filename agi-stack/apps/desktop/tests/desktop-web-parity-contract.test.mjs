@@ -38,7 +38,10 @@ test('versioned parity manifest pins the audited reference revisions and case st
     '9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47',
   );
   assert.deepEqual(
-    manifest.cases.map((parityCase) => parityCase.fixture).sort(),
+    manifest.cases
+      .filter((parityCase) => parityCase.fixture)
+      .map((parityCase) => parityCase.fixture)
+      .sort(),
     [
       '../../../../../shared/fixtures/artifact-content.v1.json',
       '../../../../../shared/fixtures/automation-run-receipt.v1.json',
@@ -52,10 +55,43 @@ test('versioned parity manifest pins the audited reference revisions and case st
   );
 });
 
+test('parity manifest links every local workbench authority to the executable route contract', () => {
+  const manifest = readJson('parity-manifest.v1.json');
+  const routeContractCases = new Map(
+    manifest.cases
+      .filter((parityCase) => parityCase.route_contract)
+      .map((parityCase) => [parityCase.area, parityCase.route_contract]),
+  );
+
+  assert.deepEqual(
+    [...routeContractCases.keys()].sort(),
+    ['managed_resources', 'mcp_apps', 'search'],
+  );
+
+  const routeContract = readJson('../local-route-parity.v1.json');
+  const declaredAreas = new Set(routeContract.routes.map((route) => route.area));
+  const expectedAreas = new Map([
+    ['search', ['search']],
+    ['managed_resources', ['agents', 'plugins', 'skills', 'subagents']],
+    ['mcp_apps', ['mcp_apps']],
+  ]);
+
+  for (const [area, selectedAreas] of expectedAreas) {
+    const declaration = routeContractCases.get(area);
+    assert.equal(declaration.path, '../local-route-parity.v1.json', area);
+    assert.deepEqual([...declaration.areas].sort(), selectedAreas, area);
+    for (const selectedArea of declaration.areas) {
+      assert.equal(declaredAreas.has(selectedArea), true, `${area}: ${selectedArea}`);
+    }
+  }
+});
+
 test('shared fixtures drive both normalizers to the same observable model', () => {
   const schema = readJson('parity-fixture.schema.json');
   const manifest = readJson('parity-manifest.v1.json');
-  const fixturePaths = manifest.cases.map((parityCase) => parityCase.fixture);
+  const fixturePaths = manifest.cases
+    .filter((parityCase) => parityCase.fixture)
+    .map((parityCase) => parityCase.fixture);
 
   for (const fixturePath of fixturePaths) {
     const fixture = readJson(fixturePath);

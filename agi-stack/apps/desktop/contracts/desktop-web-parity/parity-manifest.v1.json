@@ -87,6 +87,93 @@
       "fixture": "fixtures/capability-snapshot.v1.json"
     },
     {
+      "id": "local-search-route-authority",
+      "area": "search",
+      "references": {
+        "prototype_revision": "61454b2ead1cedda584e95afee9f471aac7851fb",
+        "web_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47",
+        "desktop_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47"
+      },
+      "source_entries": {
+        "prototype": "design-prototype/memstack-desktop-agent-mission-control/src/components/SettingsWorkspace.jsx",
+        "web": "web/src/services/graphService.ts",
+        "desktop": "agi-stack/apps/desktop/src/features/search/localSearchClient.ts"
+      },
+      "locale": "zh-CN",
+      "viewport": {
+        "width": 1440,
+        "height": 1024,
+        "device_scale_factor": 1
+      },
+      "data_state": "The local search projection has durable keyword, temporal and faceted data but no embedding or structured graph/community projection.",
+      "interaction_state": "The client negotiates capabilities before executing each declared local route.",
+      "expected_observable_result": "Advanced, temporal and faceted search use the local projection in keyword-degraded mode; graph traversal and community return stable structured unavailable authority instead of empty success.",
+      "native_deviation": "Semantic graph extraction is not inferred locally; only structured relationships may enable those routes in a future contract.",
+      "target_disposition": "native_equivalent",
+      "route_contract": {
+        "path": "../local-route-parity.v1.json",
+        "areas": ["search"]
+      }
+    },
+    {
+      "id": "local-managed-resource-route-authority",
+      "area": "managed_resources",
+      "references": {
+        "prototype_revision": "61454b2ead1cedda584e95afee9f471aac7851fb",
+        "web_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47",
+        "desktop_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47"
+      },
+      "source_entries": {
+        "prototype": "design-prototype/memstack-desktop-agent-mission-control/src/components/SettingsWorkspace.jsx",
+        "web": "web/src/services/skillService.ts",
+        "desktop": "agi-stack/apps/desktop/src/features/settings/managedResourcesClient.ts"
+      },
+      "locale": "en-US",
+      "viewport": {
+        "width": 1100,
+        "height": 800,
+        "device_scale_factor": 1
+      },
+      "data_state": "The local registry contains revisioned Skills, Plugins, Agents and SubAgents with immutable builtins and scoped vault references.",
+      "interaction_state": "The client lists, mutates, versions and rolls back resources through the declared route set.",
+      "expected_observable_result": "Every Desktop managed-resource client route has a matching sidecar route; supported registry operations return revisioned receipts and unsupported evolution, ACP or channel operations return stable structured unavailable authority.",
+      "native_deviation": "Operations without a local execution authority remain explicitly unavailable and never synthesize successful results.",
+      "target_disposition": "native_equivalent",
+      "route_contract": {
+        "path": "../local-route-parity.v1.json",
+        "areas": ["skills", "plugins", "agents", "subagents"]
+      }
+    },
+    {
+      "id": "local-mcp-app-route-authority",
+      "area": "mcp_apps",
+      "references": {
+        "prototype_revision": "61454b2ead1cedda584e95afee9f471aac7851fb",
+        "web_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47",
+        "desktop_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47"
+      },
+      "source_entries": {
+        "prototype": "design-prototype/memstack-desktop-agent-mission-control/src/components/ConversationCanvas.jsx",
+        "web": "web/src/services/mcpAppService.ts",
+        "desktop": "agi-stack/apps/desktop/src/features/chat/mcpAppsClient.ts"
+      },
+      "locale": "en-US",
+      "viewport": {
+        "width": 1440,
+        "height": 1024,
+        "device_scale_factor": 1
+      },
+      "data_state": "A persisted local MCP server definition recovers through the supervisor and exposes initialized tools, resources and App visibility.",
+      "interaction_state": "The Canvas lists Apps, reads a resource and retries a tool action with the same idempotency identity after a lost response.",
+      "expected_observable_result": "The sidecar exposes every declared MCP App host route, keeps credentials outside the renderer, restores canonical health after restart and replays tool outcomes only through the persisted idempotency authority.",
+      "native_deviation": "Local stdio, HTTP and WebSocket transports are supervised by the native sidecar instead of the cloud MCP host.",
+      "target_disposition": "native_equivalent",
+      "route_contract": {
+        "path": "../local-route-parity.v1.json",
+        "areas": ["mcp_apps"]
+      }
+    },
+    {
       "id": "hitl-cross-client-answer",
       "area": "hitl",
       "references": {

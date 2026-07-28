@@ -25,10 +25,20 @@
     },
     "cases": {
       "type": "array",
-      "minItems": 8,
+      "minItems": 11,
       "items": {
         "type": "object",
         "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": ["fixture"],
+            "not": { "required": ["route_contract"] }
+          },
+          {
+            "required": ["route_contract"],
+            "not": { "required": ["fixture"] }
+          }
+        ],
         "required": [
           "id",
           "area",
@@ -40,8 +50,7 @@
           "interaction_state",
           "expected_observable_result",
           "native_deviation",
-          "target_disposition",
-          "fixture"
+          "target_disposition"
         ],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
@@ -53,7 +62,10 @@
               "workspace",
               "artifact",
               "sandbox",
-              "automation"
+              "automation",
+              "search",
+              "managed_resources",
+              "mcp_apps"
             ]
           },
           "references": {
@@ -97,6 +109,22 @@
           "fixture": {
             "type": "string",
             "pattern": "^(fixtures|\\.\\./\\.\\./\\.\\./\\.\\./\\.\\./shared/fixtures)/[a-z0-9-]+\\.v1\\.json$"
+          },
+          "route_contract": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "areas"],
+            "properties": {
+              "path": { "const": "../local-route-parity.v1.json" },
+              "areas": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "enum": ["search", "skills", "plugins", "agents", "subagents", "mcp_apps"]
+                }
+              }
+            }
           }
         }
       }
