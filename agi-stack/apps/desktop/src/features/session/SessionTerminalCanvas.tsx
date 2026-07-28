@@ -3,6 +3,10 @@ import { DesktopIcon } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
 import type { DesktopRun, TerminalServiceResponse } from '../../types';
+import { InteractiveTerminal } from '../sandbox/InteractiveTerminal';
+import { SessionSandboxTools } from '../sandbox/SessionSandboxTools';
+import type { SandboxRuntimeCapability } from '../sandbox/sandboxRuntimeClient';
+import type { SessionSandboxRuntimeSurface } from '../sandbox/useSandboxRuntimeSurface';
 import { terminalOutputText, type TerminalBindingState } from './sessionTerminalModel';
 
 type SessionTerminalCanvasProps = {
@@ -13,6 +17,10 @@ type SessionTerminalCanvasProps = {
   busy: boolean;
   currentRun: DesktopRun | null;
   onStart: () => void;
+  interactiveCapability?: SandboxRuntimeCapability;
+  sandboxRuntime?: SessionSandboxRuntimeSurface;
+  onTerminalInput?: (data: string) => boolean | void;
+  onTerminalResize?: (cols: number, rows: number) => void;
 };
 
 export function SessionTerminalCanvas({
@@ -23,6 +31,14 @@ export function SessionTerminalCanvas({
   busy,
   currentRun,
   onStart,
+  interactiveCapability = {
+    availability: 'unavailable',
+    contract_version: 1,
+    reason_code: 'terminal_interactive_capability_unavailable',
+  },
+  sandboxRuntime,
+  onTerminalInput,
+  onTerminalResize,
 }: SessionTerminalCanvasProps) {
   const { t } = useI18n();
   const canStart =
@@ -50,6 +66,10 @@ export function SessionTerminalCanvas({
         : binding === 'connecting'
           ? 'cyan'
           : 'gray';
+  const interactive =
+    interactiveCapability.availability === 'available' &&
+    binding === 'connected' &&
+    Boolean(onTerminalInput && onTerminalResize);
   return (
     <section className="review-terminal" aria-label={t('session.terminalTitle')}>
       <div className="review-section-title">
@@ -115,14 +135,27 @@ export function SessionTerminalCanvas({
           code={error}
         />
       ) : null}
-      <pre
-        className="terminal-preview"
-        role="log"
-        tabIndex={0}
-        aria-label={t('session.terminalOutput')}
-      >
-        {lines.length ? terminalOutputText(lines, 20) : t('session.terminalEmpty')}
-      </pre>
+      {interactive && onTerminalInput && onTerminalResize ? (
+        <InteractiveTerminal
+          ariaLabel={t('session.terminalOutput')}
+          connected
+          outputChunks={lines}
+          onInput={(data) => {
+            onTerminalInput(data);
+          }}
+          onResize={onTerminalResize}
+        />
+      ) : (
+        <pre
+          className="terminal-preview"
+          role="log"
+          tabIndex={0}
+          aria-label={t('session.terminalOutput')}
+        >
+          {lines.length ? terminalOutputText(lines, 20) : t('session.terminalEmpty')}
+        </pre>
+      )}
+      {sandboxRuntime ? <SessionSandboxTools runtime={sandboxRuntime} /> : null}
     </section>
   );
 }

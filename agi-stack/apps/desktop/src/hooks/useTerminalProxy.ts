@@ -169,10 +169,20 @@ export function terminalFrame(data: unknown): { line: string; error: string | nu
         error: String(record.code ?? 'terminal_authority_revoked'),
       };
     }
+    if (record.type === 'session_lost') {
+      return {
+        line: `[session lost] ${String(record.message ?? '')}`,
+        error: 'terminal_session_lost',
+      };
+    }
     if (record.type === 'error') {
+      const code =
+        record.code === 'terminal_session_lost'
+          ? 'terminal_session_lost'
+          : 'terminal_remote_error';
       return {
         line: `[error] ${String(record.message ?? 'terminal failed')}`,
-        error: 'terminal_remote_error',
+        error: code,
       };
     }
     return { line: JSON.stringify(parsed), error: null };

@@ -1,0 +1,93 @@
+.remote-desktop-surface {
+  display: flex;
+  min-height: 420px;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--desktop-border-8);
+  border-radius: 8px;
+  background: var(--desktop-surface-3);
+}
+
+.remote-desktop-surface:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  padding: 16px;
+  border: 0;
+  border-radius: 0;
+  background: #080b10;
+}
+
+.remote-desktop-surface__toolbar,
+.remote-desktop-surface__toolbar > span,
+.remote-desktop-surface__controls,
+.remote-desktop-surface__capabilities {
+  display: flex;
+  align-items: center;
+}
+
+.remote-desktop-surface__toolbar {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.remote-desktop-surface__toolbar > span,
+.remote-desktop-surface__controls,
+.remote-desktop-surface__capabilities {
+  gap: 8px;
+}
+
+.remote-desktop-surface__controls {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.remote-desktop-surface__controls select {
+  min-height: 28px;
+  border: 1px solid var(--desktop-border-8);
+  border-radius: 6px;
+  background: var(--desktop-surface-2);
+  color: var(--desktop-text);
+}
+
+.remote-desktop-surface__capabilities {
+  flex-wrap: wrap;
+}
+
+.remote-desktop-surface__frame {
+  position: relative;
+  display: grid;
+  min-height: 340px;
+  flex: 1;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #05070a;
+}
+
+.remote-desktop-surface__frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.remote-desktop-surface__empty,
+.remote-desktop-surface--unavailable {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.remote-desktop-surface__empty {
+  display: flex;
+  min-height: 300px;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.remote-desktop-surface__reason {
+  overflow-wrap: anywhere;
+}

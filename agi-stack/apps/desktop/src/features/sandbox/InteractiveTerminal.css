@@ -1,0 +1,20 @@
+.desktop-interactive-terminal {
+  min-height: 300px;
+  overflow: hidden;
+  padding: 10px 8px;
+  border: 1px solid var(--desktop-border-8);
+  border-radius: 8px;
+  background: var(--desktop-surface-8);
+}
+
+.desktop-interactive-terminal .xterm {
+  height: 100%;
+}
+
+.desktop-interactive-terminal .xterm-viewport {
+  scrollbar-color: var(--desktop-border-6) transparent;
+}
+
+.desktop-interactive-terminal[data-connected='false'] {
+  opacity: 0.78;
+}
