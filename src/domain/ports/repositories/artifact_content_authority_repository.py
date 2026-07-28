@@ -86,3 +86,37 @@ class ArtifactContentAuthorityRepositoryPort(ABC):
         size_bytes: int,
     ) -> bool:
         """Flush a fenced pointer update and its receipt in one DB transaction."""
+
+    @abstractmethod
+    async def is_object_key_referenced(
+        self,
+        scope: ArtifactContentScope,
+        object_key: str,
+    ) -> bool:
+        """Return whether the scoped pointer or any receipt references an object."""
+
+    @abstractmethod
+    async def record_orphan_gc(
+        self,
+        *,
+        scope: ArtifactContentScope,
+        object_key: str,
+        idempotency_key: str,
+        request_hash: str,
+        content_revision: int,
+        content_hash: str,
+        reason_code: str,
+        status: str,
+        last_error_code: str | None = None,
+    ) -> None:
+        """Persist or refresh an auditable provisional-object GC record."""
+
+    @abstractmethod
+    async def mark_orphan_gc_result(
+        self,
+        object_key: str,
+        *,
+        status: str,
+        last_error_code: str | None = None,
+    ) -> None:
+        """Persist one cleanup attempt without losing the original audit record."""

@@ -1,5 +1,6 @@
 """Durable cloud ArtifactContentContractV2 authority tests."""
 
+import asyncio
 import hashlib
 from typing import Any
 
@@ -8,8 +9,13 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.services.artifact_content_authority_service import (
+    MAX_ARTIFACT_DOWNLOAD_BYTES,
+    MAX_ARTIFACT_PREVIEW_BYTES,
+    MAX_EDITABLE_ARTIFACT_BYTES,
     ArtifactContentAuthorityService,
+    ArtifactContentIntegrityError,
     ArtifactContentScope,
+    ArtifactContentTooLargeError,
 )
 from src.application.services.artifact_content_contract import (
     ArtifactContentIdempotencyConflictError,
@@ -17,8 +23,18 @@ from src.application.services.artifact_content_contract import (
     ArtifactContentRevisionConflictError,
     ArtifactContentSaveCommand,
 )
+from src.domain.ports.repositories.artifact_content_authority_repository import (
+    ArtifactContentAuthorityRecord,
+    ArtifactContentReceiptRecord,
+)
 from src.domain.ports.services.storage_service_port import UploadResult
-from src.infrastructure.adapters.secondary.persistence.artifact_model import ArtifactModel
+from src.infrastructure.adapters.secondary.persistence.artifact_content_commit_reconciler import (
+    ArtifactContentCommitReconciler,
+)
+from src.infrastructure.adapters.secondary.persistence.artifact_model import (
+    ArtifactContentOrphanGcModel,
+    ArtifactModel,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     Conversation,
     Project,
@@ -48,6 +64,7 @@ class DurableRecordingStorage:
         self.uploads: list[str] = []
         self.deletes: list[str] = []
         self.fail_upload = False
+        self.gets: list[str] = []
 
     async def upload_file(
         self,
@@ -69,12 +86,95 @@ class DurableRecordingStorage:
         )
 
     async def get_file(self, object_key: str) -> bytes | None:
+        self.gets.append(object_key)
         return self.objects.get(object_key)
 
     async def delete_file(self, object_key: str) -> bool:
         self.deletes.append(object_key)
         self.objects.pop(object_key, None)
         return True
+
+
+class BarrierAuthorityRepository:
+    """Two-writer authority double that exposes the same initial revision."""
+
+    def __init__(self) -> None:
+        self.scope = ArtifactContentScope(
+            artifact_id=ARTIFACT_ID,
+            tenant_id=TENANT_ID,
+            project_id=PROJECT_ID,
+            conversation_id=CONVERSATION_ID,
+        )
+        self.authority = ArtifactContentAuthorityRecord(
+            scope=self.scope,
+            mime_type="text/plain",
+            status="ready",
+            object_key=INITIAL_OBJECT_KEY,
+            size_bytes=4,
+            revision=1,
+            content_hash=_hash("seed"),
+        )
+        self.receipts: dict[str, ArtifactContentReceiptRecord] = {}
+        self.read_barrier = asyncio.Barrier(2)
+        self.advance_lock = asyncio.Lock()
+
+    async def get_authority(
+        self,
+        scope: ArtifactContentScope,
+        *,
+        for_update: bool = False,
+    ) -> ArtifactContentAuthorityRecord | None:
+        assert scope == self.scope
+        if for_update:
+            snapshot = self.authority
+            await self.read_barrier.wait()
+            return snapshot
+        return self.authority
+
+    async def initialize_content_hash(self, *args: Any, **kwargs: Any) -> None:
+        del args, kwargs
+        raise AssertionError("seed authority already has a content hash")
+
+    async def get_receipt(
+        self,
+        scope: ArtifactContentScope,
+        idempotency_key: str,
+    ) -> ArtifactContentReceiptRecord | None:
+        assert scope == self.scope
+        return self.receipts.get(idempotency_key)
+
+    async def advance_pointer(
+        self,
+        scope: ArtifactContentScope,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+        request_hash: str,
+        resulting_revision: int,
+        content_hash: str,
+        object_key: str,
+        size_bytes: int,
+    ) -> bool:
+        assert scope == self.scope
+        async with self.advance_lock:
+            if self.authority.revision != expected_revision:
+                return False
+            self.authority = ArtifactContentAuthorityRecord(
+                scope=scope,
+                mime_type=self.authority.mime_type,
+                status=self.authority.status,
+                object_key=object_key,
+                size_bytes=size_bytes,
+                revision=resulting_revision,
+                content_hash=content_hash,
+            )
+            self.receipts[idempotency_key] = ArtifactContentReceiptRecord(
+                request_hash=request_hash,
+                resulting_revision=resulting_revision,
+                content_hash=content_hash,
+                object_key=object_key,
+            )
+            return True
 
 
 async def _seed_authority(session: AsyncSession) -> None:
@@ -320,11 +420,13 @@ async def test_content_save_rejects_non_editable_mime_while_bytes_remain_readabl
         raw = await service.get_bytes(scope)
         assert raw is not None
         assert raw.mime_type == "application/pdf"
+        assert raw.revision == 1
+        assert raw.content_hash == _hash("seed")
         assert raw.content == b"seed"
 
 
 @pytest.mark.unit
-async def test_commit_failure_reconciliation_only_deletes_unreferenced_version(
+async def test_commit_failure_reconciler_uses_fresh_authority_and_audits_gc(
     test_engine,
 ) -> None:
     sessions = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
@@ -339,11 +441,15 @@ async def test_commit_failure_reconciliation_only_deletes_unreferenced_version(
         assert rolled_back is not None
         await first_session.rollback()
 
+    reconciler = ArtifactContentCommitReconciler(
+        session_factory=sessions,
+        storage_service=storage,  # type: ignore[arg-type]
+    )
+    await reconciler.reconcile(rolled_back)
+    assert rolled_back.uploaded_object_key in storage.deletes
+
     async with sessions() as cleanup_session:
         service = _service(cleanup_session, storage)
-        await service.discard_uncommitted(rolled_back)
-        assert rolled_back.uploaded_object_key in storage.deletes
-
         scope = await service.resolve_scope(ARTIFACT_ID)
         assert scope is not None
         committed = await service.save_content(
@@ -353,11 +459,207 @@ async def test_commit_failure_reconciliation_only_deletes_unreferenced_version(
         assert committed is not None
         await cleanup_session.commit()
 
+    await reconciler.reconcile(committed)
     async with sessions() as restarted_session:
-        restarted = _service(restarted_session, storage)
-        await restarted.discard_uncommitted(committed)
+        gc_rows = (
+            (await restarted_session.execute(select(ArtifactContentOrphanGcModel))).scalars().all()
+        )
+        assert len(gc_rows) == 1
+        assert gc_rows[0].object_key == rolled_back.uploaded_object_key
+        assert gc_rows[0].status == "deleted"
         assert committed.uploaded_object_key not in storage.deletes
         assert committed.uploaded_object_key in storage.objects
+
+
+@pytest.mark.unit
+async def test_ambiguous_reconciliation_retains_object_and_persists_pending_gc(
+    test_engine,
+    monkeypatch,
+) -> None:
+    sessions = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    storage = DurableRecordingStorage()
+
+    async with sessions() as session:
+        await _seed_authority(session)
+        service = _service(session, storage)
+        scope = await service.resolve_scope(ARTIFACT_ID)
+        assert scope is not None
+        outcome = await service.save_content(scope, _command("ambiguous"))
+        assert outcome is not None
+        await session.rollback()
+
+    reconciler = ArtifactContentCommitReconciler(
+        session_factory=sessions,
+        storage_service=storage,  # type: ignore[arg-type]
+    )
+
+    async def fail_authority_check(_outcome) -> bool:
+        raise RuntimeError("primary authority unavailable")
+
+    monkeypatch.setattr(reconciler, "_inspect_and_stage", fail_authority_check)
+    await reconciler.reconcile(outcome)
+
+    assert outcome.uploaded_object_key in storage.objects
+    assert outcome.uploaded_object_key not in storage.deletes
+    async with sessions() as audit_session:
+        audit = (
+            await audit_session.execute(
+                select(ArtifactContentOrphanGcModel).where(
+                    ArtifactContentOrphanGcModel.object_key == outcome.uploaded_object_key
+                )
+            )
+        ).scalar_one()
+        assert audit.status == "pending"
+        assert audit.reason_code == "authority_check_failed"
+        assert audit.last_error_code == "authority_check_failed"
+
+
+@pytest.mark.unit
+async def test_same_revision_writers_upload_unique_objects_and_only_gc_loser() -> None:
+    repository = BarrierAuthorityRepository()
+    storage = DurableRecordingStorage()
+    first = ArtifactContentAuthorityService(
+        repository=repository,  # type: ignore[arg-type]
+        storage_service=storage,  # type: ignore[arg-type]
+    )
+    second = ArtifactContentAuthorityService(
+        repository=repository,  # type: ignore[arg-type]
+        storage_service=storage,  # type: ignore[arg-type]
+    )
+
+    results = await asyncio.gather(
+        first.save_content(
+            repository.scope,
+            _command("same", idempotency_key="artifact-v2:race:first"),
+        ),
+        second.save_content(
+            repository.scope,
+            _command("same", idempotency_key="artifact-v2:race:second"),
+        ),
+        return_exceptions=True,
+    )
+
+    assert len(storage.uploads) == 2
+    assert storage.uploads[0] != storage.uploads[1]
+    assert all("/versions/r2-" in key for key in storage.uploads)
+    assert all(_hash("same").removeprefix("sha256:") in key for key in storage.uploads)
+    assert sum(isinstance(result, ArtifactContentRevisionConflictError) for result in results) == 1
+    assert repository.authority.object_key in storage.objects
+    loser_keys = set(storage.uploads) - {repository.authority.object_key}
+    assert loser_keys == set(storage.deletes)
+
+
+@pytest.mark.unit
+async def test_verified_reads_fail_closed_on_tamper_and_oversized_metadata(test_engine) -> None:
+    sessions = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    storage = DurableRecordingStorage()
+
+    async with sessions() as session:
+        await _seed_authority(session)
+        service = _service(session, storage)
+        scope = await service.resolve_scope(ARTIFACT_ID)
+        assert scope is not None
+
+        storage.objects[INITIAL_OBJECT_KEY] = b"evil"
+        with pytest.raises(ArtifactContentIntegrityError):
+            await service.get_bytes(scope, max_bytes=MAX_ARTIFACT_DOWNLOAD_BYTES)
+
+        storage.objects[INITIAL_OBJECT_KEY] = b"seed"
+        storage.gets.clear()
+        _ = await session.execute(
+            update(ArtifactModel)
+            .where(ArtifactModel.id == ARTIFACT_ID)
+            .values(size_bytes=MAX_ARTIFACT_DOWNLOAD_BYTES + 1)
+        )
+        await session.commit()
+        with pytest.raises(ArtifactContentTooLargeError) as too_large:
+            await service.get_bytes(scope, max_bytes=MAX_ARTIFACT_DOWNLOAD_BYTES)
+        assert too_large.value.max_bytes == MAX_ARTIFACT_DOWNLOAD_BYTES
+        assert storage.gets == []
+
+        _ = await session.execute(
+            update(ArtifactModel).where(ArtifactModel.id == ARTIFACT_ID).values(size_bytes=4)
+        )
+        await session.commit()
+        storage.objects[INITIAL_OBJECT_KEY] = b"overs"
+        with pytest.raises(ArtifactContentTooLargeError):
+            await service.get_bytes(scope, max_bytes=4)
+
+        storage.objects.pop(INITIAL_OBJECT_KEY)
+        with pytest.raises(ArtifactContentIntegrityError):
+            await service.get_bytes(scope, max_bytes=MAX_ARTIFACT_DOWNLOAD_BYTES)
+
+
+@pytest.mark.unit
+async def test_legacy_raw_read_conditionally_initializes_hash_and_returns_authority(
+    test_engine,
+) -> None:
+    sessions = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    storage = DurableRecordingStorage()
+
+    async with sessions() as session:
+        await _seed_authority(session)
+        _ = await session.execute(
+            update(ArtifactModel).where(ArtifactModel.id == ARTIFACT_ID).values(content_hash=None)
+        )
+        await session.commit()
+        service = _service(session, storage)
+        scope = await service.resolve_scope(ARTIFACT_ID)
+        assert scope is not None
+
+        raw = await service.get_bytes(scope, max_bytes=MAX_ARTIFACT_PREVIEW_BYTES)
+        await session.commit()
+
+        assert raw is not None
+        assert raw.revision == 1
+        assert raw.content_hash == _hash("seed")
+        assert raw.content == b"seed"
+        persisted_hash = (
+            await session.execute(
+                select(ArtifactModel.content_hash).where(ArtifactModel.id == ARTIFACT_ID)
+            )
+        ).scalar_one()
+        assert persisted_hash == _hash("seed")
+
+
+@pytest.mark.unit
+async def test_save_enforces_utf8_byte_limit_and_rejects_crlf_mime(test_engine) -> None:
+    sessions = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    storage = DurableRecordingStorage()
+
+    async with sessions() as session:
+        await _seed_authority(session)
+        service = _service(session, storage)
+        scope = await service.resolve_scope(ARTIFACT_ID)
+        assert scope is not None
+        multibyte_content = "界" * ((MAX_EDITABLE_ARTIFACT_BYTES // 3) + 1)
+
+        with pytest.raises(ArtifactContentTooLargeError) as too_large:
+            await service.save_content(scope, _command(multibyte_content))
+        assert too_large.value.actual_bytes > MAX_EDITABLE_ARTIFACT_BYTES
+        assert storage.uploads == []
+
+        _ = await session.execute(
+            update(ArtifactModel)
+            .where(ArtifactModel.id == ARTIFACT_ID)
+            .values(mime_type="text/plain\r\nX-Injected: yes")
+        )
+        await session.commit()
+        raw = await service.get_bytes(scope)
+        assert raw is not None
+        assert raw.mime_type == "application/octet-stream"
+        with pytest.raises(ArtifactContentNotEditableError):
+            await service.get_content(scope)
+
+        _ = await session.execute(
+            update(ArtifactModel)
+            .where(ArtifactModel.id == ARTIFACT_ID)
+            .values(mime_type="application/x-memstack-unknown")
+        )
+        await session.commit()
+        raw_unknown = await service.get_bytes(scope)
+        assert raw_unknown is not None
+        assert raw_unknown.mime_type == "application/octet-stream"
 
 
 @pytest.mark.unit

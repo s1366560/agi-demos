@@ -17,8 +17,12 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.artifact_content_authority_service import (
+    MAX_ARTIFACT_DOWNLOAD_BYTES,
+    MAX_ARTIFACT_PREVIEW_BYTES,
+    MAX_EDITABLE_ARTIFACT_BYTES,
     ArtifactContentAuthorityService,
     ArtifactContentNotReadyError,
+    ArtifactContentTooLargeError,
 )
 from src.application.services.artifact_content_contract import (
     ArtifactContentContractError,
@@ -28,6 +32,7 @@ from src.application.services.artifact_content_contract import (
     ArtifactContentNotEditableError,
     ArtifactContentRevisionConflictError,
     ArtifactContentSaveCommand,
+    preview_response_mime_type,
 )
 from src.application.services.artifact_service import ArtifactService
 from src.domain.model.artifact.artifact import ArtifactCategory, ArtifactStatus
@@ -36,7 +41,10 @@ from src.domain.ports.repositories.artifact_content_authority_repository import 
 )
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.artifact_content_commit_reconciler import (
+    ArtifactContentCommitReconciler,
+)
+from src.infrastructure.adapters.secondary.persistence.database import async_session_factory, get_db
 from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
 from src.infrastructure.adapters.secondary.persistence.sql_artifact_content_authority import (
     SqlArtifactContentAuthorityRepository,
@@ -75,6 +83,17 @@ def get_artifact_content_authority_service(
     container = request.app.state.container.with_db(db)
     return ArtifactContentAuthorityService(
         repository=SqlArtifactContentAuthorityRepository(db),
+        storage_service=container.storage_service(),
+    )
+
+
+def get_artifact_content_commit_reconciler(
+    request: Request,
+) -> ArtifactContentCommitReconciler:
+    """Build a reconciler that never reuses a failed request transaction."""
+    container = request.app.state.container
+    return ArtifactContentCommitReconciler(
+        session_factory=async_session_factory,
         storage_service=container.storage_service(),
     )
 
@@ -147,7 +166,7 @@ class UpdateContentRequest(BaseModel):
     expected_revision: int = Field(ge=0)
     content_hash: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
     idempotency_key: str = Field(pattern=r"^[A-Za-z0-9._:-]{8,128}$")
-    content: str
+    content: str = Field(max_length=MAX_EDITABLE_ARTIFACT_BYTES)
 
 
 class UpdateContentResponse(BaseModel):
@@ -301,14 +320,28 @@ async def download_artifact(
     """
     scope = await _resolve_artifact_content_scope(service, artifact_id, current_user, db)
     try:
-        content = await service.get_bytes(scope)
+        content = await service.get_bytes(
+            scope,
+            max_bytes=MAX_ARTIFACT_DOWNLOAD_BYTES,
+        )
     except ArtifactContentNotReadyError as exc:
         raise HTTPException(
             status_code=400,
             detail=_("Artifact is not ready for download"),
         ) from exc
+    except ArtifactContentTooLargeError as exc:
+        raise HTTPException(
+            status_code=413,
+            detail=_("Artifact exceeds the authenticated download size limit"),
+        ) from exc
+    except ArtifactContentIntegrityError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=_("Artifact content integrity check failed"),
+        ) from exc
     if content is None:
         raise HTTPException(status_code=404, detail=_("Artifact content not found"))
+    await db.commit()
 
     return Response(
         content=content.content,
@@ -317,6 +350,8 @@ async def download_artifact(
             "Cache-Control": "private, no-store",
             "Content-Disposition": "attachment",
             "X-Content-Type-Options": "nosniff",
+            "X-Artifact-Revision": str(content.revision),
+            "X-Artifact-Content-Hash": content.content_hash,
         },
     )
 
@@ -341,6 +376,11 @@ async def get_artifact_content(
         raise HTTPException(
             status_code=415,
             detail=_("Artifact content is not editable text"),
+        ) from exc
+    except ArtifactContentTooLargeError as exc:
+        raise HTTPException(
+            status_code=413,
+            detail=_("Artifact exceeds the editable content size limit"),
         ) from exc
     except ArtifactContentIntegrityError as exc:
         raise HTTPException(
@@ -370,20 +410,42 @@ async def get_artifact_content_bytes(
     """Return authenticated raw bytes for previews."""
     scope = await _resolve_artifact_content_scope(service, artifact_id, current_user, db)
     try:
-        content = await service.get_bytes(scope)
+        content = await service.get_bytes(
+            scope,
+            max_bytes=MAX_ARTIFACT_PREVIEW_BYTES,
+        )
     except ArtifactContentNotReadyError as exc:
         raise HTTPException(
             status_code=400,
             detail=_("Artifact content is not ready"),
         ) from exc
+    except ArtifactContentTooLargeError as exc:
+        return JSONResponse(
+            status_code=413,
+            content={
+                "detail": _("Artifact exceeds the authenticated preview size limit"),
+                "reason_code": "artifact_preview_size_limit",
+                "fallback": "download",
+                "download_url": f"/api/v1/artifacts/{artifact_id}/download",
+                "max_bytes": exc.max_bytes,
+            },
+        )
+    except ArtifactContentIntegrityError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=_("Artifact content integrity check failed"),
+        ) from exc
     if content is None:
         raise HTTPException(status_code=404, detail=_("Artifact content not found"))
+    await db.commit()
     return Response(
         content=content.content,
-        media_type=content.mime_type,
+        media_type=preview_response_mime_type(content.mime_type),
         headers={
             "Cache-Control": "private, no-store",
             "X-Content-Type-Options": "nosniff",
+            "X-Artifact-Revision": str(content.revision),
+            "X-Artifact-Content-Hash": content.content_hash,
         },
     )
 
@@ -427,6 +489,7 @@ async def update_artifact_content(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     service: ArtifactContentAuthorityService = Depends(get_artifact_content_authority_service),
+    reconciler: ArtifactContentCommitReconciler = Depends(get_artifact_content_commit_reconciler),
 ) -> UpdateContentResponse | JSONResponse:
     """
     Update the text content of an artifact (canvas save-back).
@@ -473,6 +536,11 @@ async def update_artifact_content(
             status_code=422,
             detail=_("Artifact content hash does not match content"),
         ) from exc
+    except ArtifactContentTooLargeError as exc:
+        raise HTTPException(
+            status_code=413,
+            detail=_("Artifact exceeds the editable content size limit"),
+        ) from exc
     except ArtifactContentIntegrityError as exc:
         raise HTTPException(
             status_code=409,
@@ -488,8 +556,14 @@ async def update_artifact_content(
     try:
         await db.commit()
     except Exception:
-        await db.rollback()
-        await service.discard_uncommitted(outcome)
+        try:
+            await db.rollback()
+        except Exception:
+            logger.warning(
+                "Failed request transaction rollback before Artifact reconciliation",
+                exc_info=True,
+            )
+        await reconciler.reconcile(outcome)
         raise
     receipt = outcome.receipt
 

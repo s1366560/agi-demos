@@ -8,12 +8,15 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from src.application.services.artifact_content_authority_service import (
+    MAX_ARTIFACT_PREVIEW_BYTES,
     ArtifactContentBytes,
     ArtifactContentSaveOutcome,
+    ArtifactContentTooLargeError,
 )
 from src.application.services.artifact_content_contract import (
     ArtifactContentContract,
     ArtifactContentIdempotencyConflictError,
+    ArtifactContentIntegrityError,
     ArtifactContentRevisionConflictError,
     ArtifactContentSaveReceipt,
 )
@@ -78,11 +81,17 @@ def artifact_content_authority_mock() -> AsyncMock:
 
 
 @pytest.fixture
+def artifact_content_commit_reconciler_mock() -> AsyncMock:
+    return AsyncMock()
+
+
+@pytest.fixture
 def artifacts_client(
     test_db,
     artifact_user,
     artifact_service_mock,
     artifact_content_authority_mock,
+    artifact_content_commit_reconciler_mock,
     monkeypatch,
 ) -> TestClient:
     app = FastAPI()
@@ -98,6 +107,9 @@ def artifacts_client(
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[artifacts_router.get_artifact_content_authority_service] = (
         lambda: artifact_content_authority_mock
+    )
+    app.dependency_overrides[artifacts_router.get_artifact_content_commit_reconciler] = (
+        lambda: artifact_content_commit_reconciler_mock
     )
     monkeypatch.setattr(artifacts_router, "_artifact_service", artifact_service_mock)
     return TestClient(app)
@@ -223,6 +235,8 @@ class TestArtifactContentContractV2Router:
         artifact_content_authority_mock.get_bytes.return_value = ArtifactContentBytes(
             scope=artifact_content_authority_mock.resolve_scope.return_value,
             mime_type="text/plain",
+            revision=3,
+            content_hash=content_hash,
             content=b"hello",
         )
 
@@ -244,11 +258,15 @@ class TestArtifactContentContractV2Router:
         assert raw.headers["content-type"] == "text/plain; charset=utf-8"
         assert raw.headers["cache-control"] == "private, no-store"
         assert raw.headers["x-content-type-options"] == "nosniff"
+        assert raw.headers["x-artifact-revision"] == "3"
+        assert raw.headers["x-artifact-content-hash"] == content_hash
         assert download.status_code == 200
         assert download.content == b"hello"
         assert download.headers["cache-control"] == "private, no-store"
         assert download.headers["content-disposition"] == "attachment"
         assert download.headers["x-content-type-options"] == "nosniff"
+        assert download.headers["x-artifact-revision"] == "3"
+        assert download.headers["x-artifact-content-hash"] == content_hash
         assert "presigned" not in str(download.headers).lower()
         artifact_content_authority_mock.get_content.assert_awaited_once()
         assert artifact_content_authority_mock.get_bytes.await_count == 2
@@ -271,6 +289,8 @@ class TestArtifactContentContractV2Router:
                 duplicate=False,
             ),
             uploaded_object_key="artifacts/tenant/project/artifact/versions/r4",
+            idempotency_key="artifact-1:save:0001",
+            request_hash=self._hash("request"),
         )
         request = {
             "contract_version": 2,
@@ -330,6 +350,7 @@ class TestArtifactContentContractV2Router:
         test_db,
         artifacts_client,
         artifact_content_authority_mock,
+        artifact_content_commit_reconciler_mock,
         monkeypatch,
     ) -> None:
         await self._grant_project_access(test_db)
@@ -343,12 +364,19 @@ class TestArtifactContentContractV2Router:
                 duplicate=False,
             ),
             uploaded_object_key="artifacts/tenant/project/artifact/versions/r4",
+            idempotency_key="artifact-1:save:0001",
+            request_hash=self._hash("request"),
         )
         artifact_content_authority_mock.save_content.return_value = outcome
         monkeypatch.setattr(
             test_db,
             "commit",
             AsyncMock(side_effect=RuntimeError("database commit failed")),
+        )
+        monkeypatch.setattr(
+            test_db,
+            "rollback",
+            AsyncMock(side_effect=RuntimeError("failed request session")),
         )
 
         with pytest.raises(RuntimeError, match="database commit failed"):
@@ -363,4 +391,83 @@ class TestArtifactContentContractV2Router:
                 },
             )
 
-        artifact_content_authority_mock.discard_uncommitted.assert_awaited_once_with(outcome)
+        artifact_content_commit_reconciler_mock.reconcile.assert_awaited_once_with(outcome)
+
+    @pytest.mark.asyncio
+    async def test_raw_preview_returns_structured_download_fallback_when_oversized(
+        self,
+        test_db,
+        artifacts_client,
+        artifact_content_authority_mock,
+    ) -> None:
+        await self._grant_project_access(test_db)
+        artifact_content_authority_mock.get_bytes.side_effect = ArtifactContentTooLargeError(
+            actual_bytes=MAX_ARTIFACT_PREVIEW_BYTES + 1,
+            max_bytes=MAX_ARTIFACT_PREVIEW_BYTES,
+        )
+
+        response = artifacts_client.get("/api/v1/artifacts/artifact-1/content/bytes")
+
+        assert response.status_code == 413
+        assert response.json() == {
+            "detail": "Artifact exceeds the authenticated preview size limit",
+            "reason_code": "artifact_preview_size_limit",
+            "fallback": "download",
+            "download_url": "/api/v1/artifacts/artifact-1/download",
+            "max_bytes": MAX_ARTIFACT_PREVIEW_BYTES,
+        }
+        artifact_content_authority_mock.get_bytes.assert_awaited_once_with(
+            artifact_content_authority_mock.resolve_scope.return_value,
+            max_bytes=MAX_ARTIFACT_PREVIEW_BYTES,
+        )
+
+    @pytest.mark.asyncio
+    async def test_raw_preview_downgrades_active_and_injected_mime_types(
+        self,
+        test_db,
+        artifacts_client,
+        artifact_content_authority_mock,
+    ) -> None:
+        await self._grant_project_access(test_db)
+        content_hash = self._hash("<script>bad()</script>")
+        artifact_content_authority_mock.get_bytes.return_value = ArtifactContentBytes(
+            scope=artifact_content_authority_mock.resolve_scope.return_value,
+            mime_type="text/html",
+            revision=7,
+            content_hash=content_hash,
+            content=b"<script>bad()</script>",
+        )
+
+        active = artifacts_client.get("/api/v1/artifacts/artifact-1/content/bytes")
+        assert active.status_code == 200
+        assert active.headers["content-type"] == "application/octet-stream"
+
+        artifact_content_authority_mock.get_bytes.return_value = ArtifactContentBytes(
+            scope=artifact_content_authority_mock.resolve_scope.return_value,
+            mime_type="text/plain\r\nX-Injected: yes",
+            revision=7,
+            content_hash=content_hash,
+            content=b"plain",
+        )
+        injected = artifacts_client.get("/api/v1/artifacts/artifact-1/content/bytes")
+        assert injected.status_code == 200
+        assert injected.headers["content-type"] == "application/octet-stream"
+        assert "x-injected" not in injected.headers
+
+    @pytest.mark.asyncio
+    async def test_raw_and_download_fail_closed_on_integrity_mismatch(
+        self,
+        test_db,
+        artifacts_client,
+        artifact_content_authority_mock,
+    ) -> None:
+        await self._grant_project_access(test_db)
+        artifact_content_authority_mock.get_bytes.side_effect = ArtifactContentIntegrityError
+
+        raw = artifacts_client.get("/api/v1/artifacts/artifact-1/content/bytes")
+        download = artifacts_client.get("/api/v1/artifacts/artifact-1/download")
+
+        assert raw.status_code == 409
+        assert raw.json()["detail"] == "Artifact content integrity check failed"
+        assert download.status_code == 409
+        assert download.json()["detail"] == "Artifact content integrity check failed"

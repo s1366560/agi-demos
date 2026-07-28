@@ -1,6 +1,7 @@
 """Durable cloud ArtifactContentContractV2 orchestration."""
 
 import logging
+import secrets
 from dataclasses import dataclass
 
 from src.application.services.artifact_content_contract import (
@@ -27,11 +28,26 @@ from src.domain.ports.services.storage_service_port import StorageServicePort
 
 logger = logging.getLogger(__name__)
 
+MAX_EDITABLE_ARTIFACT_BYTES = 1_048_576
+MAX_ARTIFACT_PREVIEW_BYTES = 25 * 1_048_576
+MAX_ARTIFACT_DOWNLOAD_BYTES = 50 * 1_048_576
+
 
 class ArtifactContentNotReadyError(Exception):
     """Raised when a scoped Artifact is not in the ready state."""
 
     reason_code = "artifact_content_not_ready"
+
+
+class ArtifactContentTooLargeError(Exception):
+    """Raised before an object exceeds a bounded Artifact operation."""
+
+    reason_code = "artifact_content_size_limit"
+
+    def __init__(self, *, actual_bytes: int, max_bytes: int) -> None:
+        super().__init__(self.reason_code)
+        self.actual_bytes = actual_bytes
+        self.max_bytes = max_bytes
 
 
 @dataclass(frozen=True)
@@ -40,6 +56,8 @@ class ArtifactContentBytes:
 
     scope: ArtifactContentScope
     mime_type: str
+    revision: int
+    content_hash: str
     content: bytes
 
 
@@ -50,6 +68,8 @@ class ArtifactContentSaveOutcome:
     scope: ArtifactContentScope
     receipt: ArtifactContentSaveReceipt
     uploaded_object_key: str | None
+    idempotency_key: str
+    request_hash: str
 
 
 class ArtifactContentAuthorityService:
@@ -71,37 +91,26 @@ class ArtifactContentAuthorityService:
         """Resolve only a structurally consistent tenant/project/conversation scope."""
         return await self._repository.resolve_scope(artifact_id)
 
-    async def get_bytes(self, scope: ArtifactContentScope) -> ArtifactContentBytes | None:
-        """Read authenticated bytes from the exact durable metadata pointer."""
-        authority = await self._repository.get_authority(scope)
-        if authority is None:
-            return None
-        self._require_ready(authority)
-        content = await self._storage.get_file(authority.object_key)
-        if content is None:
-            return None
-        return ArtifactContentBytes(
-            scope=scope,
-            mime_type=normalize_mime_type(authority.mime_type),
-            content=content,
-        )
-
-    async def get_content(self, scope: ArtifactContentScope) -> ArtifactContentContract | None:
-        """Return editable UTF-8 content and initialize legacy hashes durably."""
+    async def get_bytes(
+        self,
+        scope: ArtifactContentScope,
+        *,
+        max_bytes: int = MAX_ARTIFACT_DOWNLOAD_BYTES,
+    ) -> ArtifactContentBytes | None:
+        """Read bounded bytes and verify the durable revision/hash authority."""
         for _attempt in range(2):
             authority = await self._repository.get_authority(scope)
             if authority is None:
                 return None
             self._require_ready(authority)
-            mime_type = self._require_editable(authority)
-            content_bytes = await self._storage.get_file(authority.object_key)
-            if content_bytes is None:
-                return None
-            try:
-                content = content_bytes.decode("utf-8")
-            except UnicodeDecodeError as exc:
-                raise ArtifactContentNotEditableError from exc
-            computed_hash = artifact_content_hash(content_bytes)
+            self._require_size_within_limit(authority.size_bytes, max_bytes)
+            content = await self._storage.get_file(authority.object_key)
+            if content is None:
+                raise ArtifactContentIntegrityError
+            self._require_size_within_limit(len(content), max_bytes)
+            if len(content) != authority.size_bytes:
+                raise ArtifactContentIntegrityError
+            computed_hash = artifact_content_hash(content)
             if authority.content_hash is None:
                 initialized = await self._repository.initialize_content_hash(
                     scope,
@@ -118,15 +127,33 @@ class ArtifactContentAuthorityService:
                 authority = initialized
             if authority.content_hash != computed_hash:
                 raise ArtifactContentIntegrityError
-            return ArtifactContentContract(
-                contract_version=2,
-                artifact_id=scope.artifact_id,
+            return ArtifactContentBytes(
+                scope=scope,
+                mime_type=normalize_mime_type(authority.mime_type),
                 revision=authority.revision,
                 content_hash=computed_hash,
-                mime_type=mime_type,
                 content=content,
             )
         raise ArtifactContentIntegrityError
+
+    async def get_content(self, scope: ArtifactContentScope) -> ArtifactContentContract | None:
+        """Return editable UTF-8 content and initialize legacy hashes durably."""
+        content_bytes = await self.get_bytes(scope, max_bytes=MAX_EDITABLE_ARTIFACT_BYTES)
+        if content_bytes is None:
+            return None
+        mime_type = self._require_editable_mime(content_bytes.mime_type)
+        try:
+            content = content_bytes.content.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ArtifactContentNotEditableError from exc
+        return ArtifactContentContract(
+            contract_version=2,
+            artifact_id=scope.artifact_id,
+            revision=content_bytes.revision,
+            content_hash=content_bytes.content_hash,
+            mime_type=mime_type,
+            content=content,
+        )
 
     async def save_content(
         self,
@@ -136,6 +163,7 @@ class ArtifactContentAuthorityService:
         """Conditionally publish one immutable object version and fenced DB pointer."""
         validate_artifact_content_command(command)
         content_bytes = command.content.encode("utf-8")
+        self._require_size_within_limit(len(content_bytes), MAX_EDITABLE_ARTIFACT_BYTES)
         if artifact_content_hash(content_bytes) != command.content_hash:
             raise ArtifactContentHashMismatchError
 
@@ -162,6 +190,8 @@ class ArtifactContentAuthorityService:
                     duplicate=True,
                 ),
                 uploaded_object_key=None,
+                idempotency_key=command.idempotency_key,
+                request_hash=request_hash,
             )
         if command.expected_revision != authority.revision:
             raise ArtifactContentRevisionConflictError(
@@ -219,29 +249,27 @@ class ArtifactContentAuthorityService:
                 duplicate=False,
             ),
             uploaded_object_key=version_key,
+            idempotency_key=command.idempotency_key,
+            request_hash=request_hash,
         )
-
-    async def discard_uncommitted(self, outcome: ArtifactContentSaveOutcome) -> None:
-        """Reconcile an ambiguous DB commit before removing its version object."""
-        if outcome.uploaded_object_key is None:
-            return
-        current = await self._repository.get_authority(outcome.scope)
-        if (
-            current is not None
-            and current.object_key == outcome.uploaded_object_key
-            and current.revision == outcome.receipt.revision
-            and current.content_hash == outcome.receipt.content_hash
-        ):
-            return
-        await self._discard_orphan(outcome.uploaded_object_key)
 
     async def _ensure_authority_hash(
         self,
         scope: ArtifactContentScope,
         authority: ArtifactContentAuthorityRecord,
     ) -> ArtifactContentAuthorityRecord:
+        self._require_size_within_limit(
+            authority.size_bytes,
+            MAX_EDITABLE_ARTIFACT_BYTES,
+        )
         current_bytes = await self._storage.get_file(authority.object_key)
         if current_bytes is None:
+            raise ArtifactContentIntegrityError
+        self._require_size_within_limit(
+            len(current_bytes),
+            MAX_EDITABLE_ARTIFACT_BYTES,
+        )
+        if len(current_bytes) != authority.size_bytes:
             raise ArtifactContentIntegrityError
         computed_hash = artifact_content_hash(current_bytes)
         if authority.content_hash is None:
@@ -281,9 +309,10 @@ class ArtifactContentAuthorityService:
         content_hash: str,
     ) -> str:
         digest = content_hash.removeprefix("sha256:")
+        nonce = secrets.token_hex(16)
         return (
             f"{self._bucket_prefix}/{scope.tenant_id}/{scope.project_id}/{scope.artifact_id}/"
-            f"versions/r{revision}-{digest}"
+            f"versions/r{revision}-{digest}-{nonce}"
         )
 
     @staticmethod
@@ -293,7 +322,11 @@ class ArtifactContentAuthorityService:
 
     @staticmethod
     def _require_editable(authority: ArtifactContentAuthorityRecord) -> str:
-        mime_type = normalize_mime_type(authority.mime_type)
+        return ArtifactContentAuthorityService._require_editable_mime(authority.mime_type)
+
+    @staticmethod
+    def _require_editable_mime(value: str) -> str:
+        mime_type = normalize_mime_type(value)
         if mime_type not in EDITABLE_ARTIFACT_MIME_TYPES:
             raise ArtifactContentNotEditableError
         return mime_type
@@ -303,3 +336,15 @@ class ArtifactContentAuthorityService:
         if authority.content_hash is None:
             raise ArtifactContentIntegrityError
         return authority.content_hash
+
+    @staticmethod
+    def _require_size_within_limit(actual_bytes: object, max_bytes: object) -> None:
+        if isinstance(actual_bytes, bool) or not isinstance(actual_bytes, int) or actual_bytes < 0:
+            raise ArtifactContentIntegrityError
+        if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 0:
+            raise ArtifactContentIntegrityError
+        if actual_bytes > max_bytes:
+            raise ArtifactContentTooLargeError(
+                actual_bytes=actual_bytes,
+                max_bytes=max_bytes,
+            )
