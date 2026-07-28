@@ -21,6 +21,7 @@ export type PromptTemplateDraftValidation =
 export type PromptTemplateListItem = {
   key: string;
   id: string;
+  revision?: number;
   source: PromptTemplateSource;
   title: string;
   content: string;

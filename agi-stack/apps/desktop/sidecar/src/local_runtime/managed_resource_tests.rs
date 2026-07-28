@@ -54,6 +54,16 @@ fn authenticated_json_request(
         .expect("authenticated JSON request")
 }
 
+fn v2_update(key: &str, expected_revision: u64, value: Value) -> Value {
+    json!({
+        "contract_version": 2,
+        "expected_revision": expected_revision,
+        "idempotency_key": key,
+        "value": value,
+        "vault_refs": [],
+    })
+}
+
 async fn response_json(response: axum::response::Response) -> Value {
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
@@ -171,7 +181,7 @@ async fn tenant_members_can_read_but_cannot_mutate_managed_resources() {
         (
             "PATCH",
             "/api/v1/skills/custom-skill/status?status=disabled&tenant_id=orbital",
-            json!({}),
+            v2_update("member-disable-skill", 0, json!({ "status": "disabled" })),
         ),
         (
             "POST",
@@ -181,7 +191,7 @@ async fn tenant_members_can_read_but_cannot_mutate_managed_resources() {
         (
             "PATCH",
             "/api/v1/agent/definitions/custom-agent/enabled?tenant_id=orbital&project_id=agent-evals",
-            json!({ "enabled": false }),
+            v2_update("member-disable-agent", 0, json!({ "enabled": false })),
         ),
     ] {
         let response = app
@@ -206,7 +216,7 @@ async fn tenant_owners_can_mutate_non_builtin_managed_resources() {
         (
             "PATCH",
             "/api/v1/skills/custom-skill/status?status=disabled&tenant_id=local",
-            json!({}),
+            v2_update("owner-disable-skill", 0, json!({ "status": "disabled" })),
         ),
         (
             "POST",
@@ -216,7 +226,7 @@ async fn tenant_owners_can_mutate_non_builtin_managed_resources() {
         (
             "PATCH",
             "/api/v1/agent/definitions/custom-agent/enabled?tenant_id=local&project_id=local-project",
-            json!({ "enabled": false }),
+            v2_update("owner-disable-agent", 0, json!({ "enabled": false })),
         ),
     ] {
         let response = app
@@ -242,7 +252,7 @@ async fn tenant_owners_cannot_mutate_immutable_managed_resources() {
         (
             "PATCH",
             "/api/v1/skills/implementation/status?status=disabled&tenant_id=local",
-            json!({}),
+            v2_update("builtin-disable-skill", 0, json!({ "status": "disabled" })),
         ),
         (
             "POST",
@@ -252,7 +262,7 @@ async fn tenant_owners_cannot_mutate_immutable_managed_resources() {
         (
             "PATCH",
             "/api/v1/agent/definitions/builtin%3Aall-access/enabled?tenant_id=local&project_id=local-project",
-            json!({ "enabled": false }),
+            v2_update("builtin-disable-agent", 0, json!({ "enabled": false })),
         ),
     ] {
         let response = app
@@ -296,6 +306,9 @@ async fn tenant_owners_cannot_mutate_immutable_managed_resources() {
             ManagedResourceKind::Plugin | ManagedResourceKind::Agent => {
                 assert_eq!(resource["enabled"], true);
             }
+            ManagedResourceKind::SubAgent | ManagedResourceKind::PromptTemplate => {
+                unreachable!("v2 resources are not part of the immutable seed test");
+            }
             ManagedResourceKind::Provider => unreachable!("provider is not part of this test"),
         }
     }
@@ -312,7 +325,7 @@ async fn managed_agent_mutation_rejects_a_mismatched_project_scope() {
             "PATCH",
             "/api/v1/agent/definitions/builtin%3Aall-access/enabled?tenant_id=local&project_id=desktop-client",
             credential,
-            json!({ "enabled": false }),
+            v2_update("wrong-project-agent", 0, json!({ "enabled": false })),
         ))
         .await
         .expect("project-scoped managed agent response");

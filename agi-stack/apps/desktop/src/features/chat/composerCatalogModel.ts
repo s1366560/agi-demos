@@ -26,7 +26,11 @@ export type ComposerCatalogClient = {
     input: PromptTemplateCreateInput,
     signal?: AbortSignal,
   ) => Promise<PromptTemplateRecord>;
-  deletePromptTemplate?: (templateId: string, signal?: AbortSignal) => Promise<void>;
+  deletePromptTemplate?: (
+    templateId: string,
+    signal?: AbortSignal,
+    expectedRevision?: number,
+  ) => Promise<void>;
   listConversations?: (
     projectId?: string,
     workspaceIdOrOptions?:

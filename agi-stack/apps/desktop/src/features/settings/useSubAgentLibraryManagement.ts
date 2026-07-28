@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { DesktopApiClient } from '../../api/client';
+import { ManagedResourcesClient } from '../../api/managedResourcesClient';
 import type {
   DesktopRuntimeConfig,
   ManagedSubAgent,
@@ -46,7 +46,7 @@ export function useSubAgentLibraryManagement({
     setError(null);
     setDialog({ key: crypto.randomUUID(), templates: [], loading: true });
     try {
-      const result = await new DesktopApiClient(config).listManagedSubAgentTemplates();
+      const result = await new ManagedResourcesClient(config).listManagedSubAgentTemplates();
       if (contextKeyRef.current !== requestContextKey) return;
       setDialog((current) => (current ? { ...current, templates: result.templates, loading: false } : null));
     } catch (caught) {
@@ -67,7 +67,7 @@ export function useSubAgentLibraryManagement({
       setBusyId(template.id);
       setError(null);
       try {
-        const created = await new DesktopApiClient(config).installManagedSubAgentTemplate(
+        const created = await new ManagedResourcesClient(config).installManagedSubAgentTemplate(
           template.id,
         );
         if (contextKeyRef.current !== requestContextKey) return;
@@ -89,7 +89,7 @@ export function useSubAgentLibraryManagement({
       setImportBusyId(subagent.id);
       setError(null);
       try {
-        const created = await new DesktopApiClient(config).importManagedFilesystemSubAgent(
+        const created = await new ManagedResourcesClient(config).importManagedFilesystemSubAgent(
           subagent.name,
           config.projectId || undefined,
         );

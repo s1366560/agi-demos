@@ -8,6 +8,7 @@ import {
 } from '@radix-ui/react-icons';
 
 import { DesktopApiClient } from '../../api/client';
+import { ManagedResourcesClient } from '../../api/managedResourcesClient';
 import { useI18n } from '../../i18n';
 import type {
   AuthState,
@@ -188,15 +189,15 @@ export function SettingsWindow({
       setResourceLoading(true);
       setResourceError(null);
       try {
-        const client = new DesktopApiClient(config);
+        const managedResources = new ManagedResourcesClient(config);
         const items =
           resourceSection === 'skills'
-            ? await client.listManagedSkills(signal)
+            ? await managedResources.listManagedSkills(signal)
             : resourceSection === 'plugins'
-              ? await client.listManagedPlugins(signal)
+              ? await new DesktopApiClient(config).listManagedPlugins(signal)
               : resourceSection === 'agents'
-                ? await client.listManagedAgents(signal)
-                : await client.listManagedSubAgents(signal);
+                ? await managedResources.listManagedAgents(signal)
+                : await managedResources.listManagedSubAgents(signal);
         if (requestId !== resourceRequestId.current) return;
         setResourceItems(items);
         setLoadedResourceSection(resourceSection);
@@ -430,13 +431,20 @@ export function SettingsWindow({
     setActionBusyId(item.id);
     setResourceActionError(null);
     try {
-      const client = new DesktopApiClient(config);
+      const managedResources = new ManagedResourcesClient(config);
       if (action.kind === 'set_skill_status') {
         const skill = item as ManagedSkill;
-        await client.setManagedSkillStatus(skill.id, action.nextActive ? 'active' : 'disabled');
+        await managedResources.setManagedSkillStatus(
+          skill.id,
+          action.nextActive ? 'active' : 'disabled',
+          skill.revision,
+        );
       } else if (action.kind === 'set_plugin_enabled') {
         const plugin = item as ManagedPlugin;
-        const response = await client.setManagedPluginEnabled(plugin.id, action.nextActive);
+        const response = await new DesktopApiClient(config).setManagedPluginEnabled(
+          plugin.id,
+          action.nextActive,
+        );
         if (
           activeSectionRef.current === mutationSection &&
           resourceContextKeyRef.current === mutationContextKey
@@ -445,10 +453,18 @@ export function SettingsWindow({
         }
       } else if (action.kind === 'set_subagent_enabled') {
         const subagent = item as ManagedSubAgent;
-        await client.setManagedSubAgentEnabled(subagent.id, action.nextActive);
+        await managedResources.setManagedSubAgentEnabled(
+          subagent.id,
+          action.nextActive,
+          subagent.revision,
+        );
       } else {
         const agent = item as ManagedAgentDefinition;
-        await client.setManagedAgentEnabled(agent.id, action.nextActive);
+        await managedResources.setManagedAgentEnabled(
+          agent.id,
+          action.nextActive,
+          agent.revision,
+        );
       }
       if (
         activeSectionRef.current === mutationSection &&
