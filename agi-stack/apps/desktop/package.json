@@ -22,7 +22,7 @@
     "test": "node tests/run.mjs",
     "build": "tsc --noEmit && vite build",
     "build:electron": "tsc --noEmit && tsc --noEmit -p tsconfig.electron.json && electron-vite build",
-    "package:electron": "pnpm run build:electron && pnpm run build:sidecar && pnpm run stage:sidecar && electron-builder --config electron-builder.local.yml --publish never",
+    "package:electron": "corepack pnpm run build:electron && corepack pnpm run build:sidecar && corepack pnpm run stage:sidecar && electron-builder --config electron-builder.local.yml --publish never",
     "release:electron": "pnpm run build:electron && pnpm run build:sidecar && pnpm run stage:sidecar && electron-builder --publish never",
     "preview": "vite preview --host 127.0.0.1",
     "preview:electron": "electron-vite preview"

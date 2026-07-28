@@ -134,6 +134,10 @@ test('packaging stages an integrity digest and enables signed auto-updates', () 
   assert.match(updatePolicySource, /repo:\s*'agi-demos'/u);
   assert.match(automaticUpdateLoopSource, /autoDownload\s*=\s*true/u);
   assert.match(automaticUpdateLoopSource, /autoInstallOnAppQuit\s*=\s*true/u);
+  assert.match(
+    packageJson.scripts['package:electron'],
+    /^corepack pnpm run build:electron && corepack pnpm run build:sidecar/u,
+  );
   assert.match(packageJson.scripts['package:electron'], /electron-builder\.local\.yml/u);
   assert.match(localBuilderConfig, /forceCodeSigning:\s*false/u);
   assert.match(localBuilderConfig, /identity:\s*null/u);
