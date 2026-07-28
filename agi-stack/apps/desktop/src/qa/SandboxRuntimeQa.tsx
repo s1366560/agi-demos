@@ -120,6 +120,7 @@ const runtime: SessionSandboxRuntimeSurface = {
   },
   filesCapability: available,
   remoteDesktopCapability: available,
+  runtimeClient: fileClient,
   fileClient,
   remoteDesktopSession: {
     descriptor: {
