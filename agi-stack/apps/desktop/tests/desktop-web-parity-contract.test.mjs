@@ -40,6 +40,11 @@ test('versioned parity manifest pins the audited reference revisions and case st
   assert.deepEqual(
     manifest.cases.map((parityCase) => parityCase.fixture).sort(),
     [
+      '../../../../../shared/fixtures/artifact-content.v1.json',
+      '../../../../../shared/fixtures/automation-run-receipt.v1.json',
+      '../../../../../shared/fixtures/hitl-authority.v1.json',
+      '../../../../../shared/fixtures/sandbox-runtime.v1.json',
+      '../../../../../shared/fixtures/workspace-surface.v1.json',
       'fixtures/capability-snapshot.v1.json',
       'fixtures/history-replay.v1.json',
       'fixtures/live-events.v1.json',
@@ -49,11 +54,8 @@ test('versioned parity manifest pins the audited reference revisions and case st
 
 test('shared fixtures drive both normalizers to the same observable model', () => {
   const schema = readJson('parity-fixture.schema.json');
-  const fixturePaths = [
-    'fixtures/live-events.v1.json',
-    'fixtures/history-replay.v1.json',
-    'fixtures/capability-snapshot.v1.json',
-  ];
+  const manifest = readJson('parity-manifest.v1.json');
+  const fixturePaths = manifest.cases.map((parityCase) => parityCase.fixture);
 
   for (const fixturePath of fixturePaths) {
     const fixture = readJson(fixturePath);
@@ -85,4 +87,15 @@ test('parity schema rejects malformed fixture payloads instead of inferring capa
     true,
     validation.join('\n'),
   );
+});
+
+test('parity manifest covers every stateful workbench authority with shared fixtures', () => {
+  const manifest = readJson('parity-manifest.v1.json');
+  const casesByArea = new Map(manifest.cases.map((parityCase) => [parityCase.area, parityCase]));
+
+  for (const area of ['hitl', 'workspace', 'artifact', 'sandbox', 'automation']) {
+    const parityCase = casesByArea.get(area);
+    assert.ok(parityCase, `missing ${area} parity case`);
+    assert.match(parityCase.fixture, /shared\/fixtures\/.+\.v1\.json$/);
+  }
 });

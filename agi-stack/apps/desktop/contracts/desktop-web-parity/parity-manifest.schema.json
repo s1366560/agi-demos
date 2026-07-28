@@ -25,7 +25,7 @@
     },
     "cases": {
       "type": "array",
-      "minItems": 3,
+      "minItems": 8,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -46,7 +46,15 @@
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
           "area": {
-            "enum": ["conversation", "capabilities"]
+            "enum": [
+              "conversation",
+              "capabilities",
+              "hitl",
+              "workspace",
+              "artifact",
+              "sandbox",
+              "automation"
+            ]
           },
           "references": {
             "type": "object",
@@ -88,7 +96,7 @@
           },
           "fixture": {
             "type": "string",
-            "pattern": "^fixtures/[a-z0-9-]+\\.v1\\.json$"
+            "pattern": "^(fixtures|\\.\\./\\.\\./\\.\\./\\.\\./\\.\\./shared/fixtures)/[a-z0-9-]+\\.v1\\.json$"
           }
         }
       }

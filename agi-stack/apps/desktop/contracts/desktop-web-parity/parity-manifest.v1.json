@@ -85,6 +85,136 @@
       "native_deviation": "Local workspace and terminal are native equivalents; isolated cloud sandbox is intentionally unavailable.",
       "target_disposition": "native_equivalent",
       "fixture": "fixtures/capability-snapshot.v1.json"
+    },
+    {
+      "id": "hitl-cross-client-answer",
+      "area": "hitl",
+      "references": {
+        "prototype_revision": "61454b2ead1cedda584e95afee9f471aac7851fb",
+        "web_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47",
+        "desktop_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47"
+      },
+      "source_entries": {
+        "prototype": "design-prototype/memstack-desktop-agent-mission-control/src/components/ApprovalCard.jsx",
+        "web": "web/src/components/agent/RightPanel.tsx",
+        "desktop": "agi-stack/apps/desktop/src/features/chat/hitlAuthorityRecovery.ts"
+      },
+      "locale": "zh-CN",
+      "viewport": {
+        "width": 1100,
+        "height": 800,
+        "device_scale_factor": 1
+      },
+      "data_state": "A decision request has already been answered by another client at authority revision 8.",
+      "interaction_state": "The losing client refetches pending HITL after receiving already-answered authority.",
+      "expected_observable_result": "Both clients render the canonical answered state read-only and preserve the authority revision without replaying secret response values.",
+      "native_deviation": null,
+      "target_disposition": "equivalent",
+      "fixture": "../../../../../shared/fixtures/hitl-authority.v1.json"
+    },
+    {
+      "id": "workspace-discussion-stale-refetch",
+      "area": "workspace",
+      "references": {
+        "prototype_revision": "61454b2ead1cedda584e95afee9f471aac7851fb",
+        "web_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47",
+        "desktop_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47"
+      },
+      "source_entries": {
+        "prototype": "design-prototype/memstack-desktop-agent-mission-control/src/components/WorkspaceOverview.jsx",
+        "web": "web/src/stores/workspace.ts",
+        "desktop": "agi-stack/apps/desktop/src/features/workspace/workspaceCollaborationModel.ts"
+      },
+      "locale": "en-US",
+      "viewport": {
+        "width": 1440,
+        "height": 1024,
+        "device_scale_factor": 1
+      },
+      "data_state": "Discussion has revision 12 and a cursor gap marks the surface stale.",
+      "interaction_state": "A WebSocket reconnect invalidates the optimistic projection before canonical refetch.",
+      "expected_observable_result": "Both clients keep the same authority, revision, cursor and item count, and require canonical refetch for stale state.",
+      "native_deviation": null,
+      "target_disposition": "equivalent",
+      "fixture": "../../../../../shared/fixtures/workspace-surface.v1.json"
+    },
+    {
+      "id": "artifact-revision-safe-save",
+      "area": "artifact",
+      "references": {
+        "prototype_revision": "61454b2ead1cedda584e95afee9f471aac7851fb",
+        "web_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47",
+        "desktop_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47"
+      },
+      "source_entries": {
+        "prototype": "design-prototype/memstack-desktop-agent-mission-control/src/components/ConversationCanvas.jsx",
+        "web": "web/src/services/artifactService.ts",
+        "desktop": "agi-stack/apps/desktop/src/features/chat/artifactContentContractV2.ts"
+      },
+      "locale": "en-US",
+      "viewport": {
+        "width": 1440,
+        "height": 1024,
+        "device_scale_factor": 1
+      },
+      "data_state": "An editable Markdown artifact is loaded at revision 3 with a verified SHA-256 content hash.",
+      "interaction_state": "The user saves with expected revision 3 and a stable idempotency key.",
+      "expected_observable_result": "Both clients expose the same revision and content hash and treat the save as conflict-safe without exposing the idempotency key.",
+      "native_deviation": "Local content uses atomic rename while cloud content uses conditional object metadata updates.",
+      "target_disposition": "native_equivalent",
+      "fixture": "../../../../../shared/fixtures/artifact-content.v1.json"
+    },
+    {
+      "id": "sandbox-runtime-fail-closed",
+      "area": "sandbox",
+      "references": {
+        "prototype_revision": "61454b2ead1cedda584e95afee9f471aac7851fb",
+        "web_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47",
+        "desktop_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47"
+      },
+      "source_entries": {
+        "prototype": "design-prototype/memstack-desktop-agent-mission-control/src/components/ConversationCanvas.jsx",
+        "web": "web/src/services/projectSandboxService.ts",
+        "desktop": "agi-stack/apps/desktop/src/features/sandbox/sandboxRuntimeClient.ts"
+      },
+      "locale": "zh-CN",
+      "viewport": {
+        "width": 1100,
+        "height": 800,
+        "device_scale_factor": 1
+      },
+      "data_state": "The service advertises KasmVNC while terminal resume and Rust file authority remain structurally unavailable.",
+      "interaction_state": "The client gates each runtime entry before opening a connection.",
+      "expected_observable_result": "Both clients enable KasmVNC, keep degraded terminal interaction visible, and fail closed for resume and files with stable reason codes.",
+      "native_deviation": "Local mode maps files and terminal to the native workspace and does not claim an isolated cloud sandbox.",
+      "target_disposition": "native_equivalent",
+      "fixture": "../../../../../shared/fixtures/sandbox-runtime.v1.json"
+    },
+    {
+      "id": "automation-run-replay",
+      "area": "automation",
+      "references": {
+        "prototype_revision": "61454b2ead1cedda584e95afee9f471aac7851fb",
+        "web_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47",
+        "desktop_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47"
+      },
+      "source_entries": {
+        "prototype": "design-prototype/memstack-desktop-agent-mission-control/src/components/InboxView.jsx",
+        "web": "web/src/services/cronService.ts",
+        "desktop": "agi-stack/apps/desktop/src/features/automations/automationClient.ts"
+      },
+      "locale": "en-US",
+      "viewport": {
+        "width": 1440,
+        "height": 1024,
+        "device_scale_factor": 1
+      },
+      "data_state": "Run Now replays an existing V2 receipt for the same job, revision and idempotency key.",
+      "interaction_state": "The client retries after losing the first HTTP response.",
+      "expected_observable_result": "Both clients retain the stable receipt and run IDs, report duplicate true, and classify the result as replay-safe.",
+      "native_deviation": "Local execution is dispatched by the durable sidecar worker; cloud execution remains gated by server capability.",
+      "target_disposition": "native_equivalent",
+      "fixture": "../../../../../shared/fixtures/automation-run-receipt.v1.json"
     }
   ]
 }

@@ -1,0 +1,92 @@
+{
+  "schema_version": "1.0.0",
+  "case_id": "sandbox-runtime-fail-closed",
+  "kind": "sandbox_runtime",
+  "source_contract": "SandboxRuntimeCapabilities v2",
+  "input": {
+    "runtime": {
+      "service_version": "0.1.0",
+      "contract_version": 2,
+      "terminal_interactive": {
+        "availability": "degraded",
+        "contract_version": 1,
+        "reason_code": "terminal_interactive_canonical_run_authority_unavailable"
+      },
+      "terminal_resume": {
+        "availability": "unavailable",
+        "contract_version": 2,
+        "reason_code": "terminal_session_v2_canonical_run_authority_unavailable"
+      },
+      "files": {
+        "availability": "unavailable",
+        "contract_version": 1,
+        "reason_code": "sandbox_file_api_unavailable"
+      },
+      "kasm_vnc": {
+        "availability": "available",
+        "contract_version": 1,
+        "reason_code": null
+      }
+    }
+  },
+  "web_expected_view_model": {
+    "service_version": "0.1.0",
+    "contract_version": 2,
+    "features": {
+      "terminal_interactive": {
+        "availability": "degraded",
+        "available": true,
+        "contract_version": 1,
+        "reason_code": "terminal_interactive_canonical_run_authority_unavailable"
+      },
+      "terminal_resume": {
+        "availability": "unavailable",
+        "available": false,
+        "contract_version": 2,
+        "reason_code": "terminal_session_v2_canonical_run_authority_unavailable"
+      },
+      "files": {
+        "availability": "unavailable",
+        "available": false,
+        "contract_version": 1,
+        "reason_code": "sandbox_file_api_unavailable"
+      },
+      "kasm_vnc": {
+        "availability": "available",
+        "available": true,
+        "contract_version": 1,
+        "reason_code": null
+      }
+    }
+  },
+  "desktop_expected_view_model": {
+    "service_version": "0.1.0",
+    "contract_version": 2,
+    "features": {
+      "terminal_interactive": {
+        "availability": "degraded",
+        "available": true,
+        "contract_version": 1,
+        "reason_code": "terminal_interactive_canonical_run_authority_unavailable"
+      },
+      "terminal_resume": {
+        "availability": "unavailable",
+        "available": false,
+        "contract_version": 2,
+        "reason_code": "terminal_session_v2_canonical_run_authority_unavailable"
+      },
+      "files": {
+        "availability": "unavailable",
+        "available": false,
+        "contract_version": 1,
+        "reason_code": "sandbox_file_api_unavailable"
+      },
+      "kasm_vnc": {
+        "availability": "available",
+        "available": true,
+        "contract_version": 1,
+        "reason_code": null
+      }
+    }
+  }
+}
