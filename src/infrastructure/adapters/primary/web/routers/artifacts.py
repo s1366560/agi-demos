@@ -7,8 +7,9 @@ Provides REST API endpoints for:
 - Refreshing presigned URLs
 """
 
+import asyncio
 import logging
-from collections.abc import Callable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from typing import Any, Literal, override
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -26,6 +27,7 @@ from src.application.services.artifact_content_authority_service import (
     MAX_EDITABLE_ARTIFACT_BYTES,
     ArtifactContentAuthorityService,
     ArtifactContentNotReadyError,
+    ArtifactContentSaveOutcome,
     ArtifactContentTooLargeError,
 )
 from src.application.services.artifact_content_contract import (
@@ -59,6 +61,66 @@ logger = logging.getLogger(__name__)
 
 MAX_EDITABLE_ARTIFACT_REQUEST_BYTES = (MAX_EDITABLE_ARTIFACT_BYTES * 6) + 16_384
 _ARTIFACT_CONTENT_UPDATE_PATH = "/api/v1/artifacts/{artifact_id}/content"
+
+
+async def _settle_artifact_side_effect(
+    operation: Awaitable[None],
+) -> tuple[BaseException | None, asyncio.CancelledError | None]:
+    """Observe a side effect to a definitive outcome without losing cancellation."""
+    task = asyncio.ensure_future(operation)
+    caller_cancellation: asyncio.CancelledError | None = None
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError as exc:
+            if task.cancelled():
+                return exc, caller_cancellation or exc
+            caller_cancellation = caller_cancellation or exc
+        except BaseException as exc:
+            return exc, caller_cancellation
+    if task.cancelled():
+        cancelled = asyncio.CancelledError()
+        return cancelled, caller_cancellation or cancelled
+    return task.exception(), caller_cancellation
+
+
+async def _commit_artifact_content_outcome(
+    *,
+    db: AsyncSession,
+    reconciler: ArtifactContentCommitReconciler,
+    outcome: ArtifactContentSaveOutcome,
+) -> None:
+    """Commit once, reconcile only a definitive failure, and preserve cancellation."""
+    commit_error, cancellation = await _settle_artifact_side_effect(db.commit())
+    if commit_error is not None:
+        rollback_error, rollback_cancellation = await _settle_artifact_side_effect(db.rollback())
+        cancellation = cancellation or rollback_cancellation
+        if rollback_error is not None:
+            logger.warning(
+                "Failed request transaction rollback before Artifact reconciliation",
+                exc_info=(
+                    type(rollback_error),
+                    rollback_error,
+                    rollback_error.__traceback__,
+                ),
+            )
+        reconcile_error, reconcile_cancellation = await _settle_artifact_side_effect(
+            reconciler.reconcile(outcome)
+        )
+        cancellation = cancellation or reconcile_cancellation
+        if reconcile_error is not None:
+            logger.error(
+                "Failed Artifact reconciliation after request transaction failure",
+                exc_info=(
+                    type(reconcile_error),
+                    reconcile_error,
+                    reconcile_error.__traceback__,
+                ),
+            )
+    if cancellation is not None:
+        raise cancellation
+    if commit_error is not None:
+        raise commit_error
 
 
 class ArtifactContentBodyLimitRoute(APIRoute):
@@ -621,18 +683,11 @@ async def update_artifact_content(
         ) from exc
     if outcome is None:
         raise HTTPException(status_code=404, detail=_("Artifact content not found"))
-    try:
-        await db.commit()
-    except Exception:
-        try:
-            await db.rollback()
-        except Exception:
-            logger.warning(
-                "Failed request transaction rollback before Artifact reconciliation",
-                exc_info=True,
-            )
-        await reconciler.reconcile(outcome)
-        raise
+    await _commit_artifact_content_outcome(
+        db=db,
+        reconciler=reconciler,
+        outcome=outcome,
+    )
     receipt = outcome.receipt
 
     return UpdateContentResponse(

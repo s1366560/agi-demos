@@ -449,6 +449,167 @@ async def test_object_write_failure_does_not_publish_new_metadata_pointer(
 
 
 @pytest.mark.unit
+async def test_uploaded_object_is_cleaned_when_upload_await_is_cancelled(
+    test_engine,
+    monkeypatch,
+) -> None:
+    sessions = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    storage = DurableRecordingStorage()
+    recorder = AsyncMock()
+    original_upload = storage.upload_file
+
+    async def upload_then_cancel(*args: Any, **kwargs: Any) -> UploadResult:
+        _ = await original_upload(*args, **kwargs)
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(storage, "upload_file", upload_then_cancel)
+
+    async with sessions() as session:
+        await _seed_authority(session)
+        service = _service(session, storage, recorder)
+        scope = await service.resolve_scope(ARTIFACT_ID)
+        assert scope is not None
+
+        with pytest.raises(asyncio.CancelledError):
+            await service.save_content(scope, _command("uploaded-then-cancelled"))
+
+    assert len(storage.uploads) == 1
+    uploaded_key = storage.uploads[0]
+    assert storage.deletes == [uploaded_key]
+    assert uploaded_key not in storage.objects
+    recorder.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_advance_pointer_cancellation_retains_authoritative_object_and_records_candidate(
+    test_engine,
+    monkeypatch,
+) -> None:
+    sessions = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    storage = DurableRecordingStorage()
+    recorder = AsyncMock()
+
+    async with sessions() as session:
+        await _seed_authority(session)
+        repository = SqlArtifactContentAuthorityRepository(session)
+        service = ArtifactContentAuthorityService(
+            repository=repository,
+            storage_service=storage,  # type: ignore[arg-type]
+            orphan_recorder=recorder,
+        )
+        scope = await service.resolve_scope(ARTIFACT_ID)
+        assert scope is not None
+        original_advance = repository.advance_pointer
+
+        async def advance_then_cancel(*args: Any, **kwargs: Any) -> bool:
+            advanced = await original_advance(*args, **kwargs)
+            assert advanced is True
+            raise asyncio.CancelledError
+
+        monkeypatch.setattr(repository, "advance_pointer", advance_then_cancel)
+
+        with pytest.raises(asyncio.CancelledError):
+            await service.save_content(scope, _command("authoritative-then-cancelled"))
+
+        authority = await repository.get_authority(scope)
+        receipt = await repository.get_receipt(scope, "artifact-v2:save:0001")
+
+    assert authority is not None
+    assert receipt is not None
+    assert authority.object_key == receipt.object_key == storage.uploads[0]
+    assert authority.object_key in storage.objects
+    assert authority.object_key not in storage.deletes
+    recorder.assert_awaited_once()
+    assert recorder.await_args.kwargs == {
+        "reason_code": "advance_pointer_cancelled",
+        "last_error_code": "operation_cancelled",
+    }
+
+
+@pytest.mark.unit
+async def test_cancelled_immediate_delete_still_records_retryable_candidate(
+    test_engine,
+    monkeypatch,
+) -> None:
+    sessions = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    storage = DurableRecordingStorage()
+    recorder = AsyncMock()
+
+    async def cancel_delete(object_key: str) -> bool:
+        storage.deletes.append(object_key)
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(storage, "delete_file", cancel_delete)
+
+    async with sessions() as session:
+        await _seed_authority(session)
+        service = _service(session, storage, recorder)
+        scope = await service.resolve_scope(ARTIFACT_ID)
+        assert scope is not None
+        with (
+            patch.object(
+                SqlArtifactContentAuthorityRepository,
+                "advance_pointer",
+                new=AsyncMock(return_value=False),
+            ),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await service.save_content(scope, _command("delete-cancelled"))
+
+    recorder.assert_awaited_once()
+    assert recorder.await_args.kwargs == {
+        "reason_code": "immediate_delete_cancelled",
+        "last_error_code": "storage_delete_cancelled",
+    }
+
+
+@pytest.mark.unit
+async def test_cancellation_during_orphan_recorder_waits_for_durable_audit(
+    test_engine,
+) -> None:
+    sessions = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    storage = DurableRecordingStorage()
+    storage.fail_delete = True
+    recorder_started = asyncio.Event()
+    release_recorder = asyncio.Event()
+    recorder_completed = asyncio.Event()
+    recorded: list[tuple[str, str]] = []
+
+    async def record_candidate(
+        _outcome,
+        *,
+        reason_code: str,
+        last_error_code: str,
+    ) -> None:
+        recorder_started.set()
+        await release_recorder.wait()
+        recorded.append((reason_code, last_error_code))
+        recorder_completed.set()
+
+    async with sessions() as session:
+        await _seed_authority(session)
+        service = _service(session, storage, record_candidate)
+        scope = await service.resolve_scope(ARTIFACT_ID)
+        assert scope is not None
+        with patch.object(
+            SqlArtifactContentAuthorityRepository,
+            "advance_pointer",
+            new=AsyncMock(return_value=False),
+        ):
+            save_task = asyncio.create_task(
+                service.save_content(scope, _command("audit-cancelled"))
+            )
+            await asyncio.wait_for(recorder_started.wait(), timeout=1)
+            save_task.cancel()
+            release_recorder.set()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(save_task, timeout=1)
+
+    assert recorder_completed.is_set()
+    assert recorded == [("immediate_delete_failed", "storage_delete_failed")]
+
+
+@pytest.mark.unit
 async def test_failed_immediate_orphan_delete_is_persisted_through_fresh_recorder(
     test_engine,
 ) -> None:

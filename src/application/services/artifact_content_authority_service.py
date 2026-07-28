@@ -6,7 +6,7 @@ import logging
 import os
 import secrets
 import tempfile
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -43,6 +43,27 @@ logger = logging.getLogger(__name__)
 MAX_EDITABLE_ARTIFACT_BYTES = 1_048_576
 MAX_ARTIFACT_PREVIEW_BYTES = 25 * 1_048_576
 MAX_ARTIFACT_DOWNLOAD_BYTES = 50 * 1_048_576
+
+
+async def _run_shielded_to_completion(
+    operation: Awaitable[None],
+) -> asyncio.CancelledError | None:
+    """Finish one cleanup operation while preserving caller cancellation."""
+    task = asyncio.ensure_future(operation)
+    caller_cancellation: asyncio.CancelledError | None = None
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError as exc:
+            if task.cancelled():
+                raise
+            caller_cancellation = caller_cancellation or exc
+    if task.cancelled():
+        raise asyncio.CancelledError
+    error = task.exception()
+    if error is not None:
+        raise error
+    return caller_cancellation
 
 
 class ArtifactContentNotReadyError(Exception):
@@ -301,18 +322,6 @@ class ArtifactContentAuthorityService:
             revision=next_revision,
             content_hash=command.content_hash,
         )
-        _ = await self._storage.upload_file(
-            file_content=content_bytes,
-            object_key=version_key,
-            content_type=mime_type,
-            metadata={
-                "artifact_id": scope.artifact_id,
-                "project_id": scope.project_id,
-                "tenant_id": scope.tenant_id,
-                "content_revision": str(next_revision),
-                "content_hash": command.content_hash,
-            },
-        )
         outcome = ArtifactContentSaveOutcome(
             scope=scope,
             receipt=ArtifactContentSaveReceipt(
@@ -325,6 +334,11 @@ class ArtifactContentAuthorityService:
             idempotency_key=command.idempotency_key,
             request_hash=request_hash,
         )
+        await self._upload_version(
+            content_bytes=content_bytes,
+            mime_type=mime_type,
+            outcome=outcome,
+        )
         try:
             advanced = await self._repository.advance_pointer(
                 scope,
@@ -336,6 +350,13 @@ class ArtifactContentAuthorityService:
                 object_key=version_key,
                 size_bytes=len(content_bytes),
             )
+        except asyncio.CancelledError:
+            await self._record_orphan_candidate(
+                outcome,
+                reason_code="advance_pointer_cancelled",
+                last_error_code="operation_cancelled",
+            )
+            raise
         except Exception:
             await self._discard_orphan(outcome)
             raise
@@ -349,6 +370,38 @@ class ArtifactContentAuthorityService:
                 server_content_hash=self._require_content_hash(current),
             )
         return outcome
+
+    async def _upload_version(
+        self,
+        *,
+        content_bytes: bytes,
+        mime_type: str,
+        outcome: ArtifactContentSaveOutcome,
+    ) -> None:
+        object_key = outcome.uploaded_object_key
+        if object_key is None:
+            raise RuntimeError("Artifact version upload requires an object key")
+        try:
+            _ = await self._storage.upload_file(
+                file_content=content_bytes,
+                object_key=object_key,
+                content_type=mime_type,
+                metadata={
+                    "artifact_id": outcome.scope.artifact_id,
+                    "project_id": outcome.scope.project_id,
+                    "tenant_id": outcome.scope.tenant_id,
+                    "content_revision": str(outcome.receipt.revision),
+                    "content_hash": outcome.receipt.content_hash,
+                },
+            )
+        except asyncio.CancelledError as cancellation:
+            delayed_cancellation = await _run_shielded_to_completion(self._discard_orphan(outcome))
+            if delayed_cancellation is not None:
+                raise delayed_cancellation from cancellation
+            raise
+        except Exception:
+            await self._discard_orphan(outcome)
+            raise
 
     async def _ensure_authority_hash(
         self,
@@ -473,26 +526,69 @@ class ArtifactContentAuthorityService:
                     "Artifact content orphan was not present during cleanup: %s",
                     object_key,
                 )
+        except asyncio.CancelledError:
+            logger.warning(
+                "Artifact content orphan cleanup was cancelled: %s",
+                object_key,
+            )
+            await self._record_orphan_candidate(
+                outcome,
+                reason_code="immediate_delete_cancelled",
+                last_error_code="storage_delete_cancelled",
+            )
+            raise
         except Exception:
             logger.warning(
                 "Failed to remove uncommitted Artifact content object: %s",
                 object_key,
                 exc_info=True,
             )
-            if self._orphan_recorder is None:
-                return
-            try:
-                await self._orphan_recorder(
+            await self._record_orphan_candidate(
+                outcome,
+                reason_code="immediate_delete_failed",
+                last_error_code="storage_delete_failed",
+            )
+
+    async def _record_orphan_candidate(
+        self,
+        outcome: ArtifactContentSaveOutcome,
+        *,
+        reason_code: str,
+        last_error_code: str,
+    ) -> None:
+        object_key = outcome.uploaded_object_key
+        if object_key is None:
+            raise RuntimeError("Artifact orphan recording requires an object key")
+        if self._orphan_recorder is None:
+            logger.error(
+                "Artifact content orphan candidate has no durable recorder: %s",
+                object_key,
+            )
+            return
+        try:
+            delayed_cancellation = await _run_shielded_to_completion(
+                self._orphan_recorder(
                     outcome,
-                    reason_code="immediate_delete_failed",
-                    last_error_code="storage_delete_failed",
+                    reason_code=reason_code,
+                    last_error_code=last_error_code,
                 )
-            except Exception:
-                logger.error(
-                    "Failed to persist uncommitted Artifact content object: %s",
-                    object_key,
-                    exc_info=True,
-                )
+            )
+        except asyncio.CancelledError:
+            logger.error(
+                "Artifact content orphan recorder was cancelled: %s",
+                object_key,
+                exc_info=True,
+            )
+            raise
+        except Exception:
+            logger.error(
+                "Failed to persist uncommitted Artifact content object: %s",
+                object_key,
+                exc_info=True,
+            )
+            return
+        if delayed_cancellation is not None:
+            raise delayed_cancellation
 
     def _versioned_object_key(
         self,

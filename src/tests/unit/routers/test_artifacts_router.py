@@ -1,5 +1,6 @@
 """Unit tests for artifact API authorization."""
 
+import asyncio
 import hashlib
 from unittest.mock import AsyncMock
 
@@ -460,6 +461,135 @@ class TestArtifactContentContractV2Router:
                 },
             )
 
+        artifact_content_commit_reconciler_mock.reconcile.assert_awaited_once_with(outcome)
+
+    @pytest.mark.asyncio
+    async def test_content_put_waits_for_commit_success_before_propagating_cancellation(
+        self,
+        test_db,
+        artifact_user,
+        artifact_content_authority_mock,
+        artifact_content_commit_reconciler_mock,
+        monkeypatch,
+    ) -> None:
+        await self._grant_project_access(test_db)
+        content_hash = self._hash("commit-wins")
+        outcome = ArtifactContentSaveOutcome(
+            scope=artifact_content_authority_mock.resolve_scope.return_value,
+            receipt=ArtifactContentSaveReceipt(
+                artifact_id="artifact-1",
+                revision=4,
+                content_hash=content_hash,
+                duplicate=False,
+            ),
+            uploaded_object_key="artifacts/tenant/project/artifact/versions/r4",
+            idempotency_key="artifact-1:save:commit-wins",
+            request_hash=self._hash("commit-wins-request"),
+        )
+        artifact_content_authority_mock.save_content.return_value = outcome
+        commit_started = asyncio.Event()
+        release_commit = asyncio.Event()
+        commit_finished = asyncio.Event()
+
+        async def controlled_commit() -> None:
+            commit_started.set()
+            await release_commit.wait()
+            commit_finished.set()
+
+        rollback = AsyncMock()
+        monkeypatch.setattr(test_db, "commit", controlled_commit)
+        monkeypatch.setattr(test_db, "rollback", rollback)
+
+        request_task = asyncio.create_task(
+            artifacts_router.update_artifact_content(
+                artifact_id="artifact-1",
+                request=artifacts_router.UpdateContentRequest(
+                    contract_version=2,
+                    expected_revision=3,
+                    content_hash=content_hash,
+                    idempotency_key="artifact-1:save:commit-wins",
+                    content="commit-wins",
+                ),
+                current_user=artifact_user,
+                db=test_db,
+                service=artifact_content_authority_mock,
+                reconciler=artifact_content_commit_reconciler_mock,
+            )
+        )
+        await asyncio.wait_for(commit_started.wait(), timeout=1)
+        request_task.cancel()
+        release_commit.set()
+
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(request_task, timeout=1)
+
+        assert commit_finished.is_set()
+        rollback.assert_not_awaited()
+        artifact_content_commit_reconciler_mock.reconcile.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_content_put_reconciles_commit_failure_before_propagating_cancellation(
+        self,
+        test_db,
+        artifact_user,
+        artifact_content_authority_mock,
+        artifact_content_commit_reconciler_mock,
+        monkeypatch,
+    ) -> None:
+        await self._grant_project_access(test_db)
+        content_hash = self._hash("commit-fails")
+        outcome = ArtifactContentSaveOutcome(
+            scope=artifact_content_authority_mock.resolve_scope.return_value,
+            receipt=ArtifactContentSaveReceipt(
+                artifact_id="artifact-1",
+                revision=4,
+                content_hash=content_hash,
+                duplicate=False,
+            ),
+            uploaded_object_key="artifacts/tenant/project/artifact/versions/r4",
+            idempotency_key="artifact-1:save:commit-fails",
+            request_hash=self._hash("commit-fails-request"),
+        )
+        artifact_content_authority_mock.save_content.return_value = outcome
+        commit_started = asyncio.Event()
+        release_commit = asyncio.Event()
+        commit_failed = asyncio.Event()
+
+        async def controlled_commit() -> None:
+            commit_started.set()
+            await release_commit.wait()
+            commit_failed.set()
+            raise RuntimeError("database commit failed")
+
+        rollback = AsyncMock()
+        monkeypatch.setattr(test_db, "commit", controlled_commit)
+        monkeypatch.setattr(test_db, "rollback", rollback)
+
+        request_task = asyncio.create_task(
+            artifacts_router.update_artifact_content(
+                artifact_id="artifact-1",
+                request=artifacts_router.UpdateContentRequest(
+                    contract_version=2,
+                    expected_revision=3,
+                    content_hash=content_hash,
+                    idempotency_key="artifact-1:save:commit-fails",
+                    content="commit-fails",
+                ),
+                current_user=artifact_user,
+                db=test_db,
+                service=artifact_content_authority_mock,
+                reconciler=artifact_content_commit_reconciler_mock,
+            )
+        )
+        await asyncio.wait_for(commit_started.wait(), timeout=1)
+        request_task.cancel()
+        release_commit.set()
+
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(request_task, timeout=1)
+
+        assert commit_failed.is_set()
+        rollback.assert_awaited_once()
         artifact_content_commit_reconciler_mock.reconcile.assert_awaited_once_with(outcome)
 
     @pytest.mark.asyncio
