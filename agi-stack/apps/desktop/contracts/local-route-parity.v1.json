@@ -736,7 +736,7 @@
       "uri": "/api/v1/mcp/apps?project_id=local-project",
       "source": "client",
       "source_marker": "/api/v1/mcp/apps?${params.toString()}",
-      "authority": "structured_unavailable",
+      "authority": "local_mcp_supervisor",
       "body": {}
     },
     {
@@ -745,7 +745,7 @@
       "uri": "/api/v1/mcp/apps/app-1/tool-call",
       "source": "client",
       "source_marker": "/api/v1/mcp/apps/${encodeURIComponent(requireValue(appId, 'MCP App id'))}/tool-call",
-      "authority": "structured_unavailable",
+      "authority": "local_mcp_supervisor",
       "body": {
         "tool_name": "example",
         "arguments": {}
@@ -757,7 +757,7 @@
       "uri": "/api/v1/mcp/apps/proxy/tool-call",
       "source": "client",
       "source_marker": "/api/v1/mcp/apps/proxy/tool-call",
-      "authority": "structured_unavailable",
+      "authority": "local_mcp_supervisor",
       "body": {
         "project_id": "local-project",
         "server_name": "example",
@@ -771,7 +771,7 @@
       "uri": "/api/v1/mcp/apps/resources/read",
       "source": "client",
       "source_marker": "/api/v1/mcp/apps/resources/read",
-      "authority": "structured_unavailable",
+      "authority": "local_mcp_supervisor",
       "body": {
         "project_id": "local-project",
         "uri": "file:///example"
@@ -783,7 +783,7 @@
       "uri": "/api/v1/mcp/apps/resources/list",
       "source": "client",
       "source_marker": "/api/v1/mcp/apps/resources/list",
-      "authority": "structured_unavailable",
+      "authority": "local_mcp_supervisor",
       "body": {
         "project_id": "local-project"
       }

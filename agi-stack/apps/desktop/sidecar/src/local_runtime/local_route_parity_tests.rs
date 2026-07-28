@@ -113,6 +113,13 @@ fn test_state(credential: &str) -> Arc<LocalRuntimeState> {
         )
         .expect("record route parity artifact");
     state
+        .mcp_supervisor
+        .seed_route_contract_fixture(&mcp_supervisor::McpScope {
+            tenant_id: "local".to_string(),
+            project_id: "local-project".to_string(),
+        })
+        .expect("seed route parity MCP fixture");
+    state
 }
 
 fn authenticated_request(method: &str, uri: &str, credential: &str, body: &Value) -> Request<Body> {

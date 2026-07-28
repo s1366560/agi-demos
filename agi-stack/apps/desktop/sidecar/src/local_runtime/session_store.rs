@@ -335,6 +335,17 @@ impl DesktopSessionStore {
         Self::from_connection(connection)
     }
 
+    pub(super) fn with_local_mcp_connection<T>(
+        &self,
+        operation: impl FnOnce(&mut Connection) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| "desktop session store lock is unavailable".to_string())?;
+        operation(&mut connection)
+    }
+
     fn from_connection(mut connection: Connection) -> Result<Self, String> {
         let stored_schema_version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
