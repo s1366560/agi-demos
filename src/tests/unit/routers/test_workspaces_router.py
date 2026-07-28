@@ -490,3 +490,59 @@ class TestWorkspacesRouter:
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
         mock_workspace_service.bind_agent.assert_not_awaited()
+
+
+def test_workspace_collaboration_capability_is_explicit_read_only_degraded(
+    workspaces_client: TestClient,
+    mock_workspace_service: AsyncMock,
+) -> None:
+    response = workspaces_client.get(
+        "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/collaboration/capabilities"
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == {
+        "service_version": "0.1.0",
+        "contract_version": "2.0.0",
+        "authority": "cloud",
+        "tenant_id": "tenant-1",
+        "project_id": "project-1",
+        "workspace_id": "ws-1",
+        "status": "degraded",
+        "reason_code": "workspace_collaboration_mutation_guards_unavailable",
+        "canonical_read": True,
+        "read_surfaces": [
+            "goals",
+            "discussion",
+            "status",
+            "collaboration",
+            "members",
+            "genes",
+            "files",
+            "notes",
+            "topology",
+            "settings",
+        ],
+        "mutations": {
+            "allowed": False,
+            "revision_guarded": False,
+            "idempotency_guarded": False,
+        },
+    }
+    mock_workspace_service.get_workspace.assert_awaited_once_with(
+        workspace_id="ws-1",
+        actor_user_id="user-1",
+    )
+
+
+def test_workspace_collaboration_capability_fails_closed_on_scope_drift(
+    workspaces_client: TestClient,
+    mock_workspace_service: AsyncMock,
+) -> None:
+    response = workspaces_client.get(
+        "/api/v1/tenants/tenant-other/projects/project-1/workspaces/ws-1/collaboration/capabilities"
+    )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json() == {"detail": "Workspace not found"}
+    assert mock_workspace_service.get_workspace.await_count == 1
