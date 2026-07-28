@@ -9,6 +9,7 @@ import {
   mergeConversationTimelineItems,
 } from '../features/chat/chatTimelineModel';
 import { timelineMessageAttachments } from '../features/chat/messageAttachmentModel';
+import { ToastProvider } from '../features/feedback/ToastCenter';
 import { I18nProvider } from '../i18n';
 import type { AgentTimelineItem, ConversationTimelineState } from '../types';
 import '../styles.css';
@@ -207,9 +208,11 @@ function mount() {
   globalThis.__attachmentTimelineQaRoot.render(
     <React.StrictMode>
       <I18nProvider>
-        <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium">
-          <AttachmentTimelineQa />
-        </Theme>
+        <ToastProvider>
+          <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium">
+            <AttachmentTimelineQa />
+          </Theme>
+        </ToastProvider>
       </I18nProvider>
     </React.StrictMode>,
   );

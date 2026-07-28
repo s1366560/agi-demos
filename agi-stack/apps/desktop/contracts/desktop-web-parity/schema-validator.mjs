@@ -10,8 +10,15 @@ function matchesType(expected, value) {
   return allowed.includes(actual);
 }
 
-export function validateJsonSchema(schema, value, path = '$') {
+export function validateJsonSchema(schema, value, path = '$', rootSchema = schema) {
   const errors = [];
+
+  if (schema.$ref) {
+    const resolved = resolveLocalReference(rootSchema, schema.$ref);
+    return resolved
+      ? validateJsonSchema(resolved, value, path, rootSchema)
+      : [`${path} references an unknown schema ${schema.$ref}`];
+  }
 
   if (schema.type && !matchesType(schema.type, value)) {
     return [`${path} must be ${JSON.stringify(schema.type)}; received ${valueType(value)}`];
@@ -43,7 +50,9 @@ export function validateJsonSchema(schema, value, path = '$') {
     }
     if (schema.items) {
       value.forEach((item, index) => {
-        errors.push(...validateJsonSchema(schema.items, item, `${path}[${index}]`));
+        errors.push(
+          ...validateJsonSchema(schema.items, item, `${path}[${index}]`, rootSchema),
+        );
       });
     }
   }
@@ -57,7 +66,9 @@ export function validateJsonSchema(schema, value, path = '$') {
     for (const [key, child] of Object.entries(value)) {
       const childSchema = schema.properties?.[key];
       if (childSchema) {
-        errors.push(...validateJsonSchema(childSchema, child, `${path}.${key}`));
+        errors.push(
+          ...validateJsonSchema(childSchema, child, `${path}.${key}`, rootSchema),
+        );
       } else if (schema.additionalProperties === false) {
         errors.push(`${path}.${key} is not allowed`);
       }
@@ -66,7 +77,7 @@ export function validateJsonSchema(schema, value, path = '$') {
 
   if (schema.oneOf) {
     const alternatives = schema.oneOf.map((candidate) =>
-      validateJsonSchema(candidate, value, path),
+      validateJsonSchema(candidate, value, path, rootSchema),
     );
     const matches = alternatives.filter((candidateErrors) => candidateErrors.length === 0);
     if (matches.length !== 1) {
@@ -78,4 +89,22 @@ export function validateJsonSchema(schema, value, path = '$') {
   }
 
   return errors;
+}
+
+function resolveLocalReference(rootSchema, reference) {
+  if (typeof reference !== 'string' || !reference.startsWith('#/')) return null;
+  let current = rootSchema;
+  for (const encodedSegment of reference.slice(2).split('/')) {
+    const segment = encodedSegment.replaceAll('~1', '/').replaceAll('~0', '~');
+    if (
+      current === null ||
+      typeof current !== 'object' ||
+      Array.isArray(current) ||
+      !Object.hasOwn(current, segment)
+    ) {
+      return null;
+    }
+    current = current[segment];
+  }
+  return current;
 }

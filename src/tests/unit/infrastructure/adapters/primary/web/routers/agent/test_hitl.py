@@ -1,5 +1,6 @@
 """Unit tests for agent HITL router safeguards."""
 
+import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -293,7 +294,7 @@ async def test_respond_to_hitl_accepts_permission_metadata_type(monkeypatch) -> 
         request=HITLResponseRequest(
             request_id="req-1",
             hitl_type="permission",
-            response_data={"action": "allow", "granted": True},
+            response_data={"action": "allow", "granted": True, "scope": "once"},
         ),
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
@@ -360,17 +361,67 @@ async def test_respond_to_hitl_rejects_expired_request(monkeypatch) -> None:
     )
     monkeypatch.setattr(hitl_router, "_user_has_hitl_access", AsyncMock(return_value=True))
 
-    with pytest.raises(HTTPException, match="has expired") as exc_info:
-        await hitl_router.respond_to_hitl(
-            request=HITLResponseRequest(
-                request_id="req-1",
-                hitl_type="env_var",
-                response_data={"cancelled": True},
-            ),
-            current_user=SimpleNamespace(id="user-1"),
-            tenant_id="tenant-1",
-            db=SimpleNamespace(commit=AsyncMock()),
-        )
+    response = await hitl_router.respond_to_hitl(
+        request=HITLResponseRequest(
+            request_id="req-1",
+            hitl_type="env_var",
+            response_data={"cancelled": True},
+        ),
+        current_user=SimpleNamespace(id="user-1"),
+        tenant_id="tenant-1",
+        db=SimpleNamespace(commit=AsyncMock()),
+    )
 
-    assert exc_info.value.status_code == 400
+    assert response.status_code == 410
+    payload = json.loads(response.body)
+    assert payload["detail"] == "HITL request has expired"
+    assert payload["reason_code"] == "hitl_request_expired"
+    assert payload["authority_revision"] == 2
+    assert payload["authority_status"] == "timeout"
+    assert payload["expires_at"] == hitl_request.expires_at.isoformat()
     repo.mark_timeout.assert_awaited_once_with("req-1")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_respond_to_hitl_returns_authority_after_losing_atomic_claim(monkeypatch) -> None:
+    pending = _make_hitl_request(request_type=HITLRequestType.CLARIFICATION)
+    answered = _make_hitl_request(request_type=HITLRequestType.CLARIFICATION)
+    answered.status = HITLRequestStatus.ANSWERED
+    answered.answered_at = datetime.now(UTC)
+    answered.response = "first answer"
+
+    repo = MagicMock()
+    repo.get_by_id = AsyncMock(side_effect=[pending, answered])
+    repo.update_response = AsyncMock(return_value=None)
+    publish_mock = AsyncMock(return_value=True)
+    db = SimpleNamespace(commit=AsyncMock())
+
+    monkeypatch.setattr(hitl_router, "SqlHITLRequestRepository", lambda _db: repo)
+    monkeypatch.setattr(hitl_router, "_publish_hitl_response_to_redis", publish_mock)
+    monkeypatch.setattr(hitl_router, "_user_has_hitl_access", AsyncMock(return_value=True))
+    monkeypatch.setattr(
+        "src.infrastructure.agent.hitl.coordinator.validate_hitl_response",
+        lambda **_: (True, None),
+    )
+
+    response = await hitl_router.respond_to_hitl(
+        request=HITLResponseRequest(
+            request_id="req-1",
+            hitl_type="clarification",
+            response_data={"answer": "second answer"},
+        ),
+        current_user=SimpleNamespace(id="user-1"),
+        tenant_id="tenant-1",
+        db=db,
+    )
+
+    assert response.status_code == 409
+    payload = json.loads(response.body)
+    assert payload["detail"] == "HITL request is no longer pending"
+    assert payload["reason_code"] == "hitl_already_answered"
+    assert payload["authority_revision"] == 2
+    assert payload["authority_status"] == "answered"
+    assert payload["answered_at"] == answered.answered_at.isoformat()
+    publish_mock.assert_not_awaited()
+    db.commit.assert_not_awaited()

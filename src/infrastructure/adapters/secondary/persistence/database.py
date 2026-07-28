@@ -120,6 +120,7 @@ async def initialize_database() -> None:
     """
     # All model files must be imported before create_all() so that their
     # table definitions are registered with Base.metadata.
+    import src.infrastructure.adapters.secondary.persistence.artifact_model  # pyright: ignore[reportUnusedImport]
     import src.infrastructure.adapters.secondary.persistence.attachment_model  # pyright: ignore[reportUnusedImport]
     import src.infrastructure.adapters.secondary.persistence.channel_models  # noqa: F401  # pyright: ignore[reportUnusedImport]
     from src.infrastructure.adapters.secondary.persistence.models import Base

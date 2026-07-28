@@ -7,6 +7,7 @@ import { Button, Theme } from '@radix-ui/themes';
 import { ChatPanel } from '../features/chat/ChatPanel';
 import type { AgentTaskSignal } from '../features/chat/agentTaskSignalModel';
 import type { ComposerCatalogClient } from '../features/chat/composerCatalogModel';
+import { ToastProvider } from '../features/feedback/ToastCenter';
 import { I18nProvider } from '../i18n';
 import type {
   AgentConversation,
@@ -296,7 +297,9 @@ globalThis.__composeAheadQaRoot = qaRoot;
 qaRoot.render(
   <React.StrictMode>
     <I18nProvider>
-      <ComposeAheadQa />
+      <ToastProvider>
+        <ComposeAheadQa />
+      </ToastProvider>
     </I18nProvider>
   </React.StrictMode>,
 );

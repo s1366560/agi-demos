@@ -16,11 +16,13 @@ import { ChatPanel } from '../features/chat/ChatPanel';
 import type { ComposerCatalogClient } from '../features/chat/composerCatalogModel';
 import { DesktopMCPAppCanvas } from '../features/chat/DesktopMCPAppCanvas';
 import { LiveArtifactCanvas } from '../features/chat/LiveArtifactCanvas';
+import { ToastProvider } from '../features/feedback/ToastCenter';
 import {
   applyArtifactCanvasStreamEvent,
   emptyArtifactCanvasState,
   selectArtifactCanvasTab,
 } from '../features/chat/artifactCanvasEventModel';
+import { resolveA2UISurfaceAuthority } from '../features/chat/a2uiSurfaceAuthorityModel';
 import {
   applyConversationTitleUpdate,
   readConversationTitleStreamEvent,
@@ -56,6 +58,7 @@ import type {
   CodeRangeReference,
   ConversationTimelineState,
   DesktopRunInput,
+  HitlResponseSubmission,
   RuntimeDataset,
   RunInputDelivery,
   WorkspaceMessage,
@@ -1521,6 +1524,7 @@ const a2uiCanvasTimelineItems: ConversationTimelineState['items'] = [
     payload: {
       request_id: 'a2ui-release-action',
       block_id: 'release-approval',
+      authority_revision: 7,
       allowed_actions: [
         { source_component_id: 'approve-button', action_name: 'approve_release' },
       ],
@@ -2336,6 +2340,13 @@ function SessionSteeringQa() {
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
+  const a2uiCanvasSourceEvents = a2uiCanvasDeletedEventsMode
+    ? a2uiCanvasDeletedTimelineItems
+    : a2uiCanvasIncrementalEventsMode
+      ? a2uiCanvasIncrementalTimelineItems
+      : a2uiCanvasEventsMode
+        ? a2uiCanvasTimelineItems
+        : [];
   const [delivery, setDelivery] = useState<RunInputDelivery>('steer_now');
   const [references, setReferences] = useState<CodeRangeReference[]>([]);
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([queuedInput]);
@@ -2353,8 +2364,8 @@ function SessionSteeringQa() {
   const [qaWorkspaceLifecycleSummary, setQaWorkspaceLifecycleSummary] = useState('pending');
   const [switchingModel, setSwitchingModel] = useState(false);
   const [artifactCanvas, setArtifactCanvas] = useState(() =>
-    artifactCanvasEventsMode
-      ? artifactCanvasOpenEvents.reduce(
+    artifactCanvasEventsMode || a2uiCanvasSourceEvents.length > 0
+      ? [...artifactCanvasOpenEvents.filter(() => artifactCanvasEventsMode), ...a2uiCanvasSourceEvents].reduce(
           (state, event) => applyArtifactCanvasStreamEvent(state, event).state,
           emptyArtifactCanvasState(),
         )
@@ -2533,6 +2544,33 @@ function SessionSteeringQa() {
       },
     };
   });
+  const qaA2UIAuthorities = useMemo(
+    () =>
+      Object.fromEntries(
+        artifactCanvas.tabs.flatMap((tab) => {
+          const authority = resolveA2UISurfaceAuthority(
+            tab.id,
+            timeline.items,
+            ['a2ui-release-action'],
+          );
+          return authority ? [[tab.id, authority] as const] : [];
+        }),
+      ),
+    [artifactCanvas.tabs, timeline.items],
+  );
+  const respondToQaA2UI = useCallback(
+    async (submission: HitlResponseSubmission) => {
+      if (!a2uiCanvasEventsMode && !a2uiCanvasIncrementalEventsMode) return;
+      setA2UICanvasResponse(
+        [
+          submission.responseData.action_name,
+          submission.responseData.source_component_id,
+          JSON.stringify(submission.responseData.context ?? {}),
+        ].join(':'),
+      );
+    },
+    [a2uiCanvasEventsMode, a2uiCanvasIncrementalEventsMode],
+  );
 
   useEffect(() => {
     if (!workspaceRosterEventMode) return;
@@ -2860,16 +2898,7 @@ function SessionSteeringQa() {
               onSend={sendQaMessage}
               onRefresh={() => undefined}
               onLoadEarlier={loadEarlierHistory}
-              onRespondToHitl={async (submission) => {
-                if (!a2uiCanvasEventsMode && !a2uiCanvasIncrementalEventsMode) return;
-                setA2UICanvasResponse(
-                  [
-                    submission.responseData.action_name,
-                    submission.responseData.source_component_id,
-                    JSON.stringify(submission.responseData.context ?? {}),
-                  ].join(':'),
-                );
-              }}
+              onRespondToHitl={respondToQaA2UI}
               onWorkflowSelect={() => undefined}
               onModelChange={async (value) => {
                 setSwitchingModel(true);
@@ -2953,9 +2982,16 @@ function SessionSteeringQa() {
                   <p data-testid="mcp-app-host-message">{mcpAppHostMessage}</p>
                 ) : null}
               </>
-            ) : artifactCanvasEventsMode ? (
+            ) : artifactCanvasEventsMode ||
+              a2uiCanvasEventsMode ||
+              a2uiCanvasDeletedEventsMode ||
+              a2uiCanvasIncrementalEventsMode ? (
               <LiveArtifactCanvas
                 state={artifactCanvas}
+                a2uiAuthorities={qaA2UIAuthorities}
+                onRespondToA2UI={async (submission) => {
+                  await respondToQaA2UI(submission);
+                }}
                 onSelect={(artifactId) =>
                   setArtifactCanvas((current) => selectArtifactCanvasTab(current, artifactId))
                 }
@@ -2986,7 +3022,9 @@ globalThis.__sessionSteeringQaRoot = qaRoot;
 qaRoot.render(
   <React.StrictMode>
     <I18nProvider>
-      <SessionSteeringQa />
+      <ToastProvider>
+        <SessionSteeringQa />
+      </ToastProvider>
     </I18nProvider>
   </React.StrictMode>,
 );

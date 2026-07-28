@@ -770,6 +770,20 @@ export function socketEventsSince<T>(
   return fresh.reverse();
 }
 
+export function socketEventWindowSince<T>(
+  events: readonly T[],
+  previousHead: T | null,
+): { events: T[]; cursorGap: boolean } {
+  if (!events.length) return { events: [], cursorGap: previousHead !== null };
+  const boundaryIndex = previousHead === null ? -1 : events.indexOf(previousHead);
+  return {
+    events: events
+      .slice(0, boundaryIndex < 0 ? events.length : boundaryIndex)
+      .reverse(),
+    cursorGap: previousHead !== null && boundaryIndex < 0,
+  };
+}
+
 function parseEvent(data: unknown): AgentWsEvent {
   if (typeof data !== "string") return { type: "binary", payload: data };
   try {

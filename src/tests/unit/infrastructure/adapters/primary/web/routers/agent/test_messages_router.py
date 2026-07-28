@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -7,6 +8,7 @@ from typing import Any
 from src.infrastructure.adapters.primary.web.routers.agent.messages import (
     _DISPLAYABLE_EVENTS,
     _build_completion_map,
+    _build_hitl_answered_map,
     _build_timeline,
     _build_tool_exec_map,
 )
@@ -1960,6 +1962,70 @@ def test_build_timeline_replays_session_state_events_for_desktop_history() -> No
 
     assert [item["type"] for item in timeline] == [event_type for event_type, _ in session_events]
     assert [item["payload"] for item in timeline] == [data for _, data in session_events]
+
+
+def test_build_timeline_redacts_legacy_env_var_values_from_history() -> None:
+    events = [
+        _StubEvent(
+            event_type="env_var_requested",
+            event_data={
+                "request_id": "env-release",
+                "tool_name": "release",
+                "fields": [{"name": "DEPLOY_TOKEN", "type": "password"}],
+                "message": "Provide deployment credentials",
+            },
+            event_time_us=1_000,
+        ),
+        _StubEvent(
+            event_type="env_var_provided",
+            event_data={
+                "request_id": "env-release",
+                "tool_name": "release",
+                "values": {"DEPLOY_TOKEN": "must-never-enter-history"},
+                "saved_variables": ["DEPLOY_TOKEN"],
+            },
+            event_time_us=2_000,
+        ),
+    ]
+    timeline = _build_timeline(
+        events=events,
+        tool_exec_map={},
+        hitl_answered_map=_build_hitl_answered_map(events),
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert timeline[0]["answered"] is True
+    assert timeline[0]["variableNames"] == ["DEPLOY_TOKEN"]
+    assert "values" not in timeline[0]
+    assert timeline[1]["variableNames"] == ["DEPLOY_TOKEN"]
+    assert "values" not in timeline[1]
+    assert "must-never-enter-history" not in json.dumps(timeline)
+
+    status_timeline = _build_timeline(
+        events=events[:1],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={
+            "env-release": {
+                "status": "answered",
+                "response": "legacy-secret-response",
+                "response_metadata": {
+                    "values": {"DEPLOY_TOKEN": "legacy-secret-metadata"},
+                },
+            },
+        },
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+    assert status_timeline[0]["answered"] is True
+    assert status_timeline[0]["variableNames"] == ["DEPLOY_TOKEN"]
+    serialized = json.dumps(status_timeline)
+    assert "legacy-secret-response" not in serialized
+    assert "legacy-secret-metadata" not in serialized
 
 
 def test_build_timeline_replays_complete_skill_execution_for_desktop_history() -> None:

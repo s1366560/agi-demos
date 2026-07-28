@@ -14,6 +14,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.workspace_agent_autonomy import AutonomyProfileModel
+from src.application.schemas.workspace_collaboration_capabilities import (
+    WorkspaceCollaborationCapabilitiesResponse,
+    build_workspace_collaboration_capabilities,
+)
 from src.application.services.workspace_autonomy_profiles import (
     evaluate_workspace_code_context,
     normalize_sandbox_code_root,
@@ -569,6 +573,33 @@ async def get_workspace(
         )
         _ensure_workspace_scope(workspace, tenant_id=tenant_id, project_id=project_id)
         return _to_workspace_response(workspace)
+    except Exception as exc:
+        raise _map_error(exc) from exc
+
+
+@router.get(
+    "/{workspace_id}/collaboration/capabilities",
+    response_model=WorkspaceCollaborationCapabilitiesResponse,
+)
+async def get_workspace_collaboration_capabilities(
+    tenant_id: str,
+    project_id: str,
+    workspace_id: str,
+    current_user: User = Depends(get_current_user),
+    workspace_service: WorkspaceService = Depends(get_workspace_service),
+) -> WorkspaceCollaborationCapabilitiesResponse:
+    """Return the explicit read-only Workspace Collaboration authority."""
+    try:
+        workspace = await workspace_service.get_workspace(
+            workspace_id=workspace_id,
+            actor_user_id=current_user.id,
+        )
+        _ensure_workspace_scope(workspace, tenant_id=tenant_id, project_id=project_id)
+        return build_workspace_collaboration_capabilities(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
     except Exception as exc:
         raise _map_error(exc) from exc
 

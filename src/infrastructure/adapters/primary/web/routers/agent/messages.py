@@ -274,10 +274,22 @@ def _build_hitl_answered_map(events: list[Any]) -> dict[str, Any]:
             field = _answer_extractors[event_type]
             hitl_answered_map[request_id] = {field: data.get(field, "")}
         elif event_type == "env_var_provided":
-            hitl_answered_map[request_id] = {"values": data.get("values", {})}
+            hitl_answered_map[request_id] = {
+                "variable_names": _safe_env_var_names(data),
+            }
         elif event_type in ("permission_granted", "permission_replied"):
             hitl_answered_map[request_id] = {"granted": data.get("granted", False)}
     return hitl_answered_map
+
+
+def _safe_env_var_names(data: dict[str, Any]) -> list[str]:
+    raw_names = data.get("variable_names")
+    if not isinstance(raw_names, list):
+        raw_names = data.get("saved_variables")
+    if not isinstance(raw_names, list):
+        values = data.get("values")
+        raw_names = list(values) if isinstance(values, dict) else []
+    return list(dict.fromkeys(name for name in raw_names if isinstance(name, str) and name))
 
 
 def _build_hitl_status_map(hitl_requests: list[Any]) -> dict[str, Any]:
@@ -721,15 +733,16 @@ def _build_env_var_requested(
 ) -> dict[str, Any]:
     request_id = data.get("request_id", "")
     answered = False
-    values: dict[str, Any] = {}
+    variable_names: list[str] = []
     if request_id in hitl_answered_map:
         answered = True
-        values = hitl_answered_map[request_id].get("values", {})
+        raw_names = hitl_answered_map[request_id].get("variable_names", [])
+        variable_names = [name for name in raw_names if isinstance(name, str) and name]
     elif request_id in hitl_status_map:
         status_info = hitl_status_map[request_id]
         if status_info["status"] in ("answered", "completed"):
             answered = True
-            values = status_info.get("response_metadata", {}).get("values", {})
+            variable_names = _safe_env_var_names(status_info.get("response_metadata", {}))
     return {
         "requestId": request_id,
         "toolName": data.get("tool_name", ""),
@@ -737,18 +750,16 @@ def _build_env_var_requested(
         "message": data.get("message", ""),
         "context": data.get("context", {}),
         "answered": answered,
-        "values": values,
+        "providedVariables": variable_names,
+        "variableNames": variable_names,
     }
 
 
 def _build_env_var_provided(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
-    variable_names = data.get("saved_variables", [])
-    if not variable_names:
-        variable_names = list(data.get("values", {}).keys())
     return {
         "requestId": data.get("request_id", ""),
         "toolName": data.get("tool_name", ""),
-        "variableNames": variable_names,
+        "variableNames": _safe_env_var_names(data),
     }
 
 

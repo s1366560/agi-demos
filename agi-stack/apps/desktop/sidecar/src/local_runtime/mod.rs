@@ -60,11 +60,17 @@ mod auth_context;
 mod authority_store;
 mod authorized_tool_host;
 mod automation;
+mod automation_dispatcher;
+#[cfg(test)]
+mod automation_dispatcher_tests;
 mod automation_store;
 mod changes;
 mod composer_context;
 #[cfg(test)]
+mod local_route_parity_tests;
+#[cfg(test)]
 mod managed_resource_tests;
+mod parity_routes;
 mod provider_credentials;
 mod provider_probe;
 mod provider_usage_store;
@@ -72,6 +78,7 @@ mod resource_registry;
 #[cfg(test)]
 mod routing_policy_tests;
 mod run_control;
+mod search_projection;
 mod session_projection;
 mod session_store;
 mod steering;
@@ -2419,7 +2426,10 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
             "/api/v1/llm-providers/:provider_id/usage",
             get(get_llm_provider_usage),
         )
-        .route("/api/v1/skills/", get(list_managed_skills))
+        .route(
+            "/api/v1/skills/",
+            get(list_managed_skills).post(parity_routes::managed_mutation_unavailable),
+        )
         .route(
             "/api/v1/skills/:skill_id/status",
             patch(set_managed_skill_status),
@@ -2436,7 +2446,10 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
             "/api/v1/channels/tenants/:tenant_id/plugins/:plugin_id/disable",
             post(disable_managed_plugin),
         )
-        .route("/api/v1/agent/definitions", get(list_managed_agents))
+        .route(
+            "/api/v1/agent/definitions",
+            get(list_managed_agents).post(parity_routes::managed_mutation_unavailable),
+        )
         .route(
             "/api/v1/agent/definitions/:definition_id/enabled",
             patch(set_managed_agent_enabled),
@@ -2462,6 +2475,10 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         .route(
             "/api/v1/projects/:project_id/cron-jobs/:automation_id/toggle",
             post(automation::toggle),
+        )
+        .route(
+            "/api/v1/projects/:project_id/cron-jobs/:automation_id/run",
+            post(automation::run),
         )
         .route(
             "/api/v1/projects/:project_id/cron-jobs/:automation_id/runs",
@@ -2584,6 +2601,7 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         )
         .route("/mcp/tools/list", get(mcp_tools_list))
         .route("/mcp/tools/call", post(mcp_tools_call))
+        .merge(parity_routes::router())
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
             require_active_scope,
@@ -12269,7 +12287,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("migrated schema version");
-        assert_eq!(version, 19);
+        assert_eq!(version, 20);
         let selection_table: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
@@ -12358,13 +12376,13 @@ mod tests {
             let connection =
                 rusqlite::Connection::open(&future_path).expect("open future database");
             connection
-                .execute_batch("PRAGMA user_version = 20;")
+                .execute_batch("PRAGMA user_version = 21;")
                 .expect("mark future schema version");
         }
         let error = DesktopSessionStore::open(&future_path)
             .err()
             .expect("future schema must be rejected");
-        assert!(error.contains("newer than supported schema version 19"));
+        assert!(error.contains("newer than supported schema version 20"));
 
         std::fs::remove_dir_all(root).expect("remove schema test root");
     }
@@ -13153,7 +13171,7 @@ mod tests {
         let schema_version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("schema version");
-        assert_eq!(schema_version, 19);
+        assert_eq!(schema_version, 20);
         drop(connection);
         std::fs::remove_dir_all(root).expect("remove test root");
     }
@@ -15597,6 +15615,138 @@ mod tests {
             .await
             .expect("foreign project automation response");
         assert_eq!(foreign_project.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn local_automation_run_v2_returns_one_durable_receipt_and_history_record() {
+        let state = test_state("automation-run-v2-secret");
+        let app = local_router(state);
+        let created = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/projects/local-project/cron-jobs",
+                "automation-run-v2-secret",
+                json!({
+                    "idempotency_key": "create-run-v2-job",
+                    "name": "Run V2 job",
+                    "enabled": true,
+                    "schedule": {
+                        "kind": "every",
+                        "config": { "interval_seconds": 60 }
+                    },
+                    "payload": {
+                        "kind": "agent_turn",
+                        "config": { "message": "Execute the V2 job" }
+                    }
+                }),
+            ))
+            .await
+            .expect("create run V2 automation");
+        assert_eq!(created.status(), StatusCode::CREATED);
+        let created = response_json(created).await;
+        let automation_id = created["id"].as_str().expect("automation id");
+        let run_path = format!("/api/v1/projects/local-project/cron-jobs/{automation_id}/run");
+        let run_request = json!({
+            "contract_version": 2,
+            "expected_revision": 1,
+            "idempotency_key": "run-v2-idempotency",
+            "conversation_id": "conversation-run-v2"
+        });
+
+        let accepted = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                &run_path,
+                "automation-run-v2-secret",
+                run_request.clone(),
+            ))
+            .await
+            .expect("enqueue run V2 automation");
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let accepted = response_json(accepted).await;
+        assert_eq!(accepted["job_id"], automation_id);
+        assert_eq!(accepted["status"], "queued");
+        assert_eq!(accepted["duplicate"], false);
+
+        let replay = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                &run_path,
+                "automation-run-v2-secret",
+                run_request.clone(),
+            ))
+            .await
+            .expect("replay run V2 automation");
+        assert_eq!(replay.status(), StatusCode::ACCEPTED);
+        let replay = response_json(replay).await;
+        assert_eq!(replay["receipt_id"], accepted["receipt_id"]);
+        assert_eq!(replay["run_id"], accepted["run_id"]);
+        assert_eq!(replay["duplicate"], true);
+
+        let conflict = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                &run_path,
+                "automation-run-v2-secret",
+                json!({
+                    "contract_version": 2,
+                    "expected_revision": 1,
+                    "idempotency_key": "run-v2-idempotency",
+                    "conversation_id": "another-conversation"
+                }),
+            ))
+            .await
+            .expect("conflicting run V2 automation");
+        assert_eq!(conflict.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            response_json(conflict).await["code"],
+            "automation_idempotency_conflict"
+        );
+
+        let unsupported = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                &run_path,
+                "automation-run-v2-secret",
+                json!({
+                    "contract_version": 3,
+                    "expected_revision": 1,
+                    "idempotency_key": "run-unsupported-version"
+                }),
+            ))
+            .await
+            .expect("unsupported run contract response");
+        assert_eq!(unsupported.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            response_json(unsupported).await["code"],
+            "automation_contract_version_unsupported"
+        );
+
+        let history = app
+            .oneshot(authenticated_json_request(
+                "GET",
+                &format!(
+                    "/api/v1/projects/local-project/cron-jobs/{automation_id}/runs?limit=50&offset=0"
+                ),
+                "automation-run-v2-secret",
+                json!({}),
+            ))
+            .await
+            .expect("list durable automation runs");
+        assert_eq!(history.status(), StatusCode::OK);
+        let history = response_json(history).await;
+        assert_eq!(history["total"], 1);
+        assert_eq!(history["items"][0]["id"], accepted["run_id"]);
+        assert_eq!(history["items"][0]["status"], "queued");
+        assert_eq!(
+            history["items"][0]["result_summary"]["reason_code"],
+            "local_automation_execution_runtime_unavailable"
+        );
     }
 
     #[tokio::test]

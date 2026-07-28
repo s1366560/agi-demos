@@ -16,9 +16,14 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.hitl_authority import (
+    HitlAuthorityConflict,
+    classify_hitl_authority_conflict,
+)
 from src.domain.model.agent.hitl_request import HITLRequest
 from src.domain.model.auth.user import User
 from src.infrastructure.adapters.primary.web.dependencies import (
@@ -268,16 +273,14 @@ async def _mark_hitl_timeout_if_expired(
     return True
 
 
-async def _load_authorized_pending_hitl_request(
+async def _load_authorized_hitl_request(
     *,
     db: AsyncSession,
     request_id: str,
     user_id: str,
     tenant_id: str,
 ) -> HITLRequest:
-    """Load a pending HITL request after tenant/project/conversation authorization."""
-    from src.domain.model.agent.hitl_request import HITLRequestStatus
-
+    """Load an HITL request after tenant/project/conversation authorization."""
     repo = SqlHITLRequestRepository(db)
     hitl_request = await repo.get_by_id(request_id)
 
@@ -324,6 +327,26 @@ async def _load_authorized_pending_hitl_request(
             detail=_("Access denied to this HITL request"),
         )
 
+    return hitl_request
+
+
+async def _load_authorized_pending_hitl_request(
+    *,
+    db: AsyncSession,
+    request_id: str,
+    user_id: str,
+    tenant_id: str,
+) -> HITLRequest:
+    """Load a pending HITL request after tenant/project/conversation authorization."""
+    from src.domain.model.agent.hitl_request import HITLRequestStatus
+
+    hitl_request = await _load_authorized_hitl_request(
+        db=db,
+        request_id=request_id,
+        user_id=user_id,
+        tenant_id=tenant_id,
+    )
+    repo = SqlHITLRequestRepository(db)
     if await _mark_hitl_timeout_if_expired(db=db, repo=repo, hitl_request=hitl_request):
         raise HTTPException(
             status_code=400,
@@ -337,6 +360,37 @@ async def _load_authorized_pending_hitl_request(
         )
 
     return hitl_request
+
+
+def _hitl_authority_response(conflict: HitlAuthorityConflict) -> JSONResponse:
+    payload = conflict.payload()
+    payload["detail"] = _(conflict.detail)
+    return JSONResponse(status_code=conflict.status_code, content=payload)
+
+
+async def _resolve_failed_hitl_claim(
+    *,
+    db: AsyncSession,
+    repo: SqlHITLRequestRepository,
+    hitl_request: HITLRequest,
+) -> HitlAuthorityConflict:
+    """Reload and settle the persisted authority after a response loses its claim."""
+    from src.domain.model.agent.hitl_request import HITLRequestStatus
+
+    authority = await repo.get_by_id(hitl_request.id) or hitl_request
+    now = datetime.now(UTC)
+    if (
+        authority.status == HITLRequestStatus.PENDING
+        and authority.expires_at is not None
+        and authority.expires_at <= now
+    ):
+        timed_out = await repo.mark_timeout(authority.id)
+        if timed_out is not None:
+            await db.commit()
+            authority = timed_out
+        else:
+            authority = await repo.get_by_id(authority.id) or authority
+    return classify_hitl_authority_conflict(authority, observed_at=now)
 
 
 def _validate_and_summarize_hitl_response(
@@ -551,7 +605,7 @@ async def respond_to_hitl(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-) -> HumanInteractionResponse:
+) -> HumanInteractionResponse | JSONResponse:
     """
     Unified endpoint to respond to any HITL request.
 
@@ -587,12 +641,21 @@ async def respond_to_hitl(
             )
 
         repo = SqlHITLRequestRepository(db)
-        hitl_request = await _load_authorized_pending_hitl_request(
+        hitl_request = await _load_authorized_hitl_request(
             db=db,
             user_id=str(current_user.id),
             tenant_id=tenant_id,
             request_id=request.request_id,
         )
+        from src.domain.model.agent.hitl_request import HITLRequestStatus
+
+        if hitl_request.status != HITLRequestStatus.PENDING or hitl_request.is_expired:
+            conflict = await _resolve_failed_hitl_claim(
+                db=db,
+                repo=repo,
+                hitl_request=hitl_request,
+            )
+            return _hitl_authority_response(conflict)
         project_id = hitl_request.project_id
         conversation_id = hitl_request.conversation_id
         agent_mode = (hitl_request.metadata or {}).get("agent_mode", "default")
@@ -617,10 +680,12 @@ async def respond_to_hitl(
             response_metadata=response_metadata,
         )
         if updated_request is None:
-            raise HTTPException(
-                status_code=409,
-                detail=_("HITL request could not be updated"),
+            conflict = await _resolve_failed_hitl_claim(
+                db=db,
+                repo=repo,
+                hitl_request=hitl_request,
             )
+            return _hitl_authority_response(conflict)
         await db.commit()
 
         # Redis Stream delivery (primary channel)

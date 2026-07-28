@@ -1,0 +1,62 @@
+.sandbox-file-browser {
+  display: flex;
+  min-height: 180px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--desktop-border-8);
+  border-radius: 8px;
+  background: var(--desktop-surface-3);
+}
+
+.sandbox-file-browser > header,
+.sandbox-file-browser > header > span,
+.sandbox-file-browser li {
+  display: flex;
+  align-items: center;
+}
+
+.sandbox-file-browser > header {
+  justify-content: space-between;
+}
+
+.sandbox-file-browser > header > span {
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.sandbox-file-browser small {
+  color: var(--desktop-gray-25);
+}
+
+.sandbox-file-browser ul {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sandbox-file-browser li > button:first-child {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  text-align: left;
+}
+
+.sandbox-file-browser li > button:first-child span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sandbox-file-browser--unavailable {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}

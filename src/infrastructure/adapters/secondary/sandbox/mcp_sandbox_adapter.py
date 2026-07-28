@@ -3514,12 +3514,19 @@ class MCPSandboxAdapter(SandboxPort):
         if extra:
             base_result.update(extra)
 
-        # The websocket client stores extra MCP response fields
-        # (results, errors) inside MCPToolResult.metadata when the
+        # The websocket client stores extra MCP response fields inside
+        # MCPToolResult.metadata when the
         # result type is a dataclass without model_extra support.
         result_metadata = getattr(result, "metadata", None)
         if isinstance(result_metadata, dict):
-            for key in ("results", "errors"):
+            for key in (
+                "results",
+                "errors",
+                "listing",
+                "file",
+                "download",
+                "reason_code",
+            ):
                 if key in result_metadata and key not in base_result:
                     base_result[key] = result_metadata[key]
 

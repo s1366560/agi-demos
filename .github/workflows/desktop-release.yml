@@ -11,9 +11,66 @@ concurrency:
   group: desktop-release-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  AGISTACK_RELEASE_VERSION: '0.1.0'
+
 jobs:
+  parity-preflight:
+    name: Desktop parity preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+        with:
+          version: 10.24.0
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: agi-stack/apps/desktop/pnpm-lock.yaml
+
+      - name: Validate fixed release version and tag
+        shell: node {0}
+        working-directory: agi-stack/apps/desktop
+        run: |
+          const packageJson = require('./package.json');
+          const expectedVersion = process.env.AGISTACK_RELEASE_VERSION;
+          if (packageJson.version !== expectedVersion) {
+            throw new Error(
+              `desktop package version must remain ${expectedVersion}; found ${packageJson.version}`,
+            );
+          }
+          const expectedTag = `v${expectedVersion}`;
+          if (process.env.GITHUB_REF_NAME !== expectedTag) {
+            throw new Error(`release tag must exactly match ${expectedTag}`);
+          }
+
+      - name: Install desktop dependencies
+        working-directory: agi-stack/apps/desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: Install parity browser
+        working-directory: agi-stack/apps/desktop
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run desktop parity preflight
+        run: make -C agi-stack desktop-parity-check
+
   build:
     name: Build ${{ matrix.platform }}
+    needs: parity-preflight
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -23,7 +80,7 @@ jobs:
         include:
           - platform: macOS
             os: macos-latest
-            builder-args: --mac
+            builder-args: --mac --universal
           - platform: Windows
             os: windows-latest
             builder-args: --win
@@ -59,7 +116,13 @@ jobs:
         shell: node {0}
         run: |
           const packageJson = require('./package.json');
-          const expectedTag = `v${packageJson.version}`;
+          const expectedVersion = process.env.AGISTACK_RELEASE_VERSION;
+          if (packageJson.version !== expectedVersion) {
+            throw new Error(
+              `desktop package version must remain ${expectedVersion}; found ${packageJson.version}`,
+            );
+          }
+          const expectedTag = `v${expectedVersion}`;
           if (process.env.GITHUB_REF_NAME !== expectedTag) {
             throw new Error(`release tag must exactly match ${expectedTag}`);
           }
@@ -112,7 +175,31 @@ jobs:
         run: pnpm run build:electron
 
       - name: Build native Rust sidecar
+        if: runner.os != 'macOS'
         run: cargo build --manifest-path ../../Cargo.toml -p agistack-desktop-sidecar --release
+
+      - name: Build universal macOS Rust sidecar
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup target add x86_64-apple-darwin aarch64-apple-darwin
+          cargo build \
+            --manifest-path ../../Cargo.toml \
+            -p agistack-desktop-sidecar \
+            --release \
+            --target x86_64-apple-darwin
+          cargo build \
+            --manifest-path ../../Cargo.toml \
+            -p agistack-desktop-sidecar \
+            --release \
+            --target aarch64-apple-darwin
+          mkdir -p ../../target/release
+          lipo -create \
+            ../../target/x86_64-apple-darwin/release/agistack-desktop-sidecar \
+            ../../target/aarch64-apple-darwin/release/agistack-desktop-sidecar \
+            -output ../../target/release/agistack-desktop-sidecar
+          chmod 755 ../../target/release/agistack-desktop-sidecar
 
       - name: Stage native sidecar
         run: pnpm run stage:sidecar
@@ -150,6 +237,27 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
+      - name: Notarize and staple macOS disk image
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          dmg_files=(release/*.dmg)
+          if (( ${#dmg_files[@]} != 1 )); then
+            echo "Expected exactly one macOS disk image; found ${#dmg_files[@]}" >&2
+            exit 1
+          fi
+          xcrun notarytool submit "${dmg_files[0]}" \
+            --key "$APPLE_API_KEY" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER" \
+            --wait
+          xcrun stapler staple "${dmg_files[0]}"
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+
       - name: Build Windows release artifacts
         if: runner.os == 'Windows'
         run: pnpm exec electron-builder ${{ matrix.builder-args }} --publish never
@@ -164,9 +272,14 @@ jobs:
       - name: Verify packaged signatures, update metadata, and sidecar integrity
         run: node scripts/verify-release-artifacts.mjs
         env:
+          AGISTACK_EXPECTED_VERSION: ${{ env.AGISTACK_RELEASE_VERSION }}
           AGISTACK_EXPECTED_TAG: ${{ github.ref_name }}
           AGISTACK_EXPECTED_MAC_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           AGISTACK_REQUIRE_NOTARIZATION: ${{ runner.os == 'macOS' && '1' || '0' }}
+          AGISTACK_RELEASE_COMMIT_SHA: ${{ github.sha }}
+          AGISTACK_RELEASE_RUN_ID: ${{ github.run_id }}
+          AGISTACK_RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
+          AGISTACK_RELEASE_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           WIN_CSC_SHA1: ${{ secrets.WIN_CSC_SHA1 }}
 
       - name: Remove App Store Connect API key
@@ -196,6 +309,7 @@ jobs:
             agi-stack/apps/desktop/release/*.deb
             agi-stack/apps/desktop/release/*.blockmap
             agi-stack/apps/desktop/release/latest*.yml
+            agi-stack/apps/desktop/release/release-evidence-*.json
           if-no-files-found: error
 
   publish:
@@ -227,16 +341,20 @@ jobs:
       - name: Validate the combined release asset set
         shell: node {0}
         run: |
-          const { readdirSync, statSync, writeFileSync } = require('node:fs');
+          const { createHash } = require('node:crypto');
+          const { readFileSync, readdirSync, statSync, writeFileSync } = require('node:fs');
           const { basename, join } = require('node:path');
           const policies = {
             macos: {
-              required: [/\.dmg$/, /\.zip$/, /^latest-mac\.yml$/],
+              evidence: 'release-evidence-macos.json',
+              required: [/\.dmg$/, /\.zip$/, /\.zip\.blockmap$/, /^latest-mac\.yml$/],
             },
             windows: {
+              evidence: 'release-evidence-windows.json',
               required: [/\.exe$/, /\.exe\.blockmap$/, /^latest\.yml$/],
             },
             linux: {
+              evidence: 'release-evidence-linux.json',
               required: [/\.AppImage$/, /\.deb$/, /^latest-linux\.yml$/],
             },
           };
@@ -248,7 +366,112 @@ jobs:
             /\.deb$/,
             /\.blockmap$/,
             /^latest(?:-mac|-linux)?\.yml$/,
+            /^release-evidence-(?:macos|windows|linux)\.json$/,
           ];
+          const isRecord = (value) =>
+            value !== null && typeof value === 'object' && !Array.isArray(value);
+          const sha512 = (path) =>
+            createHash('sha512').update(readFileSync(path)).digest('base64');
+          const assertTrueFields = (value, fields, platform) => {
+            for (const field of fields) {
+              if (value[field] !== true) {
+                throw new Error(`${platform} native evidence ${field} must be true`);
+              }
+            }
+          };
+          const assertSidecarDigest = (value, platform) => {
+            if (!/^[a-f0-9]{64}$/.test(value.sidecar_sha256 ?? '')) {
+              throw new Error(`${platform} sidecar SHA-256 evidence is invalid`);
+            }
+          };
+          const validateNativeEvidence = (platform, native) => {
+            if (!isRecord(native)) {
+              throw new Error(`${platform} native verification evidence is invalid`);
+            }
+            assertSidecarDigest(native, platform);
+            if (platform === 'macos') {
+              const expectedArchitectures = JSON.stringify(['arm64', 'x86_64']);
+              if (
+                native.architecture !== 'universal' ||
+                JSON.stringify(native.app_architectures) !== expectedArchitectures ||
+                JSON.stringify(native.sidecar_architectures) !== expectedArchitectures
+              ) {
+                throw new Error('macOS app and sidecar must both be universal');
+              }
+              if (
+                !/^[A-Z0-9]{10}$/.test(process.env.APPLE_TEAM_ID ?? '') ||
+                native.team_identifier !== process.env.APPLE_TEAM_ID ||
+                !/^[a-f0-9]{64}$/.test(native.signing_certificate_sha256 ?? '') ||
+                !/^Developer ID Application:\s+\S/.test(
+                  native.developer_id_authority ?? '',
+                )
+              ) {
+                throw new Error('macOS release identity evidence does not match');
+              }
+              assertTrueFields(
+                native,
+                [
+                  'same_signature_identity',
+                  'app_signature_valid',
+                  'sidecar_signature_valid',
+                  'notarization_verified',
+                  'app_stapler_valid',
+                  'dmg_stapler_valid',
+                  'app_spctl_valid',
+                  'dmg_spctl_valid',
+                ],
+                platform,
+              );
+              return;
+            }
+            if (platform === 'windows') {
+              const expectedThumbprint = (process.env.WIN_CSC_SHA1 ?? '')
+                .replace(/\s/g, '')
+                .toUpperCase();
+              if (
+                !/^[A-F0-9]{40}$/.test(expectedThumbprint) ||
+                native.signer_thumbprint !== expectedThumbprint ||
+                !['x64', 'arm64'].includes(native.architecture)
+              ) {
+                throw new Error('Windows Authenticode identity evidence does not match');
+              }
+              assertTrueFields(
+                native,
+                ['installer_authenticode_valid', 'sidecar_authenticode_valid'],
+                platform,
+              );
+              return;
+            }
+            if (
+              !['x64', 'arm64'].includes(native.architecture) ||
+              (native.architecture === 'x64'
+                ? native.deb_architecture !== 'amd64'
+                : native.deb_architecture !== 'arm64')
+            ) {
+              throw new Error('Linux package architecture evidence does not match');
+            }
+            assertTrueFields(
+              native,
+              [
+                'sidecar_executable',
+                'package_sidecars_identical',
+                'appimage_executable',
+                'appimage_extract_smoke',
+                'deb_extract_smoke',
+              ],
+              platform,
+            );
+            for (const field of ['appimage_desktop_entry', 'deb_desktop_entry']) {
+              const name = native[field];
+              if (
+                typeof name !== 'string' ||
+                basename(name) !== name ||
+                !name.endsWith('.desktop')
+              ) {
+                throw new Error(`Linux ${field} evidence is invalid`);
+              }
+            }
+          };
           const assets = [];
           const owners = new Map();
           for (const [platform, policy] of Object.entries(policies)) {
@@ -278,10 +501,88 @@ jobs:
                 );
               }
             }
+            const evidenceNames = names.filter((name) =>
+              /^release-evidence-(?:macos|windows|linux)\.json$/.test(name),
+            );
+            if (
+              evidenceNames.length !== 1 ||
+              evidenceNames[0] !== policy.evidence
+            ) {
+              throw new Error(
+                `${platform} must provide only ${policy.evidence} as release evidence`,
+              );
+            }
+            let evidence;
+            try {
+              evidence = JSON.parse(
+                readFileSync(join(directory, policy.evidence), 'utf8'),
+              );
+            } catch {
+              throw new Error(`${platform} release evidence is invalid JSON`);
+            }
+            const expectedTag = `v${process.env.AGISTACK_RELEASE_VERSION}`;
+            const expectedRunUrl =
+              `https://github.com/${process.env.GITHUB_REPOSITORY}` +
+              `/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            if (
+              !isRecord(evidence) ||
+              evidence.contract_version !== 'desktop-release-evidence-v1' ||
+              evidence.verification_status !== 'verified_by_tag_ci' ||
+              evidence.platform !== platform ||
+              evidence.version !== process.env.AGISTACK_RELEASE_VERSION ||
+              evidence.tag !== expectedTag ||
+              evidence.tag !== process.env.GITHUB_REF_NAME ||
+              evidence.commit_sha !== process.env.GITHUB_SHA ||
+              !isRecord(evidence.workflow_run) ||
+              evidence.workflow_run.id !== process.env.GITHUB_RUN_ID ||
+              evidence.workflow_run.attempt !== process.env.GITHUB_RUN_ATTEMPT ||
+              evidence.workflow_run.url !== expectedRunUrl
+            ) {
+              throw new Error(`${platform} release evidence CI identity does not match`);
+            }
+            if (!Array.isArray(evidence.assets)) {
+              throw new Error(`${platform} release evidence assets must be an array`);
+            }
+            const publishableNames = names.filter((name) => name !== policy.evidence);
+            const claimedAssets = new Map();
+            for (const asset of evidence.assets) {
+              if (
+                !isRecord(asset) ||
+                typeof asset.name !== 'string' ||
+                basename(asset.name) !== asset.name ||
+                !Number.isSafeInteger(asset.size) ||
+                asset.size <= 0 ||
+                !/^[A-Za-z0-9+/]{86}==$/.test(asset.sha512 ?? '') ||
+                claimedAssets.has(asset.name)
+              ) {
+                throw new Error(`${platform} release evidence asset is invalid`);
+              }
+              claimedAssets.set(asset.name, asset);
+            }
+            if (
+              claimedAssets.size !== publishableNames.length ||
+              publishableNames.some((name) => !claimedAssets.has(name))
+            ) {
+              throw new Error(`${platform} release evidence asset set does not match`);
+            }
+            for (const name of publishableNames) {
+              const path = join(directory, name);
+              const claimed = claimedAssets.get(name);
+              if (
+                statSync(path).size !== claimed.size ||
+                sha512(path) !== claimed.sha512
+              ) {
+                throw new Error(`${platform} release evidence digest mismatch: ${name}`);
+              }
+            }
+            validateNativeEvidence(platform, evidence.native_verification);
           }
           const expectedNames = [...owners.keys()].sort();
           writeFileSync('verified-assets.txt', `${expectedNames.join('\n')}\n`);
           writeFileSync('verified-asset-paths.txt', `${assets.sort().join('\n')}\n`);
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WIN_CSC_SHA1: ${{ secrets.WIN_CSC_SHA1 }}
 
       - name: Create or recover the verified draft release
         shell: bash

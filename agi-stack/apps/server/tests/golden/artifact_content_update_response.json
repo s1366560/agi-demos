@@ -1,5 +1,6 @@
 {
   "artifact_id": "artifact-1",
-  "size_bytes": 12,
-  "url": "https://storage.example/artifact-1.txt"
+  "revision": 2,
+  "content_hash": "sha256:87fa2bcb0c6106cb5512f75ccca21dd6ce1422ea3b00d4de8c7ebc96c48acbe3",
+  "duplicate": false
 }

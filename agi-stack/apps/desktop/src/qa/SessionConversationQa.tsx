@@ -5,6 +5,7 @@ import { Theme } from '@radix-ui/themes';
 
 import { AgentTimeline } from '../features/chat/ChatTimeline';
 import { MessageDeleteDialog } from '../features/chat/MessageDeleteDialog';
+import { ToastProvider } from '../features/feedback/ToastCenter';
 import {
   canConfirmMessageDeletion,
   filterHiddenMessages,
@@ -996,9 +997,11 @@ function mount() {
   globalThis.__sessionConversationQaRoot.render(
     <React.StrictMode>
       <I18nProvider>
-        <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium">
-          <SessionConversationQa />
-        </Theme>
+        <ToastProvider>
+          <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium">
+            <SessionConversationQa />
+          </Theme>
+        </ToastProvider>
       </I18nProvider>
     </React.StrictMode>,
   );

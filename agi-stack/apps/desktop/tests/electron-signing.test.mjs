@@ -52,6 +52,10 @@ const releaseVerification = readFileSync(
   new URL('../scripts/verify-release-artifacts.mjs', import.meta.url),
   'utf8',
 );
+const releaseArtifactContract = readFileSync(
+  new URL('../scripts/release-artifact-contract.mjs', import.meta.url),
+  'utf8',
+);
 const releaseWorkflow = readFileSync(
   new URL('../../../../.github/workflows/desktop-release.yml', import.meta.url),
   'utf8',
@@ -183,12 +187,28 @@ test('tag releases fail closed and publish only after native verification', () =
   );
   assert.equal(releaseWorkflow.match(/--publish never/gu)?.length, 3);
   assert.doesNotMatch(releaseWorkflow, /--publish always/u);
+  assert.match(releaseWorkflow, /parity-preflight:/u);
+  assert.match(releaseWorkflow, /make -C agi-stack desktop-parity-check/u);
+  assert.match(releaseWorkflow, /playwright install --with-deps chromium/u);
+  assert.match(releaseWorkflow, /needs:\s*parity-preflight/u);
+  assert.match(releaseWorkflow, /AGISTACK_RELEASE_VERSION:\s*'0\.1\.0'/u);
+  assert.match(releaseWorkflow, /packageJson\.version\s*!==\s*expectedVersion/u);
+  assert.match(releaseWorkflow, /builder-args:\s*--mac --universal/u);
+  assert.match(releaseWorkflow, /x86_64-apple-darwin/u);
+  assert.match(releaseWorkflow, /aarch64-apple-darwin/u);
+  assert.match(releaseWorkflow, /lipo -create/u);
+  assert.match(releaseWorkflow, /xcrun notarytool submit/u);
+  assert.match(releaseWorkflow, /xcrun stapler staple/u);
+  assert.match(releaseWorkflow, /release-evidence-\*\.json/u);
 
   const stageIndex = releaseWorkflow.indexOf('pnpm run stage:sidecar');
   const materializeIndex = releaseWorkflow.indexOf(
     'Materialize App Store Connect API key',
   );
   const macBuildIndex = releaseWorkflow.indexOf('Build macOS release artifacts');
+  const dmgNotarizeIndex = releaseWorkflow.indexOf(
+    'Notarize and staple macOS disk image',
+  );
   const verifyIndex = releaseWorkflow.indexOf('node scripts/verify-release-artifacts.mjs');
   const cleanupIndex = releaseWorkflow.indexOf('Remove App Store Connect API key');
   const workflowUploadIndex = releaseWorkflow.indexOf('actions/upload-artifact@');
@@ -203,7 +223,8 @@ test('tag releases fail closed and publish only after native verification', () =
   const promoteIndex = releaseWorkflow.indexOf('gh release edit');
   assert.ok(stageIndex >= 0 && stageIndex < materializeIndex);
   assert.ok(materializeIndex < macBuildIndex);
-  assert.ok(macBuildIndex < verifyIndex);
+  assert.ok(macBuildIndex < dmgNotarizeIndex);
+  assert.ok(dmgNotarizeIndex < verifyIndex);
   assert.ok(verifyIndex < cleanupIndex);
   assert.match(
     releaseWorkflow.slice(cleanupIndex, workflowUploadIndex),
@@ -261,20 +282,31 @@ test('tag releases fail closed and publish only after native verification', () =
       assert.match(match[1], /^[a-f0-9]{40}$/u);
     }
   }
-  assert.match(releaseVerification, /latest-mac\.yml/u);
-  assert.match(releaseVerification, /latest\.yml/u);
-  assert.match(releaseVerification, /latest-linux\.yml/u);
-  assert.match(releaseVerification, /parseDocument/u);
-  assert.match(releaseVerification, /createHash\('sha512'\)/u);
+  assert.match(releaseArtifactContract, /latest-mac\.yml/u);
+  assert.match(releaseArtifactContract, /latest\.yml/u);
+  assert.match(releaseArtifactContract, /latest-linux\.yml/u);
+  assert.match(releaseArtifactContract, /parseDocument/u);
+  assert.match(releaseArtifactContract, /createHash\('sha512'\)/u);
   assert.match(releaseVerification, /SHA256SUMS/u);
   assert.match(releaseVerification, /stapler',\s*'validate'/u);
+  assert.match(releaseVerification, /lipo/u);
+  assert.match(releaseVerification, /x86_64/u);
+  assert.match(releaseVerification, /arm64/u);
   assert.match(releaseVerification, /Get-AuthenticodeSignature/u);
   assert.match(releaseVerification, /SignerCertificate\.Thumbprint/u);
   assert.match(releaseVerification, /WIN_CSC_SHA1/u);
   assert.match(releaseVerification, /Developer ID Authority is missing/u);
   assert.match(releaseVerification, /TeamIdentifier is missing/u);
+  assert.match(releaseVerification, /--extract-certificates/u);
+  assert.match(releaseVerification, /signing_certificate_sha256/u);
   assert.match(releaseVerification, /AGISTACK_EXPECTED_MAC_TEAM_ID/u);
   assert.match(releaseVerification, /com\.apple\.security\.device\.audio-input/u);
+  assert.match(releaseVerification, /dpkg-deb/u);
+  assert.match(releaseVerification, /--appimage-extract/u);
+  assert.match(releaseVerification, /Desktop Entry/u);
+  assert.match(releaseArtifactContract, /desktop-release-evidence-v1/u);
+  assert.match(releaseArtifactContract, /verified_by_tag_ci/u);
+  assert.match(releaseArtifactContract, /flag:\s*'wx'/u);
   assert.match(
     releaseVerification,
     /appSignature\.developerIdAuthority\s*!==\s*sidecarSignature\.developerIdAuthority/u,

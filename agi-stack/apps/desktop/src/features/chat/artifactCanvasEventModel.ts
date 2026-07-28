@@ -4,6 +4,8 @@ export type LiveArtifactCanvasTab = {
   content: string;
   contentType: string;
   language: string | null;
+  mimeType?: string;
+  sizeBytes?: number;
 };
 
 export type LiveArtifactCanvasState = {
@@ -20,7 +22,13 @@ export type ArtifactCanvasStreamEventResult = {
 };
 
 type ArtifactCanvasEvent = {
-  type: 'artifact_open' | 'artifact_update' | 'artifact_close';
+  type:
+    | 'artifact_open'
+    | 'artifact_update'
+    | 'artifact_close'
+    | 'a2ui_canvas_open'
+    | 'a2ui_canvas_update'
+    | 'a2ui_canvas_close';
   data: Record<string, unknown>;
 };
 
@@ -41,15 +49,19 @@ export function applyArtifactCanvasStreamEvent(
   if (!parsed) return { handled: false, action: null, state };
   const artifactId = stringField(parsed.data, 'artifact_id', 'artifactId');
 
-  if (parsed.type === 'artifact_open') {
+  if (parsed.type === 'artifact_open' || parsed.type === 'a2ui_canvas_open') {
     const content = stringField(parsed.data, 'content');
     if (!artifactId || !content) return { handled: true, action: null, state };
+    const mimeType = stringField(parsed.data, 'mime_type', 'mimeType');
+    const sizeBytes = numberField(parsed.data, 'size_bytes', 'sizeBytes');
     const tab: LiveArtifactCanvasTab = {
       id: artifactId,
       title: stringField(parsed.data, 'title') ?? '',
       content,
       contentType: stringField(parsed.data, 'content_type', 'contentType') ?? 'code',
       language: stringField(parsed.data, 'language'),
+      ...(mimeType ? { mimeType } : {}),
+      ...(sizeBytes !== null ? { sizeBytes } : {}),
     };
     const existingIndex = state.tabs.findIndex((candidate) => candidate.id === artifactId);
     const openRevision = state.openRevision + 1;
@@ -72,12 +84,19 @@ export function applyArtifactCanvasStreamEvent(
     };
   }
 
-  if (parsed.type === 'artifact_update') {
+  if (parsed.type === 'artifact_update' || parsed.type === 'a2ui_canvas_update') {
     const content = stringField(parsed.data, 'content');
     if (!artifactId || content === null) return { handled: true, action: null, state };
     const target = state.tabs.find((candidate) => candidate.id === artifactId);
     if (!target) return { handled: true, action: 'update', state };
-    const nextContent = parsed.data.append === true ? `${target.content}${content}` : content;
+    const nextContent =
+      parsed.type === 'a2ui_canvas_update'
+        ? a2uiCanvasUpdateReplacesSnapshot(content)
+          ? content
+          : `${target.content}\n${content}`
+        : parsed.data.append === true
+          ? `${target.content}${content}`
+          : content;
     if (nextContent === target.content) return { handled: true, action: 'update', state };
     return {
       handled: true,
@@ -92,6 +111,13 @@ export function applyArtifactCanvasStreamEvent(
   }
 
   if (!artifactId) return { handled: true, action: null, state };
+  if (
+    parsed.type === 'a2ui_canvas_close' &&
+    state.tabs.find((candidate) => candidate.id === artifactId)?.contentType !==
+      'a2ui_surface'
+  ) {
+    return { handled: false, action: null, state };
+  }
   const tabs = state.tabs.filter((candidate) => candidate.id !== artifactId);
   if (tabs.length === state.tabs.length) return { handled: true, action: 'close', state };
   return {
@@ -142,6 +168,8 @@ export type ArtifactCanvasWorkspaceTab = LiveArtifactCanvasTab & {
   pinned: boolean;
   viewMode: ArtifactCanvasViewMode;
   authorityState: 'open' | 'closed';
+  undoStack: string[];
+  redoStack: string[];
 };
 
 export type ArtifactCanvasWorkspaceState = {
@@ -171,8 +199,8 @@ export const ARTIFACT_CANVAS_VIEW_MODES: readonly ArtifactCanvasViewMode[] = Obj
 ]);
 
 export const ARTIFACT_CANVAS_SAVE_CAPABILITY = Object.freeze({
-  available: false,
-  reason: 'authority_unavailable' as const,
+  available: true,
+  contractVersion: 2 as const,
 });
 
 const artifactCanvasViewModeSet = new Set<ArtifactCanvasViewMode>(
@@ -226,6 +254,8 @@ export function reconcileArtifactCanvasWorkspace(
         content: tab.content,
         contentType: tab.contentType,
         language: tab.language,
+        mimeType: tab.mimeType,
+        sizeBytes: tab.sizeBytes,
         sourceContent: tab.content,
         sourceSignature: signature,
         draftContent,
@@ -318,6 +348,104 @@ export function editArtifactCanvasWorkspaceContent(
             ...tab,
             draftContent: content,
             dirty: content !== tab.sourceContent,
+            undoStack: [...tab.undoStack, tab.draftContent].slice(-100),
+            redoStack: [],
+          }
+        : tab,
+    ),
+  };
+}
+
+export function undoArtifactCanvasWorkspaceContent(
+  workspace: ArtifactCanvasWorkspaceState,
+  artifactId: string,
+): ArtifactCanvasWorkspaceState {
+  const target = workspace.tabs.find((tab) => tab.id === artifactId);
+  const previous = target?.undoStack.at(-1);
+  if (!target || previous === undefined) return workspace;
+  return {
+    ...workspace,
+    tabs: workspace.tabs.map((tab) =>
+      tab.id === artifactId
+        ? {
+            ...tab,
+            draftContent: previous,
+            dirty: previous !== tab.sourceContent,
+            undoStack: tab.undoStack.slice(0, -1),
+            redoStack: [...tab.redoStack, tab.draftContent].slice(-100),
+          }
+        : tab,
+    ),
+  };
+}
+
+export function redoArtifactCanvasWorkspaceContent(
+  workspace: ArtifactCanvasWorkspaceState,
+  artifactId: string,
+): ArtifactCanvasWorkspaceState {
+  const target = workspace.tabs.find((tab) => tab.id === artifactId);
+  const next = target?.redoStack.at(-1);
+  if (!target || next === undefined) return workspace;
+  return {
+    ...workspace,
+    tabs: workspace.tabs.map((tab) =>
+      tab.id === artifactId
+        ? {
+            ...tab,
+            draftContent: next,
+            dirty: next !== tab.sourceContent,
+            undoStack: [...tab.undoStack, tab.draftContent].slice(-100),
+            redoStack: tab.redoStack.slice(0, -1),
+          }
+        : tab,
+    ),
+  };
+}
+
+export function markArtifactCanvasWorkspaceSaved(
+  workspace: ArtifactCanvasWorkspaceState,
+  artifactId: string,
+): ArtifactCanvasWorkspaceState {
+  const target = workspace.tabs.find((tab) => tab.id === artifactId);
+  if (!target || !target.dirty) return workspace;
+  return {
+    ...workspace,
+    tabs: workspace.tabs.map((tab) =>
+      tab.id === artifactId
+        ? {
+            ...tab,
+            content: tab.draftContent,
+            sourceContent: tab.draftContent,
+            dirty: false,
+            redoStack: [],
+          }
+        : tab,
+    ),
+  };
+}
+
+export function applyArtifactCanvasWorkspaceAuthorityContent(
+  workspace: ArtifactCanvasWorkspaceState,
+  artifactId: string,
+  content: string,
+  mimeType: string,
+  preserveDirtyDraft = true,
+): ArtifactCanvasWorkspaceState {
+  const target = workspace.tabs.find((tab) => tab.id === artifactId);
+  if (!target) return workspace;
+  const preserveDraft = preserveDirtyDraft && target.dirty;
+  return {
+    ...workspace,
+    tabs: workspace.tabs.map((tab) =>
+      tab.id === artifactId
+        ? {
+            ...tab,
+            content,
+            sourceContent: content,
+            draftContent: preserveDraft ? tab.draftContent : content,
+            dirty: preserveDraft ? tab.draftContent !== content : false,
+            mimeType,
+            redoStack: [],
           }
         : tab,
     ),
@@ -398,6 +526,8 @@ function createArtifactCanvasWorkspaceTab(
     pinned: false,
     viewMode: defaultArtifactCanvasViewMode(tab.contentType),
     authorityState: 'open',
+    undoStack: [],
+    redoStack: [],
   };
 }
 
@@ -441,8 +571,11 @@ function activeArtifactIdForTabs(
 function defaultArtifactCanvasViewMode(contentType: string): ArtifactCanvasViewMode {
   return contentType === 'markdown' ||
     contentType === 'data' ||
-    contentType === 'preview'
-    ? contentType
+    contentType === 'preview' ||
+    contentType === 'a2ui_surface'
+    ? contentType === 'a2ui_surface'
+      ? 'preview'
+      : contentType
     : 'code';
 }
 
@@ -464,6 +597,8 @@ function artifactCanvasSourceSignature(
     tab.content,
     tab.contentType,
     tab.language,
+    tab.mimeType ?? null,
+    tab.sizeBytes ?? null,
   ]);
 }
 
@@ -489,12 +624,55 @@ function readArtifactCanvasEvent(event: unknown): ArtifactCanvasEvent | null {
         data: recordValue(current.data) ?? recordValue(current.payload) ?? current,
       };
     }
+    if (type === 'canvas_updated') {
+      const data = recordValue(current.data) ?? recordValue(current.payload) ?? current;
+      const action = stringField(data, 'action');
+      const artifactId = stringField(data, 'block_id', 'blockId');
+      const block = recordValue(data.block);
+      const blockType = block ? stringField(block, 'block_type', 'blockType') : null;
+      if (!artifactId || !action) return { type: 'a2ui_canvas_update', data: {} };
+      if (action === 'deleted') {
+        return {
+          type: 'a2ui_canvas_close',
+          data: { artifact_id: artifactId },
+        };
+      }
+      if (blockType !== 'a2ui_surface') return null;
+      const content = block ? stringField(block, 'content') : null;
+      const title = block ? stringField(block, 'title') : null;
+      const normalizedData: Record<string, unknown> = {
+        artifact_id: artifactId,
+        content_type: 'a2ui_surface',
+        ...(title ? { title } : {}),
+        ...(content ? { content } : {}),
+      };
+      if (action === 'created') {
+        return { type: 'a2ui_canvas_open', data: normalizedData };
+      }
+      if (action === 'updated') {
+        return { type: 'a2ui_canvas_update', data: normalizedData };
+      }
+      return { type: 'a2ui_canvas_update', data: {} };
+    }
     for (const key of ['data', 'payload']) {
       const nested = recordValue(current[key]);
       if (nested) queue.push(nested);
     }
   }
   return null;
+}
+
+function a2uiCanvasUpdateReplacesSnapshot(content: string): boolean {
+  for (const line of content.split(/\r?\n/u)) {
+    if (!line.trim()) continue;
+    try {
+      const record = recordValue(JSON.parse(line));
+      if (recordValue(record?.beginRendering) || recordValue(record?.deleteSurface)) return true;
+    } catch {
+      return true;
+    }
+  }
+  return false;
 }
 
 function recordValue(value: unknown): Record<string, unknown> | null {
@@ -507,6 +685,16 @@ function stringField(record: Record<string, unknown>, ...keys: string[]): string
   for (const key of keys) {
     const value = record[key];
     if (typeof value === 'string') return value;
+  }
+  return null;
+}
+
+function numberField(record: Record<string, unknown>, ...keys: string[]): number | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) {
+      return value;
+    }
   }
   return null;
 }

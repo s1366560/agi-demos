@@ -46,7 +46,7 @@ endif
 NDK_TC := $(NDK)/toolchains/llvm/prebuilt/$(NDK_HOST_TAG)/bin
 
 .DEFAULT_GOAL := help
-.PHONY: help test ci strangler-gate all ensure-wasm-target wasm-core server wasm-web desktop desktop-check desktop-deps desktop-frontend desktop-electron-frontend desktop-icons run-desktop run-desktop-electron desktop-bundle desktop-bundle-smoke android ios bench scorecard clean fmt-check
+.PHONY: help test ci strangler-gate all ensure-wasm-target wasm-core server wasm-web desktop desktop-check desktop-browser-qa desktop-parity-check desktop-deps desktop-frontend desktop-electron-frontend desktop-icons run-desktop run-desktop-electron desktop-bundle desktop-bundle-smoke android ios bench scorecard clean fmt-check
 
 help: ## 列出全部 target
 	@echo "agi-stack 构建矩阵 — target:"
@@ -98,6 +98,12 @@ desktop-check: desktop-deps ## 桌面:Rust sidecar 与 Electron/renderer 测试
 	cd $(DESKTOP_APP_DIR) && AGISTACK_REAL_SIDECAR=$(abspath target/debug/agistack-desktop-sidecar) $(PNPM) test
 	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:electron
 	@echo "==> Electron 外壳与 sidecar 验证通过"
+
+desktop-browser-qa: desktop-deps ## 桌面:执行双语、多视口、明暗主题 Browser QA 矩阵
+	cd $(DESKTOP_APP_DIR) && $(PNPM) run qa:browser
+
+desktop-parity-check: desktop-check desktop-browser-qa ## 桌面:聚合本地、Electron 与 Browser parity 门禁
+	@echo "==> Desktop parity 契约与 Browser QA 验证通过"
 
 desktop-deps: ## 桌面:安装/校验前端依赖
 	cd $(DESKTOP_APP_DIR) && CI=true $(PNPM) install $(PNPM_INSTALL_ARGS)

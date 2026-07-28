@@ -18,7 +18,7 @@ import type {
   AutomationJob,
   AutomationRun,
 } from '../../types';
-import type { DesktopCapabilityAvailability } from '../runtime/capabilitySnapshot';
+import type { DesktopCapabilityView } from '../runtime/capabilitySnapshot';
 import { AutomationEditorDialog } from './AutomationEditorDialog';
 import {
   automationRunAttemptKey,
@@ -45,7 +45,7 @@ type AutomationsPageProps = {
   api: DesktopAutomationApi;
   projectId: string;
   projectName?: string | null;
-  runCapability: DesktopCapabilityAvailability;
+  runCapability: DesktopCapabilityView;
   onOpenProjectSettings: () => void;
   onOpenConnection: () => void;
 };
@@ -485,7 +485,7 @@ function AutomationDetail({
   loadError: string | null;
   mutationError: string | null;
   capabilities: AutomationCapabilities | null;
-  runtimeRunCapability: DesktopCapabilityAvailability;
+  runtimeRunCapability: DesktopCapabilityView;
   busy: boolean;
   onEdit: () => void;
   onToggle: () => void;

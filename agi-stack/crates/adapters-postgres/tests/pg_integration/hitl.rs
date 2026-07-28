@@ -189,6 +189,55 @@ async fn hitl_request_repository_matches_python_response_lifecycle() {
 }
 
 #[tokio::test]
+async fn hitl_request_repository_allows_exactly_one_competing_response_claim() {
+    let Some(pool) =
+        pool_or_skip("hitl_request_repository_allows_exactly_one_competing_response_claim").await
+    else {
+        return;
+    };
+    ensure_python_shaped_tables(&pool).await;
+    ensure_hitl_tables(&pool).await;
+
+    sqlx::query("DELETE FROM hitl_requests WHERE id = 'hitl_repo_race'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO hitl_requests \
+         (id, request_type, conversation_id, tenant_id, project_id, question, status, expires_at) \
+         VALUES ('hitl_repo_race', 'clarification', 'hitl_repo_conversation', \
+                 'hitl_repo_tenant', 'hitl_repo_project', 'Continue?', 'pending', $1)",
+    )
+    .bind(ts(2099, 1, 1, 0, 0, 0))
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let first_repo = PgHitlRequestRepository::new(pool.clone());
+    let second_repo = PgHitlRequestRepository::new(pool.clone());
+    let now = Utc::now();
+    let (first, second) = tokio::join!(
+        first_repo.update_response("hitl_repo_race", "first", None, now),
+        second_repo.update_response("hitl_repo_race", "second", None, now),
+    );
+
+    assert_eq!(
+        [first.unwrap(), second.unwrap()]
+            .into_iter()
+            .filter(|claimed| *claimed)
+            .count(),
+        1
+    );
+    let authority = first_repo
+        .get_authority_state("hitl_repo_race")
+        .await
+        .unwrap()
+        .expect("HITL authority state");
+    assert_eq!(authority.status, "answered");
+    assert!(authority.answered_at.is_some());
+}
+
+#[tokio::test]
 async fn answered_automation_hitl_is_selected_only_for_exact_waiting_run_scope() {
     let Some(pool) =
         pool_or_skip("answered_automation_hitl_is_selected_only_for_exact_waiting_run_scope").await

@@ -1,0 +1,453 @@
+.workspace-collaboration-canvas {
+  display: grid;
+  min-width: 0;
+  height: 100%;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+  background: var(--desktop-surface-3);
+  color: var(--desktop-text);
+}
+
+.workspace-collaboration-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 26px 30px 20px;
+  border-bottom: 1px solid var(--desktop-border-soft);
+}
+
+.workspace-collaboration-header > div {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.workspace-collaboration-header span {
+  color: var(--desktop-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.workspace-collaboration-header h1 {
+  margin: 0;
+  font-size: 23px;
+  letter-spacing: -0.035em;
+}
+
+.workspace-collaboration-header p {
+  max-width: 720px;
+  margin: 0;
+  overflow: hidden;
+  color: var(--desktop-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-collaboration-canvas button,
+.workspace-collaboration-canvas input,
+.workspace-collaboration-canvas textarea,
+.workspace-collaboration-canvas select {
+  font: inherit;
+}
+
+.workspace-collaboration-canvas button {
+  min-height: 30px;
+  padding: 6px 10px;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 6px;
+  background: rgba(var(--desktop-overlay-3-rgb), 0.92);
+  color: var(--desktop-text);
+  cursor: pointer;
+}
+
+.workspace-collaboration-canvas button:hover:not(:disabled) {
+  border-color: rgba(var(--desktop-cyan-rgb), 0.42);
+  background: rgba(var(--desktop-cyan-rgb), 0.08);
+}
+
+.workspace-collaboration-canvas button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.workspace-collaboration-canvas button:focus-visible,
+.workspace-collaboration-canvas input:focus-visible,
+.workspace-collaboration-canvas textarea:focus-visible,
+.workspace-collaboration-canvas select:focus-visible,
+.workspace-collaboration-panel:focus-visible {
+  outline: 2px solid var(--desktop-cyan);
+  outline-offset: 2px;
+}
+
+.workspace-collaboration-tabs {
+  display: flex;
+  min-width: 0;
+  gap: 3px;
+  padding: 8px 14px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--desktop-border-soft);
+  scrollbar-width: thin;
+}
+
+.workspace-collaboration-tabs button {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 5px 10px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--desktop-muted);
+  font-size: 11px;
+}
+
+.workspace-collaboration-tabs button[aria-selected='true'] {
+  border-color: rgba(var(--desktop-cyan-rgb), 0.34);
+  background: rgba(var(--desktop-cyan-rgb), 0.1);
+  color: var(--desktop-text);
+}
+
+.workspace-collaboration-panel {
+  min-width: 0;
+  min-height: 0;
+  padding: 20px clamp(18px, 3vw, 34px) 32px;
+  overflow: auto;
+}
+
+.workspace-collaboration-state,
+.workspace-collaboration-mutation-error {
+  display: grid;
+  max-width: 760px;
+  gap: 6px;
+  padding: 18px;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 8px;
+  background: rgba(var(--desktop-overlay-3-rgb), 0.9);
+}
+
+.workspace-collaboration-state.is-compact {
+  max-width: none;
+  margin-bottom: 14px;
+  padding: 10px 13px;
+}
+
+.workspace-collaboration-state.is-error,
+.workspace-collaboration-mutation-error {
+  border-color: rgba(var(--desktop-amber-rgb), 0.36);
+}
+
+.workspace-collaboration-state.is-unavailable {
+  border-style: dashed;
+}
+
+.workspace-collaboration-state strong {
+  font-size: 13px;
+}
+
+.workspace-collaboration-state p {
+  margin: 0;
+  color: var(--desktop-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.workspace-collaboration-mutation-error {
+  margin-bottom: 14px;
+  color: var(--desktop-amber);
+  font-size: 11px;
+}
+
+.workspace-collaboration-surface {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+}
+
+.workspace-collaboration-surface-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.workspace-collaboration-surface-heading h2 {
+  margin: 0;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+
+.workspace-collaboration-derived {
+  padding: 4px 7px;
+  border: 1px solid rgba(var(--desktop-cyan-rgb), 0.28);
+  border-radius: 999px;
+  color: var(--desktop-cyan);
+  font-size: 10px;
+}
+
+.workspace-collaboration-split {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workspace-collaboration-collection {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 8px;
+  background: rgba(var(--desktop-overlay-3-rgb), 0.9);
+}
+
+.workspace-collaboration-collection > h3,
+.workspace-collaboration-lanes h3 {
+  margin: 0 0 12px;
+  color: var(--desktop-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.workspace-collaboration-collection > div {
+  display: grid;
+  gap: 8px;
+}
+
+.workspace-collaboration-collection article {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 6px;
+  background: rgba(var(--desktop-overlay-2-rgb), 0.52);
+}
+
+.workspace-collaboration-collection article > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.workspace-collaboration-collection strong {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.workspace-collaboration-collection p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--desktop-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.workspace-collaboration-collection aside {
+  flex: 0 0 auto;
+}
+
+.workspace-collaboration-collection.is-compact {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.workspace-collaboration-collection.is-compact article {
+  padding: 8px;
+}
+
+.workspace-collaboration-empty {
+  min-height: 72px;
+  padding: 20px;
+  color: var(--desktop-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.workspace-collaboration-layout-toggle {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.workspace-collaboration-layout-toggle button[aria-pressed='true'] {
+  border-color: rgba(var(--desktop-cyan-rgb), 0.38);
+  background: rgba(var(--desktop-cyan-rgb), 0.1);
+  color: var(--desktop-cyan);
+}
+
+.workspace-collaboration-lanes {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.workspace-collaboration-lanes > section {
+  min-width: 150px;
+  padding: 11px;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 8px;
+  background: rgba(var(--desktop-overlay-3-rgb), 0.72);
+}
+
+.workspace-collaboration-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workspace-collaboration-inline-form,
+.workspace-collaboration-composer,
+.workspace-collaboration-reply,
+.workspace-collaboration-settings {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  padding: 13px;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 8px;
+  background: rgba(var(--desktop-overlay-3-rgb), 0.9);
+}
+
+.workspace-collaboration-inline-form {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.workspace-collaboration-action-grid .workspace-collaboration-inline-form:has(input + input) {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+}
+
+.workspace-collaboration-inline-form input,
+.workspace-collaboration-inline-form select,
+.workspace-collaboration-composer input,
+.workspace-collaboration-composer textarea,
+.workspace-collaboration-reply textarea,
+.workspace-collaboration-settings input,
+.workspace-collaboration-settings textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 6px;
+  background: var(--desktop-surface-3);
+  color: var(--desktop-text);
+  font-size: 11px;
+}
+
+.workspace-collaboration-composer textarea,
+.workspace-collaboration-reply textarea,
+.workspace-collaboration-settings textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.workspace-collaboration-composer button,
+.workspace-collaboration-reply button,
+.workspace-collaboration-settings button {
+  justify-self: end;
+}
+
+.workspace-collaboration-feed {
+  display: grid;
+  gap: 10px;
+}
+
+.workspace-collaboration-feed > article {
+  display: grid;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 8px;
+  background: rgba(var(--desktop-overlay-3-rgb), 0.9);
+}
+
+.workspace-collaboration-feed > article > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workspace-collaboration-feed header > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.workspace-collaboration-feed strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.workspace-collaboration-feed small {
+  color: var(--desktop-muted);
+  font-size: 10px;
+}
+
+.workspace-collaboration-feed > article > p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--desktop-text);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.workspace-collaboration-settings {
+  max-width: 720px;
+}
+
+.workspace-collaboration-settings label {
+  display: grid;
+  gap: 5px;
+  color: var(--desktop-muted);
+  font-size: 10px;
+}
+
+@media (max-width: 900px) {
+  .workspace-collaboration-header {
+    align-items: flex-start;
+    padding: 22px 20px 17px;
+  }
+
+  .workspace-collaboration-header p {
+    white-space: normal;
+  }
+
+  .workspace-collaboration-split,
+  .workspace-collaboration-action-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 620px) {
+  .workspace-collaboration-header {
+    display: grid;
+  }
+
+  .workspace-collaboration-header button {
+    justify-self: start;
+  }
+
+  .workspace-collaboration-panel {
+    padding: 16px 12px 24px;
+  }
+
+  .workspace-collaboration-surface-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .workspace-collaboration-inline-form,
+  .workspace-collaboration-action-grid .workspace-collaboration-inline-form:has(input + input) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

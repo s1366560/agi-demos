@@ -20,7 +20,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, cast
-from urllib.parse import parse_qsl, urlencode, urlparse
+from urllib.parse import parse_qsl, quote, urlencode, urlparse
 from uuid import uuid4
 
 import redis.asyncio as redis
@@ -87,6 +87,58 @@ _DESKTOP_SERVICE_NOT_RUNNING_DETAIL = _("Desktop service is not running")
 _TERMINAL_SERVICE_NOT_RUNNING_DETAIL = _("Terminal service is not running")
 _MCP_SERVICE_NOT_RUNNING_DETAIL = _("MCP service is not running")
 _SANDBOX_INTERACTIVE_ACCESS_ROLES = ["owner", "admin", "member"]
+_SANDBOX_FILE_READ_MAX_BYTES = 1_048_576
+_SANDBOX_FILE_DOWNLOAD_MAX_BYTES = 25 * 1_048_576
+_SANDBOX_FILE_LIST_MAX_ITEMS = 500
+_SANDBOX_FILE_CONTRACT_KEYS = {
+    "listing": {
+        "authority",
+        "contract_version",
+        "cursor",
+        "entries",
+        "isolation",
+        "path",
+        "revision",
+        "root",
+    },
+    "file": {
+        "authority",
+        "content",
+        "contract_version",
+        "encoding",
+        "isolation",
+        "mime_type",
+        "path",
+        "revision",
+        "size_bytes",
+        "truncated",
+    },
+    "download": {
+        "authority",
+        "base64",
+        "contract_version",
+        "filename",
+        "isolation",
+        "mime_type",
+        "path",
+        "sha256",
+        "size_bytes",
+    },
+}
+_SANDBOX_FILE_ERROR_STATUS = {
+    "sandbox_file_path_invalid": status.HTTP_400_BAD_REQUEST,
+    "sandbox_file_limit_invalid": status.HTTP_400_BAD_REQUEST,
+    "sandbox_file_cursor_invalid": status.HTTP_400_BAD_REQUEST,
+    "sandbox_file_symlink_rejected": status.HTTP_400_BAD_REQUEST,
+    "sandbox_file_not_directory": status.HTTP_400_BAD_REQUEST,
+    "sandbox_file_not_file": status.HTTP_400_BAD_REQUEST,
+    "sandbox_file_not_found": status.HTTP_404_NOT_FOUND,
+    "sandbox_file_cursor_stale": status.HTTP_409_CONFLICT,
+    "sandbox_file_too_large": status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+    "sandbox_file_mime_not_text": status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+    "sandbox_file_encoding_invalid": status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+    "sandbox_file_io_error": status.HTTP_502_BAD_GATEWAY,
+}
 
 
 # ============================================================================
@@ -143,14 +195,16 @@ def _set_sandbox_proxy_auth_cookie(
     request: Request,
     project_id: str,
     api_key: str,
+    *,
+    cross_site_embed: bool = False,
 ) -> None:
     """Seed a scoped auth cookie for browser iframe and WebSocket proxy requests."""
     response.set_cookie(
         key=_SANDBOX_PROXY_TOKEN_COOKIE_NAME,
         value=api_key,
         httponly=True,
-        samesite="strict",
-        secure=request.url.scheme == "https",
+        samesite="none" if cross_site_embed else "strict",
+        secure=True if cross_site_embed else request.url.scheme == "https",
         max_age=_SANDBOX_PROXY_AUTH_COOKIE_MAX_AGE_SECONDS,
         path=f"/api/v1/projects/{project_id}/sandbox",
     )
@@ -1327,9 +1381,401 @@ print(json.dumps(output))
     return _decode_sandbox_exec_http_response(output)
 
 
+def _sandbox_file_http_error(reason_code: str) -> HTTPException:
+    return HTTPException(
+        status_code=_SANDBOX_FILE_ERROR_STATUS.get(
+            reason_code,
+            status.HTTP_502_BAD_GATEWAY,
+        ),
+        detail={"reason_code": reason_code},
+    )
+
+
+def _is_sandbox_contract_path(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and value.startswith("/")
+        and "\x00" not in value
+        and "\\" not in value
+        and all(segment not in {".", ".."} for segment in value.split("/"))
+    )
+
+
+def _is_sandbox_mime_type(value: object) -> bool:
+    return isinstance(value, str) and bool(
+        re.fullmatch(r"[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*", value)
+    )
+
+
+def _sandbox_file_contract(
+    result: object,
+    key: str,
+    expected_path: str,
+) -> dict[str, Any]:
+    if not isinstance(result, dict):
+        raise _sandbox_file_http_error("sandbox_file_contract_invalid")
+    if result.get("is_error") is True:
+        reason_code = result.get("reason_code")
+        raise _sandbox_file_http_error(
+            reason_code if isinstance(reason_code, str) else "sandbox_file_tool_failed"
+        )
+    payload = result.get(key)
+    if (
+        result.get("is_error") is not False
+        or not isinstance(payload, dict)
+        or set(payload) != _SANDBOX_FILE_CONTRACT_KEYS[key]
+        or payload.get("contract_version") != 1
+        or payload.get("authority") != "sandbox"
+        or payload.get("isolation") != "isolated"
+        or payload.get("path") != expected_path
+    ):
+        raise _sandbox_file_http_error("sandbox_file_contract_invalid")
+    return payload
+
+
+def _validate_sandbox_file_listing(
+    payload: dict[str, Any],
+    limit: int,
+) -> dict[str, Any]:
+    entries = payload.get("entries")
+    cursor = payload.get("cursor")
+    revision = payload.get("revision")
+    if (
+        payload.get("root") != "/"
+        or not isinstance(entries, list)
+        or len(entries) > limit
+        or not (cursor is None or isinstance(cursor, str))
+        or not isinstance(revision, str)
+        or re.fullmatch(r"[0-9a-f]{64}", revision) is None
+    ):
+        raise _sandbox_file_http_error("sandbox_file_contract_invalid")
+    for entry in entries:
+        if (
+            not isinstance(entry, dict)
+            or set(entry) != {"kind", "mime_type", "name", "path", "size_bytes"}
+            or not _is_sandbox_contract_path(entry.get("path"))
+            or not isinstance(entry.get("name"), str)
+            or not entry["name"]
+            or "/" in entry["name"]
+            or "\\" in entry["name"]
+            or entry.get("kind") not in {"directory", "file"}
+        ):
+            raise _sandbox_file_http_error("sandbox_file_contract_invalid")
+        if entry["kind"] == "directory":
+            if entry.get("size_bytes") is not None or entry.get("mime_type") is not None:
+                raise _sandbox_file_http_error("sandbox_file_contract_invalid")
+        elif (
+            isinstance(entry.get("size_bytes"), bool)
+            or not isinstance(entry.get("size_bytes"), int)
+            or entry["size_bytes"] < 0
+            or not _is_sandbox_mime_type(entry.get("mime_type"))
+        ):
+            raise _sandbox_file_http_error("sandbox_file_contract_invalid")
+    return payload
+
+
+def _validate_sandbox_file_content(
+    payload: dict[str, Any],
+    max_bytes: int,
+) -> dict[str, Any]:
+    content = payload.get("content")
+    size_bytes = payload.get("size_bytes")
+    revision = payload.get("revision")
+    if (
+        payload.get("encoding") != "utf-8"
+        or not isinstance(content, str)
+        or isinstance(size_bytes, bool)
+        or not isinstance(size_bytes, int)
+        or size_bytes < 0
+        or size_bytes > max_bytes
+        or len(content.encode("utf-8")) > max_bytes
+        or not _is_sandbox_mime_type(payload.get("mime_type"))
+        or not isinstance(revision, str)
+        or re.fullmatch(r"[0-9a-f]{64}", revision) is None
+        or not isinstance(payload.get("truncated"), bool)
+    ):
+        raise _sandbox_file_http_error("sandbox_file_contract_invalid")
+    return payload
+
+
+def _validated_sandbox_download(
+    payload: dict[str, Any],
+    max_bytes: int,
+) -> tuple[bytes, str, str]:
+    filename = payload.get("filename")
+    size_bytes = payload.get("size_bytes")
+    checksum = payload.get("sha256")
+    if (
+        not isinstance(filename, str)
+        or not filename
+        or "/" in filename
+        or "\\" in filename
+        or isinstance(size_bytes, bool)
+        or not isinstance(size_bytes, int)
+        or size_bytes < 0
+        or size_bytes > max_bytes
+        or not isinstance(checksum, str)
+        or re.fullmatch(r"[0-9a-f]{64}", checksum) is None
+        or not isinstance(payload.get("base64"), str)
+        or not _is_sandbox_mime_type(payload.get("mime_type"))
+    ):
+        raise _sandbox_file_http_error("sandbox_file_contract_invalid")
+    try:
+        raw = base64.b64decode(payload["base64"], validate=True)
+    except (ValueError, TypeError) as exc:
+        raise _sandbox_file_http_error("sandbox_file_contract_invalid") from exc
+    if (
+        len(raw) != size_bytes
+        or len(raw) > max_bytes
+        or not hmac.compare_digest(hashlib.sha256(raw).hexdigest(), checksum)
+    ):
+        raise _sandbox_file_http_error("sandbox_file_contract_invalid")
+    return raw, filename, cast(str, payload["mime_type"])
+
+
+async def _execute_sandbox_file_tool(
+    service: ProjectSandboxLifecycleService,
+    *,
+    project_id: str,
+    tool_name: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        return await service.execute_tool(
+            project_id=project_id,
+            tool_name=tool_name,
+            arguments=arguments,
+            timeout=15.0,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning(
+            "Sandbox file tool failed: has_project_id=%s tool_name=%s error_type=%s",
+            bool(project_id),
+            tool_name,
+            type(exc).__name__,
+        )
+        raise _sandbox_file_http_error("sandbox_file_runtime_unavailable") from exc
+
+
+def _validate_desktop_resolution(value: str) -> str:
+    match = re.fullmatch(r"([1-9][0-9]{2,4})x([1-9][0-9]{2,4})", value)
+    if not match:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"reason_code": "sandbox_desktop_resolution_invalid"},
+        )
+    width, height = (int(part) for part in match.groups())
+    if not (640 <= width <= 7680 and 480 <= height <= 4320):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"reason_code": "sandbox_desktop_resolution_invalid"},
+        )
+    return value
+
+
 # ============================================================================
 # API Endpoints
 # ============================================================================
+
+
+@router.get("/{project_id}/sandbox/capabilities")
+async def get_project_sandbox_runtime_capabilities(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Return explicit Desktop runtime capabilities without probing operations."""
+    await verify_project_access(
+        project_id,
+        current_user,
+        db,
+        _SANDBOX_INTERACTIVE_ACCESS_ROLES,
+    )
+    available = {
+        "availability": "available",
+        "contract_version": 1,
+        "reason_code": None,
+    }
+    return {
+        "service_version": "0.1.0",
+        "contract_version": 2,
+        "terminal_interactive": dict(available),
+        "terminal_resume": {
+            "availability": "unavailable",
+            "contract_version": 2,
+            "reason_code": "terminal_session_v2_registry_unavailable",
+        },
+        "files": dict(available),
+        "kasm_vnc": dict(available),
+    }
+
+
+@router.get("/{project_id}/sandbox/files")
+async def list_project_sandbox_files(
+    project_id: str,
+    path: str = Query("/", min_length=1, max_length=4096),
+    limit: int = Query(200, ge=1, le=_SANDBOX_FILE_LIST_MAX_ITEMS),
+    cursor: str | None = Query(None, max_length=256),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
+) -> dict[str, Any]:
+    """List project sandbox files through the structured MCP authority."""
+    await verify_project_access(
+        project_id,
+        current_user,
+        db,
+        _SANDBOX_INTERACTIVE_ACCESS_ROLES,
+    )
+    if not _is_sandbox_contract_path(path):
+        raise _sandbox_file_http_error("sandbox_file_path_invalid")
+    result = await _execute_sandbox_file_tool(
+        service,
+        project_id=project_id,
+        tool_name="platform_list_workspace_files",
+        arguments={"path": path, "limit": limit, "cursor": cursor},
+    )
+    payload = _sandbox_file_contract(result, "listing", path)
+    return _validate_sandbox_file_listing(payload, limit)
+
+
+@router.get("/{project_id}/sandbox/files/content")
+async def read_project_sandbox_file(
+    project_id: str,
+    path: str = Query(..., min_length=1, max_length=4096),
+    max_bytes: int = Query(_SANDBOX_FILE_READ_MAX_BYTES, ge=1, le=_SANDBOX_FILE_READ_MAX_BYTES),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
+) -> dict[str, Any]:
+    """Read a bounded UTF-8 file through the structured MCP authority."""
+    await verify_project_access(
+        project_id,
+        current_user,
+        db,
+        _SANDBOX_INTERACTIVE_ACCESS_ROLES,
+    )
+    if not _is_sandbox_contract_path(path):
+        raise _sandbox_file_http_error("sandbox_file_path_invalid")
+    result = await _execute_sandbox_file_tool(
+        service,
+        project_id=project_id,
+        tool_name="platform_read_workspace_file",
+        arguments={"path": path, "max_bytes": max_bytes},
+    )
+    payload = _sandbox_file_contract(result, "file", path)
+    return _validate_sandbox_file_content(payload, max_bytes)
+
+
+@router.get("/{project_id}/sandbox/files/download")
+async def download_project_sandbox_file(
+    project_id: str,
+    path: str = Query(..., min_length=1, max_length=4096),
+    max_bytes: int = Query(
+        _SANDBOX_FILE_DOWNLOAD_MAX_BYTES,
+        ge=1,
+        le=_SANDBOX_FILE_DOWNLOAD_MAX_BYTES,
+    ),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
+) -> Response:
+    """Download bounded project sandbox bytes without exposing a container URL."""
+    await verify_project_access(
+        project_id,
+        current_user,
+        db,
+        _SANDBOX_INTERACTIVE_ACCESS_ROLES,
+    )
+    if not _is_sandbox_contract_path(path):
+        raise _sandbox_file_http_error("sandbox_file_path_invalid")
+    result = await _execute_sandbox_file_tool(
+        service,
+        project_id=project_id,
+        tool_name="platform_download_workspace_file",
+        arguments={"path": path, "max_bytes": max_bytes},
+    )
+    payload = _sandbox_file_contract(result, "download", path)
+    raw, filename, mime_type = _validated_sandbox_download(payload, max_bytes)
+    ascii_filename = filename if filename.isascii() else "download"
+    content_disposition = (
+        f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{quote(filename)}"
+    )
+    return Response(
+        content=raw,
+        media_type=mime_type,
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": content_disposition,
+            "X-MemStack-File-Contract-Version": "1",
+            "X-MemStack-File-Authority": "sandbox",
+            "X-MemStack-File-Isolation": "isolated",
+        },
+    )
+
+
+@router.post("/{project_id}/sandbox/desktop/session")
+async def create_project_sandbox_desktop_session(
+    project_id: str,
+    request: Request,
+    response: Response,
+    resolution: str = Query("1920x1080"),
+    api_key: str = Depends(get_api_key_from_header),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
+    orchestrator: SandboxOrchestrator = Depends(get_orchestrator),
+) -> dict[str, Any]:
+    """Start KasmVNC and return a credential-free, fixed proxy descriptor."""
+    project_tenant_id = await verify_project_access(
+        project_id,
+        current_user,
+        db,
+        _SANDBOX_INTERACTIVE_ACCESS_ROLES,
+    )
+    resolution = _validate_desktop_resolution(resolution)
+    info = await service.ensure_sandbox_running(
+        project_id=project_id,
+        tenant_id=project_tenant_id,
+    )
+    try:
+        from src.application.services.sandbox_orchestrator import DesktopConfig
+
+        desktop_status = await orchestrator.start_desktop(
+            info.sandbox_id,
+            DesktopConfig(resolution=resolution),
+        )
+    except Exception as exc:
+        logger.warning(
+            "Failed to create project desktop session: has_project_id=%s error_type=%s",
+            bool(project_id),
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"reason_code": "kasm_vnc_runtime_unavailable"},
+        ) from exc
+    if not desktop_status.running:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"reason_code": "kasm_vnc_runtime_unavailable"},
+        )
+    _set_sandbox_proxy_auth_cookie(
+        response,
+        request,
+        project_id,
+        api_key,
+        cross_site_embed=True,
+    )
+    return {
+        "contract_version": 1,
+        "project_id": project_id,
+        "protocol": "kasmvnc-1",
+        "proxy_url": f"/api/v1/projects/{project_id}/sandbox/desktop/proxy/vnc.html",
+        "auth_mode": "scoped_http_only_cookie",
+    }
 
 
 @router.get("/{project_id}/sandbox", response_model=ProjectSandboxResponse)

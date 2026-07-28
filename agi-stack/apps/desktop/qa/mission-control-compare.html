@@ -6,8 +6,8 @@
     <title>Mission Control visual comparison</title>
     <style>
       * { box-sizing: border-box; }
-      html, body { margin: 0; background: #03070b; color: #dbe7f2; font: 16px system-ui; }
-      header { height: 44px; display: grid; grid-template-columns: 1fr 1fr; align-items: center; text-align: center; background: #111923; }
+      html, body { margin: 0; background: var(--comparison-bg, #03070b); color: var(--comparison-fg, #dbe7f2); font: 16px system-ui; }
+      header { height: 44px; display: grid; grid-template-columns: 1fr 1fr; align-items: center; text-align: center; background: var(--comparison-header, #111923); }
       main { display: grid; grid-template-columns: var(--capture-width) var(--capture-width); }
       img { display: block; width: var(--capture-width); height: var(--capture-height); object-fit: contain; }
       body.vertical header { grid-template-columns: 1fr; height: auto; }
@@ -24,18 +24,28 @@
       const width = params.get('width') === '1100' ? 1100 : 1440;
       const height = width === 1100 ? 800 : 1024;
       const vertical = params.get('layout') === 'vertical';
+      const zhCN = params.get('qaLocale') === 'zh-CN';
+      const light = params.get('qaTheme') === 'light';
+      const sourceLabel = zhCN ? '源原型' : 'Source prototype';
+      const implementationLabel = zhCN ? '桌面实现' : 'Implementation';
       const sourceName = view === 'home'
         ? `codex-01-home-composer-${width}.png`
         : `codex-02-my-work-inbox-${width}.png`;
       const implementationName = view === 'home'
         ? `mission-control-home-${width}-final.png`
         : `mission-control-my-work-${width}-final.png`;
+      document.querySelector('header').innerHTML =
+        `<strong>${sourceLabel}</strong><strong>${implementationLabel}</strong>`;
       if (vertical) {
         document.body.classList.add('vertical');
-        document.querySelector('header').innerHTML = '<strong>Source prototype</strong><strong>Implementation</strong>';
       }
+      document.documentElement.style.setProperty('--comparison-bg', light ? '#f7f9fc' : '#03070b');
+      document.documentElement.style.setProperty('--comparison-fg', light ? '#17212b' : '#dbe7f2');
+      document.documentElement.style.setProperty('--comparison-header', light ? '#e8edf3' : '#111923');
       document.documentElement.style.setProperty('--capture-width', `${width}px`);
       document.documentElement.style.setProperty('--capture-height', `${height}px`);
+      document.getElementById('source').alt = sourceLabel;
+      document.getElementById('implementation').alt = implementationLabel;
       document.getElementById('source').src = `/design-prototype/memstack-desktop-agent-mission-control/qa/${sourceName}`;
       document.getElementById('implementation').src = `/artifacts/design-qa/${implementationName}`;
     </script>

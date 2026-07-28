@@ -1,5 +1,6 @@
 """Tests for HITL route hardening."""
 
+import json
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
@@ -241,14 +242,17 @@ async def test_respond_to_hitl_sanitizes_invalid_type() -> None:
 async def test_respond_to_hitl_sanitizes_update_conflict(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    pending_request = _hitl_request()
+
     class Repo:
+        get_by_id = AsyncMock(return_value=pending_request)
         update_response = AsyncMock(return_value=None)
 
     monkeypatch.setattr(hitl_router, "SqlHITLRequestRepository", lambda _db: Repo())
     monkeypatch.setattr(
         hitl_router,
-        "_load_authorized_pending_hitl_request",
-        AsyncMock(return_value=_hitl_request()),
+        "_load_authorized_hitl_request",
+        AsyncMock(return_value=pending_request),
     )
     monkeypatch.setattr(
         hitl_router,
@@ -256,21 +260,22 @@ async def test_respond_to_hitl_sanitizes_update_conflict(
         lambda **_kwargs: ("clarification", "yes", {}),
     )
 
-    with pytest.raises(HTTPException) as exc_info:
-        await hitl_router.respond_to_hitl(
-            request=HITLResponseRequest(
-                request_id="hitl-secret",
-                hitl_type="clarification",
-                response_data={"answer": "yes"},
-            ),
-            current_user=SimpleNamespace(id="user-1"),
-            tenant_id="tenant-1",
-            db=SimpleNamespace(commit=AsyncMock()),
-        )
+    response = await hitl_router.respond_to_hitl(
+        request=HITLResponseRequest(
+            request_id="hitl-secret",
+            hitl_type="clarification",
+            response_data={"answer": "yes"},
+        ),
+        current_user=SimpleNamespace(id="user-1"),
+        tenant_id="tenant-1",
+        db=SimpleNamespace(commit=AsyncMock()),
+    )
 
-    assert exc_info.value.status_code == 409
-    assert exc_info.value.detail == "HITL request could not be updated"
-    assert "hitl-secret" not in exc_info.value.detail
+    assert response.status_code == 409
+    payload = json.loads(response.body)
+    assert payload["detail"] == "HITL request could not be updated"
+    assert payload["reason_code"] == "hitl_claim_conflict"
+    assert "hitl-secret" not in payload["detail"]
 
 
 @pytest.mark.unit

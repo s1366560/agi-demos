@@ -1,0 +1,619 @@
+{
+  "contract_version": "desktop-local-route-parity-v1",
+  "routes": [
+    {
+      "area": "search",
+      "method": "GET",
+      "uri": "/api/v1/search-enhanced/capabilities",
+      "source": "capability",
+      "source_marker": "/api/v1/search-enhanced/capabilities",
+      "authority": "local_search_projection",
+      "body": {}
+    },
+    {
+      "area": "search",
+      "method": "POST",
+      "uri": "/api/v1/search-enhanced/advanced",
+      "source": "search",
+      "source_marker": "/api/v1/search-enhanced/advanced",
+      "authority": "local_search_projection",
+      "body": {
+        "tenant_id": "local",
+        "project_id": "local-project",
+        "query": "local search",
+        "strategy": "hybrid",
+        "limit": 10
+      }
+    },
+    {
+      "area": "search",
+      "method": "POST",
+      "uri": "/api/v1/search-enhanced/graph-traversal",
+      "source": "search",
+      "source_marker": "/api/v1/search-enhanced/graph-traversal",
+      "authority": "structured_unavailable",
+      "body": {
+        "tenant_id": "local",
+        "project_id": "local-project",
+        "start_entity_uuid": "entity-1",
+        "max_depth": 2,
+        "relationship_types": [],
+        "limit": 10
+      }
+    },
+    {
+      "area": "search",
+      "method": "POST",
+      "uri": "/api/v1/search-enhanced/temporal",
+      "source": "search",
+      "source_marker": "/api/v1/search-enhanced/temporal",
+      "authority": "local_search_projection",
+      "body": {
+        "tenant_id": "local",
+        "project_id": "local-project",
+        "query": "local search",
+        "limit": 10
+      }
+    },
+    {
+      "area": "search",
+      "method": "POST",
+      "uri": "/api/v1/search-enhanced/faceted",
+      "source": "search",
+      "source_marker": "/api/v1/search-enhanced/faceted",
+      "authority": "local_search_projection",
+      "body": {
+        "tenant_id": "local",
+        "project_id": "local-project",
+        "query": "local search",
+        "entity_types": [],
+        "tags": [],
+        "limit": 10,
+        "offset": 0
+      }
+    },
+    {
+      "area": "search",
+      "method": "POST",
+      "uri": "/api/v1/search-enhanced/community",
+      "source": "search",
+      "source_marker": "/api/v1/search-enhanced/community",
+      "authority": "structured_unavailable",
+      "body": {
+        "tenant_id": "local",
+        "project_id": "local-project",
+        "community_uuid": "community-1",
+        "include_episodes": true,
+        "limit": 10
+      }
+    },
+    {
+      "area": "skills",
+      "method": "GET",
+      "uri": "/api/v1/skills/?tenant_id=local&project_id=local-project",
+      "source": "client",
+      "source_marker": "/api/v1/skills/?${params.toString()}",
+      "authority": "local_registry",
+      "body": {}
+    },
+    {
+      "area": "skills",
+      "method": "POST",
+      "uri": "/api/v1/skills/?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/skills/?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "skills",
+      "method": "PATCH",
+      "uri": "/api/v1/skills/implementation/status?status=disabled&tenant_id=local",
+      "source": "client",
+      "source_marker": "/status?${params.toString()}",
+      "authority": "local_registry",
+      "body": {}
+    },
+    {
+      "area": "skills",
+      "method": "GET",
+      "uri": "/api/v1/skills/implementation/content?tenant_id=local",
+      "source": "client",
+      "source_marker": "/content?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "skills",
+      "method": "PUT",
+      "uri": "/api/v1/skills/implementation/content?tenant_id=local",
+      "source": "client",
+      "source_marker": "/content?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "skills",
+      "method": "PUT",
+      "uri": "/api/v1/skills/implementation?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/skills/${encodeURIComponent(skillId)}?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "skills",
+      "method": "DELETE",
+      "uri": "/api/v1/skills/implementation?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/skills/${encodeURIComponent(skillId)}?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "skills",
+      "method": "POST",
+      "uri": "/api/v1/skills/import?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/skills/import?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "skills",
+      "method": "POST",
+      "uri": "/api/v1/skills/import/zip?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/skills/import/zip?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "skills",
+      "method": "GET",
+      "uri": "/api/v1/skills/implementation/versions?tenant_id=local",
+      "source": "client",
+      "source_marker": "/versions?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "skills",
+      "method": "POST",
+      "uri": "/api/v1/skills/implementation/rollback?tenant_id=local",
+      "source": "client",
+      "source_marker": "/rollback?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "skills",
+      "method": "GET",
+      "uri": "/api/v1/skills/implementation/export?tenant_id=local",
+      "source": "client",
+      "source_marker": "/export?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "skills",
+      "method": "GET",
+      "uri": "/api/v1/skills/implementation/versions/1?tenant_id=local",
+      "source": "client",
+      "source_marker": "/versions/${versionNumber}?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "skills",
+      "method": "GET",
+      "uri": "/api/v1/skills/implementation/evolution?tenant_id=local",
+      "source": "client",
+      "source_marker": "/evolution?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "skills",
+      "method": "POST",
+      "uri": "/api/v1/skills/implementation/evolution/run?tenant_id=local",
+      "source": "client",
+      "source_marker": "/evolution/run?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "skills",
+      "method": "POST",
+      "uri": "/api/v1/skills/evolution/jobs/job-1/apply?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/skills/evolution/jobs/${encodeURIComponent(jobId)}/${action}?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "plugins",
+      "method": "GET",
+      "uri": "/api/v1/channels/tenants/local/plugins",
+      "source": "client",
+      "source_marker": "/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins",
+      "authority": "local_registry",
+      "body": {}
+    },
+    {
+      "area": "plugins",
+      "method": "POST",
+      "uri": "/api/v1/channels/tenants/local/plugins/local-workspace/enable",
+      "source": "client",
+      "source_marker": "/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins",
+      "authority": "local_registry",
+      "body": {}
+    },
+    {
+      "area": "plugins",
+      "method": "POST",
+      "uri": "/api/v1/channels/tenants/local/plugins/local-workspace/disable",
+      "source": "client",
+      "source_marker": "/${enabled ? 'enable' : 'disable'}`",
+      "authority": "local_registry",
+      "body": {}
+    },
+    {
+      "area": "plugins",
+      "method": "POST",
+      "uri": "/api/v1/channels/tenants/local/plugins/install",
+      "source": "client",
+      "source_marker": "/plugins/install",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "plugins",
+      "method": "POST",
+      "uri": "/api/v1/channels/tenants/local/plugins/reload",
+      "source": "client",
+      "source_marker": "/plugins/reload",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "plugins",
+      "method": "POST",
+      "uri": "/api/v1/channels/tenants/local/plugins/local-workspace/uninstall",
+      "source": "client",
+      "source_marker": "/uninstall",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "plugins",
+      "method": "GET",
+      "uri": "/api/v1/channels/tenants/local/plugins/local-workspace/config-schema",
+      "source": "client",
+      "source_marker": "/config-schema",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "plugins",
+      "method": "GET",
+      "uri": "/api/v1/channels/tenants/local/plugins/local-workspace/config",
+      "source": "client",
+      "source_marker": "/config`",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "plugins",
+      "method": "PUT",
+      "uri": "/api/v1/channels/tenants/local/plugins/local-workspace/config",
+      "source": "client",
+      "source_marker": "/config`",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "plugins",
+      "method": "GET",
+      "uri": "/api/v1/channels/tenants/local/plugins/channel-catalog",
+      "source": "client",
+      "source_marker": "/plugins/channel-catalog",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "plugins",
+      "method": "GET",
+      "uri": "/api/v1/channels/tenants/local/plugins/channel-catalog/feishu/schema",
+      "source": "client",
+      "source_marker": "/plugins/channel-catalog/${encodeURIComponent(",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "plugins",
+      "method": "GET",
+      "uri": "/api/v1/channels/projects/local-project/configs",
+      "source": "client",
+      "source_marker": "/api/v1/channels/projects/${encodeURIComponent(projectId)}/configs",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "plugins",
+      "method": "POST",
+      "uri": "/api/v1/channels/projects/local-project/configs",
+      "source": "client",
+      "source_marker": "/api/v1/channels/projects/${encodeURIComponent(projectId)}/configs",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "plugins",
+      "method": "PUT",
+      "uri": "/api/v1/channels/configs/config-1",
+      "source": "client",
+      "source_marker": "/api/v1/channels/configs/${encodeURIComponent(configId)}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "plugins",
+      "method": "POST",
+      "uri": "/api/v1/channels/configs/config-1/test",
+      "source": "client",
+      "source_marker": "/api/v1/channels/configs/${encodeURIComponent(configId)}/test",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "plugins",
+      "method": "DELETE",
+      "uri": "/api/v1/channels/configs/config-1",
+      "source": "client",
+      "source_marker": "/api/v1/channels/configs/${encodeURIComponent(configId)}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "agents",
+      "method": "GET",
+      "uri": "/api/v1/agent/definitions?tenant_id=local&project_id=local-project",
+      "source": "client",
+      "source_marker": "/api/v1/agent/definitions?",
+      "authority": "local_registry",
+      "body": {}
+    },
+    {
+      "area": "agents",
+      "method": "POST",
+      "uri": "/api/v1/agent/definitions?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/agent/definitions${query",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "agents",
+      "method": "PATCH",
+      "uri": "/api/v1/agent/definitions/builtin%3Aall-access/enabled?tenant_id=local&project_id=local-project",
+      "source": "client",
+      "source_marker": "/enabled${",
+      "authority": "local_registry",
+      "body": {
+        "enabled": false
+      }
+    },
+    {
+      "area": "agents",
+      "method": "PUT",
+      "uri": "/api/v1/agent/definitions/custom-agent?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/agent/definitions/${encodeURIComponent(definitionId)}${",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "agents",
+      "method": "DELETE",
+      "uri": "/api/v1/agent/definitions/custom-agent?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/agent/definitions/${encodeURIComponent(definitionId)}${",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "agents",
+      "method": "GET",
+      "uri": "/api/v1/acp/tenants/local/external-agents",
+      "source": "client",
+      "source_marker": "/api/v1/acp/tenants/${encodeURIComponent(tenantId)}/external-agents",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "agents",
+      "method": "GET",
+      "uri": "/api/v1/agent/templates?tenant_id=local&limit=100&offset=0",
+      "source": "client",
+      "source_marker": "/api/v1/agent/templates?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "agents",
+      "method": "POST",
+      "uri": "/api/v1/agent/templates?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/agent/templates?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "agents",
+      "method": "DELETE",
+      "uri": "/api/v1/agent/templates/template-1",
+      "source": "client",
+      "source_marker": "/api/v1/agent/templates/${encodeURIComponent(requireValue(templateId, 'template id'))}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "subagents",
+      "method": "GET",
+      "uri": "/api/v1/subagents/?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/subagents/?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "subagents",
+      "method": "POST",
+      "uri": "/api/v1/subagents/?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/subagents/?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "subagents",
+      "method": "PATCH",
+      "uri": "/api/v1/subagents/subagent-1/enable?enabled=true&tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/subagents/${encodeURIComponent(subagentId)}/enable?",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "subagents",
+      "method": "GET",
+      "uri": "/api/v1/subagents/templates/list?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/subagents/templates/list?",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "subagents",
+      "method": "POST",
+      "uri": "/api/v1/subagents/templates/template-1/install?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/subagents/templates/${encodeURIComponent(templateId)}/install?",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "subagents",
+      "method": "POST",
+      "uri": "/api/v1/subagents/filesystem/local-worker/import?tenant_id=local&project_id=local-project",
+      "source": "client",
+      "source_marker": "/api/v1/subagents/filesystem/${encodeURIComponent(name)}/import?",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "subagents",
+      "method": "PUT",
+      "uri": "/api/v1/subagents/subagent-1?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/subagents/${encodeURIComponent(subagentId)}?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "subagents",
+      "method": "DELETE",
+      "uri": "/api/v1/subagents/subagent-1?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/subagents/${encodeURIComponent(subagentId)}?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "mcp_apps",
+      "method": "GET",
+      "uri": "/api/v1/mcp/apps?project_id=local-project",
+      "source": "client",
+      "source_marker": "/api/v1/mcp/apps?${params.toString()}",
+      "authority": "structured_unavailable",
+      "body": {}
+    },
+    {
+      "area": "mcp_apps",
+      "method": "POST",
+      "uri": "/api/v1/mcp/apps/app-1/tool-call",
+      "source": "client",
+      "source_marker": "/api/v1/mcp/apps/${encodeURIComponent(requireValue(appId, 'MCP App id'))}/tool-call",
+      "authority": "structured_unavailable",
+      "body": {
+        "tool_name": "example",
+        "arguments": {}
+      }
+    },
+    {
+      "area": "mcp_apps",
+      "method": "POST",
+      "uri": "/api/v1/mcp/apps/proxy/tool-call",
+      "source": "client",
+      "source_marker": "/api/v1/mcp/apps/proxy/tool-call",
+      "authority": "structured_unavailable",
+      "body": {
+        "project_id": "local-project",
+        "server_name": "example",
+        "tool_name": "example",
+        "arguments": {}
+      }
+    },
+    {
+      "area": "mcp_apps",
+      "method": "POST",
+      "uri": "/api/v1/mcp/apps/resources/read",
+      "source": "client",
+      "source_marker": "/api/v1/mcp/apps/resources/read",
+      "authority": "structured_unavailable",
+      "body": {
+        "project_id": "local-project",
+        "uri": "file:///example"
+      }
+    },
+    {
+      "area": "mcp_apps",
+      "method": "POST",
+      "uri": "/api/v1/mcp/apps/resources/list",
+      "source": "client",
+      "source_marker": "/api/v1/mcp/apps/resources/list",
+      "authority": "structured_unavailable",
+      "body": {
+        "project_id": "local-project"
+      }
+    },
+    {
+      "area": "sandbox_files",
+      "method": "GET",
+      "uri": "/api/v1/projects/local-project/sandbox/files?path=%2Fworkspace&limit=20",
+      "source": "sandbox",
+      "source_marker": "/sandbox/files?${query}",
+      "authority": "native_workspace",
+      "body": {}
+    },
+    {
+      "area": "sandbox_files",
+      "method": "GET",
+      "uri": "/api/v1/projects/local-project/sandbox/files/content?path=%2Fworkspace%2Froute-parity.txt&max_bytes=1024",
+      "source": "sandbox",
+      "source_marker": "/sandbox/files/content?${query}",
+      "authority": "native_workspace",
+      "body": {}
+    },
+    {
+      "area": "sandbox_files",
+      "method": "GET",
+      "uri": "/api/v1/projects/local-project/sandbox/files/download?path=%2Fworkspace%2Froute-parity.txt",
+      "source": "sandbox",
+      "source_marker": "/sandbox/files/download?${query}",
+      "authority": "native_workspace",
+      "body": {}
+    }
+  ]
+}

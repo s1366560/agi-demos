@@ -6,6 +6,7 @@ import { Button, Theme } from '@radix-ui/themes';
 import { AgentTimeline } from '../features/chat/ChatTimeline';
 import { isTimelineItemInitiallyExpanded } from '../features/chat/chatTimelinePresentation';
 import { aggregateStructuredToolSources } from '../features/chat/toolSourceAggregationModel';
+import { ToastProvider } from '../features/feedback/ToastCenter';
 import { I18nProvider } from '../i18n';
 import type { AgentTimelineItem, ConversationTimelineState } from '../types';
 import '../styles.css';
@@ -202,9 +203,11 @@ function mount() {
   globalThis.__aggregatedSourcesQaRoot.render(
     <React.StrictMode>
       <I18nProvider>
-        <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium">
-          <AggregatedSourcesQa />
-        </Theme>
+        <ToastProvider>
+          <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium">
+            <AggregatedSourcesQa />
+          </Theme>
+        </ToastProvider>
       </I18nProvider>
     </React.StrictMode>,
   );

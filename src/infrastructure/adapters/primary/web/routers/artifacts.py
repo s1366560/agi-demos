@@ -8,14 +8,23 @@ Provides REST API endpoints for:
 """
 
 import logging
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.artifact_content_contract import (
+    ArtifactContentContractError,
+    ArtifactContentHashMismatchError,
+    ArtifactContentIdempotencyConflictError,
+    ArtifactContentIntegrityError,
+    ArtifactContentNotEditableError,
+    ArtifactContentRevisionConflictError,
+    ArtifactContentSaveCommand,
+)
 from src.application.services.artifact_service import ArtifactService
 from src.domain.model.artifact.artifact import ArtifactCategory, ArtifactStatus
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
@@ -110,17 +119,33 @@ class RefreshUrlResponse(BaseModel):
 
 
 class UpdateContentRequest(BaseModel):
-    """Request model for updating artifact content from canvas."""
+    """ArtifactContentContractV2 conditional save command."""
 
-    content: str = Field(..., description="Updated text content")
+    contract_version: Literal[2]
+    expected_revision: int = Field(ge=0)
+    content_hash: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    idempotency_key: str = Field(pattern=r"^[A-Za-z0-9._:-]{8,128}$")
+    content: str
 
 
 class UpdateContentResponse(BaseModel):
-    """Response model for content update."""
+    """ArtifactContentContractV2 save receipt."""
 
     artifact_id: str
-    size_bytes: int
-    url: str | None = None
+    revision: int
+    content_hash: str
+    duplicate: bool
+
+
+class ArtifactContentResponse(BaseModel):
+    """Canonical editable Artifact content authority."""
+
+    contract_version: Literal[2]
+    artifact_id: str
+    revision: int
+    content_hash: str
+    mime_type: str
+    content: str
 
 
 # === API Endpoints ===
@@ -247,12 +272,9 @@ async def download_artifact(
     artifact_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> RedirectResponse:
+) -> Response:
     """
-    Download an artifact.
-
-    Redirects to the presigned URL for the artifact content.
-    If the URL has expired, a new one is generated automatically.
+    Download authenticated bytes without exposing object-store credentials.
     """
     service = get_artifact_service()
     artifact = await service.get_artifact(artifact_id)
@@ -268,13 +290,90 @@ async def download_artifact(
             detail=_("Artifact is not ready for download"),
         )
 
-    # Refresh URL to ensure it's valid
-    url = await service.refresh_artifact_url(artifact_id)
-    if not url:
-        raise HTTPException(status_code=500, detail=_("Failed to generate download URL"))
+    content = await service.get_artifact_bytes(artifact_id)
+    if content is None:
+        raise HTTPException(status_code=404, detail=_("Artifact content not found"))
 
-    # Redirect to presigned URL
-    return RedirectResponse(url=url, status_code=307)
+    return Response(
+        content=content,
+        media_type=artifact.mime_type,
+        headers={
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": "attachment",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.get("/{artifact_id}/content", response_model=ArtifactContentResponse)
+async def get_artifact_content(
+    artifact_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ArtifactContentResponse:
+    """Return editable text with canonical revision and content hash."""
+    service = get_artifact_service()
+    artifact = await service.get_artifact(artifact_id)
+    if not artifact:
+        raise HTTPException(status_code=404, detail=_("Artifact not found"))
+    await verify_project_access(artifact.project_id, current_user, db)
+    if artifact.status != ArtifactStatus.READY:
+        raise HTTPException(
+            status_code=400,
+            detail=_("Artifact content is not ready"),
+        )
+    try:
+        content = await service.get_artifact_content(artifact_id)
+    except ArtifactContentNotEditableError as exc:
+        raise HTTPException(
+            status_code=415,
+            detail=_("Artifact content is not editable text"),
+        ) from exc
+    except ArtifactContentIntegrityError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=_("Artifact content integrity check failed"),
+        ) from exc
+    if content is None:
+        raise HTTPException(status_code=404, detail=_("Artifact content not found"))
+    return ArtifactContentResponse(
+        contract_version=2,
+        artifact_id=content.artifact_id,
+        revision=content.revision,
+        content_hash=content.content_hash,
+        mime_type=content.mime_type,
+        content=content.content,
+    )
+
+
+@router.get("/{artifact_id}/content/bytes")
+async def get_artifact_content_bytes(
+    artifact_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Return authenticated raw bytes for previews."""
+    service = get_artifact_service()
+    artifact = await service.get_artifact(artifact_id)
+    if not artifact:
+        raise HTTPException(status_code=404, detail=_("Artifact not found"))
+    await verify_project_access(artifact.project_id, current_user, db)
+    if artifact.status != ArtifactStatus.READY:
+        raise HTTPException(
+            status_code=400,
+            detail=_("Artifact content is not ready"),
+        )
+    content = await service.get_artifact_bytes(artifact_id)
+    if content is None:
+        raise HTTPException(status_code=404, detail=_("Artifact content not found"))
+    return Response(
+        content=content,
+        media_type=artifact.mime_type,
+        headers={
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.post("/{artifact_id}/refresh-url", response_model=RefreshUrlResponse)
@@ -315,12 +414,12 @@ async def update_artifact_content(
     request: UpdateContentRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> UpdateContentResponse:
+) -> UpdateContentResponse | JSONResponse:
     """
     Update the text content of an artifact (canvas save-back).
 
-    Overwrites the file in object storage with the provided text content.
-    Only works for READY artifacts with text-decodable content.
+    Saves editable text to a versioned object and conditionally advances the
+    metadata pointer.
     """
     service = get_artifact_service()
     artifact = await service.get_artifact(artifact_id)
@@ -336,14 +435,50 @@ async def update_artifact_content(
             detail=_("Artifact cannot be updated in its current status"),
         )
 
-    updated = await service.update_artifact_content(artifact_id, request.content)
-    if not updated:
-        raise HTTPException(status_code=500, detail=_("Failed to update artifact content"))
+    try:
+        receipt = await service.save_artifact_content(
+            artifact_id,
+            ArtifactContentSaveCommand(
+                contract_version=request.contract_version,
+                expected_revision=request.expected_revision,
+                content_hash=request.content_hash,
+                idempotency_key=request.idempotency_key,
+                content=request.content,
+            ),
+        )
+    except ArtifactContentRevisionConflictError as exc:
+        return _artifact_content_conflict_response(
+            detail=_("Artifact content revision conflict"),
+            error=exc,
+        )
+    except ArtifactContentIdempotencyConflictError as exc:
+        return _artifact_content_conflict_response(
+            detail=_("Artifact content idempotency conflict"),
+            error=exc,
+        )
+    except ArtifactContentNotEditableError as exc:
+        raise HTTPException(
+            status_code=415,
+            detail=_("Artifact content is not editable text"),
+        ) from exc
+    except ArtifactContentHashMismatchError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=_("Artifact content hash does not match content"),
+        ) from exc
+    except ArtifactContentContractError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=_("Artifact content command is invalid"),
+        ) from exc
+    if receipt is None:
+        raise HTTPException(status_code=404, detail=_("Artifact content not found"))
 
     return UpdateContentResponse(
         artifact_id=artifact_id,
-        size_bytes=updated.size_bytes,
-        url=updated.url,
+        revision=receipt.revision,
+        content_hash=receipt.content_hash,
+        duplicate=receipt.duplicate,
     )
 
 
@@ -407,3 +542,19 @@ def _get_category_description(category: ArtifactCategory) -> str:
         ArtifactCategory.OTHER: "Other file types",
     }
     return descriptions.get(category, "Unknown category")
+
+
+def _artifact_content_conflict_response(
+    *,
+    detail: str,
+    error: ArtifactContentRevisionConflictError | ArtifactContentIdempotencyConflictError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=409,
+        content={
+            "detail": detail,
+            "reason_code": error.reason_code,
+            "server_revision": error.server_revision,
+            "server_content_hash": error.server_content_hash,
+        },
+    )

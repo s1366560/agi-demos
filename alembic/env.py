@@ -14,16 +14,16 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from alembic import context
-
 # Import models to ensure they're registered with Base.metadata
 # This must happen before accessing Base.metadata
-import src.infrastructure.adapters.secondary.persistence.attachment_model  # noqa: F401
+import src.infrastructure.adapters.secondary.persistence.artifact_model
+import src.infrastructure.adapters.secondary.persistence.attachment_model
 import src.infrastructure.adapters.secondary.persistence.channel_models  # noqa: F401
-from src.infrastructure.adapters.secondary.persistence.models import Base
+from alembic import context
 
 # Import settings to get database URL
 from src.configuration.config import get_settings
+from src.infrastructure.adapters.secondary.persistence.models import Base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

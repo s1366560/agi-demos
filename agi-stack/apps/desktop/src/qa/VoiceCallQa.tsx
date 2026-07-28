@@ -6,6 +6,7 @@ import { Button, Theme } from '@radix-ui/themes';
 
 import { ChatPanel } from '../features/chat/ChatPanel';
 import type { ComposerCatalogClient } from '../features/chat/composerCatalogModel';
+import { ToastProvider } from '../features/feedback/ToastCenter';
 import type {
   VoiceCallRuntime,
   VoicePlaybackBuffer,
@@ -540,7 +541,9 @@ globalThis.__voiceCallQaRoot = qaRoot;
 qaRoot.render(
   <React.StrictMode>
     <I18nProvider>
-      <VoiceCallQa />
+      <ToastProvider>
+        <VoiceCallQa />
+      </ToastProvider>
     </I18nProvider>
   </React.StrictMode>,
 );

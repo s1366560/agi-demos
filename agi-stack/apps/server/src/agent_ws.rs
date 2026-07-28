@@ -854,7 +854,7 @@ async fn handle_hitl_response(
 ) -> Result<(), axum::Error> {
     match app.hitl.respond(&identity.user_id, request).await {
         Ok(outcome) => send_json(socket, ws_ack_message(ack_type, &outcome)).await,
-        Err(err) => send_error(socket, err.detail()).await,
+        Err(err) => send_json(socket, err.websocket_message()).await,
     }
 }
 

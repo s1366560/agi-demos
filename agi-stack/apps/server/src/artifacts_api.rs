@@ -2,18 +2,19 @@
 //!
 //! Rust owns `GET /api/v1/artifacts`, `GET /api/v1/artifacts/{id}`, and
 //! `GET /api/v1/artifacts/categories/list`, plus exact
-//! `PUT /api/v1/artifacts/{id}/content` content save-back and
-//! `DELETE /api/v1/artifacts/{id}` soft-delete. Download, URL refresh, upload,
-//! and multipart storage writes remain Python-owned.
+//! `GET|PUT /api/v1/artifacts/{id}/content`, authenticated raw content reads,
+//! and `DELETE /api/v1/artifacts/{id}` soft-delete. URL refresh, upload, and
+//! multipart storage writes remain Python-owned.
 
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use axum::{
+    body::Body,
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{header, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
-    routing::{get, put},
+    routing::get,
     Extension, Json, Router,
 };
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -27,6 +28,15 @@ use agistack_core::ports::ObjectStore;
 
 use crate::auth::Identity;
 use crate::AppState;
+
+#[path = "artifact_content_v2.rs"]
+mod artifact_content_v2;
+use artifact_content_v2::{
+    get_dev_artifact_bytes, get_dev_artifact_content, get_pg_artifact_bytes,
+    get_pg_artifact_content, normalize_mime_type, save_dev_artifact_content,
+    save_pg_artifact_content, ArtifactContentBytes, ArtifactContentContractV2,
+    ArtifactContentSaveCommandV2, ArtifactContentSaveReceipt,
+};
 
 pub(crate) type SharedArtifacts = Arc<dyn ArtifactService>;
 
@@ -42,11 +52,21 @@ pub(crate) trait ArtifactService: Send + Sync {
         artifact_id: &str,
     ) -> Result<Option<ArtifactView>, ArtifactApiError>;
 
+    async fn get_artifact_bytes(
+        &self,
+        artifact: &ArtifactView,
+    ) -> Result<ArtifactContentBytes, ArtifactApiError>;
+
+    async fn get_artifact_content(
+        &self,
+        artifact: &ArtifactView,
+    ) -> Result<ArtifactContentContractV2, ArtifactApiError>;
+
     async fn update_artifact_content(
         &self,
         artifact: &ArtifactView,
-        request: ArtifactContentUpdateRequest,
-    ) -> Result<ArtifactContentUpdateResponse, ArtifactApiError>;
+        request: ArtifactContentSaveCommandV2,
+    ) -> Result<ArtifactContentSaveReceipt, ArtifactApiError>;
 
     async fn delete_artifact(
         &self,
@@ -95,25 +115,26 @@ impl ArtifactService for PgArtifactService {
             .map(|record| record.map(ArtifactView::from))
     }
 
+    async fn get_artifact_bytes(
+        &self,
+        artifact: &ArtifactView,
+    ) -> Result<ArtifactContentBytes, ArtifactApiError> {
+        get_pg_artifact_bytes(self, artifact).await
+    }
+
+    async fn get_artifact_content(
+        &self,
+        artifact: &ArtifactView,
+    ) -> Result<ArtifactContentContractV2, ArtifactApiError> {
+        get_pg_artifact_content(self, artifact).await
+    }
+
     async fn update_artifact_content(
         &self,
         artifact: &ArtifactView,
-        request: ArtifactContentUpdateRequest,
-    ) -> Result<ArtifactContentUpdateResponse, ArtifactApiError> {
-        let bytes = request.content.into_bytes();
-        let size_bytes = i64::try_from(bytes.len())
-            .map_err(|_| ArtifactApiError::bad_request("Artifact content is too large"))?;
-        self.object_store
-            .put(&artifact.object_key, bytes, Some(&artifact.mime_type))
-            .await
-            .map_err(ArtifactApiError::internal)?;
-        let updated = self
-            .repo
-            .update_content_metadata(&artifact.id, size_bytes)
-            .await
-            .map_err(ArtifactApiError::internal)?
-            .ok_or_else(|| ArtifactApiError::internal("Failed to update artifact content"))?;
-        Ok(ArtifactContentUpdateResponse::from(updated))
+        request: ArtifactContentSaveCommandV2,
+    ) -> Result<ArtifactContentSaveReceipt, ArtifactApiError> {
+        save_pg_artifact_content(self, artifact, request).await
     }
 
     async fn delete_artifact(
@@ -222,29 +243,26 @@ impl ArtifactService for DevArtifactService {
             .map(ArtifactView::from))
     }
 
+    async fn get_artifact_bytes(
+        &self,
+        artifact: &ArtifactView,
+    ) -> Result<ArtifactContentBytes, ArtifactApiError> {
+        get_dev_artifact_bytes(self, artifact).await
+    }
+
+    async fn get_artifact_content(
+        &self,
+        artifact: &ArtifactView,
+    ) -> Result<ArtifactContentContractV2, ArtifactApiError> {
+        get_dev_artifact_content(self, artifact).await
+    }
+
     async fn update_artifact_content(
         &self,
         artifact: &ArtifactView,
-        request: ArtifactContentUpdateRequest,
-    ) -> Result<ArtifactContentUpdateResponse, ArtifactApiError> {
-        let bytes = request.content.into_bytes();
-        let size_bytes = i64::try_from(bytes.len())
-            .map_err(|_| ArtifactApiError::bad_request("Artifact content is too large"))?;
-        self.object_store
-            .put(&artifact.object_key, bytes, Some(&artifact.mime_type))
-            .await
-            .map_err(ArtifactApiError::internal)?;
-        let mut artifacts = self
-            .artifacts
-            .lock()
-            .map_err(|_| ArtifactApiError::internal("poisoned artifact lock"))?;
-        let record = artifacts
-            .iter_mut()
-            .find(|candidate| candidate.id == artifact.id && candidate.status == "ready")
-            .ok_or_else(|| ArtifactApiError::internal("Failed to update artifact content"))?;
-        record.size_bytes = size_bytes;
-        record.error_message = None;
-        Ok(ArtifactContentUpdateResponse::from(record.clone()))
+        request: ArtifactContentSaveCommandV2,
+    ) -> Result<ArtifactContentSaveReceipt, ArtifactApiError> {
+        save_dev_artifact_content(self, artifact, request).await
     }
 
     async fn delete_artifact(
@@ -276,7 +294,15 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/api/v1/artifacts/categories/list", get(list_categories))
         .route(
             "/api/v1/artifacts/:artifact_id/content",
-            put(update_artifact_content),
+            get(get_artifact_content).put(update_artifact_content),
+        )
+        .route(
+            "/api/v1/artifacts/:artifact_id/content/bytes",
+            get(get_artifact_content_bytes),
+        )
+        .route(
+            "/api/v1/artifacts/:artifact_id/download",
+            get(download_artifact),
         )
         .route(
             "/api/v1/artifacts/:artifact_id",
@@ -312,8 +338,8 @@ async fn update_artifact_content(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,
     Path(artifact_id): Path<String>,
-    Json(request): Json<ArtifactContentUpdateRequest>,
-) -> Result<Json<ArtifactContentUpdateResponse>, ArtifactApiError> {
+    Json(request): Json<ArtifactContentSaveCommandV2>,
+) -> Result<Json<ArtifactContentSaveReceipt>, ArtifactApiError> {
     let artifact = app
         .artifacts
         .get_artifact(&artifact_id)
@@ -330,6 +356,74 @@ async fn update_artifact_content(
             .update_artifact_content(&artifact, request)
             .await?,
     ))
+}
+
+async fn get_artifact_content(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path(artifact_id): Path<String>,
+) -> Result<Json<ArtifactContentContractV2>, ArtifactApiError> {
+    let artifact = app
+        .artifacts
+        .get_artifact(&artifact_id)
+        .await?
+        .ok_or_else(|| ArtifactApiError::not_found("Artifact not found"))?;
+    ensure_project_access(&app, &identity, &artifact.project_id).await?;
+    if artifact.status != "ready" {
+        return Err(ArtifactApiError::bad_request(
+            "Artifact content is not ready",
+        ));
+    }
+    Ok(Json(app.artifacts.get_artifact_content(&artifact).await?))
+}
+
+async fn get_artifact_content_bytes(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path(artifact_id): Path<String>,
+) -> Result<Response, ArtifactApiError> {
+    artifact_bytes_response(&app, &identity, &artifact_id, false).await
+}
+
+async fn download_artifact(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path(artifact_id): Path<String>,
+) -> Result<Response, ArtifactApiError> {
+    artifact_bytes_response(&app, &identity, &artifact_id, true).await
+}
+
+async fn artifact_bytes_response(
+    app: &AppState,
+    identity: &Identity,
+    artifact_id: &str,
+    attachment: bool,
+) -> Result<Response, ArtifactApiError> {
+    let artifact = app
+        .artifacts
+        .get_artifact(artifact_id)
+        .await?
+        .ok_or_else(|| ArtifactApiError::not_found("Artifact not found"))?;
+    ensure_project_access(app, identity, &artifact.project_id).await?;
+    if artifact.status != "ready" {
+        return Err(ArtifactApiError::bad_request(
+            "Artifact content is not ready",
+        ));
+    }
+    let content = app.artifacts.get_artifact_bytes(&artifact).await?;
+    let content_type = HeaderValue::from_str(&normalize_mime_type(&content.mime_type))
+        .map_err(|_| ArtifactApiError::internal("Artifact MIME type is invalid"))?;
+    let mut builder = Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, content_type)
+        .header(header::CACHE_CONTROL, "private, no-store")
+        .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff");
+    if attachment {
+        builder = builder.header(header::CONTENT_DISPOSITION, "attachment");
+    }
+    builder
+        .body(Body::from(content.bytes))
+        .map_err(ArtifactApiError::internal)
 }
 
 async fn delete_artifact(
@@ -428,6 +522,10 @@ pub(crate) struct ArtifactView {
     source_path: Option<String>,
     #[serde(rename = "metadata")]
     metadata_json: Value,
+    #[serde(skip)]
+    content_revision: i64,
+    #[serde(skip)]
+    content_hash: Option<String>,
     created_at: String,
 }
 
@@ -452,29 +550,9 @@ impl From<ArtifactRecord> for ArtifactView {
             source_tool: record.source_tool,
             source_path: record.source_path,
             metadata_json: record.metadata,
+            content_revision: record.content_revision,
+            content_hash: record.content_hash,
             created_at: python_iso8601(record.created_at),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-pub(crate) struct ArtifactContentUpdateRequest {
-    content: String,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub(crate) struct ArtifactContentUpdateResponse {
-    artifact_id: String,
-    size_bytes: i64,
-    url: Option<String>,
-}
-
-impl From<ArtifactRecord> for ArtifactContentUpdateResponse {
-    fn from(record: ArtifactRecord) -> Self {
-        Self {
-            artifact_id: record.id,
-            size_bytes: record.size_bytes,
-            url: record.url,
         }
     }
 }
@@ -619,6 +697,9 @@ fn python_iso8601(value: DateTime<Utc>) -> String {
 pub(crate) struct ArtifactApiError {
     status: StatusCode,
     detail: String,
+    reason_code: Option<String>,
+    server_revision: Option<i64>,
+    server_content_hash: Option<String>,
 }
 
 impl ArtifactApiError {
@@ -626,6 +707,9 @@ impl ArtifactApiError {
         Self {
             status,
             detail: detail.into(),
+            reason_code: None,
+            server_revision: None,
+            server_content_hash: None,
         }
     }
 
@@ -645,6 +729,25 @@ impl ArtifactApiError {
         Self::new(StatusCode::UNPROCESSABLE_ENTITY, detail)
     }
 
+    fn unsupported_media(detail: impl Into<String>) -> Self {
+        Self::new(StatusCode::UNSUPPORTED_MEDIA_TYPE, detail)
+    }
+
+    fn conflict(
+        detail: impl Into<String>,
+        reason_code: impl Into<String>,
+        server_revision: i64,
+        server_content_hash: impl Into<String>,
+    ) -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
+            detail: detail.into(),
+            reason_code: Some(reason_code.into()),
+            server_revision: Some(server_revision),
+            server_content_hash: Some(server_content_hash.into()),
+        }
+    }
+
     fn internal(detail: impl std::fmt::Display) -> Self {
         Self::new(StatusCode::INTERNAL_SERVER_ERROR, detail.to_string())
     }
@@ -652,7 +755,20 @@ impl ArtifactApiError {
 
 impl IntoResponse for ArtifactApiError {
     fn into_response(self) -> Response {
-        (self.status, Json(json!({ "detail": self.detail }))).into_response()
+        let body = match (
+            self.reason_code,
+            self.server_revision,
+            self.server_content_hash,
+        ) {
+            (Some(reason_code), Some(server_revision), Some(server_content_hash)) => json!({
+                "detail": self.detail,
+                "reason_code": reason_code,
+                "server_revision": server_revision,
+                "server_content_hash": server_content_hash,
+            }),
+            _ => json!({ "detail": self.detail }),
+        };
+        (self.status, Json(body)).into_response()
     }
 }
 
@@ -689,6 +805,8 @@ mod tests {
             source_tool: Some("terminal".to_string()),
             source_path: Some(format!("/workspace/{id}.txt")),
             metadata: json!({ "line_count": 3 }),
+            content_revision: 1,
+            content_hash: None,
             created_at,
         }
     }
@@ -759,6 +877,14 @@ mod tests {
     async fn dev_service_updates_content_storage_and_python_response_shape() {
         let created_at = Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap();
         let object_store = Arc::new(InMemoryObjectStore::new());
+        object_store
+            .put(
+                "artifacts/artifact-1.txt",
+                b"old text".to_vec(),
+                Some("text/plain"),
+            )
+            .await
+            .expect("seed object");
         let service = DevArtifactService::with_object_store(
             vec![artifact(
                 "artifact-1",
@@ -779,7 +905,13 @@ mod tests {
         let response = service
             .update_artifact_content(
                 &artifact,
-                ArtifactContentUpdateRequest {
+                ArtifactContentSaveCommandV2 {
+                    contract_version: 2,
+                    expected_revision: 1,
+                    content_hash:
+                        "sha256:87fa2bcb0c6106cb5512f75ccca21dd6ce1422ea3b00d4de8c7ebc96c48acbe3"
+                            .to_string(),
+                    idempotency_key: "artifact-1:save:0001".to_string(),
                     content: "updated text".to_string(),
                 },
             )
@@ -788,7 +920,10 @@ mod tests {
 
         assert_eq!(
             object_store
-                .get("artifacts/artifact-1.txt")
+                .get(
+                    "artifacts/tenant-artifacts/project-artifacts/artifact-1/versions/\
+                     r2-87fa2bcb0c6106cb5512f75ccca21dd6ce1422ea3b00d4de8c7ebc96c48acbe3",
+                )
                 .await
                 .expect("read object"),
             Some(b"updated text".to_vec())
@@ -917,5 +1052,172 @@ mod tests {
         ))
         .expect("artifact categories golden must be valid JSON");
         agistack_parity::assert_parity(&golden, &value);
+    }
+
+    #[tokio::test]
+    async fn dev_service_reads_authenticated_content_contract_and_raw_bytes() {
+        let created_at = Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap();
+        let object_store = Arc::new(InMemoryObjectStore::new());
+        object_store
+            .put(
+                "artifacts/artifact-v2.txt",
+                b"seed".to_vec(),
+                Some("text/plain"),
+            )
+            .await
+            .expect("seed object");
+        let service = DevArtifactService::with_object_store(
+            vec![artifact(
+                "artifact-v2",
+                "project-artifacts",
+                "ready",
+                "document",
+                Some("tool-1"),
+                created_at,
+            )],
+            object_store,
+        );
+        let artifact = service
+            .get_artifact("artifact-v2")
+            .await
+            .expect("get artifact")
+            .expect("artifact exists");
+
+        let content = service
+            .get_artifact_content(&artifact)
+            .await
+            .expect("get text authority");
+        let raw = service
+            .get_artifact_bytes(&artifact)
+            .await
+            .expect("get raw bytes");
+
+        assert_eq!(content.contract_version, 2);
+        assert_eq!(content.artifact_id, "artifact-v2");
+        assert_eq!(content.revision, 1);
+        assert_eq!(
+            content.content_hash,
+            "sha256:19b25856e1c150ca834cffc8b59b23adbd0ec0389e58eb22b3b64768098d002b"
+        );
+        assert_eq!(content.mime_type, "text/plain");
+        assert_eq!(content.content, "seed");
+        assert_eq!(raw.bytes, b"seed");
+        assert_eq!(raw.mime_type, "text/plain");
+    }
+
+    #[tokio::test]
+    async fn dev_service_versions_content_and_enforces_revision_and_idempotency() {
+        let created_at = Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap();
+        let object_store = Arc::new(InMemoryObjectStore::new());
+        object_store
+            .put(
+                "artifacts/artifact-v2.txt",
+                b"seed".to_vec(),
+                Some("text/plain"),
+            )
+            .await
+            .expect("seed object");
+        let service = DevArtifactService::with_object_store(
+            vec![artifact(
+                "artifact-v2",
+                "project-artifacts",
+                "ready",
+                "document",
+                Some("tool-1"),
+                created_at,
+            )],
+            object_store.clone(),
+        );
+        let artifact = service
+            .get_artifact("artifact-v2")
+            .await
+            .expect("get artifact")
+            .expect("artifact exists");
+        let command = ArtifactContentSaveCommandV2 {
+            contract_version: 2,
+            expected_revision: 1,
+            content_hash: "sha256:27eb5e51506c911f6fc4bb345c0d9db6f60415fceab7c18e1e9b862637415777"
+                .to_string(),
+            idempotency_key: "artifact-v2:save:0001".to_string(),
+            content: "updated".to_string(),
+        };
+
+        let first = service
+            .update_artifact_content(&artifact, command.clone())
+            .await
+            .expect("first save");
+        let replay = service
+            .update_artifact_content(&artifact, command.clone())
+            .await
+            .expect("idempotent replay");
+
+        assert_eq!(first.revision, 2);
+        assert_eq!(first.content_hash, command.content_hash);
+        assert!(!first.duplicate);
+        assert_eq!(replay.revision, 2);
+        assert!(replay.duplicate);
+        let version_key = format!(
+            "artifacts/tenant-artifacts/project-artifacts/artifact-v2/versions/r2-{}",
+            command.content_hash.trim_start_matches("sha256:")
+        );
+        assert_eq!(
+            object_store.get(&version_key).await.expect("read version"),
+            Some(b"updated".to_vec())
+        );
+        assert_eq!(
+            object_store
+                .get("artifacts/artifact-v2.txt")
+                .await
+                .expect("read original"),
+            Some(b"seed".to_vec())
+        );
+
+        let key_conflict = service
+            .update_artifact_content(
+                &artifact,
+                ArtifactContentSaveCommandV2 {
+                    contract_version: 2,
+                    expected_revision: 1,
+                    content_hash:
+                        "sha256:9d6f965ac832e40a5df6c06afe983e3b449c07b843ff51ce76204de05c690d11"
+                            .to_string(),
+                    idempotency_key: command.idempotency_key,
+                    content: "different".to_string(),
+                },
+            )
+            .await
+            .expect_err("same key with a different payload must fail");
+        assert_eq!(key_conflict.status, StatusCode::CONFLICT);
+        assert_eq!(
+            key_conflict.reason_code.as_deref(),
+            Some("artifact_content_idempotency_conflict")
+        );
+        assert_eq!(key_conflict.server_revision, Some(2));
+        assert_eq!(
+            key_conflict.server_content_hash.as_deref(),
+            Some(first.content_hash.as_str())
+        );
+
+        let revision_conflict = service
+            .update_artifact_content(
+                &artifact,
+                ArtifactContentSaveCommandV2 {
+                    contract_version: 2,
+                    expected_revision: 1,
+                    content_hash:
+                        "sha256:804f51f71254c4081e37e7c887073560f4a6fa6cdad202e9ac67e032c43ed1e1"
+                            .to_string(),
+                    idempotency_key: "artifact-v2:save:0002".to_string(),
+                    content: "newer".to_string(),
+                },
+            )
+            .await
+            .expect_err("stale revision must fail");
+        assert_eq!(revision_conflict.status, StatusCode::CONFLICT);
+        assert_eq!(
+            revision_conflict.reason_code.as_deref(),
+            Some("artifact_content_revision_conflict")
+        );
+        assert_eq!(revision_conflict.server_revision, Some(2));
     }
 }
