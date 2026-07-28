@@ -35,6 +35,9 @@ from src.application.services.artifact_content_contract import (
     validate_artifact_content_command,
     versioned_artifact_object_key,
 )
+from src.application.services.in_memory_artifact_repository import (
+    InMemoryArtifactRepository,
+)
 from src.domain.events.agent_events import (
     AgentArtifactCreatedEvent,
     AgentArtifactErrorEvent,
@@ -49,6 +52,7 @@ from src.domain.model.artifact.artifact import (
     detect_mime_type,
     get_category_from_mime,
 )
+from src.domain.ports.repositories.artifact_repository import ArtifactRepositoryPort
 from src.domain.ports.services.storage_service_port import StorageServicePort
 
 logger = logging.getLogger(__name__)
@@ -82,6 +86,7 @@ class ArtifactService:
         self,
         storage_service: StorageServicePort,
         event_publisher: Callable[..., Any] | None = None,
+        artifact_repository: ArtifactRepositoryPort | None = None,
         bucket_prefix: str = "artifacts",
         url_expiration_seconds: int = 7 * 24 * 3600,  # 7 days default
     ) -> None:
@@ -96,11 +101,17 @@ class ArtifactService:
         """
         self._storage = storage_service
         self._event_publisher = event_publisher
+        self._repository = artifact_repository or InMemoryArtifactRepository()
         self._bucket_prefix = bucket_prefix
         self._url_expiration = url_expiration_seconds
 
-        # In-memory artifact tracking (would be DB in production)
-        self._artifacts: dict[str, Artifact] = {}
+        # Kept only for compatibility with isolated tests that use the explicit
+        # process-local fallback. Production construction always injects SQL.
+        self._artifacts = (
+            self._repository.artifacts
+            if isinstance(self._repository, InMemoryArtifactRepository)
+            else {}
+        )
         self._content_locks: dict[str, asyncio.Lock] = {}
 
     def _generate_object_key(
@@ -170,6 +181,9 @@ class ArtifactService:
         object_key = self._generate_object_key(tenant_id, project_id, filename, tool_execution_id)
 
         # Create artifact entity
+        artifact_metadata = dict(metadata or {})
+        artifact_metadata.setdefault("content_revision", 1)
+        artifact_metadata.setdefault("content_hash", artifact_content_hash(file_content))
         artifact = Artifact(
             id=artifact_id,
             project_id=project_id,
@@ -184,44 +198,72 @@ class ArtifactService:
             object_key=object_key,
             source_tool=source_tool,
             source_path=source_path,
-            metadata=metadata or {},
+            metadata=artifact_metadata,
             status=ArtifactStatus.PENDING,
         )
 
-        # Store artifact reference
-        self._artifacts[artifact_id] = artifact
+        # The pending row is the durable lifecycle authority before object I/O.
+        await self._repository.save(artifact)
 
         # Emit created event
         await self._publish_artifact_created(artifact, sandbox_id or "")
 
+        task = asyncio.create_task(
+            self._complete_artifact_upload(
+                artifact=artifact,
+                file_content=file_content,
+                sandbox_id=sandbox_id or "",
+            ),
+            name=f"artifact-upload:{artifact_id}",
+        )
+        cancellation: asyncio.CancelledError | None = None
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError as exc:
+                cancellation = cancellation or exc
+        result = task.result()
+        if cancellation is not None:
+            raise cancellation
+        return result
+
+    async def _complete_artifact_upload(
+        self,
+        *,
+        artifact: Artifact,
+        file_content: bytes,
+        sandbox_id: str,
+    ) -> Artifact:
+        """Finish one durable pending upload even if its caller disconnects."""
         try:
             # Mark as uploading
             artifact.mark_uploading()
+            await self._repository.save(artifact)
 
             # Upload to storage
-            logger.debug(f"Starting S3 upload: key={object_key}")
+            logger.debug(f"Starting S3 upload: key={artifact.object_key}")
             result = await self._storage.upload_file(
                 file_content=file_content,
-                object_key=object_key,
-                content_type=mime_type,
+                object_key=artifact.object_key,
+                content_type=artifact.mime_type,
                 metadata={
-                    "artifact_id": artifact_id,
-                    "project_id": project_id,
-                    "tenant_id": tenant_id,
-                    "filename": filename,
-                    "source_tool": source_tool or "",
+                    "artifact_id": artifact.id,
+                    "project_id": artifact.project_id,
+                    "tenant_id": artifact.tenant_id,
+                    "filename": artifact.filename,
+                    "source_tool": artifact.source_tool or "",
                 },
             )
-            logger.debug(f"S3 upload done: key={object_key}, etag={result.etag}")
+            logger.debug(f"S3 upload done: key={artifact.object_key}, etag={result.etag}")
 
             url = await self._storage.generate_presigned_url(
-                object_key=object_key,
+                object_key=artifact.object_key,
                 expiration_seconds=self._url_expiration,
             )
 
             # Generate preview URL for images (if supported)
             preview_url = None
-            if category == ArtifactCategory.IMAGE:
+            if artifact.category == ArtifactCategory.IMAGE:
                 # For now, use the same URL; could add thumbnail generation later
                 preview_url = url
 
@@ -230,22 +272,29 @@ class ArtifactService:
 
             # Update metadata with storage info
             artifact.metadata["etag"] = result.etag
+            await self._repository.save(artifact)
 
             # Emit ready event
-            await self._publish_artifact_ready(artifact, sandbox_id or "")
+            await self._publish_artifact_ready(artifact, sandbox_id)
 
-            logger.info(f"Artifact created: {artifact_id} ({filename}, {len(file_content)} bytes)")
+            logger.info(
+                "Artifact created: %s (%s, %s bytes)",
+                artifact.id,
+                artifact.filename,
+                len(file_content),
+            )
 
             return artifact
 
         except Exception as e:
             error_msg = str(e)
             artifact.mark_error(error_msg)
+            await self._repository.save(artifact)
 
             # Emit error event
-            await self._publish_artifact_error(artifact, sandbox_id or "", error_msg)
+            await self._publish_artifact_error(artifact, sandbox_id, error_msg)
 
-            logger.error(f"Failed to create artifact {artifact_id}: {error_msg}")
+            logger.error(f"Failed to create artifact {artifact.id}: {error_msg}")
             raise
 
     async def create_artifacts_batch(
@@ -303,11 +352,11 @@ class ArtifactService:
 
     async def get_artifact(self, artifact_id: str) -> Artifact | None:
         """Get an artifact by ID."""
-        return self._artifacts.get(artifact_id)
+        return await self._repository.get(artifact_id)
 
     async def get_artifacts_by_tool_execution(self, tool_execution_id: str) -> list[Artifact]:
         """Get all artifacts for a specific tool execution."""
-        return [a for a in self._artifacts.values() if a.tool_execution_id == tool_execution_id]
+        return await self._repository.get_by_tool_execution(tool_execution_id)
 
     async def get_artifacts_by_project(
         self,
@@ -316,23 +365,16 @@ class ArtifactService:
         category: ArtifactCategory | None = None,
     ) -> list[Artifact]:
         """Get artifacts for a project, optionally filtered by category."""
-        artifacts = [
-            a
-            for a in self._artifacts.values()
-            if a.project_id == project_id and a.status == ArtifactStatus.READY
-        ]
-
-        if category:
-            artifacts = [a for a in artifacts if a.category == category]
-
-        # Sort by creation time, newest first
-        artifacts.sort(key=lambda a: a.created_at, reverse=True)
-
+        artifacts = await self._repository.get_by_project(
+            project_id,
+            category=category,
+            status=ArtifactStatus.READY,
+        )
         return artifacts[:limit]
 
     async def refresh_artifact_url(self, artifact_id: str) -> str | None:
         """Refresh the presigned URL for an artifact."""
-        artifact = self._artifacts.get(artifact_id)
+        artifact = await self._repository.get(artifact_id)
         if not artifact or artifact.status != ArtifactStatus.READY:
             return None
 
@@ -342,6 +384,7 @@ class ArtifactService:
                 expiration_seconds=self._url_expiration,
             )
             artifact.url = url
+            await self._repository.save(artifact)
             return url
         except Exception as e:
             logger.error(f"Failed to refresh URL for artifact {artifact_id}: {e}")
@@ -349,7 +392,7 @@ class ArtifactService:
 
     async def delete_artifact(self, artifact_id: str) -> bool:
         """Delete an artifact from storage."""
-        artifact = self._artifacts.get(artifact_id)
+        artifact = await self._repository.get(artifact_id)
         if not artifact:
             return False
 
@@ -358,7 +401,7 @@ class ArtifactService:
             await self._storage.delete_file(artifact.object_key)
 
             # Mark as deleted
-            artifact.mark_deleted()
+            _ = await self._repository.delete(artifact_id)
 
             logger.info(f"Deleted artifact: {artifact_id}")
             return True
@@ -369,14 +412,14 @@ class ArtifactService:
 
     async def get_artifact_bytes(self, artifact_id: str) -> bytes | None:
         """Return authenticated artifact bytes without issuing storage credentials."""
-        artifact = self._artifacts.get(artifact_id)
+        artifact = await self._repository.get(artifact_id)
         if not artifact or artifact.status != ArtifactStatus.READY:
             return None
         return await self._storage.get_file(artifact.object_key)
 
     async def get_artifact_content(self, artifact_id: str) -> ArtifactContentContract | None:
         """Return editable UTF-8 content with its canonical revision and hash."""
-        artifact = self._artifacts.get(artifact_id)
+        artifact = await self._repository.get(artifact_id)
         if not artifact or artifact.status != ArtifactStatus.READY:
             return None
         mime_type = normalize_mime_type(artifact.mime_type)
@@ -397,6 +440,7 @@ class ArtifactService:
         revision = artifact_content_revision(artifact)
         artifact.metadata["content_revision"] = revision
         artifact.metadata["content_hash"] = content_hash
+        await self._repository.save(artifact)
         return ArtifactContentContract(
             contract_version=2,
             artifact_id=artifact.id,
@@ -412,7 +456,7 @@ class ArtifactService:
         command: ArtifactContentSaveCommand,
     ) -> ArtifactContentSaveReceipt | None:
         """Conditionally save editable text to a versioned object key."""
-        artifact = self._artifacts.get(artifact_id)
+        artifact = await self._repository.get(artifact_id)
         if not artifact or artifact.status != ArtifactStatus.READY:
             return None
         validate_artifact_content_command(command)
@@ -487,6 +531,7 @@ class ArtifactService:
                 "content_hash": command.content_hash,
             }
             artifact.metadata[ARTIFACT_CONTENT_RECEIPTS_METADATA_KEY] = receipts
+            await self._repository.save(artifact)
             return ArtifactContentSaveReceipt(
                 artifact_id=artifact.id,
                 revision=next_revision,
@@ -515,7 +560,7 @@ class ArtifactService:
                 ),
             )
             logger.info(f"Updated artifact content: {artifact_id}, new_size={len(content_bytes)}")
-            return self._artifacts.get(artifact_id)
+            return await self._repository.get(artifact_id)
         except Exception as e:
             logger.error(f"Failed to update artifact {artifact_id}: {e}")
             return None

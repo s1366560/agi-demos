@@ -182,9 +182,13 @@ def get_artifact_service() -> ArtifactService:
     global _artifact_service
 
     if _artifact_service is None:
-        from src.configuration.di_container import DIContainer
+        from src.infrastructure.adapters.primary.web.startup.container import (
+            get_app_container,
+        )
 
-        container = DIContainer()
+        container = get_app_container()
+        if container is None:
+            raise RuntimeError("Application container is not initialized")
         _artifact_service = container.artifact_service()
 
     service = _artifact_service

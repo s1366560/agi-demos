@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from src.domain.ports.agent.agent_tool_port import AgentToolBase
 
 import redis.asyncio as redis
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.services.agent_service import AgentService
 from src.application.services.skill_service import SkillService
@@ -146,6 +146,7 @@ class AgentContainer:
         db: AsyncSession | None = None,
         graph_service: GraphServicePort | None = None,
         redis_client: redis.Redis | None = None,
+        session_factory: async_sessionmaker[AsyncSession] | None = None,
         settings: Settings | None = None,
         neo4j_client_factory: Callable[..., Any] | None = None,
         storage_service_factory: Callable[..., Any] | None = None,
@@ -157,6 +158,7 @@ class AgentContainer:
         self._db = db
         self._graph_service = graph_service
         self._redis_client = redis_client
+        self._session_factory = session_factory
         self._settings = settings
         self._neo4j_client_factory = neo4j_client_factory
         self._storage_service_factory = storage_service_factory
@@ -328,8 +330,13 @@ class AgentContainer:
     def artifact_service(self) -> Any:
         """Get ArtifactService for managing tool output artifacts."""
         from src.application.services.artifact_service import ArtifactService
+        from src.infrastructure.adapters.secondary.persistence.sql_artifact_repository import (
+            SqlArtifactRepository,
+        )
 
         storage_service = self._storage_service_factory() if self._storage_service_factory else None
+        if self._session_factory is None:
+            raise RuntimeError("ArtifactService requires a durable SQL session factory")
 
         event_publisher = None
         try:
@@ -362,6 +369,7 @@ class AgentContainer:
         return ArtifactService(
             storage_service=storage_service,
             event_publisher=event_publisher,
+            artifact_repository=SqlArtifactRepository(self._session_factory),
             bucket_prefix="artifacts",
             url_expiration_seconds=7 * 24 * 3600,
         )
