@@ -1,21 +1,28 @@
 """Tests for plan-mode route hardening."""
 
+import asyncio
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.primary.web.routers.agent.plans import (
+    ApprovePlanAndStartRequest,
     SwitchModeRequest,
+    approve_plan_and_start,
     get_mode,
     get_tasks,
     switch_mode,
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentPlanRunModel,
+    AgentPlanVersionModel,
     AgentTaskModel,
     Conversation,
     Project,
@@ -48,6 +55,7 @@ async def _add_conversation_task(
             id=f"task-{conversation_id}",
             conversation_id=conversation_id,
             content="Authorized task",
+            title="Authorized task",
             status="pending",
             priority="high",
             order_index=0,
@@ -67,6 +75,174 @@ class FailingDb:
 class AuthorizedDb:
     async def execute(self, *_args: Any, **_kwargs: Any) -> Any:
         return SimpleNamespace(scalar_one_or_none=lambda: "conversation-1")
+
+
+def test_approve_plan_environment_rejects_renderer_authority_fields() -> None:
+    request = {
+        "conversation_id": "conversation-1",
+        "project_id": "project-1",
+        "plan_version_id": "plan-version-1",
+        "expected_plan_version": 1,
+        "permission_profile": "full_access",
+        "message": "Implement the approved plan",
+        "message_id": "message-1",
+        "idempotency_key": "approve-1",
+    }
+
+    with pytest.raises(ValidationError):
+        ApprovePlanAndStartRequest.model_validate(
+            {
+                **request,
+                "environment": {
+                    "kind": "worktree",
+                    "id": "renderer-controlled-sandbox",
+                    "workspace_path": "/renderer-controlled",
+                },
+            }
+        )
+
+
+@pytest.mark.unit
+async def test_resolve_cloud_run_environment_uses_server_sandbox_identity_and_root(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.infrastructure.adapters.primary.web.routers.agent.plans as plans_router
+
+    class SandboxSessionContext:
+        async def __aenter__(self) -> object:
+            return object()
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    lifecycle = SimpleNamespace(
+        ensure_sandbox_running=AsyncMock(
+            return_value=SimpleNamespace(
+                project_id="project-1",
+                tenant_id="tenant-1",
+                sandbox_id="sandbox-server-authority",
+                is_healthy=True,
+                created_at=datetime(2026, 7, 28, 10),
+            )
+        )
+    )
+    scoped_container = SimpleNamespace(
+        project_sandbox_lifecycle_service=lambda: lifecycle,
+    )
+    base_container = SimpleNamespace(with_db=lambda _db: scoped_container)
+    monkeypatch.setattr(plans_router, "async_session_factory", SandboxSessionContext)
+
+    environment = await plans_router._resolve_cloud_run_environment(
+        base_container=base_container,
+        project_id="project-1",
+        tenant_id="tenant-1",
+        kind="worktree",
+        bound_at=datetime(2026, 7, 28, 9, tzinfo=UTC),
+    )
+
+    assert environment == {
+        "id": "sandbox-server-authority",
+        "kind": "worktree",
+        "label": "sandbox-server-authority",
+        "workspace_path": "/workspace",
+        "repository_root": None,
+        "branch": None,
+        "base_commit": None,
+        "source_run_id": None,
+        "created_at": "2026-07-28T10:00:00+00:00",
+    }
+    lifecycle.ensure_sandbox_running.assert_awaited_once_with(
+        project_id="project-1",
+        tenant_id="tenant-1",
+    )
+
+
+@pytest.mark.unit
+async def test_approve_plan_persists_server_resolved_environment_and_reuses_it_on_retry(
+    monkeypatch: pytest.MonkeyPatch,
+    test_db: AsyncSession,
+    test_user: User,
+    test_project_db: Project,
+) -> None:
+    import src.infrastructure.adapters.primary.web.routers.agent.plans as plans_router
+
+    conversation_id = "conversation-approved-environment"
+    test_db.add(
+        Conversation(
+            id=conversation_id,
+            project_id=test_project_db.id,
+            tenant_id=test_project_db.tenant_id,
+            user_id=test_user.id,
+            title="Approved environment",
+        )
+    )
+    await test_db.commit()
+    plan = AgentPlanVersionModel(
+        id="plan-version-approved-environment",
+        conversation_id=conversation_id,
+        version=1,
+        status="draft",
+        tasks_json=[],
+    )
+    test_db.add(plan)
+    await test_db.commit()
+
+    environment = {
+        "id": "sandbox-authoritative",
+        "kind": "worktree",
+        "label": "sandbox-authoritative",
+        "workspace_path": "/workspace",
+        "repository_root": None,
+        "branch": None,
+        "base_commit": None,
+        "source_run_id": None,
+        "created_at": "2026-07-28T10:00:00+00:00",
+    }
+    resolve_environment = AsyncMock(return_value=environment)
+    execute_plan = AsyncMock(return_value=None)
+    monkeypatch.setattr(plans_router, "_resolve_cloud_run_environment", resolve_environment)
+    monkeypatch.setattr(plans_router, "_execute_approved_plan", execute_plan)
+
+    body = ApprovePlanAndStartRequest(
+        conversation_id=conversation_id,
+        project_id=test_project_db.id,
+        plan_version_id=plan.id,
+        expected_plan_version=1,
+        permission_profile="full_access",
+        message="Implement the approved plan",
+        message_id="message-approved-environment",
+        idempotency_key="approve-environment-1",
+        environment={"kind": "worktree"},
+    )
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(container=object())),
+    )
+
+    response = await approve_plan_and_start(
+        body=body,
+        request=request,
+        current_user=test_user,
+        db=test_db,
+    )
+    await asyncio.sleep(0)
+
+    run = await test_db.get(AgentPlanRunModel, response["run"]["id"])
+    assert run is not None
+    assert run.authorization_snapshot["environment"] == environment
+    assert response["run"]["environment"] == environment
+    resolve_environment.assert_awaited_once()
+
+    resolve_environment.reset_mock()
+    retried = await approve_plan_and_start(
+        body=body,
+        request=request,
+        current_user=test_user,
+        db=test_db,
+    )
+
+    assert retried["created"] is False
+    assert retried["run"]["environment"] == environment
+    resolve_environment.assert_not_awaited()
 
 
 @pytest.mark.unit
@@ -207,7 +383,7 @@ async def test_get_tasks_returns_tasks_for_owned_tenant_project_conversation(
     assert response.tasks[0].id == "task-conversation-owned"
     payload = response.model_dump()
     assert payload["approval"] == {"kind": "legacy_mode_switch"}
-    assert "plan_version" not in payload
+    assert payload["plan_version"] is None
 
 
 @pytest.mark.unit

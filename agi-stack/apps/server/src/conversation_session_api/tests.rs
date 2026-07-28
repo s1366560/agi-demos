@@ -37,6 +37,17 @@ fn conversation() -> SessionConversationResponse {
 
 #[test]
 fn schema_v2_projection_uses_persisted_authority_and_capabilities() {
+    let environment = SessionRunEnvironmentResponse {
+        id: "sandbox-cloud-1".to_string(),
+        kind: SessionRunEnvironmentKind::Worktree,
+        label: "sandbox-cloud-1".to_string(),
+        workspace_path: "/workspace".to_string(),
+        repository_root: None,
+        branch: None,
+        base_commit: None,
+        source_run_id: None,
+        created_at: timestamp(25),
+    };
     let hitl = SessionPendingHitlResponse {
         id: "hitl-1".to_string(),
         conversation_id: "conversation-1".to_string(),
@@ -80,6 +91,47 @@ fn schema_v2_projection_uses_persisted_authority_and_capabilities() {
             created_at: timestamp(30),
             updated_at: None,
             completed_at: None,
+        }],
+        runs: vec![SessionPlanRunResponse {
+            id: "run-cloud-1".to_string(),
+            conversation_id: "conversation-1".to_string(),
+            project_id: "project-1".to_string(),
+            plan_version_id: "plan-version-1".to_string(),
+            idempotency_key: "approval-1".to_string(),
+            message_id: "message-run-1".to_string(),
+            request_message: "Implement the approved plan".to_string(),
+            status: "running".to_string(),
+            revision: 4,
+            created_at: timestamp(25),
+            updated_at: timestamp(55),
+            started_at: None,
+            completed_at: None,
+            last_heartbeat_at: None,
+            error: None,
+            environment: Some(environment.clone()),
+            permission_profile: SessionPermissionProfile::FullAccess,
+            authorization_snapshot: Map::from_iter([
+                (
+                    "conversation_id".to_string(),
+                    Value::String("conversation-1".to_string()),
+                ),
+                (
+                    "project_id".to_string(),
+                    Value::String("project-1".to_string()),
+                ),
+                (
+                    "plan_version_id".to_string(),
+                    Value::String("plan-version-1".to_string()),
+                ),
+                (
+                    "permission_profile".to_string(),
+                    Value::String("full_access".to_string()),
+                ),
+                (
+                    "environment".to_string(),
+                    serde_json::to_value(environment).expect("environment must serialize"),
+                ),
+            ]),
         }],
         conversation_tasks: Vec::new(),
         workspace_plan_context: None,
@@ -137,7 +189,25 @@ fn schema_v2_projection_uses_persisted_authority_and_capabilities() {
         2
     );
     assert_eq!(payload["tool_execution_records"]["truncated"], true);
-    assert_eq!(payload["updated_at"], "1970-01-01T00:00:51Z");
+    assert_eq!(payload["execution"]["current_run"]["id"], "run-cloud-1");
+    assert_eq!(
+        payload["execution"]["current_run"]["environment"]["id"],
+        "sandbox-cloud-1"
+    );
+    assert_eq!(
+        payload["execution"]["current_run"]["environment"]["workspace_path"],
+        "/workspace"
+    );
+    assert_eq!(
+        payload["execution"]["current_run"]["authorization_snapshot"]["environment"]
+            ["workspace_path"],
+        "/workspace"
+    );
+    assert_eq!(
+        payload["execution"]["current_run"],
+        payload["execution"]["run_history"][0]
+    );
+    assert_eq!(payload["updated_at"], "1970-01-01T00:00:55Z");
     assert_eq!(
         payload["snapshot_revision"]
             .as_str()
@@ -146,15 +216,8 @@ fn schema_v2_projection_uses_persisted_authority_and_capabilities() {
         64
     );
     let serialized = payload.to_string();
-    for unsupported in [
-        "run_id",
-        "permission_profile",
-        "environment",
-        "plan_version",
-        "artifact_version",
-    ] {
-        assert!(!serialized.contains(unsupported));
-    }
+    assert!(!serialized.contains("raw_authorization_secret"));
+    assert!(!serialized.contains("artifact_version"));
 }
 
 #[test]
@@ -179,6 +242,7 @@ fn read_only_projection_never_grants_mutation_capabilities() {
     let projection = build_projection(ConversationSessionAuthoritySnapshot {
         conversation: conversation(),
         attempts: Vec::new(),
+        runs: Vec::new(),
         conversation_tasks: Vec::new(),
         workspace_plan_context: None,
         pending_hitl: vec![hitl],

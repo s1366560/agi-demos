@@ -3215,6 +3215,7 @@ export function App() {
     setReviewTab('overview');
     setReviewPanelOpen(true);
     setTerminal(null);
+    setTerminalV2(null);
     setAgentConversationSession(null);
     setSessionProjectionState(emptySessionProjectionState);
     setSessionDisplayProjection(null);
@@ -6091,7 +6092,8 @@ export function App() {
           session.conversation_id !== currentRun.conversation_id ||
           session.run_id !== currentRun.id ||
           session.run_revision !== currentRun.revision ||
-          session.environment_id !== currentRun.environment?.id
+          session.environment_id !== currentRun.environment?.id ||
+          session.cwd !== currentRun.environment?.workspace_path
         ) {
           throw new Error(t('session.terminalAuthorityMismatch'));
         }
@@ -6228,10 +6230,13 @@ export function App() {
     socket.connected,
   );
   const currentTerminalRunScopeKey = terminalRunScopeKey(currentArtifactRun);
-  if (terminalRunScopeKeyRef.current !== currentTerminalRunScopeKey) {
+  useEffect(() => {
+    if (terminalRunScopeKeyRef.current === currentTerminalRunScopeKey) return;
     terminalRunScopeKeyRef.current = currentTerminalRunScopeKey;
     terminalStartGenerationRef.current += 1;
-  }
+    setTerminal(null);
+    setTerminalV2(null);
+  }, [currentTerminalRunScopeKey]);
   const terminalMatchesCurrentRun = terminalSessionMatchesRun(terminal, currentArtifactRun);
   const terminalUrl = useMemo(() => {
     if (!terminalMatchesCurrentRun || !terminal?.session_id) return null;

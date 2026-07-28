@@ -1,12 +1,14 @@
 import { absoluteUrl } from '../../api/client';
 
 export const TERMINAL_SESSION_V2_CONTRACT_VERSION = 2 as const;
+export const TERMINAL_SESSION_V2_MIN_CONTRACT_VERSION =
+  TERMINAL_SESSION_V2_CONTRACT_VERSION;
 const TERMINAL_RECONNECT_LIMIT = 5;
 const TERMINAL_RECONNECT_BASE_DELAY_MS = 1_000;
 const TERMINAL_RECONNECT_MAX_DELAY_MS = 8_000;
 
 export type TerminalSessionV2 = {
-  contract_version: typeof TERMINAL_SESSION_V2_CONTRACT_VERSION;
+  contract_version: number;
   session_id: string;
   resume_token: string;
   project_id: string;
@@ -24,7 +26,9 @@ export type TerminalDisconnectEvent =
   | { kind: 'normal_close' }
   | { kind: 'abnormal_close' }
   | { kind: 'session_lost' }
-  | { kind: 'authority_revoked' };
+  | { kind: 'authority_revoked' }
+  | { kind: 'output_gap' }
+  | { kind: 'input_overload' };
 
 export type TerminalReconnectDecision =
   | { action: 'resume'; delay_ms: number }
@@ -35,31 +39,19 @@ export type TerminalReconnectDecision =
         | 'terminal_closed'
         | 'terminal_reconnect_exhausted'
         | 'terminal_session_expired'
-        | 'terminal_session_lost';
+        | 'terminal_session_lost'
+        | 'terminal_output_gap'
+        | 'terminal_input_overload';
     };
-
-const TERMINAL_SESSION_V2_KEYS = [
-  'contract_version',
-  'session_id',
-  'resume_token',
-  'project_id',
-  'conversation_id',
-  'run_id',
-  'run_revision',
-  'environment_id',
-  'cwd',
-  'created_at',
-  'expires_at',
-  'resumable',
-] as const;
 
 export function parseTerminalSessionV2(
   input: unknown,
   nowMs = Date.now(),
 ): TerminalSessionV2 | null {
-  if (!isExactRecord(input, TERMINAL_SESSION_V2_KEYS)) return null;
+  if (!isRecord(input)) return null;
   if (
-    input.contract_version !== TERMINAL_SESSION_V2_CONTRACT_VERSION ||
+    !Number.isSafeInteger(input.contract_version) ||
+    Number(input.contract_version) < TERMINAL_SESSION_V2_MIN_CONTRACT_VERSION ||
     input.resumable !== true ||
     !isNonEmptyString(input.session_id) ||
     !isNonEmptyString(input.resume_token) ||
@@ -69,7 +61,7 @@ export function parseTerminalSessionV2(
     !Number.isSafeInteger(input.run_revision) ||
     Number(input.run_revision) < 1 ||
     !isNonEmptyString(input.environment_id) ||
-    !isNonEmptyString(input.cwd) ||
+    input.cwd !== '/workspace' ||
     !isNonEmptyString(input.created_at) ||
     !isNonEmptyString(input.expires_at)
   ) {
@@ -86,7 +78,7 @@ export function parseTerminalSessionV2(
     return null;
   }
   return {
-    contract_version: TERMINAL_SESSION_V2_CONTRACT_VERSION,
+    contract_version: Number(input.contract_version),
     session_id: input.session_id.trim(),
     resume_token: input.resume_token.trim(),
     project_id: input.project_id.trim(),
@@ -104,6 +96,7 @@ export function parseTerminalSessionV2(
 export function terminalSessionV2SocketUrl(
   apiBaseUrl: string,
   session: TerminalSessionV2,
+  afterSequence = 0,
 ): string {
   const target = new URL(
     absoluteUrl(
@@ -116,7 +109,45 @@ export function terminalSessionV2SocketUrl(
   if (target.protocol === 'https:') target.protocol = 'wss:';
   else if (target.protocol === 'http:') target.protocol = 'ws:';
   else throw new Error('terminal API origin must use HTTP or HTTPS');
+  if (Number.isSafeInteger(afterSequence) && afterSequence > 0) {
+    target.searchParams.set('after_sequence', String(afterSequence));
+  }
   return target.toString();
+}
+
+export function acceptTerminalSequence(
+  currentSequence: number,
+  candidateSequence: number,
+): { accepted: boolean; next_sequence: number; gap?: true } {
+  if (
+    !Number.isSafeInteger(currentSequence) ||
+    currentSequence < 0 ||
+    !Number.isSafeInteger(candidateSequence) ||
+    candidateSequence < 1 ||
+    candidateSequence <= currentSequence
+  ) {
+    return {
+      accepted: false,
+      next_sequence:
+        Number.isSafeInteger(currentSequence) && currentSequence >= 0 ? currentSequence : 0,
+    };
+  }
+  if (candidateSequence !== currentSequence + 1) {
+    return { accepted: false, next_sequence: currentSequence, gap: true };
+  }
+  return { accepted: true, next_sequence: candidateSequence };
+}
+
+export function terminalAcknowledgementMatches(
+  currentSequence: number,
+  acknowledgedSequence: number,
+): boolean {
+  return (
+    Number.isSafeInteger(currentSequence) &&
+    currentSequence >= 0 &&
+    Number.isSafeInteger(acknowledgedSequence) &&
+    acknowledgedSequence === currentSequence
+  );
 }
 
 export function terminalReconnectDecision(
@@ -130,6 +161,12 @@ export function terminalReconnectDecision(
   }
   if (event.kind === 'authority_revoked') {
     return { action: 'refetch_run', reason_code: 'terminal_authority_revoked' };
+  }
+  if (event.kind === 'output_gap') {
+    return { action: 'refetch_run', reason_code: 'terminal_output_gap' };
+  }
+  if (event.kind === 'input_overload') {
+    return { action: 'stop', reason_code: 'terminal_input_overload' };
   }
   if (event.kind === 'normal_close') {
     return { action: 'stop', reason_code: 'terminal_closed' };
@@ -147,16 +184,6 @@ export function terminalReconnectDecision(
       TERMINAL_RECONNECT_MAX_DELAY_MS,
     ),
   };
-}
-
-function isExactRecord(
-  input: unknown,
-  expectedKeys: readonly string[],
-): input is Record<string, unknown> {
-  if (!isRecord(input)) return false;
-  const keys = Object.keys(input).sort();
-  const expected = [...expectedKeys].sort();
-  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
 }
 
 function isRecord(input: unknown): input is Record<string, unknown> {

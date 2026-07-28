@@ -96,6 +96,89 @@ fn sandbox_runtime_capabilities_publish_terminal_v2_only_when_authority_is_ready
 }
 
 #[test]
+fn sandbox_runtime_capabilities_publish_stable_terminal_v2_unavailable_reasons() {
+    for (state, availability, reason_code) in [
+        (
+            TerminalV2CapabilityState::SandboxUnavailable,
+            "unavailable",
+            "terminal_session_v2_sandbox_unavailable",
+        ),
+        (
+            TerminalV2CapabilityState::SandboxNotRunning,
+            "unavailable",
+            "terminal_session_v2_sandbox_not_running",
+        ),
+        (
+            TerminalV2CapabilityState::TerminalUrlUnavailable,
+            "unavailable",
+            "terminal_session_v2_terminal_url_unavailable",
+        ),
+        (
+            TerminalV2CapabilityState::RegistryUnavailable,
+            "unavailable",
+            "terminal_session_v2_registry_unavailable",
+        ),
+        (
+            TerminalV2CapabilityState::NotApplicable,
+            "not_applicable",
+            "terminal_session_v2_not_applicable",
+        ),
+    ] {
+        let actual = SandboxRuntimeCapabilitiesResponse::from_terminal_v2_state(state);
+        assert_eq!(actual.terminal_resume.availability, availability);
+        assert_eq!(actual.terminal_resume.reason_code, Some(reason_code));
+    }
+}
+
+#[test]
+fn terminal_v2_capability_requires_a_live_applicable_terminal_and_healthy_registry() {
+    let mut info = sample_info();
+    info.terminal_url = Some("http://127.0.0.1:7681".to_string());
+    info.runtime_auth_token = Some(SandboxRuntimeToken::from_exposed("private-capability"));
+    assert_eq!(
+        terminal_v2_capability_state(Some(&info), true, true),
+        TerminalV2CapabilityState::Available
+    );
+
+    info.profile = SandboxProfile::Lite;
+    assert_eq!(
+        terminal_v2_capability_state(Some(&info), true, true),
+        TerminalV2CapabilityState::NotApplicable
+    );
+    info.profile = SandboxProfile::Standard;
+    info.sandbox_type = "local".to_string();
+    assert_eq!(
+        terminal_v2_capability_state(Some(&info), true, true),
+        TerminalV2CapabilityState::NotApplicable
+    );
+    info.sandbox_type = "cloud".to_string();
+    info.state = ContainerState::Exited;
+    assert_eq!(
+        terminal_v2_capability_state(Some(&info), true, true),
+        TerminalV2CapabilityState::SandboxNotRunning
+    );
+    info.state = ContainerState::Running;
+    info.terminal_url = None;
+    assert_eq!(
+        terminal_v2_capability_state(Some(&info), true, true),
+        TerminalV2CapabilityState::TerminalUrlUnavailable
+    );
+    assert_eq!(
+        terminal_v2_capability_state(None, true, true),
+        TerminalV2CapabilityState::SandboxUnavailable
+    );
+    assert_eq!(
+        terminal_v2_capability_state(Some(&info), false, true),
+        TerminalV2CapabilityState::CanonicalAuthorityUnavailable
+    );
+    info.terminal_url = Some("http://127.0.0.1:7681".to_string());
+    assert_eq!(
+        terminal_v2_capability_state(Some(&info), true, false),
+        TerminalV2CapabilityState::RegistryUnavailable
+    );
+}
+
+#[test]
 fn sandbox_profiles_match_python_wire_shape() {
     let response = SandboxProfilesResponse {
         profiles: SANDBOX_PROFILE_INFOS,

@@ -62,11 +62,27 @@ const localRuntimeSnapshot = {
   },
 };
 
-test('sandbox capability snapshot is exact, versioned, and fail closed', () => {
+test('sandbox capability snapshot negotiates minimum versions and fails closed below them', () => {
   assert.deepEqual(parseSandboxRuntimeCapabilitySnapshot(availableSnapshot), availableSnapshot);
-  assert.equal(
-    parseSandboxRuntimeCapabilitySnapshot({ ...availableSnapshot, inferred: true }),
-    null
+  assert.deepEqual(
+    parseSandboxRuntimeCapabilitySnapshot({
+      ...availableSnapshot,
+      contract_version: 3,
+      terminal_resume: {
+        ...availableSnapshot.terminal_resume,
+        contract_version: 3,
+        retained_sequences: 512,
+      },
+      inferred: true,
+    }),
+    {
+      ...availableSnapshot,
+      contract_version: 3,
+      terminal_resume: {
+        ...availableSnapshot.terminal_resume,
+        contract_version: 3,
+      },
+    }
   );
   assert.equal(
     parseSandboxRuntimeCapabilitySnapshot({

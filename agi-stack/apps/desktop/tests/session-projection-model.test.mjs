@@ -189,6 +189,8 @@ function validCloudProjection() {
       focused_agent_id: 'agent-worker',
     },
     execution: {
+      current_run: null,
+      run_history: [],
       current_attempt: attempt,
       attempt_history: [attempt],
     },
@@ -397,6 +399,94 @@ test('session projection decoder accepts a scoped cloud workspace authority with
   assert.equal(projection?.capabilities.canSendMessage, false);
   assert.equal(projection?.toolInvocations.length, 0);
   assert.equal(projection?.activityAuthority.kind, 'cloud_tool_records');
+});
+
+test('cloud session projection decodes the persisted current run and exact environment', () => {
+  const payload = validCloudProjection();
+  const run = {
+    id: 'run-cloud-1',
+    conversation_id: 'conversation-1',
+    project_id: 'project-1',
+    plan_version_id: 'plan-version-1',
+    idempotency_key: 'approval-1',
+    message_id: 'message-1',
+    request_message: 'Implement the approved plan',
+    status: 'running',
+    revision: 4,
+    created_at: '2026-07-14T00:00:00Z',
+    updated_at: '2026-07-14T00:01:00Z',
+    started_at: null,
+    completed_at: null,
+    last_heartbeat_at: null,
+    error: null,
+    environment: {
+      id: 'sandbox-cloud-1',
+      kind: 'worktree',
+      label: 'sandbox-cloud-1',
+      workspace_path: '/workspace',
+      repository_root: null,
+      branch: null,
+      base_commit: null,
+      source_run_id: null,
+      created_at: '2026-07-14T00:00:00Z',
+    },
+    permission_profile: 'full_access',
+    authorization_snapshot: {
+      conversation_id: 'conversation-1',
+      project_id: 'project-1',
+      plan_version_id: 'plan-version-1',
+      permission_profile: 'full_access',
+      environment: {
+        id: 'sandbox-cloud-1',
+        kind: 'worktree',
+        label: 'sandbox-cloud-1',
+        workspace_path: '/workspace',
+        repository_root: null,
+        branch: null,
+        base_commit: null,
+        source_run_id: null,
+        created_at: '2026-07-14T00:00:00Z',
+      },
+    },
+  };
+  payload.execution.current_run = run;
+  payload.execution.run_history = [run];
+
+  const projection = decodeConversationSessionProjection(payload, {
+    conversationId: 'conversation-1',
+    projectId: 'project-1',
+    tenantId: 'tenant-1',
+    workspaceId: 'workspace-1',
+  });
+
+  assert.equal(projection?.currentRun?.id, 'run-cloud-1');
+  assert.equal(projection?.currentRun?.revision, 4);
+  assert.equal(projection?.currentRun?.environment?.id, 'sandbox-cloud-1');
+  assert.equal(projection?.currentRun?.environment?.workspace_path, '/workspace');
+  assert.equal(projection?.executionAuthority.currentRun?.id, 'run-cloud-1');
+  assert.deepEqual(projection?.runHistory, [projection?.currentRun]);
+
+  payload.execution.current_run.revision = 0;
+  assert.equal(
+    decodeConversationSessionProjection(payload, {
+      conversationId: 'conversation-1',
+      projectId: 'project-1',
+      tenantId: 'tenant-1',
+      workspaceId: 'workspace-1',
+    }),
+    null,
+  );
+  payload.execution.current_run.revision = 4;
+  payload.execution.current_run.environment.workspace_path = '/workspace/project-1';
+  assert.equal(
+    decodeConversationSessionProjection(payload, {
+      conversationId: 'conversation-1',
+      projectId: 'project-1',
+      tenantId: 'tenant-1',
+      workspaceId: 'workspace-1',
+    }),
+    null,
+  );
 });
 
 test('cloud session projection preserves the explicit explore runtime mode', () => {

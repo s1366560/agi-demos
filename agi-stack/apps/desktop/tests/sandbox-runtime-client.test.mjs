@@ -87,7 +87,7 @@ test('cloud terminal operations use strict TerminalSessionV2 create and resume r
         run_id: 'run-1',
         run_revision: 4,
         environment_id: 'environment-1',
-        cwd: '/workspace/project',
+        cwd: '/workspace',
         created_at: createdAt,
         expires_at: expiresAt,
         resumable: true,

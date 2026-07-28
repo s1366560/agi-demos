@@ -13,6 +13,12 @@ pub(crate) trait HttpServiceRegistry: Send + Sync {
         false
     }
 
+    async fn health_check(&self) -> SandboxApiResult<()> {
+        Err(SandboxApiError::service_unavailable(
+            "Durable sandbox registry is unavailable",
+        ))
+    }
+
     async fn upsert(
         &self,
         project_id: &str,
@@ -239,6 +245,12 @@ impl HttpServiceRegistry for InMemoryHttpServiceRegistry {
 impl HttpServiceRegistry for agistack_adapters_redis::RedisSandboxHttpRegistry {
     fn is_durable(&self) -> bool {
         true
+    }
+
+    async fn health_check(&self) -> SandboxApiResult<()> {
+        agistack_adapters_redis::RedisSandboxHttpRegistry::health_check(self)
+            .await
+            .map_err(SandboxApiError::internal)
     }
 
     async fn upsert(

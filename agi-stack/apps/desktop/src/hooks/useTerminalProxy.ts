@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
+  acceptTerminalSequence,
+  terminalAcknowledgementMatches,
   terminalReconnectDecision,
   type TerminalDisconnectEvent,
   type TerminalSessionV2,
@@ -17,6 +19,9 @@ type TerminalProxyState = {
   close: () => void;
   clear: () => void;
 };
+
+const TERMINAL_CLIENT_FRAME_BYTES = 128 * 1024;
+const TERMINAL_AGGREGATE_BYTES = 256 * 1024;
 
 export function useTerminalProxy(
   url: string | null,
@@ -40,7 +45,7 @@ export function useTerminalProxy(
     const pending = pendingLinesRef.current;
     if (!pending.length) return;
     pendingLinesRef.current = [];
-    setLines((current) => [...current, ...pending].slice(-300));
+    setLines((current) => appendTerminalLinesBounded(current, pending));
   }, []);
 
   const scheduleLinesFlush = useCallback(() => {
@@ -70,6 +75,7 @@ export function useTerminalProxy(
     let disposed = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let reconnectAttempts = 0;
+    let lastSequence = 0;
     let disconnectEvent: TerminalDisconnectEvent | null = null;
     const recoveryConfig = recovery;
 
@@ -82,6 +88,7 @@ export function useTerminalProxy(
         launchCapability,
         WebSocket,
         recoveryConfig?.session?.resume_token ?? '',
+        lastSequence,
       );
       socketRef.current = socket;
       const isCurrent = () =>
@@ -127,9 +134,53 @@ export function useTerminalProxy(
       };
       socket.onmessage = (message) => {
         if (!isCurrent()) return;
-        const frame = terminalFrame(message.data);
-        pendingLinesRef.current.push(frame.line);
-        scheduleLinesFlush();
+        if (
+          typeof message.data === 'string' &&
+          utf8Bytes(message.data) > TERMINAL_CLIENT_FRAME_BYTES
+        ) {
+          disconnectEvent = { kind: 'output_gap' };
+          setStatus('error');
+          setError('terminal_output_gap');
+          socket.close();
+          return;
+        }
+        const frame = terminalFrame(message.data, Boolean(recoveryConfig?.session));
+        if (
+          frame.acknowledged_sequence !== undefined &&
+          !terminalAcknowledgementMatches(lastSequence, frame.acknowledged_sequence)
+        ) {
+          disconnectEvent = { kind: 'output_gap' };
+          setStatus('error');
+          setError('terminal_output_gap');
+          socket.close();
+          return;
+        }
+        if (frame.sequence !== undefined) {
+          const acceptance = acceptTerminalSequence(lastSequence, frame.sequence);
+          if (acceptance.gap) {
+            disconnectEvent = { kind: 'output_gap' };
+            setStatus('error');
+            setError('terminal_output_gap');
+            socket.close();
+            return;
+          }
+          if (!acceptance.accepted) return;
+          lastSequence = acceptance.next_sequence;
+        }
+        if (frame.line !== null) {
+          const pendingBytes =
+            pendingLinesRef.current.reduce((total, line) => total + utf8Bytes(line), 0) +
+            utf8Bytes(frame.line);
+          if (pendingBytes > TERMINAL_AGGREGATE_BYTES) {
+            disconnectEvent = { kind: 'output_gap' };
+            setStatus('error');
+            setError('terminal_output_gap');
+            socket.close();
+            return;
+          }
+          pendingLinesRef.current.push(frame.line);
+          scheduleLinesFlush();
+        }
         if (frame.disconnect) disconnectEvent = frame.disconnect;
         if (frame.error) {
           setStatus('error');
@@ -191,26 +242,68 @@ export function openTerminalSocket(
   launchCapability: string,
   Socket: typeof WebSocket = WebSocket,
   resumeToken = '',
+  afterSequence = 0,
 ): WebSocket {
   const protocols = launchCapability
     ? ['memstack.launch', launchCapability, 'memstack.auth', credential]
     : ['memstack.auth', credential];
   if (resumeToken) protocols.push('memstack.terminal-v2', resumeToken);
-  return new Socket(url, protocols);
+  const target = new URL(url);
+  if (Number.isSafeInteger(afterSequence) && afterSequence > 0) {
+    target.searchParams.set('after_sequence', String(afterSequence));
+  }
+  return new Socket(target.toString(), protocols);
 }
 
-export function terminalFrame(data: unknown): {
-  line: string;
+export function terminalFrame(data: unknown, requireSequence = false): {
+  line: string | null;
   error: string | null;
   disconnect?: TerminalDisconnectEvent;
+  sequence?: number;
+  acknowledged_sequence?: number;
 } {
   if (typeof data !== 'string') return { line: '[binary terminal frame]', error: null };
   try {
     const parsed = JSON.parse(data);
     if (!parsed || typeof parsed !== 'object') return { line: data, error: null };
     const record = parsed as Record<string, unknown>;
-    if (record.type === 'output') return { line: String(record.data ?? ''), error: null };
+    if (record.type === 'output') {
+      if (!requireSequence && record.sequence === undefined && typeof record.data === 'string') {
+        return { line: record.data, error: null };
+      }
+      if (
+        !Number.isSafeInteger(record.sequence) ||
+        Number(record.sequence) < 1 ||
+        typeof record.data !== 'string'
+      ) {
+        return {
+          line: null,
+          error: 'terminal_output_gap',
+          disconnect: { kind: 'output_gap' },
+        };
+      }
+      return {
+        line: record.data,
+        error: null,
+        sequence: Number(record.sequence),
+      };
+    }
+    if (record.type === 'ack') {
+      if (!Number.isSafeInteger(record.after_sequence) || Number(record.after_sequence) < 0) {
+        return {
+          line: null,
+          error: 'terminal_output_gap',
+          disconnect: { kind: 'output_gap' },
+        };
+      }
+      return {
+        line: null,
+        error: null,
+        acknowledged_sequence: Number(record.after_sequence),
+      };
+    }
     if (record.type === 'connected') {
+      if (requireSequence) return { line: null, error: null };
       const sessionId = String(record.session_id ?? '');
       const cols = String(record.cols ?? '');
       const rows = String(record.rows ?? '');
@@ -230,6 +323,20 @@ export function terminalFrame(data: unknown): {
         disconnect: { kind: 'session_lost' },
       };
     }
+    if (record.type === 'terminal_output_gap') {
+      return {
+        line: null,
+        error: 'terminal_output_gap',
+        disconnect: { kind: 'output_gap' },
+      };
+    }
+    if (record.type === 'terminal_input_overload') {
+      return {
+        line: null,
+        error: 'terminal_input_overload',
+        disconnect: { kind: 'input_overload' },
+      };
+    }
     if (record.type === 'error') {
       const code =
         record.code === 'terminal_session_lost'
@@ -244,4 +351,27 @@ export function terminalFrame(data: unknown): {
   } catch {
     return { line: data, error: null };
   }
+}
+
+export function appendTerminalLinesBounded(
+  current: string[],
+  pending: string[],
+  maxBytes = TERMINAL_AGGREGATE_BYTES,
+): string[] {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) return [];
+  const combined = [...current, ...pending];
+  const retained: string[] = [];
+  let retainedBytes = 0;
+  for (let index = combined.length - 1; index >= 0; index -= 1) {
+    const line = combined[index];
+    const lineBytes = utf8Bytes(line);
+    if (lineBytes > maxBytes || retainedBytes + lineBytes > maxBytes) break;
+    retained.unshift(line);
+    retainedBytes += lineBytes;
+  }
+  return retained.slice(-300);
+}
+
+function utf8Bytes(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
 }

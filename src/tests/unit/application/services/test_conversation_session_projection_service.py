@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from src.application.services.conversation_session_projection_service import (
+    AgentPlanRunAuthority,
     ArtifactRecordAuthority,
     ConversationAuthority,
     ConversationSessionAuthoritySnapshot,
@@ -17,6 +19,9 @@ from src.application.services.conversation_session_projection_service import (
     WorkspaceAttemptAuthority,
     WorkspacePlanContextAuthority,
     WorkspacePlanNodeAuthority,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_conversation_session_projection_reader import (
+    SqlConversationSessionProjectionReader,
 )
 
 NOW = datetime(2026, 7, 15, 9, 0, tzinfo=UTC)
@@ -91,6 +96,36 @@ def attempt(attempt_id: str, number: int, status: str) -> WorkspaceAttemptAuthor
         created_at=NOW - timedelta(minutes=10 - number),
         updated_at=NOW - timedelta(minutes=2),
         completed_at=None,
+    )
+
+
+def plan_run() -> AgentPlanRunAuthority:
+    return AgentPlanRunAuthority(
+        id="run-1",
+        conversation_id="conversation-1",
+        project_id="project-1",
+        plan_version_id="plan-version-1",
+        idempotency_key="approve-1",
+        message_id="message-1",
+        request_message="Implement the approved plan",
+        status="running",
+        revision=3,
+        permission_profile="full_access",
+        environment={
+            "id": "sandbox-1",
+            "kind": "worktree",
+            "label": "sandbox-1",
+            "workspace_path": "/workspace",
+            "repository_root": None,
+            "branch": None,
+            "base_commit": None,
+            "source_run_id": None,
+            "created_at": (NOW - timedelta(minutes=5)).isoformat(),
+        },
+        created_at=NOW - timedelta(minutes=5),
+        updated_at=NOW,
+        completed_at=None,
+        error=None,
     )
 
 
@@ -178,6 +213,11 @@ def snapshot() -> ConversationSessionAuthoritySnapshot:
     )
 
 
+def test_malformed_permission_profile_fails_instead_of_promoting_an_older_run() -> None:
+    with pytest.raises(ValueError, match="unsupported permission profile"):
+        SqlConversationSessionProjectionReader._run_permission_profile("malformed")
+
+
 async def test_builds_discriminated_workspace_session_without_desktop_authority() -> None:
     reader = FakeConversationSessionReader(snapshot())
     service = ConversationSessionProjectionService(reader)
@@ -242,6 +282,37 @@ async def test_builds_discriminated_workspace_session_without_desktop_authority(
     ):
         assert forbidden not in serialized
     assert "revision" not in payload
+
+
+async def test_projects_latest_persisted_run_and_exact_cloud_environment() -> None:
+    reader = FakeConversationSessionReader(replace(snapshot(), runs=(plan_run(),)))
+    service = ConversationSessionProjectionService(reader)
+
+    projection = await service.get_projection(
+        conversation_id="conversation-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        user_id="user-1",
+        now=NOW,
+    )
+
+    assert projection.execution.current_run == projection.execution.run_history[0]
+    assert projection.execution.current_run is not None
+    assert projection.execution.current_run.id == "run-1"
+    assert projection.execution.current_run.revision == 3
+    assert projection.execution.current_run.permission_profile == "full_access"
+    assert projection.execution.current_run.environment is not None
+    assert projection.execution.current_run.environment.id == "sandbox-1"
+    assert projection.execution.current_run.environment.workspace_path == "/workspace"
+    assert projection.execution.current_run.authorization_snapshot == {
+        "conversation_id": "conversation-1",
+        "project_id": "project-1",
+        "plan_version_id": "plan-version-1",
+        "permission_profile": "full_access",
+        "environment": projection.execution.current_run.environment.model_dump(mode="json"),
+    }
+    assert projection.updated_at == NOW
 
 
 async def test_standalone_session_uses_conversation_record_authority() -> None:
