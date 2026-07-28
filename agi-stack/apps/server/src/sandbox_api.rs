@@ -100,8 +100,8 @@ use views::{
     HttpServiceActionResponse, HttpServicePreviewSessionResponse, HttpServiceResponse,
     ListHttpServicesResponse, ListProjectSandboxesQuery, ListProjectSandboxesResponse,
     ProjectSandboxResponse, SandboxActionResponse, SandboxProxyAuthCookieResponse,
-    SandboxServiceStopResponse, SandboxStatsResponse, StartDesktopQuery, TerminalServiceResponse,
-    TerminalWsQuery,
+    SandboxRuntimeCapabilitiesResponse, SandboxServiceStopResponse, SandboxStatsResponse,
+    StartDesktopQuery, TerminalServiceResponse, TerminalWsQuery,
 };
 use ws_handlers::*;
 use ws_proxy::{
@@ -605,6 +605,10 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/api/v1/projects/:project_id/sandbox/execute",
             post(execute_project_sandbox_tool),
+        )
+        .route(
+            "/api/v1/projects/:project_id/sandbox/capabilities",
+            get(get_project_sandbox_runtime_capabilities),
         )
         .route(
             "/api/v1/projects/:project_id/sandbox/proxy-auth-cookie",

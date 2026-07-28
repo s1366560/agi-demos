@@ -28,6 +28,41 @@ fn sandbox_router_builds_with_http_service_proxy_routes() {
 }
 
 #[test]
+fn sandbox_runtime_capabilities_do_not_claim_canonical_run_authority() {
+    let actual = serde_json::to_value(
+        SandboxRuntimeCapabilitiesResponse::canonical_run_authority_unavailable(),
+    )
+    .unwrap();
+    assert_eq!(
+        actual,
+        serde_json::json!({
+            "service_version": "0.1.0",
+            "contract_version": 2,
+            "terminal_interactive": {
+                "availability": "degraded",
+                "contract_version": 1,
+                "reason_code": "terminal_interactive_canonical_run_authority_unavailable"
+            },
+            "terminal_resume": {
+                "availability": "unavailable",
+                "contract_version": 2,
+                "reason_code": "terminal_session_v2_canonical_run_authority_unavailable"
+            },
+            "files": {
+                "availability": "unavailable",
+                "contract_version": 1,
+                "reason_code": "sandbox_file_api_unavailable"
+            },
+            "kasm_vnc": {
+                "availability": "unavailable",
+                "contract_version": 1,
+                "reason_code": "kasm_proxy_contract_unavailable"
+            }
+        })
+    );
+}
+
+#[test]
 fn sandbox_profiles_match_python_wire_shape() {
     let response = SandboxProfilesResponse {
         profiles: SANDBOX_PROFILE_INFOS,

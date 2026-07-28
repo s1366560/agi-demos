@@ -6057,11 +6057,33 @@ export function App() {
       }
       const requestGeneration = terminalStartGenerationRef.current + 1;
       terminalStartGenerationRef.current = requestGeneration;
+      if (config.mode === 'cloud') {
+        const runtimeClient = sandboxRuntime.runtimeClient;
+        if (!runtimeClient) {
+          throw new Error(t('session.terminalCapabilityUnavailable'));
+        }
+        const result = await runtimeClient.createTerminalSession(
+          config.projectId,
+          sourceRun.id,
+          sourceRun.revision,
+        );
+        if (result.status === 'unavailable') {
+          throw new Error(
+            t(
+              result.reason_code ===
+                'terminal_session_v2_canonical_run_authority_unavailable'
+                ? 'session.terminalCanonicalRunAuthorityUnavailable'
+                : 'session.terminalCapabilityUnavailable',
+            ),
+          );
+        }
+        throw new Error(t('session.terminalAuthorityMismatch'));
+      }
+      if (config.mode !== 'local') {
+        throw new Error(t('session.terminalCapabilityUnavailable'));
+      }
       await api.seedProxyAuthCookie();
-      const response = await api.startTerminal(
-        sourceRun.id,
-        sourceRun.revision,
-      );
+      const response = await api.startTerminal(sourceRun.id, sourceRun.revision);
       if (terminalStartGenerationRef.current !== requestGeneration) return;
       if (!terminalSessionMatchesRun(response, currentArtifactRunRef.current)) {
         throw new Error(t('session.terminalAuthorityMismatch'));

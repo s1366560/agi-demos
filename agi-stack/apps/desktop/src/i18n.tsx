@@ -1914,6 +1914,10 @@ const enUS: Record<string, string> = {
   'session.openNewTerminal': 'Open new shell',
   'session.terminalAuthorityMismatch':
     'The terminal response does not match the current Run, revision, conversation, and environment.',
+  'session.terminalCanonicalRunAuthorityUnavailable':
+    'Cloud terminal access is unavailable until the server can verify the canonical Run and environment.',
+  'session.terminalCapabilityUnavailable':
+    'Terminal access is unavailable for the current runtime capability contract.',
   'session.terminalStaleBody':
     'This shell belonged to a different Run identity. It was detached and its output was cleared.',
   'session.terminalClosedBody':
@@ -5297,6 +5301,9 @@ const zhCN: Record<string, string> = {
   'session.terminalOutput': '运行终端输出',
   'session.openNewTerminal': '打开新 Shell',
   'session.terminalAuthorityMismatch': '终端回执与当前 Run、修订版本、会话或执行环境不一致。',
+  'session.terminalCanonicalRunAuthorityUnavailable':
+    '云端终端暂不可用：服务端尚不能校验权威 Run 与执行环境。',
+  'session.terminalCapabilityUnavailable': '当前运行时能力契约不支持终端访问。',
   'session.terminalStaleBody': '此 Shell 属于另一组运行身份，现已解除绑定并清除旧输出。',
   'session.terminalClosedBody':
     '连接关闭时 Shell 进程已结束；如果当前运行仍获授权，请打开新的 Shell。',
