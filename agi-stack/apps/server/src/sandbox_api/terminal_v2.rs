@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use super::*;
 use axum::extract::ws::WebSocketUpgrade;
@@ -24,8 +25,11 @@ const REPLAY_BUFFER_BYTES: usize = 512 * 1024;
 const TERMINAL_FRAME_BYTES: usize = 64 * 1024;
 const INPUT_SEND_TIMEOUT_MILLIS: u64 = 250;
 const AUTHORITY_RECHECK_SECONDS: u64 = 5;
+const AUTHORITY_HEALTH_TIMEOUT_MILLIS: u64 = 500;
 const DEFAULT_DISCONNECT_GRACE_SECONDS: i64 = 30;
 const TERMINAL_RESUME_SUBPROTOCOL: &str = "memstack.terminal-v2";
+const SERVER_REPLICA_COUNT_ENV: &str = "AGISTACK_SERVER_REPLICA_COUNT";
+const TERMINAL_INSTANCE_AFFINITY_ENV: &str = "AGISTACK_TERMINAL_INSTANCE_AFFINITY";
 const TERMINAL_RUN_AUTHORITY_SQL: &str = "\
 SELECT c.tenant_id, c.user_id, apr.project_id, apr.conversation_id, apr.id AS run_id, \
        apr.revision AS run_revision, \
@@ -119,6 +123,15 @@ impl TerminalV2Error {
         }
     }
 
+    fn instance_affinity_unavailable() -> Self {
+        Self {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            code: "terminal_session_v2_instance_affinity_unavailable",
+            message: "TerminalSessionV2 requires instance affinity in multi-replica deployments",
+            refetch: false,
+        }
+    }
+
     fn authority() -> Self {
         Self {
             status: StatusCode::CONFLICT,
@@ -198,6 +211,21 @@ impl TerminalV2Service {
         self.registry.is_durable() && self.registry.health_check().await.is_ok()
     }
 
+    pub(super) async fn authority_is_healthy(&self) -> bool {
+        matches!(
+            tokio::time::timeout(
+                Duration::from_millis(AUTHORITY_HEALTH_TIMEOUT_MILLIS),
+                sqlx::query_scalar::<_, i32>("SELECT 1").fetch_one(&self.authority_pool),
+            )
+            .await,
+            Ok(Ok(1))
+        )
+    }
+
+    pub(super) fn instance_affinity_is_ready(&self) -> bool {
+        terminal_v2_instance_affinity_ready_from_env()
+    }
+
     async fn authority(
         &self,
         tenant_id: &str,
@@ -225,6 +253,9 @@ impl TerminalV2Service {
     ) -> Result<TerminalSessionV2Response, TerminalV2Error> {
         if !self.is_available() {
             return Err(TerminalV2Error::unavailable());
+        }
+        if !self.instance_affinity_is_ready() {
+            return Err(TerminalV2Error::instance_affinity_unavailable());
         }
         let environment = resolve_terminal_environment(info, &authority)?;
         let terminal_url = info
@@ -309,6 +340,9 @@ impl TerminalV2Service {
         if !self.is_available() {
             return Err(TerminalV2Error::unavailable());
         }
+        if !self.instance_affinity_is_ready() {
+            return Err(TerminalV2Error::instance_affinity_unavailable());
+        }
         let record = self
             .registry
             .get_terminal_session_v2(project_id, session_id)
@@ -358,6 +392,26 @@ impl TerminalV2Service {
         }
         Ok((record, hub))
     }
+}
+
+pub(super) fn terminal_v2_instance_affinity_ready(
+    replica_count: Option<&str>,
+    affinity_enabled: Option<&str>,
+) -> bool {
+    let replicas = match replica_count {
+        None => 1,
+        Some(raw) => match raw.trim().parse::<u32>() {
+            Ok(value) if value > 0 => value,
+            _ => return false,
+        },
+    };
+    replicas == 1 || matches!(affinity_enabled.map(str::trim), Some("true" | "1"))
+}
+
+fn terminal_v2_instance_affinity_ready_from_env() -> bool {
+    let replica_count = std::env::var(SERVER_REPLICA_COUNT_ENV).ok();
+    let affinity_enabled = std::env::var(TERMINAL_INSTANCE_AFFINITY_ENV).ok();
+    terminal_v2_instance_affinity_ready(replica_count.as_deref(), affinity_enabled.as_deref())
 }
 
 async fn load_terminal_authority(
@@ -748,5 +802,18 @@ mod tests {
                 "missing authority clause: {clause}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn terminal_v2_authority_health_fails_closed_when_postgres_is_unreachable() {
+        let service = TerminalV2Service::new(
+            sqlx::postgres::PgPoolOptions::new()
+                .acquire_timeout(Duration::from_millis(25))
+                .connect_lazy("postgres://postgres:postgres@127.0.0.1:1/memstack")
+                .expect("test postgres URL is valid"),
+            in_memory_http_service_registry(),
+        );
+
+        assert!(!service.authority_is_healthy().await);
     }
 }

@@ -1,5 +1,6 @@
 use super::super::*;
 use super::*;
+use crate::sandbox_api::terminal_v2::terminal_v2_instance_affinity_ready;
 
 #[test]
 fn profile_validation_matches_python_enum_values() {
@@ -142,6 +143,16 @@ fn sandbox_runtime_capabilities_publish_stable_terminal_v2_unavailable_reasons()
             "terminal_session_v2_registry_unavailable",
         ),
         (
+            TerminalV2CapabilityState::AuthorityUnavailable,
+            "unavailable",
+            "terminal_session_v2_authority_unavailable",
+        ),
+        (
+            TerminalV2CapabilityState::InstanceAffinityUnavailable,
+            "unavailable",
+            "terminal_session_v2_instance_affinity_unavailable",
+        ),
+        (
             TerminalV2CapabilityState::NotApplicable,
             "not_applicable",
             "terminal_session_v2_not_applicable",
@@ -154,51 +165,76 @@ fn sandbox_runtime_capabilities_publish_stable_terminal_v2_unavailable_reasons()
 }
 
 #[test]
-fn terminal_v2_capability_requires_a_live_applicable_terminal_and_healthy_registry() {
+fn terminal_v2_capability_requires_all_authorities_and_safe_instance_routing() {
     let mut info = sample_info();
     info.terminal_url = Some("http://127.0.0.1:7681".to_string());
     info.runtime_auth_token = Some(SandboxRuntimeToken::from_exposed("private-capability"));
     assert_eq!(
-        terminal_v2_capability_state(Some(&info), true, true),
+        terminal_v2_capability_state(Some(&info), true, true, true, true),
         TerminalV2CapabilityState::Available
     );
 
     info.profile = SandboxProfile::Lite;
     assert_eq!(
-        terminal_v2_capability_state(Some(&info), true, true),
+        terminal_v2_capability_state(Some(&info), true, true, true, true),
         TerminalV2CapabilityState::NotApplicable
     );
     info.profile = SandboxProfile::Standard;
     info.sandbox_type = "local".to_string();
     assert_eq!(
-        terminal_v2_capability_state(Some(&info), true, true),
+        terminal_v2_capability_state(Some(&info), true, true, true, true),
         TerminalV2CapabilityState::NotApplicable
     );
     info.sandbox_type = "cloud".to_string();
     info.state = ContainerState::Exited;
     assert_eq!(
-        terminal_v2_capability_state(Some(&info), true, true),
+        terminal_v2_capability_state(Some(&info), true, true, true, true),
         TerminalV2CapabilityState::SandboxNotRunning
     );
     info.state = ContainerState::Running;
     info.terminal_url = None;
     assert_eq!(
-        terminal_v2_capability_state(Some(&info), true, true),
+        terminal_v2_capability_state(Some(&info), true, true, true, true),
         TerminalV2CapabilityState::TerminalUrlUnavailable
     );
     assert_eq!(
-        terminal_v2_capability_state(None, true, true),
+        terminal_v2_capability_state(None, true, true, true, true),
         TerminalV2CapabilityState::SandboxUnavailable
     );
     assert_eq!(
-        terminal_v2_capability_state(Some(&info), false, true),
+        terminal_v2_capability_state(Some(&info), false, true, true, true),
         TerminalV2CapabilityState::CanonicalAuthorityUnavailable
     );
     info.terminal_url = Some("http://127.0.0.1:7681".to_string());
     assert_eq!(
-        terminal_v2_capability_state(Some(&info), true, false),
+        terminal_v2_capability_state(Some(&info), true, false, true, true),
         TerminalV2CapabilityState::RegistryUnavailable
     );
+    assert_eq!(
+        terminal_v2_capability_state(Some(&info), true, true, false, true),
+        TerminalV2CapabilityState::AuthorityUnavailable
+    );
+    assert_eq!(
+        terminal_v2_capability_state(Some(&info), true, true, true, false),
+        TerminalV2CapabilityState::InstanceAffinityUnavailable
+    );
+}
+
+#[test]
+fn terminal_v2_instance_affinity_fails_closed_for_multi_replica_deployments() {
+    assert!(terminal_v2_instance_affinity_ready(None, None));
+    assert!(terminal_v2_instance_affinity_ready(Some("1"), None));
+    assert!(terminal_v2_instance_affinity_ready(Some("2"), Some("true")));
+    assert!(terminal_v2_instance_affinity_ready(Some("2"), Some("1")));
+    assert!(!terminal_v2_instance_affinity_ready(Some("2"), None));
+    assert!(!terminal_v2_instance_affinity_ready(
+        Some("2"),
+        Some("false")
+    ));
+    assert!(!terminal_v2_instance_affinity_ready(
+        Some("invalid"),
+        Some("true")
+    ));
 }
 
 #[test]

@@ -36,6 +36,8 @@ pub(super) enum TerminalV2CapabilityState {
     SandboxNotRunning,
     TerminalUrlUnavailable,
     RegistryUnavailable,
+    AuthorityUnavailable,
+    InstanceAffinityUnavailable,
     NotApplicable,
 }
 
@@ -90,17 +92,29 @@ impl SandboxRuntimeCapabilitiesResponse {
                 "unavailable",
                 Some("terminal_session_v2_registry_unavailable"),
             ),
+            TerminalV2CapabilityState::AuthorityUnavailable => (
+                "unavailable",
+                Some("terminal_session_v2_authority_unavailable"),
+            ),
+            TerminalV2CapabilityState::InstanceAffinityUnavailable => (
+                "unavailable",
+                Some("terminal_session_v2_instance_affinity_unavailable"),
+            ),
             TerminalV2CapabilityState::NotApplicable => {
                 ("not_applicable", Some("terminal_session_v2_not_applicable"))
             }
         };
         let terminal_interactive = match state {
             TerminalV2CapabilityState::Available
-            | TerminalV2CapabilityState::RegistryUnavailable => SandboxRuntimeCapabilityResponse {
-                availability: "available",
-                contract_version: 1,
-                reason_code: None,
-            },
+            | TerminalV2CapabilityState::RegistryUnavailable
+            | TerminalV2CapabilityState::AuthorityUnavailable
+            | TerminalV2CapabilityState::InstanceAffinityUnavailable => {
+                SandboxRuntimeCapabilityResponse {
+                    availability: "available",
+                    contract_version: 1,
+                    reason_code: None,
+                }
+            }
             TerminalV2CapabilityState::CanonicalAuthorityUnavailable => {
                 SandboxRuntimeCapabilityResponse {
                     availability: "degraded",

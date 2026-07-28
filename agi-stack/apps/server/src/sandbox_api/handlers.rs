@@ -268,14 +268,30 @@ pub(super) async fn get_project_sandbox_runtime_capabilities(
     ensure_project_access(&app, &identity, &project_id).await?;
     let info = app.sandboxes.get(&project_id).await?;
     let authority_ready = app.sandboxes.terminal_v2.is_some();
-    let registry_healthy = match app.sandboxes.terminal_v2.as_ref() {
-        Some(service) => service.registry_is_healthy().await,
-        None => false,
-    };
-    let capabilities = SandboxRuntimeCapabilitiesResponse::from_terminal_v2_state(
-        terminal_v2_capability_state(info.as_ref(), authority_ready, registry_healthy),
-    )
-    .with_files_available(app.sandboxes.file_authority_available());
+    let (registry_healthy, authority_healthy, instance_affinity_ready) =
+        match app.sandboxes.terminal_v2.as_ref() {
+            Some(service) => {
+                let (registry_healthy, authority_healthy) = tokio::join!(
+                    service.registry_is_healthy(),
+                    service.authority_is_healthy()
+                );
+                (
+                    registry_healthy,
+                    authority_healthy,
+                    service.instance_affinity_is_ready(),
+                )
+            }
+            None => (false, false, false),
+        };
+    let capabilities =
+        SandboxRuntimeCapabilitiesResponse::from_terminal_v2_state(terminal_v2_capability_state(
+            info.as_ref(),
+            authority_ready,
+            registry_healthy,
+            authority_healthy,
+            instance_affinity_ready,
+        ))
+        .with_files_available(app.sandboxes.file_authority_available());
     Ok(Json(capabilities))
 }
 
@@ -283,6 +299,8 @@ pub(super) fn terminal_v2_capability_state(
     info: Option<&ProjectSandboxInfo>,
     authority_ready: bool,
     registry_healthy: bool,
+    authority_healthy: bool,
+    instance_affinity_ready: bool,
 ) -> TerminalV2CapabilityState {
     if !authority_ready {
         return TerminalV2CapabilityState::CanonicalAuthorityUnavailable;
@@ -308,6 +326,12 @@ pub(super) fn terminal_v2_capability_state(
     }
     if !registry_healthy {
         return TerminalV2CapabilityState::RegistryUnavailable;
+    }
+    if !authority_healthy {
+        return TerminalV2CapabilityState::AuthorityUnavailable;
+    }
+    if !instance_affinity_ready {
+        return TerminalV2CapabilityState::InstanceAffinityUnavailable;
     }
     TerminalV2CapabilityState::Available
 }
