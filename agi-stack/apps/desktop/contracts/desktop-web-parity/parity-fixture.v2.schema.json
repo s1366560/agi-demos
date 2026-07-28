@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MemStack Desktop and Web Shared Parity Fixture v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "case_id",
+    "kind",
+    "source_contract",
+    "input",
+    "web_expected_view_model",
+    "desktop_expected_view_model"
+  ],
+  "properties": {
+    "$schema": { "type": "string", "minLength": 1 },
+    "schema_version": { "const": "2.0.0" },
+    "case_id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "kind": { "const": "capability_snapshot" },
+    "source_contract": { "const": "DesktopCapabilitySnapshot v2" },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snapshot"],
+      "properties": {
+        "snapshot": { "$ref": "#/$defs/snapshot" }
+      }
+    },
+    "web_expected_view_model": { "$ref": "#/$defs/view_model" },
+    "desktop_expected_view_model": { "$ref": "#/$defs/view_model" }
+  },
+  "$defs": {
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reason_code",
+        "service_version",
+        "contract_version",
+        "minimum_contract_version"
+      ],
+      "properties": {
+        "status": {
+          "enum": ["available", "degraded", "unavailable", "not_applicable"]
+        },
+        "reason_code": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
+        },
+        "service_version": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+        },
+        "contract_version": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+        },
+        "minimum_contract_version": { "const": "2.0.0" }
+      }
+    },
+    "capability_view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "available",
+        "reason_code",
+        "service_version",
+        "contract_version",
+        "minimum_contract_version"
+      ],
+      "properties": {
+        "status": {
+          "enum": ["available", "degraded", "unavailable", "not_applicable"]
+        },
+        "available": { "type": "boolean" },
+        "reason_code": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
+        },
+        "service_version": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+        },
+        "contract_version": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+        },
+        "minimum_contract_version": { "const": "2.0.0" }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "automation_run",
+        "search",
+        "workspace_collaboration",
+        "sandbox_isolation"
+      ],
+      "properties": {
+        "automation_run": { "$ref": "#/$defs/capability" },
+        "search": { "$ref": "#/$defs/capability" },
+        "workspace_collaboration": { "$ref": "#/$defs/capability" },
+        "sandbox_isolation": { "$ref": "#/$defs/capability" }
+      }
+    },
+    "capability_views": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "automation_run",
+        "search",
+        "workspace_collaboration",
+        "sandbox_isolation"
+      ],
+      "properties": {
+        "automation_run": { "$ref": "#/$defs/capability_view" },
+        "search": { "$ref": "#/$defs/capability_view" },
+        "workspace_collaboration": { "$ref": "#/$defs/capability_view" },
+        "sandbox_isolation": { "$ref": "#/$defs/capability_view" }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "mode", "capabilities"],
+      "properties": {
+        "version": { "const": "2.0.0" },
+        "mode": { "enum": ["cloud", "local", "native"] },
+        "capabilities": { "$ref": "#/$defs/capabilities" }
+      }
+    },
+    "view_model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "features"],
+      "properties": {
+        "mode": { "enum": ["cloud", "local", "native"] },
+        "features": { "$ref": "#/$defs/capability_views" }
+      }
+    }
+  }
+}

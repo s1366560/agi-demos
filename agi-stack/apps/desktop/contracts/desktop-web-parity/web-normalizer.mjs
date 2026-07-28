@@ -48,6 +48,20 @@ function normalizeWebCapabilitySnapshot(snapshot) {
   const features = Object.fromEntries(
     CAPABILITY_NAMES.map((name) => {
       const capability = snapshot.capabilities[name];
+      if (typeof capability.status === 'string') {
+        return [
+          name,
+          {
+            status: capability.status,
+            available:
+              capability.status === 'available' || capability.status === 'degraded',
+            reason_code: capability.reason_code,
+            service_version: capability.service_version,
+            contract_version: capability.contract_version,
+            minimum_contract_version: capability.minimum_contract_version,
+          },
+        ];
+      }
       return [
         name,
         {

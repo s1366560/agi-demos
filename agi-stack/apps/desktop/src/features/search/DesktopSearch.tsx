@@ -14,7 +14,7 @@ import type {
   DesktopSearchResponse,
 } from '../../api/searchContract';
 import { useI18n } from '../../i18n';
-import type { DesktopCapabilityAvailability } from '../runtime/capabilitySnapshot';
+import type { DesktopCapabilityView } from '../runtime/capabilitySnapshot';
 import {
   commaSeparatedSearchValues,
   DESKTOP_SEARCH_PAGE_SIZE,
@@ -31,7 +31,7 @@ type DesktopSearchProps = {
   tenantId: string;
   projectId: string;
   projectName: string | null;
-  capability: DesktopCapabilityAvailability;
+  capability: DesktopCapabilityView;
   capabilityLoading: boolean;
   onRetryCapability?: () => void;
   onOpenProjectSettings?: () => void;

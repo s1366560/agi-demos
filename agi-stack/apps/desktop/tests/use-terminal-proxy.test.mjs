@@ -56,3 +56,31 @@ test('terminal authority revocation is a structured terminal error', () => {
     error: null,
   });
 });
+
+test('terminal session loss remains a stable structured reconnect boundary', () => {
+  assert.deepEqual(
+    terminalFrame(
+      JSON.stringify({
+        type: 'session_lost',
+        message: 'registry no longer owns this PTY',
+      })
+    ),
+    {
+      line: '[session lost] registry no longer owns this PTY',
+      error: 'terminal_session_lost',
+    }
+  );
+  assert.deepEqual(
+    terminalFrame(
+      JSON.stringify({
+        type: 'error',
+        code: 'terminal_session_lost',
+        message: 'PTY was lost after restart',
+      })
+    ),
+    {
+      line: '[error] PTY was lost after restart',
+      error: 'terminal_session_lost',
+    }
+  );
+});

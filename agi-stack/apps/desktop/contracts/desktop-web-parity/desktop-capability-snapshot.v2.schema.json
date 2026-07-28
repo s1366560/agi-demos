@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MemStack Desktop Capability Snapshot v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "mode", "capabilities"],
+  "properties": {
+    "$schema": { "type": "string", "minLength": 1 },
+    "version": { "const": "2.0.0" },
+    "mode": { "enum": ["cloud", "local", "native"] },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "automation_run",
+        "search",
+        "workspace_collaboration",
+        "sandbox_isolation"
+      ],
+      "properties": {
+        "automation_run": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "reason_code",
+            "service_version",
+            "contract_version",
+            "minimum_contract_version"
+          ],
+          "properties": {
+            "status": {
+              "enum": ["available", "degraded", "unavailable", "not_applicable"]
+            },
+            "reason_code": {
+              "type": ["string", "null"],
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
+            },
+            "service_version": {
+              "type": ["string", "null"],
+              "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+            },
+            "contract_version": {
+              "type": ["string", "null"],
+              "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+            },
+            "minimum_contract_version": { "const": "2.0.0" }
+          }
+        },
+        "search": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "reason_code",
+            "service_version",
+            "contract_version",
+            "minimum_contract_version"
+          ],
+          "properties": {
+            "status": {
+              "enum": ["available", "degraded", "unavailable", "not_applicable"]
+            },
+            "reason_code": {
+              "type": ["string", "null"],
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
+            },
+            "service_version": {
+              "type": ["string", "null"],
+              "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+            },
+            "contract_version": {
+              "type": ["string", "null"],
+              "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+            },
+            "minimum_contract_version": { "const": "2.0.0" }
+          }
+        },
+        "workspace_collaboration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "reason_code",
+            "service_version",
+            "contract_version",
+            "minimum_contract_version"
+          ],
+          "properties": {
+            "status": {
+              "enum": ["available", "degraded", "unavailable", "not_applicable"]
+            },
+            "reason_code": {
+              "type": ["string", "null"],
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
+            },
+            "service_version": {
+              "type": ["string", "null"],
+              "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+            },
+            "contract_version": {
+              "type": ["string", "null"],
+              "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+            },
+            "minimum_contract_version": { "const": "2.0.0" }
+          }
+        },
+        "sandbox_isolation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "reason_code",
+            "service_version",
+            "contract_version",
+            "minimum_contract_version"
+          ],
+          "properties": {
+            "status": {
+              "enum": ["available", "degraded", "unavailable", "not_applicable"]
+            },
+            "reason_code": {
+              "type": ["string", "null"],
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
+            },
+            "service_version": {
+              "type": ["string", "null"],
+              "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+            },
+            "contract_version": {
+              "type": ["string", "null"],
+              "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+            },
+            "minimum_contract_version": { "const": "2.0.0" }
+          }
+        }
+      }
+    }
+  }
+}

@@ -20,8 +20,23 @@ const {
   resetAgentSocketContextState,
   transitionAgentSocketConversationSelection,
   socketEventKey,
+  socketEventWindowSince,
   socketEventsSince,
 } = require("/tmp/agistack-desktop-test-dist/src/hooks/useAgentSocket.js");
+
+test("socket event windows surface an evicted cursor boundary for canonical refetch", () => {
+  const previous = { type: "old" };
+  const first = { type: "first" };
+  const second = { type: "second" };
+  assert.deepEqual(socketEventWindowSince([second, first], previous), {
+    events: [first, second],
+    cursorGap: true,
+  });
+  assert.deepEqual(socketEventWindowSince([second, first, previous], previous), {
+    events: [first, second],
+    cursorGap: false,
+  });
+});
 
 test("a stop request is scoped, immediate, and never enters the reconnect outbox", () => {
   const queue = createPendingAgentMessageQueue();

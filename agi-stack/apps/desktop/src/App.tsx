@@ -108,8 +108,13 @@ import {
   protocolStreamMessageId,
 } from './features/chat/agentEventIdentityModel';
 import { reconcileAgentTaskSignals } from './features/chat/agentTaskSignalModel';
+import { classifyHitlAuthorityRecovery } from './features/chat/hitlAuthorityRecovery';
 import { DesktopMCPAppCanvas } from './features/chat/DesktopMCPAppCanvas';
 import { LiveArtifactCanvas } from './features/chat/LiveArtifactCanvas';
+import {
+  createHttpDesktopArtifactClient,
+  type DesktopArtifactClient,
+} from './features/chat/desktopArtifactClient';
 import {
   applyArtifactCanvasStreamEvent,
   emptyArtifactCanvasState,
@@ -117,6 +122,7 @@ import {
   selectArtifactCanvasTab,
   type LiveArtifactCanvasState,
 } from './features/chat/artifactCanvasEventModel';
+import { resolveA2UISurfaceAuthority } from './features/chat/a2uiSurfaceAuthorityModel';
 import {
   composerAgentExecutionContext,
   workspaceMessageRequiresDefaultAgentLaunch,
@@ -272,6 +278,14 @@ import {
 } from './features/navigation/keyboardShortcutModel';
 import { DesktopSearch } from './features/search/DesktopSearch';
 import {
+  terminalInteractiveCapability as resolveTerminalInteractiveCapability,
+  type SandboxRuntimeCapability,
+} from './features/sandbox/sandboxRuntimeClient';
+import {
+  useSandboxRuntimeSurface,
+  type SessionSandboxRuntimeSurface,
+} from './features/sandbox/useSandboxRuntimeSurface';
+import {
   settingsSectionForEntry,
   type SettingsEntry,
 } from './features/settings/settingsEntryRouting';
@@ -317,9 +331,12 @@ import {
   taskSessionCreationFingerprint,
   writeTaskSessionCreationAttempt,
 } from './features/task/newTaskSessionModel';
+import { WorkspaceCollaborationCanvas } from './features/workspace/WorkspaceCollaborationCanvas';
 import { WorkspaceOverview } from './features/workspace/WorkspaceOverview';
 import { WorkspaceCreateDialog } from './features/workspace/WorkspaceCreateDialog';
 import { WorkspaceSettingsDialog } from './features/workspace/WorkspaceSettingsDialog';
+import { createCapabilityWorkspaceCollaborationClient } from './features/workspace/capabilityWorkspaceCollaborationClient';
+import { createHttpWorkspaceCollaborationClient } from './features/workspace/httpWorkspaceCollaborationClient';
 import {
   applyWorkspaceActivityStreamEvent,
   type WorkspaceLiveActivity,
@@ -361,7 +378,11 @@ import {
   supersedeWorkspaceConversationRequests,
   workspaceTreeRefreshFailed,
 } from './features/workspace/workspaceTreeModel';
-import { socketEventsSince, useAgentSocket } from './hooks/useAgentSocket';
+import {
+  socketEventWindowSince,
+  socketEventsSince,
+  useAgentSocket,
+} from './hooks/useAgentSocket';
 import { useTerminalProxy } from './hooks/useTerminalProxy';
 import { useI18n } from './i18n';
 import { useThemePreference } from './theme';
@@ -1042,7 +1063,7 @@ function mergeLiveTimelineEvent(
   const titleEvent = readConversationTitleStreamEvent(event);
   if (titleEvent.handled) return existing;
   const artifactCanvasResult = applyArtifactCanvasStreamEvent(emptyArtifactCanvasState(), event);
-  if (artifactCanvasResult.handled) return existing;
+  if (artifactCanvasResult.handled && type !== 'canvas_updated') return existing;
   const hitlResponse = applyHitlResponseStreamEvent(existing, event);
   if (hitlResponse.handled) return hitlResponse.items;
   const timeline = existing;
@@ -1778,6 +1799,10 @@ export function App() {
   const sessionProjectionRefreshTimerRef = useRef<number | null>(null);
   const agentTaskEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const sessionEventsHeadRef = useRef<AgentWsEvent | null>(null);
+  const sessionSocketAuthorityRef = useRef({
+    connected: false,
+    conversationId: '',
+  });
   const conversationMetadataEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const authoritativeRunEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const workspaceActivityEventsHeadRef = useRef<AgentWsEvent | null>(null);
@@ -1896,9 +1921,17 @@ export function App() {
     () => createDesktopAutomationApi(api, config),
     [api, config],
   );
+  const artifactApi = useMemo(
+    () => createHttpDesktopArtifactClient(config),
+    [config],
+  );
   const workbenchCapabilityClient = useMemo(
     () => createDesktopWorkbenchCapabilityClient(automationApi, config),
     [automationApi, config],
+  );
+  const sandboxRuntime = useSandboxRuntimeSurface(
+    config,
+    showRuntimeConfig && connection === 'ready' && Boolean(config.projectId.trim()),
   );
   const chatComposerApi = useMemo(
     () => (config.workspaceId.trim() ? api : unboundComposerCatalogClient(api)),
@@ -1942,6 +1975,31 @@ export function App() {
   const automationRunCapability = desktopCapability(
     desktopCapabilityState.snapshot,
     'automation_run',
+  );
+  const workspaceCollaborationCapability = desktopCapability(
+    desktopCapabilityState.snapshot,
+    'workspace_collaboration',
+  );
+  const workspaceCollaborationAuthority = useMemo(
+    () => createHttpWorkspaceCollaborationClient(config),
+    [config],
+  );
+  const workspaceCollaborationClient = useMemo(
+    () =>
+      createCapabilityWorkspaceCollaborationClient(
+        workspaceCollaborationAuthority,
+        workspaceCollaborationCapability,
+        config.mode,
+      ),
+    [
+      config.mode,
+      workspaceCollaborationAuthority,
+      workspaceCollaborationCapability.available,
+      workspaceCollaborationCapability.contract_version,
+      workspaceCollaborationCapability.reason_code,
+      workspaceCollaborationCapability.service_version,
+      workspaceCollaborationCapability.status,
+    ],
   );
   const runtimeModelRole: LlmRoutingRole =
     scopedConversation?.agent_config?.capability_mode === 'code' ? 'coding' : 'default';
@@ -2553,6 +2611,15 @@ export function App() {
           await loadConversationTimeline(conversation, config.projectId);
         }
       } catch (caught) {
+        const recovery = classifyHitlAuthorityRecovery(caught);
+        if (recovery.canonicalRefetch) {
+          invalidateSessionAuthority();
+          const conversation = agentConversationSession?.conversation;
+          if (conversation) {
+            await loadConversationTimeline(conversation, config.projectId);
+          }
+          if (recovery.settledByAuthority) return;
+        }
         const message = formatConnectionError(caught, config.apiBaseUrl);
         setError(message);
         throw new Error(message, { cause: caught });
@@ -2571,6 +2638,56 @@ export function App() {
       t,
     ],
   );
+
+  useEffect(() => {
+    const previous = sessionSocketAuthorityRef.current;
+    sessionSocketAuthorityRef.current = {
+      connected: socket.connected,
+      conversationId: scopedConversationId,
+    };
+    if (
+      !socket.connected ||
+      !scopedConversationId ||
+      (previous.connected && previous.conversationId === scopedConversationId)
+    ) {
+      return;
+    }
+    invalidateSessionAuthority();
+    const conversation = agentConversationSessionRef.current?.conversation;
+    if (conversation?.id === scopedConversationId) {
+      void loadConversationTimeline(conversation, conversation.project_id);
+    }
+  }, [
+    invalidateSessionAuthority,
+    loadConversationTimeline,
+    scopedConversationId,
+    socket.connected,
+  ]);
+
+  useEffect(() => {
+    if (!scopedConversationId) return;
+    let refreshFrame: number | null = null;
+    const recoverCanonicalAuthority = () => {
+      if (refreshFrame !== null) return;
+      refreshFrame = window.requestAnimationFrame(() => {
+        refreshFrame = null;
+        const conversation = agentConversationSessionRef.current?.conversation;
+        if (conversation?.id !== scopedConversationId) return;
+        invalidateSessionAuthority();
+        void loadConversationTimeline(conversation, conversation.project_id);
+      });
+    };
+    const recoverVisibleAuthority = () => {
+      if (document.visibilityState === 'visible') recoverCanonicalAuthority();
+    };
+    window.addEventListener('focus', recoverCanonicalAuthority);
+    document.addEventListener('visibilitychange', recoverVisibleAuthority);
+    return () => {
+      window.removeEventListener('focus', recoverCanonicalAuthority);
+      document.removeEventListener('visibilitychange', recoverVisibleAuthority);
+      if (refreshFrame !== null) window.cancelAnimationFrame(refreshFrame);
+    };
+  }, [invalidateSessionAuthority, loadConversationTimeline, scopedConversationId]);
 
   const openCommandPalette = useCallback((trigger?: HTMLElement | null) => {
     commandPaletteTriggerRef.current =
@@ -2767,8 +2884,19 @@ export function App() {
   }, [socket.connected]);
 
   useEffect(() => {
-    const events = socketEventsSince(socket.events, sessionEventsHeadRef.current);
+    const eventWindow = socketEventWindowSince(
+      socket.events,
+      sessionEventsHeadRef.current,
+    );
+    const events = eventWindow.events;
     sessionEventsHeadRef.current = socket.events[0] ?? null;
+    if (eventWindow.cursorGap) {
+      invalidateSessionAuthority();
+      const conversation = agentConversationSessionRef.current?.conversation;
+      if (conversation) {
+        void loadConversationTimeline(conversation, conversation.project_id);
+      }
+    }
     if (!events.length) return;
     const activeConversation = scopedConversation;
     if (!activeConversation) return;
@@ -2842,7 +2970,14 @@ export function App() {
         invalidateSessionAuthority();
       }, 150);
     }
-  }, [config.workspaceId, invalidateSessionAuthority, reviewTab, scopedConversation, socket.events]);
+  }, [
+    config.workspaceId,
+    invalidateSessionAuthority,
+    loadConversationTimeline,
+    reviewTab,
+    scopedConversation,
+    socket.events,
+  ]);
 
   useEffect(
     () => () => {
@@ -6059,6 +6194,13 @@ export function App() {
     () => terminalBindingState(terminal, currentArtifactRun, terminalProxy.status),
     [currentArtifactRun, terminal, terminalProxy.status],
   );
+  const terminalInteractiveCapability = useMemo(
+    () =>
+      resolveTerminalInteractiveCapability(
+        terminalMatchesCurrentRun && terminalProxy.connected,
+      ),
+    [terminalMatchesCurrentRun, terminalProxy.connected],
+  );
   const runInputDeliveryOptions = useMemo(
     () => {
       if (!localRuntimeMode || sessionDetailViewModel?.capabilityMode !== 'code') return [];
@@ -7274,36 +7416,44 @@ export function App() {
 
   const renderWorkspaceOverview = () => {
     return (
-      <WorkspaceOverview
-        workspace={selectedWorkspace}
-        project={selectedProject}
-        tenantName={
-          auth.tenants.find((tenant) => tenant.id === config.tenantId)?.name ||
-          config.tenantId ||
-          t('settings.noTenantSelected')
-        }
-        workspaceAuthority={newTaskWorkspaceAuthority}
-        conversations={dataset.conversationsByWorkspace[config.workspaceId] ?? []}
-        members={dataset.workspaceMembers}
-        agents={dataset.workspaceAgents}
-        plan={activeDataset.plan}
-        sandboxStatus={dataset.sandbox?.status ?? null}
-        liveActivity={workspaceLiveActivity}
-        newTaskDisabledReason={newTaskDisabledReason}
-        onNewTask={() => openNewTask(config.workspaceId)}
-        onRetryWorkspaces={() => void refreshRuntime()}
-        onOpenConversation={(conversationId) => {
-          const conversation = (dataset.conversationsByWorkspace[config.workspaceId] ?? []).find(
-            (item) => item.id === conversationId,
-          );
-          if (!conversation) {
-            setError(t('myWork.sessionUnavailable'));
-            return;
+      <>
+        <WorkspaceOverview
+          workspace={selectedWorkspace}
+          project={selectedProject}
+          tenantName={
+            auth.tenants.find((tenant) => tenant.id === config.tenantId)?.name ||
+            config.tenantId ||
+            t('settings.noTenantSelected')
           }
-          selectConversation(config.projectId, config.workspaceId, conversation, 'chat');
-        }}
-        onOpenSettings={openWorkspaceSettings}
-      />
+          workspaceAuthority={newTaskWorkspaceAuthority}
+          conversations={dataset.conversationsByWorkspace[config.workspaceId] ?? []}
+          members={dataset.workspaceMembers}
+          agents={dataset.workspaceAgents}
+          plan={activeDataset.plan}
+          sandboxStatus={dataset.sandbox?.status ?? null}
+          liveActivity={workspaceLiveActivity}
+          newTaskDisabledReason={newTaskDisabledReason}
+          onNewTask={() => openNewTask(config.workspaceId)}
+          onRetryWorkspaces={() => void refreshRuntime()}
+          onOpenConversation={(conversationId) => {
+            const conversation = (
+              dataset.conversationsByWorkspace[config.workspaceId] ?? []
+            ).find((item) => item.id === conversationId);
+            if (!conversation) {
+              setError(t('myWork.sessionUnavailable'));
+              return;
+            }
+            selectConversation(config.projectId, config.workspaceId, conversation, 'chat');
+          }}
+          onOpenSettings={openWorkspaceSettings}
+        />
+        {selectedWorkspace && config.workspaceId.trim() ? (
+          <WorkspaceCollaborationCanvas
+            workspaceId={config.workspaceId}
+            client={workspaceCollaborationClient}
+          />
+        ) : null}
+      </>
     );
   };
 
@@ -7530,6 +7680,7 @@ export function App() {
       artifacts={workspaceArtifacts}
       artifactVersions={displaySessionProjection?.artifactVersions ?? []}
       artifactCanvas={artifactCanvasState}
+      artifactClient={artifactApi}
       mcpAppCanvas={mcpAppCanvasState}
       mcpAppApi={api}
       mcpAppProjectId={config.projectId}
@@ -7548,6 +7699,8 @@ export function App() {
       terminalError={terminalProxy.error}
       terminalLines={terminalProxy.lines}
       terminalBusy={sandboxBusy}
+      terminalInteractiveCapability={terminalInteractiveCapability}
+      sandboxRuntime={sandboxRuntime}
       capabilityMode={sessionDetailViewModel?.capabilityMode ?? 'unavailable'}
       approvalRequests={displaySessionProjection?.pendingHitl ?? []}
       currentPlan={displaySessionProjection?.currentPlan ?? null}
@@ -7596,6 +7749,8 @@ export function App() {
         });
       }}
       onStartTerminal={() => void startTerminal()}
+      onTerminalInput={terminalProxy.sendInput}
+      onTerminalResize={terminalProxy.resize}
       onRefreshChanges={() => void loadRunChanges()}
       onToggleChangeReference={(reference) =>
         setRunInputReferences((current) => toggleRunInputReference(current, reference))
@@ -8012,6 +8167,7 @@ function WorkspaceReviewPanel({
   artifacts,
   artifactVersions,
   artifactCanvas,
+  artifactClient,
   mcpAppCanvas,
   mcpAppApi,
   mcpAppProjectId,
@@ -8030,6 +8186,8 @@ function WorkspaceReviewPanel({
   terminalError,
   terminalLines,
   terminalBusy,
+  terminalInteractiveCapability,
+  sandboxRuntime,
   capabilityMode,
   approvalRequests,
   currentPlan,
@@ -8051,6 +8209,8 @@ function WorkspaceReviewPanel({
   onSelectMCPAppCanvasTab,
   onCloseMCPAppCanvasTab,
   onStartTerminal,
+  onTerminalInput,
+  onTerminalResize,
   onRefreshChanges,
   onToggleChangeReference,
   onOpenAgentSession,
@@ -8063,6 +8223,7 @@ function WorkspaceReviewPanel({
   artifacts: WorkspaceArtifact[];
   artifactVersions: DesktopArtifactVersion[];
   artifactCanvas: LiveArtifactCanvasState;
+  artifactClient: DesktopArtifactClient;
   mcpAppCanvas: MCPAppCanvasState;
   mcpAppApi: DesktopApiClient;
   mcpAppProjectId: string;
@@ -8081,6 +8242,8 @@ function WorkspaceReviewPanel({
   terminalError: string | null;
   terminalLines: string[];
   terminalBusy: boolean;
+  terminalInteractiveCapability: SandboxRuntimeCapability;
+  sandboxRuntime: SessionSandboxRuntimeSurface;
   capabilityMode: SessionCapabilityMode;
   approvalRequests: DesktopApprovalRequest[];
   currentPlan: SessionProjectionPlan | null;
@@ -8114,6 +8277,8 @@ function WorkspaceReviewPanel({
   onSelectMCPAppCanvasTab: (tabId: string) => void;
   onCloseMCPAppCanvasTab: (tabId: string) => void;
   onStartTerminal: () => void;
+  onTerminalInput: (data: string) => boolean | void;
+  onTerminalResize: (cols: number, rows: number) => void;
   onRefreshChanges: () => void;
   onToggleChangeReference: (reference: CodeRangeReference) => void;
   onOpenAgentSession: (conversationId: string) => void;
@@ -8166,6 +8331,21 @@ function WorkspaceReviewPanel({
   );
   const canRespondToApproval = Boolean(
     approvalRequest && respondableHitlRequestIds.includes(approvalRequest.id),
+  );
+  const a2uiAuthorities = useMemo(
+    () =>
+      Object.fromEntries(
+        artifactCanvas.tabs.flatMap((tab) => {
+          if (tab.contentType !== 'a2ui_surface') return [];
+          const authority = resolveA2UISurfaceAuthority(
+            tab.id,
+            timelineItems,
+            respondableHitlRequestIds,
+          );
+          return authority ? [[tab.id, authority] as const] : [];
+        }),
+      ),
+    [artifactCanvas.tabs, respondableHitlRequestIds, timelineItems],
   );
   const reviewDecision = useMemo(
     () => buildReviewDecisionSummary(approvalRequest),
@@ -8667,7 +8847,13 @@ function WorkspaceReviewPanel({
 
         {activeTab === 'artifacts' ? (
           <>
-            <LiveArtifactCanvas state={artifactCanvas} onSelect={onSelectArtifactCanvasTab} />
+            <LiveArtifactCanvas
+              state={artifactCanvas}
+              onSelect={onSelectArtifactCanvasTab}
+              artifactClient={artifactClient}
+              a2uiAuthorities={a2uiAuthorities}
+              onRespondToA2UI={onRespondToHitl}
+            />
             <ArtifactLifecyclePanel
               versions={artifactVersions}
               deliveries={artifactDeliveries}
@@ -8692,6 +8878,10 @@ function WorkspaceReviewPanel({
             busy={terminalBusy}
             currentRun={currentRun}
             onStart={onStartTerminal}
+            interactiveCapability={terminalInteractiveCapability}
+            sandboxRuntime={sandboxRuntime}
+            onTerminalInput={onTerminalInput}
+            onTerminalResize={onTerminalResize}
           />
         ) : null}
 

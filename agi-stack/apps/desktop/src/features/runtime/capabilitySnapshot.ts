@@ -1,6 +1,17 @@
-export const DESKTOP_CAPABILITY_SNAPSHOT_VERSION = '1.0.0' as const;
+import {
+  isCapabilityVersion,
+  negotiateCapabilityContract,
+} from './capabilityVersion';
+
+export const DESKTOP_CAPABILITY_SNAPSHOT_VERSION = '2.0.0' as const;
+export const DESKTOP_MINIMUM_CONTRACT_VERSION = '2.0.0' as const;
 
 export type DesktopCapabilityMode = 'cloud' | 'local' | 'native';
+export type DesktopCapabilityStatus =
+  | 'available'
+  | 'degraded'
+  | 'unavailable'
+  | 'not_applicable';
 
 export type DesktopCapabilityName =
   | 'automation_run'
@@ -9,8 +20,15 @@ export type DesktopCapabilityName =
   | 'sandbox_isolation';
 
 export type DesktopCapabilityAvailability = {
-  available: boolean;
+  status: DesktopCapabilityStatus;
   reason_code: string | null;
+  service_version: string | null;
+  contract_version: string | null;
+  minimum_contract_version: typeof DESKTOP_MINIMUM_CONTRACT_VERSION;
+};
+
+export type DesktopCapabilityView = DesktopCapabilityAvailability & {
+  available: boolean;
 };
 
 export type DesktopCapabilitySnapshot = {
@@ -57,31 +75,89 @@ export function parseDesktopCapabilitySnapshot(
 export function desktopCapability(
   snapshot: DesktopCapabilitySnapshot | null,
   capabilityName: DesktopCapabilityName,
-): DesktopCapabilityAvailability {
-  return (
-    snapshot?.capabilities[capabilityName] ?? {
-      available: false,
-      reason_code: 'capability_snapshot_unavailable',
-    }
-  );
+): DesktopCapabilityView {
+  const capability = snapshot?.capabilities[capabilityName] ?? {
+    status: 'unavailable' as const,
+    reason_code: 'capability_snapshot_unavailable',
+    service_version: null,
+    contract_version: null,
+    minimum_contract_version: DESKTOP_MINIMUM_CONTRACT_VERSION,
+  };
+  return {
+    ...capability,
+    available: capability.status === 'available' || capability.status === 'degraded',
+  };
 }
 
 function readAvailability(input: unknown): DesktopCapabilityAvailability | null {
   if (
-    !isExactRecord(input, ['available', 'reason_code']) ||
-    typeof input.available !== 'boolean'
+    !isExactRecord(input, [
+      'status',
+      'reason_code',
+      'service_version',
+      'contract_version',
+      'minimum_contract_version',
+    ]) ||
+    !isCapabilityStatus(input.status) ||
+    input.minimum_contract_version !== DESKTOP_MINIMUM_CONTRACT_VERSION ||
+    !isNullableCapabilityVersion(input.service_version) ||
+    !isNullableCapabilityVersion(input.contract_version)
   ) {
     return null;
   }
-  if (input.available) {
-    return input.reason_code === null ? { available: true, reason_code: null } : null;
+
+  if (input.status === 'available' || input.status === 'degraded') {
+    const negotiation = negotiateCapabilityContract(
+      {
+        service_version: input.service_version,
+        contract_version: input.contract_version,
+      },
+      DESKTOP_MINIMUM_CONTRACT_VERSION,
+    );
+    if (!negotiation.compatible) return null;
   }
-  if (typeof input.reason_code !== 'string' || !input.reason_code.trim()) return null;
-  return { available: false, reason_code: input.reason_code };
+  if (input.status === 'available') {
+    if (input.reason_code !== null) return null;
+  } else if (!isStableReasonCode(input.reason_code)) {
+    return null;
+  }
+  if (
+    input.status === 'not_applicable' &&
+    (input.service_version !== null || input.contract_version !== null)
+  ) {
+    return null;
+  }
+  return {
+    status: input.status,
+    reason_code: input.reason_code,
+    service_version: input.service_version,
+    contract_version: input.contract_version,
+    minimum_contract_version: DESKTOP_MINIMUM_CONTRACT_VERSION,
+  };
 }
 
 function isCapabilityMode(input: unknown): input is DesktopCapabilityMode {
   return input === 'cloud' || input === 'local' || input === 'native';
+}
+
+function isCapabilityStatus(input: unknown): input is DesktopCapabilityStatus {
+  return (
+    input === 'available' ||
+    input === 'degraded' ||
+    input === 'unavailable' ||
+    input === 'not_applicable'
+  );
+}
+
+function isNullableCapabilityVersion(input: unknown): input is string | null {
+  return input === null || isCapabilityVersion(input);
+}
+
+function isStableReasonCode(input: unknown): input is string {
+  return (
+    typeof input === 'string' &&
+    /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/.test(input)
+  );
 }
 
 function isExactRecord(

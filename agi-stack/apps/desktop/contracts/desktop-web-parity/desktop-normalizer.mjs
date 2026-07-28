@@ -70,6 +70,16 @@ function projectDesktopCapabilitySnapshot(snapshot) {
 }
 
 function projectDesktopAvailability(capability) {
+  if (typeof capability.status === 'string') {
+    return {
+      status: capability.status,
+      available: capability.status === 'available' || capability.status === 'degraded',
+      reason_code: capability.reason_code,
+      service_version: capability.service_version,
+      contract_version: capability.contract_version,
+      minimum_contract_version: capability.minimum_contract_version,
+    };
+  }
   return {
     available: capability.available,
     reason_code: capability.reason_code,

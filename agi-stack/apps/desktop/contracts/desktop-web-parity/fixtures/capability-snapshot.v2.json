@@ -1,0 +1,117 @@
+{
+  "$schema": "../parity-fixture.v2.schema.json",
+  "schema_version": "2.0.0",
+  "case_id": "local-capability-snapshot-v2",
+  "kind": "capability_snapshot",
+  "source_contract": "DesktopCapabilitySnapshot v2",
+  "input": {
+    "snapshot": {
+      "version": "2.0.0",
+      "mode": "local",
+      "capabilities": {
+        "automation_run": {
+          "status": "unavailable",
+          "reason_code": "capability_contract_version_too_old",
+          "service_version": "0.1.0",
+          "contract_version": "1.0.0",
+          "minimum_contract_version": "2.0.0"
+        },
+        "search": {
+          "status": "degraded",
+          "reason_code": "local_search_keyword_only",
+          "service_version": "0.1.0",
+          "contract_version": "2.0.0",
+          "minimum_contract_version": "2.0.0"
+        },
+        "workspace_collaboration": {
+          "status": "unavailable",
+          "reason_code": "local_workspace_collaboration_unavailable",
+          "service_version": null,
+          "contract_version": null,
+          "minimum_contract_version": "2.0.0"
+        },
+        "sandbox_isolation": {
+          "status": "not_applicable",
+          "reason_code": "local_isolation_not_applicable",
+          "service_version": null,
+          "contract_version": null,
+          "minimum_contract_version": "2.0.0"
+        }
+      }
+    }
+  },
+  "web_expected_view_model": {
+    "mode": "local",
+    "features": {
+      "automation_run": {
+        "status": "unavailable",
+        "available": false,
+        "reason_code": "capability_contract_version_too_old",
+        "service_version": "0.1.0",
+        "contract_version": "1.0.0",
+        "minimum_contract_version": "2.0.0"
+      },
+      "search": {
+        "status": "degraded",
+        "available": true,
+        "reason_code": "local_search_keyword_only",
+        "service_version": "0.1.0",
+        "contract_version": "2.0.0",
+        "minimum_contract_version": "2.0.0"
+      },
+      "workspace_collaboration": {
+        "status": "unavailable",
+        "available": false,
+        "reason_code": "local_workspace_collaboration_unavailable",
+        "service_version": null,
+        "contract_version": null,
+        "minimum_contract_version": "2.0.0"
+      },
+      "sandbox_isolation": {
+        "status": "not_applicable",
+        "available": false,
+        "reason_code": "local_isolation_not_applicable",
+        "service_version": null,
+        "contract_version": null,
+        "minimum_contract_version": "2.0.0"
+      }
+    }
+  },
+  "desktop_expected_view_model": {
+    "mode": "local",
+    "features": {
+      "automation_run": {
+        "status": "unavailable",
+        "available": false,
+        "reason_code": "capability_contract_version_too_old",
+        "service_version": "0.1.0",
+        "contract_version": "1.0.0",
+        "minimum_contract_version": "2.0.0"
+      },
+      "search": {
+        "status": "degraded",
+        "available": true,
+        "reason_code": "local_search_keyword_only",
+        "service_version": "0.1.0",
+        "contract_version": "2.0.0",
+        "minimum_contract_version": "2.0.0"
+      },
+      "workspace_collaboration": {
+        "status": "unavailable",
+        "available": false,
+        "reason_code": "local_workspace_collaboration_unavailable",
+        "service_version": null,
+        "contract_version": null,
+        "minimum_contract_version": "2.0.0"
+      },
+      "sandbox_isolation": {
+        "status": "not_applicable",
+        "available": false,
+        "reason_code": "local_isolation_not_applicable",
+        "service_version": null,
+        "contract_version": null,
+        "minimum_contract_version": "2.0.0"
+      }
+    }
+  }
+}

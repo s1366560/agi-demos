@@ -6,6 +6,7 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const {
   ARTIFACT_CANVAS_SAVE_CAPABILITY,
+  applyArtifactCanvasWorkspaceAuthorityContent,
   applyArtifactCanvasStreamEvent,
   artifactCanvasDownloadDescriptor,
   cancelArtifactCanvasTabClose,
@@ -14,6 +15,8 @@ const {
   editArtifactCanvasWorkspaceContent,
   emptyArtifactCanvasState,
   formatArtifactCanvasData,
+  markArtifactCanvasWorkspaceSaved,
+  redoArtifactCanvasWorkspaceContent,
   reconcileArtifactCanvasWorkspace,
   replayArtifactCanvasEvents,
   requestArtifactCanvasTabClose,
@@ -21,6 +24,7 @@ const {
   selectArtifactCanvasWorkspaceTab,
   setArtifactCanvasViewMode,
   toggleArtifactCanvasTabPin,
+  undoArtifactCanvasWorkspaceContent,
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/chat/artifactCanvasEventModel.js',
 );
@@ -171,6 +175,119 @@ test('persisted artifact lifecycle events rebuild the latest canvas state in ord
   ]);
 });
 
+test('A2UI canvas_updated events open, incrementally update, and delete the same Canvas tab', () => {
+  const begin = [
+    JSON.stringify({
+      beginRendering: { surfaceId: 'release-surface', root: 'release-root' },
+    }),
+    JSON.stringify({
+      surfaceUpdate: {
+        surfaceId: 'release-surface',
+        components: [
+          {
+            id: 'release-root',
+            component: { Text: { text: { literalString: 'Review release' } } },
+          },
+        ],
+      },
+    }),
+  ].join('\n');
+  const update = JSON.stringify({
+    surfaceUpdate: {
+      surfaceId: 'release-surface',
+      components: [
+        {
+          id: 'release-root',
+          component: { Text: { text: { literalString: 'Approve release' } } },
+        },
+      ],
+    },
+  });
+
+  let state = apply(emptyArtifactCanvasState(), {
+    type: 'canvas_updated',
+    payload: {
+      action: 'created',
+      block_id: 'release-approval',
+      block: {
+        id: 'release-approval',
+        block_type: 'a2ui_surface',
+        title: 'Release approval',
+        content: begin,
+      },
+    },
+  }).state;
+  assert.equal(state.tabs.length, 1);
+  assert.deepEqual(state.tabs[0], {
+    id: 'release-approval',
+    title: 'Release approval',
+    content: begin,
+    contentType: 'a2ui_surface',
+    language: null,
+  });
+  assert.equal(createArtifactCanvasWorkspace(state).tabs[0].viewMode, 'preview');
+
+  const updated = apply(state, {
+    type: 'canvas_updated',
+    data: {
+      action: 'updated',
+      block_id: 'release-approval',
+      block: {
+        id: 'release-approval',
+        block_type: 'a2ui_surface',
+        title: 'Release approval',
+        content: update,
+      },
+    },
+  });
+  assert.equal(updated.action, 'update');
+  assert.equal(updated.state.tabs[0].content, `${begin}\n${update}`);
+  state = updated.state;
+
+  const deleted = apply(state, {
+    type: 'canvas_updated',
+    data: {
+      action: 'deleted',
+      block_id: 'release-approval',
+      block: null,
+    },
+  });
+  assert.equal(deleted.action, 'close');
+  assert.deepEqual(deleted.state.tabs, []);
+});
+
+test('Canvas ignores non-A2UI blocks and fails closed on malformed A2UI updates', () => {
+  const nonA2UI = apply(emptyArtifactCanvasState(), {
+    type: 'canvas_updated',
+    data: {
+      action: 'created',
+      block_id: 'markdown-block',
+      block: {
+        id: 'markdown-block',
+        block_type: 'markdown',
+        content: '# Not an A2UI surface',
+      },
+    },
+  });
+  assert.equal(nonA2UI.handled, false);
+
+  const malformed = apply(emptyArtifactCanvasState(), {
+    type: 'canvas_updated',
+    data: {
+      action: 'updated',
+      block_id: 'missing',
+      block: {
+        id: 'missing',
+        block_type: 'a2ui_surface',
+        content: '',
+      },
+    },
+  });
+  assert.equal(malformed.handled, true);
+  assert.equal(malformed.action, null);
+  assert.deepEqual(malformed.state.tabs, []);
+});
+
 test('artifact workspace preserves multi-tab selection, pinning, and stable close fallback', () => {
   const source = {
     tabs: [
@@ -307,6 +424,46 @@ test('artifact workspace reconciles authoritative updates without overwriting di
   assert.deepEqual(sameSource.tabs.map((tab) => tab.id), ['artifact-1']);
 });
 
+test('artifact workspace keeps per-tab undo/redo history and commits saved authority', () => {
+  const source = {
+    tabs: [
+      {
+        id: 'artifact-history',
+        title: 'history.md',
+        content: 'server',
+        contentType: 'markdown',
+        language: 'markdown',
+      },
+    ],
+    activeArtifactId: 'artifact-history',
+    openRevision: 1,
+  };
+  let workspace = createArtifactCanvasWorkspace(source);
+  workspace = editArtifactCanvasWorkspaceContent(workspace, 'artifact-history', 'draft one');
+  workspace = editArtifactCanvasWorkspaceContent(workspace, 'artifact-history', 'draft two');
+  assert.deepEqual(workspace.tabs[0].undoStack, ['server', 'draft one']);
+
+  workspace = undoArtifactCanvasWorkspaceContent(workspace, 'artifact-history');
+  assert.equal(workspace.tabs[0].draftContent, 'draft one');
+  workspace = redoArtifactCanvasWorkspaceContent(workspace, 'artifact-history');
+  assert.equal(workspace.tabs[0].draftContent, 'draft two');
+
+  workspace = applyArtifactCanvasWorkspaceAuthorityContent(
+    workspace,
+    'artifact-history',
+    'server v2',
+    'text/markdown',
+    true,
+  );
+  assert.equal(workspace.tabs[0].sourceContent, 'server v2');
+  assert.equal(workspace.tabs[0].draftContent, 'draft two');
+  assert.equal(workspace.tabs[0].dirty, true);
+
+  workspace = markArtifactCanvasWorkspaceSaved(workspace, 'artifact-history');
+  assert.equal(workspace.tabs[0].sourceContent, 'draft two');
+  assert.equal(workspace.tabs[0].dirty, false);
+});
+
 test('artifact workspace keeps a dirty orphan when authority closes the source tab', () => {
   const initial = {
     tabs: [
@@ -413,8 +570,8 @@ test('artifact view modes, data formatting, download, and save authority remain 
     content: '{"ready":true,"count":2}',
   });
   assert.deepEqual(ARTIFACT_CANVAS_SAVE_CAPABILITY, {
-    available: false,
-    reason: 'authority_unavailable',
+    available: true,
+    contractVersion: 2,
   });
   assert.equal(Object.isFrozen(ARTIFACT_CANVAS_SAVE_CAPABILITY), true);
 });
@@ -431,7 +588,9 @@ test('Desktop folds artifact canvas events out of the timeline and exposes Brows
   assert.match(componentSource, /role="radiogroup"/);
   assert.match(componentSource, /navigator\.clipboard\.writeText/);
   assert.match(componentSource, /URL\.createObjectURL/);
-  assert.match(componentSource, /disabled=\{!ARTIFACT_CANVAS_SAVE_CAPABILITY\.available\}/);
+  assert.match(componentSource, /createArtifactSaveCommandV2/);
+  assert.match(componentSource, /ArtifactPreviewSurface/);
+  assert.match(componentSource, /event\.metaKey \|\| event\.ctrlKey/);
   assert.match(qaSource, /artifact-canvas-events/);
   assert.match(qaSource, /Cloud session release notes/);
 });
@@ -453,6 +612,12 @@ test('artifact workspace controls are localized in both dictionaries', () => {
     'artifact.download',
     'artifact.save',
     'artifact.saveUnavailable',
+    'artifact.undo',
+    'artifact.redo',
+    'artifact.saveConflict',
+    'artifact.reloadServer',
+    'artifact.saveCopy',
+    'artifact.copyDraft',
   ];
   for (const key of keys) {
     const occurrences = i18nSource.split(`'${key}':`).length - 1;
