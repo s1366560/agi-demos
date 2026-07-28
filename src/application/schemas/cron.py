@@ -147,6 +147,29 @@ class ManualRunRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class CronActionCapability(BaseModel):
+    """One explicit automation action availability verdict."""
+
+    allowed: bool
+    reason_code: str | None = None
+
+
+class CronJobCapabilitiesResponse(BaseModel):
+    """Versioned capability contract for the scoped automation runtime."""
+
+    schema_version: int = 1
+    read: bool
+    revision_guarded: bool
+    idempotency_guarded: bool
+    durable_execution: bool
+    supported_read_trigger_kinds: list[str]
+    create: CronActionCapability
+    edit: CronActionCapability
+    toggle: CronActionCapability
+    run_now: CronActionCapability
+    delete: CronActionCapability
+
+
 class CronJobResponse(BaseModel):
     """Response schema for a single cron job."""
 

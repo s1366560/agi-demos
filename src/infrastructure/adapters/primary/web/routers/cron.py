@@ -13,6 +13,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.cron import (
+    CronActionCapability,
+    CronJobCapabilitiesResponse,
     CronJobCreate,
     CronJobListResponse,
     CronJobResponse,
@@ -109,6 +111,35 @@ async def list_cron_jobs(
     return CronJobListResponse(
         items=[cron_job_to_response(j) for j in jobs],
         total=total,
+    )
+
+
+@router.get("/capabilities", response_model=CronJobCapabilitiesResponse)
+async def get_cron_job_capabilities(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CronJobCapabilitiesResponse:
+    """Return structured automation availability without inferring from failed requests."""
+    await _require_project_access(project_id, current_user, db)
+    mutation_unavailable = CronActionCapability(
+        allowed=False,
+        reason_code="durable_automation_runtime_unavailable",
+    )
+    return CronJobCapabilitiesResponse(
+        read=True,
+        revision_guarded=False,
+        idempotency_guarded=False,
+        durable_execution=False,
+        supported_read_trigger_kinds=["manual", "schedule", "event"],
+        create=mutation_unavailable,
+        edit=mutation_unavailable,
+        toggle=mutation_unavailable,
+        run_now=CronActionCapability(
+            allowed=False,
+            reason_code="durable_automation_execution_unavailable",
+        ),
+        delete=mutation_unavailable,
     )
 
 
