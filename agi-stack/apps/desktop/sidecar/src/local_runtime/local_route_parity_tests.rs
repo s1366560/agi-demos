@@ -14,7 +14,10 @@ use uuid::Uuid;
 use super::*;
 
 const ROUTE_CONTRACT: &str = include_str!("../../../contracts/local-route-parity.v1.json");
-const DESKTOP_CLIENT_SOURCE: &str = include_str!("../../../src/api/client.ts");
+const DESKTOP_CLIENT_SOURCE: &str = concat!(
+    include_str!("../../../src/api/client.ts"),
+    include_str!("../../../src/api/managedResourcesClient.ts"),
+);
 const SEARCH_CONTRACT_SOURCE: &str = include_str!("../../../src/api/searchContract.ts");
 const CAPABILITY_CLIENT_SOURCE: &str =
     include_str!("../../../src/features/runtime/workbenchCapabilityClient.ts");
@@ -39,6 +42,8 @@ struct LocalRouteProbe {
     source: String,
     source_marker: String,
     authority: String,
+    #[serde(default)]
+    expected_status: Option<u16>,
     body: Value,
 }
 
@@ -190,6 +195,15 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
             ));
             continue;
         }
+        if let Some(expected_status) = route.expected_status {
+            assert_eq!(
+                response.status().as_u16(),
+                expected_status,
+                "{} {} returned an unexpected status",
+                route.method,
+                route.uri
+            );
+        }
 
         if route.authority == "structured_unavailable" {
             assert_eq!(
@@ -284,6 +298,22 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
                 route.method,
                 route.uri
             );
+            if is_managed_resource_mutation(&route) && response.status().is_success() {
+                let payload = response_json(response).await;
+                assert_eq!(
+                    payload["mutation_receipt"]["contract_version"], 2,
+                    "{} {} must return a V2 mutation receipt",
+                    route.method, route.uri
+                );
+                assert!(
+                    payload["mutation_receipt"]["receipt_id"]
+                        .as_str()
+                        .is_some_and(|receipt_id| !receipt_id.is_empty()),
+                    "{} {} must return a stable receipt id",
+                    route.method,
+                    route.uri
+                );
+            }
         }
     }
 
@@ -297,6 +327,11 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
         "Desktop client routes missing from Axum router:\n{}",
         missing_router_routes.join("\n")
     );
+}
+
+fn is_managed_resource_mutation(route: &LocalRouteProbe) -> bool {
+    matches!(route.area.as_str(), "skills" | "agents" | "subagents")
+        && matches!(route.method.as_str(), "POST" | "PUT" | "PATCH" | "DELETE")
 }
 
 #[tokio::test]

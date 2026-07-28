@@ -111,6 +111,7 @@ export function PromptTemplateLibrary({
       customTemplates.map((template) => ({
         key: `custom:${template.id}`,
         id: template.id,
+        revision: template.revision,
         source: 'custom',
         title: template.title,
         content: template.content,
@@ -300,7 +301,11 @@ export function PromptTemplateLibrary({
     setDeleteBusy(true);
     setCatalogErrorKey(null);
     try {
-      await api.deletePromptTemplate(templateId, controller.signal);
+      await api.deletePromptTemplate(
+        templateId,
+        controller.signal,
+        deleteSelection.template.revision,
+      );
       if (
         controller.signal.aborted ||
         !promptTemplateRequestMatches({

@@ -277,6 +277,7 @@ export type PromptTemplateVariable = {
 
 export type PromptTemplateRecord = {
   id: string;
+  revision?: number;
   tenant_id: string;
   project_id: string | null;
   created_by: string;
@@ -944,6 +945,7 @@ export type LlmProviderValidationOutcome = {
 
 export type ManagedSkill = {
   id: string;
+  revision?: number;
   tenant_id?: string;
   project_id?: string | null;
   name: string;
@@ -1342,6 +1344,7 @@ export type ManagedExternalAcpAgent = {
 
 export type ManagedAgentDefinition = {
   id: string;
+  revision?: number;
   name: string;
   display_name?: string | null;
   system_prompt?: string | null;
@@ -1393,6 +1396,7 @@ export type ManagedAgentDefinitionMutation = {
 
 export type ManagedSubAgent = {
   id: string;
+  revision?: number;
   tenant_id: string;
   project_id?: string | null;
   name: string;

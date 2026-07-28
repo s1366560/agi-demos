@@ -110,6 +110,7 @@ import {
   desktopSearchRequestContract,
   normalizeDesktopSearchResponse,
 } from './searchContract';
+import { ManagedResourcesClient } from './managedResourcesClient';
 import type { DesktopSearchRequest, DesktopSearchResponse } from './searchContract';
 
 type RequestOptions = {
@@ -248,9 +249,18 @@ export function isTaskSessionIdempotencyConflictError(error: unknown): boolean {
 
 export class DesktopApiClient {
   private readonly config: DesktopRuntimeConfig;
+  private readonly managedResourcesClient: ManagedResourcesClient;
 
   constructor(config: DesktopRuntimeConfig) {
     this.config = config;
+    this.managedResourcesClient = new ManagedResourcesClient(
+      config,
+      (message, status, payload) => new DesktopApiError(message, status, payload),
+    );
+  }
+
+  managedResources(): ManagedResourcesClient {
+    return this.managedResourcesClient;
   }
 
   async login(username: string, password: string): Promise<LoginOutcome> {
@@ -1709,170 +1719,114 @@ export class DesktopApiClient {
   }
 
   async listManagedSkills(signal?: AbortSignal): Promise<ManagedSkill[]> {
-    const params = new URLSearchParams({ limit: '100' });
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    if (this.config.projectId) params.set('project_id', this.config.projectId);
-    const payload = await this.request<unknown>(`/api/v1/skills/?${params.toString()}`, {
-      signal,
-    });
-    return readArray<ManagedSkill>(payload, ['skills', 'items', 'data']);
+    return this.managedResourcesClient.listManagedSkills(signal);
   }
 
   async setManagedSkillStatus(
     skillId: string,
     status: 'active' | 'disabled' | 'deprecated',
+    expectedRevision?: number,
   ): Promise<ManagedSkill> {
-    const params = new URLSearchParams({ status });
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    return this.request<ManagedSkill>(
-      `/api/v1/skills/${encodeURIComponent(skillId)}/status?${params.toString()}`,
-      { method: 'PATCH' },
+    return this.managedResourcesClient.setManagedSkillStatus(
+      skillId,
+      status,
+      expectedRevision,
     );
   }
 
   async createManagedSkill(input: ManagedSkillCreateMutation): Promise<ManagedSkill> {
-    const params = this.managedSkillTenantParams();
-    return this.request<ManagedSkill>(`/api/v1/skills/?${params.toString()}`, {
-      method: 'POST',
-      body: input,
-    });
+    return this.managedResourcesClient.createManagedSkill(input);
   }
 
   async getManagedSkillContent(skillId: string): Promise<ManagedSkillContent> {
-    const params = this.managedSkillTenantParams();
-    return this.request<ManagedSkillContent>(
-      `/api/v1/skills/${encodeURIComponent(skillId)}/content?${params.toString()}`,
-    );
+    return this.managedResourcesClient.getManagedSkillContent(skillId);
   }
 
   async updateManagedSkill(
     skillId: string,
     input: Omit<ManagedSkillMutation, 'full_content'>,
+    expectedRevision?: number,
   ): Promise<ManagedSkill> {
-    const params = this.managedSkillTenantParams();
-    return this.request<ManagedSkill>(
-      `/api/v1/skills/${encodeURIComponent(skillId)}?${params.toString()}`,
-      { method: 'PUT', body: input },
+    return this.managedResourcesClient.updateManagedSkill(
+      skillId,
+      input,
+      expectedRevision,
     );
   }
 
-  async updateManagedSkillContent(skillId: string, fullContent: string): Promise<ManagedSkill> {
-    const params = this.managedSkillTenantParams();
-    return this.request<ManagedSkill>(
-      `/api/v1/skills/${encodeURIComponent(skillId)}/content?${params.toString()}`,
-      { method: 'PUT', body: { full_content: fullContent } },
+  async updateManagedSkillContent(
+    skillId: string,
+    fullContent: string,
+    expectedRevision?: number,
+  ): Promise<ManagedSkill> {
+    return this.managedResourcesClient.updateManagedSkillContent(
+      skillId,
+      fullContent,
+      expectedRevision,
     );
   }
 
-  async deleteManagedSkill(skillId: string): Promise<void> {
-    const params = this.managedSkillTenantParams();
-    await this.request<void>(
-      `/api/v1/skills/${encodeURIComponent(skillId)}?${params.toString()}`,
-      { method: 'DELETE' },
-    );
+  async deleteManagedSkill(skillId: string, expectedRevision?: number): Promise<void> {
+    return this.managedResourcesClient.deleteManagedSkill(skillId, expectedRevision);
   }
 
   async importManagedSkillPackage(
     input: ManagedSkillImportInput,
   ): Promise<ManagedSkillLifecycle> {
-    const params = this.managedSkillTenantParams();
-    return this.request<ManagedSkillLifecycle>(`/api/v1/skills/import?${params.toString()}`, {
-      method: 'POST',
-      body: input,
-    });
+    return this.managedResourcesClient.importManagedSkillPackage(input);
   }
 
   async importManagedSkillZip(
     archive: File,
     input: ManagedSkillZipImportInput = {},
   ): Promise<ManagedSkillLifecycle> {
-    const params = this.managedSkillTenantParams();
-    const formData = new FormData();
-    formData.append('archive', archive);
-    formData.append('scope', input.scope ?? 'tenant');
-    formData.append('overwrite', String(input.overwrite ?? false));
-    if (input.project_id) formData.append('project_id', input.project_id);
-    if (input.change_summary) formData.append('change_summary', input.change_summary);
-    return this.request<ManagedSkillLifecycle>(
-      `/api/v1/skills/import/zip?${params.toString()}`,
-      { method: 'POST', body: formData },
-    );
+    return this.managedResourcesClient.importManagedSkillZip(archive, input);
   }
 
   async listManagedSkillVersions(
     skillId: string,
     signal?: AbortSignal,
   ): Promise<ManagedSkillVersionList> {
-    const params = this.managedSkillTenantParams();
-    params.set('limit', '50');
-    return this.request<ManagedSkillVersionList>(
-      `/api/v1/skills/${encodeURIComponent(skillId)}/versions?${params.toString()}`,
-      { signal },
-    );
+    return this.managedResourcesClient.listManagedSkillVersions(skillId, signal);
   }
 
-  async rollbackManagedSkill(skillId: string, versionNumber: number): Promise<ManagedSkill> {
-    const params = this.managedSkillTenantParams();
-    return this.request<ManagedSkill>(
-      `/api/v1/skills/${encodeURIComponent(skillId)}/rollback?${params.toString()}`,
-      { method: 'POST', body: { version_number: versionNumber } },
+  async rollbackManagedSkill(
+    skillId: string,
+    versionNumber: number,
+    expectedRevision?: number,
+  ): Promise<ManagedSkill> {
+    return this.managedResourcesClient.rollbackManagedSkill(
+      skillId,
+      versionNumber,
+      expectedRevision,
     );
   }
 
   async exportManagedSkillPackage(skillId: string): Promise<ManagedSkillPackage> {
-    const params = this.managedSkillTenantParams();
-    return this.request<ManagedSkillPackage>(
-      `/api/v1/skills/${encodeURIComponent(skillId)}/export?${params.toString()}`,
-    );
+    return this.managedResourcesClient.exportManagedSkillPackage(skillId);
   }
 
   async getManagedSkillVersion(
     skillId: string,
     versionNumber: number,
   ): Promise<ManagedSkillVersionDetail> {
-    const params = this.managedSkillTenantParams();
-    return this.request<ManagedSkillVersionDetail>(
-      `/api/v1/skills/${encodeURIComponent(skillId)}/versions/${versionNumber}?${params.toString()}`,
-    );
+    return this.managedResourcesClient.getManagedSkillVersion(skillId, versionNumber);
   }
 
   async getManagedSkillEvolution(skillId: string): Promise<ManagedSkillEvolutionDetail> {
-    const params = this.managedSkillTenantParams();
-    return this.request<ManagedSkillEvolutionDetail>(
-      `/api/v1/skills/${encodeURIComponent(skillId)}/evolution?${params.toString()}`,
-    );
+    return this.managedResourcesClient.getManagedSkillEvolution(skillId);
   }
 
   async runManagedSkillEvolution(skillId: string): Promise<ManagedSkillEvolutionRun> {
-    const params = this.managedSkillTenantParams();
-    return this.request<ManagedSkillEvolutionRun>(
-      `/api/v1/skills/${encodeURIComponent(skillId)}/evolution/run?${params.toString()}`,
-      { method: 'POST' },
-    );
+    return this.managedResourcesClient.runManagedSkillEvolution(skillId);
   }
 
   async applyManagedSkillEvolutionJob(jobId: string): Promise<ManagedSkillEvolutionJob> {
-    return this.mutateManagedSkillEvolutionJob(jobId, 'apply');
+    return this.managedResourcesClient.applyManagedSkillEvolutionJob(jobId);
   }
 
   async rejectManagedSkillEvolutionJob(jobId: string): Promise<ManagedSkillEvolutionJob> {
-    return this.mutateManagedSkillEvolutionJob(jobId, 'reject');
-  }
-
-  private async mutateManagedSkillEvolutionJob(
-    jobId: string,
-    action: 'apply' | 'reject',
-  ): Promise<ManagedSkillEvolutionJob> {
-    const params = this.managedSkillTenantParams();
-    return this.request<ManagedSkillEvolutionJob>(
-      `/api/v1/skills/evolution/jobs/${encodeURIComponent(jobId)}/${action}?${params.toString()}`,
-      { method: 'POST' },
-    );
-  }
-
-  private managedSkillTenantParams(): URLSearchParams {
-    const tenantId = requireValue(this.config.tenantId, 'tenant id');
-    return new URLSearchParams({ tenant_id: tenantId });
+    return this.managedResourcesClient.rejectManagedSkillEvolutionJob(jobId);
   }
 
   async listMCPApps(projectId: string): Promise<DesktopMCPAppSummary[]> {
@@ -2093,31 +2047,14 @@ export class DesktopApiClient {
   }
 
   async listManagedAgents(signal?: AbortSignal): Promise<ManagedAgentDefinition[]> {
-    const params = new URLSearchParams({ limit: '100', enabled_only: 'false' });
-    if (this.config.projectId) params.set('project_id', this.config.projectId);
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    const payload = await this.request<unknown>(
-      `/api/v1/agent/definitions?${params.toString()}`,
-      { signal },
-    );
-    return readArray<ManagedAgentDefinition>(payload, ['definitions', 'items', 'data']);
+    return this.managedResourcesClient.listManagedAgents(signal);
   }
 
   async listPromptTemplates(
     tenantId: string,
     signal?: AbortSignal,
   ): Promise<PromptTemplateRecord[]> {
-    const requiredTenantId = requireValue(tenantId, 'tenant id');
-    const params = new URLSearchParams({
-      tenant_id: requiredTenantId,
-      limit: '100',
-      offset: '0',
-    });
-    const payload = await this.request<unknown>(
-      `/api/v1/agent/templates?${params.toString()}`,
-      { signal },
-    );
-    return requirePromptTemplateCatalog(payload, requiredTenantId);
+    return this.managedResourcesClient.listPromptTemplates(tenantId, signal);
   }
 
   async createPromptTemplate(
@@ -2125,40 +2062,18 @@ export class DesktopApiClient {
     input: PromptTemplateCreateInput,
     signal?: AbortSignal,
   ): Promise<PromptTemplateRecord> {
-    const requiredTenantId = requireValue(tenantId, 'tenant id');
-    const request = {
-      title: requireValue(input.title, 'template title'),
-      content: requireValue(input.content, 'template content'),
-      category: requireValue(input.category, 'template category'),
-    };
-    const params = new URLSearchParams({ tenant_id: requiredTenantId });
-    const payload = await this.request<unknown>(
-      `/api/v1/agent/templates?${params.toString()}`,
-      {
-        method: 'POST',
-        body: request,
-        signal,
-      },
-    );
-    const template = normalizePromptTemplate(payload, requiredTenantId);
-    if (
-      !template ||
-      template.is_system ||
-      template.project_id !== null ||
-      template.title !== request.title ||
-      template.content !== request.content ||
-      template.category !== request.category ||
-      template.variables.length !== 0
-    ) {
-      throw invalidPromptTemplateResponse(payload);
-    }
-    return template;
+    return this.managedResourcesClient.createPromptTemplate(tenantId, input, signal);
   }
 
-  async deletePromptTemplate(templateId: string, signal?: AbortSignal): Promise<void> {
-    await this.request<unknown>(
-      `/api/v1/agent/templates/${encodeURIComponent(requireValue(templateId, 'template id'))}`,
-      { method: 'DELETE', signal },
+  async deletePromptTemplate(
+    templateId: string,
+    signal?: AbortSignal,
+    expectedRevision?: number,
+  ): Promise<void> {
+    return this.managedResourcesClient.deletePromptTemplate(
+      templateId,
+      signal,
+      expectedRevision,
     );
   }
 
@@ -2179,139 +2094,97 @@ export class DesktopApiClient {
   async setManagedAgentEnabled(
     definitionId: string,
     enabled: boolean,
+    expectedRevision?: number,
   ): Promise<ManagedAgentDefinition> {
-    const params = new URLSearchParams();
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    if (this.config.projectId) params.set('project_id', this.config.projectId);
-    const query = params.toString();
-    return this.request<ManagedAgentDefinition>(
-      `/api/v1/agent/definitions/${encodeURIComponent(definitionId)}/enabled${
-        query ? `?${query}` : ''
-      }`,
-      { method: 'PATCH', body: { enabled } },
+    return this.managedResourcesClient.setManagedAgentEnabled(
+      definitionId,
+      enabled,
+      expectedRevision,
     );
   }
 
   async createManagedAgentDefinition(
     body: ManagedAgentDefinitionMutation,
   ): Promise<ManagedAgentDefinition> {
-    const params = new URLSearchParams();
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    const query = params.toString();
-    return this.request<ManagedAgentDefinition>(
-      `/api/v1/agent/definitions${query ? `?${query}` : ''}`,
-      { method: 'POST', body },
-    );
+    return this.managedResourcesClient.createManagedAgentDefinition(body);
   }
 
   async updateManagedAgentDefinition(
     definitionId: string,
     body: ManagedAgentDefinitionMutation,
+    expectedRevision?: number,
   ): Promise<ManagedAgentDefinition> {
-    const params = new URLSearchParams();
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    const query = params.toString();
-    return this.request<ManagedAgentDefinition>(
-      `/api/v1/agent/definitions/${encodeURIComponent(definitionId)}${
-        query ? `?${query}` : ''
-      }`,
-      { method: 'PUT', body },
+    return this.managedResourcesClient.updateManagedAgentDefinition(
+      definitionId,
+      body,
+      expectedRevision,
     );
   }
 
   async deleteManagedAgentDefinition(
     definitionId: string,
+    expectedRevision?: number,
   ): Promise<{ deleted: boolean; id: string }> {
-    const params = new URLSearchParams();
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    const query = params.toString();
-    return this.request<{ deleted: boolean; id: string }>(
-      `/api/v1/agent/definitions/${encodeURIComponent(definitionId)}${
-        query ? `?${query}` : ''
-      }`,
-      { method: 'DELETE' },
+    return this.managedResourcesClient.deleteManagedAgentDefinition(
+      definitionId,
+      expectedRevision,
     );
   }
 
   async listManagedSubAgents(signal?: AbortSignal): Promise<ManagedSubAgent[]> {
-    const params = new URLSearchParams({ limit: '100', include_filesystem: 'true' });
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    const payload = await this.request<unknown>(`/api/v1/subagents/?${params.toString()}`, {
-      signal,
-    });
-    return readArray<ManagedSubAgent>(payload, ['subagents', 'items', 'data']);
+    return this.managedResourcesClient.listManagedSubAgents(signal);
   }
 
   async setManagedSubAgentEnabled(
     subagentId: string,
     enabled: boolean,
+    expectedRevision?: number,
   ): Promise<ManagedSubAgent> {
-    const params = new URLSearchParams({ enabled: String(enabled) });
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    return this.request<ManagedSubAgent>(
-      `/api/v1/subagents/${encodeURIComponent(subagentId)}/enable?${params.toString()}`,
-      { method: 'PATCH' },
+    return this.managedResourcesClient.setManagedSubAgentEnabled(
+      subagentId,
+      enabled,
+      expectedRevision,
     );
   }
 
   async listManagedSubAgentTemplates(signal?: AbortSignal): Promise<ManagedSubAgentTemplateList> {
-    const params = new URLSearchParams({ limit: '100' });
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    return this.request<ManagedSubAgentTemplateList>(
-      `/api/v1/subagents/templates/list?${params.toString()}`,
-      { signal },
-    );
+    return this.managedResourcesClient.listManagedSubAgentTemplates(signal);
   }
 
   async installManagedSubAgentTemplate(templateId: string): Promise<ManagedSubAgent> {
-    const params = new URLSearchParams();
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    return this.request<ManagedSubAgent>(
-      `/api/v1/subagents/templates/${encodeURIComponent(templateId)}/install?${params.toString()}`,
-      { method: 'POST' },
-    );
+    return this.managedResourcesClient.installManagedSubAgentTemplate(templateId);
   }
 
   async importManagedFilesystemSubAgent(
     name: string,
     projectId?: string,
   ): Promise<ManagedSubAgent> {
-    const params = new URLSearchParams();
-    if (projectId) params.set('project_id', projectId);
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    return this.request<ManagedSubAgent>(
-      `/api/v1/subagents/filesystem/${encodeURIComponent(name)}/import?${params.toString()}`,
-      { method: 'POST' },
-    );
+    return this.managedResourcesClient.importManagedFilesystemSubAgent(name, projectId);
   }
 
   async createManagedSubAgent(input: ManagedSubAgentMutation): Promise<ManagedSubAgent> {
-    const params = new URLSearchParams();
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    return this.request<ManagedSubAgent>(`/api/v1/subagents/?${params.toString()}`, {
-      method: 'POST',
-      body: input,
-    });
+    return this.managedResourcesClient.createManagedSubAgent(input);
   }
 
   async updateManagedSubAgent(
     subagentId: string,
     input: ManagedSubAgentMutation,
+    expectedRevision?: number,
   ): Promise<ManagedSubAgent> {
-    const params = new URLSearchParams();
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    return this.request<ManagedSubAgent>(
-      `/api/v1/subagents/${encodeURIComponent(subagentId)}?${params.toString()}`,
-      { method: 'PUT', body: input },
+    return this.managedResourcesClient.updateManagedSubAgent(
+      subagentId,
+      input,
+      expectedRevision,
     );
   }
 
-  async deleteManagedSubAgent(subagentId: string): Promise<void> {
-    const params = new URLSearchParams();
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    await this.request<void>(
-      `/api/v1/subagents/${encodeURIComponent(subagentId)}?${params.toString()}`,
-      { method: 'DELETE' },
+  async deleteManagedSubAgent(
+    subagentId: string,
+    expectedRevision?: number,
+  ): Promise<void> {
+    return this.managedResourcesClient.deleteManagedSubAgent(
+      subagentId,
+      expectedRevision,
     );
   }
 
@@ -2612,93 +2485,6 @@ function readArray<T>(payload: unknown, keys: string[]): T[] {
     if (Array.isArray(value)) return value as T[];
   }
   return [];
-}
-
-function requirePromptTemplateCatalog(
-  payload: unknown,
-  tenantId: string,
-): PromptTemplateRecord[] {
-  if (!Array.isArray(payload) || payload.length > 100) {
-    throw invalidPromptTemplateCatalogResponse(payload);
-  }
-  const seenIds = new Set<string>();
-  const templates = payload.map((value) => normalizePromptTemplate(value, tenantId));
-  if (
-    templates.some((template) => template === null) ||
-    templates.some((template) => {
-      if (template === null || seenIds.has(template.id)) return true;
-      seenIds.add(template.id);
-      return false;
-    })
-  ) {
-    throw invalidPromptTemplateCatalogResponse(payload);
-  }
-  return templates as PromptTemplateRecord[];
-}
-
-function normalizePromptTemplate(
-  value: unknown,
-  tenantId: string,
-): PromptTemplateRecord | null {
-  if (
-    !isRecord(value) ||
-    !isNonEmptyString(value.id) ||
-    value.tenant_id !== tenantId ||
-    !(value.project_id === null || typeof value.project_id === 'string') ||
-    !isNonEmptyString(value.created_by) ||
-    !isNonEmptyString(value.title) ||
-    typeof value.content !== 'string' ||
-    !isNonEmptyString(value.category) ||
-    !Array.isArray(value.variables) ||
-    typeof value.is_system !== 'boolean' ||
-    !isUnsignedSafeInteger(value.usage_count) ||
-    !isNonEmptyString(value.created_at) ||
-    !isNonEmptyString(value.updated_at)
-  ) {
-    return null;
-  }
-  const variables = value.variables.map(normalizePromptTemplateVariable);
-  if (variables.some((variable) => variable === null)) return null;
-  return {
-    id: value.id,
-    tenant_id: value.tenant_id,
-    project_id: value.project_id,
-    created_by: value.created_by,
-    title: value.title,
-    content: value.content,
-    category: value.category,
-    variables: variables as PromptTemplateVariable[],
-    is_system: value.is_system,
-    usage_count: value.usage_count,
-    created_at: value.created_at,
-    updated_at: value.updated_at,
-  };
-}
-
-function normalizePromptTemplateVariable(value: unknown): PromptTemplateVariable | null {
-  if (
-    !isRecord(value) ||
-    !isNonEmptyString(value.name) ||
-    typeof value.description !== 'string' ||
-    typeof value.default_value !== 'string' ||
-    typeof value.required !== 'boolean'
-  ) {
-    return null;
-  }
-  return {
-    name: value.name,
-    description: value.description,
-    default_value: value.default_value,
-    required: value.required,
-  };
-}
-
-function invalidPromptTemplateCatalogResponse(payload: unknown): DesktopApiError {
-  return new DesktopApiError('Invalid prompt template catalog response', 502, payload);
-}
-
-function invalidPromptTemplateResponse(payload: unknown): DesktopApiError {
-  return new DesktopApiError('Invalid prompt template response', 502, payload);
 }
 
 async function loadPagedIdentityCatalog<T extends { id: string }>(

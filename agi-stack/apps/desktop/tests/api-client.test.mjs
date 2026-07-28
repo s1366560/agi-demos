@@ -60,6 +60,22 @@ function conversationRecord(index, overrides = {}) {
   };
 }
 
+function assertLocalManagedMutation(
+  call,
+  { expectedRevision, value, resourceId = false, targetRevision },
+) {
+  const body = JSON.parse(String(call.init?.body));
+  assert.equal(body.contract_version, 2);
+  assert.equal(body.expected_revision, expectedRevision);
+  assert.match(body.idempotency_key, /^[0-9a-f-]{36}$/i);
+  assert.deepEqual(body.value, value);
+  assert.deepEqual(body.vault_refs, []);
+  if (resourceId) assert.match(body.resource_id, /^[0-9a-f-]{36}$/i);
+  else assert.equal('resource_id' in body, false);
+  if (targetRevision === undefined) assert.equal('target_revision' in body, false);
+  else assert.equal(body.target_revision, targetRevision);
+}
+
 test('workspace creation sends an explicit project-scoped contract and validates the response', async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
@@ -3891,25 +3907,27 @@ test('managed skill APIs preserve tenant and project collection scope and status
     });
 
     const skills = await client.listManagedSkills();
-    const updated = await client.setManagedSkillStatus(skills[0].id, 'disabled');
+    const updated = await client.setManagedSkillStatus(skills[0].id, 'disabled', 0);
 
     assert.equal(skills[0].id, 'skill/1');
     assert.equal(updated.status, 'disabled');
     assert.deepEqual(
-      calls.map((call) => [String(call.input), call.init?.method, call.init?.body]),
+      calls.map((call) => [String(call.input), call.init?.method]),
       [
         [
           'http://127.0.0.1:8088/api/v1/skills/?limit=100&tenant_id=tenant+1&project_id=project%2F1',
           'GET',
-          undefined,
         ],
         [
           'http://127.0.0.1:8088/api/v1/skills/skill%2F1/status?status=disabled&tenant_id=tenant+1',
           'PATCH',
-          undefined,
         ],
-      ]
+      ],
     );
+    assertLocalManagedMutation(calls[1], {
+      expectedRevision: 0,
+      value: { status: 'disabled' },
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -3970,7 +3988,7 @@ test('managed skill author APIs preserve tenant scope and SKILL.md content contr
 
     const created = await client.createManagedSkill(createInput);
     const content = await client.getManagedSkillContent(created.id);
-    await client.updateManagedSkill(created.id, {
+    const updateInput = {
       name: createInput.name,
       description: 'Review repository changes safely',
       tools: createInput.tools,
@@ -3979,54 +3997,273 @@ test('managed skill author APIs preserve tenant scope and SKILL.md content contr
       compatibility: createInput.compatibility,
       allowed_tools_raw: createInput.allowed_tools_raw,
       spec_version: createInput.spec_version,
-    });
-    await client.updateManagedSkillContent(created.id, '# Repository review\n\nUpdated.');
-    await client.deleteManagedSkill(created.id);
+    };
+    await client.updateManagedSkill(created.id, updateInput, 0);
+    await client.updateManagedSkillContent(
+      created.id,
+      '# Repository review\n\nUpdated.',
+      1,
+    );
+    await client.deleteManagedSkill(created.id, 2);
 
     assert.equal(content.full_content, '# Repository review');
     assert.deepEqual(
-      calls.map((call) => [
-        String(call.input),
-        call.init?.method ?? 'GET',
-        call.init?.body ? JSON.parse(call.init.body) : undefined,
-      ]),
+      calls.map((call) => [String(call.input), call.init?.method ?? 'GET']),
       [
         [
           'http://127.0.0.1:8088/api/v1/skills/?tenant_id=tenant+1',
           'POST',
-          createInput,
         ],
         [
           'http://127.0.0.1:8088/api/v1/skills/skill%2F1/content?tenant_id=tenant+1',
           'GET',
-          undefined,
         ],
         [
           'http://127.0.0.1:8088/api/v1/skills/skill%2F1?tenant_id=tenant+1',
           'PUT',
-          {
-            name: 'repository-review',
-            description: 'Review repository changes safely',
-            tools: ['git_diff'],
-            metadata: {},
-            license: null,
-            compatibility: null,
-            allowed_tools_raw: 'git_diff',
-            spec_version: '1.0',
-          },
         ],
         [
           'http://127.0.0.1:8088/api/v1/skills/skill%2F1/content?tenant_id=tenant+1',
           'PUT',
-          { full_content: '# Repository review\n\nUpdated.' },
         ],
         [
           'http://127.0.0.1:8088/api/v1/skills/skill%2F1?tenant_id=tenant+1',
           'DELETE',
-          undefined,
         ],
       ],
     );
+    assertLocalManagedMutation(calls[0], {
+      expectedRevision: 0,
+      value: createInput,
+      resourceId: true,
+    });
+    assertLocalManagedMutation(calls[2], {
+      expectedRevision: 0,
+      value: updateInput,
+    });
+    assertLocalManagedMutation(calls[3], {
+      expectedRevision: 1,
+      value: { full_content: '# Repository review\n\nUpdated.' },
+    });
+    assertLocalManagedMutation(calls[4], {
+      expectedRevision: 2,
+      value: null,
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('local managed skill import binds frontmatter identity to scope and revision authority', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  const packageInput = {
+    skill_md_content: [
+      '---',
+      'name: repository-review',
+      'description: Review repository changes safely.',
+      'allowed-tools: git_diff',
+      '---',
+      '',
+      '# Repository review',
+    ].join('\n'),
+    resource_files: {},
+    scope: 'tenant',
+    project_id: null,
+    overwrite: true,
+    change_summary: 'Refresh local package.',
+  };
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    if ((init?.method ?? 'GET') === 'GET') {
+      return new Response(
+        JSON.stringify({
+          items: [
+            {
+              id: 'repository-review',
+              revision: 4,
+              name: 'repository-review',
+              description: 'Review repository changes.',
+              status: 'active',
+              scope: 'tenant',
+              project_id: null,
+              tools: ['git_diff'],
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        action: 'updated',
+        version_number: 5,
+        version_label: null,
+        skill: {
+          id: 'repository-review',
+          revision: 5,
+          name: 'repository-review',
+          description: 'Review repository changes safely.',
+          status: 'active',
+          scope: 'tenant',
+          project_id: null,
+          tools: ['git_diff'],
+        },
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      localApiToken: 'local-session-token',
+      tenantId: 'tenant 1',
+      projectId: 'project/1',
+    });
+
+    const imported = await client.importManagedSkillPackage(packageInput);
+
+    assert.equal(imported.skill.id, 'repository-review');
+    assert.deepEqual(
+      calls.map((call) => [String(call.input), call.init?.method ?? 'GET']),
+      [
+        [
+          'http://127.0.0.1:8088/api/v1/skills/?limit=100&tenant_id=tenant+1&project_id=project%2F1',
+          'GET',
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/skills/import?tenant_id=tenant+1&project_id=project%2F1',
+          'POST',
+        ],
+      ],
+    );
+    const body = JSON.parse(String(calls[1].init.body));
+    assert.equal(body.contract_version, 2);
+    assert.equal(body.expected_revision, 4);
+    assert.equal(body.resource_id, 'repository-review');
+    assert.equal(body.value.full_content, packageInput.skill_md_content);
+    assert.equal(body.value.overwrite, true);
+    assert.match(body.idempotency_key, /^[0-9a-f-]{36}$/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('local managed skill import refuses implicit overwrite before mutation', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    return new Response(
+      JSON.stringify({
+        items: [
+          {
+            id: 'repository-review',
+            revision: 0,
+            name: 'repository-review',
+            description: 'Existing package.',
+            status: 'active',
+            scope: 'tenant',
+            project_id: null,
+            tools: ['read'],
+          },
+        ],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      localApiToken: 'local-session-token',
+      tenantId: 'tenant 1',
+      projectId: 'project/1',
+    });
+
+    await assert.rejects(
+      () =>
+        client.importManagedSkillPackage({
+          skill_md_content: [
+            '---',
+            'name: repository-review',
+            'description: Must not overwrite implicitly.',
+            '---',
+            '',
+            '# Repository review',
+          ].join('\n'),
+          scope: 'tenant',
+          overwrite: false,
+        }),
+      (error) =>
+        error instanceof DesktopApiError &&
+        error.status === 409 &&
+        error.payload?.code === 'managed_resource_already_exists',
+    );
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].init?.method, 'GET');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('cloud managed skill import preserves the existing request contract', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  const packageInput = {
+    skill_md_content: [
+      '---',
+      'name: cloud-review',
+      'description: Cloud authority fixture.',
+      '---',
+      '',
+      '# Cloud review',
+    ].join('\n'),
+    scope: 'tenant',
+    overwrite: false,
+  };
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    return new Response(
+      JSON.stringify({
+        action: 'imported',
+        version_number: 1,
+        version_label: null,
+        skill: {
+          id: 'cloud-skill-id',
+          name: 'cloud-review',
+          description: 'Cloud authority fixture.',
+          status: 'active',
+          scope: 'tenant',
+          tools: [],
+        },
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'cloud',
+      apiBaseUrl: 'https://api.memstack.test',
+      apiKey: 'cloud-session',
+      tenantId: 'tenant 1',
+      projectId: 'project/1',
+    });
+
+    await client.importManagedSkillPackage(packageInput);
+
+    assert.equal(calls.length, 1);
+    assert.equal(
+      String(calls[0].input),
+      'https://api.memstack.test/api/v1/skills/import?tenant_id=tenant+1',
+    );
+    assert.equal(calls[0].init?.method, 'POST');
+    assert.deepEqual(JSON.parse(String(calls[0].init?.body)), packageInput);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -4283,24 +4520,26 @@ test('managed agent APIs preserve project scope and the enabled mutation body', 
     });
 
     const agents = await client.listManagedAgents();
-    const updated = await client.setManagedAgentEnabled(agents[0].id, true);
+    const updated = await client.setManagedAgentEnabled(agents[0].id, true, 0);
 
     assert.equal(updated.enabled, true);
     assert.deepEqual(
-      calls.map((call) => [String(call.input), call.init?.method, call.init?.body]),
+      calls.map((call) => [String(call.input), call.init?.method]),
       [
         [
           'http://127.0.0.1:8088/api/v1/agent/definitions?limit=100&enabled_only=false&project_id=project%2F1&tenant_id=tenant+1',
           'GET',
-          undefined,
         ],
         [
           'http://127.0.0.1:8088/api/v1/agent/definitions/agent%2F1/enabled?tenant_id=tenant+1&project_id=project%2F1',
           'PATCH',
-          JSON.stringify({ enabled: true }),
         ],
-      ]
+      ],
     );
+    assertLocalManagedMutation(calls[1], {
+      expectedRevision: 0,
+      value: { enabled: true },
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -4388,30 +4627,40 @@ test('managed Agent definition CRUD preserves tenant scope and request bodies', 
     });
 
     const created = await client.createManagedAgentDefinition(mutation);
-    const updated = await client.updateManagedAgentDefinition(created.id, mutation);
-    const deleted = await client.deleteManagedAgentDefinition(updated.id);
+    const updated = await client.updateManagedAgentDefinition(created.id, mutation, 0);
+    const deleted = await client.deleteManagedAgentDefinition(updated.id, 1);
 
     assert.equal(deleted.deleted, true);
     assert.deepEqual(
-      calls.map((call) => [String(call.input), call.init?.method, call.init?.body]),
+      calls.map((call) => [String(call.input), call.init?.method]),
       [
         [
           'http://127.0.0.1:8088/api/v1/agent/definitions?tenant_id=tenant+1',
           'POST',
-          JSON.stringify(mutation),
         ],
         [
           'http://127.0.0.1:8088/api/v1/agent/definitions/agent%2F1?tenant_id=tenant+1',
           'PUT',
-          JSON.stringify(mutation),
         ],
         [
           'http://127.0.0.1:8088/api/v1/agent/definitions/agent%2F1?tenant_id=tenant+1',
           'DELETE',
-          undefined,
         ],
       ],
     );
+    assertLocalManagedMutation(calls[0], {
+      expectedRevision: 0,
+      value: mutation,
+      resourceId: true,
+    });
+    assertLocalManagedMutation(calls[1], {
+      expectedRevision: 0,
+      value: mutation,
+    });
+    assertLocalManagedMutation(calls[2], {
+      expectedRevision: 1,
+      value: null,
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -4463,24 +4712,26 @@ test('managed subagent APIs preserve tenant scope and enabled mutation contracts
     });
 
     const subagents = await client.listManagedSubAgents();
-    const updated = await client.setManagedSubAgentEnabled(subagents[0].id, true);
+    const updated = await client.setManagedSubAgentEnabled(subagents[0].id, true, 0);
 
     assert.equal(updated.enabled, true);
     assert.deepEqual(
-      calls.map((call) => [String(call.input), call.init?.method, call.init?.body]),
+      calls.map((call) => [String(call.input), call.init?.method]),
       [
         [
           'http://127.0.0.1:8088/api/v1/subagents/?limit=100&include_filesystem=true&tenant_id=tenant+1',
           'GET',
-          undefined,
         ],
         [
           'http://127.0.0.1:8088/api/v1/subagents/subagent%2F1/enable?enabled=true&tenant_id=tenant+1',
           'PATCH',
-          undefined,
         ],
       ],
     );
+    assertLocalManagedMutation(calls[1], {
+      expectedRevision: 0,
+      value: { enabled: true },
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }

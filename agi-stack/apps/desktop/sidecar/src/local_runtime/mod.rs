@@ -2571,14 +2571,6 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
             get(get_llm_provider_usage),
         )
         .route(
-            "/api/v1/skills/",
-            get(list_managed_skills).post(parity_routes::managed_mutation_unavailable),
-        )
-        .route(
-            "/api/v1/skills/:skill_id/status",
-            patch(set_managed_skill_status),
-        )
-        .route(
             "/api/v1/channels/tenants/:tenant_id/plugins",
             get(list_managed_plugins),
         )
@@ -2589,14 +2581,6 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         .route(
             "/api/v1/channels/tenants/:tenant_id/plugins/:plugin_id/disable",
             post(disable_managed_plugin),
-        )
-        .route(
-            "/api/v1/agent/definitions",
-            get(list_managed_agents).post(parity_routes::managed_mutation_unavailable),
-        )
-        .route(
-            "/api/v1/agent/definitions/:definition_id/enabled",
-            patch(set_managed_agent_enabled),
         )
         .route(
             "/api/v1/projects/:project_id/my-work",
@@ -2970,6 +2954,20 @@ fn resource_registry_error(error: ResourceRegistryError) -> (StatusCode, Json<Va
         ResourceRegistryError::NotFound => {
             (StatusCode::NOT_FOUND, Json(json!({ "detail": detail })))
         }
+        ResourceRegistryError::AlreadyExists => (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "code": "managed_resource_already_exists",
+                "detail": detail,
+            })),
+        ),
+        ResourceRegistryError::IdempotencyConflict => (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "code": "managed_resource_idempotency_conflict",
+                "detail": detail,
+            })),
+        ),
         ResourceRegistryError::Immutable { .. } => (
             StatusCode::CONFLICT,
             Json(json!({
@@ -2983,6 +2981,13 @@ fn resource_registry_error(error: ResourceRegistryError) -> (StatusCode, Json<Va
         ResourceRegistryError::InvalidRoutingPolicy(_) => (
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(json!({ "detail": detail })),
+        ),
+        ResourceRegistryError::InvalidMutation(_) => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({
+                "code": "invalid_managed_resource_mutation",
+                "detail": detail,
+            })),
         ),
         ResourceRegistryError::Storage(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -3315,17 +3320,6 @@ async fn switch_workspace_context(
 struct ManagedResourceListQuery {
     tenant_id: Option<String>,
     project_id: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ManagedSkillStatusQuery {
-    status: String,
-    tenant_id: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ManagedAgentEnabledBody {
-    enabled: bool,
 }
 
 #[derive(Deserialize)]
@@ -4814,7 +4808,8 @@ async fn list_managed_skills(
     Query(query): Query<ManagedResourceListQuery>,
 ) -> LocalJsonResult {
     ensure_tenant_scope(&authenticated, query.tenant_id.as_deref())?;
-    let items = state
+    ensure_project_scope(&authenticated, query.project_id.as_deref())?;
+    let mut items = state
         .session_store
         .list_managed_resources(
             ManagedResourceKind::Skill,
@@ -4822,51 +4817,17 @@ async fn list_managed_skills(
             &authenticated.workspace.tenant_id,
         )
         .map_err(local_store_error)?;
+    items.extend(
+        state
+            .session_store
+            .list_managed_resources(
+                ManagedResourceKind::Skill,
+                "project",
+                &authenticated.workspace.project_id,
+            )
+            .map_err(local_store_error)?,
+    );
     Ok(Json(json!({ "items": items })))
-}
-
-async fn set_managed_skill_status(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(skill_id): Path<String>,
-    Query(query): Query<ManagedSkillStatusQuery>,
-) -> LocalJsonResult {
-    ensure_tenant_scope(&authenticated, query.tenant_id.as_deref())?;
-    ensure_managed_resource_manager(&authenticated)?;
-    if !matches!(query.status.as_str(), "active" | "disabled" | "deprecated") {
-        return Err((
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({ "detail": "unsupported skill status" })),
-        ));
-    }
-    let mut skill = state
-        .session_store
-        .managed_resource(
-            ManagedResourceKind::Skill,
-            "tenant",
-            &authenticated.workspace.tenant_id,
-            &skill_id,
-        )
-        .map_err(local_store_error)?
-        .ok_or_else(|| resource_registry_error(ResourceRegistryError::NotFound))?;
-    let revision = skill.get("revision").and_then(Value::as_u64).unwrap_or(0);
-    if let Some(object) = skill.as_object_mut() {
-        object.insert("status".to_string(), json!(query.status));
-    }
-    state
-        .session_store
-        .put_managed_resource(
-            ManagedResourceKind::Skill,
-            "tenant",
-            &authenticated.workspace.tenant_id,
-            &skill_id,
-            &query.status,
-            Some(revision),
-            skill,
-            Utc::now().timestamp_millis(),
-        )
-        .map(Json)
-        .map_err(resource_registry_error)
 }
 
 async fn list_managed_plugins(
@@ -4937,30 +4898,6 @@ async fn list_managed_agents(
         )
         .map_err(local_store_error)?;
     Ok(Json(json!({ "items": items })))
-}
-
-async fn set_managed_agent_enabled(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(definition_id): Path<String>,
-    Query(query): Query<ManagedResourceListQuery>,
-    Json(request): Json<ManagedAgentEnabledBody>,
-) -> LocalJsonResult {
-    ensure_tenant_scope(&authenticated, query.tenant_id.as_deref())?;
-    ensure_project_scope(&authenticated, query.project_id.as_deref())?;
-    ensure_managed_resource_manager(&authenticated)?;
-    state
-        .session_store
-        .set_managed_resource_enabled(
-            ManagedResourceKind::Agent,
-            "project",
-            &authenticated.workspace.project_id,
-            &definition_id,
-            request.enabled,
-            Utc::now().timestamp_millis(),
-        )
-        .map(Json)
-        .map_err(resource_registry_error)
 }
 
 fn ensure_tenant_scope(

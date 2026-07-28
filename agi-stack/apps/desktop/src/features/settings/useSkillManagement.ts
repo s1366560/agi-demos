@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { DesktopApiClient } from '../../api/client';
+import { ManagedResourcesClient } from '../../api/managedResourcesClient';
 import type {
   DesktopRuntimeConfig,
   ManagedSkill,
@@ -57,7 +57,7 @@ export function useSkillManagement({
       setDialog({ key, skill, loading: Boolean(skill), contentReady: !skill });
       if (!skill) return;
       try {
-        const content = await new DesktopApiClient(config).getManagedSkillContent(skill.id);
+        const content = await new ManagedResourcesClient(config).getManagedSkillContent(skill.id);
         if (contextKeyRef.current !== requestContextKey) return;
         setDialog((current) =>
           current?.key === key
@@ -85,13 +85,21 @@ export function useSkillManagement({
       setBusy(true);
       setError(null);
       try {
-        const client = new DesktopApiClient(config);
+        const client = new ManagedResourcesClient(config);
         let saved: ManagedSkill;
         if (dialog.skill) {
           const { full_content: fullContent, ...metadata } = input;
-          saved = await client.updateManagedSkill(dialog.skill.id, metadata);
+          saved = await client.updateManagedSkill(
+            dialog.skill.id,
+            metadata,
+            dialog.skill.revision,
+          );
           if (fullContent)
-            saved = await client.updateManagedSkillContent(dialog.skill.id, fullContent);
+            saved = await client.updateManagedSkillContent(
+              dialog.skill.id,
+              fullContent,
+              saved.revision,
+            );
         } else {
           saved = await client.createManagedSkill(input as ManagedSkillCreateMutation);
         }
@@ -114,7 +122,10 @@ export function useSkillManagement({
     setBusy(true);
     setError(null);
     try {
-      await new DesktopApiClient(config).deleteManagedSkill(dialog.skill.id);
+      await new ManagedResourcesClient(config).deleteManagedSkill(
+        dialog.skill.id,
+        dialog.skill.revision,
+      );
       if (contextKeyRef.current !== requestContextKey) return;
       setDialog(null);
       onDeleted();

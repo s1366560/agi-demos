@@ -5,6 +5,9 @@ use super::*;
 mod artifact_content;
 #[cfg(test)]
 mod artifact_content_tests;
+pub(super) mod managed_resources;
+#[cfg(test)]
+mod managed_resources_tests;
 mod sandbox_files;
 #[cfg(test)]
 mod sandbox_files_tests;
@@ -18,7 +21,7 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
     Router::new()
         .merge(artifact_content::router())
         .merge(search::router())
-        .route("/api/v1/skills/import", post(managed_mutation_unavailable))
+        .merge(managed_resources::router())
         .route(
             "/api/v1/skills/import/zip",
             post(managed_mutation_unavailable),
@@ -28,36 +31,12 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
             post(managed_mutation_unavailable),
         )
         .route(
-            "/api/v1/skills/:skill_id/content",
-            get(managed_read_unavailable).put(managed_mutation_unavailable),
-        )
-        .route(
-            "/api/v1/skills/:skill_id/versions",
-            get(managed_read_unavailable),
-        )
-        .route(
-            "/api/v1/skills/:skill_id/versions/:version_number",
-            get(managed_read_unavailable),
-        )
-        .route(
-            "/api/v1/skills/:skill_id/rollback",
-            post(managed_mutation_unavailable),
-        )
-        .route(
-            "/api/v1/skills/:skill_id/export",
-            get(managed_read_unavailable),
-        )
-        .route(
             "/api/v1/skills/:skill_id/evolution",
             get(managed_read_unavailable),
         )
         .route(
             "/api/v1/skills/:skill_id/evolution/run",
             post(managed_mutation_unavailable),
-        )
-        .route(
-            "/api/v1/skills/:skill_id",
-            put(managed_mutation_unavailable).delete(managed_mutation_unavailable),
         )
         .route(
             "/api/v1/channels/tenants/:tenant_id/plugins/install",
@@ -100,24 +79,8 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
             post(managed_mutation_unavailable),
         )
         .route(
-            "/api/v1/agent/definitions/:definition_id",
-            put(managed_mutation_unavailable).delete(managed_mutation_unavailable),
-        )
-        .route(
-            "/api/v1/agent/templates",
-            get(managed_read_unavailable).post(managed_mutation_unavailable),
-        )
-        .route(
-            "/api/v1/agent/templates/:template_id",
-            delete(managed_mutation_unavailable),
-        )
-        .route(
             "/api/v1/acp/tenants/:tenant_id/external-agents",
             get(managed_read_unavailable),
-        )
-        .route(
-            "/api/v1/subagents/",
-            get(managed_read_unavailable).post(managed_mutation_unavailable),
         )
         .route(
             "/api/v1/subagents/templates/list",
@@ -130,14 +93,6 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
         .route(
             "/api/v1/subagents/filesystem/:name/import",
             post(managed_mutation_unavailable),
-        )
-        .route(
-            "/api/v1/subagents/:subagent_id/enable",
-            patch(managed_mutation_unavailable),
-        )
-        .route(
-            "/api/v1/subagents/:subagent_id",
-            put(managed_mutation_unavailable).delete(managed_mutation_unavailable),
         )
         .route("/api/v1/mcp/apps", get(mcp_read_unavailable))
         .route(
