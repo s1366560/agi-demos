@@ -1,4 +1,139 @@
 use super::support::*;
+use agistack_adapters_postgres::{
+    ArtifactContentConflictRecord, ArtifactContentReceiptRecord, ArtifactContentSaveCommand,
+    ArtifactContentSaveResult,
+};
+
+#[tokio::test]
+async fn artifact_content_v2_save_is_conditional_and_idempotent() {
+    let Some(pool) = pool_or_skip("artifact_content_v2_save_is_conditional_and_idempotent").await
+    else {
+        return;
+    };
+    ensure_python_shaped_tables(&pool).await;
+    ensure_artifact_content_v2_schema(&pool).await;
+    clean_artifact_rows(&pool).await;
+    seed_artifact(
+        &pool,
+        SeedArtifact {
+            id: "artifact_v2",
+            project_id: "artifact_project",
+            status: "ready",
+            category: "document",
+            tool_execution_id: Some("tool-1"),
+            created_at: ts(2026, 2, 1, 0, 0, 0),
+        },
+    )
+    .await;
+
+    let repo = PgArtifactRepository::new(pool.clone());
+    let initialized = repo
+        .initialize_content_hash(
+            "artifact_v2",
+            1,
+            "sha256:19b25856e1c150ca834cffc8b59b23adbd0ec0389e58eb22b3b64768098d002b",
+        )
+        .await
+        .expect("initialize hash")
+        .expect("artifact exists");
+    assert_eq!(initialized.content_revision, 1);
+
+    let command = ArtifactContentSaveCommand {
+        artifact_id: "artifact_v2",
+        project_id: "artifact_project",
+        tenant_id: "artifact_tenant",
+        expected_revision: 1,
+        idempotency_key: "artifact-v2:save:0001",
+        request_hash:
+            "sha256:99009b05d03d76249c37a09ec4c3e7f9a3096173f094e0421736197525515a21",
+        content_hash:
+            "sha256:27eb5e51506c911f6fc4bb345c0d9db6f60415fceab7c18e1e9b862637415777",
+        object_key:
+            "artifacts/artifact_tenant/artifact_project/artifact_v2/versions/r2-27eb5e51506c911f6fc4bb345c0d9db6f60415fceab7c18e1e9b862637415777",
+        size_bytes: 7,
+    };
+    let first = repo
+        .save_content_v2(command)
+        .await
+        .expect("first save succeeds");
+    let replay = repo
+        .save_content_v2(command)
+        .await
+        .expect("same payload replays");
+
+    assert_eq!(
+        first,
+        ArtifactContentSaveResult::Saved(ArtifactContentReceiptRecord {
+            artifact_id: "artifact_v2".to_string(),
+            revision: 2,
+            content_hash: "sha256:27eb5e51506c911f6fc4bb345c0d9db6f60415fceab7c18e1e9b862637415777"
+                .to_string(),
+            duplicate: false,
+        })
+    );
+    assert_eq!(
+        replay,
+        ArtifactContentSaveResult::Saved(ArtifactContentReceiptRecord {
+            artifact_id: "artifact_v2".to_string(),
+            revision: 2,
+            content_hash: "sha256:27eb5e51506c911f6fc4bb345c0d9db6f60415fceab7c18e1e9b862637415777"
+                .to_string(),
+            duplicate: true,
+        })
+    );
+
+    let key_conflict = repo
+        .save_content_v2(ArtifactContentSaveCommand {
+            request_hash: "sha256:ae1a1b87e7fc8dfaa620631e73c67257ff1288f515179dd6a2b1c1d319d9a8ff",
+            content_hash: "sha256:9d6f965ac832e40a5df6c06afe983e3b449c07b843ff51ce76204de05c690d11",
+            ..command
+        })
+        .await
+        .expect("idempotency conflict is an authority result");
+    assert_eq!(
+        key_conflict,
+        ArtifactContentSaveResult::Conflict(ArtifactContentConflictRecord {
+            reason_code: "artifact_content_idempotency_conflict".to_string(),
+            server_revision: 2,
+            server_content_hash:
+                "sha256:27eb5e51506c911f6fc4bb345c0d9db6f60415fceab7c18e1e9b862637415777"
+                    .to_string(),
+        })
+    );
+
+    let revision_conflict = repo
+        .save_content_v2(ArtifactContentSaveCommand {
+            idempotency_key: "artifact-v2:save:0002",
+            request_hash: "sha256:99009b05d03d76249c37a09ec4c3e7f9a3096173f094e0421736197525515a21",
+            ..command
+        })
+        .await
+        .expect("revision conflict is an authority result");
+    assert_eq!(
+        revision_conflict,
+        ArtifactContentSaveResult::Conflict(ArtifactContentConflictRecord {
+            reason_code: "artifact_content_revision_conflict".to_string(),
+            server_revision: 2,
+            server_content_hash:
+                "sha256:27eb5e51506c911f6fc4bb345c0d9db6f60415fceab7c18e1e9b862637415777"
+                    .to_string(),
+        })
+    );
+
+    let stored = repo
+        .get("artifact_v2")
+        .await
+        .expect("get updated artifact")
+        .expect("artifact exists");
+    assert_eq!(stored.content_revision, 2);
+    assert_eq!(
+        stored.content_hash.as_deref(),
+        Some("sha256:27eb5e51506c911f6fc4bb345c0d9db6f60415fceab7c18e1e9b862637415777")
+    );
+    assert_eq!(stored.object_key, command.object_key);
+    assert_eq!(stored.url, None);
+    assert_eq!(stored.preview_url, None);
+}
 
 #[tokio::test]
 async fn artifacts_are_project_scoped_ready_filtered_and_ordered() {
@@ -208,10 +343,58 @@ async fn artifact_mark_deleted_soft_deletes_python_row() {
 }
 
 async fn clean_artifact_rows(pool: &PgPool) {
+    ensure_artifact_content_v2_schema(pool).await;
+    sqlx::query("DELETE FROM artifact_content_receipts WHERE artifact_id LIKE 'artifact_%'")
+        .execute(pool)
+        .await
+        .expect("clean artifact content receipts");
     sqlx::query("DELETE FROM artifacts WHERE id LIKE 'artifact_%'")
         .execute(pool)
         .await
         .expect("clean artifacts");
+}
+
+async fn ensure_artifact_content_v2_schema(pool: &PgPool) {
+    let migration_managed =
+        sqlx::query_scalar::<_, bool>("SELECT to_regclass('public.alembic_version') IS NOT NULL")
+            .fetch_one(pool)
+            .await
+            .expect("inspect artifact schema ownership");
+    if migration_managed {
+        let schema_is_current = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (\
+                SELECT 1 FROM information_schema.columns \
+                WHERE table_schema = 'public' AND table_name = 'artifacts' \
+                  AND column_name = 'content_revision'\
+             ) AND to_regclass('public.artifact_content_receipts') IS NOT NULL",
+        )
+        .fetch_one(pool)
+        .await
+        .expect("inspect artifact content v2 schema");
+        assert!(
+            schema_is_current,
+            "migration-managed database must be upgraded to ArtifactContentContractV2"
+        );
+        return;
+    }
+
+    for statement in [
+        "ALTER TABLE artifacts ADD COLUMN IF NOT EXISTS content_revision bigint DEFAULT 1 NOT NULL",
+        "ALTER TABLE artifacts ADD COLUMN IF NOT EXISTS content_hash varchar(71)",
+        "CREATE TABLE IF NOT EXISTS artifact_content_receipts (\
+            artifact_id text NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE, \
+            project_id text NOT NULL, tenant_id text NOT NULL, \
+            idempotency_key varchar(128) NOT NULL, request_hash varchar(71) NOT NULL, \
+            expected_revision bigint NOT NULL, resulting_revision bigint NOT NULL, \
+            content_hash varchar(71) NOT NULL, object_key text NOT NULL, \
+            size_bytes bigint NOT NULL, created_at timestamptz DEFAULT now() NOT NULL, \
+            PRIMARY KEY (artifact_id, idempotency_key))",
+    ] {
+        sqlx::query(statement)
+            .execute(pool)
+            .await
+            .expect("ensure artifact content v2 schema");
+    }
 }
 
 struct SeedArtifact<'a> {

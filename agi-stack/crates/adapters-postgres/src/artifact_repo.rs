@@ -14,7 +14,7 @@ use crate::PgPool;
 const ARTIFACT_COLS: &str = "id, project_id, tenant_id, sandbox_id, tool_execution_id, \
     conversation_id, filename, mime_type, category, size_bytes, object_key, url, preview_url, status, \
     error_message, source_tool, source_path, COALESCE(artifact_metadata, '{}'::json) AS metadata, \
-    created_at";
+    content_revision, content_hash, created_at";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArtifactRecord {
@@ -36,7 +36,45 @@ pub struct ArtifactRecord {
     pub source_tool: Option<String>,
     pub source_path: Option<String>,
     pub metadata: serde_json::Value,
+    pub content_revision: i64,
+    pub content_hash: Option<String>,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ArtifactContentSaveCommand<'a> {
+    pub artifact_id: &'a str,
+    pub project_id: &'a str,
+    pub tenant_id: &'a str,
+    pub expected_revision: i64,
+    pub idempotency_key: &'a str,
+    pub request_hash: &'a str,
+    pub content_hash: &'a str,
+    pub object_key: &'a str,
+    pub size_bytes: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArtifactContentReceiptRecord {
+    pub artifact_id: String,
+    pub revision: i64,
+    pub content_hash: String,
+    pub duplicate: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArtifactContentConflictRecord {
+    pub reason_code: String,
+    pub server_revision: i64,
+    pub server_content_hash: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArtifactContentSaveResult {
+    Saved(ArtifactContentReceiptRecord),
+    Conflict(ArtifactContentConflictRecord),
+    NotFound,
+    NotReady,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -162,6 +200,185 @@ impl PgArtifactRepository {
         row.map(row_to_record).transpose()
     }
 
+    pub async fn initialize_content_hash(
+        &self,
+        artifact_id: &str,
+        expected_revision: i64,
+        content_hash: &str,
+    ) -> CoreResult<Option<ArtifactRecord>> {
+        let sql = format!(
+            "UPDATE artifacts \
+             SET content_hash = $3 \
+             WHERE id = $1 AND content_revision = $2 AND content_hash IS NULL \
+             RETURNING {ARTIFACT_COLS}"
+        );
+        let row = sqlx::query(&sql)
+            .bind(artifact_id)
+            .bind(expected_revision)
+            .bind(content_hash)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| CoreError::Storage(format!("initialize artifact content hash: {e}")))?;
+        if let Some(row) = row {
+            return row_to_record(row).map(Some);
+        }
+        self.get(artifact_id).await
+    }
+
+    pub async fn save_content_v2(
+        &self,
+        command: ArtifactContentSaveCommand<'_>,
+    ) -> CoreResult<ArtifactContentSaveResult> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| CoreError::Storage(format!("begin artifact content save: {e}")))?;
+        let authority = sqlx::query(
+            "SELECT status, content_revision, content_hash \
+             FROM artifacts \
+             WHERE id = $1 AND project_id = $2 AND tenant_id = $3 \
+             FOR UPDATE",
+        )
+        .bind(command.artifact_id)
+        .bind(command.project_id)
+        .bind(command.tenant_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| CoreError::Storage(format!("lock artifact content authority: {e}")))?;
+        let Some(authority) = authority else {
+            tx.rollback()
+                .await
+                .map_err(|e| CoreError::Storage(format!("rollback missing artifact save: {e}")))?;
+            return Ok(ArtifactContentSaveResult::NotFound);
+        };
+
+        let status: String = authority.try_get("status").map_err(row_error)?;
+        let server_revision: i64 = authority.try_get("content_revision").map_err(row_error)?;
+        let server_content_hash: Option<String> =
+            authority.try_get("content_hash").map_err(row_error)?;
+        let server_content_hash = server_content_hash.ok_or_else(|| {
+            CoreError::Storage("artifact content authority hash is not initialized".to_string())
+        })?;
+
+        let receipt = sqlx::query(
+            "SELECT request_hash, resulting_revision, content_hash \
+             FROM artifact_content_receipts \
+             WHERE artifact_id = $1 AND project_id = $2 AND tenant_id = $3 \
+               AND idempotency_key = $4",
+        )
+        .bind(command.artifact_id)
+        .bind(command.project_id)
+        .bind(command.tenant_id)
+        .bind(command.idempotency_key)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| CoreError::Storage(format!("read artifact content receipt: {e}")))?;
+        if let Some(receipt) = receipt {
+            let request_hash: String = receipt.try_get("request_hash").map_err(row_error)?;
+            if request_hash == command.request_hash {
+                let result = ArtifactContentSaveResult::Saved(ArtifactContentReceiptRecord {
+                    artifact_id: command.artifact_id.to_string(),
+                    revision: receipt.try_get("resulting_revision").map_err(row_error)?,
+                    content_hash: receipt.try_get("content_hash").map_err(row_error)?,
+                    duplicate: true,
+                });
+                tx.commit().await.map_err(|e| {
+                    CoreError::Storage(format!("commit artifact content replay: {e}"))
+                })?;
+                return Ok(result);
+            }
+            tx.commit().await.map_err(|e| {
+                CoreError::Storage(format!("commit artifact idempotency conflict: {e}"))
+            })?;
+            return Ok(ArtifactContentSaveResult::Conflict(
+                ArtifactContentConflictRecord {
+                    reason_code: "artifact_content_idempotency_conflict".to_string(),
+                    server_revision,
+                    server_content_hash,
+                },
+            ));
+        }
+
+        if status != "ready" {
+            tx.rollback().await.map_err(|e| {
+                CoreError::Storage(format!("rollback non-ready artifact save: {e}"))
+            })?;
+            return Ok(ArtifactContentSaveResult::NotReady);
+        }
+        if server_revision != command.expected_revision {
+            tx.commit().await.map_err(|e| {
+                CoreError::Storage(format!("commit artifact revision conflict: {e}"))
+            })?;
+            return Ok(ArtifactContentSaveResult::Conflict(
+                ArtifactContentConflictRecord {
+                    reason_code: "artifact_content_revision_conflict".to_string(),
+                    server_revision,
+                    server_content_hash,
+                },
+            ));
+        }
+        let next_revision = server_revision
+            .checked_add(1)
+            .ok_or_else(|| CoreError::Storage("artifact content revision exhausted".to_string()))?;
+
+        let updated = sqlx::query(
+            "UPDATE artifacts \
+             SET object_key = $4, size_bytes = $5, content_revision = $6, content_hash = $7, \
+                 url = NULL, preview_url = NULL, error_message = NULL \
+             WHERE id = $1 AND project_id = $2 AND tenant_id = $3 \
+               AND content_revision = $8 AND status = 'ready'",
+        )
+        .bind(command.artifact_id)
+        .bind(command.project_id)
+        .bind(command.tenant_id)
+        .bind(command.object_key)
+        .bind(command.size_bytes)
+        .bind(next_revision)
+        .bind(command.content_hash)
+        .bind(command.expected_revision)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| CoreError::Storage(format!("advance artifact content pointer: {e}")))?;
+        if updated.rows_affected() != 1 {
+            return Err(CoreError::Storage(
+                "artifact content pointer update lost its revision fence".to_string(),
+            ));
+        }
+
+        sqlx::query(
+            "INSERT INTO artifact_content_receipts \
+             (artifact_id, project_id, tenant_id, idempotency_key, request_hash, \
+              expected_revision, resulting_revision, content_hash, object_key, size_bytes) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+        )
+        .bind(command.artifact_id)
+        .bind(command.project_id)
+        .bind(command.tenant_id)
+        .bind(command.idempotency_key)
+        .bind(command.request_hash)
+        .bind(command.expected_revision)
+        .bind(next_revision)
+        .bind(command.content_hash)
+        .bind(command.object_key)
+        .bind(command.size_bytes)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| CoreError::Storage(format!("record artifact content receipt: {e}")))?;
+        tx.commit()
+            .await
+            .map_err(|e| CoreError::Storage(format!("commit artifact content save: {e}")))?;
+
+        Ok(ArtifactContentSaveResult::Saved(
+            ArtifactContentReceiptRecord {
+                artifact_id: command.artifact_id.to_string(),
+                revision: next_revision,
+                content_hash: command.content_hash.to_string(),
+                duplicate: false,
+            },
+        ))
+    }
+
     pub async fn mark_deleted(&self, artifact_id: &str) -> CoreResult<Option<ArtifactRecord>> {
         let sql = format!(
             "UPDATE artifacts \
@@ -198,6 +415,8 @@ fn row_to_record(row: sqlx::postgres::PgRow) -> CoreResult<ArtifactRecord> {
         source_tool: row.try_get("source_tool").map_err(row_error)?,
         source_path: row.try_get("source_path").map_err(row_error)?,
         metadata: row.try_get("metadata").map_err(row_error)?,
+        content_revision: row.try_get("content_revision").map_err(row_error)?,
+        content_hash: row.try_get("content_hash").map_err(row_error)?,
         created_at: row.try_get("created_at").map_err(row_error)?,
     })
 }

@@ -8,12 +8,33 @@ This service handles:
 - Managing artifact lifecycle
 """
 
+import asyncio
 import logging
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
+from src.application.services.artifact_content_contract import (
+    ARTIFACT_CONTENT_RECEIPTS_METADATA_KEY,
+    EDITABLE_ARTIFACT_MIME_TYPES,
+    ArtifactContentContract,
+    ArtifactContentHashMismatchError,
+    ArtifactContentIdempotencyConflictError,
+    ArtifactContentIntegrityError,
+    ArtifactContentNotEditableError,
+    ArtifactContentRevisionConflictError,
+    ArtifactContentSaveCommand,
+    ArtifactContentSaveReceipt,
+    artifact_content_hash,
+    artifact_content_receipts,
+    artifact_content_revision,
+    artifact_save_request_hash,
+    normalize_mime_type,
+    parse_artifact_content_receipt,
+    validate_artifact_content_command,
+    versioned_artifact_object_key,
+)
 from src.domain.events.agent_events import (
     AgentArtifactCreatedEvent,
     AgentArtifactErrorEvent,
@@ -80,6 +101,7 @@ class ArtifactService:
 
         # In-memory artifact tracking (would be DB in production)
         self._artifacts: dict[str, Artifact] = {}
+        self._content_locks: dict[str, asyncio.Lock] = {}
 
     def _generate_object_key(
         self,
@@ -345,34 +367,155 @@ class ArtifactService:
             logger.error(f"Failed to delete artifact {artifact_id}: {e}")
             return False
 
-    async def update_artifact_content(self, artifact_id: str, content: str) -> Artifact | None:
-        """Update the text content of an artifact (canvas save-back).
-
-        Overwrites the file in storage and refreshes the presigned URL.
-        Only works for READY artifacts.
-        """
+    async def get_artifact_bytes(self, artifact_id: str) -> bytes | None:
+        """Return authenticated artifact bytes without issuing storage credentials."""
         artifact = self._artifacts.get(artifact_id)
         if not artifact or artifact.status != ArtifactStatus.READY:
             return None
+        return await self._storage.get_file(artifact.object_key)
 
+    async def get_artifact_content(self, artifact_id: str) -> ArtifactContentContract | None:
+        """Return editable UTF-8 content with its canonical revision and hash."""
+        artifact = self._artifacts.get(artifact_id)
+        if not artifact or artifact.status != ArtifactStatus.READY:
+            return None
+        mime_type = normalize_mime_type(artifact.mime_type)
+        if mime_type not in EDITABLE_ARTIFACT_MIME_TYPES:
+            raise ArtifactContentNotEditableError
+        content_bytes = await self._storage.get_file(artifact.object_key)
+        if content_bytes is None:
+            return None
+        try:
+            content = content_bytes.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ArtifactContentNotEditableError from exc
+
+        content_hash = artifact_content_hash(content_bytes)
+        persisted_hash = artifact.metadata.get("content_hash")
+        if isinstance(persisted_hash, str) and persisted_hash != content_hash:
+            raise ArtifactContentIntegrityError
+        revision = artifact_content_revision(artifact)
+        artifact.metadata["content_revision"] = revision
+        artifact.metadata["content_hash"] = content_hash
+        return ArtifactContentContract(
+            contract_version=2,
+            artifact_id=artifact.id,
+            revision=revision,
+            content_hash=content_hash,
+            mime_type=mime_type,
+            content=content,
+        )
+
+    async def save_artifact_content(
+        self,
+        artifact_id: str,
+        command: ArtifactContentSaveCommand,
+    ) -> ArtifactContentSaveReceipt | None:
+        """Conditionally save editable text to a versioned object key."""
+        artifact = self._artifacts.get(artifact_id)
+        if not artifact or artifact.status != ArtifactStatus.READY:
+            return None
+        validate_artifact_content_command(command)
+        mime_type = normalize_mime_type(artifact.mime_type)
+        if mime_type not in EDITABLE_ARTIFACT_MIME_TYPES:
+            raise ArtifactContentNotEditableError
+
+        content_bytes = command.content.encode("utf-8")
+        if artifact_content_hash(content_bytes) != command.content_hash:
+            raise ArtifactContentHashMismatchError
+
+        lock = self._content_locks.setdefault(artifact_id, asyncio.Lock())
+        async with lock:
+            authority = await self.get_artifact_content(artifact_id)
+            if authority is None:
+                return None
+            request_hash = artifact_save_request_hash(artifact_id, command)
+            receipts = artifact_content_receipts(artifact)
+            existing = receipts.get(command.idempotency_key)
+            if existing is not None:
+                stored_request_hash, stored_revision, stored_content_hash = (
+                    parse_artifact_content_receipt(existing)
+                )
+                if stored_request_hash != request_hash:
+                    raise ArtifactContentIdempotencyConflictError(
+                        server_revision=authority.revision,
+                        server_content_hash=authority.content_hash,
+                    )
+                return ArtifactContentSaveReceipt(
+                    artifact_id=artifact_id,
+                    revision=stored_revision,
+                    content_hash=stored_content_hash,
+                    duplicate=True,
+                )
+
+            if command.expected_revision != authority.revision:
+                raise ArtifactContentRevisionConflictError(
+                    server_revision=authority.revision,
+                    server_content_hash=authority.content_hash,
+                )
+
+            next_revision = authority.revision + 1
+            version_key = versioned_artifact_object_key(
+                bucket_prefix=self._bucket_prefix,
+                artifact=artifact,
+                revision=next_revision,
+                content_hash=command.content_hash,
+            )
+            _ = await self._storage.upload_file(
+                file_content=content_bytes,
+                object_key=version_key,
+                content_type=mime_type,
+                metadata={
+                    "artifact_id": artifact.id,
+                    "project_id": artifact.project_id,
+                    "tenant_id": artifact.tenant_id,
+                    "content_revision": str(next_revision),
+                    "content_hash": command.content_hash,
+                },
+            )
+
+            artifact.object_key = version_key
+            artifact.size_bytes = len(content_bytes)
+            artifact.url = None
+            artifact.preview_url = None
+            artifact.error_message = None
+            artifact.metadata["content_revision"] = next_revision
+            artifact.metadata["content_hash"] = command.content_hash
+            receipts[command.idempotency_key] = {
+                "request_hash": request_hash,
+                "revision": next_revision,
+                "content_hash": command.content_hash,
+            }
+            artifact.metadata[ARTIFACT_CONTENT_RECEIPTS_METADATA_KEY] = receipts
+            return ArtifactContentSaveReceipt(
+                artifact_id=artifact.id,
+                revision=next_revision,
+                content_hash=command.content_hash,
+                duplicate=False,
+            )
+
+    async def update_artifact_content(self, artifact_id: str, content: str) -> Artifact | None:
+        """Update the text content of an artifact (canvas save-back).
+
+        Compatibility wrapper over the versioned V2 save authority.
+        """
+        authority = await self.get_artifact_content(artifact_id)
+        if authority is None:
+            return None
         try:
             content_bytes = content.encode("utf-8")
-            await self._storage.upload_file(
-                file_content=content_bytes,
-                object_key=artifact.object_key,
-                content_type=artifact.mime_type,
+            _ = await self.save_artifact_content(
+                artifact_id,
+                ArtifactContentSaveCommand(
+                    contract_version=2,
+                    expected_revision=authority.revision,
+                    content_hash=artifact_content_hash(content_bytes),
+                    idempotency_key=f"legacy:{artifact_id}:{uuid.uuid4().hex}",
+                    content=content,
+                ),
             )
-            artifact.size_bytes = len(content_bytes)
-
-            # Refresh presigned URL
-            url = await self._storage.generate_presigned_url(
-                object_key=artifact.object_key,
-                expiration_seconds=self._url_expiration,
-            )
-            artifact.url = url
-
             logger.info(f"Updated artifact content: {artifact_id}, new_size={len(content_bytes)}")
-            return artifact
+            return self._artifacts.get(artifact_id)
         except Exception as e:
             logger.error(f"Failed to update artifact {artifact_id}: {e}")
             return None

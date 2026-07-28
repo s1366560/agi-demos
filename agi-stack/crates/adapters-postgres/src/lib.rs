@@ -75,7 +75,10 @@ mod workspace_context_repo;
 mod workspace_repo;
 
 pub use admin_access_repo::PgAdminAccessRepository;
-pub use artifact_repo::{ArtifactListQuery, ArtifactRecord, PgArtifactRepository};
+pub use artifact_repo::{
+    ArtifactContentConflictRecord, ArtifactContentReceiptRecord, ArtifactContentSaveCommand,
+    ArtifactContentSaveResult, ArtifactListQuery, ArtifactRecord, PgArtifactRepository,
+};
 pub use attachment_repo::{
     AttachmentListQuery, AttachmentRecord, AttachmentUploadRecord, PgAttachmentRepository,
 };

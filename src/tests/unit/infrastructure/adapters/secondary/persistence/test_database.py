@@ -8,6 +8,7 @@ from src.infrastructure.adapters.secondary.persistence import database
 from src.infrastructure.adapters.secondary.persistence.models import (
     AGENT_EXECUTION_EVENT_CORRELATION_ID_LENGTH,
     AgentExecutionEvent,
+    Base,
 )
 
 
@@ -53,6 +54,8 @@ async def test_initialize_database_repairs_agent_events_schema_before_stamping()
 
     conn.execute.assert_awaited_once()
     conn.run_sync.assert_awaited_once()
+    assert "artifacts" in Base.metadata.tables
+    assert "artifact_content_receipts" in Base.metadata.tables
     assert call_order == ["schema", "stamp"]
 
 

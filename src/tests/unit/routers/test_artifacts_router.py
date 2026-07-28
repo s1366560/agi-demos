@@ -1,11 +1,17 @@
 """Unit tests for artifact API authorization."""
 
+import hashlib
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from src.application.services.artifact_content_contract import (
+    ArtifactContentContract,
+    ArtifactContentRevisionConflictError,
+    ArtifactContentSaveReceipt,
+)
 from src.domain.model.artifact.artifact import Artifact, ArtifactCategory, ArtifactStatus
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers import artifacts as artifacts_router
@@ -149,3 +155,115 @@ class TestArtifactsRouterAuthorization:
         payload = response.json()
         assert payload["total"] == 1
         assert payload["artifacts"][0]["id"] == "artifact-allowed"
+
+
+@pytest.mark.unit
+class TestArtifactContentContractV2Router:
+    async def _grant_project_access(self, test_db) -> None:
+        test_db.add(
+            UserProject(
+                id="user-project-artifact-content-v2",
+                user_id=USER_ID,
+                project_id=OTHER_PROJECT_ID,
+                role="member",
+            )
+        )
+        await test_db.commit()
+
+    @staticmethod
+    def _hash(content: str) -> str:
+        return f"sha256:{hashlib.sha256(content.encode('utf-8')).hexdigest()}"
+
+    @pytest.mark.asyncio
+    async def test_content_get_returns_v2_json_and_bytes_without_presigned_redirect(
+        self,
+        test_db,
+        artifacts_client,
+        artifact_service_mock,
+    ) -> None:
+        await self._grant_project_access(test_db)
+        content_hash = self._hash("hello")
+        artifact_service_mock.get_artifact_content.return_value = ArtifactContentContract(
+            contract_version=2,
+            artifact_id="artifact-1",
+            revision=3,
+            content_hash=content_hash,
+            mime_type="text/plain",
+            content="hello",
+        )
+        artifact_service_mock.get_artifact_bytes.return_value = b"hello"
+
+        content = artifacts_client.get("/api/v1/artifacts/artifact-1/content")
+        raw = artifacts_client.get("/api/v1/artifacts/artifact-1/content/bytes")
+        download = artifacts_client.get("/api/v1/artifacts/artifact-1/download")
+
+        assert content.status_code == 200
+        assert content.json() == {
+            "contract_version": 2,
+            "artifact_id": "artifact-1",
+            "revision": 3,
+            "content_hash": content_hash,
+            "mime_type": "text/plain",
+            "content": "hello",
+        }
+        assert raw.status_code == 200
+        assert raw.content == b"hello"
+        assert raw.headers["content-type"] == "text/plain; charset=utf-8"
+        assert raw.headers["cache-control"] == "private, no-store"
+        assert raw.headers["x-content-type-options"] == "nosniff"
+        assert download.status_code == 200
+        assert download.content == b"hello"
+        assert download.headers["cache-control"] == "private, no-store"
+        assert download.headers["content-disposition"] == "attachment"
+        assert download.headers["x-content-type-options"] == "nosniff"
+        assert "presigned" not in str(download.headers).lower()
+        artifact_service_mock.refresh_artifact_url.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_content_put_returns_receipt_and_structured_revision_conflict(
+        self,
+        test_db,
+        artifacts_client,
+        artifact_service_mock,
+    ) -> None:
+        await self._grant_project_access(test_db)
+        content_hash = self._hash("updated")
+        artifact_service_mock.save_artifact_content.return_value = ArtifactContentSaveReceipt(
+            artifact_id="artifact-1",
+            revision=4,
+            content_hash=content_hash,
+            duplicate=False,
+        )
+        request = {
+            "contract_version": 2,
+            "expected_revision": 3,
+            "content_hash": content_hash,
+            "idempotency_key": "artifact-1:save:0001",
+            "content": "updated",
+        }
+
+        saved = artifacts_client.put("/api/v1/artifacts/artifact-1/content", json=request)
+
+        assert saved.status_code == 200
+        assert saved.json() == {
+            "artifact_id": "artifact-1",
+            "revision": 4,
+            "content_hash": content_hash,
+            "duplicate": False,
+        }
+
+        artifact_service_mock.save_artifact_content.side_effect = (
+            ArtifactContentRevisionConflictError(
+                server_revision=5,
+                server_content_hash=self._hash("server"),
+            )
+        )
+        conflict = artifacts_client.put("/api/v1/artifacts/artifact-1/content", json=request)
+
+        assert conflict.status_code == 409
+        assert conflict.json() == {
+            "detail": "Artifact content revision conflict",
+            "reason_code": "artifact_content_revision_conflict",
+            "server_revision": 5,
+            "server_content_hash": self._hash("server"),
+        }

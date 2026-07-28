@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 from sqlalchemy import (
     JSON,
     BigInteger,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -74,6 +75,13 @@ class ArtifactModel(Base):
     size_bytes: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
 
     object_key: Mapped[str] = mapped_column(String(500), nullable=False)
+    content_revision: Mapped[int] = mapped_column(
+        BigInteger,
+        default=1,
+        server_default="1",
+        nullable=False,
+    )
+    content_hash: Mapped[str | None] = mapped_column(String(71), nullable=True)
     url: Mapped[str | None] = mapped_column(Text, nullable=True)
     preview_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -107,6 +115,7 @@ class ArtifactModel(Base):
         Index("ix_artifacts_project_status", "project_id", "status"),
         Index("ix_artifacts_project_category", "project_id", "category"),
         Index("ix_artifacts_workspace_status", "workspace_id", "status"),
+        CheckConstraint("content_revision >= 0", name="ck_artifacts_content_revision"),
     )
 
     def __repr__(self) -> str:
@@ -114,3 +123,49 @@ class ArtifactModel(Base):
             f"Artifact(id={self.id!r}, filename={self.filename!r}, "
             f"status={self.status!r}, size_bytes={self.size_bytes})"
         )
+
+
+class ArtifactContentReceiptModel(Base):
+    """Idempotency receipt for a conditional Artifact content save."""
+
+    __tablename__ = "artifact_content_receipts"
+
+    artifact_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("artifacts.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tenant_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    request_hash: Mapped[str] = mapped_column(String(71), nullable=False)
+    expected_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    resulting_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(71), nullable=False)
+    object_key: Mapped[str] = mapped_column(String(500), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint("expected_revision >= 0", name="ck_artifact_receipts_expected_revision"),
+        CheckConstraint("resulting_revision > 0", name="ck_artifact_receipts_resulting_revision"),
+        CheckConstraint("size_bytes >= 0", name="ck_artifact_receipts_size_bytes"),
+        Index(
+            "ix_artifact_content_receipts_scope",
+            "tenant_id",
+            "project_id",
+            "artifact_id",
+        ),
+    )
