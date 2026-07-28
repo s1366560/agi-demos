@@ -27,18 +27,37 @@ export function discoverBrowserQaScenarios() {
 export function buildBrowserQaMatrix() {
   const scenarios = discoverBrowserQaScenarios();
   return scenarios.flatMap((scenario) =>
-    browserQaManifest.locales.flatMap((locale) =>
-      browserQaManifest.viewports.flatMap((viewport) =>
-        browserQaManifest.themes.map((theme) =>
-          Object.freeze({
-            id: `${scenario.id}::${locale.id}::${viewport.id}::${theme}`,
-            scenario,
-            locale,
-            viewport,
-            theme,
-          }),
+    scenarioVariants(scenario).flatMap((scenarioVariant) =>
+      browserQaManifest.locales.flatMap((locale) =>
+        browserQaManifest.viewports.flatMap((viewport) =>
+          browserQaManifest.themes.map((theme) =>
+            Object.freeze({
+              id: `${scenario.id}:${scenarioVariant.id}::${locale.id}::${viewport.id}::${theme}`,
+              scenario: Object.freeze({
+                ...scenario,
+                variantId: scenarioVariant.id,
+                query: Object.freeze({ ...scenarioVariant.query }),
+              }),
+              locale,
+              viewport,
+              theme,
+            }),
+          ),
         ),
       ),
     ),
+  );
+}
+
+function scenarioVariants(scenario) {
+  const configured = browserQaManifest.scenarioVariants?.[scenario.id];
+  if (!Array.isArray(configured) || configured.length === 0) {
+    return [Object.freeze({ id: 'default', query: Object.freeze({}) })];
+  }
+  return configured.map((variant) =>
+    Object.freeze({
+      id: variant.id,
+      query: Object.freeze({ ...variant.query }),
+    }),
   );
 }

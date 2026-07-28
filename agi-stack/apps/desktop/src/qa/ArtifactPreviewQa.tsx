@@ -18,7 +18,8 @@ type PreviewFixture = {
   label: string;
   title: string;
   mimeType: string;
-  content: string;
+  content?: string;
+  source?: 'pdf' | 'docx' | 'xlsx' | 'audio' | 'video' | 'png';
 };
 
 const fixtures: readonly PreviewFixture[] = [
@@ -41,10 +42,46 @@ const fixtures: readonly PreviewFixture[] = [
   {
     id: 'image',
     label: 'Image',
-    title: 'evidence.svg',
-    mimeType: 'image/svg+xml',
-    content:
-      '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="420"><rect width="800" height="420" fill="#132235"/><text x="48" y="100" fill="#fff" font-size="36">Immutable release evidence</text><text x="48" y="160" fill="#8ccfff" font-size="24">Tag CI pending</text></svg>',
+    title: 'evidence.png',
+    mimeType: 'image/png',
+    source: 'png',
+  },
+  {
+    id: 'pdf',
+    label: 'PDF',
+    title: 'desktop-client-prd.pdf',
+    mimeType: 'application/pdf',
+    source: 'pdf',
+  },
+  {
+    id: 'docx',
+    label: 'DOCX',
+    title: 'desktop-client-prd.docx',
+    mimeType:
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    source: 'docx',
+  },
+  {
+    id: 'xlsx',
+    label: 'XLSX',
+    title: 'parity-matrix.xlsx',
+    mimeType:
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    source: 'xlsx',
+  },
+  {
+    id: 'audio',
+    label: 'Audio',
+    title: 'notification.wav',
+    mimeType: 'audio/wav',
+    source: 'audio',
+  },
+  {
+    id: 'video',
+    label: 'Video',
+    title: 'runtime-preview.webm',
+    mimeType: 'video/webm',
+    source: 'video',
   },
   {
     id: 'legacy-office',
@@ -67,7 +104,7 @@ function ArtifactPreviewQa() {
         throw new Error('artifact_save_not_used_by_preview_fixture');
       },
       async download() {
-        return new Blob([selected.content], { type: selected.mimeType });
+        return loadPreviewFixture(selected);
       },
     }),
     [selected],
@@ -76,7 +113,7 @@ function ArtifactPreviewQa() {
   return (
     <Theme accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
       <main className="parity-runtime-qa">
-        <header>
+        <header data-qa-format={selected.id}>
           <div>
             <h1>Artifact Preview</h1>
             <p>
@@ -91,6 +128,7 @@ function ArtifactPreviewQa() {
               <button
                 key={fixture.id}
                 type="button"
+                data-qa-format={fixture.id}
                 aria-pressed={selected.id === fixture.id}
                 onClick={() => setSelectedId(fixture.id)}
               >
@@ -104,7 +142,11 @@ function ArtifactPreviewQa() {
               artifactId={`artifact-${selected.id}`}
               client={client}
               mimeType={selected.mimeType}
-              sizeBytes={new TextEncoder().encode(selected.content).byteLength}
+              sizeBytes={
+                selected.content
+                  ? new TextEncoder().encode(selected.content).byteLength
+                  : 1
+              }
               title={selected.title}
             />
           </section>
@@ -112,6 +154,95 @@ function ArtifactPreviewQa() {
       </main>
     </Theme>
   );
+}
+
+async function loadPreviewFixture(fixture: PreviewFixture): Promise<Blob> {
+  if (fixture.source === 'pdf' || fixture.source === 'docx') {
+    const extension = fixture.source;
+    const response = await fetch(
+      `/docs/product/desktop-agent-ui/MemStack-Desktop-Agent-Client-PRD.${extension}`,
+    );
+    if (!response.ok) throw new Error('artifact_preview_fixture_unavailable');
+    return new Blob([await response.arrayBuffer()], { type: fixture.mimeType });
+  }
+  if (fixture.source === 'xlsx') {
+    const XLSX = await import('xlsx');
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ['Surface', 'Authority', 'Status'],
+        ['Terminal', 'cloud', 'ready'],
+        ['Workspace', 'cloud', 'ready'],
+        ['Artifact', 'cloud', 'ready'],
+      ]),
+      'Parity',
+    );
+    return new Blob(
+      [
+        XLSX.write(workbook, {
+          type: 'array',
+          bookType: 'xlsx',
+          compression: true,
+        }),
+      ],
+      { type: fixture.mimeType },
+    );
+  }
+  if (fixture.source === 'audio') {
+    return new Blob([silentWav()], { type: fixture.mimeType });
+  }
+  if (fixture.source === 'video') {
+    return new Blob([new Uint8Array([0x1a, 0x45, 0xdf, 0xa3])], {
+      type: fixture.mimeType,
+    });
+  }
+  if (fixture.source === 'png') {
+    return new Blob(
+      [
+        decodeBase64(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+        ),
+      ],
+      { type: fixture.mimeType },
+    );
+  }
+  return new Blob([fixture.content ?? ''], { type: fixture.mimeType });
+}
+
+function decodeBase64(value: string): ArrayBuffer {
+  const decoded = atob(value);
+  const bytes = new Uint8Array(new ArrayBuffer(decoded.length));
+  for (let index = 0; index < decoded.length; index += 1) {
+    bytes[index] = decoded.charCodeAt(index);
+  }
+  return bytes.buffer;
+}
+
+function silentWav(): ArrayBuffer {
+  const sampleRate = 8_000;
+  const samples = 800;
+  const buffer = new ArrayBuffer(44 + samples * 2);
+  const view = new DataView(buffer);
+  const writeAscii = (offset: number, value: string) => {
+    for (let index = 0; index < value.length; index += 1) {
+      view.setUint8(offset + index, value.charCodeAt(index));
+    }
+  };
+  writeAscii(0, 'RIFF');
+  view.setUint32(4, buffer.byteLength - 8, true);
+  writeAscii(8, 'WAVE');
+  writeAscii(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeAscii(36, 'data');
+  view.setUint32(40, samples * 2, true);
+  return buffer;
 }
 
 const container = document.getElementById('root');

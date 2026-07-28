@@ -18,6 +18,15 @@ declare global {
 }
 
 const workspaceId = 'workspace-parity-qa';
+type WorkspaceQaState = 'ready' | 'loading' | 'empty' | 'stale' | 'error';
+const requestedState = new URLSearchParams(window.location.search).get('state');
+const qaState: WorkspaceQaState =
+  requestedState === 'loading' ||
+  requestedState === 'empty' ||
+  requestedState === 'stale' ||
+  requestedState === 'error'
+    ? requestedState
+    : 'ready';
 
 const surfaceData: Record<WorkspaceCollaborationSurface, Record<string, unknown>> = {
   goals: {
@@ -104,16 +113,34 @@ const surfaceData: Record<WorkspaceCollaborationSurface, Record<string, unknown>
 function snapshot(
   surface: WorkspaceCollaborationSurface,
   revision = 7,
+  status: WorkspaceQaState = qaState,
 ): WorkspaceSurfaceState {
+  if (status === 'loading') {
+    return {
+      workspace_id: workspaceId,
+      surface,
+      authority: 'cloud',
+      status,
+      revision: null,
+      cursor: null,
+      data: null,
+      reason_code: null,
+    };
+  }
   return {
     workspace_id: workspaceId,
     surface,
     authority: 'cloud',
-    status: 'ready',
+    status,
     revision,
     cursor: `surface:${surface}:revision:${revision}`,
-    data: surfaceData[surface],
-    reason_code: null,
+    data: status === 'empty' ? {} : surfaceData[surface],
+    reason_code:
+      status === 'error'
+        ? 'workspace_surface_load_failed'
+        : status === 'stale'
+          ? 'workspace_surface_cursor_gap'
+          : null,
   };
 }
 
@@ -123,7 +150,7 @@ const client: WorkspaceCollaborationClient = {
     return snapshot(surface, revision);
   },
   async refetchAuthority(_workspaceId, surface) {
-    return snapshot(surface, revision);
+    return snapshot(surface, revision, qaState === 'stale' ? 'ready' : qaState);
   },
   async mutateSurface(
     _workspaceId: string,
@@ -142,7 +169,7 @@ function WorkspaceCollaborationQa() {
   return (
     <Theme accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
       <main className="parity-runtime-qa">
-        <header>
+        <header data-qa-state={qaState}>
           <div>
             <h1>Workspace Collaboration</h1>
             <p>

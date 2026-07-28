@@ -18,7 +18,7 @@ const terminalQaSource = readFileSync(
   'utf8',
 );
 
-test('Browser QA v1 expands every fixture across locale, viewport, and theme', () => {
+test('Browser QA v1 expands fixtures and applicable states across all visual dimensions', () => {
   const scenarios = discoverBrowserQaScenarios();
   const matrix = buildBrowserQaMatrix();
   assert.equal(browserQaManifest.contractVersion, 1);
@@ -41,8 +41,27 @@ test('Browser QA v1 expands every fixture across locale, viewport, and theme', (
     ],
   );
   assert.deepEqual(browserQaManifest.themes, ['light', 'dark']);
-  assert.equal(matrix.length, 312);
+  assert.equal(matrix.length, 416);
   assert.equal(new Set(matrix.map((variant) => variant.id)).size, matrix.length);
+  assert.deepEqual(
+    matrix
+      .filter(({ scenario }) => scenario.id === 'session-steering')
+      .map(({ scenario }) => scenario.variantId)
+      .filter((value, index, values) => values.indexOf(value) === index)
+      .sort(),
+    [
+      'a2ui-deleted',
+      'a2ui-incremental',
+      'a2ui-ready',
+      'default',
+      'elicitation',
+      'hitl-answered',
+    ],
+  );
+  assert.deepEqual(
+    Object.keys(browserQaManifest.scenarioVariants).sort(),
+    ['sandbox-runtime', 'session-steering', 'workspace-collaboration'],
+  );
 });
 
 test('terminal Browser QA mounts the interactive xterm contract', () => {

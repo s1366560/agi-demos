@@ -18,6 +18,16 @@ declare global {
   var __sandboxRuntimeQaRoot: Root | undefined;
 }
 
+type SandboxQaState = 'ready' | 'loading' | 'unavailable' | 'stale' | 'error';
+const requestedState = new URLSearchParams(window.location.search).get('state');
+const qaState: SandboxQaState =
+  requestedState === 'loading' ||
+  requestedState === 'unavailable' ||
+  requestedState === 'stale' ||
+  requestedState === 'error'
+    ? requestedState
+    : 'ready';
+
 const fileListing = {
   contract_version: 1 as const,
   authority: 'sandbox' as const,
@@ -103,7 +113,7 @@ const available = {
   reason_code: null,
 };
 
-const runtime: SessionSandboxRuntimeSurface = {
+const readyRuntime: SessionSandboxRuntimeSurface = {
   capabilityStatus: 'ready',
   capabilityLoadReason: null,
   capabilities: {
@@ -142,11 +152,56 @@ const runtime: SessionSandboxRuntimeSurface = {
   async startRemoteDesktop() {},
 };
 
+const unavailableCapability = {
+  availability: 'unavailable' as const,
+  contract_version: 1,
+  reason_code: 'sandbox_runtime_capability_contract_unavailable',
+};
+
+function runtimeForQaState(state: SandboxQaState): SessionSandboxRuntimeSurface {
+  if (state === 'loading' || state === 'unavailable') {
+    return {
+      ...readyRuntime,
+      capabilityStatus: state,
+      capabilityLoadReason:
+        state === 'unavailable'
+          ? 'sandbox_runtime_capability_request_failed'
+          : null,
+      capabilities: null,
+      filesCapability: unavailableCapability,
+      remoteDesktopCapability: unavailableCapability,
+      runtimeClient: null,
+      fileClient: null,
+      remoteDesktopSession: null,
+      remoteDesktopStatus: 'unavailable',
+      remoteDesktopReason: 'sandbox_runtime_capability_contract_unavailable',
+    };
+  }
+  if (state === 'stale') {
+    return {
+      ...readyRuntime,
+      remoteDesktopSession: null,
+      remoteDesktopStatus: 'starting',
+      remoteDesktopReason: 'kasm_remote_desktop_reconnecting',
+    };
+  }
+  if (state === 'error') {
+    return {
+      ...readyRuntime,
+      remoteDesktopSession: null,
+      remoteDesktopStatus: 'error',
+      remoteDesktopReason: 'kasm_remote_desktop_request_failed',
+    };
+  }
+  return readyRuntime;
+}
+
 function SandboxRuntimeQa() {
+  const runtime = runtimeForQaState(qaState);
   return (
     <Theme accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
       <main className="parity-runtime-qa">
-        <header>
+        <header data-qa-state={qaState}>
           <div>
             <h1>Sandbox Runtime</h1>
             <p>

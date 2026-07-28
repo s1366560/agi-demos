@@ -13,6 +13,7 @@ const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../
 const STATIC_ASSET_ROOTS = [
   resolve(REPOSITORY_ROOT, 'artifacts'),
   resolve(REPOSITORY_ROOT, 'design-prototype'),
+  resolve(REPOSITORY_ROOT, 'docs'),
 ];
 const BARE_I18N_KEY =
   /\b(?:artifact|automation|common|hitl|login|myWork|navigation|search|session|settings|workspace)\.[A-Za-z][\w.-]*\b/u;
@@ -45,7 +46,7 @@ for (const variant of buildBrowserQaMatrix()) {
         runtimeErrors.push(`console: ${message.text()}`);
       }
     });
-    await page.route(/\/(?:artifacts|design-prototype)\//u, async (route) => {
+    await page.route(/\/(?:artifacts|design-prototype|docs)\//u, async (route) => {
       const pathname = decodeURIComponent(new URL(route.request().url()).pathname);
       const candidate = resolve(REPOSITORY_ROOT, `.${pathname}`);
       const allowed = STATIC_ASSET_ROOTS.some(
@@ -108,6 +109,9 @@ for (const variant of buildBrowserQaMatrix()) {
       qaLocale: variant.locale.id,
       qaTheme: variant.theme,
     });
+    for (const [name, value] of Object.entries(variant.scenario.query)) {
+      parameters.set(name, value);
+    }
     if (variant.scenario.id === 'mission-control-compare') {
       parameters.set('layout', 'vertical');
       parameters.set('width', String(variant.viewport.width));
@@ -231,6 +235,46 @@ for (const variant of buildBrowserQaMatrix()) {
       expect(firstFocus.tag).not.toBe('BODY');
     }
 
+    if (variant.scenario.id === 'artifact-preview') {
+      const formatButtons = page.locator(
+        '.parity-runtime-qa__preview-nav button[data-qa-format]',
+      );
+      await expect(formatButtons).toHaveCount(9);
+      for (let index = 0; index < 9; index += 1) {
+        const button = formatButtons.nth(index);
+        const format = await button.getAttribute('data-qa-format');
+        expect(format).toBeTruthy();
+        await button.click();
+        await expect(page.locator(`header[data-qa-format="${format}"]`)).toBeVisible();
+        await expect(
+          page.locator('.artifact-preview-state[role="status"]'),
+        ).toHaveCount(0);
+        await expect(page.locator('.artifact-preview-state[role="alert"]')).toHaveCount(0);
+      }
+    }
+    if (variant.scenario.id === 'workspace-collaboration') {
+      const tabs = page.locator('.workspace-collaboration-tabs > [role="tab"]');
+      await expect(tabs).toHaveCount(10);
+      for (let index = 0; index < 10; index += 1) {
+        const tab = tabs.nth(index);
+        await tab.click();
+        await expect(tab).toHaveAttribute('aria-selected', 'true');
+        await expect(page.locator('.app-fatal-error')).toHaveCount(0);
+      }
+    }
+    if (
+      variant.scenario.id === 'sandbox-runtime' &&
+      ['ready', 'stale', 'error'].includes(variant.scenario.variantId)
+    ) {
+      const tabs = page.locator('.session-sandbox-tools [role="tablist"] [role="tab"]');
+      await expect(tabs).toHaveCount(2);
+      for (let index = 0; index < 2; index += 1) {
+        const tab = tabs.nth(index);
+        await tab.click();
+        await expect(tab).toHaveAttribute('aria-selected', 'true');
+      }
+    }
+
     const visiblePopup = page
       .locator(
         '[role="menu"]:visible, [role="dialog"]:visible, [role="alertdialog"]:visible, [role="listbox"]:visible',
@@ -283,7 +327,13 @@ test('matrix contract covers every top-level QA fixture', () => {
     browserQaManifest.viewports.length *
     browserQaManifest.themes.length;
   const scenarioCount = new Set(variants.map((variant) => variant.scenario.id)).size;
+  const statefulScenarioCount = new Set(
+    variants.map(
+      (variant) => `${variant.scenario.id}:${variant.scenario.variantId}`,
+    ),
+  ).size;
   expect(scenarioCount).toBeGreaterThanOrEqual(36);
-  expect(variants).toHaveLength(scenarioCount * dimensionCount);
+  expect(statefulScenarioCount).toBeGreaterThan(scenarioCount);
+  expect(variants).toHaveLength(statefulScenarioCount * dimensionCount);
   expect(variants.length).toBeGreaterThanOrEqual(288);
 });
