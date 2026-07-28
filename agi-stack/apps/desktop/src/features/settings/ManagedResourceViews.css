@@ -63,8 +63,8 @@
 }
 
 .managed-resource-search:focus-within {
-  border-color: #286a7d;
-  box-shadow: 0 0 0 2px rgb(56 214 255 / 6%);
+  border-color: var(--desktop-border-cyan-3);
+  box-shadow: 0 0 0 2px rgba(var(--desktop-cyan-rgb), 6%);
 }
 
 .managed-resource-filters {
@@ -77,7 +77,7 @@
 .managed-resource-filters button {
   height: 24px;
   padding: 0 8px;
-  color: #667487;
+  color: var(--desktop-gray-21);
   font-size: 8px;
   background: transparent;
   border: 0;
@@ -134,7 +134,7 @@
 }
 
 .managed-resource-item:hover {
-  background: #121923;
+  background: var(--desktop-surface-25);
 }
 
 .managed-resource-item.selected {
@@ -149,8 +149,8 @@
   height: 29px;
   place-items: center;
   color: #7d8da0;
-  background: #141c27;
-  border: 1px solid #2c3948;
+  background: var(--desktop-surface-28);
+  border: 1px solid var(--desktop-border-17);
   border-radius: 7px;
 }
 
@@ -161,15 +161,15 @@
 }
 
 .managed-resource-workspace.skills .managed-resource-item.selected .managed-resource-item-icon {
-  color: #a58cff;
-  background: #211c37;
+  color: var(--desktop-purple-bright);
+  background: var(--desktop-surface-purple);
   border-color: var(--desktop-purple);
 }
 
 .managed-resource-workspace.plugins .managed-resource-item.selected .managed-resource-item-icon {
-  color: #52d68a;
-  background: #13271f;
-  border-color: #375a4d;
+  color: var(--desktop-green-vivid);
+  background: var(--desktop-surface-green);
+  border-color: var(--desktop-border-green);
 }
 
 .managed-resource-create,
@@ -183,8 +183,8 @@
   color: #dce8f2;
   font-size: 11px;
   font-weight: 650;
-  background: #162330;
-  border: 1px solid #345066;
+  background: var(--desktop-surface-31);
+  border: 1px solid var(--desktop-border-21);
   border-radius: 7px;
 }
 
@@ -225,14 +225,14 @@
   border-radius: 8px;
   padding: 0 12px;
   color: var(--desktop-red-light);
-  background: rgba(111, 25, 37, 0.18);
+  background: rgba(var(--desktop-red-dark-rgb), 0.18);
 }
 
 .managed-resource-workspace.agents .managed-resource-item.selected .managed-resource-item-icon,
 .managed-resource-workspace.subagents .managed-resource-item.selected .managed-resource-item-icon {
   color: var(--desktop-amber-dim);
-  background: #2a2014;
-  border-color: #6d5334;
+  background: var(--desktop-surface-amber);
+  border-color: var(--desktop-border-amber-2);
 }
 
 .managed-resource-item-copy {
@@ -254,7 +254,7 @@
   display: -webkit-box;
   margin-top: 4px;
   overflow: hidden;
-  color: #758396;
+  color: var(--desktop-gray-25);
   font-size: 8px;
   line-height: 1.4;
   -webkit-box-orient: vertical;
@@ -283,10 +283,10 @@
   align-items: center;
   gap: 4px;
   padding: 0 6px;
-  color: #8996a7;
+  color: var(--desktop-gray-27);
   font-size: 7px;
   white-space: nowrap;
-  background: #171e27;
+  background: var(--desktop-surface-30);
   border: 1px solid #374352;
   border-radius: 9px;
 }
@@ -299,15 +299,15 @@
 }
 
 .managed-resource-status.active {
-  color: #52d68a;
-  background: #10231b;
-  border-color: #265943;
+  color: var(--desktop-green-vivid);
+  background: var(--desktop-surface-green-2);
+  border-color: var(--desktop-border-green-2);
 }
 
 .managed-resource-status.attention {
   color: var(--desktop-amber-dim);
-  background: #231d15;
-  border-color: #5a4930;
+  background: var(--desktop-surface-amber-2);
+  border-color: var(--desktop-border-amber);
 }
 
 .managed-resource-detail {
@@ -356,7 +356,7 @@
   align-items: center;
   gap: 5px;
   overflow: hidden;
-  color: #68778a;
+  color: var(--desktop-gray-22);
   font-size: 7px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -370,7 +370,7 @@
   justify-content: center;
   gap: 6px;
   padding: 0 10px;
-  color: #effbff;
+  color: var(--desktop-text-ice);
   font-size: 8px;
   font-weight: 650;
   background: var(--desktop-cyan-dark);
@@ -418,7 +418,7 @@
   place-items: center;
   color: var(--desktop-cyan);
   background: #112d37;
-  border: 1px solid #2a6376;
+  border: 1px solid var(--desktop-border-cyan);
   border-radius: 10px;
 }
 
@@ -428,22 +428,22 @@
 }
 
 .managed-resource-identity-icon.skills {
-  color: #a58cff;
-  background: #211c37;
+  color: var(--desktop-purple-bright);
+  background: var(--desktop-surface-purple);
   border-color: var(--desktop-purple);
 }
 
 .managed-resource-identity-icon.plugins {
-  color: #52d68a;
-  background: #13271f;
-  border-color: #375a4d;
+  color: var(--desktop-green-vivid);
+  background: var(--desktop-surface-green);
+  border-color: var(--desktop-border-green);
 }
 
 .managed-resource-identity-icon.agents,
 .managed-resource-identity-icon.subagents {
   color: var(--desktop-amber-dim);
-  background: #2a2014;
-  border-color: #6d5334;
+  background: var(--desktop-surface-amber);
+  border-color: var(--desktop-border-amber-2);
 }
 
 .managed-resource-identity h1 {
@@ -474,8 +474,8 @@
   padding: 4px 7px;
   color: #8c9bad;
   font-size: 7px;
-  background: #151d27;
-  border: 1px solid #2d3947;
+  background: var(--desktop-surface-29);
+  border: 1px solid var(--desktop-border-18);
   border-radius: 5px;
 }
 
@@ -486,8 +486,8 @@
   padding: 4px 7px;
   color: #8c9bad;
   font-size: 7px;
-  background: #151d27;
-  border: 1px solid #2d3947;
+  background: var(--desktop-surface-29);
+  border: 1px solid var(--desktop-border-18);
   border-radius: 5px;
 }
 
@@ -502,7 +502,7 @@
 .managed-resource-identity > section small {
   max-width: 150px;
   overflow: hidden;
-  color: #5e6e82;
+  color: var(--desktop-gray-19);
   font-size: 7px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -510,7 +510,7 @@
 
 .managed-resource-identity > section b {
   margin: 6px 0 4px;
-  color: #b9c5d2;
+  color: var(--desktop-gray-34);
   font-size: 9px;
 }
 
@@ -543,7 +543,7 @@
   color: #e58b96;
   font-size: 8px;
   background: var(--desktop-surface-red);
-  border: 1px solid #5d3239;
+  border: 1px solid var(--desktop-border-red);
   border-radius: 6px;
 }
 
@@ -598,7 +598,7 @@
 
 .managed-resource-card h2 {
   margin: 4px 0 0;
-  color: #dce5ee;
+  color: var(--desktop-text-mist);
   font-size: 10px;
 }
 
@@ -639,7 +639,7 @@
   flex-direction: column;
   gap: 7px;
   padding: 65px 22px;
-  color: #526174;
+  color: var(--desktop-gray-15);
   text-align: center;
 }
 
@@ -664,7 +664,7 @@
   padding: 0 9px;
   color: #b8c4d0;
   font-size: 8px;
-  background: #151d27;
+  background: var(--desktop-surface-29);
   border: 1px solid #344254;
   border-radius: 5px;
 }

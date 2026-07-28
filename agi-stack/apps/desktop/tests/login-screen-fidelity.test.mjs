@@ -278,11 +278,11 @@ test('login geometry and primary action colors match the approved prototype', ()
   assert.match(loginStyles, /\.desktop-login-card \{[\s\S]*width: min\(430px, 100%\)/);
   assert.match(
     loginStyles,
-    /\.desktop-login-submit \{[\s\S]*background: #146f87;[\s\S]*border: 1px solid #2b8ea7/,
+    /\.desktop-login-submit \{[\s\S]*background: var\(--desktop-cyan-deep\);[\s\S]*border: 1px solid var\(--desktop-border-cyan-4\)/,
   );
   assert.match(
     loginStyles,
-    /\.desktop-login-submit:hover \{[\s\S]*background: #177c96/,
+    /\.desktop-login-submit:hover \{[\s\S]*background: var\(--desktop-cyan-rich\)/,
   );
   assert.match(
     loginStyles,

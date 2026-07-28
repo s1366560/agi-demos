@@ -53,10 +53,10 @@
   align-items: center;
   gap: 6px;
   padding: 4px 7px;
-  border: 1px solid rgba(74, 222, 128, 0.24);
+  border: 1px solid rgba(var(--desktop-green-neon-rgb), 0.24);
   border-radius: 10px;
-  background: rgba(74, 222, 128, 0.07);
-  color: #63d78f;
+  background: rgba(var(--desktop-green-neon-rgb), 0.07);
+  color: var(--desktop-green-mint);
   font-size: 10px;
   font-style: normal;
 }
@@ -299,7 +299,7 @@
 
 .workspace-design-metric[data-tone='cyan'] b { color: var(--desktop-cyan); }
 .workspace-design-metric[data-tone='amber'] b { color: var(--desktop-amber); }
-.workspace-design-metric[data-tone='green'] b { color: #63d78f; }
+.workspace-design-metric[data-tone='green'] b { color: var(--desktop-green-mint); }
 
 .workspace-design-metric small {
   overflow: hidden;
@@ -341,7 +341,7 @@
 
 .workspace-design-system-card header b { font-size: 11px; }
 .workspace-design-system-card header small { color: var(--desktop-muted); font-size: 10px; }
-.workspace-design-system-card header em { color: #63d78f; font-size: 10px; font-style: normal; }
+.workspace-design-system-card header em { color: var(--desktop-green-mint); font-size: 10px; font-style: normal; }
 .workspace-design-system-card header em[data-state='loading'] { color: var(--desktop-cyan); }
 .workspace-design-system-card header em[data-state='error'] { color: var(--desktop-amber); }
 .workspace-design-system-card header em[data-state='unavailable'] { color: var(--desktop-muted); }
@@ -410,7 +410,7 @@
   font-size: 10px;
 }
 
-.workspace-design-environment span[data-state='ready'] { color: #63d78f; }
+.workspace-design-environment span[data-state='ready'] { color: var(--desktop-green-mint); }
 .workspace-design-environment span[data-state='loading'] { color: var(--desktop-cyan); }
 .workspace-design-environment span[data-state='error'] { color: var(--desktop-amber); }
 
@@ -524,8 +524,8 @@
 
 .workspace-design-sessions-card button em[data-status='ready'],
 .workspace-design-sessions-card button em[data-status='completed'] {
-  background: rgba(74, 222, 128, 0.07);
-  color: #63d78f;
+  background: rgba(var(--desktop-green-neon-rgb), 0.07);
+  color: var(--desktop-green-mint);
 }
 
 .workspace-design-sessions-card button em[data-status='danger'] {

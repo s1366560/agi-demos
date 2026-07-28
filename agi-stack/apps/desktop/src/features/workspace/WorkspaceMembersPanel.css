@@ -89,7 +89,7 @@
 
 .workspace-members-read-only {
   color: #d6b46e;
-  border-color: rgba(214, 180, 110, 0.35);
+  border-color: rgba(var(--desktop-gold-rgb), 0.35);
 }
 
 .workspace-members-empty {
@@ -103,7 +103,7 @@
 
 .workspace-members-authority.error {
   color: var(--desktop-red-soft);
-  border-color: rgba(229, 139, 149, 0.35);
+  border-color: rgba(var(--desktop-red-soft-rgb), 0.35);
 }
 
 .workspace-members-authority small {

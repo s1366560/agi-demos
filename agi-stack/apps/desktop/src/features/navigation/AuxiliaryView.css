@@ -124,7 +124,7 @@
   align-items: center;
   gap: 7px;
   margin-top: 11px;
-  color: #718094;
+  color: var(--desktop-gray-23);
   font-size: 8px;
 }
 

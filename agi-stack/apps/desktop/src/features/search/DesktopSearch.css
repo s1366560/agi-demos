@@ -15,7 +15,7 @@
       rgba(29, 164, 205, 0.08),
       transparent 30%
     ),
-    #070c13;
+    var(--desktop-surface-16);
 }
 
 .desktop-search__header {
@@ -129,7 +129,7 @@
   padding-left: 14px;
   border: 1px solid rgba(var(--desktop-steel-2-rgb), 0.32);
   border-radius: 11px;
-  background: rgba(4, 10, 17, 0.74);
+  background: rgba(var(--desktop-overlay-9-rgb), 0.74);
 }
 
 .desktop-search__query-control > svg {
@@ -151,7 +151,7 @@
   color: #03141a;
   border: 0;
   border-radius: 0 10px 10px 0;
-  background: linear-gradient(135deg, var(--desktop-cyan), #53f0cf);
+  background: linear-gradient(135deg, var(--desktop-cyan), var(--desktop-teal-bright));
   font-size: 12px;
   font-weight: 750;
   cursor: pointer;
@@ -198,7 +198,7 @@
   border: 1px solid var(--search-border);
   border-radius: 7px;
   outline: none;
-  background: rgba(4, 10, 17, 0.76);
+  background: rgba(var(--desktop-overlay-9-rgb), 0.76);
   font: 500 11px/1 inherit;
 }
 
@@ -432,8 +432,8 @@
 }
 
 .desktop-search__select[aria-pressed="true"] {
-  border-color: #53f0cf;
-  background: #53f0cf;
+  border-color: var(--desktop-teal-bright);
+  background: var(--desktop-teal-bright);
 }
 
 .desktop-search__result-meta {

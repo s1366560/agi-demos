@@ -10,7 +10,7 @@
   gap: 12px;
   height: 100%;
   padding: 16px;
-  background: #080d13;
+  background: var(--desktop-surface-17);
 }
 
 .session-recovery-qa-thread article {
@@ -18,7 +18,7 @@
   padding: 12px 14px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 8px;
-  background: #0d141d;
+  background: var(--desktop-surface-21);
 }
 
 .session-recovery-qa-thread article.from-user {

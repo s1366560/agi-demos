@@ -57,7 +57,7 @@
 
 .session-invocation-ledger-header > strong.blocked {
   border-color: rgba(var(--desktop-red-bright-rgb), 0.42);
-  background: rgba(127, 29, 29, 0.18);
+  background: rgba(var(--desktop-red-deep-rgb), 0.18);
   color: var(--red-9);
 }
 
@@ -69,7 +69,7 @@
   padding: 11px 12px;
   border: 1px solid rgba(var(--desktop-red-bright-rgb), 0.46);
   border-radius: 7px;
-  background: rgba(127, 29, 29, 0.16);
+  background: rgba(var(--desktop-red-deep-rgb), 0.16);
   color: var(--red-9);
 }
 
@@ -85,7 +85,7 @@
 }
 
 .session-invocation-blocker strong {
-  color: #fecaca;
+  color: var(--desktop-red-pale-2);
   font-size: 11px;
 }
 
@@ -114,7 +114,7 @@
   min-height: 29px;
   padding: 0 9px;
   border-color: rgba(var(--desktop-red-bright-rgb), 0.38);
-  color: #fecaca;
+  color: var(--desktop-red-pale-2);
   font-size: 10px;
   font-weight: 650;
 }
@@ -145,7 +145,7 @@
   padding: 8px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
-  background: rgba(15, 23, 42, 0.44);
+  background: rgba(var(--desktop-overlay-16-rgb), 0.44);
   color: var(--desktop-muted);
 }
 
@@ -178,7 +178,7 @@
   overflow: hidden;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
-  background: rgba(9, 14, 22, 0.72);
+  background: rgba(var(--desktop-overlay-12-rgb), 0.72);
 }
 
 .session-invocation-row.status-unknown_outcome {
@@ -315,7 +315,7 @@
   margin: 0;
   padding: 10px 12px 11px 45px;
   border-top: 1px solid var(--desktop-border-soft);
-  background: rgba(15, 23, 42, 0.36);
+  background: rgba(var(--desktop-overlay-16-rgb), 0.36);
 }
 
 .session-invocation-detail div {

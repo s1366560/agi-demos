@@ -67,7 +67,7 @@
 }
 
 .settings-panel > header small {
-  color: #68778a;
+  color: var(--desktop-gray-22);
   font-size: 8px;
   line-height: 1.45;
 }
@@ -251,7 +251,7 @@
   color: var(--desktop-cyan);
   font-size: 8px;
   background: #10242d;
-  border: 1px solid #2a6376;
+  border: 1px solid var(--desktop-border-cyan);
   border-radius: 50%;
 }
 
@@ -292,7 +292,7 @@
   margin-top: 11px;
   color: var(--desktop-gray-7);
   background: var(--desktop-surface-5);
-  border: 1px solid #2b3643;
+  border: 1px solid var(--desktop-border-16);
   border-radius: 7px;
 }
 
@@ -304,12 +304,12 @@
 }
 
 .settings-project-empty strong {
-  color: #b9c4cf;
+  color: var(--desktop-gray-33);
   font-size: 8px;
 }
 
 .settings-project-empty small {
-  color: #627185;
+  color: var(--desktop-gray-20);
   font-size: 7px;
   line-height: 1.45;
 }
@@ -324,7 +324,7 @@
   color: var(--desktop-gray-7);
   text-align: left;
   background: var(--desktop-surface-5);
-  border: 1px solid #2b3643;
+  border: 1px solid var(--desktop-border-16);
   border-radius: 7px;
 }
 
@@ -358,7 +358,7 @@
   height: 33px;
   place-items: center;
   color: #7f90a2;
-  background: #141c27;
+  background: var(--desktop-surface-28);
   border: 1px solid #314050;
   border-radius: 7px;
 }
@@ -366,7 +366,7 @@
 button.active > .settings-choice-icon {
   color: var(--desktop-cyan);
   background: #12303b;
-  border-color: #2a6376;
+  border-color: var(--desktop-border-cyan);
 }
 
 .settings-tenant-list button > span:nth-child(2),
@@ -380,7 +380,7 @@ button.active > .settings-choice-icon {
 .settings-tenant-list button strong,
 .settings-project-grid button strong {
   overflow: hidden;
-  color: #b9c4cf;
+  color: var(--desktop-gray-33);
   font-size: 8px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -389,7 +389,7 @@ button.active > .settings-choice-icon {
 .settings-tenant-list button small,
 .settings-project-grid button small {
   overflow: hidden;
-  color: #627185;
+  color: var(--desktop-gray-20);
   font-size: 7px;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -397,7 +397,7 @@ button.active > .settings-choice-icon {
 
 .settings-tenant-list button > em,
 .settings-project-grid button span > em {
-  color: #536274;
+  color: var(--desktop-gray-16);
   font-size: 7px;
   font-style: normal;
 }
@@ -415,7 +415,7 @@ button.active > .settings-choice-icon {
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  background: #111821;
+  background: var(--desktop-surface-23);
   border: 1px solid #30404e;
   border-radius: 7px;
   box-shadow: 0 -12px 26px rgb(8 12 18 / 55%);
@@ -442,7 +442,7 @@ button.active > .settings-choice-icon {
 }
 
 .settings-context-apply small {
-  color: #627185;
+  color: var(--desktop-gray-20);
   font-size: 7px;
 }
 
@@ -618,9 +618,142 @@ button.active > .settings-choice-icon {
 }
 
 .settings-preference-summary > header small {
-  color: #68778a;
+  color: var(--desktop-gray-22);
   font-size: 8px;
   line-height: 1.45;
+}
+
+.settings-notification-controls {
+  display: grid;
+  padding: 0 14px;
+}
+
+.settings-preference-switch-row {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid var(--desktop-border-2);
+}
+
+.settings-preference-switch-row > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-preference-switch-row strong,
+.settings-delivery-options legend,
+.settings-quiet-hours label > span {
+  color: var(--desktop-text-pale);
+  font-size: 9px;
+}
+
+.settings-preference-switch-row small,
+.settings-delivery-options > p {
+  color: var(--desktop-gray-8);
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.settings-preference-switch-row > button {
+  display: inline-grid;
+  min-width: 78px;
+  height: 30px;
+  grid-template-columns: 20px auto;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px 0 5px;
+  color: var(--desktop-gray-10);
+  font-size: 8px;
+  background: var(--desktop-surface-5);
+  border: 1px solid var(--desktop-border-4);
+  border-radius: 999px;
+}
+
+.settings-preference-switch-row > button > i {
+  width: 18px;
+  height: 18px;
+  background: var(--desktop-gray-2);
+  border-radius: 50%;
+  transition: background 130ms ease;
+}
+
+.settings-preference-switch-row > button.active {
+  color: var(--desktop-cyan);
+  background: var(--desktop-surface-cyan);
+  border-color: var(--desktop-cyan-mid);
+}
+
+.settings-preference-switch-row > button.active > i {
+  background: var(--desktop-cyan);
+}
+
+.settings-delivery-options {
+  padding: 14px 0;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--desktop-border-2);
+}
+
+.settings-delivery-options > p {
+  margin: 4px 0 10px;
+}
+
+.settings-delivery-options > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.settings-delivery-options button {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 10px;
+  color: var(--desktop-gray-11);
+  font-size: 8px;
+  text-align: left;
+  background: var(--desktop-surface-5);
+  border: 1px solid var(--desktop-border-4);
+  border-radius: 6px;
+}
+
+.settings-delivery-options button.active {
+  color: var(--desktop-text-pale);
+  background: var(--desktop-surface-cyan);
+  border-color: var(--desktop-cyan-mid);
+}
+
+.settings-delivery-options button svg {
+  flex: 0 0 auto;
+  color: var(--desktop-cyan);
+}
+
+.settings-quiet-hours {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 13px 0;
+}
+
+.settings-quiet-hours label {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-quiet-hours input {
+  height: 34px;
+  padding: 0 9px;
+  color: var(--desktop-text-pale);
+  color-scheme: dark;
+  background: var(--desktop-surface-5);
+  border: 1px solid var(--desktop-border-4);
+  border-radius: 6px;
 }
 
 @media (max-width: 1180px) {
@@ -632,7 +765,8 @@ button.active > .settings-choice-icon {
 
 @media (max-width: 850px) {
   .settings-language-options,
-  .settings-resource-entry-grid {
+  .settings-resource-entry-grid,
+  .settings-delivery-options > div {
     grid-template-columns: 1fr;
   }
 

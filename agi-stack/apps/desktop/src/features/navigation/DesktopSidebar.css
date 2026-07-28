@@ -9,7 +9,7 @@
   padding: 16px 12px 12px;
   overflow: hidden;
   border-right: 1px solid var(--desktop-border-soft);
-  background: #080e16;
+  background: var(--desktop-surface-18);
   color: var(--desktop-muted);
 }
 

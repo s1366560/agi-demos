@@ -3,9 +3,9 @@
 }
 
 .skill-evolution-icon {
-  color: #65d6a4;
-  background: #13271f;
-  border-color: #375a4d;
+  color: var(--desktop-green-light);
+  background: var(--desktop-surface-green);
+  border-color: var(--desktop-border-green);
 }
 
 .skill-evolution-body {
@@ -50,7 +50,7 @@
   color: #071711;
   font-size: 9px;
   font-weight: 700;
-  background: #65d6a4;
+  background: var(--desktop-green-light);
   border: 1px solid #79e3b5;
   border-radius: 6px;
 }
@@ -61,7 +61,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #75869a;
+  color: var(--desktop-gray-26);
   font-size: 10px;
 }
 
@@ -120,11 +120,11 @@
 .skill-evolution-schedule em {
   padding: 4px 7px;
   margin-left: auto;
-  color: #65d6a4;
+  color: var(--desktop-green-light);
   font-size: 7px;
   font-style: normal;
-  background: #10231b;
-  border: 1px solid #265943;
+  background: var(--desktop-surface-green-2);
+  border: 1px solid var(--desktop-border-green-2);
   border-radius: 9px;
 }
 
@@ -151,16 +151,16 @@
   width: 32px;
   height: 32px;
   place-items: center;
-  color: #a58cff;
-  background: #211c37;
+  color: var(--desktop-purple-bright);
+  background: var(--desktop-surface-purple);
   border: 1px solid var(--desktop-purple);
   border-radius: 50%;
 }
 
 .skill-evolution-node.evolution_job {
-  color: #65d6a4;
-  background: #13271f;
-  border-color: #375a4d;
+  color: var(--desktop-green-light);
+  background: var(--desktop-surface-green);
+  border-color: var(--desktop-border-green);
 }
 
 .skill-evolution-entry-copy {
@@ -202,8 +202,8 @@
 
 .skill-evolution-status.pending_review {
   color: var(--desktop-amber-dim);
-  background: #231d15;
-  border-color: #5a4930;
+  background: var(--desktop-surface-amber-2);
+  border-color: var(--desktop-border-amber);
 }
 
 .skill-evolution-entry-actions,
@@ -221,14 +221,14 @@
   padding: 0 8px;
   color: var(--desktop-text-pale);
   font-size: 8px;
-  background: #162330;
-  border: 1px solid #345066;
+  background: var(--desktop-surface-31);
+  border: 1px solid var(--desktop-border-21);
   border-radius: 5px;
 }
 
 .skill-evolution-entry-actions button.apply {
-  color: #65d6a4;
-  border-color: #375a4d;
+  color: var(--desktop-green-light);
+  border-color: var(--desktop-border-green);
 }
 
 .skill-evolution-entry-actions button.reject {

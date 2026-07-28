@@ -113,7 +113,7 @@
 }
 
 .workspace-tree-workspace-action > i[data-status='active'] {
-  background: #54d68b;
+  background: var(--desktop-green-vivid-2);
   box-shadow: 0 0 8px rgba(84, 214, 139, 0.55);
 }
 
@@ -129,7 +129,7 @@
 
 .workspace-tree-workspace-action > i[data-status='ready'],
 .workspace-tree-workspace-action > i[data-status='completed'] {
-  background: #54d68b;
+  background: var(--desktop-green-vivid-2);
 }
 
 .workspace-tree-workspace-action > i[data-status='queued'],
@@ -198,7 +198,7 @@
 
 .workspace-tree-session-row > svg:last-child[data-status='ready'],
 .workspace-tree-session-row > svg:last-child[data-status='completed'] {
-  color: #54d68b;
+  color: var(--desktop-green-vivid-2);
 }
 
 .workspace-tree-session-row > svg:last-child[data-status='danger'] {

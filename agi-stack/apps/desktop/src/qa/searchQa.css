@@ -8,7 +8,7 @@ body,
 }
 
 body {
-  background: #070c13;
+  background: var(--desktop-surface-16);
 }
 
 .search-qa-shell {

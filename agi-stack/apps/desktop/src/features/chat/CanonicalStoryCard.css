@@ -3,7 +3,7 @@
   max-width: 100%;
   margin: 10px 0;
   overflow: hidden;
-  border: 1px solid rgba(73, 177, 207, 0.26);
+  border: 1px solid rgba(var(--desktop-cyan-dim-rgb), 0.26);
   border-radius: 8px;
   background: rgba(8, 17, 24, 0.82);
   color: #cbd5e1;
@@ -91,7 +91,7 @@
 
 .canonical-story-dependency-warning {
   padding: 2px 5px;
-  color: #fbbf24;
+  color: var(--desktop-amber-hot);
   letter-spacing: 0;
   text-transform: none;
 }
@@ -123,7 +123,7 @@
 }
 
 .canonical-story-invest.is-warning {
-  color: #fbbf24;
+  color: var(--desktop-amber-hot);
 }
 
 .canonical-story-invest.is-fail,
@@ -136,7 +136,7 @@
 .canonical-story-invalid-details {
   min-width: 0;
   padding: 0 11px 9px 37px;
-  border-top: 1px solid rgba(73, 177, 207, 0.16);
+  border-top: 1px solid rgba(var(--desktop-cyan-dim-rgb), 0.16);
 }
 
 .canonical-story-section {
@@ -243,7 +243,7 @@
 }
 
 .canonical-story-card.is-invalid {
-  border-color: rgba(251, 191, 36, 0.35);
+  border-color: rgba(var(--desktop-amber-hot-rgb), 0.35);
   background: rgba(120, 53, 15, 0.13);
   color: #fcd34d;
 }
@@ -267,7 +267,7 @@
   gap: 4px;
   margin: 0;
   padding-left: 18px;
-  color: #fbbf24;
+  color: var(--desktop-amber-hot);
   font-size: 10px;
 }
 

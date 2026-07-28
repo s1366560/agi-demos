@@ -16,7 +16,7 @@
   min-height: 0;
   padding: 14px 10px;
   border-right: 1px solid var(--desktop-border-soft);
-  background: #080e16;
+  background: var(--desktop-surface-18);
 }
 
 .session-steering-qa-brand,

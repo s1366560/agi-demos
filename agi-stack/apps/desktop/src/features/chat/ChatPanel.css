@@ -4017,23 +4017,28 @@
 }
 
 .session-chat-narrative .session-composer-editor {
+  --session-composer-radius: 8px;
+  --session-composer-control-radius: 6px;
+  --session-composer-font-size: 11px;
+
   position: relative;
   min-width: 0;
   overflow: visible;
   border: 1px solid #334151;
-  border-radius: 8px;
+  border-radius: var(--session-composer-radius);
   background: #0a1017;
 }
 
-.session-workspace-thread .session-chat-narrative .chat-composer-input,
-.session-workspace-thread .session-chat-narrative .session-composer-editor textarea {
+.session-chat-narrative .chat-composer-input,
+.session-chat-narrative .session-composer-editor textarea {
   min-height: 64px;
   padding: 11px 12px;
   border: 0;
-  border-radius: 8px 8px 0 0;
+  border-radius: var(--session-composer-radius) var(--session-composer-radius) 0 0;
   background: transparent;
   color: var(--desktop-text);
-  font-size: 11px;
+  font-family: inherit;
+  font-size: var(--session-composer-font-size);
   line-height: 1.45;
   box-shadow: none;
 }
@@ -4470,10 +4475,23 @@
 }
 
 .session-chat-narrative .chat-composer-footer {
+  display: flex;
+  align-items: center;
   min-height: 38px;
   gap: 8px;
   padding: 5px 8px;
   border-top: 1px solid #263342;
+}
+
+.session-chat-narrative .composer-right-actions {
+  flex: 0 1 auto;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.session-chat-narrative .composer-voice-button {
+  border-radius: var(--session-composer-control-radius);
+  font-family: inherit;
 }
 
 .session-composer-context-actions {
@@ -4483,6 +4501,16 @@
   gap: 2px;
 }
 
+.session-composer-context-actions .composer-plus-compact,
+.session-composer-context-actions .prompt-template-library > button,
+.session-composer-context-actions > button {
+  border-radius: var(--session-composer-control-radius);
+  font-family: inherit;
+  font-size: var(--session-composer-font-size);
+  font-weight: 500;
+  line-height: 1;
+}
+
 .session-composer-context-actions > button {
   display: inline-flex;
   align-items: center;
@@ -4490,10 +4518,8 @@
   gap: 5px;
   padding: 0 7px;
   border: 0;
-  border-radius: 5px;
   background: transparent;
   color: var(--desktop-muted);
-  font: 600 9px/1 inherit;
   cursor: pointer;
 }
 
@@ -4519,8 +4545,9 @@
   max-width: 156px;
   height: 26px;
   padding: 0 7px;
-  border-radius: 5px;
-  font-size: 9px;
+  border-radius: var(--session-composer-control-radius);
+  font-size: var(--session-composer-font-size);
+  font-weight: 500;
 }
 
 .session-composer-context-actions .composer-model-popover button {
@@ -4554,15 +4581,18 @@
   margin-left: auto;
   padding: 2px;
   border-color: #263342;
-  border-radius: 6px;
+  border-radius: var(--session-composer-control-radius);
   background: #0c1219;
 }
 
 .session-chat-narrative .composer-delivery-switch button {
   height: 23px;
   padding: 0 7px;
+  border-radius: var(--session-composer-control-radius);
   color: #5f6f81;
-  font-size: 9px;
+  font-family: inherit;
+  font-size: var(--session-composer-font-size);
+  font-weight: 500;
 }
 
 .session-chat-narrative .composer-delivery-switch button.is-active {
@@ -4576,7 +4606,7 @@
   min-width: 28px;
   height: 28px;
   margin-left: 0;
-  border-radius: 6px;
+  border-radius: var(--session-composer-control-radius);
   background: #173541;
   color: var(--desktop-cyan);
 }
@@ -4585,7 +4615,7 @@
   width: 28px;
   min-width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--session-composer-control-radius);
 }
 
 .session-chat-narrative .session-authority-notice,

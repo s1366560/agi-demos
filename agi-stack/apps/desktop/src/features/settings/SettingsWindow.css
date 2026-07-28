@@ -19,7 +19,7 @@
   background: var(--desktop-surface-3);
   border: 1px solid #384657;
   border-radius: 11px;
-  box-shadow: 0 30px 80px rgb(0 0 0 / 55%);
+  box-shadow: 0 30px 80px rgba(var(--desktop-black-rgb), 55%);
 }
 
 .settings-window-titlebar {
@@ -28,7 +28,7 @@
   align-items: center;
   gap: 14px;
   padding: 0 10px 0 13px;
-  background: #111821;
+  background: var(--desktop-surface-23);
   border-bottom: 1px solid var(--desktop-border-5);
 }
 
@@ -95,7 +95,7 @@
 .settings-window-search input {
   width: 100%;
   height: 27px;
-  color: #dce5ee;
+  color: var(--desktop-text-mist);
   font-size: 8px;
   background: transparent;
   border: 0;
@@ -110,7 +110,7 @@
   justify-self: end;
   color: #8391a3;
   background: transparent;
-  border: 1px solid #334154;
+  border: 1px solid var(--desktop-border-20);
   border-radius: 5px;
 }
 
@@ -139,7 +139,7 @@
 
 .settings-rail-group > span {
   padding: 12px 9px 6px;
-  color: #526174;
+  color: var(--desktop-gray-15);
   font-size: 7px;
   font-weight: 800;
   letter-spacing: 0.13em;
@@ -182,7 +182,7 @@
 }
 
 .settings-rail-group strong {
-  color: #aeb9c6;
+  color: var(--desktop-gray-31);
   font-size: 9px;
 }
 
@@ -211,7 +211,7 @@
   align-items: center;
   gap: 7px;
   padding: 14px 9px;
-  color: #667487;
+  color: var(--desktop-gray-21);
   font-size: 7px;
   line-height: 1.4;
 }

@@ -4,9 +4,9 @@
 }
 
 .subagent-library-icon {
-  color: #8bd2ff;
-  background: rgba(65, 158, 216, 0.12);
-  border-color: rgba(87, 181, 239, 0.25);
+  color: var(--desktop-cyan-pale);
+  background: rgba(var(--desktop-blue-rgb), 0.12);
+  border-color: rgba(var(--desktop-blue-soft-rgb), 0.25);
 }
 
 .subagent-library-body {
@@ -32,9 +32,9 @@
   display: grid;
   width: 38px;
   height: 38px;
-  color: #8bd2ff;
-  background: rgba(65, 158, 216, 0.1);
-  border: 1px solid rgba(87, 181, 239, 0.22);
+  color: var(--desktop-cyan-pale);
+  background: rgba(var(--desktop-blue-rgb), 0.1);
+  border: 1px solid rgba(var(--desktop-blue-soft-rgb), 0.22);
   border-radius: 8px;
   place-items: center;
 }
@@ -88,7 +88,7 @@
   padding: 0 12px;
   color: #071219;
   font-weight: 700;
-  background: #8bd2ff;
+  background: var(--desktop-cyan-pale);
   border: 0;
   border-radius: 6px;
 }

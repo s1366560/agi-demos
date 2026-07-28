@@ -75,6 +75,29 @@ const migratedHexLiterals = [
   // accent variants
   'e58b95', 'ff9aa4', 'ffadb6', '5a4f83', '145f73', '287d94',
   '55d8f7', '4cd6a3', 'e8ad5b',
+  // phase-2: all hex literals with >=3 occurrences at phase-1 end
+  // surface ladder extension
+  '070c13', '080d13', '080e16', '0a1018', '0a1119', '0d141d', '101923',
+  '111820', '111821', '111a25', '121923', '141b25', '141c27', '151d27',
+  '162330', '171e27',
+  // tinted surfaces
+  '211c37', '10222b', '102630', '13271f', '10231b', '10251d', '2a2014', '231d15',
+  // border ladder extension
+  '1b2531', '252f3b', '253140', '263140', '273340', '273444', '293541',
+  '293542', '2a3643', '2b3643', '2c3948', '2d3947', '334151', '334154', '345066',
+  // tinted borders
+  '375a4d', '265943', '5d3239', '5a4930', '6d5334', '6b5427',
+  '2a6376', '23404c', '286a7d', '2b8ea7', '2b7084',
+  // gray ladder extension
+  '465466', '526174', '536274', '566577', '586779', '5e6e82', '627185',
+  '667487', '68778a', '718094', '718195', '758396', '75869a', '8996a7',
+  '8ca0b4', '9fb0c1', 'aab5c3', 'aeb9c6', 'b7c8d9', 'b8c3ce', 'b9c4cf', 'b9c5d2',
+  // light text rungs
+  'dce5ee', 'dce9f5', 'effbff',
+  // accent variants
+  'a58cff', 'd8cfff', '65d6a4', '63d78f', '52d68a', '54d68b', '53f0cf',
+  'e98598', 'ffb6be', 'fecaca', 'c68c94', 'e5a54b', 'fbbf24',
+  '146f87', '177c96', '8bd2ff', '8ee9ff',
 ];
 
 // Full phase-1 channel list: rgb triples replaced by --desktop-*-rgb tokens.
@@ -84,13 +107,25 @@ const migratedChannels = [
   [71, 113, 135], [118, 145, 170], [124, 150, 177],
   [3, 7, 12], [8, 15, 23], [10, 16, 25], [9, 17, 27], [13, 19, 29], [13, 24, 34],
   [34, 211, 238], [83, 208, 239], [245, 158, 11], [245, 183, 71],
+  // phase-2: comma-form rgba families with >=2 occurrences at phase-1 end
+  [127, 29, 29], [15, 23, 42], [111, 25, 37], [255, 102, 119], [74, 222, 128],
+  [156, 163, 175], [7, 11, 18], [13, 20, 30], [11, 17, 26], [73, 177, 207],
+  [251, 191, 36], [4, 10, 17], [9, 14, 22], [4, 9, 15], [8, 13, 20],
+  [36, 178, 222], [65, 158, 216], [87, 181, 239], [214, 180, 110],
+  [229, 139, 149], [19, 176, 219], [4, 8, 14], [79, 209, 231],
+  [76, 221, 168], [10, 14, 21],
 ];
 
 test('migrated hex and rgba literals stay out of value position outside ChatPanel.css', () => {
   const offenders = [];
   const hexRes = migratedHexLiterals.map((hex) => [hex, new RegExp(`#${hex}\\b`, 'i')]);
+  // Matches both comma form rgba(r, g, b, a) and slash form rgb(r g b / a) —
+  // phase-2 converted slash forms onto channel tokens too.
   const channelRes = migratedChannels.map(
-    ([r, g, b]) => [`${r},${g},${b}`, new RegExp(`\\brgba?\\(\\s*${r}\\s*,\\s*${g}\\s*,\\s*${b}\\s*[,)]`, 'i')],
+    ([r, g, b]) => [
+      `${r},${g},${b}`,
+      new RegExp(`\\brgba?\\(\\s*${r}(?:\\s*,\\s*|\\s+)${g}(?:\\s*,\\s*|\\s+)${b}\\s*[,/)]`, 'i'),
+    ],
   );
   for (const file of migratedCssFiles) {
     for (const value of declarationValues(readSrc(file))) {
@@ -105,10 +140,10 @@ test('migrated hex and rgba literals stay out of value position outside ChatPane
   assert.deepEqual(offenders, []);
 });
 
-test('hardcoded hex color budget ratchets down (phase-1 baseline: 1126)', () => {
+test('hardcoded hex color budget ratchets down (phase-2 baseline: 787)', () => {
   // This budget may only go DOWN. Lower the number whenever a migration pass
   // removes more hardcoded hex colors; never raise it.
-  const HEX_BUDGET = 1126;
+  const HEX_BUDGET = 787;
   let count = 0;
   for (const file of migratedCssFiles) {
     for (const value of declarationValues(readSrc(file))) {

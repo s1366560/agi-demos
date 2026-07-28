@@ -171,7 +171,7 @@
   color: #dce7ef;
   background: #14232d;
   border-color: #31677a;
-  box-shadow: 0 1px 8px rgb(0 0 0 / 24%);
+  box-shadow: 0 1px 8px rgba(var(--desktop-black-rgb), 24%);
 }
 
 .desktop-login-mode button:focus-visible {
@@ -275,7 +275,7 @@
 .desktop-login-card > label > input:focus,
 .desktop-login-password:focus-within {
   border-color: var(--desktop-cyan-mid);
-  box-shadow: 0 0 0 3px rgb(56 214 255 / 6%);
+  box-shadow: 0 0 0 3px rgba(var(--desktop-cyan-rgb), 6%);
 }
 
 .desktop-login-password {
@@ -369,13 +369,13 @@
   color: white;
   font-size: 10px;
   font-weight: 700;
-  background: #146f87;
-  border: 1px solid #2b8ea7;
+  background: var(--desktop-cyan-deep);
+  border: 1px solid var(--desktop-border-cyan-4);
   border-radius: 7px;
 }
 
 .desktop-login-submit:hover {
-  background: #177c96;
+  background: var(--desktop-cyan-rich);
 }
 
 .desktop-login-submit:disabled,
@@ -412,7 +412,7 @@
   z-index: 40;
   display: grid;
   padding: 32px;
-  background: rgb(3 7 12 / 76%);
+  background: rgba(var(--desktop-overlay-1-rgb), 76%);
   backdrop-filter: blur(8px);
   inset: 0;
   place-items: center;
@@ -426,7 +426,7 @@
   background: var(--desktop-surface-10);
   border: 1px solid #344457;
   border-radius: 10px;
-  box-shadow: 0 22px 70px rgb(0 0 0 / 48%);
+  box-shadow: 0 22px 70px rgba(var(--desktop-black-rgb), 48%);
   outline: 0;
 }
 
@@ -460,13 +460,13 @@
   margin-bottom: 17px;
   color: var(--desktop-cyan);
   background: #102832;
-  border: 1px solid #286a7d;
+  border: 1px solid var(--desktop-border-cyan-3);
   border-radius: 9px;
   place-items: center;
 }
 
 .desktop-device-auth-dialog.expired .desktop-device-auth-icon {
-  color: #e5a54b;
+  color: var(--desktop-amber-light);
   background: #251d14;
   border-color: #675033;
 }
@@ -484,7 +484,7 @@
 }
 
 .desktop-device-auth-dialog.expired > header > span {
-  color: #e5a54b;
+  color: var(--desktop-amber-light);
 }
 
 .desktop-device-auth-dialog > header h2 {
@@ -508,7 +508,7 @@
   padding: 15px;
   margin-top: 21px;
   text-align: center;
-  background: #080d13;
+  background: var(--desktop-surface-17);
   border: 1px solid #2d3b4a;
   border-radius: 8px;
 }
@@ -552,9 +552,9 @@
 }
 
 .desktop-device-auth-status.expired {
-  color: #e5a54b;
+  color: var(--desktop-amber-light);
   background: #211a12;
-  border-color: #5a4930;
+  border-color: var(--desktop-border-amber);
 }
 
 .desktop-device-auth-status > svg {
@@ -613,15 +613,15 @@
   color: #96a5b6;
   font-size: 8px;
   font-weight: 650;
-  background: #121923;
+  background: var(--desktop-surface-25);
   border: 1px solid #354153;
   border-radius: 6px;
 }
 
 .desktop-device-auth-actions .primary {
   color: white;
-  background: #146f87;
-  border-color: #2b8ea7;
+  background: var(--desktop-cyan-deep);
+  border-color: var(--desktop-border-cyan-4);
 }
 
 .desktop-device-auth-actions button:hover,
@@ -633,7 +633,7 @@
 
 .desktop-device-auth-actions .primary:hover,
 .desktop-device-auth-actions .primary:focus-visible {
-  background: #177c96;
+  background: var(--desktop-cyan-rich);
 }
 
 .desktop-device-auth-actions svg {

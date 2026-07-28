@@ -16,10 +16,10 @@
   flex-direction: column;
   overflow: hidden;
   color: #e8edf3;
-  background: #0d141d;
+  background: var(--desktop-surface-21);
   border: 1px solid #2d3c4d;
   border-radius: 13px;
-  box-shadow: 0 28px 80px rgb(0 0 0 / 55%);
+  box-shadow: 0 28px 80px rgba(var(--desktop-black-rgb), 55%);
 }
 
 .agent-definition-dialog-heading {
@@ -28,7 +28,7 @@
   gap: 14px;
   align-items: start;
   padding: 20px 22px 18px;
-  border-bottom: 1px solid #253140;
+  border-bottom: 1px solid var(--desktop-border-9);
 }
 
 .agent-definition-dialog-icon {
@@ -37,8 +37,8 @@
   height: 42px;
   place-items: center;
   color: var(--desktop-amber-dim);
-  background: #2a2014;
-  border: 1px solid #6d5334;
+  background: var(--desktop-surface-amber);
+  border: 1px solid var(--desktop-border-amber-2);
   border-radius: 10px;
 }
 
@@ -75,7 +75,7 @@
   display: flex;
   gap: 4px;
   padding: 10px 22px 0;
-  border-bottom: 1px solid #253140;
+  border-bottom: 1px solid var(--desktop-border-9);
 }
 
 .agent-definition-dialog-tabs button {
@@ -110,7 +110,7 @@
   color: #d4dee8;
   font-size: 12px;
   font-weight: 700;
-  border-top: 1px solid #253140;
+  border-top: 1px solid var(--desktop-border-9);
 }
 
 .agent-definition-form-section:first-child {
@@ -146,7 +146,7 @@
   color: #e5edf4;
   font: inherit;
   font-size: 12px;
-  background: #0a1119;
+  background: var(--desktop-surface-20);
   border: 1px solid #2a3949;
   border-radius: 7px;
   outline: none;
@@ -177,7 +177,7 @@
   gap: 10px;
   align-items: center;
   padding: 0 12px;
-  background: #0a1119;
+  background: var(--desktop-surface-20);
   border: 1px solid #2a3949;
   border-radius: 7px;
 }
@@ -205,7 +205,7 @@
   gap: 16px;
   align-items: center;
   padding: 14px 22px;
-  border-top: 1px solid #253140;
+  border-top: 1px solid var(--desktop-border-9);
 }
 
 .agent-definition-dialog-footer > div {

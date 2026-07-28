@@ -10,8 +10,8 @@ body,
 body {
   color: var(--desktop-text);
   background:
-    radial-gradient(circle at 70% 15%, rgba(19, 176, 219, 0.1), transparent 36%),
-    #070c13;
+    radial-gradient(circle at 70% 15%, rgba(var(--desktop-cyan-neon-rgb), 0.1), transparent 36%),
+    var(--desktop-surface-16);
 }
 
 .workspace-create-qa-shell {

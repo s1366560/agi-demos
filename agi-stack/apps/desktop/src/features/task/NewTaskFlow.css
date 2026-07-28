@@ -46,7 +46,7 @@
   gap: 20px;
   min-width: 0;
   padding: 0 20px;
-  border-bottom: 1px solid #1b2531;
+  border-bottom: 1px solid var(--desktop-border-7);
   background: var(--desktop-surface-7);
 }
 
@@ -74,7 +74,7 @@
 }
 
 .new-task-brand small {
-  color: #758396;
+  color: var(--desktop-gray-25);
   font-size: 8px;
 }
 
@@ -148,7 +148,7 @@
   width: 32px;
   height: 32px;
   place-items: center;
-  border: 1px solid #253140;
+  border: 1px solid var(--desktop-border-9);
   border-radius: 6px;
   background: #101620;
   color: #7f8d9f;
@@ -191,7 +191,7 @@
   gap: 19px;
   padding-right: 30px;
   padding-left: 30px;
-  border-left: 1px solid #1b2531;
+  border-left: 1px solid var(--desktop-border-7);
   background: var(--desktop-surface-2);
 }
 
@@ -259,7 +259,7 @@
 }
 
 .new-task-field > small {
-  color: #758396;
+  color: var(--desktop-gray-25);
   font-size: 8px;
 }
 
@@ -330,7 +330,7 @@
   height: 36px;
   place-items: center;
   border-radius: 6px;
-  background: #121923;
+  background: var(--desktop-surface-25);
   color: #5fd6f2;
 }
 
@@ -347,7 +347,7 @@
 
 .new-task-mode-grid small,
 .new-task-context-options small {
-  color: #758396;
+  color: var(--desktop-gray-25);
   font-size: 8px;
   line-height: 1.4;
 }
@@ -380,7 +380,7 @@
 .new-task-context-options button.selected,
 .new-task-environment-field button.selected {
   border-color: #275064;
-  background: #101923;
+  background: var(--desktop-surface-24);
   color: #50cee9;
 }
 
@@ -503,7 +503,7 @@
   border: 1px solid var(--desktop-border-3);
   border-radius: 6px;
   background: var(--desktop-surface-6);
-  color: #526174;
+  color: var(--desktop-gray-15);
 }
 
 .new-task-planning-checks > div.complete {
@@ -512,7 +512,7 @@
 
 .new-task-planning-checks > div.active {
   border-color: #25536a;
-  background: #101923;
+  background: var(--desktop-surface-24);
   color: var(--desktop-cyan-bright);
 }
 
@@ -561,7 +561,7 @@
   align-items: center;
   gap: 6px;
   padding: 7px 9px;
-  border: 1px solid #6b5427;
+  border: 1px solid var(--desktop-border-amber-3);
   border-radius: 5px;
   color: #d9a84c;
   background: #211b10;

@@ -36,14 +36,14 @@
   height: 20px;
   padding: 9px;
   border-radius: 11px;
-  color: #8ee9ff;
-  background: rgba(36, 178, 222, 0.13);
+  color: var(--desktop-cyan-ice);
+  background: rgba(var(--desktop-cyan-vivid-rgb), 0.13);
 }
 
 .plugin-management-heading span,
 .plugin-management-heading p,
 .plugin-management-body small {
-  color: #8ca0b4;
+  color: var(--desktop-gray-28);
 }
 
 .plugin-management-heading span {
@@ -93,7 +93,7 @@
   gap: 16px;
   align-items: center;
   justify-content: space-between;
-  color: #8ca0b4;
+  color: var(--desktop-gray-28);
   font-size: 11px;
 }
 
@@ -120,7 +120,7 @@
 
 .plugin-activity-section h3 {
   margin: 0;
-  color: #dce9f5;
+  color: var(--desktop-text-frost);
   font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -134,13 +134,13 @@
 }
 
 .plugin-activity-trace strong {
-  color: #8ee9ff;
+  color: var(--desktop-cyan-ice);
 }
 
 .plugin-activity-trace span,
 .plugin-activity-timeline article > div > span,
 .plugin-activity-empty {
-  color: #8ca0b4;
+  color: var(--desktop-gray-28);
   font-size: 11px;
 }
 
@@ -182,15 +182,15 @@
   gap: 10px;
   padding: 10px;
   border-radius: 9px;
-  background: rgba(4, 9, 15, 0.45);
+  background: rgba(var(--desktop-overlay-8-rgb), 0.45);
 }
 
 .plugin-activity-diagnostics article > span {
   align-self: start;
   padding: 3px 6px;
   border-radius: 999px;
-  color: #8ee9ff;
-  background: rgba(36, 178, 222, 0.13);
+  color: var(--desktop-cyan-ice);
+  background: rgba(var(--desktop-cyan-vivid-rgb), 0.13);
   font-size: 9px;
   text-transform: uppercase;
 }
@@ -198,7 +198,7 @@
 .plugin-activity-diagnostics article > span[data-level='error'],
 .plugin-activity-diagnostics article > span[data-level='warning'] {
   color: #ffb4bc;
-  background: rgba(255, 102, 119, 0.13);
+  background: rgba(var(--desktop-red-hot-rgb), 0.13);
 }
 
 .plugin-activity-diagnostics article > div,
@@ -243,7 +243,7 @@
 .plugin-management-body label {
   display: grid;
   gap: 7px;
-  color: #dce9f5;
+  color: var(--desktop-text-frost);
   font-size: 12px;
 }
 
@@ -260,7 +260,7 @@
   padding: 0 12px;
   outline: none;
   color: #edf6ff;
-  background: #111a25;
+  background: var(--desktop-surface-26);
 }
 
 .plugin-management-body input:focus,
@@ -288,7 +288,7 @@
   padding: 0 12px;
   border: 1px solid rgba(var(--desktop-steel-3-rgb), 0.22);
   border-radius: 9px;
-  background: #111a25;
+  background: var(--desktop-surface-26);
 }
 
 .plugin-config-checkbox input {
@@ -315,10 +315,10 @@
   align-items: flex-start;
   margin-top: 18px;
   padding: 11px 13px;
-  border: 1px solid rgba(255, 102, 119, 0.35);
+  border: 1px solid rgba(var(--desktop-red-hot-rgb), 0.35);
   border-radius: 9px;
   color: var(--desktop-red-light);
-  background: rgba(111, 25, 37, 0.2);
+  background: rgba(var(--desktop-red-dark-rgb), 0.2);
   font-size: 12px;
 }
 
@@ -328,7 +328,7 @@
   gap: 10px;
   padding: 16px 24px;
   border-top: 1px solid rgba(var(--desktop-steel-3-rgb), 0.18);
-  background: #0a1018;
+  background: var(--desktop-surface-19);
 }
 
 .plugin-management-footer.split {
@@ -376,8 +376,8 @@
 }
 
 .plugin-management-footer button.danger {
-  border: 1px solid rgba(255, 102, 119, 0.55);
-  background: rgba(111, 25, 37, 0.32);
+  border: 1px solid rgba(var(--desktop-red-hot-rgb), 0.55);
+  background: rgba(var(--desktop-red-dark-rgb), 0.32);
 }
 
 .plugin-management-footer button:disabled {

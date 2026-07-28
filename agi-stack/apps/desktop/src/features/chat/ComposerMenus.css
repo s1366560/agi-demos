@@ -15,7 +15,7 @@
   border: 1px solid #2a3745;
   border-radius: 10px;
   background: var(--desktop-surface-14);
-  box-shadow: 0 18px 48px rgb(0 0 0 / 48%);
+  box-shadow: 0 18px 48px rgba(var(--desktop-black-rgb), 48%);
 }
 
 .picker-menu-header,
@@ -471,7 +471,7 @@
 
 .prompt-template-delete:hover {
   background: #321b21;
-  color: #e98598;
+  color: var(--desktop-red-soft-2);
 }
 
 .prompt-template-state {
@@ -512,7 +512,7 @@
 
 .prompt-template-variable-fields label > span b {
   margin-left: 3px;
-  color: #e98598;
+  color: var(--desktop-red-soft-2);
 }
 
 .prompt-template-variable-fields label > small {
@@ -521,7 +521,7 @@
 }
 
 .prompt-template-variable-fields .prompt-template-field-error {
-  color: #e98598;
+  color: var(--desktop-red-soft-2);
 }
 
 .prompt-template-variable-preview {
@@ -570,7 +570,7 @@
 
 .save-prompt-template-form > .prompt-template-field-error {
   margin-top: -9px;
-  color: #e98598;
+  color: var(--desktop-red-soft-2);
   font-size: 9px;
 }
 

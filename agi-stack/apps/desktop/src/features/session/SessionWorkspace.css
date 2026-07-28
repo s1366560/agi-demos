@@ -160,7 +160,7 @@
   width: 174px;
   gap: 2px;
   padding: 5px;
-  background: #0d141d;
+  background: var(--desktop-surface-21);
   border: 1px solid var(--desktop-border);
   border-radius: 7px;
   box-shadow: 0 16px 36px rgba(var(--desktop-black-rgb), 0.42);
@@ -315,7 +315,7 @@
   padding: 10px;
   margin: 0;
   list-style: none;
-  background: #080d13;
+  background: var(--desktop-surface-17);
   border: 1px solid var(--desktop-border-soft);
   border-radius: 8px;
 }
@@ -545,7 +545,7 @@
   color: var(--desktop-text);
   font: inherit;
   font-size: 9px;
-  background: #080d13;
+  background: var(--desktop-surface-17);
   border: 1px solid var(--desktop-border);
   border-radius: 6px;
 }
@@ -753,7 +753,7 @@
   padding: 7px 8px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
-  background: rgba(4, 9, 15, 0.48);
+  background: rgba(var(--desktop-overlay-8-rgb), 0.48);
 }
 
 .session-current-activity dt {
@@ -774,7 +774,7 @@
   overflow: hidden;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(8, 13, 20, 0.74);
+  background: rgba(var(--desktop-overlay-11-rgb), 0.74);
 }
 
 .timeline-tool-group + .timeline-tool-group { margin-top: 4px; }
@@ -886,7 +886,7 @@
   padding: 11px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 8px;
-  background: linear-gradient(150deg, rgba(19, 28, 40, 0.82), rgba(8, 13, 20, 0.72));
+  background: linear-gradient(150deg, rgba(19, 28, 40, 0.82), rgba(var(--desktop-overlay-11-rgb), 0.72));
 }
 
 .session-overview-metrics span,
@@ -926,14 +926,14 @@
   text-align: left;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 8px;
-  background: #0a1018;
+  background: var(--desktop-surface-19);
 }
 
 .session-overview-jump-grid button:hover,
 .session-overview-jump-grid button:focus-visible {
   color: var(--desktop-text);
   border-color: color-mix(in srgb, var(--cyan-8) 36%, var(--desktop-border));
-  background: color-mix(in srgb, var(--cyan-9) 7%, #0a1018);
+  background: color-mix(in srgb, var(--cyan-9) 7%, var(--desktop-surface-19));
 }
 
 .session-overview-jump-grid button > span {
