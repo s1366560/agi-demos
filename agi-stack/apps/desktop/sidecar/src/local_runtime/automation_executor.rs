@@ -15,8 +15,13 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 
 use super::{
-    automation_dispatcher::AutomationOperationClaim,
-    automation_worker::{AutomationExecutor, AutomationExecutorError, AutomationWorkerExecution},
+    authority_store::DesktopHitlStatus,
+    automation_dispatcher::{AutomationLedgerError, AutomationOperationClaim},
+    automation_hitl::{reserve_authority, AutomationHitlAuthority},
+    automation_worker::{
+        AutomationExecutor, AutomationExecutorError, AutomationExecutorOutcome,
+        AutomationWorkerExecution, AutomationWorkerWait,
+    },
     now_iso, session_store, ConversationCapabilityMode, ConversationRunMode, LlmWorkloadRole,
     LocalConversation, LocalRuntimeState, LocalTimelineObserver, PLAN_MODE_TOOL_NAMES,
 };
@@ -71,7 +76,7 @@ impl AutomationExecutor for LocalAutomationAgentExecutor {
     async fn execute(
         &self,
         claim: &AutomationOperationClaim,
-    ) -> Result<AutomationWorkerExecution, AutomationExecutorError> {
+    ) -> Result<AutomationExecutorOutcome, AutomationExecutorError> {
         let state = self
             .state
             .upgrade()
@@ -127,17 +132,7 @@ impl AutomationExecutor for LocalAutomationAgentExecutor {
         user_item["id"] = json!(format!("local-automation-trigger-{}", claim.run_id));
         state.append_timeline(&conversation.id, user_item);
 
-        let tool_host: Arc<dyn ToolHost> = Arc::new(ReadOnlyAutomationToolHost::new(
-            state.tool_host.lock().expect("local tool host").clone(),
-        ));
-        let llm = state.llm_for_role(&conversation, LlmWorkloadRole::Default);
-        let engine = ReActEngine::new(
-            llm,
-            tool_host,
-            state.checkpoints.clone(),
-            state.clock.clone(),
-        )
-        .with_max_rounds(8);
+        let engine = automation_engine(&state, &conversation);
         let observer = Arc::new(LocalTimelineObserver {
             state: Arc::clone(&state),
             conversation_id: conversation.id.clone(),
@@ -154,15 +149,68 @@ impl AutomationExecutor for LocalAutomationAgentExecutor {
             .map_err(|_| {
                 AutomationExecutorError::retryable("local_automation_agent_execution_failed")
             })?;
+        if result.status == SessionStatus::AwaitingInput {
+            let pending = result.pending_hitl.as_ref().ok_or_else(|| {
+                AutomationExecutorError::permanent("local_automation_hitl_authority_invalid")
+            })?;
+            reserve_authority(
+                &state.session_store,
+                claim,
+                &conversation.id,
+                &pending.id,
+                &now_iso(),
+            )
+            .map_err(map_hitl_authority_error)?;
+            let request = state
+                .persist_pending_hitl(&conversation.id, None, &result)
+                .map_err(|_| {
+                    AutomationExecutorError::retryable("local_automation_hitl_persistence_failed")
+                })?
+                .ok_or_else(|| {
+                    AutomationExecutorError::retryable(
+                        "local_automation_hitl_authority_unavailable",
+                    )
+                })?;
+            if request.id != pending.id
+                || request.conversation_id != conversation.id
+                || request.status != DesktopHitlStatus::Pending
+            {
+                return Err(AutomationExecutorError::permanent(
+                    "local_automation_hitl_authority_invalid",
+                ));
+            }
+            let after_count = state
+                .session_store
+                .timeline_count(&conversation.id)
+                .unwrap_or(before_count);
+            return Ok(AutomationExecutorOutcome::WaitingHuman(
+                AutomationWorkerWait {
+                    request_id: request.id.clone(),
+                    result_summary: json!({
+                        "authority": "local_scoped_agent",
+                        "actor_user_id": claim.actor_user_id,
+                        "runtime_execution_id": claim.runtime_execution_id,
+                        "status": "waiting_human",
+                        "hitl_request_id": request.id,
+                        "hitl_type": request.kind,
+                        "delivery": delivery_kind,
+                    }),
+                    event_count: after_count.saturating_sub(before_count) as u64,
+                    execution_time_ms: u64::try_from(started_at.elapsed().as_millis())
+                        .unwrap_or(u64::MAX),
+                    conversation_id: conversation.id,
+                },
+            ));
+        }
         if result.status != SessionStatus::Finished {
             let (code, retryable) = match result.status {
-                SessionStatus::AwaitingInput => {
-                    ("local_automation_hitl_authority_unavailable", false)
-                }
                 SessionStatus::Failed | SessionStatus::Running | SessionStatus::Paused => {
                     ("local_automation_agent_execution_incomplete", true)
                 }
                 SessionStatus::Cancelled => ("local_automation_agent_execution_cancelled", false),
+                SessionStatus::AwaitingInput => {
+                    unreachable!("awaiting input status handled above")
+                }
                 SessionStatus::Finished => unreachable!("finished status handled above"),
             };
             return Err(if retryable {
@@ -186,19 +234,118 @@ impl AutomationExecutor for LocalAutomationAgentExecutor {
             .session_store
             .timeline_count(&conversation.id)
             .unwrap_or(before_count);
-        Ok(AutomationWorkerExecution {
-            result_summary: json!({
-                "authority": "local_scoped_agent",
-                "actor_user_id": claim.actor_user_id,
-                "runtime_execution_id": claim.runtime_execution_id,
-                "answer": answer,
-                "delivery": delivery_kind,
-            }),
-            event_count: after_count.saturating_sub(before_count) as u64,
-            execution_time_ms: u64::try_from(started_at.elapsed().as_millis()).unwrap_or(u64::MAX),
-            conversation_id: conversation.id,
-        })
+        Ok(AutomationExecutorOutcome::Completed(
+            AutomationWorkerExecution {
+                result_summary: json!({
+                    "authority": "local_scoped_agent",
+                    "actor_user_id": claim.actor_user_id,
+                    "runtime_execution_id": claim.runtime_execution_id,
+                    "answer": answer,
+                    "delivery": delivery_kind,
+                }),
+                event_count: after_count.saturating_sub(before_count) as u64,
+                execution_time_ms: u64::try_from(started_at.elapsed().as_millis())
+                    .unwrap_or(u64::MAX),
+                conversation_id: conversation.id,
+            },
+        ))
     }
+
+    async fn recover_answered_hitl(
+        &self,
+        authority: &AutomationHitlAuthority,
+    ) -> Result<(), AutomationExecutorError> {
+        let state = self
+            .state
+            .upgrade()
+            .ok_or_else(|| AutomationExecutorError::retryable("local_runtime_stopped"))?;
+        let answer = authority.response_answer.as_deref().ok_or_else(|| {
+            AutomationExecutorError::permanent("local_automation_hitl_authority_invalid")
+        })?;
+        accept_human_response(&state, authority, &authority.request_id, answer)
+            .await
+            .map_err(AutomationExecutorError::retryable)
+    }
+}
+
+fn map_hitl_authority_error(error: AutomationLedgerError) -> AutomationExecutorError {
+    match error {
+        AutomationLedgerError::Storage(_) => {
+            AutomationExecutorError::retryable("local_automation_hitl_authority_store_unavailable")
+        }
+        AutomationLedgerError::LeaseLost => {
+            AutomationExecutorError::retryable("local_automation_hitl_authority_lease_lost")
+        }
+        AutomationLedgerError::NotFound
+        | AutomationLedgerError::RevisionConflict { .. }
+        | AutomationLedgerError::IdempotencyConflict
+        | AutomationLedgerError::InvalidRecord(_) => {
+            AutomationExecutorError::permanent("local_automation_hitl_authority_conflict")
+        }
+    }
+}
+
+pub(super) async fn accept_human_response(
+    state: &LocalRuntimeState,
+    authority: &AutomationHitlAuthority,
+    request_id: &str,
+    answer: &str,
+) -> Result<(), &'static str> {
+    if authority.request_id != request_id {
+        return Err("local_automation_hitl_request_mismatch");
+    }
+    let conversation = state
+        .session_store
+        .conversation(&authority.conversation_id)
+        .map_err(|_| "local_automation_conversation_store_unavailable")?
+        .ok_or("local_automation_conversation_not_found")?;
+    if conversation.tenant_id != authority.tenant_id
+        || conversation.project_id != authority.project_id
+    {
+        return Err("local_automation_conversation_scope_mismatch");
+    }
+    let workspace_id = conversation
+        .workspace_id
+        .as_deref()
+        .ok_or("local_automation_workspace_unavailable")?;
+    validate_workspace_scope(
+        state,
+        &authority.tenant_id,
+        &authority.project_id,
+        workspace_id,
+    )?;
+    let engine = automation_engine(state, &conversation);
+    let accepted = engine
+        .accept_human_response(&authority.runtime_execution_id, request_id, answer)
+        .await
+        .map_err(|_| "local_automation_hitl_checkpoint_rejected")?;
+    let pending_matches = accepted
+        .pending_hitl
+        .as_ref()
+        .is_some_and(|request| request.id == request_id);
+    if accepted.session_id != authority.runtime_execution_id
+        || accepted.project_id.as_deref() != Some(authority.project_id.as_str())
+        || accepted.status != SessionStatus::Running
+        || !pending_matches
+        || accepted.hitl_answer(request_id) != Some(answer)
+    {
+        return Err("local_automation_hitl_checkpoint_mismatch");
+    }
+    Ok(())
+}
+
+fn automation_engine(state: &LocalRuntimeState, conversation: &LocalConversation) -> ReActEngine {
+    let tool_host: Arc<dyn ToolHost> = Arc::new(ReadOnlyAutomationToolHost::new(
+        state.tool_host.lock().expect("local tool host").clone(),
+    ));
+    let llm = state.llm_for_role(conversation, LlmWorkloadRole::Default);
+    ReActEngine::new(
+        llm,
+        tool_host,
+        state.checkpoints.clone(),
+        state.clock.clone(),
+    )
+    .with_max_rounds(8)
 }
 
 pub(super) fn execution_workspace_id(

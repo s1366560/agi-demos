@@ -65,6 +65,10 @@ mod automation_dispatcher_schema;
 #[cfg(test)]
 mod automation_dispatcher_tests;
 mod automation_executor;
+mod automation_hitl;
+mod automation_hitl_reservation;
+#[cfg(test)]
+mod automation_hitl_tests;
 mod automation_ledger_support;
 mod automation_schedule;
 mod automation_schedule_dispatcher;
@@ -7453,24 +7457,51 @@ async fn respond_to_hitl(
             Json(json!({ "detail": "invalid permission response" })),
         ));
     }
+    let is_automation_request =
+        match automation_hitl::authority_for_request(&state.session_store, &request.id) {
+            Ok(authority) => authority.is_some(),
+            Err(_) => {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "detail": "automation HITL authority is unavailable",
+                        "reason_code": "local_automation_hitl_authority_unavailable",
+                    })),
+                ))
+            }
+        };
     if request.status == DesktopHitlStatus::Responded {
-        let same_payload = request.response_data.as_ref() == Some(&body.response_data);
-        let same_key = body.idempotency_key.as_deref().is_none()
-            || request.idempotency_key.as_deref() == body.idempotency_key.as_deref();
-        if same_payload && same_key {
-            return Ok(Json(json!({
-                "success": true,
-                "status": "responded",
-                "request_id": request.id,
-                "conversation_id": request.conversation_id,
-                "run_id": request.run_id,
-                "revision": request.response_revision,
-            })));
+        if request.response_actor.as_deref() == Some("local_automation_expiry") {
+            return Err((
+                StatusCode::GONE,
+                Json(json!({
+                    "detail": "automation HITL request expired",
+                    "reason_code": automation_hitl::AUTOMATION_HITL_EXPIRED_REASON,
+                    "request_id": request.id,
+                })),
+            ));
         }
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "HITL request was already answered with a different payload" })),
-        ));
+        if !is_automation_request {
+            let same_payload = request.response_data.as_ref() == Some(&body.response_data);
+            let same_key = body.idempotency_key.as_deref().is_none()
+                || request.idempotency_key.as_deref() == body.idempotency_key.as_deref();
+            if same_payload && same_key {
+                return Ok(Json(json!({
+                    "success": true,
+                    "status": "responded",
+                    "request_id": request.id,
+                    "conversation_id": request.conversation_id,
+                    "run_id": request.run_id,
+                    "revision": request.response_revision,
+                })));
+            }
+            return Err((
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "detail": "HITL request was already answered with a different payload"
+                })),
+            ));
+        }
     }
     let answer = hitl_response_answer(request.kind, &body.response_data).ok_or_else(|| {
         (
@@ -7525,6 +7556,93 @@ async fn respond_to_hitl(
                 Json(json!({ "detail": "conversation not found" })),
             )
         })?;
+    match automation_hitl::respond_to_request(
+        &state,
+        &request.id,
+        &answer,
+        &body.response_data,
+        body.idempotency_key.as_deref(),
+        Utc::now(),
+    )
+    .await
+    {
+        Ok(automation_hitl::AutomationHitlResponse::NotAutomation) => {}
+        Ok(automation_hitl::AutomationHitlResponse::Expired { run_id }) => {
+            return Err((
+                StatusCode::GONE,
+                Json(json!({
+                    "detail": "automation HITL request expired",
+                    "reason_code": automation_hitl::AUTOMATION_HITL_EXPIRED_REASON,
+                    "request_id": request.id,
+                    "automation_run_id": run_id,
+                })),
+            ));
+        }
+        Ok(automation_hitl::AutomationHitlResponse::Queued {
+            authority,
+            duplicate,
+        }) => {
+            if !duplicate {
+                let mut item = state.timeline_item(
+                    "hitl_responded",
+                    conversation.id.clone(),
+                    None,
+                    Some("user"),
+                    None,
+                    json!({
+                        "request_id": request.id,
+                        "requestId": request.id,
+                        "hitl_type": hitl_kind_name(request.kind),
+                        "answered": true,
+                        "run_id": null,
+                        "automation_run_id": authority.run_id,
+                        "decision": request.decision,
+                        "response_actor": "local_user",
+                    }),
+                );
+                item["requestId"] = json!(request.id);
+                item["answered"] = json!(true);
+                state.append_timeline(&conversation.id, item);
+            }
+            return Ok(Json(json!({
+                "success": true,
+                "status": if duplicate { "responded" } else { "queued" },
+                "request_id": request.id,
+                "conversation_id": conversation.id,
+                "run_id": null,
+                "automation_run_id": authority.run_id,
+                "revision": null,
+            })));
+        }
+        Err(automation_hitl::AutomationHitlResponseError::Checkpoint(reason_code)) => {
+            return Err((
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "detail": "automation HITL checkpoint rejected",
+                    "reason_code": reason_code,
+                })),
+            ));
+        }
+        Err(automation_hitl::AutomationHitlResponseError::Ledger(
+            automation_dispatcher::AutomationLedgerError::IdempotencyConflict,
+        )) => {
+            return Err((
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "detail": "HITL request was already answered with a different payload"
+                })),
+            ));
+        }
+        Err(automation_hitl::AutomationHitlResponseError::Ledger(_)) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "detail": "automation HITL authority is unavailable",
+                    "reason_code": "local_automation_hitl_authority_unavailable",
+                })),
+            ));
+        }
+    }
     let engine_run = if let Some(run_id) = request.run_id.as_deref() {
         Some(
             state
