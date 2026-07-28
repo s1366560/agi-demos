@@ -105,8 +105,9 @@ test('Electron window keeps renderer privileges isolated and navigation constrai
   assert.match(rendererHtml, /http-equiv="Content-Security-Policy"/);
   assert.match(
     rendererHtml,
-    /frame-src 'self' https: http:\/\/127\.0\.0\.1:\* http:\/\/localhost:\*/,
+    /frame-src 'self' blob: https: http:\/\/127\.0\.0\.1:\* http:\/\/localhost:\*/,
   );
+  assert.doesNotMatch(rendererHtml, /http:\/\/\[::1\]:\*/u);
   assert.match(rendererHtml, /object-src 'none'/);
   assert.match(rendererHtml, /script-src 'self'/);
   assert.doesNotMatch(

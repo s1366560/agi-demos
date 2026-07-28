@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { expect, test } from '@playwright/test';
 
+import { isExpectedBrowserQaSecurityDiagnostic } from './diagnostics.mjs';
 import { buildBrowserQaMatrix, browserQaManifest } from './matrix.mjs';
 
 const LOCALE_STORAGE_KEY = 'agistack.desktop.locale';
@@ -21,9 +22,28 @@ test.describe.configure({ mode: 'parallel' });
 for (const variant of buildBrowserQaMatrix()) {
   test(variant.id, async ({ page }) => {
     const runtimeErrors = [];
-    page.on('pageerror', (error) => runtimeErrors.push(`page: ${error.message}`));
+    page.on('pageerror', (error) => {
+      if (
+        !isExpectedBrowserQaSecurityDiagnostic(
+          variant.scenario.id,
+          'page',
+          error.message,
+        )
+      ) {
+        runtimeErrors.push(`page: ${error.message}`);
+      }
+    });
     page.on('console', (message) => {
-      if (message.type() === 'error') runtimeErrors.push(`console: ${message.text()}`);
+      if (
+        message.type() === 'error' &&
+        !isExpectedBrowserQaSecurityDiagnostic(
+          variant.scenario.id,
+          'console',
+          message.text(),
+        )
+      ) {
+        runtimeErrors.push(`console: ${message.text()}`);
+      }
     });
     await page.route(/\/(?:artifacts|design-prototype)\//u, async (route) => {
       const pathname = decodeURIComponent(new URL(route.request().url()).pathname);
