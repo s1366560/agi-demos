@@ -288,6 +288,7 @@ for (const variant of buildBrowserQaMatrix()) {
     if ((await visiblePopup.count()) > 0 && (await openPopupTrigger.count()) > 0) {
       const openPopupTriggerElement = await openPopupTrigger.elementHandle();
       expect(openPopupTriggerElement, 'open popup must retain its trigger element').not.toBeNull();
+      const popupRole = await visiblePopup.getAttribute('role');
       await page.keyboard.press('Escape');
       await expect(visiblePopup).toBeHidden();
       await expect
@@ -295,6 +296,17 @@ for (const variant of buildBrowserQaMatrix()) {
           openPopupTriggerElement?.evaluate((element) => document.activeElement === element),
         )
         .toBe(true);
+      if (popupRole === 'menu' || popupRole === 'listbox') {
+        await openPopupTriggerElement?.click();
+        const reopenedPopup = page
+          .locator(
+            '[role="menu"]:visible, [role="listbox"]:visible',
+          )
+          .first();
+        await expect(reopenedPopup).toBeVisible();
+        await page.mouse.click(1, 1);
+        await expect(reopenedPopup).toBeHidden();
+      }
     } else if ((await visiblePopup.count()) === 0) {
       const closedPopupTrigger = page
         .locator(
@@ -302,6 +314,11 @@ for (const variant of buildBrowserQaMatrix()) {
         )
         .first();
       if ((await closedPopupTrigger.count()) > 0) {
+        const closedPopupTriggerElement = await closedPopupTrigger.elementHandle();
+        expect(
+          closedPopupTriggerElement,
+          'closed popup must retain its trigger element',
+        ).not.toBeNull();
         await closedPopupTrigger.click();
         const openedPopup = page
           .locator(
@@ -309,9 +326,21 @@ for (const variant of buildBrowserQaMatrix()) {
           )
           .first();
         if ((await openedPopup.count()) > 0) {
+          const popupRole = await openedPopup.getAttribute('role');
           await page.keyboard.press('Escape');
           await expect(openedPopup).toBeHidden();
           await expect(closedPopupTrigger).toBeFocused();
+          if (popupRole === 'menu' || popupRole === 'listbox') {
+            await closedPopupTriggerElement?.click();
+            const reopenedPopup = page
+              .locator(
+                '[role="menu"]:visible, [role="listbox"]:visible',
+              )
+              .first();
+            await expect(reopenedPopup).toBeVisible();
+            await page.mouse.click(1, 1);
+            await expect(reopenedPopup).toBeHidden();
+          }
         }
       }
     }
