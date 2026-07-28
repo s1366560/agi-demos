@@ -333,6 +333,38 @@ export function buildWorkspaceMutationRequest(
   }
 }
 
+export function buildWorkspaceAuthorityMutationRequest(
+  scope: WorkspaceHttpScope,
+  surface: WorkspaceCollaborationSurface,
+  mutation: WorkspaceSurfaceMutation,
+): WorkspaceMutationRequest {
+  requireWorkspaceMutationAuthority(mutation);
+  if (!isAllowedWorkspaceMutation(surface, mutation.action)) {
+    throw workspaceContractError('workspace_surface_action_unavailable');
+  }
+  const scopedBase = scopedWorkspacePath(scope);
+  const payload = requireSafePayload(mutation.payload);
+  if (surface === 'files' && mutation.action === 'upload_file') {
+    return {
+      method: 'POST',
+      path: `${scopedBase}/collaboration/mutations/files/upload`,
+      body: uploadFormData(payload),
+    };
+  }
+  return {
+    method: 'POST',
+    path: `${scopedBase}/collaboration/mutations`,
+    body: {
+      contract_version: '2.0.0',
+      surface,
+      action: mutation.action,
+      expected_revision: mutation.expected_revision,
+      idempotency_key: mutation.idempotency_key,
+      payload: canonicalPayload(payload, []),
+    },
+  };
+}
+
 function requireSafePayload(input: unknown): Record<string, unknown> {
   if (!isWorkspaceRecord(input)) {
     throw workspaceContractError('workspace_surface_payload_invalid');

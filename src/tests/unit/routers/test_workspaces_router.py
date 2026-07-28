@@ -492,7 +492,7 @@ class TestWorkspacesRouter:
         mock_workspace_service.bind_agent.assert_not_awaited()
 
 
-def test_workspace_collaboration_capability_is_explicit_read_only_degraded(
+def test_workspace_collaboration_capability_declares_durable_mutation_authority(
     workspaces_client: TestClient,
     mock_workspace_service: AsyncMock,
 ) -> None:
@@ -502,14 +502,14 @@ def test_workspace_collaboration_capability_is_explicit_read_only_degraded(
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json() == {
-        "service_version": "0.1.0",
+        "service_version": "0.2.0",
         "contract_version": "2.0.0",
         "authority": "cloud",
         "tenant_id": "tenant-1",
         "project_id": "project-1",
         "workspace_id": "ws-1",
-        "status": "degraded",
-        "reason_code": "workspace_collaboration_mutation_guards_unavailable",
+        "status": "available",
+        "reason_code": None,
         "canonical_read": True,
         "read_surfaces": [
             "goals",
@@ -524,9 +524,65 @@ def test_workspace_collaboration_capability_is_explicit_read_only_degraded(
             "settings",
         ],
         "mutations": {
-            "allowed": False,
-            "revision_guarded": False,
-            "idempotency_guarded": False,
+            "allowed": True,
+            "revision_guarded": True,
+            "idempotency_guarded": True,
+        },
+        "mutation_actions": {
+            "goals": [
+                "create_objective",
+                "update_objective",
+                "delete_objective",
+                "project_objective_to_task",
+                "create_task",
+                "update_task",
+                "delete_task",
+                "assign_task_agent",
+                "unassign_task_agent",
+            ],
+            "discussion": [
+                "create_post",
+                "update_post",
+                "delete_post",
+                "pin_post",
+                "unpin_post",
+                "create_reply",
+                "update_reply",
+                "delete_reply",
+            ],
+            "status": ["update_task", "apply_task_recovery_action"],
+            "collaboration": [
+                "bind_agent",
+                "update_agent_binding",
+                "unbind_agent",
+                "add_member",
+                "update_member_role",
+                "remove_member",
+                "create_task",
+                "update_task",
+                "delete_task",
+                "assign_task_agent",
+                "unassign_task_agent",
+            ],
+            "members": ["add_member", "update_member_role", "remove_member"],
+            "genes": ["create_gene", "update_gene", "delete_gene"],
+            "files": [
+                "create_directory",
+                "upload_file",
+                "update_file",
+                "delete_file",
+                "copy_file",
+            ],
+            "notes": [],
+            "topology": [
+                "create_node",
+                "update_node",
+                "delete_node",
+                "create_edge",
+                "update_edge",
+                "delete_edge",
+            ],
+            "settings": ["update_workspace"],
         },
     }
     mock_workspace_service.get_workspace.assert_awaited_once_with(
