@@ -40,7 +40,11 @@ test('Desktop interactive terminal uses xterm, Fit, and WebLinks', () => {
 });
 
 test('terminal canvas gates xterm and retains the history fallback', () => {
-  assert.match(sessionTerminalSource, /interactiveCapability\.availability === 'available'/);
+  assert.match(
+    sessionTerminalSource,
+    /sandboxRuntime\?\.capabilities\?\.terminal_interactive/
+  );
+  assert.match(sessionTerminalSource, /declaredInteractiveCapability\.availability === 'available'/);
   assert.match(sessionTerminalSource, /<InteractiveTerminal/);
   assert.match(sessionTerminalSource, /<pre[\s\S]*className="terminal-preview"/);
   assert.match(appSource, /interactiveCapability=\{terminalInteractiveCapability\}/);

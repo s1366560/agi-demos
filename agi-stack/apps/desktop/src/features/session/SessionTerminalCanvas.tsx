@@ -66,7 +66,17 @@ export function SessionTerminalCanvas({
         : binding === 'connecting'
           ? 'cyan'
           : 'gray';
+  const declaredInteractiveCapability =
+    sandboxRuntime?.capabilities?.terminal_interactive ??
+    (sandboxRuntime
+      ? {
+          availability: 'unavailable' as const,
+          contract_version: 1,
+          reason_code: 'terminal_interactive_capability_not_declared',
+        }
+      : interactiveCapability);
   const interactive =
+    declaredInteractiveCapability.availability === 'available' &&
     interactiveCapability.availability === 'available' &&
     binding === 'connected' &&
     Boolean(onTerminalInput && onTerminalResize);

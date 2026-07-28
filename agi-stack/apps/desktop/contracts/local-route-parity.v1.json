@@ -589,6 +589,15 @@
       }
     },
     {
+      "area": "sandbox_runtime",
+      "method": "GET",
+      "uri": "/api/v1/projects/local-project/sandbox/capabilities",
+      "source": "sandbox_surface",
+      "source_marker": "/sandbox/capabilities",
+      "authority": "sandbox_capabilities",
+      "body": {}
+    },
+    {
       "area": "sandbox_files",
       "method": "GET",
       "uri": "/api/v1/projects/local-project/sandbox/files?path=%2Fworkspace&limit=20",

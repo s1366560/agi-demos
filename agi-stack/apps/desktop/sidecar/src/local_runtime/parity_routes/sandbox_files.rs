@@ -27,6 +27,7 @@ use sha2::{Digest, Sha256};
 use super::super::{ensure_active_project, AuthenticatedContext, LocalRuntimeState};
 
 const CONTRACT_VERSION: u8 = 1;
+const CAPABILITY_CONTRACT_VERSION: u8 = 2;
 const AUTHORITY: &str = "native_workspace";
 const ISOLATION: &str = "not_applicable";
 const VIRTUAL_ROOT: &str = "/workspace";
@@ -40,6 +41,10 @@ const MAX_DOWNLOAD_LIMIT: u64 = 25 * 1_048_576;
 pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
     Router::new()
         .route(
+            "/api/v1/projects/:project_id/sandbox/capabilities",
+            get(runtime_capabilities),
+        )
+        .route(
             "/api/v1/projects/:project_id/sandbox/files",
             get(list_files),
         )
@@ -51,6 +56,39 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
             "/api/v1/projects/:project_id/sandbox/files/download",
             get(download_file),
         )
+}
+
+async fn runtime_capabilities(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Path(project_id): Path<String>,
+) -> Result<Json<serde_json::Value>, SandboxFileError> {
+    ensure_project_scope(&authenticated, &project_id)?;
+    WorkspaceAuthority::from_state(&state)?;
+    Ok(Json(json!({
+        "service_version": env!("CARGO_PKG_VERSION"),
+        "contract_version": CAPABILITY_CONTRACT_VERSION,
+        "terminal_interactive": {
+            "availability": "available",
+            "contract_version": 1,
+            "reason_code": null,
+        },
+        "terminal_resume": {
+            "availability": "unavailable",
+            "contract_version": 2,
+            "reason_code": "local_terminal_resume_unavailable",
+        },
+        "files": {
+            "availability": "available",
+            "contract_version": 1,
+            "reason_code": null,
+        },
+        "kasm_vnc": {
+            "availability": "not_applicable",
+            "contract_version": 1,
+            "reason_code": "local_kasm_vnc_not_applicable",
+        },
+    })))
 }
 
 #[derive(Deserialize)]
