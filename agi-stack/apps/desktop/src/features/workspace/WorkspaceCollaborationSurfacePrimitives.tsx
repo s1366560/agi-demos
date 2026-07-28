@@ -54,7 +54,7 @@ export function WorkspaceCollaborationTopologySurface({
               type="button"
               disabled={busy}
               onClick={() =>
-                void onMutate('delete_topology_node', {
+                void onMutate('delete_node', {
                   node_id: workspaceCollaborationItemId(node, index, 'node'),
                 })
               }
@@ -72,7 +72,7 @@ export function WorkspaceCollaborationTopologySurface({
               type="button"
               disabled={busy}
               onClick={() =>
-                void onMutate('delete_topology_edge', {
+                void onMutate('delete_edge', {
                   edge_id: workspaceCollaborationItemId(edge, index, 'edge'),
                 })
               }
@@ -90,7 +90,7 @@ export function WorkspaceCollaborationTopologySurface({
           actionLabel={t('workspaceCollaboration.topology.createNode')}
           busy={busy}
           onSubmit={async () => {
-            await onMutate('create_topology_node', {
+            await onMutate('create_node', {
               title: nodeLabel.trim(),
               node_type: 'workspace',
             });
@@ -102,7 +102,7 @@ export function WorkspaceCollaborationTopologySurface({
           onSubmit={(event) => {
             event.preventDefault();
             if (!sourceId.trim() || !targetId.trim()) return;
-            void onMutate('create_topology_edge', {
+            void onMutate('create_edge', {
               source_node_id: sourceId.trim(),
               target_node_id: targetId.trim(),
             }).then(() => {
@@ -162,7 +162,7 @@ export function WorkspaceCollaborationSettingsSurface({
         className="workspace-collaboration-settings"
         onSubmit={(event) => {
           event.preventDefault();
-          void onMutate('update_settings', {
+          void onMutate('update_workspace', {
             name: name.trim(),
             description: description.trim(),
           });

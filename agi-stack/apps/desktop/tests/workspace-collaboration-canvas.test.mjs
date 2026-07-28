@@ -93,15 +93,19 @@ test('surface-specific interactions cover goals, discussion, members, genes, and
     'unpin_post',
     'add_member',
     'remove_member',
-    'toggle_gene',
-    'create_topology_node',
-    'delete_topology_node',
-    'create_topology_edge',
-    'delete_topology_edge',
-    'update_settings',
+    'update_gene',
+    'create_node',
+    'delete_node',
+    'create_edge',
+    'delete_edge',
+    'update_workspace',
   ]) {
     assert.match(componentSource, new RegExp(`'${action}'`, 'u'));
   }
+  assert.doesNotMatch(
+    componentSource,
+    /'toggle_gene'|'create_topology_node'|'delete_topology_node'|'create_topology_edge'|'delete_topology_edge'|'update_settings'/u,
+  );
 });
 
 test('Notes is a read-only derived projection and all owned copy uses collaboration keys', () => {
