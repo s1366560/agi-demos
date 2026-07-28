@@ -686,7 +686,7 @@ function GenesSurface({ data, busy, onMutate, t }: SurfaceProps) {
               type="button"
               disabled={busy}
               onClick={() =>
-                void onMutate('toggle_gene', { gene_id: id, is_active: !active })
+                void onMutate('update_gene', { gene_id: id, is_active: !active })
               }
             >
               {t(

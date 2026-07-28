@@ -93,6 +93,16 @@ test('surface-specific interactions cover goals, discussion, members, genes, and
     'unpin_post',
     'add_member',
     'remove_member',
+    'update_gene',
+    'create_node',
+    'delete_node',
+    'create_edge',
+    'delete_edge',
+    'update_workspace',
+  ]) {
+    assert.match(componentSource, new RegExp(`'${action}'`, 'u'));
+  }
+  for (const obsoleteAction of [
     'toggle_gene',
     'create_topology_node',
     'delete_topology_node',
@@ -100,7 +110,7 @@ test('surface-specific interactions cover goals, discussion, members, genes, and
     'delete_topology_edge',
     'update_settings',
   ]) {
-    assert.match(componentSource, new RegExp(`'${action}'`, 'u'));
+    assert.doesNotMatch(componentSource, new RegExp(`'${obsoleteAction}'`, 'u'));
   }
 });
 
