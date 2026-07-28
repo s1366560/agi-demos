@@ -100,7 +100,7 @@ desktop-check: desktop-deps ## 桌面:Rust sidecar 与 Electron/renderer 测试
 	@echo "==> Electron 外壳与 sidecar 验证通过"
 
 desktop-browser-qa: desktop-deps ## 桌面:执行双语、多视口、明暗主题 Browser QA 矩阵
-	cd $(DESKTOP_APP_DIR) && $(PNPM) run qa:browser
+	cd $(DESKTOP_APP_DIR) && CI=true $(PNPM) run qa:browser
 
 desktop-parity-check: desktop-check desktop-browser-qa ## 桌面:聚合本地、Electron 与 Browser parity 门禁
 	@echo "==> Desktop parity 契约与 Browser QA 验证通过"

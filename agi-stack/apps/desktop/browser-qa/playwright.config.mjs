@@ -71,7 +71,7 @@ export default defineConfig({
     command: `corepack pnpm exec vite --host 127.0.0.1 --port ${port} --strictPort`,
     cwd: desktopRoot,
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });
