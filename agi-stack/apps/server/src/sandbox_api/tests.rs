@@ -261,6 +261,7 @@ fn sample_info() -> ProjectSandboxInfo {
 }
 
 mod docker_live;
+mod files;
 mod proxy;
 mod response;
 mod runtime_auth;

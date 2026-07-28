@@ -386,6 +386,7 @@ dependencies = [
  "sqlx",
  "tokio",
  "tokio-tungstenite",
+ "tower",
  "tower-http",
  "url",
  "uuid",

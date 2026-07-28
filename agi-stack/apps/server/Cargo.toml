@@ -51,3 +51,4 @@ base64 = "0.22"
 [dev-dependencies]
 serde_urlencoded = "0.7"
 agistack-parity = { path = "../../crates/parity" }
+tower = { version = "0.5", features = ["util"] }

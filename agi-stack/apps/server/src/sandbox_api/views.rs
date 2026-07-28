@@ -29,6 +29,23 @@ pub(super) struct SandboxRuntimeCapabilitiesResponse {
 }
 
 impl SandboxRuntimeCapabilitiesResponse {
+    pub(super) fn with_files_available(mut self, available: bool) -> Self {
+        self.files = if available {
+            SandboxRuntimeCapabilityResponse {
+                availability: "available",
+                contract_version: 1,
+                reason_code: None,
+            }
+        } else {
+            SandboxRuntimeCapabilityResponse {
+                availability: "unavailable",
+                contract_version: 1,
+                reason_code: Some("sandbox_file_api_unavailable"),
+            }
+        };
+        self
+    }
+
     pub(super) fn terminal_v2_available() -> Self {
         Self {
             service_version: "0.1.0",
