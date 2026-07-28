@@ -5741,6 +5741,8 @@ async fn plan_snapshot(
 struct ListConversationsQuery {
     project_id: Option<String>,
     workspace_id: Option<String>,
+    #[serde(default)]
+    unbound_only: bool,
     limit: Option<usize>,
     offset: Option<usize>,
 }
@@ -5768,6 +5770,7 @@ async fn list_conversations(
         .list_conversations(&project_id, workspace_id.as_deref())
         .map_err(local_store_error)?
         .iter()
+        .filter(|conversation| !query.unbound_only || conversation.workspace_id.is_none())
         .map(|conversation| state.conversation_value(conversation))
         .collect();
     let total = values.len();
@@ -9471,6 +9474,52 @@ mod tests {
                 .expect("invalid identity page response");
             assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
         }
+    }
+
+    #[tokio::test]
+    async fn conversation_catalog_filters_unbound_sessions_before_pagination() {
+        let state = test_state("unbound-catalog-secret");
+        seed_plan_conversation(&state, "bound-plan-conversation");
+        let app = local_router(state);
+        let created = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/agent/conversations",
+                "unbound-catalog-secret",
+                json!({
+                    "project_id": "local-project",
+                    "title": "Unbound task",
+                    "agent_config": { "capability_mode": "work" }
+                }),
+            ))
+            .await
+            .expect("create unbound conversation response");
+        assert_eq!(created.status(), StatusCode::OK);
+        let created = response_json(created).await;
+        let created_id = created["id"].as_str().expect("created conversation id");
+
+        let unbound = app
+            .oneshot(
+                Request::builder()
+                    .uri(
+                        "/api/v1/agent/conversations?project_id=local-project&status=active&unbound_only=true&limit=100&offset=0",
+                    )
+                    .header("authorization", "Bearer unbound-catalog-secret")
+                    .header("x-agistack-launch", "unbound-catalog-secret")
+                    .body(Body::empty())
+                    .expect("unbound catalog request"),
+            )
+            .await
+            .expect("unbound catalog response");
+        assert_eq!(unbound.status(), StatusCode::OK);
+        let unbound = response_json(unbound).await;
+        assert_eq!(unbound["total"], 1);
+        assert_eq!(unbound["items"].as_array().map(Vec::len), Some(1));
+        assert_eq!(unbound["items"][0]["id"], created_id);
+        assert!(unbound["items"][0]["workspace_id"].is_null());
+        assert_eq!(unbound["has_more"], false);
+        assert_eq!(unbound["next_offset"], Value::Null);
     }
 
     #[tokio::test]
