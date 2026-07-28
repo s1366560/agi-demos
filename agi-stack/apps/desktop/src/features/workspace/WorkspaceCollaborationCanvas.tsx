@@ -193,7 +193,7 @@ export function WorkspaceCollaborationCanvas({
       );
       if (!built.ok) {
         setMutationFailed(true);
-        return;
+        return false;
       }
 
       abortSurface(surface);
@@ -208,7 +208,9 @@ export function WorkspaceCollaborationCanvas({
           built.mutation,
           controller.signal,
         );
-        if (controller.signal.aborted || controllersRef.current[surface] !== controller) return;
+        if (controller.signal.aborted || controllersRef.current[surface] !== controller) {
+          return false;
+        }
         commit((current) =>
           invalidateWorkspaceSurfaceAuthority(current, surface, 'mutation_ack'),
         );
@@ -219,12 +221,15 @@ export function WorkspaceCollaborationCanvas({
           surface,
           controller.signal,
         );
-        if (controller.signal.aborted || controllersRef.current[surface] !== controller) return;
+        if (controller.signal.aborted || controllersRef.current[surface] !== controller) {
+          return false;
+        }
         commit((current) =>
           resolveWorkspaceSurfaceLoad(current, surface, generation, canonical),
         );
+        return true;
       } catch (error: unknown) {
-        if (controller.signal.aborted || isAbortError(error)) return;
+        if (controller.signal.aborted || isAbortError(error)) return false;
         const generation = stateRef.current.requestGenerations[surface] ?? 0;
         commit((current) =>
           failWorkspaceSurfaceLoad(
@@ -235,6 +240,7 @@ export function WorkspaceCollaborationCanvas({
           ),
         );
         setMutationFailed(true);
+        return false;
       } finally {
         if (controllersRef.current[surface] === controller) {
           delete controllersRef.current[surface];
@@ -457,7 +463,10 @@ function GoalsSurface(props: SurfaceProps) {
           actionLabel={t('workspaceCollaboration.goals.createObjective')}
           busy={busy}
           onSubmit={async () => {
-            await onMutate('create_objective', { title: objective.trim() });
+            const succeeded = await onMutate('create_objective', {
+              title: objective.trim(),
+            });
+            if (!succeeded) return;
             setObjective('');
           }}
         />
@@ -468,7 +477,8 @@ function GoalsSurface(props: SurfaceProps) {
           actionLabel={t('workspaceCollaboration.goals.createTask')}
           busy={busy}
           onSubmit={async () => {
-            await onMutate('create_task', { title: task.trim() });
+            const succeeded = await onMutate('create_task', { title: task.trim() });
+            if (!succeeded) return;
             setTask('');
           }}
         />
@@ -491,7 +501,11 @@ function DiscussionSurface({ data, busy, onMutate, t }: SurfaceProps) {
         onSubmit={(event) => {
           event.preventDefault();
           if (!body.trim()) return;
-          void onMutate('create_post', { title: title.trim(), content: body.trim() }).then(() => {
+          void onMutate('create_post', {
+            title: title.trim(),
+            content: body.trim(),
+          }).then((succeeded) => {
+            if (!succeeded) return;
             setTitle('');
             setBody('');
           });
@@ -551,12 +565,14 @@ function DiscussionSurface({ data, busy, onMutate, t }: SurfaceProps) {
                   onSubmit={(event) => {
                     event.preventDefault();
                     if (!reply.trim()) return;
-                    void onMutate('create_reply', { post_id: id, content: reply.trim() }).then(
-                      () => {
-                        setReply('');
-                        setReplyTo(null);
-                      },
-                    );
+                    void onMutate('create_reply', {
+                      post_id: id,
+                      content: reply.trim(),
+                    }).then((succeeded) => {
+                      if (!succeeded) return;
+                      setReply('');
+                      setReplyTo(null);
+                    });
                   }}
                 >
                   <textarea
@@ -644,8 +660,11 @@ function MembersSurface({ data, busy, onMutate, t }: SurfaceProps) {
         onSubmit={(event) => {
           event.preventDefault();
           if (!userId.trim()) return;
-          void onMutate('add_member', { user_id: userId.trim(), role }).then(() =>
-            setUserId(''),
+          void onMutate('add_member', { user_id: userId.trim(), role }).then(
+            (succeeded) => {
+              if (!succeeded) return;
+              setUserId('');
+            },
           );
         }}
       >

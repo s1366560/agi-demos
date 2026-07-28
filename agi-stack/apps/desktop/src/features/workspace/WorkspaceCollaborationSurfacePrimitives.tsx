@@ -13,7 +13,7 @@ export type WorkspaceCollaborationDataRecord = Record<string, unknown>;
 export type WorkspaceCollaborationMutationHandler = (
   action: string,
   payload: WorkspaceCollaborationDataRecord,
-) => Promise<void>;
+) => Promise<boolean>;
 
 export type WorkspaceCollaborationSurfaceProps = {
   data: unknown;
@@ -90,10 +90,11 @@ export function WorkspaceCollaborationTopologySurface({
           actionLabel={t('workspaceCollaboration.topology.createNode')}
           busy={busy}
           onSubmit={async () => {
-            await onMutate('create_node', {
+            const succeeded = await onMutate('create_node', {
               title: nodeLabel.trim(),
               node_type: 'workspace',
             });
+            if (!succeeded) return;
             setNodeLabel('');
           }}
         />
@@ -105,7 +106,8 @@ export function WorkspaceCollaborationTopologySurface({
             void onMutate('create_edge', {
               source_node_id: sourceId.trim(),
               target_node_id: targetId.trim(),
-            }).then(() => {
+            }).then((succeeded) => {
+              if (!succeeded) return;
               setSourceId('');
               setTargetId('');
             });
@@ -276,7 +278,7 @@ export function WorkspaceCollaborationInlineCreate({
   label: string;
   actionLabel: string;
   busy: boolean;
-  onSubmit: () => Promise<void>;
+  onSubmit: () => Promise<boolean>;
 }) {
   return (
     <form

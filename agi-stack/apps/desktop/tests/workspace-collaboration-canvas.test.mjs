@@ -70,6 +70,14 @@ test('active-tab loading aborts replaced work and mutations always canonical-ref
   assert.ok(canonicalRefetch > mutationCall);
 });
 
+test('failed or unavailable mutations retain local drafts instead of resolving as success', () => {
+  assert.match(componentSource, /Promise<boolean>/u);
+  assert.match(componentSource, /return false;/u);
+  assert.match(componentSource, /return true;/u);
+  assert.match(componentSource, /if \(!succeeded\) return;/u);
+  assert.doesNotMatch(componentSource, /\.then\(\(\) => \{\s*set(?:Title|Body|Reply|SourceId)/u);
+});
+
 test('every authority state remains explicit and refreshable', () => {
   for (const status of ['loading', 'empty', 'stale', 'error', 'unavailable']) {
     assert.match(componentSource, new RegExp(`'${status}'`, 'u'));

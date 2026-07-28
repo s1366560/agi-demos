@@ -85,16 +85,17 @@ test('degraded capability permits canonical reads but blocks unguarded mutations
   );
 
   assert.equal((await client.getSurface('workspace-1', 'goals')).status, 'ready');
-  assert.equal(
-    (
-      await client.mutateSurface('workspace-1', 'goals', {
+  await assert.rejects(
+    () =>
+      client.mutateSurface('workspace-1', 'goals', {
         action: 'create_objective',
         expected_revision: 3,
         idempotency_key: 'workspace-create-1',
         payload: { title: 'Parity' },
-      })
-    ).reason_code,
-    'workspace_collaboration_revision_guards_unavailable',
+      }),
+    (error) =>
+      error?.name === 'WorkspaceCollaborationCapabilityError' &&
+      error?.reasonCode === 'workspace_collaboration_revision_guards_unavailable',
   );
   assert.deepEqual(
     calls.map(([name]) => name),
