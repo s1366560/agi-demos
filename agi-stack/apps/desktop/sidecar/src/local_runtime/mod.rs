@@ -70,6 +70,9 @@ mod composer_context;
 mod local_route_parity_tests;
 #[cfg(test)]
 mod managed_resource_tests;
+mod mcp_supervisor;
+#[cfg(test)]
+mod mcp_supervisor_tests;
 mod parity_routes;
 mod provider_credentials;
 mod provider_probe;
@@ -108,6 +111,7 @@ use authority_store::{
 use authorized_tool_host::AuthorizedRunToolHost;
 use changes::{ChangeLineKind, ChangeSnapshot, ChangeSnapshotStatus, GitChangesInspector};
 use composer_context::{validate_composer_context_items, ComposerContextItem, ComposerContextKind};
+use mcp_supervisor::{McpSupervisor, SupervisorLimits};
 #[cfg(test)]
 use provider_credentials::ProviderCredentialStore;
 use provider_credentials::{
@@ -149,6 +153,7 @@ impl LocalRuntimeService {
         let tool_host = LocalToolHost::new(&workspace_root).map_err(|error| error.to_string())?;
         let api_token = generate_capability_token();
         let session_store = DesktopSessionStore::open(&session_store_path)?;
+        let mcp_credential_vault = credential_vault.clone();
         let provider_credentials =
             ProviderCredentialBroker::native(credential_vault, session_store.installation_id())
                 .map_err(|error| error.to_string())?;
@@ -160,7 +165,16 @@ impl LocalRuntimeService {
             session_store,
             provider_credentials,
         )?);
+        state
+            .mcp_supervisor
+            .install_credential_vault(mcp_credential_vault)
+            .map_err(|error| error.to_string())?;
         state.reconcile_recovered_runs_from_checkpoints().await?;
+        state
+            .mcp_supervisor
+            .recover_all_enabled()
+            .await
+            .map_err(|error| error.to_string())?;
 
         let app = local_router(Arc::clone(&state));
         let listener = TcpListener::bind(("127.0.0.1", 0))
@@ -824,6 +838,7 @@ struct LocalRuntimeState {
     provider_credentials: ProviderCredentialBroker,
     provider_probe: ProviderProbeService,
     session_store: DesktopSessionStore,
+    mcp_supervisor: Arc<McpSupervisor>,
     event_counter: AtomicU64,
     terminal_sessions: Mutex<HashMap<String, TerminalSessionLease>>,
     agent_runs: Mutex<HashMap<String, ActiveAgentRun>>,
@@ -1121,6 +1136,12 @@ impl LocalRuntimeState {
                 }
             }
         }
+        let mcp_supervisor = Arc::new(McpSupervisor::new(
+            session_store.clone(),
+            workspace_root.clone(),
+            None,
+            SupervisorLimits::default(),
+        )?);
         Ok(Self {
             api_token,
             workspace_root: Mutex::new(workspace_root),
@@ -1138,6 +1159,7 @@ impl LocalRuntimeState {
             provider_credentials,
             provider_probe: ProviderProbeService::default(),
             session_store,
+            mcp_supervisor,
             event_counter: AtomicU64::new(1),
             terminal_sessions: Mutex::new(HashMap::new()),
             agent_runs: Mutex::new(HashMap::new()),
