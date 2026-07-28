@@ -7,12 +7,20 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from src.application.services.artifact_content_authority_service import (
+    ArtifactContentBytes,
+    ArtifactContentSaveOutcome,
+)
 from src.application.services.artifact_content_contract import (
     ArtifactContentContract,
+    ArtifactContentIdempotencyConflictError,
     ArtifactContentRevisionConflictError,
     ArtifactContentSaveReceipt,
 )
 from src.domain.model.artifact.artifact import Artifact, ArtifactCategory, ArtifactStatus
+from src.domain.ports.repositories.artifact_content_authority_repository import (
+    ArtifactContentScope,
+)
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers import artifacts as artifacts_router
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -58,7 +66,25 @@ def artifact_service_mock() -> AsyncMock:
 
 
 @pytest.fixture
-def artifacts_client(test_db, artifact_user, artifact_service_mock, monkeypatch) -> TestClient:
+def artifact_content_authority_mock() -> AsyncMock:
+    service = AsyncMock()
+    service.resolve_scope.return_value = ArtifactContentScope(
+        artifact_id="artifact-1",
+        project_id=OTHER_PROJECT_ID,
+        tenant_id="tenant-artifacts",
+        conversation_id=None,
+    )
+    return service
+
+
+@pytest.fixture
+def artifacts_client(
+    test_db,
+    artifact_user,
+    artifact_service_mock,
+    artifact_content_authority_mock,
+    monkeypatch,
+) -> TestClient:
     app = FastAPI()
     app.include_router(artifacts_router.router)
 
@@ -70,6 +96,9 @@ def artifacts_client(test_db, artifact_user, artifact_service_mock, monkeypatch)
 
     app.dependency_overrides[get_current_user] = override_get_current_user
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[artifacts_router.get_artifact_content_authority_service] = (
+        lambda: artifact_content_authority_mock
+    )
     monkeypatch.setattr(artifacts_router, "_artifact_service", artifact_service_mock)
     return TestClient(app)
 
@@ -179,11 +208,11 @@ class TestArtifactContentContractV2Router:
         self,
         test_db,
         artifacts_client,
-        artifact_service_mock,
+        artifact_content_authority_mock,
     ) -> None:
         await self._grant_project_access(test_db)
         content_hash = self._hash("hello")
-        artifact_service_mock.get_artifact_content.return_value = ArtifactContentContract(
+        artifact_content_authority_mock.get_content.return_value = ArtifactContentContract(
             contract_version=2,
             artifact_id="artifact-1",
             revision=3,
@@ -191,7 +220,11 @@ class TestArtifactContentContractV2Router:
             mime_type="text/plain",
             content="hello",
         )
-        artifact_service_mock.get_artifact_bytes.return_value = b"hello"
+        artifact_content_authority_mock.get_bytes.return_value = ArtifactContentBytes(
+            scope=artifact_content_authority_mock.resolve_scope.return_value,
+            mime_type="text/plain",
+            content=b"hello",
+        )
 
         content = artifacts_client.get("/api/v1/artifacts/artifact-1/content")
         raw = artifacts_client.get("/api/v1/artifacts/artifact-1/content/bytes")
@@ -217,22 +250,27 @@ class TestArtifactContentContractV2Router:
         assert download.headers["content-disposition"] == "attachment"
         assert download.headers["x-content-type-options"] == "nosniff"
         assert "presigned" not in str(download.headers).lower()
-        artifact_service_mock.refresh_artifact_url.assert_not_called()
+        artifact_content_authority_mock.get_content.assert_awaited_once()
+        assert artifact_content_authority_mock.get_bytes.await_count == 2
 
     @pytest.mark.asyncio
     async def test_content_put_returns_receipt_and_structured_revision_conflict(
         self,
         test_db,
         artifacts_client,
-        artifact_service_mock,
+        artifact_content_authority_mock,
     ) -> None:
         await self._grant_project_access(test_db)
         content_hash = self._hash("updated")
-        artifact_service_mock.save_artifact_content.return_value = ArtifactContentSaveReceipt(
-            artifact_id="artifact-1",
-            revision=4,
-            content_hash=content_hash,
-            duplicate=False,
+        artifact_content_authority_mock.save_content.return_value = ArtifactContentSaveOutcome(
+            scope=artifact_content_authority_mock.resolve_scope.return_value,
+            receipt=ArtifactContentSaveReceipt(
+                artifact_id="artifact-1",
+                revision=4,
+                content_hash=content_hash,
+                duplicate=False,
+            ),
+            uploaded_object_key="artifacts/tenant/project/artifact/versions/r4",
         )
         request = {
             "contract_version": 2,
@@ -252,7 +290,7 @@ class TestArtifactContentContractV2Router:
             "duplicate": False,
         }
 
-        artifact_service_mock.save_artifact_content.side_effect = (
+        artifact_content_authority_mock.save_content.side_effect = (
             ArtifactContentRevisionConflictError(
                 server_revision=5,
                 server_content_hash=self._hash("server"),
@@ -267,3 +305,62 @@ class TestArtifactContentContractV2Router:
             "server_revision": 5,
             "server_content_hash": self._hash("server"),
         }
+
+        artifact_content_authority_mock.save_content.side_effect = (
+            ArtifactContentIdempotencyConflictError(
+                server_revision=5,
+                server_content_hash=self._hash("server"),
+            )
+        )
+        key_conflict = artifacts_client.put(
+            "/api/v1/artifacts/artifact-1/content",
+            json=request,
+        )
+        assert key_conflict.status_code == 409
+        assert key_conflict.json() == {
+            "detail": "Artifact content idempotency conflict",
+            "reason_code": "artifact_content_idempotency_conflict",
+            "server_revision": 5,
+            "server_content_hash": self._hash("server"),
+        }
+
+    @pytest.mark.asyncio
+    async def test_content_put_reconciles_uploaded_object_when_database_commit_fails(
+        self,
+        test_db,
+        artifacts_client,
+        artifact_content_authority_mock,
+        monkeypatch,
+    ) -> None:
+        await self._grant_project_access(test_db)
+        content_hash = self._hash("updated")
+        outcome = ArtifactContentSaveOutcome(
+            scope=artifact_content_authority_mock.resolve_scope.return_value,
+            receipt=ArtifactContentSaveReceipt(
+                artifact_id="artifact-1",
+                revision=4,
+                content_hash=content_hash,
+                duplicate=False,
+            ),
+            uploaded_object_key="artifacts/tenant/project/artifact/versions/r4",
+        )
+        artifact_content_authority_mock.save_content.return_value = outcome
+        monkeypatch.setattr(
+            test_db,
+            "commit",
+            AsyncMock(side_effect=RuntimeError("database commit failed")),
+        )
+
+        with pytest.raises(RuntimeError, match="database commit failed"):
+            artifacts_client.put(
+                "/api/v1/artifacts/artifact-1/content",
+                json={
+                    "contract_version": 2,
+                    "expected_revision": 3,
+                    "content_hash": content_hash,
+                    "idempotency_key": "artifact-1:save:0001",
+                    "content": "updated",
+                },
+            )
+
+        artifact_content_authority_mock.discard_uncommitted.assert_awaited_once_with(outcome)

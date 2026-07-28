@@ -10,12 +10,16 @@ Provides REST API endpoints for:
 import logging
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.artifact_content_authority_service import (
+    ArtifactContentAuthorityService,
+    ArtifactContentNotReadyError,
+)
 from src.application.services.artifact_content_contract import (
     ArtifactContentContractError,
     ArtifactContentHashMismatchError,
@@ -27,10 +31,16 @@ from src.application.services.artifact_content_contract import (
 )
 from src.application.services.artifact_service import ArtifactService
 from src.domain.model.artifact.artifact import ArtifactCategory, ArtifactStatus
+from src.domain.ports.repositories.artifact_content_authority_repository import (
+    ArtifactContentScope,
+)
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
+from src.infrastructure.adapters.secondary.persistence.sql_artifact_content_authority import (
+    SqlArtifactContentAuthorityRepository,
+)
 from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
@@ -55,6 +65,18 @@ def get_artifact_service() -> ArtifactService:
     if service is None:
         raise RuntimeError("Artifact service initialization failed")
     return service
+
+
+def get_artifact_content_authority_service(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> ArtifactContentAuthorityService:
+    """Build the cloud content authority from the request-scoped DB container."""
+    container = request.app.state.container.with_db(db)
+    return ArtifactContentAuthorityService(
+        repository=SqlArtifactContentAuthorityRepository(db),
+        storage_service=container.storage_service(),
+    )
 
 
 async def verify_project_access(project_id: str, user: User, db: AsyncSession) -> None:
@@ -272,31 +294,25 @@ async def download_artifact(
     artifact_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    service: ArtifactContentAuthorityService = Depends(get_artifact_content_authority_service),
 ) -> Response:
     """
     Download authenticated bytes without exposing object-store credentials.
     """
-    service = get_artifact_service()
-    artifact = await service.get_artifact(artifact_id)
-
-    if not artifact:
-        raise HTTPException(status_code=404, detail=_("Artifact not found"))
-
-    await verify_project_access(artifact.project_id, current_user, db)
-
-    if artifact.status != ArtifactStatus.READY:
+    scope = await _resolve_artifact_content_scope(service, artifact_id, current_user, db)
+    try:
+        content = await service.get_bytes(scope)
+    except ArtifactContentNotReadyError as exc:
         raise HTTPException(
             status_code=400,
             detail=_("Artifact is not ready for download"),
-        )
-
-    content = await service.get_artifact_bytes(artifact_id)
+        ) from exc
     if content is None:
         raise HTTPException(status_code=404, detail=_("Artifact content not found"))
 
     return Response(
-        content=content,
-        media_type=artifact.mime_type,
+        content=content.content,
+        media_type=content.mime_type,
         headers={
             "Cache-Control": "private, no-store",
             "Content-Disposition": "attachment",
@@ -310,20 +326,17 @@ async def get_artifact_content(
     artifact_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    service: ArtifactContentAuthorityService = Depends(get_artifact_content_authority_service),
 ) -> ArtifactContentResponse:
     """Return editable text with canonical revision and content hash."""
-    service = get_artifact_service()
-    artifact = await service.get_artifact(artifact_id)
-    if not artifact:
-        raise HTTPException(status_code=404, detail=_("Artifact not found"))
-    await verify_project_access(artifact.project_id, current_user, db)
-    if artifact.status != ArtifactStatus.READY:
+    scope = await _resolve_artifact_content_scope(service, artifact_id, current_user, db)
+    try:
+        content = await service.get_content(scope)
+    except ArtifactContentNotReadyError as exc:
         raise HTTPException(
             status_code=400,
             detail=_("Artifact content is not ready"),
-        )
-    try:
-        content = await service.get_artifact_content(artifact_id)
+        ) from exc
     except ArtifactContentNotEditableError as exc:
         raise HTTPException(
             status_code=415,
@@ -336,6 +349,7 @@ async def get_artifact_content(
         ) from exc
     if content is None:
         raise HTTPException(status_code=404, detail=_("Artifact content not found"))
+    await db.commit()
     return ArtifactContentResponse(
         contract_version=2,
         artifact_id=content.artifact_id,
@@ -351,24 +365,22 @@ async def get_artifact_content_bytes(
     artifact_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    service: ArtifactContentAuthorityService = Depends(get_artifact_content_authority_service),
 ) -> Response:
     """Return authenticated raw bytes for previews."""
-    service = get_artifact_service()
-    artifact = await service.get_artifact(artifact_id)
-    if not artifact:
-        raise HTTPException(status_code=404, detail=_("Artifact not found"))
-    await verify_project_access(artifact.project_id, current_user, db)
-    if artifact.status != ArtifactStatus.READY:
+    scope = await _resolve_artifact_content_scope(service, artifact_id, current_user, db)
+    try:
+        content = await service.get_bytes(scope)
+    except ArtifactContentNotReadyError as exc:
         raise HTTPException(
             status_code=400,
             detail=_("Artifact content is not ready"),
-        )
-    content = await service.get_artifact_bytes(artifact_id)
+        ) from exc
     if content is None:
         raise HTTPException(status_code=404, detail=_("Artifact content not found"))
     return Response(
-        content=content,
-        media_type=artifact.mime_type,
+        content=content.content,
+        media_type=content.mime_type,
         headers={
             "Cache-Control": "private, no-store",
             "X-Content-Type-Options": "nosniff",
@@ -414,6 +426,7 @@ async def update_artifact_content(
     request: UpdateContentRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    service: ArtifactContentAuthorityService = Depends(get_artifact_content_authority_service),
 ) -> UpdateContentResponse | JSONResponse:
     """
     Update the text content of an artifact (canvas save-back).
@@ -421,23 +434,10 @@ async def update_artifact_content(
     Saves editable text to a versioned object and conditionally advances the
     metadata pointer.
     """
-    service = get_artifact_service()
-    artifact = await service.get_artifact(artifact_id)
-
-    if not artifact:
-        raise HTTPException(status_code=404, detail=_("Artifact not found"))
-
-    await verify_project_access(artifact.project_id, current_user, db)
-
-    if artifact.status != ArtifactStatus.READY:
-        raise HTTPException(
-            status_code=400,
-            detail=_("Artifact cannot be updated in its current status"),
-        )
-
+    scope = await _resolve_artifact_content_scope(service, artifact_id, current_user, db)
     try:
-        receipt = await service.save_artifact_content(
-            artifact_id,
+        outcome = await service.save_content(
+            scope,
             ArtifactContentSaveCommand(
                 contract_version=request.contract_version,
                 expected_revision=request.expected_revision,
@@ -447,11 +447,13 @@ async def update_artifact_content(
             ),
         )
     except ArtifactContentRevisionConflictError as exc:
+        await db.rollback()
         return _artifact_content_conflict_response(
             detail=_("Artifact content revision conflict"),
             error=exc,
         )
     except ArtifactContentIdempotencyConflictError as exc:
+        await db.rollback()
         return _artifact_content_conflict_response(
             detail=_("Artifact content idempotency conflict"),
             error=exc,
@@ -461,18 +463,35 @@ async def update_artifact_content(
             status_code=415,
             detail=_("Artifact content is not editable text"),
         ) from exc
+    except ArtifactContentNotReadyError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=_("Artifact cannot be updated in its current status"),
+        ) from exc
     except ArtifactContentHashMismatchError as exc:
         raise HTTPException(
             status_code=422,
             detail=_("Artifact content hash does not match content"),
+        ) from exc
+    except ArtifactContentIntegrityError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=_("Artifact content integrity check failed"),
         ) from exc
     except ArtifactContentContractError as exc:
         raise HTTPException(
             status_code=422,
             detail=_("Artifact content command is invalid"),
         ) from exc
-    if receipt is None:
+    if outcome is None:
         raise HTTPException(status_code=404, detail=_("Artifact content not found"))
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        await service.discard_uncommitted(outcome)
+        raise
+    receipt = outcome.receipt
 
     return UpdateContentResponse(
         artifact_id=artifact_id,
@@ -558,3 +577,16 @@ def _artifact_content_conflict_response(
             "server_content_hash": error.server_content_hash,
         },
     )
+
+
+async def _resolve_artifact_content_scope(
+    service: ArtifactContentAuthorityService,
+    artifact_id: str,
+    current_user: User,
+    db: AsyncSession,
+) -> ArtifactContentScope:
+    scope = await service.resolve_scope(artifact_id)
+    if scope is None:
+        raise HTTPException(status_code=404, detail=_("Artifact not found"))
+    await verify_project_access(scope.project_id, current_user, db)
+    return scope
