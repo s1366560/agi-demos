@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,20 @@ class ArtifactContentReceiptRecord:
     resulting_revision: int
     content_hash: str
     object_key: str
+
+
+@dataclass(frozen=True)
+class ArtifactContentOrphanGcRecord:
+    """One durably leased provisional object awaiting authoritative cleanup."""
+
+    scope: ArtifactContentScope
+    object_key: str
+    idempotency_key: str
+    request_hash: str
+    content_revision: int
+    content_hash: str
+    reason_code: str
+    attempts: int
 
 
 class ArtifactContentAuthorityRepositoryPort(ABC):
@@ -112,11 +127,38 @@ class ArtifactContentAuthorityRepositoryPort(ABC):
         """Persist or refresh an auditable provisional-object GC record."""
 
     @abstractmethod
-    async def mark_orphan_gc_result(
+    async def claim_orphan_gc(
+        self,
+        *,
+        lease_owner: str,
+        lease_token: str,
+        now: datetime,
+        lease_expires_at: datetime,
+        limit: int,
+    ) -> list[ArtifactContentOrphanGcRecord]:
+        """Lease a bounded pending batch with database-level skip-locked semantics."""
+
+    @abstractmethod
+    async def lease_orphan_gc(
         self,
         object_key: str,
         *,
+        lease_owner: str,
+        lease_token: str,
+        now: datetime,
+        lease_expires_at: datetime,
+    ) -> bool:
+        """Lease one known pending object before an immediate cleanup attempt."""
+
+    @abstractmethod
+    async def complete_orphan_gc_lease(
+        self,
+        object_key: str,
+        *,
+        lease_owner: str,
+        lease_token: str,
         status: str,
-        last_error_code: str | None = None,
-    ) -> None:
-        """Persist one cleanup attempt without losing the original audit record."""
+        last_error_code: str | None,
+        next_attempt_at: datetime,
+    ) -> bool:
+        """Fenced completion that cannot mutate a lease reclaimed by another worker."""

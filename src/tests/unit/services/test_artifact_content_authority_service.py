@@ -2,10 +2,13 @@
 
 import asyncio
 import hashlib
+from collections.abc import Awaitable, Callable
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy import select, update
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.services.artifact_content_authority_service import (
@@ -27,7 +30,11 @@ from src.domain.ports.repositories.artifact_content_authority_repository import 
     ArtifactContentAuthorityRecord,
     ArtifactContentReceiptRecord,
 )
-from src.domain.ports.services.storage_service_port import UploadResult
+from src.domain.ports.services.storage_service_port import (
+    StorageObjectMetadata,
+    StorageObjectTooLargeError,
+    UploadResult,
+)
 from src.infrastructure.adapters.secondary.persistence.artifact_content_commit_reconciler import (
     ArtifactContentCommitReconciler,
 )
@@ -64,7 +71,11 @@ class DurableRecordingStorage:
         self.uploads: list[str] = []
         self.deletes: list[str] = []
         self.fail_upload = False
+        self.fail_delete = False
         self.gets: list[str] = []
+        self.heads: list[str] = []
+        self.bounded_gets: list[tuple[str, int]] = []
+        self.streams: list[tuple[str, int]] = []
 
     async def upload_file(
         self,
@@ -89,8 +100,49 @@ class DurableRecordingStorage:
         self.gets.append(object_key)
         return self.objects.get(object_key)
 
+    async def get_file_metadata(self, object_key: str) -> StorageObjectMetadata | None:
+        self.heads.append(object_key)
+        content = self.objects.get(object_key)
+        if content is None:
+            return None
+        return StorageObjectMetadata(
+            size_bytes=len(content),
+            content_type="application/octet-stream",
+        )
+
+    async def get_file_bounded(self, object_key: str, *, max_bytes: int) -> bytes | None:
+        self.bounded_gets.append((object_key, max_bytes))
+        content = self.objects.get(object_key)
+        if content is not None and len(content) > max_bytes:
+            raise StorageObjectTooLargeError(
+                actual_bytes=len(content),
+                max_bytes=max_bytes,
+            )
+        return content
+
+    async def stream_file(
+        self,
+        object_key: str,
+        *,
+        max_bytes: int,
+        chunk_size: int = 64 * 1024,
+    ):
+        self.streams.append((object_key, max_bytes))
+        content = self.objects.get(object_key)
+        if content is None:
+            return
+        if len(content) > max_bytes:
+            raise StorageObjectTooLargeError(
+                actual_bytes=len(content),
+                max_bytes=max_bytes,
+            )
+        for offset in range(0, len(content), chunk_size):
+            yield content[offset : offset + chunk_size]
+
     async def delete_file(self, object_key: str) -> bool:
         self.deletes.append(object_key)
+        if self.fail_delete:
+            raise RuntimeError("object delete unavailable")
         self.objects.pop(object_key, None)
         return True
 
@@ -224,11 +276,14 @@ async def _seed_authority(session: AsyncSession) -> None:
 
 
 def _service(
-    session: AsyncSession, storage: DurableRecordingStorage
+    session: AsyncSession,
+    storage: DurableRecordingStorage,
+    orphan_recorder: Callable[..., Awaitable[None]] | None = None,
 ) -> ArtifactContentAuthorityService:
     return ArtifactContentAuthorityService(
         repository=SqlArtifactContentAuthorityRepository(session),
         storage_service=storage,  # type: ignore[arg-type]
+        orphan_recorder=orphan_recorder,
     )
 
 
@@ -394,6 +449,39 @@ async def test_object_write_failure_does_not_publish_new_metadata_pointer(
 
 
 @pytest.mark.unit
+async def test_failed_immediate_orphan_delete_is_persisted_through_fresh_recorder(
+    test_engine,
+) -> None:
+    sessions = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    storage = DurableRecordingStorage()
+    recorder = AsyncMock()
+
+    async with sessions() as session:
+        await _seed_authority(session)
+        service = _service(session, storage, recorder)
+        scope = await service.resolve_scope(ARTIFACT_ID)
+        assert scope is not None
+        storage.fail_delete = True
+        with (
+            patch.object(
+                SqlArtifactContentAuthorityRepository,
+                "advance_pointer",
+                new=AsyncMock(return_value=False),
+            ),
+            pytest.raises(ArtifactContentRevisionConflictError),
+        ):
+            await service.save_content(scope, _command("uncommitted"))
+
+    recorder.assert_awaited_once()
+    outcome = recorder.await_args.args[0]
+    assert outcome.uploaded_object_key in storage.objects
+    assert recorder.await_args.kwargs == {
+        "reason_code": "immediate_delete_failed",
+        "last_error_code": "storage_delete_failed",
+    }
+
+
+@pytest.mark.unit
 async def test_content_save_rejects_non_editable_mime_while_bytes_remain_readable(
     test_engine,
 ) -> None:
@@ -493,7 +581,8 @@ async def test_ambiguous_reconciliation_retains_object_and_persists_pending_gc(
         storage_service=storage,  # type: ignore[arg-type]
     )
 
-    async def fail_authority_check(_outcome) -> bool:
+    async def fail_authority_check(_outcome, *, lease_token: str) -> bool:
+        del lease_token
         raise RuntimeError("primary authority unavailable")
 
     monkeypatch.setattr(reconciler, "_inspect_and_stage", fail_authority_check)
@@ -550,6 +639,80 @@ async def test_same_revision_writers_upload_unique_objects_and_only_gc_loser() -
 
 
 @pytest.mark.unit
+def test_postgresql_authority_lock_targets_only_the_artifact_row() -> None:
+    scope = ArtifactContentScope(
+        artifact_id=ARTIFACT_ID,
+        tenant_id=TENANT_ID,
+        project_id=PROJECT_ID,
+        conversation_id=CONVERSATION_ID,
+    )
+
+    statement = SqlArtifactContentAuthorityRepository._authority_statement(
+        scope,
+        for_update=True,
+    )
+    sql = str(
+        statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+
+    assert "LEFT OUTER JOIN conversations" in sql
+    assert sql.endswith("FOR UPDATE OF artifacts")
+
+
+@pytest.mark.unit
+async def test_commit_reconciler_waits_for_locked_authority_before_delete(
+    test_engine,
+) -> None:
+    sessions = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    storage = DurableRecordingStorage()
+
+    async with sessions() as session:
+        await _seed_authority(session)
+        service = _service(session, storage)
+        scope = await service.resolve_scope(ARTIFACT_ID)
+        assert scope is not None
+        outcome = await service.save_content(scope, _command("ambiguous-lock"))
+        assert outcome is not None
+        await session.rollback()
+
+    lock_entered = asyncio.Event()
+    release_lock = asyncio.Event()
+
+    async def locked_authority_read(
+        repository,
+        scope,
+        *,
+        for_update: bool = False,
+    ):
+        del repository, scope
+        assert for_update is True
+        lock_entered.set()
+        await release_lock.wait()
+        return None
+
+    reconciler = ArtifactContentCommitReconciler(
+        session_factory=sessions,
+        storage_service=storage,  # type: ignore[arg-type]
+    )
+    with patch.object(
+        SqlArtifactContentAuthorityRepository,
+        "get_authority",
+        new=locked_authority_read,
+    ):
+        reconcile_task = asyncio.create_task(reconciler.reconcile(outcome))
+        await asyncio.wait_for(lock_entered.wait(), timeout=1)
+        assert outcome.uploaded_object_key not in storage.deletes
+
+        release_lock.set()
+        await asyncio.wait_for(reconcile_task, timeout=1)
+
+    assert outcome.uploaded_object_key in storage.deletes
+
+
+@pytest.mark.unit
 async def test_verified_reads_fail_closed_on_tamper_and_oversized_metadata(test_engine) -> None:
     sessions = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
     storage = DurableRecordingStorage()
@@ -588,6 +751,32 @@ async def test_verified_reads_fail_closed_on_tamper_and_oversized_metadata(test_
         storage.objects.pop(INITIAL_OBJECT_KEY)
         with pytest.raises(ArtifactContentIntegrityError):
             await service.get_bytes(scope, max_bytes=MAX_ARTIFACT_DOWNLOAD_BYTES)
+
+
+@pytest.mark.unit
+async def test_download_is_hash_verified_into_a_disk_backed_bounded_stream(test_engine) -> None:
+    sessions = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    storage = DurableRecordingStorage()
+
+    async with sessions() as session:
+        await _seed_authority(session)
+        service = _service(session, storage)
+        scope = await service.resolve_scope(ARTIFACT_ID)
+        assert scope is not None
+
+        download = await service.stage_download(
+            scope,
+            max_bytes=MAX_ARTIFACT_DOWNLOAD_BYTES,
+        )
+        assert download is not None
+        assert download.size_bytes == 4
+        assert download.content_hash == _hash("seed")
+        assert storage.streams == [(INITIAL_OBJECT_KEY, MAX_ARTIFACT_DOWNLOAD_BYTES)]
+        assert storage.gets == []
+
+        content = b"".join([chunk async for chunk in download.iter_chunks(chunk_size=2)])
+        assert content == b"seed"
+        assert not download.staged_path.exists()
 
 
 @pytest.mark.unit

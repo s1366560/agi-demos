@@ -1,8 +1,15 @@
 """Durable cloud ArtifactContentContractV2 orchestration."""
 
+import asyncio
+import hashlib
 import logging
+import os
 import secrets
+import tempfile
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Protocol
 
 from src.application.services.artifact_content_contract import (
     EDITABLE_ARTIFACT_MIME_TYPES,
@@ -24,7 +31,12 @@ from src.domain.ports.repositories.artifact_content_authority_repository import 
     ArtifactContentAuthorityRepositoryPort,
     ArtifactContentScope,
 )
-from src.domain.ports.services.storage_service_port import StorageServicePort
+from src.domain.ports.services.storage_service_port import (
+    StorageObjectIntegrityError,
+    StorageObjectMetadata,
+    StorageObjectTooLargeError,
+    StorageServicePort,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +74,36 @@ class ArtifactContentBytes:
 
 
 @dataclass(frozen=True)
+class ArtifactContentDownload:
+    """Hash-verified, disk-backed download that never buffers the object in memory."""
+
+    scope: ArtifactContentScope
+    mime_type: str
+    revision: int
+    content_hash: str
+    size_bytes: int
+    staged_path: Path
+
+    async def iter_chunks(self, *, chunk_size: int = 64 * 1024) -> AsyncIterator[bytes]:
+        """Yield staged bytes and remove the private temporary file on completion."""
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be positive")
+        try:
+            staged = await asyncio.to_thread(self.staged_path.open, "rb")
+            try:
+                while chunk := await asyncio.to_thread(staged.read, chunk_size):
+                    yield chunk
+            finally:
+                await asyncio.to_thread(staged.close)
+        finally:
+            await self.discard()
+
+    async def discard(self) -> None:
+        """Idempotently remove the private staged file."""
+        await asyncio.to_thread(self.staged_path.unlink, missing_ok=True)
+
+
+@dataclass(frozen=True)
 class ArtifactContentSaveOutcome:
     """Save receipt plus the object that remains provisional until DB commit."""
 
@@ -70,6 +112,19 @@ class ArtifactContentSaveOutcome:
     uploaded_object_key: str | None
     idempotency_key: str
     request_hash: str
+
+
+class ArtifactContentOrphanRecorder(Protocol):
+    """Fresh-transaction persistence seam for failed immediate orphan cleanup."""
+
+    async def __call__(
+        self,
+        outcome: ArtifactContentSaveOutcome,
+        *,
+        reason_code: str,
+        last_error_code: str,
+    ) -> None:
+        """Persist one retryable orphan without reusing the save transaction."""
 
 
 class ArtifactContentAuthorityService:
@@ -81,11 +136,13 @@ class ArtifactContentAuthorityService:
         repository: ArtifactContentAuthorityRepositoryPort,
         storage_service: StorageServicePort,
         bucket_prefix: str = "artifacts",
+        orphan_recorder: ArtifactContentOrphanRecorder | None = None,
     ) -> None:
         super().__init__()
         self._repository = repository
         self._storage = storage_service
         self._bucket_prefix = bucket_prefix
+        self._orphan_recorder = orphan_recorder
 
     async def resolve_scope(self, artifact_id: str) -> ArtifactContentScope | None:
         """Resolve only a structurally consistent tenant/project/conversation scope."""
@@ -103,13 +160,7 @@ class ArtifactContentAuthorityService:
             if authority is None:
                 return None
             self._require_ready(authority)
-            self._require_size_within_limit(authority.size_bytes, max_bytes)
-            content = await self._storage.get_file(authority.object_key)
-            if content is None:
-                raise ArtifactContentIntegrityError
-            self._require_size_within_limit(len(content), max_bytes)
-            if len(content) != authority.size_bytes:
-                raise ArtifactContentIntegrityError
+            content = await self._read_bounded_object(authority, max_bytes=max_bytes)
             computed_hash = artifact_content_hash(content)
             if authority.content_hash is None:
                 initialized = await self._repository.initialize_content_hash(
@@ -133,6 +184,51 @@ class ArtifactContentAuthorityService:
                 revision=authority.revision,
                 content_hash=computed_hash,
                 content=content,
+            )
+        raise ArtifactContentIntegrityError
+
+    async def stage_download(
+        self,
+        scope: ArtifactContentScope,
+        *,
+        max_bytes: int = MAX_ARTIFACT_DOWNLOAD_BYTES,
+    ) -> ArtifactContentDownload | None:
+        """Hash-verify a bounded object into a private disk-backed download."""
+        for _attempt in range(2):
+            authority = await self._repository.get_authority(scope)
+            if authority is None:
+                return None
+            self._require_ready(authority)
+            _ = await self._require_object_metadata(authority, max_bytes=max_bytes)
+            staged_path, computed_hash = await self._stage_object(
+                authority,
+                max_bytes=max_bytes,
+            )
+            if authority.content_hash is None:
+                initialized = await self._repository.initialize_content_hash(
+                    scope,
+                    expected_revision=authority.revision,
+                    expected_object_key=authority.object_key,
+                    content_hash=computed_hash,
+                )
+                if (
+                    initialized is None
+                    or initialized.revision != authority.revision
+                    or initialized.object_key != authority.object_key
+                ):
+                    await self._discard_staged_path(staged_path)
+                    continue
+                authority = initialized
+            if authority.content_hash != computed_hash:
+                await self._discard_staged_path(staged_path)
+                raise ArtifactContentIntegrityError
+            return ArtifactContentDownload(
+                scope=scope,
+                mime_type=normalize_mime_type(authority.mime_type),
+                revision=authority.revision,
+                content_hash=computed_hash,
+                size_bytes=authority.size_bytes,
+                staged_path=staged_path,
             )
         raise ArtifactContentIntegrityError
 
@@ -217,6 +313,18 @@ class ArtifactContentAuthorityService:
                 "content_hash": command.content_hash,
             },
         )
+        outcome = ArtifactContentSaveOutcome(
+            scope=scope,
+            receipt=ArtifactContentSaveReceipt(
+                artifact_id=scope.artifact_id,
+                revision=next_revision,
+                content_hash=command.content_hash,
+                duplicate=False,
+            ),
+            uploaded_object_key=version_key,
+            idempotency_key=command.idempotency_key,
+            request_hash=request_hash,
+        )
         try:
             advanced = await self._repository.advance_pointer(
                 scope,
@@ -229,10 +337,10 @@ class ArtifactContentAuthorityService:
                 size_bytes=len(content_bytes),
             )
         except Exception:
-            await self._discard_orphan(version_key)
+            await self._discard_orphan(outcome)
             raise
         if not advanced:
-            await self._discard_orphan(version_key)
+            await self._discard_orphan(outcome)
             current = await self._repository.get_authority(scope)
             if current is None:
                 return None
@@ -240,37 +348,17 @@ class ArtifactContentAuthorityService:
                 server_revision=current.revision,
                 server_content_hash=self._require_content_hash(current),
             )
-        return ArtifactContentSaveOutcome(
-            scope=scope,
-            receipt=ArtifactContentSaveReceipt(
-                artifact_id=scope.artifact_id,
-                revision=next_revision,
-                content_hash=command.content_hash,
-                duplicate=False,
-            ),
-            uploaded_object_key=version_key,
-            idempotency_key=command.idempotency_key,
-            request_hash=request_hash,
-        )
+        return outcome
 
     async def _ensure_authority_hash(
         self,
         scope: ArtifactContentScope,
         authority: ArtifactContentAuthorityRecord,
     ) -> ArtifactContentAuthorityRecord:
-        self._require_size_within_limit(
-            authority.size_bytes,
-            MAX_EDITABLE_ARTIFACT_BYTES,
+        current_bytes = await self._read_bounded_object(
+            authority,
+            max_bytes=MAX_EDITABLE_ARTIFACT_BYTES,
         )
-        current_bytes = await self._storage.get_file(authority.object_key)
-        if current_bytes is None:
-            raise ArtifactContentIntegrityError
-        self._require_size_within_limit(
-            len(current_bytes),
-            MAX_EDITABLE_ARTIFACT_BYTES,
-        )
-        if len(current_bytes) != authority.size_bytes:
-            raise ArtifactContentIntegrityError
         computed_hash = artifact_content_hash(current_bytes)
         if authority.content_hash is None:
             initialized = await self._repository.initialize_content_hash(
@@ -286,7 +374,98 @@ class ArtifactContentAuthorityService:
             raise ArtifactContentIntegrityError
         return authority
 
-    async def _discard_orphan(self, object_key: str) -> None:
+    async def _read_bounded_object(
+        self,
+        authority: ArtifactContentAuthorityRecord,
+        *,
+        max_bytes: int,
+    ) -> bytes:
+        _ = await self._require_object_metadata(authority, max_bytes=max_bytes)
+        try:
+            content = await self._storage.get_file_bounded(
+                authority.object_key,
+                max_bytes=max_bytes,
+            )
+        except StorageObjectTooLargeError as exc:
+            raise ArtifactContentTooLargeError(
+                actual_bytes=exc.actual_bytes,
+                max_bytes=exc.max_bytes,
+            ) from exc
+        except StorageObjectIntegrityError as exc:
+            raise ArtifactContentIntegrityError from exc
+        if content is None:
+            raise ArtifactContentIntegrityError
+        self._require_size_within_limit(len(content), max_bytes)
+        if len(content) != authority.size_bytes:
+            raise ArtifactContentIntegrityError
+        return content
+
+    async def _require_object_metadata(
+        self,
+        authority: ArtifactContentAuthorityRecord,
+        *,
+        max_bytes: int,
+    ) -> StorageObjectMetadata:
+        self._require_size_within_limit(authority.size_bytes, max_bytes)
+        try:
+            metadata = await self._storage.get_file_metadata(authority.object_key)
+        except StorageObjectIntegrityError as exc:
+            raise ArtifactContentIntegrityError from exc
+        if metadata is None:
+            raise ArtifactContentIntegrityError
+        self._require_size_within_limit(metadata.size_bytes, max_bytes)
+        if metadata.size_bytes != authority.size_bytes:
+            raise ArtifactContentIntegrityError
+        return metadata
+
+    async def _stage_object(
+        self,
+        authority: ArtifactContentAuthorityRecord,
+        *,
+        max_bytes: int,
+    ) -> tuple[Path, str]:
+        descriptor, raw_path = tempfile.mkstemp(prefix="memstack-artifact-", suffix=".download")
+        os.close(descriptor)
+        staged_path = Path(raw_path)
+        digest = hashlib.sha256()
+        total = 0
+        try:
+            staged = await asyncio.to_thread(staged_path.open, "wb")
+            try:
+                async for chunk in self._storage.stream_file(
+                    authority.object_key,
+                    max_bytes=max_bytes,
+                ):
+                    total += len(chunk)
+                    self._require_size_within_limit(total, max_bytes)
+                    digest.update(chunk)
+                    _ = await asyncio.to_thread(staged.write, chunk)
+            finally:
+                await asyncio.to_thread(staged.close)
+            if total != authority.size_bytes:
+                raise ArtifactContentIntegrityError
+        except StorageObjectTooLargeError as exc:
+            await self._discard_staged_path(staged_path)
+            raise ArtifactContentTooLargeError(
+                actual_bytes=exc.actual_bytes,
+                max_bytes=exc.max_bytes,
+            ) from exc
+        except StorageObjectIntegrityError as exc:
+            await self._discard_staged_path(staged_path)
+            raise ArtifactContentIntegrityError from exc
+        except Exception:
+            await self._discard_staged_path(staged_path)
+            raise
+        return staged_path, f"sha256:{digest.hexdigest()}"
+
+    @staticmethod
+    async def _discard_staged_path(staged_path: Path) -> None:
+        await asyncio.to_thread(staged_path.unlink, missing_ok=True)
+
+    async def _discard_orphan(self, outcome: ArtifactContentSaveOutcome) -> None:
+        object_key = outcome.uploaded_object_key
+        if object_key is None:
+            raise RuntimeError("Artifact orphan cleanup requires an object key")
         try:
             deleted = await self._storage.delete_file(object_key)
             if not deleted:
@@ -300,6 +479,20 @@ class ArtifactContentAuthorityService:
                 object_key,
                 exc_info=True,
             )
+            if self._orphan_recorder is None:
+                return
+            try:
+                await self._orphan_recorder(
+                    outcome,
+                    reason_code="immediate_delete_failed",
+                    last_error_code="storage_delete_failed",
+                )
+            except Exception:
+                logger.error(
+                    "Failed to persist uncommitted Artifact content object: %s",
+                    object_key,
+                    exc_info=True,
+                )
 
     def _versioned_object_key(
         self,

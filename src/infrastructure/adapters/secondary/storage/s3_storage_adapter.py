@@ -1,6 +1,7 @@
 """S3 Storage Adapter - Implementation of StorageServicePort for S3/MinIO."""
 
 import logging
+from collections.abc import AsyncIterator
 from typing import Any, cast
 
 import aioboto3
@@ -9,6 +10,9 @@ from botocore.exceptions import ClientError
 from src.domain.ports.services.storage_service_port import (
     MultipartUploadResult,
     PartUploadResult,
+    StorageObjectIntegrityError,
+    StorageObjectMetadata,
+    StorageObjectTooLargeError,
     StorageServicePort,
     UploadResult,
 )
@@ -216,6 +220,129 @@ class S3StorageAdapter(StorageServicePort):
                     return None
                 logger.error(f"Failed to get file from S3: {object_key}, error: {e}")
                 raise
+
+    async def get_file_metadata(self, object_key: str) -> StorageObjectMetadata | None:
+        """Read S3 HEAD metadata without downloading the object body."""
+        async with await self._get_client() as s3:
+            try:
+                response = await s3.head_object(
+                    Bucket=self._bucket,
+                    Key=object_key,
+                )
+            except ClientError as error:
+                if self._is_missing_object_error(error):
+                    return None
+                logger.error("Failed to read S3 object metadata for %s", object_key)
+                raise
+        size_bytes = response.get("ContentLength")
+        if isinstance(size_bytes, bool) or not isinstance(size_bytes, int) or size_bytes < 0:
+            raise StorageObjectIntegrityError("invalid S3 ContentLength")
+        raw_metadata = response.get("Metadata")
+        metadata = (
+            {str(key): str(value) for key, value in raw_metadata.items()}
+            if isinstance(raw_metadata, dict)
+            else None
+        )
+        raw_etag = response.get("ETag")
+        return StorageObjectMetadata(
+            size_bytes=size_bytes,
+            content_type=str(response.get("ContentType") or "application/octet-stream"),
+            etag=str(raw_etag).strip('"') if raw_etag is not None else None,
+            metadata=metadata,
+        )
+
+    async def get_file_bounded(self, object_key: str, *, max_bytes: int) -> bytes | None:
+        """Use HEAD plus an inclusive range sentinel to enforce a hard memory cap."""
+        metadata = await self.get_file_metadata(object_key)
+        if metadata is None:
+            return None
+        self._require_storage_size(metadata.size_bytes, max_bytes)
+        async with await self._get_client() as s3:
+            try:
+                response = await s3.get_object(
+                    Bucket=self._bucket,
+                    Key=object_key,
+                    Range=f"bytes=0-{max_bytes}",
+                )
+                body = response["Body"]
+                chunks: list[bytes] = []
+                total = 0
+                while total <= max_bytes:
+                    chunk = await body.read(max_bytes - total + 1)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    self._require_storage_size(total, max_bytes)
+                    chunks.append(cast(bytes, chunk))
+            except ClientError as error:
+                if self._is_missing_object_error(error):
+                    return None
+                logger.error("Failed bounded S3 read for %s", object_key)
+                raise
+        content = b"".join(chunks)
+        self._require_storage_size(len(content), max_bytes)
+        if len(content) != metadata.size_bytes:
+            raise StorageObjectIntegrityError("S3 object changed during bounded read")
+        return content
+
+    async def stream_file(
+        self,
+        object_key: str,
+        *,
+        max_bytes: int,
+        chunk_size: int = 64 * 1024,
+    ) -> AsyncIterator[bytes]:
+        """Stream bounded S3 chunks without materializing the whole object."""
+        metadata = await self.get_file_metadata(object_key)
+        if metadata is None:
+            return
+        self._require_storage_size(metadata.size_bytes, max_bytes)
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be positive")
+        total = 0
+        async with await self._get_client() as s3:
+            try:
+                response = await s3.get_object(
+                    Bucket=self._bucket,
+                    Key=object_key,
+                )
+                body = response["Body"]
+                while True:
+                    remaining_with_sentinel = max_bytes - total + 1
+                    read_size = min(chunk_size, remaining_with_sentinel)
+                    chunk = await body.read(read_size)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    self._require_storage_size(total, max_bytes)
+                    yield cast(bytes, chunk)
+            except ClientError as error:
+                if self._is_missing_object_error(error):
+                    raise StorageObjectIntegrityError(
+                        "S3 object disappeared during stream"
+                    ) from error
+                logger.error("Failed streaming S3 read for %s", object_key)
+                raise
+        if total != metadata.size_bytes:
+            raise StorageObjectIntegrityError("S3 object changed during stream")
+
+    @staticmethod
+    def _require_storage_size(actual_bytes: int, max_bytes: int) -> None:
+        if max_bytes < 0:
+            raise ValueError("max_bytes must be non-negative")
+        if actual_bytes > max_bytes:
+            raise StorageObjectTooLargeError(
+                actual_bytes=actual_bytes,
+                max_bytes=max_bytes,
+            )
+
+    @staticmethod
+    def _is_missing_object_error(error: ClientError) -> bool:
+        return str(error.response.get("Error", {}).get("Code")) in {
+            "404",
+            "NoSuchKey",
+            "NotFound",
+        }
 
     async def list_files(
         self,

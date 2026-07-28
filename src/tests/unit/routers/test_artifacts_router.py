@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from src.application.services.artifact_content_authority_service import (
     MAX_ARTIFACT_PREVIEW_BYTES,
     ArtifactContentBytes,
+    ArtifactContentDownload,
     ArtifactContentSaveOutcome,
     ArtifactContentTooLargeError,
 )
@@ -221,6 +222,7 @@ class TestArtifactContentContractV2Router:
         test_db,
         artifacts_client,
         artifact_content_authority_mock,
+        tmp_path,
     ) -> None:
         await self._grant_project_access(test_db)
         content_hash = self._hash("hello")
@@ -238,6 +240,16 @@ class TestArtifactContentContractV2Router:
             revision=3,
             content_hash=content_hash,
             content=b"hello",
+        )
+        staged_path = tmp_path / "artifact-download"
+        staged_path.write_bytes(b"hello")
+        artifact_content_authority_mock.stage_download.return_value = ArtifactContentDownload(
+            scope=artifact_content_authority_mock.resolve_scope.return_value,
+            mime_type="text/plain",
+            revision=3,
+            content_hash=content_hash,
+            size_bytes=5,
+            staged_path=staged_path,
         )
 
         content = artifacts_client.get("/api/v1/artifacts/artifact-1/content")
@@ -264,12 +276,15 @@ class TestArtifactContentContractV2Router:
         assert download.content == b"hello"
         assert download.headers["cache-control"] == "private, no-store"
         assert download.headers["content-disposition"] == "attachment"
+        assert download.headers["content-length"] == "5"
         assert download.headers["x-content-type-options"] == "nosniff"
         assert download.headers["x-artifact-revision"] == "3"
         assert download.headers["x-artifact-content-hash"] == content_hash
         assert "presigned" not in str(download.headers).lower()
+        assert not staged_path.exists()
         artifact_content_authority_mock.get_content.assert_awaited_once()
-        assert artifact_content_authority_mock.get_bytes.await_count == 2
+        artifact_content_authority_mock.get_bytes.assert_awaited_once()
+        artifact_content_authority_mock.stage_download.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_content_put_returns_receipt_and_structured_revision_conflict(
@@ -345,6 +360,60 @@ class TestArtifactContentContractV2Router:
         }
 
     @pytest.mark.asyncio
+    async def test_content_put_rejects_oversized_body_before_json_parsing(
+        self,
+        test_db,
+        artifacts_client,
+        artifact_content_authority_mock,
+    ) -> None:
+        await self._grant_project_access(test_db)
+        oversized_invalid_json = (
+            b"{" + (b"x" * artifacts_router.MAX_EDITABLE_ARTIFACT_REQUEST_BYTES) + b"}"
+        )
+
+        response = artifacts_client.put(
+            "/api/v1/artifacts/artifact-1/content",
+            content=oversized_invalid_json,
+            headers={"Content-Type": "application/json"},
+        )
+
+        assert response.status_code == 413, response.text
+        assert response.json() == {
+            "detail": "Artifact content request exceeds the size limit",
+            "reason_code": "artifact_content_request_size_limit",
+            "max_bytes": artifacts_router.MAX_EDITABLE_ARTIFACT_REQUEST_BYTES,
+        }
+        artifact_content_authority_mock.save_content.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_content_put_bounds_chunked_body_without_content_length(
+        self,
+        test_db,
+        artifacts_client,
+        artifact_content_authority_mock,
+    ) -> None:
+        await self._grant_project_access(test_db)
+
+        response = artifacts_client.put(
+            "/api/v1/artifacts/artifact-1/content",
+            content=iter(
+                [
+                    b"{",
+                    b"x" * artifacts_router.MAX_EDITABLE_ARTIFACT_REQUEST_BYTES,
+                    b"}",
+                ]
+            ),
+            headers={
+                "Content-Type": "application/json",
+                "Transfer-Encoding": "chunked",
+            },
+        )
+
+        assert response.status_code == 413, response.text
+        assert response.json()["reason_code"] == "artifact_content_request_size_limit"
+        artifact_content_authority_mock.save_content.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_content_put_reconciles_uploaded_object_when_database_commit_fails(
         self,
         test_db,
@@ -392,6 +461,38 @@ class TestArtifactContentContractV2Router:
             )
 
         artifact_content_commit_reconciler_mock.reconcile.assert_awaited_once_with(outcome)
+
+    @pytest.mark.asyncio
+    async def test_download_discards_staged_file_when_hash_commit_fails(
+        self,
+        test_db,
+        artifacts_client,
+        artifact_content_authority_mock,
+        monkeypatch,
+        tmp_path,
+    ) -> None:
+        await self._grant_project_access(test_db)
+        content_hash = self._hash("hello")
+        staged_path = tmp_path / "failed-download-commit"
+        staged_path.write_bytes(b"hello")
+        artifact_content_authority_mock.stage_download.return_value = ArtifactContentDownload(
+            scope=artifact_content_authority_mock.resolve_scope.return_value,
+            mime_type="text/plain",
+            revision=3,
+            content_hash=content_hash,
+            size_bytes=5,
+            staged_path=staged_path,
+        )
+        monkeypatch.setattr(
+            test_db,
+            "commit",
+            AsyncMock(side_effect=RuntimeError("database commit failed")),
+        )
+
+        with pytest.raises(RuntimeError, match="database commit failed"):
+            artifacts_client.get("/api/v1/artifacts/artifact-1/download")
+
+        assert not staged_path.exists()
 
     @pytest.mark.asyncio
     async def test_raw_preview_returns_structured_download_fallback_when_oversized(
@@ -463,6 +564,7 @@ class TestArtifactContentContractV2Router:
     ) -> None:
         await self._grant_project_access(test_db)
         artifact_content_authority_mock.get_bytes.side_effect = ArtifactContentIntegrityError
+        artifact_content_authority_mock.stage_download.side_effect = ArtifactContentIntegrityError
 
         raw = artifacts_client.get("/api/v1/artifacts/artifact-1/content/bytes")
         download = artifacts_client.get("/api/v1/artifacts/artifact-1/download")

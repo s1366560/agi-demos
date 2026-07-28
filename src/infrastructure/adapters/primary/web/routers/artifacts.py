@@ -8,13 +8,17 @@ Provides REST API endpoints for:
 """
 
 import logging
-from typing import Any, Literal
+from collections.abc import Callable, Coroutine
+from typing import Any, Literal, override
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.background import BackgroundTask
+from starlette.types import Message
 
 from src.application.services.artifact_content_authority_service import (
     MAX_ARTIFACT_DOWNLOAD_BYTES,
@@ -53,7 +57,59 @@ from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/artifacts", tags=["artifacts"])
+MAX_EDITABLE_ARTIFACT_REQUEST_BYTES = (MAX_EDITABLE_ARTIFACT_BYTES * 6) + 16_384
+_ARTIFACT_CONTENT_UPDATE_PATH = "/api/v1/artifacts/{artifact_id}/content"
+
+
+class ArtifactContentBodyLimitRoute(APIRoute):
+    """Enforce the Artifact save transport limit before JSON parsing."""
+
+    @override
+    def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+        original_route_handler = super().get_route_handler()
+        if self.path_format != _ARTIFACT_CONTENT_UPDATE_PATH or "PUT" not in self.methods:
+            return original_route_handler
+
+        async def limited_route_handler(request: Request) -> Response:
+            content_length = request.headers.get("content-length")
+            if content_length is not None:
+                try:
+                    declared_bytes = int(content_length)
+                except ValueError:
+                    declared_bytes = -1
+                if declared_bytes > MAX_EDITABLE_ARTIFACT_REQUEST_BYTES:
+                    return _artifact_content_request_too_large_response()
+
+            body = bytearray()
+            async for chunk in request.stream():
+                if len(body) + len(chunk) > MAX_EDITABLE_ARTIFACT_REQUEST_BYTES:
+                    return _artifact_content_request_too_large_response()
+                body.extend(chunk)
+
+            replayed = False
+
+            async def replay_receive() -> Message:
+                nonlocal replayed
+                if replayed:
+                    return {"type": "http.disconnect"}
+                replayed = True
+                return {
+                    "type": "http.request",
+                    "body": bytes(body),
+                    "more_body": False,
+                }
+
+            limited_request = Request(request.scope, receive=replay_receive)
+            return await original_route_handler(limited_request)
+
+        return limited_route_handler
+
+
+router = APIRouter(
+    prefix="/api/v1/artifacts",
+    tags=["artifacts"],
+    route_class=ArtifactContentBodyLimitRoute,
+)
 
 # Singleton artifact service
 _artifact_service: ArtifactService | None = None
@@ -81,9 +137,15 @@ def get_artifact_content_authority_service(
 ) -> ArtifactContentAuthorityService:
     """Build the cloud content authority from the request-scoped DB container."""
     container = request.app.state.container.with_db(db)
+    storage_service = container.storage_service()
+    reconciler = ArtifactContentCommitReconciler(
+        session_factory=async_session_factory,
+        storage_service=storage_service,
+    )
     return ArtifactContentAuthorityService(
         repository=SqlArtifactContentAuthorityRepository(db),
-        storage_service=container.storage_service(),
+        storage_service=storage_service,
+        orphan_recorder=reconciler.record_pending,
     )
 
 
@@ -320,7 +382,7 @@ async def download_artifact(
     """
     scope = await _resolve_artifact_content_scope(service, artifact_id, current_user, db)
     try:
-        content = await service.get_bytes(
+        download = await service.stage_download(
             scope,
             max_bytes=MAX_ARTIFACT_DOWNLOAD_BYTES,
         )
@@ -339,19 +401,25 @@ async def download_artifact(
             status_code=409,
             detail=_("Artifact content integrity check failed"),
         ) from exc
-    if content is None:
+    if download is None:
         raise HTTPException(status_code=404, detail=_("Artifact content not found"))
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        await download.discard()
+        raise
 
-    return Response(
-        content=content.content,
-        media_type=content.mime_type,
+    return StreamingResponse(
+        content=download.iter_chunks(),
+        media_type=download.mime_type,
+        background=BackgroundTask(download.discard),
         headers={
             "Cache-Control": "private, no-store",
             "Content-Disposition": "attachment",
+            "Content-Length": str(download.size_bytes),
             "X-Content-Type-Options": "nosniff",
-            "X-Artifact-Revision": str(content.revision),
-            "X-Artifact-Content-Hash": content.content_hash,
+            "X-Artifact-Revision": str(download.revision),
+            "X-Artifact-Content-Hash": download.content_hash,
         },
     )
 
@@ -649,6 +717,17 @@ def _artifact_content_conflict_response(
             "reason_code": error.reason_code,
             "server_revision": error.server_revision,
             "server_content_hash": error.server_content_hash,
+        },
+    )
+
+
+def _artifact_content_request_too_large_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=413,
+        content={
+            "detail": _("Artifact content request exceeds the size limit"),
+            "reason_code": "artifact_content_request_size_limit",
+            "max_bytes": MAX_EDITABLE_ARTIFACT_REQUEST_BYTES,
         },
     )
 

@@ -189,6 +189,17 @@ class ArtifactContentOrphanGcModel(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     attempts: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
     last_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    lease_owner: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -211,10 +222,20 @@ class ArtifactContentOrphanGcModel(Base):
             "status IN ('pending', 'deleted', 'missing', 'retained')",
             name="ck_artifact_orphan_gc_status",
         ),
+        CheckConstraint(
+            "(status = 'pending' AND "
+            + "((lease_owner IS NULL AND lease_token IS NULL AND lease_expires_at IS NULL) "
+            + "OR (lease_owner IS NOT NULL AND lease_token IS NOT NULL "
+            + "AND lease_expires_at IS NOT NULL))) "
+            + "OR (status <> 'pending' AND lease_owner IS NULL AND lease_token IS NULL "
+            + "AND lease_expires_at IS NULL)",
+            name="ck_artifact_orphan_gc_lease_complete",
+        ),
         Index(
-            "ix_artifact_content_orphan_gc_status_updated",
+            "ix_artifact_content_orphan_gc_dispatch",
             "status",
-            "updated_at",
+            "next_attempt_at",
+            "lease_expires_at",
         ),
         Index(
             "ix_artifact_content_orphan_gc_scope",

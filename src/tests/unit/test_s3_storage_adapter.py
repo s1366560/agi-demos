@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from src.domain.ports.services.storage_service_port import StorageObjectTooLargeError
 from src.infrastructure.adapters.secondary.storage.s3_storage_adapter import S3StorageAdapter
 
 
@@ -22,7 +23,14 @@ class TestS3StorageAdapter:
         client = AsyncMock()
         client.put_object = AsyncMock(return_value={"ETag": '"abc123"', "VersionId": "v1"})
         client.delete_object = AsyncMock(return_value={})
-        client.head_object = AsyncMock(return_value={"ContentLength": 1024})
+        client.head_object = AsyncMock(
+            return_value={
+                "ContentLength": 1024,
+                "ContentType": "application/pdf",
+                "ETag": '"abc123"',
+                "Metadata": {"content_hash": "sha256:abc"},
+            }
+        )
         client.get_object = AsyncMock(
             return_value={
                 "Body": AsyncMock(read=AsyncMock(return_value=b"test content")),
@@ -184,3 +192,106 @@ class TestS3StorageAdapter:
             # Verify metadata was passed
             call_kwargs = mock_s3_client.put_object.call_args[1]
             assert call_kwargs["Metadata"]["tenant_id"] == "tenant-abc"
+
+    async def test_bounded_read_rejects_head_size_before_get(
+        self,
+        storage_adapter,
+        mock_s3_client,
+    ):
+        mock_s3_client.head_object.return_value["ContentLength"] = 5
+
+        with patch.object(
+            storage_adapter, "_get_client", return_value=AsyncMock()
+        ) as mock_get_client:
+            mock_context = AsyncMock()
+            mock_context.__aenter__ = AsyncMock(return_value=mock_s3_client)
+            mock_context.__aexit__ = AsyncMock(return_value=None)
+            mock_get_client.return_value = mock_context
+
+            with pytest.raises(StorageObjectTooLargeError) as too_large:
+                await storage_adapter.get_file_bounded(
+                    "tenant-123/files/report.pdf",
+                    max_bytes=4,
+                )
+
+        assert too_large.value.actual_bytes == 5
+        mock_s3_client.get_object.assert_not_awaited()
+
+    async def test_bounded_read_uses_range_and_rejects_changed_object(
+        self,
+        storage_adapter,
+        mock_s3_client,
+    ):
+        mock_s3_client.head_object.return_value["ContentLength"] = 4
+        mock_s3_client.get_object.return_value["Body"].read.return_value = b"12345"
+
+        with patch.object(
+            storage_adapter, "_get_client", return_value=AsyncMock()
+        ) as mock_get_client:
+            mock_context = AsyncMock()
+            mock_context.__aenter__ = AsyncMock(return_value=mock_s3_client)
+            mock_context.__aexit__ = AsyncMock(return_value=None)
+            mock_get_client.return_value = mock_context
+
+            with pytest.raises(StorageObjectTooLargeError):
+                await storage_adapter.get_file_bounded(
+                    "tenant-123/files/report.pdf",
+                    max_bytes=4,
+                )
+
+        assert mock_s3_client.get_object.await_args.kwargs["Range"] == "bytes=0-4"
+        mock_s3_client.get_object.return_value["Body"].read.assert_awaited_once_with(5)
+
+    async def test_stream_file_reads_bounded_chunks(
+        self,
+        storage_adapter,
+        mock_s3_client,
+    ):
+        mock_s3_client.head_object.return_value["ContentLength"] = 4
+        body = mock_s3_client.get_object.return_value["Body"]
+        body.read.side_effect = [b"12", b"34", b""]
+
+        with patch.object(
+            storage_adapter, "_get_client", return_value=AsyncMock()
+        ) as mock_get_client:
+            mock_context = AsyncMock()
+            mock_context.__aenter__ = AsyncMock(return_value=mock_s3_client)
+            mock_context.__aexit__ = AsyncMock(return_value=None)
+            mock_get_client.return_value = mock_context
+
+            chunks = [
+                chunk
+                async for chunk in storage_adapter.stream_file(
+                    "tenant-123/files/report.pdf",
+                    max_bytes=4,
+                    chunk_size=2,
+                )
+            ]
+
+        assert chunks == [b"12", b"34"]
+        assert [call.args for call in body.read.await_args_list] == [(2,), (2,), (1,)]
+
+    async def test_bounded_read_accumulates_partial_chunks_with_sentinel(
+        self,
+        storage_adapter,
+        mock_s3_client,
+    ):
+        mock_s3_client.head_object.return_value["ContentLength"] = 4
+        body = mock_s3_client.get_object.return_value["Body"]
+        body.read.side_effect = [b"12", b"34", b""]
+
+        with patch.object(
+            storage_adapter, "_get_client", return_value=AsyncMock()
+        ) as mock_get_client:
+            mock_context = AsyncMock()
+            mock_context.__aenter__ = AsyncMock(return_value=mock_s3_client)
+            mock_context.__aexit__ = AsyncMock(return_value=None)
+            mock_get_client.return_value = mock_context
+
+            content = await storage_adapter.get_file_bounded(
+                "tenant-123/files/report.pdf",
+                max_bytes=4,
+            )
+
+        assert content == b"1234"
+        assert [call.args for call in body.read.await_args_list] == [(5,), (3,), (1,)]
