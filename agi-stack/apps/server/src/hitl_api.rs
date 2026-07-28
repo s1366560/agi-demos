@@ -23,7 +23,9 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
-use agistack_adapters_postgres::{HitlRequestRecord, PgHitlRequestRepository, PgPool};
+use agistack_adapters_postgres::{
+    HitlAuthorityState, HitlRequestRecord, PgHitlRequestRepository, PgPool,
+};
 use agistack_adapters_secrets::try_encrypt_python_aes256_gcm;
 use agistack_core::ports::EventStream;
 
@@ -35,6 +37,9 @@ const A2UI_CONTEXT_MAX_FIELDS: usize = 32;
 const A2UI_CONTEXT_MAX_KEY_BYTES: usize = 128;
 const A2UI_CONTEXT_MAX_STRING_BYTES: usize = 4 * 1024;
 const A2UI_CONTEXT_MAX_BYTES: usize = 16 * 1024;
+const HITL_ALREADY_ANSWERED: &str = "hitl_already_answered";
+const HITL_REQUEST_EXPIRED: &str = "hitl_request_expired";
+const HITL_CLAIM_CONFLICT: &str = "hitl_claim_conflict";
 
 pub(crate) type SharedHitlResponses = Arc<dyn HitlResponseService>;
 
@@ -72,6 +77,18 @@ pub(crate) struct HumanInteractionResponse {
 pub(crate) struct HitlApiError {
     status: StatusCode,
     detail: String,
+    authority: Option<HitlAuthoritySnapshot>,
+}
+
+#[derive(Debug, Clone)]
+struct HitlAuthoritySnapshot {
+    reason_code: &'static str,
+    authority_revision: u64,
+    authority_status: String,
+    created_at: Option<DateTime<Utc>>,
+    answered_at: Option<DateTime<Utc>>,
+    expires_at: Option<DateTime<Utc>>,
+    observed_at: DateTime<Utc>,
 }
 
 impl HitlApiError {
@@ -79,6 +96,7 @@ impl HitlApiError {
         Self {
             status,
             detail: detail.into(),
+            authority: None,
         }
     }
 
@@ -101,12 +119,168 @@ impl HitlApiError {
     pub(crate) fn detail(&self) -> &str {
         &self.detail
     }
+
+    fn authority(state: HitlAuthorityState, now: DateTime<Utc>) -> Self {
+        Self::authority_from_parts(
+            &state.status,
+            Some(state.created_at),
+            state.answered_at,
+            state.expires_at,
+            now,
+        )
+    }
+
+    fn authority_from_record(
+        record: &HitlRequestRecord,
+        answered_at: Option<DateTime<Utc>>,
+        now: DateTime<Utc>,
+    ) -> Self {
+        Self::authority_from_parts(&record.status, None, answered_at, record.expires_at, now)
+    }
+
+    fn authority_from_parts(
+        status: &str,
+        created_at: Option<DateTime<Utc>>,
+        answered_at: Option<DateTime<Utc>>,
+        expires_at: Option<DateTime<Utc>>,
+        now: DateTime<Utc>,
+    ) -> Self {
+        let (http_status, detail, reason_code, authority_status, authority_revision) =
+            if matches!(status, "answered" | "processing" | "completed") {
+                (
+                    StatusCode::CONFLICT,
+                    "HITL request is no longer pending",
+                    HITL_ALREADY_ANSWERED,
+                    status.to_string(),
+                    2,
+                )
+            } else if status == "timeout"
+                || (status == "pending" && expires_at.is_some_and(|expires_at| expires_at <= now))
+            {
+                (
+                    StatusCode::GONE,
+                    "HITL request has expired",
+                    HITL_REQUEST_EXPIRED,
+                    "timeout".to_string(),
+                    2,
+                )
+            } else {
+                (
+                    StatusCode::CONFLICT,
+                    "HITL request could not be updated",
+                    HITL_CLAIM_CONFLICT,
+                    status.to_string(),
+                    u64::from(status != "pending") + 1,
+                )
+            };
+        Self {
+            status: http_status,
+            detail: detail.to_string(),
+            authority: Some(HitlAuthoritySnapshot {
+                reason_code,
+                authority_revision,
+                authority_status,
+                created_at,
+                answered_at,
+                expires_at,
+                observed_at: now,
+            }),
+        }
+    }
+
+    fn response_body(&self) -> Value {
+        let mut body = json!({ "detail": self.detail });
+        let Some(authority) = &self.authority else {
+            return body;
+        };
+        let Some(fields) = body.as_object_mut() else {
+            return body;
+        };
+        fields.insert(
+            "reason_code".to_string(),
+            Value::String(authority.reason_code.to_string()),
+        );
+        fields.insert(
+            "authority_revision".to_string(),
+            Value::from(authority.authority_revision),
+        );
+        fields.insert(
+            "authority_status".to_string(),
+            Value::String(authority.authority_status.clone()),
+        );
+        fields.insert(
+            "created_at".to_string(),
+            optional_timestamp(authority.created_at),
+        );
+        fields.insert(
+            "answered_at".to_string(),
+            optional_timestamp(authority.answered_at),
+        );
+        fields.insert(
+            "expires_at".to_string(),
+            optional_timestamp(authority.expires_at),
+        );
+        fields.insert(
+            "observed_at".to_string(),
+            Value::String(timestamp(authority.observed_at)),
+        );
+        body
+    }
+
+    pub(crate) fn websocket_message(&self) -> Value {
+        let mut data = self.response_body();
+        let message = data
+            .get("detail")
+            .cloned()
+            .unwrap_or_else(|| Value::String(self.detail.clone()));
+        if let Some(fields) = data.as_object_mut() {
+            fields.remove("detail");
+            fields.insert("message".to_string(), message);
+            if let Some(reason_code) = fields.get("reason_code").cloned() {
+                fields.insert("code".to_string(), reason_code);
+            }
+        }
+        json!({"type": "error", "data": data})
+    }
+
+    #[cfg(test)]
+    fn reason_code(&self) -> Option<&str> {
+        self.authority
+            .as_ref()
+            .map(|authority| authority.reason_code)
+    }
+
+    #[cfg(test)]
+    fn authority_revision(&self) -> Option<u64> {
+        self.authority
+            .as_ref()
+            .map(|authority| authority.authority_revision)
+    }
+
+    #[cfg(test)]
+    fn answered_at(&self) -> Option<DateTime<Utc>> {
+        self.authority
+            .as_ref()
+            .and_then(|authority| authority.answered_at)
+    }
 }
 
 impl IntoResponse for HitlApiError {
     fn into_response(self) -> Response {
-        (self.status, Json(json!({ "detail": self.detail }))).into_response()
+        let body = self.response_body();
+        (self.status, Json(body)).into_response()
     }
+}
+
+fn timestamp(value: DateTime<Utc>) -> String {
+    value.to_rfc3339_opts(SecondsFormat::Micros, true)
+}
+
+fn optional_timestamp(value: Option<DateTime<Utc>>) -> Value {
+    value
+        .map(timestamp)
+        .map(Value::String)
+        .unwrap_or(Value::Null)
 }
 
 pub(crate) struct PgHitlResponseService {
@@ -145,13 +319,27 @@ impl HitlResponseService for PgHitlResponseService {
             .ok_or_else(|| HitlApiError::not_found("HITL request not found"))?;
 
         authorize_hitl_request(&self.repo, user_id, &record).await?;
+        if record.status != "pending" {
+            let authority = self
+                .repo
+                .get_authority_state(&record.id)
+                .await
+                .map_err(HitlApiError::internal)?;
+            return Err(authority.map_or_else(
+                || HitlApiError::authority_from_record(&record, None, now),
+                |authority| HitlApiError::authority(authority, now),
+            ));
+        }
         if record.is_expired_at(now) {
             let _ = self.repo.mark_timeout(&record.id).await;
-            return Err(HitlApiError::bad_request("HITL request has expired"));
-        }
-        if record.status != "pending" {
-            return Err(HitlApiError::bad_request(
-                "HITL request is no longer pending",
+            let authority = self
+                .repo
+                .get_authority_state(&record.id)
+                .await
+                .map_err(HitlApiError::internal)?;
+            return Err(authority.map_or_else(
+                || HitlApiError::authority_from_record(&record, None, now),
+                |authority| HitlApiError::authority(authority, now),
             ));
         }
 
@@ -167,9 +355,14 @@ impl HitlResponseService for PgHitlResponseService {
             .await
             .map_err(HitlApiError::internal)?;
         if !updated {
-            return Err(HitlApiError::new(
-                StatusCode::CONFLICT,
-                "HITL request could not be updated",
+            let authority = self
+                .repo
+                .get_authority_state(&record.id)
+                .await
+                .map_err(HitlApiError::internal)?;
+            return Err(authority.map_or_else(
+                || HitlApiError::authority_from_record(&record, None, now),
+                |authority| HitlApiError::authority(authority, now),
             ));
         }
 
@@ -195,6 +388,7 @@ impl HitlResponseService for PgHitlResponseService {
 
 pub(crate) struct DevHitlResponseService {
     records: Mutex<HashMap<String, HitlRequestRecord>>,
+    answered_at: Mutex<HashMap<String, DateTime<Utc>>>,
     events: Arc<dyn EventStream>,
     encryption_key: Option<Arc<str>>,
 }
@@ -203,6 +397,7 @@ impl DevHitlResponseService {
     pub(crate) fn new(events: Arc<dyn EventStream>) -> Self {
         Self {
             records: Mutex::new(HashMap::new()),
+            answered_at: Mutex::new(HashMap::new()),
             events,
             encryption_key: None,
         }
@@ -214,6 +409,7 @@ impl DevHitlResponseService {
     ) -> Self {
         Self {
             records: Mutex::new(HashMap::new()),
+            answered_at: Mutex::new(HashMap::new()),
             events,
             encryption_key: Some(encryption_key.into()),
         }
@@ -225,6 +421,10 @@ impl DevHitlResponseService {
             .records
             .lock()
             .map_err(|_| HitlApiError::internal("hitl request store mutex poisoned"))?;
+        self.answered_at
+            .lock()
+            .map_err(|_| HitlApiError::internal("hitl authority mutex poisoned"))?
+            .remove(&record.id);
         records.insert(record.id.clone(), record);
         Ok(())
     }
@@ -268,14 +468,24 @@ impl HitlResponseService for DevHitlResponseService {
                 ));
             }
         }
+        if record.status != "pending" {
+            let answered_at = self
+                .answered_at
+                .lock()
+                .map_err(|_| HitlApiError::internal("hitl authority mutex poisoned"))?
+                .get(&record.id)
+                .copied();
+            return Err(HitlApiError::authority_from_record(
+                &record,
+                answered_at,
+                now,
+            ));
+        }
         if record.is_expired_at(now) {
             mark_dev_status(&self.records, &record.id, "timeout")?;
-            return Err(HitlApiError::bad_request("HITL request has expired"));
-        }
-        if record.status != "pending" {
-            return Err(HitlApiError::bad_request(
-                "HITL request is no longer pending",
-            ));
+            let mut timed_out = record;
+            timed_out.status = "timeout".to_string();
+            return Err(HitlApiError::authority_from_record(&timed_out, None, now));
         }
 
         let prepared = prepare_response(&record, request, now, self.encryption_key.as_deref())?;
@@ -290,9 +500,31 @@ impl HitlResponseService for DevHitlResponseService {
                     "HITL request could not be updated",
                 ));
             };
+            if stored.status != "pending" || stored.is_expired_at(now) {
+                if stored.status == "pending" {
+                    stored.status = "timeout".to_string();
+                }
+                let conflict_record = stored.clone();
+                drop(records);
+                let answered_at = self
+                    .answered_at
+                    .lock()
+                    .map_err(|_| HitlApiError::internal("hitl authority mutex poisoned"))?
+                    .get(&record.id)
+                    .copied();
+                return Err(HitlApiError::authority_from_record(
+                    &conflict_record,
+                    answered_at,
+                    now,
+                ));
+            }
             stored.status = "answered".to_string();
             stored.response = Some(prepared.response_summary.clone());
             stored.response_metadata = prepared.response_metadata.clone();
+            self.answered_at
+                .lock()
+                .map_err(|_| HitlApiError::internal("hitl authority mutex poisoned"))?
+                .insert(record.id.clone(), now);
         }
 
         let delivery_pending = publish_hitl_response(
@@ -1226,5 +1458,70 @@ mod tests {
             .await
             .unwrap();
         assert!(entries.is_empty());
+    }
+
+    #[tokio::test]
+    async fn dev_service_allows_exactly_one_competing_hitl_claim() {
+        let events = Arc::new(InMemoryEventStream::new());
+        let service = DevHitlResponseService::new(events.clone());
+        service
+            .insert_request(pending_request("req-race", "clarification"))
+            .unwrap();
+        let first = HitlResponsePayload {
+            request_id: "req-race".to_string(),
+            hitl_type: "clarification".to_string(),
+            response_data: json!({"answer": "first"}),
+        };
+        let second = HitlResponsePayload {
+            request_id: "req-race".to_string(),
+            hitl_type: "clarification".to_string(),
+            response_data: json!({"answer": "second"}),
+        };
+
+        let (first_result, second_result) = tokio::join!(
+            service.respond("user1", first),
+            service.respond("user1", second)
+        );
+
+        let successes = [&first_result, &second_result]
+            .into_iter()
+            .filter(|result| result.is_ok())
+            .count();
+        assert_eq!(successes, 1);
+        let conflict = first_result
+            .err()
+            .or_else(|| second_result.err())
+            .expect("one client must lose the claim");
+        assert_eq!(conflict.status, StatusCode::CONFLICT);
+        assert_eq!(conflict.reason_code(), Some("hitl_already_answered"));
+        assert_eq!(conflict.authority_revision(), Some(2));
+        assert!(conflict.answered_at().is_some());
+        let response_body = conflict.response_body();
+        assert_eq!(
+            response_body["detail"],
+            Value::String("HITL request is no longer pending".to_string())
+        );
+        assert_eq!(
+            response_body["reason_code"],
+            Value::String(HITL_ALREADY_ANSWERED.to_string())
+        );
+        assert_eq!(response_body["authority_revision"], 2);
+        let websocket_error = conflict.websocket_message();
+        assert_eq!(websocket_error["type"], "error");
+        assert_eq!(
+            websocket_error["data"]["code"],
+            Value::String(HITL_ALREADY_ANSWERED.to_string())
+        );
+        assert_eq!(
+            websocket_error["data"]["reason_code"],
+            Value::String(HITL_ALREADY_ANSWERED.to_string())
+        );
+        assert_eq!(websocket_error["data"]["authority_revision"], 2);
+
+        let entries = events
+            .read_after(&hitl_stream_topic("tenant1", "project1"), "", 10)
+            .await
+            .unwrap();
+        assert_eq!(entries.len(), 1);
     }
 }

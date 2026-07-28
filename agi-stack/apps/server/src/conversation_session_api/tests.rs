@@ -343,6 +343,42 @@ fn persisted_permission_without_question_projects_and_keeps_capabilities_consist
 }
 
 #[test]
+fn pending_projection_covers_the_five_explicit_hitl_kinds_only() {
+    for hitl_kind in ["clarification", "decision", "env_var", "a2ui_action"] {
+        let (items, has_blocking, can_respond) =
+            project_pending_hitl_for_test(hitl_kind, "Provide input", None);
+        assert_eq!(items.len(), 1, "{hitl_kind}");
+        assert!(has_blocking, "{hitl_kind}");
+        assert!(can_respond, "{hitl_kind}");
+        assert_eq!(items[0].request_type.as_str(), hitl_kind);
+    }
+
+    let permission_metadata = json!({
+        "hitl_type": "permission",
+        "tool_name": "terminal.execute",
+        "action": "run tests",
+        "risk_level": "low",
+        "description": "Run the reviewed tests",
+        "allow_remember": false,
+    });
+    let (permission, has_blocking, can_respond) =
+        project_pending_hitl_for_test("clarification", "", Some(permission_metadata));
+    assert_eq!(permission.len(), 1);
+    assert!(has_blocking);
+    assert!(can_respond);
+    assert_eq!(
+        permission[0].request_type,
+        super::SessionHitlKind::Permission
+    );
+
+    let (elicitation, has_blocking, can_respond) =
+        project_pending_hitl_for_test("elicitation", "Provide input", None);
+    assert!(elicitation.is_empty());
+    assert!(has_blocking);
+    assert!(!can_respond);
+}
+
+#[test]
 fn standalone_projection_keeps_current_mode_and_stable_revision() {
     let source = || StandaloneConversationSource {
         id: "conversation-standalone".to_string(),

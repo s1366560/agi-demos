@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.application.services.hitl_authority import classify_hitl_authority_conflict
 from src.configuration.config import get_settings
 from src.domain.model.agent.hitl_request import HITLRequest, HITLRequestStatus, HITLRequestType
 from src.infrastructure.adapters.primary.web.websocket.handlers import hitl_handler
@@ -355,7 +356,54 @@ async def test_handle_hitl_response_rejects_expired_request(monkeypatch) -> None
     hitl_handler._mark_hitl_timeout.assert_awaited_once_with("req-1", session_factory=None)
     payload = context.websocket.send_json.await_args.args[0]
     assert payload["type"] == "error"
-    assert payload["data"]["message"] == "HITL request req-1 has expired (status: timeout)"
+    assert payload["data"]["message"] == "HITL request has expired"
+    assert payload["data"]["code"] == "hitl_request_expired"
+    assert payload["data"]["reason_code"] == "hitl_request_expired"
+    assert payload["data"]["authority_revision"] == 2
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_handle_hitl_response_returns_structured_authority_when_claim_is_lost(
+    monkeypatch,
+) -> None:
+    context = _make_context()
+    pending = _make_hitl_request(request_type=HITLRequestType.CLARIFICATION)
+    answered = _make_hitl_request(request_type=HITLRequestType.CLARIFICATION)
+    answered.status = HITLRequestStatus.ANSWERED
+    answered.answered_at = datetime.now(UTC)
+    conflict = classify_hitl_authority_conflict(answered)
+
+    monkeypatch.setattr(
+        hitl_handler,
+        "_load_hitl_request",
+        AsyncMock(return_value=pending),
+    )
+    monkeypatch.setattr(hitl_handler, "_user_has_hitl_access", AsyncMock(return_value=True))
+    monkeypatch.setattr(
+        hitl_handler,
+        "_persist_hitl_response",
+        AsyncMock(side_effect=conflict),
+    )
+    publish_mock = AsyncMock(return_value=True)
+    monkeypatch.setattr(hitl_handler, "_publish_hitl_response_to_redis", publish_mock)
+
+    await hitl_handler._handle_hitl_response(
+        context=context,
+        request_id="req-1",
+        hitl_type="clarification",
+        response_data={"answer": "second answer"},
+        ack_type="clarification_response_ack",
+    )
+
+    payload = context.websocket.send_json.await_args.args[0]
+    assert payload["type"] == "error"
+    assert payload["data"]["message"] == "HITL request is no longer pending"
+    assert payload["data"]["code"] == "hitl_already_answered"
+    assert payload["data"]["reason_code"] == "hitl_already_answered"
+    assert payload["data"]["authority_status"] == "answered"
+    assert payload["data"]["answered_at"] == answered.answered_at.isoformat()
+    publish_mock.assert_not_awaited()
 
 
 @pytest.mark.unit

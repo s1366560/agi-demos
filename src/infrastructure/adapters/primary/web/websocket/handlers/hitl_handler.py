@@ -13,7 +13,11 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
-from src.domain.model.agent.hitl_request import HITLRequest
+from src.application.services.hitl_authority import (
+    HitlAuthorityConflict,
+    classify_hitl_authority_conflict,
+)
+from src.domain.model.agent.hitl_request import HITLRequest, HITLRequestStatus
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
 )
@@ -206,7 +210,7 @@ async def _persist_hitl_response(
     response_metadata: dict[str, Any] | None,
     *,
     session_factory: "async_sessionmaker[AsyncSession] | None" = None,
-) -> None:
+) -> HITLRequest:
     """Persist a validated HITL response with a single-winner claim."""
     from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
         SqlHITLRequestRepository,
@@ -221,8 +225,19 @@ async def _persist_hitl_response(
             response_metadata=response_metadata,
         )
         if updated_request is None:
-            raise RuntimeError(f"HITL request {request_id} could not be updated")
+            authority = await repo.get_by_id(request_id)
+            if authority is None:
+                raise RuntimeError("HITL request could not be updated")
+            if authority.status == HITLRequestStatus.PENDING and authority.is_expired:
+                timed_out = await repo.mark_timeout(request_id)
+                if timed_out is not None:
+                    await update_session.commit()
+                    authority = timed_out
+                else:
+                    authority = await repo.get_by_id(request_id) or authority
+            raise classify_hitl_authority_conflict(authority)
         await update_session.commit()
+        return updated_request
 
 
 async def _mark_hitl_timeout(
@@ -285,23 +300,54 @@ async def _load_authorized_pending_hitl_request(
         await context.send_error("Access denied", conversation_id=conversation_id)
         return None
 
-    expires_at = hitl_request.expires_at
-    if expires_at is not None and expires_at <= datetime.now(UTC):
-        await _mark_hitl_timeout(request_id, session_factory=context.session_factory)
-        await context.send_error(
-            f"HITL request {request_id} has expired (status: timeout)",
+    if hitl_request.status != HITLRequestStatus.PENDING:
+        await _send_hitl_authority_conflict(
+            context,
+            classify_hitl_authority_conflict(hitl_request),
             conversation_id=conversation_id,
         )
         return None
 
-    if hitl_request.status != HITLRequestStatus.PENDING:
-        await context.send_error(
-            f"HITL request {request_id} is no longer pending (status: {hitl_request.status.value})",
+    expires_at = hitl_request.expires_at
+    if expires_at is not None and expires_at <= datetime.now(UTC):
+        timed_out = await _mark_hitl_timeout(
+            request_id,
+            session_factory=context.session_factory,
+        )
+        if timed_out:
+            hitl_request.status = HITLRequestStatus.TIMEOUT
+        else:
+            hitl_request = (
+                await _load_hitl_request(
+                    request_id,
+                    session_factory=context.session_factory,
+                )
+                or hitl_request
+            )
+        await _send_hitl_authority_conflict(
+            context,
+            classify_hitl_authority_conflict(hitl_request),
             conversation_id=conversation_id,
         )
         return None
 
     return hitl_request
+
+
+async def _send_hitl_authority_conflict(
+    context: MessageContext,
+    conflict: HitlAuthorityConflict,
+    *,
+    conversation_id: str,
+) -> None:
+    payload = conflict.payload()
+    payload.pop("detail", None)
+    await context.send_error(
+        conflict.detail,
+        code=conflict.reason_code,
+        conversation_id=conversation_id,
+        extra=payload,
+    )
 
 
 async def _validate_and_summarize_hitl_response(
@@ -405,6 +451,13 @@ async def _handle_hitl_response(
             response_metadata=response_metadata,
             session_factory=context.session_factory,
         )
+    except HitlAuthorityConflict as conflict:
+        await _send_hitl_authority_conflict(
+            context,
+            conflict,
+            conversation_id=conversation_id,
+        )
+        return
     except Exception as e:
         logger.error(f"[WS HITL] Failed to update HITL request: {e}", exc_info=True)
         await context.send_error(

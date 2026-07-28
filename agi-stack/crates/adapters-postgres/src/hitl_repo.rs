@@ -32,6 +32,14 @@ pub struct HitlRequestRecord {
 }
 
 #[derive(Debug, Clone)]
+pub struct HitlAuthorityState {
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub answered_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone)]
 pub struct NewHitlRequestRecord {
     pub id: String,
     pub request_type: String,
@@ -128,6 +136,38 @@ impl PgHitlRequestRepository {
         .fetch_optional(&self.pool)
         .await
         .map(|row| row.map(Into::into))
+        .map_err(storage)
+    }
+
+    pub async fn get_authority_state(
+        &self,
+        request_id: &str,
+    ) -> CoreResult<Option<HitlAuthorityState>> {
+        sqlx::query_as::<
+            _,
+            (
+                String,
+                DateTime<Utc>,
+                Option<DateTime<Utc>>,
+                Option<DateTime<Utc>>,
+            ),
+        >(
+            "SELECT status, created_at, answered_at, expires_at \
+             FROM hitl_requests WHERE id = $1",
+        )
+        .bind(request_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map(|row| {
+            row.map(
+                |(status, created_at, answered_at, expires_at)| HitlAuthorityState {
+                    status,
+                    created_at,
+                    answered_at,
+                    expires_at,
+                },
+            )
+        })
         .map_err(storage)
     }
 

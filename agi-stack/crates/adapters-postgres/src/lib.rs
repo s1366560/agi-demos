@@ -143,7 +143,8 @@ pub use gene_repo::{
     GeneListQuery, GeneRecord, GeneTenantAccess, GenomeListQuery, GenomeRecord, PgGeneRepository,
 };
 pub use hitl_repo::{
-    AutomationHitlResumeCandidate, HitlRequestRecord, NewHitlRequestRecord, PgHitlRequestRepository,
+    AutomationHitlResumeCandidate, HitlAuthorityState, HitlRequestRecord, NewHitlRequestRecord,
+    PgHitlRequestRepository,
 };
 pub use instance_repo::{
     InstanceChannelRecord, InstanceListQuery, InstanceMemberListQuery, InstanceMemberRecord,

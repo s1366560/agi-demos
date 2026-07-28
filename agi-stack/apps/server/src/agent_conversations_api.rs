@@ -1411,12 +1411,13 @@ fn event_fields(
             "decision",
         )),
         "env_var_requested" => Some(env_var_fields(data, hitl_answered_map, hitl_status_map)),
+        "a2ui_action_asked" => Some(a2ui_action_fields(data, hitl_status_map)),
         "permission_asked" | "permission_requested" => {
             Some(permission_fields(data, hitl_answered_map, hitl_status_map))
         }
+        "env_var_provided" => Some(env_var_provided_fields(data)),
         "clarification_answered"
         | "decision_answered"
-        | "env_var_provided"
         | "permission_granted"
         | "permission_replied" => Some(generic_with_payload(event)),
         _ => Some(generic_with_payload(event)),
@@ -1702,8 +1703,8 @@ fn env_var_fields(
     status_map: &BTreeMap<String, HitlStatusInfo>,
 ) -> Map<String, Value> {
     let request_id = string_value(data, "request_id").unwrap_or_default();
-    let (answered, values) = resolve_hitl_answer(&request_id, "values", answered_map, status_map);
-    let mut fields = fields_from_pairs([
+    let (answered, variable_names) = resolve_env_var_answer(&request_id, answered_map, status_map);
+    let fields = fields_from_pairs([
         ("requestId", request_id.into()),
         (
             "toolName",
@@ -1716,11 +1717,139 @@ fn env_var_fields(
         ),
         ("context", value_or(data, "context", json!({}))),
         ("answered", answered.into()),
+        ("providedVariables", variable_names.clone()),
+        ("variableNames", variable_names),
     ]);
-    if let Some(values) = values {
-        fields.insert("values".to_string(), values);
-    }
     fields
+}
+
+fn resolve_env_var_answer(
+    request_id: &str,
+    answered_map: &BTreeMap<String, Value>,
+    status_map: &BTreeMap<String, HitlStatusInfo>,
+) -> (bool, Value) {
+    if let Some(value) = answered_map
+        .get(request_id)
+        .and_then(Value::as_object)
+        .and_then(|map| map.get("variable_names"))
+    {
+        return (true, value.clone());
+    }
+    if let Some(status) = status_map.get(request_id) {
+        if matches!(status.status.as_str(), "answered" | "completed") {
+            return (
+                true,
+                safe_env_var_names(status.response_metadata.as_object()),
+            );
+        }
+    }
+    (false, json!([]))
+}
+
+fn env_var_provided_fields(data: Option<&Map<String, Value>>) -> Map<String, Value> {
+    fields_from_pairs([
+        (
+            "requestId",
+            string_value(data, "request_id").unwrap_or_default().into(),
+        ),
+        (
+            "toolName",
+            string_value(data, "tool_name").unwrap_or_default().into(),
+        ),
+        ("variableNames", safe_env_var_names(data)),
+    ])
+}
+
+fn a2ui_action_fields(
+    data: Option<&Map<String, Value>>,
+    status_map: &BTreeMap<String, HitlStatusInfo>,
+) -> Map<String, Value> {
+    let request_id = string_value(data, "request_id").unwrap_or_default();
+    let status = status_map
+        .get(&request_id)
+        .map(|status| status.status.clone());
+    let answered = status
+        .as_deref()
+        .is_some_and(|status| matches!(status, "answered" | "completed"));
+    let allowed_actions = data
+        .and_then(|data| data.get("surface_data"))
+        .and_then(Value::as_object)
+        .and_then(|surface| surface.get("allowed_actions"));
+    fields_from_pairs([
+        ("request_id", request_id.into()),
+        ("block_id", value_or(data, "block_id", json!(""))),
+        ("title", value_or(data, "title", Value::Null)),
+        (
+            "timeout_seconds",
+            value_or(data, "timeout_seconds", Value::Null),
+        ),
+        ("status", status.map(Value::String).unwrap_or(Value::Null)),
+        ("answered", answered.into()),
+        (
+            "allowed_actions",
+            safe_a2ui_allowed_actions(allowed_actions),
+        ),
+    ])
+}
+
+fn safe_a2ui_allowed_actions(value: Option<&Value>) -> Value {
+    let Some(actions) = value.and_then(Value::as_array) else {
+        return json!([]);
+    };
+    if actions.len() > 32 {
+        return json!([]);
+    }
+    let mut safe = Vec::with_capacity(actions.len());
+    for action in actions {
+        let Some(action) = action.as_object() else {
+            return json!([]);
+        };
+        let Some(source_component_id) = action
+            .get("source_component_id")
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+        else {
+            return json!([]);
+        };
+        let Some(action_name) = action
+            .get("action_name")
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+        else {
+            return json!([]);
+        };
+        safe.push(json!({
+            "source_component_id": source_component_id,
+            "action_name": action_name,
+        }));
+    }
+    Value::Array(safe)
+}
+
+fn safe_env_var_names(data: Option<&Map<String, Value>>) -> Value {
+    let mut names = data
+        .and_then(|data| {
+            data.get("variable_names")
+                .or_else(|| data.get("saved_variables"))
+        })
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter(|name| !name.is_empty())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    if names.is_empty() {
+        names.extend(
+            data.and_then(|data| data.get("values"))
+                .and_then(Value::as_object)
+                .into_iter()
+                .flatten()
+                .map(|(name, _)| name.clone()),
+        );
+    }
+    names.dedup();
+    Value::Array(names.into_iter().map(Value::String).collect())
 }
 
 fn permission_fields(
@@ -1861,7 +1990,7 @@ fn hitl_answered_map(events: &[AgentExecutionEventRecord]) -> BTreeMap<String, V
         let value = match event.event_type.as_str() {
             "clarification_answered" => json!({"answer": value_or(data, "answer", Value::Null)}),
             "decision_answered" => json!({"decision": value_or(data, "decision", Value::Null)}),
-            "env_var_provided" => json!({"values": value_or(data, "values", json!({}))}),
+            "env_var_provided" => json!({"variable_names": safe_env_var_names(data)}),
             "permission_granted" | "permission_replied" => {
                 json!({"granted": value_or(data, "granted", json!(false))})
             }
@@ -2323,6 +2452,164 @@ mod tests {
 
         assert_eq!(timeline[0].fields["answered"], true);
         assert_eq!(timeline[0].fields["answer"], "yes");
+    }
+
+    #[test]
+    fn agent_timeline_redacts_legacy_env_var_values_for_pg_and_dev_history() {
+        let events = vec![
+            event(
+                "env_var_requested",
+                10,
+                json!({
+                    "request_id": "env-release",
+                    "tool_name": "release",
+                    "fields": [{"name": "DEPLOY_TOKEN", "type": "password"}],
+                    "message": "Provide deployment credentials",
+                }),
+            ),
+            event(
+                "env_var_provided",
+                20,
+                json!({
+                    "request_id": "env-release",
+                    "tool_name": "release",
+                    "values": {"DEPLOY_TOKEN": "must-never-enter-history"},
+                    "saved_variables": ["DEPLOY_TOKEN"],
+                }),
+            ),
+        ];
+        let answered = hitl_answered_map(&events);
+        let timeline = build_timeline(
+            &events,
+            &BTreeMap::new(),
+            &answered,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        );
+
+        assert_eq!(timeline[0].fields["answered"], true);
+        assert_eq!(timeline[0].fields["variableNames"], json!(["DEPLOY_TOKEN"]));
+        assert!(timeline[0].fields.get("values").is_none());
+        assert_eq!(timeline[1].fields["variableNames"], json!(["DEPLOY_TOKEN"]));
+        assert!(timeline[1].fields.get("values").is_none());
+        assert!(!serde_json::to_string(&timeline)
+            .unwrap()
+            .contains("must-never-enter-history"));
+
+        let status = BTreeMap::from([(
+            "env-release".to_string(),
+            HitlStatusInfo {
+                status: "answered".to_string(),
+                response: Some("legacy-secret-response".to_string()),
+                response_metadata: json!({
+                    "values": {"DEPLOY_TOKEN": "legacy-secret-metadata"}
+                }),
+            },
+        )]);
+        let status_timeline = build_timeline(
+            &events[..1],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &status,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        );
+        assert_eq!(status_timeline[0].fields["answered"], true);
+        assert_eq!(
+            status_timeline[0].fields["variableNames"],
+            json!(["DEPLOY_TOKEN"])
+        );
+        let serialized = serde_json::to_string(&status_timeline).unwrap();
+        assert!(!serialized.contains("legacy-secret-response"));
+        assert!(!serialized.contains("legacy-secret-metadata"));
+    }
+
+    #[test]
+    fn agent_timeline_projects_a2ui_allowlist_and_replays_elicitation_history() {
+        let events = vec![
+            event(
+                "a2ui_action_asked",
+                10,
+                json!({
+                    "request_id": "a2ui-release",
+                    "block_id": "release-card",
+                    "title": "Review",
+                    "timeout_seconds": 300,
+                    "surface_data": {
+                        "allowed_actions": [{
+                            "source_component_id": "approve-button",
+                            "action_name": "approve",
+                            "untrusted_extra": "drop-me",
+                        }],
+                        "context": {"must_not_enter_history": true},
+                        "components": "sensitive surface body",
+                    },
+                }),
+            ),
+            event(
+                "a2ui_action_answered",
+                20,
+                json!({
+                    "request_id": "a2ui-release",
+                    "source_component_id": "approve-button",
+                    "action_name": "approve",
+                }),
+            ),
+            event(
+                "elicitation_asked",
+                30,
+                json!({
+                    "request_id": "elicitation-region",
+                    "message": "Choose a region",
+                    "requested_schema": {"type": "string"},
+                }),
+            ),
+            event(
+                "elicitation_answered",
+                40,
+                json!({
+                    "request_id": "elicitation-region",
+                    "response": "eu-west",
+                }),
+            ),
+        ];
+        let status = BTreeMap::from([(
+            "a2ui-release".to_string(),
+            HitlStatusInfo {
+                status: "completed".to_string(),
+                response: None,
+                response_metadata: json!({}),
+            },
+        )]);
+        let timeline = build_timeline(
+            &events,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &status,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        );
+
+        assert_eq!(timeline[0].fields["request_id"], "a2ui-release");
+        assert_eq!(timeline[0].fields["status"], "completed");
+        assert_eq!(timeline[0].fields["answered"], true);
+        assert_eq!(
+            timeline[0].fields["allowed_actions"],
+            json!([{
+                "source_component_id": "approve-button",
+                "action_name": "approve",
+            }])
+        );
+        let asked = serde_json::to_string(&timeline[0]).unwrap();
+        assert!(!asked.contains("must_not_enter_history"));
+        assert!(!asked.contains("sensitive surface body"));
+        assert_eq!(timeline[1].timeline_type, "a2ui_action_answered");
+        assert_eq!(timeline[2].timeline_type, "elicitation_asked");
+        assert_eq!(timeline[3].timeline_type, "elicitation_answered");
     }
 
     #[test]
