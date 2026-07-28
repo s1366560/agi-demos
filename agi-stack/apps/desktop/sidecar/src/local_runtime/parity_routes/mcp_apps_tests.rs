@@ -347,3 +347,81 @@ async fn server_registration_rejects_plaintext_environment_and_unknown_payload_f
     );
     fs::remove_dir_all(root).expect("remove malformed route root");
 }
+
+#[tokio::test]
+async fn remote_registration_accepts_only_header_vault_refs_and_never_exposes_reference_values() {
+    let root = test_root();
+    fs::create_dir_all(&root).expect("create remote route root");
+    let credential = "mcp-remote-route-secret";
+    let app = local_router(test_state(&root, credential));
+    let response = app
+        .oneshot(request(
+            Method::POST,
+            "/api/v1/mcp",
+            credential,
+            json!({
+                "name": "remote-route",
+                "server_type": "http",
+                "transport_config": {
+                    "url": "http://127.0.0.1:12345/mcp",
+                    "vault_header_refs": {
+                        "authorization": "private-vault-record-id"
+                    },
+                },
+                "enabled": false,
+                "project_id": "local-project",
+                "idempotency_key": "create-remote-route",
+            }),
+        ))
+        .await
+        .expect("create remote MCP response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let server = response_json(response).await;
+    assert_eq!(
+        server["transport_config"]["url"],
+        "http://127.0.0.1:12345/mcp"
+    );
+    assert_eq!(
+        server["transport_config"]["vault_header_names"],
+        json!(["authorization"])
+    );
+    assert_eq!(server["transport_config"]["vault_env_names"], json!([]));
+    assert!(!server.to_string().contains("private-vault-record-id"));
+    fs::remove_dir_all(root).expect("remove remote route root");
+}
+
+#[tokio::test]
+async fn capability_snapshot_only_advertises_live_transports_and_fails_closed_for_elicitation() {
+    let root = test_root();
+    fs::create_dir_all(&root).expect("create capability route root");
+    let credential = "mcp-capability-route-secret";
+    let app = local_router(test_state(&root, credential));
+    let response = app
+        .oneshot(request(
+            Method::GET,
+            "/api/v1/mcp/capabilities?project_id=local-project",
+            credential,
+            json!({}),
+        ))
+        .await
+        .expect("MCP capability response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let snapshot = response_json(response).await;
+    assert_eq!(snapshot["contract_version"], "desktop-local-mcp-v2");
+    assert_eq!(snapshot["availability"], "available");
+    for transport in ["stdio", "http", "sse", "websocket"] {
+        assert_eq!(
+            snapshot["transports"][transport]["availability"],
+            "available"
+        );
+        assert!(snapshot["transports"][transport]["reason_code"].is_null());
+    }
+    assert_eq!(snapshot["elicitation"]["availability"], "unavailable");
+    assert_eq!(
+        snapshot["elicitation"]["reason_code"],
+        "local_mcp_elicitation_bridge_unavailable"
+    );
+    assert_eq!(snapshot["credential_authority"], "application_vault");
+    assert_eq!(snapshot["redirect_policy"], "deny");
+    fs::remove_dir_all(root).expect("remove capability route root");
+}

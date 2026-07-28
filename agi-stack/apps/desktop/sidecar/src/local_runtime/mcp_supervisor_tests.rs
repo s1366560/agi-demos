@@ -143,6 +143,8 @@ fn test_limits() -> SupervisorLimits {
         retry_max: Duration::from_millis(20),
         max_request_bytes: 128 * 1024,
         max_response_bytes: 256 * 1024,
+        max_frame_bytes: 256 * 1024,
+        max_aggregate_bytes: 512 * 1024,
     }
 }
 
@@ -359,25 +361,22 @@ async fn stdio_supervisor_fails_closed_for_timeout_crash_malformed_and_conflicti
         .expect_err("conflicting idempotency replay");
     assert_eq!(conflict.reason_code(), "local_mcp_idempotency_conflict");
 
-    let unsupported = supervisor.create_server(
-        &active_scope,
-        McpServerDefinitionInput {
-            name: "remote".to_string(),
-            description: None,
-            transport: McpTransport::Http,
-            command: vec!["https://example.invalid/mcp".to_string()],
-            cwd: None,
-            vault_env_refs: BTreeMap::new(),
-            enabled: true,
-        },
-        "create-remote",
-    );
-    assert_eq!(
-        unsupported
-            .expect_err("HTTP remains explicit unavailable")
-            .reason_code(),
-        "local_mcp_http_transport_unavailable"
-    );
+    let remote = supervisor
+        .create_server(
+            &active_scope,
+            McpServerDefinitionInput {
+                name: "remote".to_string(),
+                description: None,
+                transport: McpTransport::Http,
+                command: vec!["https://example.invalid/mcp".to_string()],
+                cwd: None,
+                vault_env_refs: BTreeMap::new(),
+                enabled: true,
+            },
+            "create-remote",
+        )
+        .expect("HTTP definition is accepted before runtime resolution");
+    assert_eq!(remote.runtime_status, "stopped");
 
     fs::remove_dir_all(root).expect("remove MCP failure test root");
 }

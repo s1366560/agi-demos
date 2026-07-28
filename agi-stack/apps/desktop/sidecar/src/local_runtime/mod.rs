@@ -82,6 +82,8 @@ mod composer_context;
 mod local_route_parity_tests;
 #[cfg(test)]
 mod managed_resource_tests;
+#[cfg(test)]
+mod mcp_remote_transport_tests;
 mod mcp_supervisor;
 #[cfg(test)]
 mod mcp_supervisor_tests;

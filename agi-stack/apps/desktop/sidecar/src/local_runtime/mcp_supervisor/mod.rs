@@ -15,11 +15,17 @@ use crate::application_vault::ApplicationCredentialVault;
 
 use super::DesktopSessionStore;
 
+mod http;
+mod remote_common;
 mod stdio;
 mod store;
+mod websocket;
 
+use http::{HttpRuntime, SseRuntime};
+use remote_common::{validate_remote_header_names, validate_remote_input, InitializedServer};
 use stdio::StdioRuntime;
 use store::McpStore;
+use websocket::WebSocketRuntime;
 
 const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
 
@@ -123,6 +129,8 @@ pub(super) struct SupervisorLimits {
     pub(super) retry_max: Duration,
     pub(super) max_request_bytes: usize,
     pub(super) max_response_bytes: usize,
+    pub(super) max_frame_bytes: usize,
+    pub(super) max_aggregate_bytes: usize,
 }
 
 impl Default for SupervisorLimits {
@@ -134,6 +142,8 @@ impl Default for SupervisorLimits {
             retry_max: Duration::from_secs(30),
             max_request_bytes: 256 * 1024,
             max_response_bytes: 1024 * 1024,
+            max_frame_bytes: 1024 * 1024,
+            max_aggregate_bytes: 4 * 1024 * 1024,
         }
     }
 }
@@ -174,7 +184,96 @@ pub(super) struct McpSupervisor {
     workspace_root: PathBuf,
     credential_vault: Mutex<Option<ApplicationCredentialVault>>,
     limits: SupervisorLimits,
-    runtimes: Mutex<HashMap<String, Arc<AsyncMutex<StdioRuntime>>>>,
+    runtimes: Mutex<HashMap<String, Arc<AsyncMutex<McpRuntime>>>>,
+}
+
+enum McpRuntime {
+    Stdio(Box<StdioRuntime>),
+    Http(Box<HttpRuntime>),
+    Sse(Box<SseRuntime>),
+    Websocket(Box<WebSocketRuntime>),
+}
+
+impl McpRuntime {
+    fn new(transport: McpTransport) -> Self {
+        match transport {
+            McpTransport::Stdio => Self::Stdio(Box::new(StdioRuntime::new())),
+            McpTransport::Http => Self::Http(Box::new(HttpRuntime::new())),
+            McpTransport::Sse => Self::Sse(Box::new(SseRuntime::new())),
+            McpTransport::Websocket => Self::Websocket(Box::new(WebSocketRuntime::new())),
+        }
+    }
+
+    async fn ensure_initialized(
+        &mut self,
+        server: &McpServerDefinition,
+        workspace_root: &Path,
+        credential_vault: Option<&ApplicationCredentialVault>,
+        limits: SupervisorLimits,
+    ) -> McpResult<InitializedServer> {
+        match self {
+            Self::Stdio(runtime) => {
+                runtime
+                    .ensure_initialized(server, workspace_root, credential_vault, limits)
+                    .await
+            }
+            Self::Http(runtime) => {
+                runtime
+                    .ensure_initialized(server, credential_vault, limits)
+                    .await
+            }
+            Self::Sse(runtime) => {
+                runtime
+                    .ensure_initialized(server, credential_vault, limits)
+                    .await
+            }
+            Self::Websocket(runtime) => {
+                runtime
+                    .ensure_initialized(server, credential_vault, limits)
+                    .await
+            }
+        }
+    }
+
+    async fn request(
+        &mut self,
+        server: &McpServerDefinition,
+        workspace_root: &Path,
+        credential_vault: Option<&ApplicationCredentialVault>,
+        method: &str,
+        params: Value,
+        limits: SupervisorLimits,
+    ) -> McpResult<Value> {
+        match self {
+            Self::Stdio(runtime) => {
+                runtime
+                    .request(
+                        server,
+                        workspace_root,
+                        credential_vault,
+                        method,
+                        params,
+                        limits,
+                    )
+                    .await
+            }
+            Self::Http(runtime) => {
+                runtime
+                    .request(server, credential_vault, method, params, limits)
+                    .await
+            }
+            Self::Sse(runtime) => {
+                runtime
+                    .request(server, credential_vault, method, params, limits)
+                    .await
+            }
+            Self::Websocket(runtime) => {
+                runtime
+                    .request(server, credential_vault, method, params, limits)
+                    .await
+            }
+        }
+    }
 }
 
 impl McpSupervisor {
@@ -207,9 +306,6 @@ impl McpSupervisor {
         idempotency_key: &str,
     ) -> McpResult<McpServerDefinition> {
         validate_scope(scope)?;
-        if input.transport != McpTransport::Stdio {
-            return Err(unsupported_transport(input.transport));
-        }
         validate_definition(&input)?;
         validate_idempotency_key(idempotency_key)?;
         let request_hash = definition_hash(scope, &input);
@@ -447,9 +543,6 @@ impl McpSupervisor {
                 "MCP server is disabled",
             ));
         }
-        if server.transport != McpTransport::Stdio {
-            return Err(unsupported_transport(server.transport));
-        }
         Ok(server)
     }
 
@@ -459,7 +552,7 @@ impl McpSupervisor {
         method: &str,
         params: Value,
     ) -> McpResult<Value> {
-        let runtime = self.runtime(&server.id)?;
+        let runtime = self.runtime(server)?;
         let credential_vault = self.credential_vault()?;
         let mut runtime = runtime.lock().await;
         runtime
@@ -478,7 +571,7 @@ impl McpSupervisor {
     }
 
     async fn ensure_initialized(&self, server: &McpServerDefinition) -> McpResult<()> {
-        let runtime = self.runtime(&server.id)?;
+        let runtime = self.runtime(server)?;
         let credential_vault = self.credential_vault()?;
         let mut runtime = runtime.lock().await;
         let initialized = runtime
@@ -497,12 +590,12 @@ impl McpSupervisor {
             .map_err(|_| storage_error())
     }
 
-    fn runtime(&self, server_id: &str) -> McpResult<Arc<AsyncMutex<StdioRuntime>>> {
+    fn runtime(&self, server: &McpServerDefinition) -> McpResult<Arc<AsyncMutex<McpRuntime>>> {
         let mut runtimes = self.runtimes.lock().map_err(|_| storage_error())?;
         Ok(Arc::clone(
             runtimes
-                .entry(server_id.to_string())
-                .or_insert_with(|| Arc::new(AsyncMutex::new(StdioRuntime::new()))),
+                .entry(server.id.clone())
+                .or_insert_with(|| Arc::new(AsyncMutex::new(McpRuntime::new(server.transport)))),
         ))
     }
 
@@ -521,30 +614,47 @@ fn validate_scope(scope: &McpScope) -> McpResult<()> {
 
 fn validate_definition(input: &McpServerDefinitionInput) -> McpResult<()> {
     validate_identifier(&input.name, "local_mcp_server_name_invalid")?;
-    if input.command.is_empty() || input.command.len() > 64 {
-        return Err(McpSupervisorError::new(
-            "local_mcp_command_invalid",
-            "MCP stdio command must contain direct argv entries",
-        ));
-    }
-    for argument in &input.command {
-        if argument.is_empty() || argument.len() > 4096 || argument.chars().any(char::is_control) {
-            return Err(McpSupervisorError::new(
-                "local_mcp_command_invalid",
-                "MCP stdio command argv is invalid",
-            ));
+    match input.transport {
+        McpTransport::Stdio => {
+            if input.command.is_empty() || input.command.len() > 64 {
+                return Err(McpSupervisorError::new(
+                    "local_mcp_command_invalid",
+                    "MCP stdio command must contain direct argv entries",
+                ));
+            }
+            for argument in &input.command {
+                if argument.is_empty()
+                    || argument.len() > 4096
+                    || argument.chars().any(char::is_control)
+                {
+                    return Err(McpSupervisorError::new(
+                        "local_mcp_command_invalid",
+                        "MCP stdio command argv is invalid",
+                    ));
+                }
+            }
+            for (name, reference) in &input.vault_env_refs {
+                if !valid_env_name(name) || reference.is_empty() || reference.len() > 512 {
+                    return Err(McpSupervisorError::new(
+                        "local_mcp_environment_invalid",
+                        "MCP environment vault reference is invalid",
+                    ));
+                }
+            }
+            if let Some(cwd) = input.cwd.as_deref() {
+                validate_relative_path(cwd)?;
+            }
         }
-    }
-    for (name, reference) in &input.vault_env_refs {
-        if !valid_env_name(name) || reference.is_empty() || reference.len() > 512 {
-            return Err(McpSupervisorError::new(
-                "local_mcp_environment_invalid",
-                "MCP environment vault reference is invalid",
-            ));
+        McpTransport::Http | McpTransport::Sse | McpTransport::Websocket => {
+            validate_remote_input(input.transport, &input.command)?;
+            validate_remote_header_names(&input.vault_env_refs)?;
+            if input.cwd.is_some() {
+                return Err(McpSupervisorError::new(
+                    "local_mcp_cwd_invalid",
+                    "MCP remote transports do not accept a local working directory",
+                ));
+            }
         }
-    }
-    if let Some(cwd) = input.cwd.as_deref() {
-        validate_relative_path(cwd)?;
     }
     Ok(())
 }
@@ -642,22 +752,6 @@ fn value_hash(value: &Value) -> String {
     let mut hasher = Sha256::new();
     hasher.update(value.to_string());
     format!("{:x}", hasher.finalize())
-}
-
-fn unsupported_transport(transport: McpTransport) -> McpSupervisorError {
-    match transport {
-        McpTransport::Stdio => {
-            McpSupervisorError::new("local_mcp_transport_invalid", "MCP transport is invalid")
-        }
-        McpTransport::Http | McpTransport::Sse => McpSupervisorError::new(
-            "local_mcp_http_transport_unavailable",
-            "local MCP HTTP and SSE transports are unavailable",
-        ),
-        McpTransport::Websocket => McpSupervisorError::new(
-            "local_mcp_websocket_transport_unavailable",
-            "local MCP WebSocket transport is unavailable",
-        ),
-    }
 }
 
 fn server_not_found() -> McpSupervisorError {

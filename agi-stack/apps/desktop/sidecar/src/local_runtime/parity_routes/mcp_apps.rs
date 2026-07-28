@@ -17,12 +17,13 @@ use crate::local_runtime::mcp_supervisor::{
     McpTransport,
 };
 
-const CONTRACT_VERSION: &str = "desktop-local-mcp-v1";
+const CONTRACT_VERSION: &str = "desktop-local-mcp-v2";
 
 pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
     Router::new()
         .route("/api/v1/mcp", get(list_servers).post(create_server))
         .route("/api/v1/mcp/create", post(create_server))
+        .route("/api/v1/mcp/capabilities", get(capabilities))
         .route("/api/v1/mcp/tools/all", get(list_all_tools))
         .route("/api/v1/mcp/tools/call", post(call_tool_by_server_id))
         .route("/api/v1/mcp/reconcile/:project_id", post(reconcile_project))
@@ -35,6 +36,48 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
         .route("/api/v1/mcp/apps/proxy/tool-call", post(call_direct_tool))
         .route("/api/v1/mcp/apps/resources/read", post(read_resource))
         .route("/api/v1/mcp/apps/resources/list", post(list_resources))
+}
+
+async fn capabilities(
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Query(query): Query<ProjectQuery>,
+) -> LocalJsonResult {
+    ensure_project_scope(&authenticated, query.project_id.as_deref())?;
+    Ok(Json(json!({
+        "contract_version": CONTRACT_VERSION,
+        "mode": "local",
+        "capability": "mcp_apps",
+        "availability": "available",
+        "reason_code": null,
+        "transports": {
+            "stdio": {
+                "availability": "available",
+                "protocol_version": "2024-11-05",
+                "reason_code": null,
+            },
+            "http": {
+                "availability": "available",
+                "protocol_version": "2025-03-26",
+                "reason_code": null,
+            },
+            "sse": {
+                "availability": "available",
+                "protocol_version": "2024-11-05",
+                "reason_code": null,
+            },
+            "websocket": {
+                "availability": "available",
+                "protocol_version": "2025-03-26",
+                "reason_code": null,
+            },
+        },
+        "elicitation": {
+            "availability": "unavailable",
+            "reason_code": "local_mcp_elicitation_bridge_unavailable",
+        },
+        "credential_authority": "application_vault",
+        "redirect_policy": "deny",
+    })))
 }
 
 #[derive(Deserialize)]
@@ -69,6 +112,8 @@ struct TransportConfigBody {
     cwd: Option<String>,
     #[serde(default)]
     vault_env_refs: BTreeMap<String, String>,
+    #[serde(default)]
+    vault_header_refs: BTreeMap<String, String>,
     environment: Option<Value>,
     env: Option<Value>,
     url: Option<String>,
@@ -232,7 +277,7 @@ async fn test_server(
         .map_err(mcp_error_tuple_for)?;
     Ok(Json(json!({
         "success": true,
-        "message": "MCP stdio handshake succeeded",
+        "message": "MCP handshake succeeded",
         "tools_discovered": tools.len(),
         "connection_time_ms": started.elapsed().as_secs_f64() * 1_000.0,
         "errors": [],
@@ -493,10 +538,43 @@ async fn read_resource(
 fn definition_input(
     body: CreateServerBody,
 ) -> Result<McpServerDefinitionInput, (StatusCode, Json<Value>)> {
-    let command = match body.server_type {
-        McpTransport::Stdio => direct_command(&body.transport_config)?,
+    let (command, cwd, vault_refs) = match body.server_type {
+        McpTransport::Stdio => {
+            if body.transport_config.url.is_some()
+                || !body.transport_config.vault_header_refs.is_empty()
+            {
+                return Err(malformed(
+                    "local_mcp_stdio_config_invalid",
+                    "MCP stdio transport accepts command argv and environment vault references",
+                ));
+            }
+            (
+                direct_command(&body.transport_config)?,
+                body.transport_config.cwd,
+                body.transport_config.vault_env_refs,
+            )
+        }
         McpTransport::Http | McpTransport::Sse | McpTransport::Websocket => {
-            vec![body.transport_config.url.unwrap_or_default()]
+            if body.transport_config.command.is_some()
+                || !body.transport_config.args.is_empty()
+                || body.transport_config.cwd.is_some()
+                || !body.transport_config.vault_env_refs.is_empty()
+            {
+                return Err(malformed(
+                    "local_mcp_remote_config_invalid",
+                    "MCP remote transport accepts only a URL and vault header references",
+                ));
+            }
+            (
+                vec![body.transport_config.url.ok_or_else(|| {
+                    malformed(
+                        "local_mcp_endpoint_invalid",
+                        "MCP remote transport URL is required",
+                    )
+                })?],
+                None,
+                body.transport_config.vault_header_refs,
+            )
         }
     };
     Ok(McpServerDefinitionInput {
@@ -504,8 +582,8 @@ fn definition_input(
         description: body.description,
         transport: body.server_type,
         command,
-        cwd: body.transport_config.cwd,
-        vault_env_refs: body.transport_config.vault_env_refs,
+        cwd,
+        vault_env_refs: vault_refs,
         enabled: body.enabled,
     })
 }
@@ -567,6 +645,7 @@ fn active_scope(authenticated: &AuthenticatedContext) -> McpScope {
 }
 
 fn server_response(server: &McpServerDefinition) -> Value {
+    let is_stdio = server.transport == McpTransport::Stdio;
     json!({
         "id": server.id,
         "tenant_id": server.tenant_id,
@@ -575,10 +654,20 @@ fn server_response(server: &McpServerDefinition) -> Value {
         "description": server.description,
         "server_type": server.transport,
         "transport_config": {
-            "command": server.command.first(),
-            "arguments_redacted": server.command.len() > 1,
+            "command": if is_stdio { server.command.first() } else { None },
+            "url": if is_stdio { None } else { server.command.first() },
+            "arguments_redacted": is_stdio && server.command.len() > 1,
             "cwd": server.cwd,
-            "vault_env_names": server.vault_env_refs.keys().collect::<Vec<_>>(),
+            "vault_env_names": if is_stdio {
+                server.vault_env_refs.keys().collect::<Vec<_>>()
+            } else {
+                Vec::<&String>::new()
+            },
+            "vault_header_names": if is_stdio {
+                Vec::<&String>::new()
+            } else {
+                server.vault_env_refs.keys().collect::<Vec<_>>()
+            },
         },
         "enabled": server.enabled,
         "runtime_status": server.runtime_status,
@@ -626,16 +715,25 @@ fn mcp_error_tuple_for(error: McpSupervisorError) -> (StatusCode, Json<Value>) {
     let status = match error.reason_code() {
         "local_mcp_server_not_found" | "local_mcp_app_not_found" => StatusCode::NOT_FOUND,
         "local_mcp_idempotency_conflict" | "local_mcp_server_name_conflict" => StatusCode::CONFLICT,
-        "local_mcp_http_transport_unavailable" | "local_mcp_websocket_transport_unavailable" => {
+        "local_mcp_elicitation_bridge_unavailable" | "local_mcp_client_request_unavailable" => {
             StatusCode::NOT_IMPLEMENTED
         }
         "local_mcp_request_timeout" => StatusCode::GATEWAY_TIMEOUT,
         "local_mcp_process_start_failed"
         | "local_mcp_process_exited"
+        | "local_mcp_connection_closed"
+        | "local_mcp_session_lost"
         | "local_mcp_restart_backoff"
         | "local_mcp_server_disabled"
         | "local_mcp_vault_reference_unavailable" => StatusCode::SERVICE_UNAVAILABLE,
         "local_mcp_malformed_response"
+        | "local_mcp_content_type_rejected"
+        | "local_mcp_http_status_error"
+        | "local_mcp_redirect_rejected"
+        | "local_mcp_sse_handshake_failed"
+        | "local_mcp_sse_endpoint_missing"
+        | "local_mcp_sse_endpoint_rejected"
+        | "local_mcp_websocket_handshake_failed"
         | "local_mcp_response_too_large"
         | "local_mcp_response_correlation_failed"
         | "local_mcp_json_rpc_error" => StatusCode::BAD_GATEWAY,
