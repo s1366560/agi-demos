@@ -38,6 +38,33 @@ test('App composes the narrow automation API and the page invokes guarded run-no
   assert.match(automationsPageSource, /onClick=\{onRun\}/u);
 });
 
+test('the narrow automation API preserves the versioned capability authority', async () => {
+  const envelope = {
+    service_version: '0.1.0',
+    contract_version: '2.0.0',
+    schema_version: 1,
+    read: true,
+    revision_guarded: true,
+    idempotency_guarded: true,
+    durable_execution: false,
+    supported_read_trigger_kinds: ['manual', 'schedule', 'event'],
+    create: { allowed: true },
+    edit: { allowed: true },
+    toggle: { allowed: true },
+    run_now: {
+      allowed: false,
+      reason_code: 'durable_automation_execution_unavailable',
+    },
+    delete: { allowed: true },
+  };
+  const baseApi = {
+    getAutomationCapabilities: async () => envelope,
+  };
+  const api = createDesktopAutomationApi(baseApi, DEFAULT_CONFIG);
+
+  assert.deepEqual(await api.getAutomationCapabilities(), envelope);
+});
+
 test('automation run-now uses the scoped guarded contract without expanding DesktopApiClient', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;

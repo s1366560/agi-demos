@@ -15482,6 +15482,8 @@ mod tests {
         assert_eq!(
             response_json(capabilities).await,
             json!({
+                "service_version": "0.1.0",
+                "contract_version": "2.0.0",
                 "schema_version": 1,
                 "read": true,
                 "revision_guarded": true,

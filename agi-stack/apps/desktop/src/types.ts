@@ -1790,6 +1790,11 @@ export type AutomationCapabilities = {
   delete: AutomationActionCapability;
 };
 
+export type AutomationCapabilityEnvelope = AutomationCapabilities & {
+  service_version: string;
+  contract_version: string;
+};
+
 export type AutomationJob = {
   id: string;
   project_id: string;

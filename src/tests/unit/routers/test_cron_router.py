@@ -52,6 +52,8 @@ async def test_capabilities_fail_closed_with_stable_reason_codes() -> None:
         db,
     )
 
+    assert response.service_version == "0.1.0"
+    assert response.contract_version == "2.0.0"
     assert response.schema_version == 1
     assert response.read is True
     assert response.revision_guarded is False

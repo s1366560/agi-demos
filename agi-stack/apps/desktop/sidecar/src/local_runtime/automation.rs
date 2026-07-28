@@ -20,6 +20,8 @@ use super::{
 const DEFAULT_PAGE_SIZE: i64 = 50;
 const DEFAULT_TIMEOUT_SECONDS: u64 = 300;
 const AUTOMATION_RUN_CONTRACT_VERSION: u64 = 2;
+const LOCAL_AUTOMATION_SERVICE_VERSION: &str = "0.1.0";
+const LOCAL_AUTOMATION_CONTRACT_VERSION: &str = "2.0.0";
 
 #[derive(Debug, Default, Deserialize)]
 pub(super) struct ListQuery {
@@ -169,6 +171,8 @@ pub(super) async fn capabilities(
 ) -> LocalJsonResult {
     ensure_active_project(&authenticated, &project_id)?;
     Ok(Json(json!({
+        "service_version": LOCAL_AUTOMATION_SERVICE_VERSION,
+        "contract_version": LOCAL_AUTOMATION_CONTRACT_VERSION,
         "schema_version": 1,
         "read": true,
         "revision_guarded": true,

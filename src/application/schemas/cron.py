@@ -157,6 +157,8 @@ class CronActionCapability(BaseModel):
 class CronJobCapabilitiesResponse(BaseModel):
     """Versioned capability contract for the scoped automation runtime."""
 
+    service_version: str = "0.1.0"
+    contract_version: str = "2.0.0"
     schema_version: int = 1
     read: bool
     revision_guarded: bool

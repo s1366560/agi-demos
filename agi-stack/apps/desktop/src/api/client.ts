@@ -11,7 +11,7 @@ import type {
   AgentInputFileMetadata,
   ApprovePlanAndStartRequest,
   ApprovePlanAndStartResponse,
-  AutomationCapabilities,
+  AutomationCapabilityEnvelope,
   AutomationCreateInput,
   AutomationDeleteInput,
   AutomationJob,
@@ -434,9 +434,9 @@ export class DesktopApiClient {
   async getAutomationCapabilities(
     projectId = this.config.projectId,
     signal?: AbortSignal,
-  ): Promise<AutomationCapabilities> {
+  ): Promise<AutomationCapabilityEnvelope> {
     const resolvedProjectId = requireValue(projectId, 'project id');
-    return this.request<AutomationCapabilities>(
+    return this.request<AutomationCapabilityEnvelope>(
       `/api/v1/projects/${encodeURIComponent(resolvedProjectId)}/cron-jobs/capabilities`,
       { signal },
     );
