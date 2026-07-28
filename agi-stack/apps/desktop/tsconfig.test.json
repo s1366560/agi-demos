@@ -107,6 +107,8 @@
     "src/features/settings/settingsNavigationModel.ts",
     "src/features/settings/settingsEntryRouting.ts",
     "src/features/settings/managedResourceModel.ts",
+    "src/features/settings/ManagedResourceViews.tsx",
+    "src/features/settings/SettingsCorePages.tsx",
     "src/features/settings/agentDefinitionFormModel.ts",
     "src/features/settings/skillEditorModel.ts",
     "src/features/settings/subAgentEditorModel.ts",
@@ -137,6 +139,7 @@
     "src/features/workspace/workspaceTreeModel.ts",
     "src/features/workspace/workspaceOverviewModel.ts",
     "src/features/workspace/workspaceExecutionModel.ts",
+    "src/theme.tsx",
     "src/types.ts"
   ]
 }

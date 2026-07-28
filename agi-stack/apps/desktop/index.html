@@ -8,6 +8,7 @@
       content="default-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:* https: wss:; font-src 'self' data:; frame-src 'self' https: http://127.0.0.1:* http://localhost:* http://[::1]:*; img-src 'self' blob: data:; object-src 'none'; base-uri 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
     />
     <title>agi-stack Desktop</title>
+    <script src="/theme-init.js"></script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
@@ -21,6 +22,12 @@
         height: 100%;
         margin: 0;
         background: #080c12;
+      }
+
+      html[data-theme='light'],
+      html[data-theme='light'] body,
+      html[data-theme='light'] #root {
+        background: #f6f8fb;
       }
 
       .boot-fallback {

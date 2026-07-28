@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { ToastProvider } from './features/feedback/ToastCenter';
 import { I18nProvider } from './i18n';
+import { ThemePreferenceProvider } from './theme';
 import './styles.css';
 
 function formatError(error: unknown): string {
@@ -80,9 +81,11 @@ try {
   createRoot(root).render(
     <React.StrictMode>
       <I18nProvider>
-        <ToastProvider>
-          <App />
-        </ToastProvider>
+        <ThemePreferenceProvider>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </ThemePreferenceProvider>
       </I18nProvider>
     </React.StrictMode>,
   );

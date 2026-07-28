@@ -94,6 +94,105 @@
   --desktop-amber-soft-rgb: 245, 183, 71;
 }
 
+/* Light theme overrides. Every --desktop-* token from :root must be redefined
+   here; tests/theme.test.mjs enforces parity between the two blocks. */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --desktop-bg: #f6f8fb;
+  --desktop-panel: #ffffff;
+  --desktop-panel-2: #f0f3f7;
+  --desktop-panel-raised: #ffffff;
+  --desktop-border: #d7dee7;
+  --desktop-border-soft: #e4e9f0;
+  --desktop-text: #17202c;
+  --desktop-muted: #51637a;
+  --desktop-faint: #6b7c91;
+  --desktop-cyan: #0e7490;
+  --desktop-accent: #0e7490;
+  --desktop-green: #0d7f57;
+  --desktop-amber: #b4741c;
+  --desktop-red: #d63a4b;
+  --desktop-sidebar-width: 220px;
+  /* Surface ladder (light gray to white by luminance) */
+  --desktop-surface-1: #e9edf3;
+  --desktop-surface-2: #eceff5;
+  --desktop-surface-3: #edf1f6;
+  --desktop-surface-4: #eef2f7;
+  --desktop-surface-5: #eff3f8;
+  --desktop-surface-6: #f0f3f7;
+  --desktop-surface-7: #f1f4f8;
+  --desktop-surface-8: #f1f5f9;
+  --desktop-surface-9: #f2f5f9;
+  --desktop-surface-10: #f3f6fa;
+  --desktop-surface-11: #f4f6fa;
+  --desktop-surface-12: #f5f7fb;
+  --desktop-surface-13: #f5f8fb;
+  --desktop-surface-14: #f8fafc;
+  --desktop-surface-15: #fbfcfe;
+  /* Tinted surfaces */
+  --desktop-surface-red: #fbeef0;
+  --desktop-surface-cyan: #e3f2f6;
+  /* Border ladder (light to dark by luminance) */
+  --desktop-border-1: #dbe2ea;
+  --desktop-border-2: #d9e0e9;
+  --desktop-border-3: #d5dde6;
+  --desktop-border-4: #cfd8e2;
+  --desktop-border-5: #c7d2de;
+  --desktop-border-6: #b8c5d4;
+  /* Gray ladder (muted text/icons on light surfaces) */
+  --desktop-gray-1: #6d7e92;
+  --desktop-gray-2: #6a7b8f;
+  --desktop-gray-3: #67788c;
+  --desktop-gray-4: #66778b;
+  --desktop-gray-5: #647589;
+  --desktop-gray-6: #637488;
+  --desktop-gray-7: #627386;
+  --desktop-gray-8: #617185;
+  --desktop-gray-9: #5e6f83;
+  --desktop-gray-10: #586b7f;
+  --desktop-gray-11: #536579;
+  --desktop-gray-12: #506276;
+  --desktop-gray-13: #495a6d;
+  /* Dark text + white */
+  --desktop-text-pale: #3c4c5f;
+  --desktop-text-soft: #2a3747;
+  --desktop-text-bright: #101823;
+  --desktop-white: #fff;
+  /* Accent variants (darkened for contrast on light surfaces) */
+  --desktop-red-soft: #cf5465;
+  --desktop-red-pale: #b03a4c;
+  --desktop-red-light: #992f40;
+  --desktop-purple: #6a5cae;
+  --desktop-cyan-dark: #0a5468;
+  --desktop-cyan-mid: #0e7490;
+  --desktop-cyan-bright: #1294b0;
+  --desktop-green-bright: #12a06f;
+  --desktop-amber-dim: #a5681a;
+  /* RGB channel tokens for rgba(var(...), alpha) usage */
+  --desktop-cyan-rgb: 14, 116, 144;
+  --desktop-slate-rgb: 100, 116, 139;
+  --desktop-amber-rgb: 180, 116, 28;
+  --desktop-green-rgb: 13, 127, 87;
+  --desktop-red-rgb: 214, 58, 75;
+  --desktop-red-bright-rgb: 224, 45, 65;
+  --desktop-black-rgb: 0, 0, 0;
+  --desktop-white-rgb: 255, 255, 255;
+  --desktop-steel-1-rgb: 70, 100, 122;
+  --desktop-steel-2-rgb: 84, 116, 140;
+  --desktop-steel-3-rgb: 90, 122, 146;
+  /* Scrims stay dark translucent over light content */
+  --desktop-overlay-1-rgb: 3, 7, 12;
+  --desktop-overlay-2-rgb: 8, 15, 23;
+  --desktop-overlay-3-rgb: 10, 16, 25;
+  --desktop-overlay-4-rgb: 9, 17, 27;
+  --desktop-overlay-5-rgb: 13, 19, 29;
+  --desktop-overlay-6-rgb: 13, 24, 34;
+  --desktop-cyan-alt-rgb: 8, 145, 178;
+  --desktop-cyan-soft-rgb: 21, 156, 187;
+  --desktop-amber-alt-rgb: 180, 83, 9;
+  --desktop-amber-soft-rgb: 196, 122, 30;
+}
+
 * {
   box-sizing: border-box;
 }

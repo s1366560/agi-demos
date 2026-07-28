@@ -360,6 +360,7 @@ import {
 import { socketEventsSince, useAgentSocket } from './hooks/useAgentSocket';
 import { useTerminalProxy } from './hooks/useTerminalProxy';
 import { useI18n } from './i18n';
+import { useThemePreference } from './theme';
 import type {
   AgentConversation,
   AgentInputFileMetadata,
@@ -1649,6 +1650,7 @@ class WorkspaceSsoFlowError extends Error {
 export function App() {
   const runsInNativeDesktop = detectNativeDesktopShell();
   const { t } = useI18n();
+  const { resolved: themeAppearance } = useThemePreference();
   const { showToast } = useToast();
   const [config, setConfig] = useState<DesktopRuntimeConfig>(() =>
     initialDesktopRuntimeConfig(undefined, runsInNativeDesktop),
@@ -7595,7 +7597,13 @@ export function App() {
     auth.status === 'changing_password'
   ) {
     return (
-      <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+      <Theme
+        appearance={themeAppearance}
+        accentColor="cyan"
+        grayColor="slate"
+        radius="medium"
+        scaling="95%"
+      >
         <ForcePasswordChangeScreen
           busy={auth.status === 'changing_password'}
           error={auth.error}
@@ -7610,7 +7618,13 @@ export function App() {
 
   if (!identityAuthenticated) {
     return (
-      <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+      <Theme
+        appearance={themeAppearance}
+        accentColor="cyan"
+        grayColor="slate"
+        radius="medium"
+        scaling="95%"
+      >
         <LoginScreen
           auth={auth}
           mode={config.mode}
@@ -7633,7 +7647,13 @@ export function App() {
   }
 
   return (
-    <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+    <Theme
+      appearance={themeAppearance}
+      accentColor="cyan"
+      grayColor="slate"
+      radius="medium"
+      scaling="95%"
+    >
       <div
         ref={appShellRef}
         className={`app-shell hierarchy-shell runtime-mode ${

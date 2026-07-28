@@ -57,6 +57,17 @@ copyFileSync(
   join(compiledFeedbackDirectory, 'ToastCenter.css'),
 );
 
+const compiledSettingsDirectory = join(compiledRoot, 'src', 'features', 'settings');
+mkdirSync(compiledSettingsDirectory, { recursive: true });
+copyFileSync(
+  join(desktopRoot, 'src', 'features', 'settings', 'SettingsCorePages.css'),
+  join(compiledSettingsDirectory, 'SettingsCorePages.css'),
+);
+copyFileSync(
+  join(desktopRoot, 'src', 'features', 'settings', 'ManagedResourceViews.css'),
+  join(compiledSettingsDirectory, 'ManagedResourceViews.css'),
+);
+
 const compiledComponentsDirectory = join(compiledRoot, 'src', 'components');
 mkdirSync(compiledComponentsDirectory, { recursive: true });
 copyFileSync(
@@ -119,6 +130,7 @@ const testFiles = [
   'cloud-session-queue-qa.test.mjs',
   'conversation-title-events.test.mjs',
   'toast-center.test.mjs',
+  'theme.test.mjs',
   'skeleton.test.mjs',
   'desktop-shell-fidelity.test.mjs',
   'desktop-search-model.test.mjs',

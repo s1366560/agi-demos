@@ -15,6 +15,7 @@ import {
 
 import { DesktopApiClient } from '../../api/client';
 import { useI18n } from '../../i18n';
+import { useThemePreference, type ThemePreference } from '../../theme';
 import type {
   AuthState,
   DesktopRuntimeConfig,
@@ -497,11 +498,28 @@ export function PreferenceSummaryPage({
   section: 'appearance' | 'notifications';
 }) {
   const { t } = useI18n();
+  const { preference, setPreference } = useThemePreference();
   const Icon = section === 'appearance' ? FontStyleIcon : BellIcon;
+  const themeOptions: { value: ThemePreference; label: string; description: string }[] = [
+    {
+      value: 'dark',
+      label: t('settings.themeDark'),
+      description: t('settings.themeDarkDescription'),
+    },
+    {
+      value: 'light',
+      label: t('settings.themeLight'),
+      description: t('settings.themeLightDescription'),
+    },
+    {
+      value: 'system',
+      label: t('settings.themeSystem'),
+      description: t('settings.themeSystemDescription'),
+    },
+  ];
   const rows =
     section === 'appearance'
       ? [
-          ['settings.theme', 'settings.themeValue'],
           ['settings.density', 'settings.densityValue'],
           ['settings.motion', 'settings.motionValue'],
         ]
@@ -518,6 +536,32 @@ export function PreferenceSummaryPage({
       description={t(`settings.${section}Subtitle`)}
       className="settings-preference-page"
     >
+      {section === 'appearance' ? (
+        <section className="settings-panel settings-theme-panel">
+          <header>
+            <FontStyleIcon />
+            <span>
+              <strong>{t('settings.theme')}</strong>
+              <small>{t('settings.themeDescription')}</small>
+            </span>
+          </header>
+          <div
+            className="settings-language-options settings-theme-options"
+            role="radiogroup"
+            aria-label={t('settings.themeGroupLabel')}
+          >
+            {themeOptions.map((option) => (
+              <ThemeOption
+                key={option.value}
+                label={option.label}
+                detail={option.description}
+                selected={preference === option.value}
+                onSelect={() => setPreference(option.value)}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
       <section className="settings-panel settings-preference-summary">
         <header>
           <Icon />
@@ -533,6 +577,34 @@ export function PreferenceSummaryPage({
         </div>
       </section>
     </SettingsPage>
+  );
+}
+
+function ThemeOption({
+  label,
+  detail,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  detail: string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      className={selected ? 'active' : ''}
+      onClick={onSelect}
+    >
+      <div>
+        <strong>{label}</strong>
+        <small>{detail}</small>
+      </div>
+      {selected ? <CheckCircledIcon /> : null}
+    </button>
   );
 }
 
