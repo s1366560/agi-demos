@@ -2,3 +2,5 @@
 out/
 release/
 build/sidecar/
+browser-qa/report/
+browser-qa/results/

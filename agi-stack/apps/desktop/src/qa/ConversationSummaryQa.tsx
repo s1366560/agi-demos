@@ -6,6 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 
 import { ChatPanel } from '../features/chat/ChatPanel';
 import type { ComposerCatalogClient } from '../features/chat/composerCatalogModel';
+import { ToastProvider } from '../features/feedback/ToastCenter';
 import { I18nProvider } from '../i18n';
 import type {
   AgentConversation,
@@ -272,7 +273,9 @@ globalThis.__conversationSummaryQaRoot = qaRoot;
 qaRoot.render(
   <React.StrictMode>
     <I18nProvider>
-      <ConversationSummaryQa />
+      <ToastProvider>
+        <ConversationSummaryQa />
+      </ToastProvider>
     </I18nProvider>
   </React.StrictMode>,
 );

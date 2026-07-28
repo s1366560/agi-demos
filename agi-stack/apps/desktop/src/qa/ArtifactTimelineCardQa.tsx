@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { Button, Theme } from '@radix-ui/themes';
 
 import { AgentTimeline } from '../features/chat/ChatTimeline';
+import { ToastProvider } from '../features/feedback/ToastCenter';
 import { I18nProvider } from '../i18n';
 import type { AgentTimelineItem, ConversationTimelineState } from '../types';
 import '../styles.css';
@@ -179,7 +180,9 @@ function mount() {
   }
   globalThis.__artifactTimelineCardQaRoot.render(
     <I18nProvider>
-      <ArtifactTimelineCardQa />
+      <ToastProvider>
+        <ArtifactTimelineCardQa />
+      </ToastProvider>
     </I18nProvider>,
   );
 }

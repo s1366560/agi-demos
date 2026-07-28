@@ -1,0 +1,41 @@
+{
+  "contractVersion": 1,
+  "scenarioPattern": "../qa/*.html",
+  "locales": [
+    {
+      "id": "en-US",
+      "storageValue": "en",
+      "documentLanguage": "en"
+    },
+    {
+      "id": "zh-CN",
+      "storageValue": "zh-CN",
+      "documentLanguage": "zh-CN"
+    }
+  ],
+  "viewports": [
+    {
+      "id": "desktop-wide",
+      "width": 1440,
+      "height": 1024
+    },
+    {
+      "id": "desktop-compact",
+      "width": 1100,
+      "height": 800
+    }
+  ],
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "checks": [
+    "page-error",
+    "console-error",
+    "horizontal-overflow",
+    "bare-i18n-key",
+    "keyboard-order",
+    "focus-return",
+    "aria"
+  ]
+}
