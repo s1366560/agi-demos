@@ -88,7 +88,7 @@
   padding: 11px 12px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(var(--desktop-overlay-15-rgb), 0.82);
+  background: rgba(var(--desktop-surface-34-rgb), 0.82);
 }
 
 .automations-summary dt,
@@ -129,7 +129,7 @@
   overflow: auto;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 8px;
-  background: rgba(9, 15, 24, 0.9);
+  background: rgba(var(--desktop-panel-glass-rgb), 0.9);
 }
 
 .automations-list {
@@ -218,7 +218,7 @@
 .automation-inline-error {
   border-color: rgba(var(--desktop-red-bright-rgb), 0.32);
   background: rgba(var(--desktop-red-bright-rgb), 0.08);
-  color: #ffaaaa;
+  color: var(--desktop-red-pale-3);
 }
 
 .automation-history {
@@ -238,7 +238,7 @@
   padding: 9px 10px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(var(--desktop-overlay-15-rgb), 0.72);
+  background: rgba(var(--desktop-surface-34-rgb), 0.72);
 }
 
 .automation-run-row > span {
@@ -261,7 +261,7 @@
 .automation-run-row p {
   grid-column: 1 / -1;
   margin: 0;
-  color: #ffaaaa;
+  color: var(--desktop-red-pale-3);
   font-size: 10px;
 }
 
@@ -275,7 +275,7 @@
   text-align: center;
   border: 1px dashed var(--desktop-border);
   border-radius: 8px;
-  background: rgba(var(--desktop-overlay-14-rgb), 0.74);
+  background: rgba(var(--desktop-surface-34-rgb), 0.74);
 }
 
 .automation-empty > span {
@@ -288,7 +288,7 @@
 }
 
 .automation-empty.error > span {
-  color: #ff8e8e;
+  color: var(--desktop-red-pale-7);
 }
 
 .automation-editor-dialog {

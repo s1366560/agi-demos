@@ -9,7 +9,7 @@
 .my-work-inbox-heading p { margin: 0; color: var(--desktop-gray-11); font-size: 12px; line-height: 1.55; }
 .my-work-inbox-actions { display: flex; align-items: center; gap: 8px; }
 .my-work-inbox-actions label { display: flex; width: 220px; height: 34px; align-items: center; gap: 7px; padding: 0 10px; border: 1px solid var(--desktop-border); border-radius: 7px; background: var(--desktop-surface-12); color: var(--desktop-gray-19); }
-.my-work-inbox-actions label:focus-within { border-color: #2c768a; }
+.my-work-inbox-actions label:focus-within { border-color: var(--desktop-border-cyan-5); }
 .my-work-inbox-actions svg { width: 13px; height: 13px; }
 .my-work-inbox-actions input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--desktop-text); font: inherit; font-size: 10px; }
 .my-work-inbox-actions button { display: inline-flex; height: 34px; align-items: center; gap: 6px; padding: 0 11px; border: 1px solid var(--desktop-border); border-radius: 7px; background: var(--desktop-surface-14); color: var(--desktop-gray-30); cursor: pointer; font-size: 9px; }
@@ -24,7 +24,7 @@
 .my-work-inbox-group > header span { justify-self: start; color: var(--desktop-gray-16); font-size: 9px; }
 .my-work-inbox-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 365px)); gap: 10px; }
 .my-work-inbox-card { display: grid; min-width: 0; min-height: 104px; padding: 12px 14px 10px; border: 1px solid var(--desktop-border); border-radius: 9px; background: var(--desktop-surface-12); color: inherit; cursor: pointer; text-align: left; transition: border-color 130ms ease, background 130ms ease, transform 130ms ease; }
-.my-work-inbox-card:hover, .my-work-inbox-card:focus-visible { border-color: #315263; background: var(--desktop-surface-15); transform: translateY(-1px); }
+.my-work-inbox-card:hover, .my-work-inbox-card:focus-visible { border-color: var(--desktop-border-cyan-6); background: var(--desktop-surface-15); transform: translateY(-1px); }
 .my-work-inbox-card > header { display: grid; grid-template-columns: 7px 13px auto 1fr; align-items: center; gap: 7px; color: var(--desktop-gray-23); font-size: 8px; }
 .my-work-inbox-card > header i { width: 6px; height: 6px; border-radius: 50%; background: currentcolor; }
 .my-work-inbox-card > header i.status-needs_input, .my-work-inbox-card > header i.status-needs_approval { color: var(--amber-9); }
@@ -43,7 +43,7 @@
 .my-work-inbox-card footer svg { width: 12px; height: 12px; }
 .my-work-inbox-empty { margin: 0; padding: 14px; border: 1px dashed var(--desktop-border-1); border-radius: 8px; color: var(--desktop-gray-1); font-size: 9px; }
 .my-work-inbox-state { display: flex; max-width: 1120px; align-items: flex-start; gap: 10px; margin: 0 auto 24px; padding: 16px; border: 1px solid var(--desktop-border); border-radius: 9px; background: var(--desktop-surface-12); color: var(--desktop-gray-25); }
-.my-work-inbox-state.error { border-color: #4b2831; background: #1c1115; color: var(--red-9); }
+.my-work-inbox-state.error { border-color: var(--desktop-border-red-4); background: var(--desktop-surface-red); color: var(--red-9); }
 .my-work-inbox-state strong { color: var(--desktop-text-soft); font-size: 11px; }
 .my-work-inbox-state p { margin: 4px 0 0; font-size: 9px; }
 .my-work-inbox .spinning { animation: my-work-spin 900ms linear infinite; }

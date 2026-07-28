@@ -20,7 +20,7 @@
   padding: 7px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
-  background: rgba(var(--desktop-overlay-16-rgb), 0.45);
+  background: rgba(var(--desktop-surface-26-rgb), 0.45);
 }
 
 .voice-transcription-qa-diagnostics dt {

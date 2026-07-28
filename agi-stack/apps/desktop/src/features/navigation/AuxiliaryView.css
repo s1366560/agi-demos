@@ -100,9 +100,9 @@
   height: 29px;
   margin-top: 13px;
   padding: 0 11px;
-  border: 1px solid #2692ad;
+  border: 1px solid var(--desktop-border-cyan-4);
   border-radius: 5px;
-  background: #157a94;
+  background: var(--desktop-cyan-rich);
   color: var(--desktop-white);
   cursor: pointer;
   font-size: 9px;
@@ -111,7 +111,7 @@
 
 .overview-hero > button:hover {
   border-color: var(--desktop-cyan);
-  background: #188ba7;
+  background: var(--desktop-cyan-strong);
 }
 
 .overview-hero > button:focus-visible {
@@ -129,7 +129,7 @@
 }
 
 .auxiliary-metric-status.error {
-  color: #d6a86a;
+  color: var(--desktop-amber-pale-3);
 }
 
 .auxiliary-metric-status button {

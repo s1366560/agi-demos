@@ -72,7 +72,7 @@
 
 .subagent-library-body article em {
   padding: 2px 6px;
-  color: #7899b2;
+  color: var(--desktop-steel-blue);
   font-size: 10px;
   font-style: normal;
   background: var(--desktop-surface-21);

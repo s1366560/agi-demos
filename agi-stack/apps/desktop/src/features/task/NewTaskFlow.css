@@ -111,7 +111,7 @@
 
 .new-task-steps li.done:not(:last-child)::after,
 .new-task-steps li.active:not(:last-child)::after {
-  background: #1c6b83;
+  background: var(--desktop-cyan-deep);
 }
 
 .new-task-steps li > span {
@@ -139,8 +139,8 @@
 .new-task-steps li.active > span,
 .new-task-steps li.done > span {
   color: var(--desktop-cyan-bright);
-  border-color: #246b80;
-  background: #0d2029;
+  border-color: var(--desktop-border-cyan-3);
+  background: var(--desktop-surface-cyan-2);
 }
 
 .new-task-close {
@@ -289,8 +289,8 @@
 .new-task-window input:focus,
 .new-task-window textarea:focus,
 .new-task-window select:focus {
-  border-color: #26718a;
-  box-shadow: 0 0 0 2px rgb(41 168 204 / 10%);
+  border-color: var(--desktop-border-cyan-8);
+  box-shadow: 0 0 0 2px rgba(var(--desktop-cyan-ring-rgb), 10%);
 }
 
 .new-task-objective-field textarea {
@@ -319,7 +319,7 @@
 }
 
 .new-task-mode-grid > button.selected {
-  border-color: #26718a;
+  border-color: var(--desktop-border-cyan-8);
   background: var(--desktop-surface-15);
   color: var(--desktop-text-soft);
 }
@@ -331,7 +331,7 @@
   place-items: center;
   border-radius: 6px;
   background: var(--desktop-surface-25);
-  color: #5fd6f2;
+  color: var(--desktop-cyan-bright);
 }
 
 .new-task-mode-grid > button > div {
@@ -353,7 +353,7 @@
 }
 
 .new-task-mode-grid > button > svg:last-child {
-  color: #56d7f5;
+  color: var(--desktop-cyan-bright);
 }
 
 .new-task-context-options,
@@ -379,9 +379,9 @@
 
 .new-task-context-options button.selected,
 .new-task-environment-field button.selected {
-  border-color: #275064;
+  border-color: var(--desktop-border-cyan-6);
   background: var(--desktop-surface-24);
-  color: #50cee9;
+  color: var(--desktop-cyan-soft);
 }
 
 .new-task-context-options button > span,
@@ -391,7 +391,7 @@
 }
 
 .new-task-context-options button > svg:last-child {
-  color: #56d7f5;
+  color: var(--desktop-cyan-bright);
 }
 
 .new-task-context-options button > i {
@@ -410,8 +410,8 @@
   padding: 13px;
   border: 1px solid var(--desktop-border-15);
   border-radius: 7px;
-  background: #0d141e;
-  color: #52cce8;
+  background: var(--desktop-surface-21);
+  color: var(--desktop-cyan-soft);
 }
 
 .new-task-protection-note > span,
@@ -462,16 +462,16 @@
   height: 54px;
   place-items: center;
   margin-bottom: 10px;
-  border: 1px solid #286a80;
+  border: 1px solid var(--desktop-border-cyan-3);
   border-radius: 13px;
-  background: #10202a;
+  background: var(--desktop-surface-cyan-2);
   color: var(--desktop-cyan-bright);
 }
 
 .new-task-planning-icon.code {
-  border-color: #574989;
-  background: #211b38;
-  color: #a18cff;
+  border-color: var(--desktop-border-purple);
+  background: var(--desktop-surface-purple);
+  color: var(--desktop-purple-bright);
 }
 
 .new-task-planning-progress {
@@ -485,7 +485,7 @@
   display: block;
   width: 66%;
   height: 100%;
-  background: #4fcceb;
+  background: var(--desktop-cyan-soft);
 }
 
 .new-task-planning-checks {
@@ -507,11 +507,11 @@
 }
 
 .new-task-planning-checks > div.complete {
-  color: #42bb88;
+  color: var(--desktop-green-check);
 }
 
 .new-task-planning-checks > div.active {
-  border-color: #25536a;
+  border-color: var(--desktop-border-cyan-6);
   background: var(--desktop-surface-24);
   color: var(--desktop-cyan-bright);
 }
@@ -537,9 +537,9 @@
   justify-content: space-between;
   gap: 16px;
   padding: 10px 12px;
-  border: 1px solid #5b4825;
+  border: 1px solid var(--desktop-border-amber-4);
   border-radius: 6px;
-  background: #17140e;
+  background: var(--desktop-surface-amber-3);
 }
 
 .new-task-planning-delay span {
@@ -553,7 +553,7 @@
 }
 
 .new-task-planning-delay small {
-  color: #8e7b55;
+  color: var(--desktop-amber-muted-2);
 }
 
 .new-task-planning-delay button {
@@ -563,8 +563,8 @@
   padding: 7px 9px;
   border: 1px solid var(--desktop-border-amber-3);
   border-radius: 5px;
-  color: #d9a84c;
-  background: #211b10;
+  color: var(--desktop-amber-rich);
+  background: var(--desktop-surface-amber-2);
 }
 
 .new-task-brief-card {

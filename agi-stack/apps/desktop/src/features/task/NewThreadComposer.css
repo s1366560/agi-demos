@@ -62,7 +62,7 @@
 }
 
 .new-thread-composer:focus-within {
-  border-color: #2e8ba5;
+  border-color: var(--desktop-border-cyan-4);
   box-shadow: 0 0 0 2px rgba(var(--desktop-cyan-rgb), 8%), 0 18px 48px rgba(var(--desktop-black-rgb), 35%);
 }
 
@@ -124,7 +124,7 @@
 }
 
 .mode-picker button.active {
-  background: #143642;
+  background: var(--desktop-surface-cyan-5);
   color: var(--desktop-cyan);
 }
 
@@ -182,9 +182,9 @@
   height: 32px;
   flex: none;
   place-items: center;
-  border: 1px solid #267e96;
+  border: 1px solid var(--desktop-border-cyan-9);
   border-radius: 8px;
-  background: #11313e;
+  background: var(--desktop-surface-cyan-4);
   color: var(--desktop-text-ice);
 }
 
@@ -206,7 +206,7 @@
 }
 
 .new-thread-error {
-  color: #f4a6a6;
+  color: var(--desktop-red-pale-3);
 }
 
 .new-thread-error span {
@@ -234,7 +234,7 @@
 }
 
 .new-thread-suggestions > button:hover {
-  border-color: #2c5566;
+  border-color: var(--desktop-border-cyan-6);
   background: var(--desktop-surface-15);
 }
 

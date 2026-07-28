@@ -79,7 +79,7 @@
   font-size: 7px;
   font-style: normal;
   background: var(--desktop-surface-cyan);
-  border: 1px solid #2b5362;
+  border: 1px solid var(--desktop-border-cyan-6);
   border-radius: 4px;
 }
 
@@ -169,7 +169,7 @@
 .settings-signout {
   align-self: flex-start;
   padding: 0;
-  color: #d2858d;
+  color: var(--desktop-red-muted);
   font-size: 8px;
   background: transparent;
   border: 0;
@@ -188,7 +188,7 @@
   padding: 10px 13px;
   color: var(--desktop-text-pale);
   background: var(--desktop-surface-cyan-2);
-  border: 1px solid #2c5361;
+  border: 1px solid var(--desktop-border-cyan-6);
   border-radius: 7px;
 }
 
@@ -367,7 +367,7 @@
 
 button.active > .settings-choice-icon {
   color: var(--desktop-cyan);
-  background: #12303b;
+  background: var(--desktop-surface-cyan-4);
   border-color: var(--desktop-border-cyan);
 }
 
@@ -502,7 +502,7 @@ button.active > .settings-choice-icon {
 
 .settings-language-options > button.active > span {
   color: var(--desktop-cyan);
-  background: #143340;
+  background: var(--desktop-surface-cyan-4);
 }
 
 .settings-language-options > button > div {
@@ -549,7 +549,7 @@ button.active > .settings-choice-icon {
 
 .settings-resource-entry-grid > button:hover {
   background: var(--desktop-surface-26);
-  border-color: #31596a;
+  border-color: var(--desktop-border-cyan-6);
 }
 
 .settings-resource-entry-grid > button > svg {
@@ -584,13 +584,13 @@ button.active > .settings-choice-icon {
   color: var(--desktop-cyan);
   font-size: 7px;
   font-style: normal;
-  background: #17313c;
+  background: var(--desktop-surface-cyan-4);
   border-radius: 10px;
 }
 
 .settings-resource-entry-grid b {
   grid-column: 2 / -1;
-  color: #4fbfdc;
+  color: var(--desktop-cyan-link-bright);
   font-size: 7px;
   font-weight: 650;
 }

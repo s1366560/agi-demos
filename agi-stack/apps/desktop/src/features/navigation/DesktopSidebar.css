@@ -356,7 +356,7 @@
 }
 
 .desktop-design-profile-menu button.danger {
-  color: #cc7e87;
+  color: var(--desktop-red-muted);
 }
 
 .app-shell.hierarchy-shell,

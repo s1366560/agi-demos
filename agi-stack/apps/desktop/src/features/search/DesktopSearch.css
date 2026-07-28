@@ -1,5 +1,5 @@
 .desktop-search {
-  --search-panel: rgba(10, 18, 29, 0.82);
+  --search-panel: rgba(var(--desktop-panel-glass-rgb), 0.82);
   --search-border: rgba(var(--desktop-steel-2-rgb), 0.22);
   display: flex;
   flex: 1;
@@ -12,7 +12,7 @@
   background:
     radial-gradient(
       circle at 82% 0%,
-      rgba(29, 164, 205, 0.08),
+      rgba(var(--desktop-cyan-ring-rgb), 0.08),
       transparent 30%
     ),
     var(--desktop-surface-16);
@@ -55,7 +55,7 @@
   color: var(--desktop-faint);
   border: 1px solid var(--search-border);
   border-radius: 999px;
-  background: rgba(15, 25, 38, 0.66);
+  background: rgba(var(--desktop-panel-glass-2-rgb), 0.66);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -94,7 +94,7 @@
 .desktop-search__state-card button {
   color: var(--desktop-muted);
   border: 1px solid var(--search-border);
-  background: rgba(8, 14, 22, 0.62);
+  background: rgba(var(--desktop-panel-glass-rgb), 0.62);
   cursor: pointer;
 }
 
@@ -129,7 +129,7 @@
   padding-left: 14px;
   border: 1px solid rgba(var(--desktop-steel-2-rgb), 0.32);
   border-radius: 11px;
-  background: rgba(var(--desktop-overlay-9-rgb), 0.74);
+  background: rgba(var(--desktop-surface-32-rgb), 0.74);
 }
 
 .desktop-search__query-control > svg {
@@ -148,7 +148,7 @@
 .desktop-search__query-control button {
   align-self: stretch;
   min-width: 148px;
-  color: #03141a;
+  color: var(--desktop-on-accent);
   border: 0;
   border-radius: 0 10px 10px 0;
   background: linear-gradient(135deg, var(--desktop-cyan), var(--desktop-teal-bright));
@@ -198,7 +198,7 @@
   border: 1px solid var(--search-border);
   border-radius: 7px;
   outline: none;
-  background: rgba(var(--desktop-overlay-9-rgb), 0.76);
+  background: rgba(var(--desktop-surface-32-rgb), 0.76);
   font: 500 11px/1 inherit;
 }
 
@@ -303,10 +303,10 @@
   gap: 16px;
   margin-top: 16px;
   padding: 13px 14px;
-  color: #ffc8c8;
-  border: 1px solid rgba(255, 107, 107, 0.34);
+  color: var(--desktop-red-pale-2);
+  border: 1px solid rgba(var(--desktop-red-bright-rgb), 0.34);
   border-radius: 10px;
-  background: rgba(124, 34, 34, 0.16);
+  background: rgba(var(--desktop-red-deep-rgb), 0.16);
 }
 
 .desktop-search__error p {
@@ -341,7 +341,7 @@
   color: var(--desktop-faint);
   border: 1px dashed rgba(var(--desktop-steel-2-rgb), 0.24);
   border-radius: 14px;
-  background: rgba(9, 16, 26, 0.44);
+  background: rgba(var(--desktop-panel-glass-rgb), 0.44);
   text-align: center;
 }
 
@@ -400,7 +400,7 @@
   padding: 16px;
   border: 1px solid var(--search-border);
   border-radius: 12px;
-  background: rgba(10, 18, 29, 0.68);
+  background: rgba(var(--desktop-panel-glass-rgb), 0.68);
   transition:
     border-color 140ms ease,
     background 140ms ease;
@@ -411,8 +411,8 @@
 }
 
 .desktop-search__result.is-selected {
-  border-color: rgba(83, 240, 207, 0.56);
-  background: rgba(21, 58, 53, 0.26);
+  border-color: rgba(var(--desktop-teal-bright-rgb), 0.56);
+  background: rgba(var(--desktop-teal-dim-rgb), 0.26);
 }
 
 .desktop-search__select {
@@ -424,10 +424,10 @@
   height: 22px;
   padding: 0;
   place-items: center;
-  color: #041410;
+  color: var(--desktop-on-accent);
   border: 1px solid rgba(var(--desktop-steel-2-rgb), 0.35);
   border-radius: 6px;
-  background: rgba(5, 12, 19, 0.8);
+  background: rgba(var(--desktop-panel-glass-rgb), 0.8);
   cursor: pointer;
 }
 

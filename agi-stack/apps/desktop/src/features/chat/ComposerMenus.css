@@ -81,8 +81,8 @@
 .picker-menu-copy b em {
   padding: 1px 5px;
   border-radius: 999px;
-  background: #17303c;
-  color: #8cc8d6;
+  background: var(--desktop-surface-cyan-5);
+  color: var(--desktop-cyan-mist);
   font-size: 8px;
   font-style: normal;
 }
@@ -103,7 +103,7 @@
 }
 
 .picker-menu-check {
-  color: #78c2d2;
+  color: var(--desktop-cyan-link-2);
 }
 
 .picker-menu-footer {
@@ -256,7 +256,7 @@
   overflow: hidden;
   border: 1px solid var(--desktop-border-13);
   background:
-    radial-gradient(circle at 85% 0, rgb(20 103 123 / 12%), transparent 34%),
+    radial-gradient(circle at 85% 0, rgba(var(--desktop-cyan-dusk-4-rgb), 12%), transparent 34%),
     var(--desktop-surface-13);
   color: var(--desktop-text-soft);
 }
@@ -315,14 +315,14 @@
 }
 
 .prompt-template-source-tabs button.is-active {
-  background: #17303a;
-  color: #b9e5ed;
+  background: var(--desktop-surface-cyan-5);
+  color: var(--desktop-cyan-pale-2);
   box-shadow: inset 0 0 0 1px var(--desktop-border-cyan);
 }
 
 .prompt-template-source-tabs button.is-active span {
-  background: #205264;
-  color: #d2f4fa;
+  background: var(--desktop-surface-cyan-6);
+  color: var(--desktop-text-cyan);
 }
 
 .prompt-template-controls {
@@ -371,9 +371,9 @@
 }
 
 .prompt-template-categories button.is-active {
-  border-color: #2b5360;
-  background: #18303a;
-  color: #b9e5ed;
+  border-color: var(--desktop-border-cyan-6);
+  background: var(--desktop-surface-cyan-5);
+  color: var(--desktop-cyan-pale-2);
 }
 
 .prompt-template-summary {
@@ -388,7 +388,7 @@
 
 .prompt-template-summary button {
   padding-right: 0;
-  color: #74bdcc;
+  color: var(--desktop-cyan-link-2);
 }
 
 .prompt-template-error {
@@ -398,10 +398,10 @@
   gap: 12px;
   margin-bottom: 8px;
   padding: 9px 10px;
-  border: 1px solid #683542;
+  border: 1px solid var(--desktop-border-red-3);
   border-radius: 7px;
-  background: #28171d;
-  color: #e9a5b1;
+  background: var(--desktop-surface-red);
+  color: var(--desktop-red-blush-2);
   font-size: 10px;
 }
 
@@ -428,25 +428,25 @@
 
 .prompt-template-card:hover,
 .prompt-template-card:focus-within {
-  border-color: #2d6878;
-  background: #14232d;
+  border-color: var(--desktop-border-cyan);
+  background: var(--desktop-surface-cyan-3);
   transform: translateY(-1px);
 }
 
 .prompt-template-card.is-code {
-  border-left-color: #247258;
+  border-left-color: var(--desktop-border-green-4);
 }
 
 .prompt-template-card.is-analysis {
-  border-left-color: #315e9c;
+  border-left-color: var(--desktop-border-blue);
 }
 
 .prompt-template-card.is-writing {
-  border-left-color: #6c5d8e;
+  border-left-color: var(--desktop-border-purple-2);
 }
 
 .prompt-template-card.is-general {
-  border-left-color: #796844;
+  border-left-color: var(--desktop-olive);
 }
 
 .prompt-template-select {
@@ -515,7 +515,7 @@
 }
 
 .prompt-template-delete:hover {
-  background: #321b21;
+  background: var(--desktop-surface-red-2);
   color: var(--desktop-red-soft-2);
 }
 

@@ -14,10 +14,10 @@
 .session-heading > span svg { width: 9px; height: 9px; }
 .session-heading > div { display: flex; align-items: center; min-width: 0; gap: 8px; }
 .session-heading h1 { overflow: hidden; margin: 0; color: var(--desktop-text-mist); font-size: 14px; letter-spacing: -.02em; text-overflow: ellipsis; white-space: nowrap; }
-.session-status-badge { display: inline-flex; align-items: center; flex: 0 0 auto; gap: 5px; padding: 3px 6px; border: 1px solid #27584a; border-radius: 10px; background: var(--desktop-surface-green-2); color: var(--green); font-size: 6.5px; white-space: nowrap; }
+.session-status-badge { display: inline-flex; align-items: center; flex: 0 0 auto; gap: 5px; padding: 3px 6px; border: 1px solid var(--desktop-border-green-3); border-radius: 10px; background: var(--desktop-surface-green-2); color: var(--green); font-size: 6.5px; white-space: nowrap; }
 .session-status-badge i, .session-dot { width: 5px; height: 5px; border-radius: 50%; background: currentcolor; }
-.session-status-badge.running { border-color: #24576a; background: #0f2028; color: var(--cyan); }
-.session-status-badge.input { border-color: #624a2d; background: var(--desktop-surface-amber-2); color: var(--amber); }
+.session-status-badge.running { border-color: var(--desktop-border-cyan-6); background: var(--desktop-surface-cyan-2); color: var(--cyan); }
+.session-status-badge.input { border-color: var(--desktop-border-amber-4); background: var(--desktop-surface-amber-2); color: var(--amber); }
 
 .session-stage-strip { display: flex; align-items: center; gap: 2px; }
 .session-stage-strip > div { position: relative; display: flex; align-items: center; min-width: 60px; gap: 5px; padding-right: 12px; color: var(--desktop-gray-14); }
@@ -34,17 +34,17 @@
 .session-header-actions > span { display: inline-flex; align-items: center; gap: 4px; color: var(--desktop-gray-7); font-size: 6px; }
 .session-header-actions > span svg { width: 10px; height: 10px; }
 .session-header-actions > button { display: inline-flex; align-items: center; height: 27px; gap: 5px; padding: 0 7px; border: 1px solid var(--desktop-border-18); border-radius: 5px; background: var(--desktop-surface-15); color: var(--desktop-gray-27); font-size: 6.5px; }
-.session-header-actions > button.primary { border-color: #2a5c6d; background: var(--desktop-surface-cyan-3); color: #8ed9e9; }
+.session-header-actions > button.primary { border-color: var(--desktop-border-cyan-7); background: var(--desktop-surface-cyan-3); color: var(--desktop-cyan-spray); }
 .session-header-actions > button.icon-button { width: 27px; padding: 0; justify-content: center; }
 .session-header-actions svg { width: 11px; height: 11px; }
 
-.session-hitl-banner { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 7px 16px; border-bottom: 1px solid #5d472c; background: #19140e; color: var(--amber); }
+.session-hitl-banner { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 7px 16px; border-bottom: 1px solid var(--desktop-border-amber-4); background: var(--desktop-surface-amber-3); color: var(--amber); }
 .session-hitl-banner > svg { width: 18px; height: 18px; }
 .session-hitl-banner > div { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 8px; }
-.session-hitl-banner small { color: #87683f; font-size: 5.5px; font-weight: 800; letter-spacing: .13em; }
+.session-hitl-banner small { color: var(--desktop-amber-text); font-size: 5.5px; font-weight: 800; letter-spacing: .13em; }
 .session-hitl-banner b { font-size: 7.5px; }
-.session-hitl-banner p { overflow: hidden; margin: 0; color: #806b4e; font-size: 6.5px; text-overflow: ellipsis; white-space: nowrap; }
-.session-hitl-banner button { height: 27px; padding: 0 9px; border: 1px solid #8b6533; border-radius: 5px; background: #352719; color: #f0c37f; font-size: 6.5px; }
+.session-hitl-banner p { overflow: hidden; margin: 0; color: var(--desktop-amber-text); font-size: 6.5px; text-overflow: ellipsis; white-space: nowrap; }
+.session-hitl-banner button { height: 27px; padding: 0 9px; border: 1px solid var(--desktop-border-amber-5); border-radius: 5px; background: var(--desktop-surface-amber-4); color: var(--desktop-amber-pale-2); font-size: 6.5px; }
 
 .session-workspace { display: grid; grid-template-columns: minmax(355px, .82fr) minmax(480px, 1.18fr); min-width: 0; min-height: 0; }
 .session-thread-pane { display: grid; grid-template-rows: 39px minmax(0, 1fr) auto; min-width: 0; min-height: 0; border-right: 1px solid var(--border); background: var(--desktop-surface-7); }
@@ -65,13 +65,13 @@
 .session-thread-message.user > div:nth-child(2) { padding: 9px 10px; border: 1px solid var(--desktop-border-14); border-radius: 7px; background: var(--desktop-surface-14); }
 .session-thread-message header { display: flex; align-items: center; min-height: 17px; gap: 6px; }
 .session-thread-message header b { color: var(--desktop-text-pale); font-size: 8px; }
-.session-thread-message header em { padding: 2px 5px; border-radius: 7px; background: #14252d; color: #69b5c8; font-size: 5px; font-style: normal; }
+.session-thread-message header em { padding: 2px 5px; border-radius: 7px; background: var(--desktop-surface-cyan-3); color: var(--desktop-cyan-muted); font-size: 5px; font-style: normal; }
 .session-thread-message header time { margin-left: auto; color: var(--desktop-gray-14); font-size: 5.5px; }
 .session-thread-message header button { display: grid; width: 18px; height: 18px; padding: 0; place-items: center; border: 0; background: transparent; color: var(--desktop-gray-16); }
 .session-thread-message p { margin: 5px 0 0; color: var(--desktop-gray-29); font-size: 8px; line-height: 1.58; }
 .session-thread-message ul { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none; }
 .session-thread-message li { padding: 3px 5px; border: 1px solid var(--desktop-border-5); border-radius: 8px; color: var(--desktop-gray-22); font-size: 6px; }
-.session-inline-action { display: flex; align-items: center; width: 100%; height: 30px; margin-top: 9px; gap: 6px; padding: 0 8px; border: 1px solid #28596a; border-radius: 5px; background: var(--desktop-surface-cyan); color: #77c8da; font-size: 6.5px; text-align: left; }
+.session-inline-action { display: flex; align-items: center; width: 100%; height: 30px; margin-top: 9px; gap: 6px; padding: 0 8px; border: 1px solid var(--desktop-border-cyan-6); border-radius: 5px; background: var(--desktop-surface-cyan); color: var(--desktop-cyan-link-2); font-size: 6.5px; text-align: left; }
 .session-inline-action svg:last-child { margin-left: auto; }
 
 .session-system-event, .session-progress-event { display: grid; grid-template-columns: 23px minmax(0, 1fr) auto; align-items: center; gap: 8px; margin: 15px 0 0 35px; padding: 7px 8px; border: 1px solid var(--desktop-border-9); border-radius: 6px; background: var(--desktop-surface-13); }
@@ -80,8 +80,8 @@
 .session-system-event b, .session-progress-event b { color: var(--desktop-gray-29); font-size: 7px; }
 .session-system-event small, .session-progress-event small { overflow: hidden; color: var(--desktop-gray-2); font-size: 6px; text-overflow: ellipsis; white-space: nowrap; }
 .session-system-event time, .session-progress-event em { color: var(--desktop-gray-1); font-size: 5.5px; font-style: normal; }
-.session-progress-event { border-color: #285768; background: #0e1d24; }
-.session-progress-event > span { display: grid; width: 22px; height: 22px; place-items: center; border-radius: 5px; background: #112933; }
+.session-progress-event { border-color: var(--desktop-border-cyan-6); background: var(--desktop-surface-cyan-2); }
+.session-progress-event > span { display: grid; width: 22px; height: 22px; place-items: center; border-radius: 5px; background: var(--desktop-surface-cyan-3); }
 .session-progress-event > span svg { width: 12px; height: 12px; }
 .session-progress-event em { color: var(--cyan); }
 
@@ -106,11 +106,11 @@
 .session-agent-typing span:nth-child(2) { opacity: .7; }
 .session-agent-typing span:nth-child(3) { margin-right: 3px; opacity: 1; }
 .session-message-refs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
-.session-message-refs span { display: inline-flex; align-items: center; gap: 3px; padding: 3px 5px; border: 1px solid #315062; border-radius: 5px; color: #78b9c9; font-size: 5.3px; }
+.session-message-refs span { display: inline-flex; align-items: center; gap: 3px; padding: 3px 5px; border: 1px solid var(--desktop-border-cyan-6); border-radius: 5px; color: var(--desktop-cyan-link-2); font-size: 5.3px; }
 
 .session-composer { padding: 8px 10px 9px; border-top: 1px solid var(--desktop-border-1); background: var(--desktop-surface-7); }
 .session-context-chips { display: flex; gap: 4px; padding: 6px 7px 0; border: 1px solid var(--desktop-border-19); border-bottom: 0; border-radius: 7px 7px 0 0; background: var(--desktop-surface-6); }
-.session-context-chips button { display: inline-flex; align-items: center; height: 21px; max-width: 210px; gap: 4px; padding: 0 5px; overflow: hidden; border: 1px solid #315062; border-radius: 5px; background: var(--desktop-surface-cyan); color: #7fbfce; font-size: 5.5px; text-overflow: ellipsis; white-space: nowrap; }
+.session-context-chips button { display: inline-flex; align-items: center; height: 21px; max-width: 210px; gap: 4px; padding: 0 5px; overflow: hidden; border: 1px solid var(--desktop-border-cyan-6); border-radius: 5px; background: var(--desktop-surface-cyan); color: var(--desktop-cyan-link-2); font-size: 5.5px; text-overflow: ellipsis; white-space: nowrap; }
 .session-context-chips button span { color: var(--desktop-gray-3); }
 .session-composer textarea { width: 100%; height: 48px; padding: 8px 9px; resize: none; border: 1px solid var(--desktop-border-19); border-radius: 7px 7px 0 0; outline: 0; background: var(--desktop-surface-6); color: var(--desktop-text-soft); font-size: 8px; line-height: 1.45; }
 .session-context-chips + textarea { border-top: 0; border-radius: 0; }
@@ -119,7 +119,7 @@
 .session-composer > div:last-child > span { display: flex; gap: 2px; }
 .session-composer > div:last-child button { display: inline-flex; align-items: center; height: 21px; gap: 4px; padding: 0 5px; border: 0; border-radius: 4px; background: transparent; color: var(--desktop-gray-5); font-size: 5.5px; }
 .session-composer > div:last-child small { margin-left: auto; color: var(--desktop-gray-14); font-size: 5.2px; }
-.session-composer .send-button { width: 22px; margin-left: 6px; justify-content: center; background: #173541; color: var(--cyan); }
+.session-composer .send-button { width: 22px; margin-left: 6px; justify-content: center; background: var(--desktop-surface-cyan-5); color: var(--cyan); }
 .session-composer .send-button:disabled { opacity: .35; }
 
 .session-canvas-pane { display: grid; grid-template-rows: 39px minmax(0, 1fr); min-width: 0; min-height: 0; background: var(--desktop-surface-13); }
@@ -147,7 +147,7 @@
 .session-canvas-hero span, .session-stage-card > header span, .session-run-card > header span, .session-deliverables-card > header span { color: var(--desktop-gray-2); font-size: 5.5px; font-weight: 800; letter-spacing: .12em; }
 .session-canvas-hero h2 { margin: 7px 0 5px; font-size: 13px; }
 .session-canvas-hero p { max-width: 540px; margin: 0; color: var(--desktop-gray-25); font-size: 7.5px; line-height: 1.5; }
-.session-canvas-hero button { display: inline-flex; align-items: center; flex: 0 0 auto; height: 27px; gap: 5px; padding: 0 8px; border: 1px solid #2b5d6d; border-radius: 5px; background: var(--desktop-surface-cyan-3); color: #80cede; font-size: 6px; }
+.session-canvas-hero button { display: inline-flex; align-items: center; flex: 0 0 auto; height: 27px; gap: 5px; padding: 0 8px; border: 1px solid var(--desktop-border-cyan-7); border-radius: 5px; background: var(--desktop-surface-cyan-3); color: var(--desktop-cyan-link-2); font-size: 6px; }
 .session-overview-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(190px, .7fr); gap: 9px; margin-top: 9px; }
 .session-stage-card, .session-run-card, .session-deliverables-card { padding: 9px 10px; border: 1px solid var(--desktop-border-11); border-radius: 7px; background: var(--desktop-surface-9); }
 .session-stage-card > header, .session-run-card > header, .session-deliverables-card > header { display: flex; align-items: center; justify-content: space-between; min-height: 22px; }
@@ -167,7 +167,7 @@
 .session-deliverables-card { margin-top: 9px; }
 .session-deliverables-card > header button { padding: 0; border: 0; background: transparent; color: var(--desktop-gray-8); font-size: 5.5px; }
 .session-deliverables-card > div { display: grid; grid-template-columns: 22px minmax(0, 1fr) 8px; align-items: center; gap: 7px; min-height: 42px; border-top: 1px solid var(--desktop-border-1); }
-.session-deliverables-card > div > svg { color: #6cb9ca; }
+.session-deliverables-card > div > svg { color: var(--desktop-cyan-muted); }
 .session-deliverables-card > div > span { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
 .session-deliverables-card b { color: var(--desktop-gray-29); font-size: 6.3px; }
 .session-deliverables-card small { color: var(--desktop-gray-17); font-size: 5.3px; }
@@ -187,11 +187,11 @@
 .session-plan-list small { color: var(--desktop-gray-18); font-size: 5.5px; }
 .session-plan-list em { color: var(--desktop-gray-22); font-size: 5.5px; font-style: normal; }
 .session-plan-canvas > footer { display: flex; align-items: center; justify-content: space-between; padding: 10px 13px; color: var(--desktop-gray-17); font-size: 5.5px; }
-.session-plan-canvas > footer button { border: 0; background: transparent; color: #6fb9ca; font-size: 5.5px; }
+.session-plan-canvas > footer button { border: 0; background: transparent; color: var(--desktop-cyan-muted); font-size: 5.5px; }
 
 .session-file-tabs { display: flex; gap: 4px; margin: 8px 0; overflow-x: auto; }
 .session-file-tabs button { height: 26px; padding: 0 7px; border: 1px solid var(--desktop-border-14); border-radius: 5px; background: var(--desktop-surface-9); color: var(--desktop-gray-22); font-size: 5.8px; white-space: nowrap; }
-.session-file-tabs button.active { border-color: #335a69; background: var(--desktop-surface-cyan-2); color: var(--desktop-gray-30); }
+.session-file-tabs button.active { border-color: var(--desktop-border-cyan-6); background: var(--desktop-surface-cyan-2); color: var(--desktop-gray-30); }
 .session-file-tabs b { color: var(--green); font-size: 5.3px; }
 .session-file-tabs em { color: var(--red); font-size: 5.3px; font-style: normal; }
 .session-diff-card { overflow: hidden; margin-top: 8px; border: 1px solid var(--desktop-border-15); border-radius: 6px; background: var(--desktop-surface-6); }
@@ -204,13 +204,13 @@
 .session-diff-lines > button > span { display: grid; place-items: center; border-right: 1px solid var(--desktop-border-1); color: var(--desktop-gray-14); font-size: 5.5px; }
 .session-diff-lines code { padding: 5px 8px; font: 7px/1.4 Menlo, monospace; white-space: pre; }
 .session-diff-lines > button.added { background: var(--desktop-surface-green-2); }
-.session-diff-lines > button.added code { color: #a2d6b1; }
-.session-diff-lines > button.removed { background: #271616; }
-.session-diff-lines > button.removed code { color: #d2a1a1; }
+.session-diff-lines > button.added code { color: var(--desktop-green-pastel); }
+.session-diff-lines > button.removed { background: var(--desktop-surface-red-2); }
+.session-diff-lines > button.removed code { color: var(--desktop-red-dim-2); }
 .session-show-lines { width: 100%; height: 27px; border: 0; border-top: 1px solid var(--desktop-border-8); background: var(--desktop-surface-13); color: var(--desktop-gray-5); font-size: 5.5px; }
 .session-diff-card.compact > header { border-bottom: 0; }
 .session-collapsed-file { display: flex; align-items: center; justify-content: space-between; width: 100%; height: 34px; padding: 0 9px; border: 0; border-top: 1px solid var(--desktop-border-8); background: var(--desktop-surface-13); color: var(--desktop-gray-26); font-size: 5.8px; }
-.session-collapsed-file span { display: flex; align-items: center; gap: 4px; color: #64b2c4; }
+.session-collapsed-file span { display: flex; align-items: center; gap: 4px; color: var(--desktop-cyan-muted); }
 
 .session-terminal-canvas { display: grid; grid-template-rows: auto minmax(280px, 1fr) auto; min-height: 100%; }
 .session-terminal-canvas pre { min-height: 350px; margin: 8px 0 0; padding: 14px; overflow: auto; border: 1px solid var(--desktop-border-11); border-radius: 6px; background: var(--desktop-surface-16); color: var(--desktop-gray-11); font: 6.5px/1.8 Menlo, monospace; }
@@ -225,10 +225,10 @@
 .session-artifact-canvas h3 { margin: 24px 0 8px; color: var(--desktop-text-pale); font-size: 9px; }
 .session-artifact-canvas p { color: var(--desktop-gray-28); font-size: 7.5px; line-height: 1.75; }
 .session-artifact-canvas blockquote { position: relative; margin: 22px 0 0; padding: 14px; border-left: 2px solid var(--cyan); background: var(--desktop-surface-13); color: var(--desktop-gray-30); font-size: 7px; line-height: 1.6; }
-.session-artifact-canvas blockquote button { display: block; margin-top: 10px; padding: 0; border: 0; background: transparent; color: #70b9c9; font-size: 5.8px; }
+.session-artifact-canvas blockquote button { display: block; margin-top: 10px; padding: 0; border: 0; background: transparent; color: var(--desktop-cyan-muted); font-size: 5.8px; }
 
 .session-sources-canvas > button { display: grid; grid-template-columns: 25px minmax(0, 1fr) auto; align-items: center; width: calc(100% - 26px); min-height: 52px; margin: 0 13px; gap: 8px; border: 0; border-bottom: 1px solid var(--desktop-border-1); background: transparent; text-align: left; }
-.session-sources-canvas > button > svg { color: #69b5c7; }
+.session-sources-canvas > button > svg { color: var(--desktop-cyan-muted); }
 .session-sources-canvas > button span { display: flex; flex-direction: column; gap: 4px; }
 .session-sources-canvas > button b { color: var(--desktop-gray-29); font-size: 6.5px; }
 .session-sources-canvas > button small { color: var(--desktop-gray-18); font-size: 5.5px; }
@@ -305,12 +305,12 @@
 
 .session-thread { padding: 18px 20px 30px; }
 .session-thread-day { margin-bottom: 16px; font-size: 9px; }
-.session-live-summary { margin-bottom: 20px; overflow: hidden; border: 1px solid #285467; border-radius: 9px; background: linear-gradient(135deg, var(--desktop-surface-cyan) 0%, var(--desktop-surface-21) 70%); }
+.session-live-summary { margin-bottom: 20px; overflow: hidden; border: 1px solid var(--desktop-border-cyan-6); border-radius: 9px; background: linear-gradient(135deg, var(--desktop-surface-cyan) 0%, var(--desktop-surface-21) 70%); }
 .session-live-summary > div { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 58px; padding: 10px 12px; }
-.session-live-summary > div > span { display: grid; width: 31px; height: 31px; place-items: center; border-radius: 7px; background: #153642; color: var(--cyan); }
+.session-live-summary > div > span { display: grid; width: 31px; height: 31px; place-items: center; border-radius: 7px; background: var(--desktop-surface-cyan-5); color: var(--cyan); }
 .session-live-summary > div > span svg { width: 15px; height: 15px; }
 .session-live-summary p { display: flex; min-width: 0; flex-direction: column; gap: 4px; margin: 0; }
-.session-live-summary p small { color: #5f8391; font-size: 8px; font-weight: 800; letter-spacing: .1em; }
+.session-live-summary p small { color: var(--desktop-cyan-gray); font-size: 8px; font-weight: 800; letter-spacing: .1em; }
 .session-live-summary p b { overflow: hidden; color: var(--desktop-text-pale); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .session-live-summary > div > em { color: var(--cyan); font-size: 10px; font-style: normal; }
 .session-live-summary dl { display: grid; grid-template-columns: 1fr 1fr; margin: 0; border-top: 1px solid var(--desktop-border-cyan-2); }
@@ -351,7 +351,7 @@
 .session-tool-rows b { font-size: 9.5px; }
 .session-tool-rows small, .session-tool-rows em { font-size: 8.5px; }
 .session-tool-rows > div.session-subagent-row { margin: 7px 0; padding: 0 8px; border: 1px solid var(--desktop-border-18); border-radius: 6px; background: var(--desktop-surface-24); }
-.session-tool-rows > div.session-subagent-row > svg { color: #80bdd0; }
+.session-tool-rows > div.session-subagent-row > svg { color: var(--desktop-cyan-link-2); }
 .session-agent-typing { margin: 18px 0 0 45px; font-size: 9px; }
 .session-agent-typing span { width: 5px; height: 5px; }
 .session-message-refs span { padding: 4px 7px; font-size: 8px; }
@@ -364,7 +364,7 @@
 .session-composer > div:last-child button { height: 26px; padding: 0 7px; font-size: 9px; }
 .session-delivery-mode { display: flex; gap: 2px; margin-left: auto; padding: 2px; border: 1px solid var(--desktop-border-22); border-radius: 6px; background: var(--desktop-surface-12); }
 .session-composer > div:last-child .session-delivery-mode button { height: 23px; padding: 0 7px; border-radius: 4px; color: var(--desktop-gray-19); }
-.session-composer > div:last-child .session-delivery-mode button.active { background: #172632; color: #93c9d6; }
+.session-composer > div:last-child .session-delivery-mode button.active { background: var(--desktop-surface-cyan-3); color: var(--desktop-cyan-mist); }
 .session-composer .send-button { width: 28px; margin-left: 8px; }
 
 .session-canvas-pane { grid-template-rows: 48px minmax(0, 1fr); }
@@ -392,15 +392,15 @@
   display: grid;
   gap: 8px;
   padding: 13px;
-  border: 1px solid #6a4c27;
+  border: 1px solid var(--desktop-border-amber-4);
   border-radius: 8px;
-  background: #1b150e;
+  background: var(--desktop-surface-amber-3);
 }
-.session-attention-card > span { display: flex; align-items: center; gap: 6px; color: #d6a65f; font-size: 8px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.session-attention-card > span { display: flex; align-items: center; gap: 6px; color: var(--desktop-amber-pale-3); font-size: 8px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .session-attention-card > span svg { width: 13px; height: 13px; }
-.session-attention-card strong { color: #e7c991; font-size: 11px; line-height: 1.4; }
-.session-attention-card p { margin: 0; color: #8f7651; font-size: 9px; line-height: 1.45; }
-.session-attention-card button { display: flex; align-items: center; justify-content: space-between; height: 32px; padding: 0 9px; border: 1px solid #8c6634; border-radius: 6px; background: #332518; color: #f1c77f; font-size: 9px; }
+.session-attention-card strong { color: var(--desktop-amber-pale); font-size: 11px; line-height: 1.4; }
+.session-attention-card p { margin: 0; color: var(--desktop-amber-muted-2); font-size: 9px; line-height: 1.45; }
+.session-attention-card button { display: flex; align-items: center; justify-content: space-between; height: 32px; padding: 0 9px; border: 1px solid var(--desktop-border-amber-5); border-radius: 6px; background: var(--desktop-surface-amber-4); color: var(--desktop-amber-pale-2); font-size: 9px; }
 .session-attention-card button svg { width: 12px; height: 12px; }
 
 .session-context-section { padding: 16px 2px; border-bottom: 1px solid var(--desktop-border-1); }
@@ -411,7 +411,7 @@
 .session-stage-progress { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 9px; margin-bottom: 11px; }
 .session-stage-progress > span { overflow: hidden; height: 4px; border-radius: 99px; background: var(--desktop-surface-31); }
 .session-stage-progress > span i { display: block; height: 100%; border-radius: inherit; background: var(--cyan); }
-.session-stage-progress b { color: #93c9d6; font-size: 9px; }
+.session-stage-progress b { color: var(--desktop-cyan-mist); font-size: 9px; }
 .session-run-snapshot dl { display: grid; gap: 9px; margin: 0; }
 .session-run-snapshot dl > div { display: grid; grid-template-columns: 78px minmax(0, 1fr); align-items: baseline; gap: 8px; }
 .session-run-snapshot dt { color: var(--desktop-gray-16); font-size: 8px; }

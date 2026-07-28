@@ -290,7 +290,7 @@
 }
 
 .workspace-tree-session-actions button.danger {
-  color: #ff8b96;
+  color: var(--desktop-red-pale-7);
 }
 
 .workspace-tree-session-actions button svg {
@@ -323,7 +323,7 @@
 
 .conversation-lifecycle-error {
   margin: 10px 0 0;
-  color: #ff8b96;
+  color: var(--desktop-red-pale-7);
   font-size: 12px;
   line-height: 1.45;
 }

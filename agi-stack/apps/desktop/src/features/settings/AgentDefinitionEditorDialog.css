@@ -5,7 +5,7 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgb(3 8 14 / 78%);
+  background: rgba(var(--desktop-overlay-7-rgb), 78%);
   backdrop-filter: blur(8px);
 }
 
@@ -156,8 +156,8 @@
 .agent-definition-field input:focus,
 .agent-definition-field select:focus,
 .agent-definition-field textarea:focus {
-  border-color: #38bfe3;
-  box-shadow: 0 0 0 2px rgb(56 191 227 / 13%);
+  border-color: var(--desktop-cyan-vivid);
+  box-shadow: 0 0 0 2px rgba(var(--desktop-cyan-focus-2-rgb), 13%);
 }
 
 .agent-definition-field input:disabled,
@@ -167,7 +167,7 @@
 }
 
 .agent-definition-field small {
-  color: #ff8e86;
+  color: var(--desktop-red-warm);
   font-size: 10px;
 }
 
@@ -183,7 +183,7 @@
 }
 
 .agent-definition-toggle-field input {
-  accent-color: #38bfe3;
+  accent-color: var(--desktop-cyan-vivid);
 }
 
 .agent-definition-dialog-error {
@@ -192,10 +192,10 @@
   align-items: center;
   margin: 0 22px 14px;
   padding: 10px 12px;
-  color: #ffb0aa;
+  color: var(--desktop-red-pale-3);
   font-size: 11px;
-  background: rgb(127 35 35 / 20%);
-  border: 1px solid #663735;
+  background: rgba(var(--desktop-red-deep-rgb), 20%);
+  border: 1px solid var(--desktop-border-red-2);
   border-radius: 7px;
 }
 
@@ -228,22 +228,22 @@
 
 .agent-definition-dialog-footer button.primary {
   color: var(--desktop-surface-2);
-  background: #5ccae8;
-  border-color: #69d6f3;
+  background: var(--desktop-cyan-soft);
+  border-color: var(--desktop-cyan-bright-2);
 }
 
 .agent-definition-dialog-footer button.danger,
 .agent-definition-dialog-footer button.agent-definition-delete {
-  color: #ffaaa3;
-  background: #231516;
-  border-color: #603635;
+  color: var(--desktop-red-pale-3);
+  background: var(--desktop-surface-red);
+  border-color: var(--desktop-border-red-2);
 }
 
 .agent-definition-delete-confirmation {
   display: flex;
   gap: 8px;
   align-items: center;
-  color: #ffb0aa;
+  color: var(--desktop-red-pale-3);
   font-size: 11px;
 }
 

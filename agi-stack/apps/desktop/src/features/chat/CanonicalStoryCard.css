@@ -5,7 +5,7 @@
   overflow: hidden;
   border: 1px solid rgba(var(--desktop-cyan-dim-rgb), 0.26);
   border-radius: 8px;
-  background: rgba(8, 17, 24, 0.82);
+  background: rgba(var(--desktop-surface-34-rgb), 0.82);
   color: var(--desktop-text-pale);
 }
 
@@ -129,7 +129,7 @@
 .canonical-story-invest.is-fail,
 .canonical-story-criteria .is-fail,
 .canonical-story-dependencies .is-fail {
-  color: #fb7185;
+  color: var(--desktop-red-bright);
 }
 
 .canonical-story-details,
@@ -188,7 +188,7 @@
 
 .canonical-story-criteria code {
   padding: 1px 4px;
-  color: #9ddceb;
+  color: var(--desktop-cyan-spray);
   font-size: 9px;
 }
 
@@ -245,7 +245,7 @@
 .canonical-story-card.is-invalid {
   border-color: rgba(var(--desktop-amber-hot-rgb), 0.35);
   background: rgba(var(--desktop-amber-deep-rgb), 0.13);
-  color: #fcd34d;
+  color: var(--desktop-amber-glow);
 }
 
 .canonical-story-card.is-invalid .canonical-story-toggle {

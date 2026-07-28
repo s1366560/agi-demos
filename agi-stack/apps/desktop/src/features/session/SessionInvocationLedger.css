@@ -145,7 +145,7 @@
   padding: 8px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
-  background: rgba(var(--desktop-overlay-16-rgb), 0.44);
+  background: rgba(var(--desktop-surface-26-rgb), 0.44);
   color: var(--desktop-muted);
 }
 
@@ -178,7 +178,7 @@
   overflow: hidden;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
-  background: rgba(var(--desktop-overlay-12-rgb), 0.72);
+  background: rgba(var(--desktop-surface-33-rgb), 0.72);
 }
 
 .session-invocation-row.status-unknown_outcome {
@@ -315,7 +315,7 @@
   margin: 0;
   padding: 10px 12px 11px 45px;
   border-top: 1px solid var(--desktop-border-soft);
-  background: rgba(var(--desktop-overlay-16-rgb), 0.36);
+  background: rgba(var(--desktop-surface-26-rgb), 0.36);
 }
 
 .session-invocation-detail div {

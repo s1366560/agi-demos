@@ -3,9 +3,9 @@
 }
 
 .skill-editor-icon {
-  color: #62d8c7;
-  background: #102622;
-  border-color: #32675f;
+  color: var(--desktop-teal-soft);
+  background: var(--desktop-surface-teal);
+  border-color: var(--desktop-border-teal);
 }
 
 .skill-editor-code {

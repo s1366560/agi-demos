@@ -51,7 +51,7 @@
   font-size: 9px;
   font-weight: 700;
   background: var(--desktop-green-light);
-  border: 1px solid #79e3b5;
+  border: 1px solid var(--desktop-green-aqua-2);
   border-radius: 6px;
 }
 
@@ -233,7 +233,7 @@
 
 .skill-evolution-entry-actions button.reject {
   color: var(--desktop-red-light);
-  border-color: #6d313d;
+  border-color: var(--desktop-border-red-3);
 }
 
 .skill-evolution-confirm span {

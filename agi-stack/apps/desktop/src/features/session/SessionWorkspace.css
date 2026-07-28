@@ -651,7 +651,7 @@
   gap: 8px;
   padding: 8px 9px;
   color: var(--desktop-muted);
-  background: rgba(17, 25, 35, 0.9);
+  background: rgba(var(--desktop-panel-glass-2-rgb), 0.9);
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
 }
@@ -661,7 +661,7 @@
 .session-authority-notice small { font-size: 9px; line-height: 1.4; }
 .session-authority-notice.tone-warning > svg { color: var(--amber-9); }
 .session-authority-notice.tone-error {
-  background: rgba(53, 22, 27, 0.72);
+  background: rgba(var(--desktop-red-glass-rgb), 0.72);
   border-color: rgba(var(--desktop-red-bright-rgb), 0.28);
 }
 .session-authority-notice.tone-error > svg { color: var(--red-9); }
@@ -753,7 +753,7 @@
   padding: 7px 8px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
-  background: rgba(var(--desktop-overlay-8-rgb), 0.48);
+  background: rgba(var(--desktop-surface-32-rgb), 0.48);
 }
 
 .session-current-activity dt {
@@ -774,7 +774,7 @@
   overflow: hidden;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(var(--desktop-overlay-11-rgb), 0.74);
+  background: rgba(var(--desktop-surface-33-rgb), 0.74);
 }
 
 .timeline-tool-group + .timeline-tool-group { margin-top: 4px; }
@@ -833,7 +833,7 @@
   gap: 1px;
   padding: 3px 4px 5px 18px;
   border-top: 1px solid var(--desktop-border-soft);
-  background: rgba(2, 6, 11, 0.28);
+  background: rgba(var(--desktop-track-glass-rgb), 0.28);
 }
 
 .session-overview-canvas {
@@ -886,7 +886,7 @@
   padding: 11px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 8px;
-  background: linear-gradient(150deg, rgba(19, 28, 40, 0.82), rgba(var(--desktop-overlay-11-rgb), 0.72));
+  background: linear-gradient(150deg, rgba(var(--desktop-panel-glass-2-rgb), 0.82), rgba(var(--desktop-surface-33-rgb), 0.72));
 }
 
 .session-overview-metrics span,

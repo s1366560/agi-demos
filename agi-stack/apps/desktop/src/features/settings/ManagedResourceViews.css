@@ -139,7 +139,7 @@
 
 .managed-resource-item.selected {
   background: var(--desktop-surface-cyan);
-  border-color: #285265;
+  border-color: var(--desktop-border-cyan-6);
   box-shadow: inset 2px 0 var(--desktop-cyan);
 }
 
@@ -156,8 +156,8 @@
 
 .managed-resource-item.selected .managed-resource-item-icon {
   color: var(--desktop-cyan);
-  background: #13303c;
-  border-color: #28667a;
+  background: var(--desktop-surface-cyan-4);
+  border-color: var(--desktop-border-cyan-3);
 }
 
 .managed-resource-workspace.skills .managed-resource-item.selected .managed-resource-item-icon {
@@ -197,8 +197,8 @@
 
 .managed-resource-create {
   color: var(--desktop-surface-2);
-  background: #5ccae8;
-  border-color: #69d6f3;
+  background: var(--desktop-cyan-soft);
+  border-color: var(--desktop-cyan-bright-2);
 }
 
 .managed-resource-header-actions {
@@ -221,7 +221,7 @@
 
 .managed-resource-danger-action {
   min-height: 34px;
-  border: 1px solid rgba(255, 108, 124, 0.35);
+  border: 1px solid rgba(var(--desktop-red-hot-rgb), 0.35);
   border-radius: 8px;
   padding: 0 12px;
   color: var(--desktop-red-light);
@@ -379,7 +379,7 @@
 }
 
 .managed-resource-primary-action:hover:not(:disabled) {
-  background: #176e84;
+  background: var(--desktop-cyan-deep);
   border-color: var(--desktop-cyan);
 }
 
@@ -417,7 +417,7 @@
   height: 46px;
   place-items: center;
   color: var(--desktop-cyan);
-  background: #112d37;
+  background: var(--desktop-surface-cyan-4);
   border: 1px solid var(--desktop-border-cyan);
   border-radius: 10px;
 }
@@ -656,7 +656,7 @@
 }
 
 .managed-resource-catalog-state.error {
-  color: #db6d7a;
+  color: var(--desktop-red-bright-2);
 }
 
 .managed-resource-catalog-state button {

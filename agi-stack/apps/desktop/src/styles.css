@@ -240,6 +240,142 @@
   --desktop-indigo-dim-rgb: 90, 99, 129;
   --desktop-steel-5-rgb: 56, 81, 96;
   --desktop-amber-deep-rgb: 120, 53, 15;
+  /* Phase-4 neutral surface channels (translucent panels/gradient stops, flip light) */
+  --desktop-surface-26-rgb: 17, 26, 37;
+  --desktop-surface-32-rgb: 4, 13, 16;
+  --desktop-surface-33-rgb: 8, 17, 24;
+  --desktop-surface-34-rgb: 10, 20, 28;
+  --desktop-surface-35-rgb: 15, 30, 39;
+  /* Phase-4 tinted surfaces */
+  --desktop-surface-cyan-4: #13303c;
+  --desktop-surface-cyan-5: #17303c;
+  --desktop-surface-cyan-6: #205264;
+  --desktop-surface-cyan-7-rgb: 21, 45, 57;
+  --desktop-surface-cyan-8-rgb: 28, 74, 88;
+  --desktop-surface-cyan-9-rgb: 28, 93, 112;
+  --desktop-surface-cyan-10-rgb: 25, 114, 136;
+  --desktop-surface-green-4-rgb: 8, 27, 25;
+  --desktop-surface-green-5-rgb: 16, 113, 84;
+  --desktop-surface-red-2: #2c151b;
+  --desktop-surface-red-2-rgb: 44, 21, 27;
+  --desktop-surface-purple-2: #29223f;
+  --desktop-surface-purple-3-rgb: 21, 25, 42;
+  --desktop-surface-purple-4-rgb: 31, 36, 57;
+  --desktop-surface-amber-3: #19140e;
+  --desktop-surface-amber-4: #332518;
+  --desktop-surface-teal: #102622;
+  /* Phase-4 tinted borders */
+  --desktop-border-cyan-6: #2b5362;
+  --desktop-border-cyan-7: #2b5d6d;
+  --desktop-border-cyan-8: #27738c;
+  --desktop-border-cyan-9: #267e96;
+  --desktop-border-cyan-10: #477086;
+  --desktop-border-green-3: #27584a;
+  --desktop-border-green-4: #247258;
+  --desktop-border-red-2: #663735;
+  --desktop-border-red-3: #6b343c;
+  --desktop-border-red-4: #4b2831;
+  --desktop-border-amber-4: #5d472c;
+  --desktop-border-amber-5: #8b6533;
+  --desktop-border-amber-6: #4c3b25;
+  --desktop-border-amber-7: #3a342e;
+  --desktop-border-purple: #574989;
+  --desktop-border-purple-2: #71639f;
+  --desktop-border-teal: #32675f;
+  --desktop-border-slate: #466079;
+  --desktop-border-blue: #315e9c;
+  /* Phase-4 red accent tokens */
+  --desktop-red-pale-4: #ffd7dc;
+  --desktop-red-pale-7: #ff8e99;
+  --desktop-red-warm: #ff8e86;
+  --desktop-red-bright: #fb7185;
+  --desktop-red-bright-2: #db6d7a;
+  --desktop-red-blush-2: #e8a1ad;
+  --desktop-red-muted: #d2858d;
+  --desktop-red-dim-2: #d2a1a1;
+  --desktop-red-faint: #8a6970;
+  --desktop-red-deep: #b63b52;
+  --desktop-red-blush-rgb: 255, 182, 190;
+  --desktop-red-blush-2-rgb: 232, 161, 173;
+  --desktop-red-strong-rgb: 212, 92, 101;
+  --desktop-red-deep-2-rgb: 153, 27, 27;
+  --desktop-red-deep-3-rgb: 185, 28, 28;
+  --desktop-red-glass-rgb: 53, 22, 27;
+  /* Phase-4 green/teal accent tokens */
+  --desktop-green-pale: #bff8df;
+  --desktop-green-aqua: #7fe6bd;
+  --desktop-green-aqua-2: #79e4bd;
+  --desktop-green-pastel: #a2d6b1;
+  --desktop-green-vivid-3: #55d69a;
+  --desktop-green-vivid-4: #49c788;
+  --desktop-green-muted: #4fc29e;
+  --desktop-green-check: #42bb88;
+  --desktop-green-cta: #2dbf7f;
+  --desktop-green-soft-rgb: 45, 176, 138;
+  --desktop-green-bright-rgb: 76, 214, 163;
+  --desktop-teal-soft: #65d7d2;
+  --desktop-teal-soft-2: #7dd3cf;
+  --desktop-teal-bright-rgb: 83, 240, 207;
+  --desktop-teal-dim-rgb: 21, 58, 53;
+  /* Phase-4 amber/gold accent tokens */
+  --desktop-amber-pale: #f6d5a3;
+  --desktop-amber-pale-2: #f0c37f;
+  --desktop-amber-pale-3: #d6a86a;
+  --desktop-amber-glow: #fcd34d;
+  --desktop-amber-rich: #d9a84c;
+  --desktop-amber-dark-text: #b68a4a;
+  --desktop-amber-muted: #a78a5f;
+  --desktop-amber-muted-2: #8e7b55;
+  --desktop-amber-text: #87683f;
+  --desktop-amber-muted-text: #7b6e62;
+  --desktop-gold-soft: #d8bd62;
+  --desktop-amber-deep-2-rgb: 146, 64, 14;
+  /* Phase-4 cyan accent tokens */
+  --desktop-cyan-pale-2: #b8efff;
+  --desktop-cyan-spray: #9adbe8;
+  --desktop-cyan-mist: #93c9d6;
+  --desktop-cyan-bright-2: #6edff6;
+  --desktop-cyan-spark: #66c5df;
+  --desktop-cyan-bright-3: #56b4cc;
+  --desktop-cyan-vivid: #38bfe3;
+  --desktop-cyan-link: #6abdd1;
+  --desktop-cyan-link-2: #78c2d2;
+  --desktop-cyan-link-bright: #4fbfdc;
+  --desktop-cyan-focus: #43a7c0;
+  --desktop-cyan-strong: #188ba7;
+  --desktop-cyan-gray: #5f8391;
+  --desktop-cyan-soft-2-rgb: 89, 188, 212;
+  --desktop-cyan-ring-rgb: 41, 168, 204;
+  --desktop-cyan-ring-2-rgb: 39, 142, 167;
+  --desktop-cyan-abyss-rgb: 26, 91, 110;
+  --desktop-cyan-focus-rgb: 66, 193, 225;
+  --desktop-cyan-focus-2-rgb: 56, 191, 227;
+  --desktop-cyan-tint-rgb: 8, 28, 37;
+  --desktop-cyan-dusk-3-rgb: 44, 112, 133;
+  --desktop-cyan-dusk-4-rgb: 30, 108, 133;
+  /* Phase-4 indigo/purple/blue accent tokens */
+  --desktop-indigo-bright: #6366f1;
+  --desktop-indigo-bright-rgb: 139, 156, 246;
+  --desktop-indigo-pale: #a5b4fc;
+  --desktop-indigo-soft-rgb: 143, 157, 196;
+  --desktop-purple-light: #d9b8ff;
+  --desktop-purple-checkbox: #7f6bd1;
+  --desktop-sky-light: #7cc7ff;
+  --desktop-blue-soft: #7fa8c9;
+  --desktop-olive: #796844;
+  /* Phase-4 steel/slate + glass + on-accent tokens */
+  --desktop-steel-6-rgb: 92, 155, 181;
+  --desktop-steel-7-rgb: 73, 143, 168;
+  --desktop-steel-8-rgb: 82, 115, 129;
+  --desktop-slate-2-rgb: 151, 174, 190;
+  --desktop-slate-3-rgb: 130, 148, 157;
+  --desktop-steel-text: #7e9dab;
+  --desktop-steel-blue: #7899b2;
+  --desktop-gray-9-rgb: 99, 119, 134;
+  --desktop-panel-glass-rgb: 10, 18, 29;
+  --desktop-panel-glass-2-rgb: 15, 25, 38;
+  --desktop-track-glass-rgb: 2, 6, 11;
+  --desktop-on-accent: #03141a;
 }
 
 /* Light theme overrides. Every --desktop-* token from :root must be redefined
@@ -489,6 +625,143 @@
   --desktop-indigo-dim-rgb: 84, 91, 140;
   --desktop-steel-5-rgb: 74, 98, 114;
   --desktop-amber-deep-rgb: 146, 64, 14;
+
+  /* Phase-4 neutral surface channels (light = near-white translucent panels) */
+  --desktop-surface-26-rgb: 251, 252, 254;
+  --desktop-surface-32-rgb: 234, 239, 244;
+  --desktop-surface-33-rgb: 235, 240, 246;
+  --desktop-surface-34-rgb: 236, 241, 247;
+  --desktop-surface-35-rgb: 238, 242, 248;
+  /* Phase-4 tinted surfaces */
+  --desktop-surface-cyan-4: #d3eaf2;
+  --desktop-surface-cyan-5: #daedf3;
+  --desktop-surface-cyan-6: #c4e2ea;
+  --desktop-surface-cyan-7-rgb: 210, 233, 240;
+  --desktop-surface-cyan-8-rgb: 213, 236, 242;
+  --desktop-surface-cyan-9-rgb: 214, 238, 244;
+  --desktop-surface-cyan-10-rgb: 215, 240, 246;
+  --desktop-surface-green-4-rgb: 228, 243, 236;
+  --desktop-surface-green-5-rgb: 214, 240, 229;
+  --desktop-surface-red-2: #f8e2e6;
+  --desktop-surface-red-2-rgb: 248, 226, 230;
+  --desktop-surface-purple-2: #e9e4f8;
+  --desktop-surface-purple-3-rgb: 236, 234, 247;
+  --desktop-surface-purple-4-rgb: 237, 235, 248;
+  --desktop-surface-amber-3: #f8f0e2;
+  --desktop-surface-amber-4: #f6ecdc;
+  --desktop-surface-teal: #dff1ed;
+  /* Phase-4 tinted borders */
+  --desktop-border-cyan-6: #a3c2d0;
+  --desktop-border-cyan-7: #8bb8ca;
+  --desktop-border-cyan-8: #7cb8cb;
+  --desktop-border-cyan-9: #74b3c6;
+  --desktop-border-cyan-10: #79aec2;
+  --desktop-border-green-3: #a3c9b8;
+  --desktop-border-green-4: #6aab8d;
+  --desktop-border-red-2: #d0a0a8;
+  --desktop-border-red-3: #cd98a2;
+  --desktop-border-red-4: #caa3ac;
+  --desktop-border-amber-4: #d6c2a2;
+  --desktop-border-amber-5: #c9a96f;
+  --desktop-border-amber-6: #cdb28a;
+  --desktop-border-amber-7: #d8cbb8;
+  --desktop-border-purple: #c5b9e8;
+  --desktop-border-purple-2: #8578cc;
+  --desktop-border-teal: #93c5ba;
+  --desktop-border-slate: #97a9bc;
+  --desktop-border-blue: #25629a;
+  /* Phase-4 red accent tokens (darkened for contrast on light surfaces) */
+  --desktop-red-pale-4: #992f40;
+  --desktop-red-pale-7: #cf5465;
+  --desktop-red-warm: #c24040;
+  --desktop-red-bright: #e02d41;
+  --desktop-red-bright-2: #c24555;
+  --desktop-red-blush-2: #cf5465;
+  --desktop-red-muted: #b04a58;
+  --desktop-red-dim-2: #992f40;
+  --desktop-red-faint: #a45560;
+  --desktop-red-deep: #991b1b;
+  --desktop-red-blush-rgb: 176, 58, 76;
+  --desktop-red-blush-2-rgb: 207, 84, 101;
+  --desktop-red-strong-rgb: 190, 50, 62;
+  --desktop-red-deep-2-rgb: 153, 27, 27;
+  --desktop-red-deep-3-rgb: 185, 28, 28;
+  --desktop-red-glass-rgb: 251, 238, 240;
+  /* Phase-4 green/teal accent tokens (darkened for contrast on light surfaces) */
+  --desktop-green-pale: #0d7f57;
+  --desktop-green-aqua: #0e9f6e;
+  --desktop-green-aqua-2: #0f8a5e;
+  --desktop-green-pastel: #0d7f57;
+  --desktop-green-vivid-3: #0e9a55;
+  --desktop-green-vivid-4: #0e9a55;
+  --desktop-green-muted: #12a06f;
+  --desktop-green-check: #0e9f6e;
+  --desktop-green-cta: #2dbf7f;
+  --desktop-green-soft-rgb: 15, 138, 90;
+  --desktop-green-bright-rgb: 18, 160, 111;
+  --desktop-teal-soft: #0c8a6e;
+  --desktop-teal-soft-2: #0c8a6e;
+  --desktop-teal-bright-rgb: 12, 138, 110;
+  --desktop-teal-dim-rgb: 227, 244, 240;
+  /* Phase-4 amber/gold accent tokens (darkened for contrast on light surfaces) */
+  --desktop-amber-pale: #b4741c;
+  --desktop-amber-pale-2: #b4741c;
+  --desktop-amber-pale-3: #a5681a;
+  --desktop-amber-glow: #b45309;
+  --desktop-amber-rich: #a5681a;
+  --desktop-amber-dark-text: #8a5a12;
+  --desktop-amber-muted: #8a5c12;
+  --desktop-amber-muted-2: #8a6a2f;
+  --desktop-amber-text: #a5681a;
+  --desktop-amber-muted-text: #7a6a58;
+  --desktop-gold-soft: #8a6d33;
+  --desktop-amber-deep-2-rgb: 146, 64, 14;
+  /* Phase-4 cyan accent tokens (darkened for contrast on light surfaces) */
+  --desktop-cyan-pale-2: #0a5468;
+  --desktop-cyan-spray: #0e7490;
+  --desktop-cyan-mist: #0e7490;
+  --desktop-cyan-bright-2: #0e8aa8;
+  --desktop-cyan-spark: #0e8aa8;
+  --desktop-cyan-bright-3: #0e8aa8;
+  --desktop-cyan-vivid: #0891b2;
+  --desktop-cyan-link: #0f7d9c;
+  --desktop-cyan-link-2: #0f7d9c;
+  --desktop-cyan-link-bright: #0e8aa8;
+  --desktop-cyan-focus: #0f7d9c;
+  --desktop-cyan-strong: #0c6a84;
+  --desktop-cyan-gray: #357c8c;
+  --desktop-cyan-soft-2-rgb: 8, 145, 178;
+  --desktop-cyan-ring-rgb: 8, 145, 178;
+  --desktop-cyan-ring-2-rgb: 14, 116, 144;
+  --desktop-cyan-abyss-rgb: 14, 116, 144;
+  --desktop-cyan-focus-rgb: 15, 125, 156;
+  --desktop-cyan-focus-2-rgb: 8, 145, 178;
+  --desktop-cyan-tint-rgb: 227, 242, 246;
+  --desktop-cyan-dusk-3-rgb: 34, 90, 108;
+  --desktop-cyan-dusk-4-rgb: 11, 94, 117;
+  /* Phase-4 indigo/purple/blue accent tokens (darkened for contrast on light surfaces) */
+  --desktop-indigo-bright: #4f46e5;
+  --desktop-indigo-bright-rgb: 79, 70, 229;
+  --desktop-indigo-pale: #5b54d6;
+  --desktop-indigo-soft-rgb: 84, 91, 140;
+  --desktop-purple-light: #7c3aed;
+  --desktop-purple-checkbox: #7c3aed;
+  --desktop-sky-light: #0369a1;
+  --desktop-blue-soft: #2b78ad;
+  --desktop-olive: #8a6a2f;
+  /* Phase-4 steel/slate + glass + on-accent tokens */
+  --desktop-steel-6-rgb: 70, 120, 145;
+  --desktop-steel-7-rgb: 55, 110, 135;
+  --desktop-steel-8-rgb: 62, 92, 108;
+  --desktop-slate-2-rgb: 120, 140, 158;
+  --desktop-slate-3-rgb: 104, 120, 130;
+  --desktop-steel-text: #4e6a7e;
+  --desktop-steel-blue: #456a86;
+  --desktop-gray-9-rgb: 94, 111, 131;
+  --desktop-panel-glass-rgb: 255, 255, 255;
+  --desktop-panel-glass-2-rgb: 255, 255, 255;
+  --desktop-track-glass-rgb: 233, 237, 243;
+  --desktop-on-accent: #ffffff;
 }
 
 * {
@@ -542,7 +815,7 @@ select {
   max-height: 60vh;
   margin: 0;
   overflow: auto;
-  color: #ffd7dc;
+  color: var(--desktop-red-pale-4);
   white-space: pre-wrap;
   font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
@@ -704,7 +977,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .titlebar-run-status.run-state-running {
   border-color: rgba(var(--desktop-green-rgb), 0.26);
-  color: #bff8df;
+  color: var(--desktop-green-pale);
 }
 
 .titlebar-run-status.run-state-running i {
@@ -714,7 +987,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .titlebar-run-status.run-state-planning {
   border-color: rgba(var(--desktop-cyan-rgb), 0.3);
-  color: #b8efff;
+  color: var(--desktop-cyan-pale-2);
 }
 
 .titlebar-run-status.run-state-planning i {
@@ -724,7 +997,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .titlebar-run-status.run-state-paused {
   border-color: rgba(var(--desktop-amber-rgb), 0.3);
-  color: #f6d5a3;
+  color: var(--desktop-amber-pale);
 }
 
 .titlebar-run-status.run-state-paused i {
@@ -1208,7 +1481,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .sidebar-run-row.selected .sidebar-run-meta strong {
-  color: #bff8df;
+  color: var(--desktop-green-pale);
 }
 
 .sidebar-runtime-monitor {
@@ -1276,7 +1549,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 7px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(var(--desktop-overlay-7-rgb), 0.52);
+  background: rgba(var(--desktop-surface-32-rgb), 0.52);
 }
 
 .runtime-monitor-grid dt,
@@ -1694,7 +1967,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .auth-modal .auth-hint {
   background: rgba(var(--desktop-amber-rgb), 0.12);
-  color: #e7c48d;
+  color: var(--desktop-amber-pale);
 }
 
 .auth-dev-helper {
@@ -1714,7 +1987,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   justify-content: center;
   border: 1px solid rgba(var(--desktop-amber-rgb), 0.24);
   background: rgba(var(--desktop-amber-rgb), 0.08);
-  color: #e7c48d;
+  color: var(--desktop-amber-pale);
 }
 
 .auth-fill-dev-button:hover {
@@ -1905,7 +2178,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 8px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
-  background: rgba(var(--desktop-overlay-12-rgb), 0.72);
+  background: rgba(var(--desktop-surface-33-rgb), 0.72);
 }
 
 .auth-metric .rt-Text:last-child {
@@ -2195,7 +2468,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .workbench-error > button {
   flex: 0 0 auto;
   padding: 3px 7px;
-  border: 1px solid rgba(255, 182, 190, 0.38);
+  border: 1px solid rgba(var(--desktop-red-blush-rgb), 0.38);
   border-radius: 4px;
   background: rgba(var(--desktop-white-rgb), 0.05);
   color: inherit;
@@ -2434,7 +2707,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 10px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 8px;
-  background: rgba(var(--desktop-overlay-5-rgb), 0.68);
+  background: rgba(var(--desktop-surface-34-rgb), 0.68);
 }
 
 .session-plan-task-index {
@@ -2478,7 +2751,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 13px;
   border: 1px solid rgba(var(--desktop-cyan-alt-rgb), 0.28);
   border-radius: 9px;
-  background: rgba(8, 28, 37, 0.42);
+  background: rgba(var(--desktop-cyan-tint-rgb), 0.42);
 }
 
 .session-plan-approval-card > header {
@@ -2656,7 +2929,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 10px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(var(--desktop-overlay-5-rgb), 0.68);
+  background: rgba(var(--desktop-surface-34-rgb), 0.68);
 }
 
 .review-json,
@@ -2733,7 +3006,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 12px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(var(--desktop-overlay-5-rgb), 0.68);
+  background: rgba(var(--desktop-surface-34-rgb), 0.68);
 }
 
 .decision-summary-head,
@@ -3268,7 +3541,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 9px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(var(--desktop-overlay-5-rgb), 0.68);
+  background: rgba(var(--desktop-surface-34-rgb), 0.68);
   color: var(--desktop-muted);
   cursor: pointer;
   font: inherit;
@@ -3340,7 +3613,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 10px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(var(--desktop-overlay-5-rgb), 0.68);
+  background: rgba(var(--desktop-surface-34-rgb), 0.68);
 }
 
 .review-event-row:hover,
@@ -3621,7 +3894,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 10px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(var(--desktop-overlay-5-rgb), 0.68);
+  background: rgba(var(--desktop-surface-34-rgb), 0.68);
   color: inherit;
   cursor: pointer;
   font: inherit;
@@ -3801,7 +4074,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 9px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(var(--desktop-overlay-5-rgb), 0.68);
+  background: rgba(var(--desktop-surface-34-rgb), 0.68);
   color: inherit;
   font: inherit;
   text-align: left;
@@ -3939,7 +4212,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .artifact-status-track > span.reached {
   border-color: rgba(var(--desktop-green-rgb), 0.26);
-  color: #7fe6bd;
+  color: var(--desktop-green-aqua);
 }
 
 .artifact-status-track svg {
@@ -4031,7 +4304,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   align-items: center;
   gap: 6px;
   min-width: 0;
-  color: #7fe6bd;
+  color: var(--desktop-green-aqua);
 }
 
 .artifact-evidence-grid li > span {
@@ -4078,7 +4351,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .artifact-delivery-receipt {
   border-color: rgba(var(--desktop-green-rgb), 0.25);
   background: rgba(var(--desktop-green-rgb), 0.06);
-  color: #55d69a;
+  color: var(--desktop-green-vivid-3);
 }
 
 .artifact-feedback-record > span,
@@ -4223,7 +4496,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 8px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(var(--desktop-overlay-5-rgb), 0.68);
+  background: rgba(var(--desktop-surface-34-rgb), 0.68);
 }
 
 .terminal-authority-facts dt {
@@ -4365,7 +4638,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .overview-summary,
 .sandbox-panel {
   border: 1px solid var(--desktop-border-soft);
-  background: rgba(var(--desktop-overlay-15-rgb), 0.82);
+  background: rgba(var(--desktop-surface-34-rgb), 0.82);
 }
 
 .message {
@@ -4564,7 +4837,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   overflow: auto;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
-  background: rgba(var(--desktop-overlay-1-rgb), 0.42);
+  background: rgba(var(--desktop-surface-32-rgb), 0.42);
   color: var(--desktop-gray-33);
   font-size: 0.92em;
   line-height: 1.5;
@@ -4749,7 +5022,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .timeline-status.ok {
   border-color: rgba(var(--desktop-green-rgb), 0.2);
   background: rgba(var(--desktop-green-rgb), 0.08);
-  color: #86e9c2;
+  color: var(--desktop-green-aqua);
 }
 
 .timeline-status.error {
@@ -4761,7 +5034,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .timeline-status.waiting {
   border-color: rgba(var(--desktop-amber-rgb), 0.24);
   background: rgba(var(--desktop-amber-rgb), 0.09);
-  color: #f6c983;
+  color: var(--desktop-amber-pale-2);
 }
 
 .timeline-title {
@@ -4819,7 +5092,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   overflow: auto;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
-  background: rgba(var(--desktop-overlay-1-rgb), 0.42);
+  background: rgba(var(--desktop-surface-32-rgb), 0.42);
   color: var(--desktop-muted);
   font-size: 12px;
   line-height: 1.45;
@@ -4978,7 +5251,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   max-width: 100%;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(var(--desktop-overlay-1-rgb), 0.55);
+  background: rgba(var(--desktop-surface-32-rgb), 0.55);
   overflow: hidden;
 }
 
@@ -5059,7 +5332,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   bottom: 24px;
   left: 0;
   height: 44px;
-  background: linear-gradient(180deg, transparent, rgba(var(--desktop-overlay-1-rgb), 0.92));
+  background: linear-gradient(180deg, transparent, rgba(var(--desktop-surface-32-rgb), 0.92));
   pointer-events: none;
 }
 
@@ -5091,13 +5364,13 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .hljs-keyword,
 .hljs-selector-tag,
 .hljs-meta .hljs-keyword {
-  color: #7cc7ff;
+  color: var(--desktop-sky-light);
 }
 
 .hljs-string,
 .hljs-regexp,
 .hljs-addition {
-  color: #86e9c2;
+  color: var(--desktop-green-aqua);
 }
 
 .hljs-number,
@@ -5110,7 +5383,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .hljs-title,
 .hljs-name,
 .hljs-section {
-  color: #d9b8ff;
+  color: var(--desktop-purple-light);
 }
 
 .hljs-attr,
@@ -5118,7 +5391,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .hljs-variable,
 .hljs-template-variable,
 .hljs-type {
-  color: #9fd3e8;
+  color: var(--desktop-cyan-spray);
 }
 
 .hljs-built_in,
@@ -5235,7 +5508,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 /* Reasoning (thought) rows: second-class, muted presentation */
 .message.timeline-row.thought .timeline-row-icon {
-  color: #8f9dc4;
+  color: rgb(var(--desktop-indigo-soft-rgb));
 }
 
 .message.timeline-row.thought .timeline-row-title {
@@ -5249,7 +5522,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .thought-content {
   padding-left: 10px;
-  border-left: 2px solid rgba(143, 157, 196, 0.28);
+  border-left: 2px solid rgba(var(--desktop-indigo-soft-rgb), 0.28);
   color: var(--desktop-gray-27);
   font-size: 0.96em;
 }
@@ -5375,7 +5648,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .composer {
   padding: 10px;
   border-top: 1px solid var(--desktop-border-soft);
-  background: rgba(var(--desktop-overlay-13-rgb), 0.86);
+  background: rgba(var(--desktop-surface-33-rgb), 0.86);
 }
 
 .chat-composer {
@@ -5460,7 +5733,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   gap: 8px;
   padding: 10px;
   border-bottom: 1px solid var(--desktop-border-soft);
-  background: rgba(var(--desktop-overlay-10-rgb), 0.38);
+  background: rgba(var(--desktop-surface-32-rgb), 0.38);
 }
 
 .board-command-bar {
@@ -5471,7 +5744,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   min-width: 0;
   padding: 10px;
   border-top: 1px solid var(--desktop-border-soft);
-  background: rgba(var(--desktop-overlay-13-rgb), 0.9);
+  background: rgba(var(--desktop-surface-33-rgb), 0.9);
 }
 
 .board-command-slash,
@@ -5495,7 +5768,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   width: 34px;
   height: 34px;
   border-color: rgba(var(--desktop-green-rgb), 0.2);
-  background: #2dbf7f;
+  background: var(--desktop-green-cta);
   color: rgb(var(--desktop-black-rgb));
 }
 
@@ -5753,7 +6026,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   border-bottom: 1px solid var(--desktop-border-soft);
   background:
     linear-gradient(90deg, rgba(var(--desktop-slate-rgb), 0.06) 1px, transparent 1px),
-    rgba(var(--desktop-overlay-7-rgb), 0.28);
+    rgba(var(--desktop-surface-32-rgb), 0.28);
   background-size: calc(100% / 7) 100%, 100% 100%;
   color: var(--desktop-faint);
   font-size: calc(11px * var(--board-zoom, 1));
@@ -5887,7 +6160,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   overflow: hidden;
   border-radius: 0;
   border-bottom: 0;
-  background: rgba(var(--desktop-overlay-10-rgb), 0.4);
+  background: rgba(var(--desktop-surface-32-rgb), 0.4);
 }
 
 .lane-grid.board-view-swimlane .lane:first-of-type {
@@ -5954,7 +6227,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   grid-template-rows: 38px minmax(0, 1fr);
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(var(--desktop-overlay-10-rgb), 0.55);
+  background: rgba(var(--desktop-surface-32-rgb), 0.55);
 }
 
 .lane-head {
@@ -6358,7 +6631,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   gap: 24px;
   padding: 22px 26px 20px;
   border-bottom: 1px solid var(--desktop-border-soft);
-  background: rgba(var(--desktop-overlay-14-rgb), 0.92);
+  background: rgba(var(--desktop-surface-34-rgb), 0.92);
 }
 
 .workspace-overview-identity {
@@ -6418,7 +6691,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   border-radius: 9px;
   background:
     linear-gradient(90deg, rgba(var(--desktop-cyan-rgb), 0.08), rgba(var(--desktop-cyan-rgb), 0.015) 52%),
-    rgba(var(--desktop-overlay-3-rgb), 0.9);
+    rgba(var(--desktop-surface-33-rgb), 0.9);
 }
 
 .workspace-goal-icon {
@@ -6460,7 +6733,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   gap: 3px;
   padding: 12px 13px;
   border-color: var(--desktop-border-soft);
-  background: rgba(var(--desktop-overlay-3-rgb), 0.9);
+  background: rgba(var(--desktop-surface-33-rgb), 0.9);
 }
 
 .workspace-execution-metric[data-tone='warning'] {
@@ -6501,7 +6774,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 13px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 9px;
-  background: rgba(var(--desktop-overlay-3-rgb), 0.9);
+  background: rgba(var(--desktop-surface-33-rgb), 0.9);
 }
 
 .workspace-active-sessions {
@@ -6703,8 +6976,8 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .workspace-conversation-dot {
-  background: #8b9cf6;
-  box-shadow: 0 0 0 3px rgba(139, 156, 246, 0.09);
+  background: rgb(var(--desktop-indigo-bright-rgb));
+  box-shadow: 0 0 0 3px rgba(var(--desktop-indigo-bright-rgb), 0.09);
 }
 
 .workspace-evidence-stats {
@@ -7282,7 +7555,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .composer-model-error {
-  color: #e8a1ad !important;
+  color: var(--desktop-red-blush-2) !important;
 }
 
 .composer-workflows button {

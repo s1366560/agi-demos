@@ -5,7 +5,7 @@
   display: grid;
   place-items: center;
   padding: 32px;
-  background: rgba(2, 6, 12, 0.76);
+  background: rgba(var(--desktop-overlay-1-rgb), 0.76);
   backdrop-filter: blur(10px);
 }
 
@@ -115,7 +115,7 @@
   padding: 15px;
   border: 1px solid rgba(var(--desktop-steel-3-rgb), 0.18);
   border-radius: 12px;
-  background: rgba(17, 26, 37, 0.64);
+  background: rgba(var(--desktop-surface-26-rgb), 0.64);
 }
 
 .plugin-activity-section h3 {
@@ -161,7 +161,7 @@
   padding: 5px 8px;
   border-radius: 7px;
   color: var(--desktop-gray-29);
-  background: rgba(98, 217, 239, 0.08);
+  background: rgba(var(--desktop-cyan-soft-rgb), 0.08);
   font-size: 10px;
 }
 
@@ -182,7 +182,7 @@
   gap: 10px;
   padding: 10px;
   border-radius: 9px;
-  background: rgba(var(--desktop-overlay-8-rgb), 0.45);
+  background: rgba(var(--desktop-surface-32-rgb), 0.45);
 }
 
 .plugin-activity-diagnostics article > span {
@@ -197,7 +197,7 @@
 
 .plugin-activity-diagnostics article > span[data-level='error'],
 .plugin-activity-diagnostics article > span[data-level='warning'] {
-  color: #ffb4bc;
+  color: var(--desktop-red-blush);
   background: rgba(var(--desktop-red-hot-rgb), 0.13);
 }
 
@@ -223,7 +223,7 @@
 
 .plugin-activity-timeline article > svg {
   margin-top: 2px;
-  color: #79e4bd;
+  color: var(--desktop-green-aqua-2);
 }
 
 .plugin-activity-timeline article[data-success='false'] > svg {
@@ -248,7 +248,7 @@
 }
 
 .plugin-management-body label > span b {
-  color: #ff8e99;
+  color: var(--desktop-red-pale-7);
 }
 
 .plugin-management-body input:not([type='checkbox']),
@@ -265,13 +265,13 @@
 
 .plugin-management-body input:focus,
 .plugin-management-body select:focus {
-  border-color: #6edff6;
-  box-shadow: 0 0 0 3px rgba(66, 193, 225, 0.12);
+  border-color: var(--desktop-cyan-bright-2);
+  box-shadow: 0 0 0 3px rgba(var(--desktop-cyan-focus-rgb), 0.12);
 }
 
 .plugin-management-body label.invalid input,
 .plugin-management-body label.invalid select {
-  border-color: #ff7f8b;
+  border-color: var(--desktop-red-bright);
 }
 
 .plugin-management-body label em {
@@ -292,7 +292,7 @@
 }
 
 .plugin-config-checkbox input {
-  accent-color: #59d6ed;
+  accent-color: var(--desktop-cyan-soft);
 }
 
 .plugin-management-state {
@@ -342,7 +342,7 @@
 }
 
 .plugin-management-footer span {
-  color: #f3b2b8;
+  color: var(--desktop-red-blush);
   font-size: 11px;
 }
 
@@ -358,9 +358,9 @@
 }
 
 .plugin-management-footer button.primary {
-  border: 1px solid #62d9ef;
+  border: 1px solid var(--desktop-cyan-bright-2);
   color: var(--desktop-surface-2);
-  background: #70dff2;
+  background: var(--desktop-cyan-bright-2);
 }
 
 .plugin-management-footer button.secondary,

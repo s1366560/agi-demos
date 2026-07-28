@@ -108,7 +108,7 @@
   padding: 22px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 8px;
-  background: rgba(var(--desktop-overlay-3-rgb), 0.9);
+  background: rgba(var(--desktop-surface-33-rgb), 0.9);
 }
 
 .workspace-design-context-empty > span {
@@ -194,7 +194,7 @@
   min-width: 0;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 8px;
-  background: rgba(var(--desktop-overlay-3-rgb), 0.9);
+  background: rgba(var(--desktop-surface-33-rgb), 0.9);
 }
 
 .workspace-design-goal-card {
@@ -483,7 +483,7 @@
   color: var(--desktop-cyan);
 }
 
-.workspace-design-session-icon[data-mode='work'] { color: #9c8cff; }
+.workspace-design-session-icon[data-mode='work'] { color: var(--desktop-purple-bright); }
 
 .workspace-design-sessions-card button > span:nth-child(2) {
   display: grid;
@@ -530,7 +530,7 @@
 
 .workspace-design-sessions-card button em[data-status='danger'] {
   background: rgba(var(--desktop-red-rgb), 0.08);
-  color: #ff8793;
+  color: var(--desktop-red-pale-7);
 }
 
 .workspace-design-activity-card > div {

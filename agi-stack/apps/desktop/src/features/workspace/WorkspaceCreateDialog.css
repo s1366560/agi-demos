@@ -41,7 +41,7 @@
 .workspace-create-form .rt-TextFieldRoot,
 .workspace-create-form .rt-TextAreaRoot {
   border-color: rgba(var(--desktop-steel-1-rgb), 0.58);
-  background: rgba(var(--desktop-overlay-2-rgb), 0.8);
+  background: rgba(var(--desktop-surface-33-rgb), 0.8);
 }
 
 .workspace-create-form .rt-TextFieldInput,
@@ -95,7 +95,7 @@
   padding: 12px 10px;
   border: 1px solid rgba(var(--desktop-steel-1-rgb), 0.42);
   border-radius: 9px;
-  background: rgba(var(--desktop-overlay-6-rgb), 0.72);
+  background: rgba(var(--desktop-surface-26-rgb), 0.72);
   color: var(--desktop-muted, var(--desktop-gray-13));
   text-align: left;
   transition:
@@ -106,7 +106,7 @@
 
 .workspace-create-option-grid button:hover:not(:disabled) {
   border-color: rgba(var(--desktop-cyan-rgb), 0.6);
-  background: rgba(24, 47, 60, 0.72);
+  background: rgba(var(--desktop-surface-cyan-7-rgb), 0.72);
   transform: translateY(-1px);
 }
 
@@ -117,7 +117,7 @@
 
 .workspace-create-option-grid button.selected {
   border-color: rgba(var(--desktop-cyan-rgb), 0.86);
-  background: rgba(30, 108, 133, 0.2);
+  background: rgba(var(--desktop-cyan-dusk-4-rgb), 0.2);
   box-shadow: inset 0 0 0 1px rgba(var(--desktop-cyan-rgb), 0.12);
 }
 

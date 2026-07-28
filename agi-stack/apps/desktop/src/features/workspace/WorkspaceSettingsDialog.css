@@ -32,7 +32,7 @@
   padding: 15px;
   border: 1px solid rgba(var(--desktop-steel-1-rgb), 0.4);
   border-radius: 10px;
-  background: rgba(var(--desktop-overlay-2-rgb), 0.62);
+  background: rgba(var(--desktop-surface-33-rgb), 0.62);
 }
 
 .workspace-settings-form > section > header {
@@ -82,7 +82,7 @@
 .workspace-settings-form .rt-TextAreaRoot,
 .workspace-settings-form select {
   border-color: rgba(var(--desktop-steel-1-rgb), 0.58);
-  background: rgba(var(--desktop-overlay-2-rgb), 0.8);
+  background: rgba(var(--desktop-surface-33-rgb), 0.8);
 }
 
 .workspace-settings-form .rt-TextFieldInput,
@@ -132,7 +132,7 @@
   padding: 7px 10px;
   border: 1px solid rgba(var(--desktop-steel-1-rgb), 0.45);
   border-radius: 7px;
-  background: rgba(var(--desktop-overlay-6-rgb), 0.72);
+  background: rgba(var(--desktop-surface-26-rgb), 0.72);
 }
 
 .workspace-settings-archive > span {

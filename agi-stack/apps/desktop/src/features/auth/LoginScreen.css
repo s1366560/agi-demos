@@ -170,7 +170,7 @@
 .desktop-login-mode button[aria-pressed='true'] {
   color: var(--desktop-text-mist);
   background: var(--desktop-surface-30);
-  border-color: #31677a;
+  border-color: var(--desktop-border-cyan-3);
   box-shadow: 0 1px 8px rgba(var(--desktop-black-rgb), 24%);
 }
 
@@ -215,7 +215,7 @@
 
 .desktop-login-sso:hover {
   background: var(--desktop-surface-30);
-  border-color: #477086;
+  border-color: var(--desktop-border-cyan-10);
 }
 
 .desktop-login-local {
@@ -342,7 +342,7 @@
 
 .desktop-login-options button {
   padding: 0;
-  color: #68bbcf;
+  color: var(--desktop-cyan-link);
   font-size: 8px;
   background: transparent;
   border: 0;
@@ -401,7 +401,7 @@
 
 .desktop-login-help button {
   padding: 0;
-  color: #6abdd1;
+  color: var(--desktop-cyan-link);
   font-size: 8px;
   background: transparent;
   border: 0;
@@ -534,7 +534,7 @@
   justify-content: center;
   flex-wrap: wrap;
   gap: 5px 8px;
-  color: #6abdd1;
+  color: var(--desktop-cyan-link);
   font-size: 8px;
 }
 
@@ -547,7 +547,7 @@
   margin-top: 10px;
   color: var(--desktop-cyan);
   background: var(--desktop-surface-cyan-2);
-  border: 1px solid #285465;
+  border: 1px solid var(--desktop-border-cyan-6);
   border-radius: 7px;
 }
 
@@ -581,7 +581,7 @@
 }
 
 .desktop-device-auth-status.expired small {
-  color: #a78a5f;
+  color: var(--desktop-amber-muted);
 }
 
 .desktop-device-auth-error {
@@ -626,9 +626,13 @@
 
 .desktop-device-auth-actions button:hover,
 .desktop-device-auth-actions button:focus-visible {
-  color: var(--desktop-white);
-  border-color: #477086;
+  border-color: var(--desktop-border-cyan-10);
   outline: 0;
+}
+
+.desktop-device-auth-actions button:not(.primary):hover,
+.desktop-device-auth-actions button:not(.primary):focus-visible {
+  color: var(--desktop-text);
 }
 
 .desktop-device-auth-actions .primary:hover,

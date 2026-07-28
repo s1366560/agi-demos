@@ -5,7 +5,7 @@
   padding: 15px;
   border: 1px solid rgba(var(--desktop-steel-1-rgb), 0.4);
   border-radius: 10px;
-  background: rgba(var(--desktop-overlay-2-rgb), 0.62);
+  background: rgba(var(--desktop-surface-33-rgb), 0.62);
 }
 
 .workspace-agents-panel > header {
@@ -47,7 +47,7 @@
   color: var(--desktop-muted, var(--desktop-gray-13));
   border: 1px solid rgba(var(--desktop-steel-1-rgb), 0.36);
   border-radius: 8px;
-  background: rgba(var(--desktop-overlay-6-rgb), 0.66);
+  background: rgba(var(--desktop-surface-26-rgb), 0.66);
   font-size: 11px;
   line-height: 1.55;
 }
@@ -96,7 +96,7 @@
   padding: 11px 12px;
   border: 1px solid rgba(var(--desktop-steel-1-rgb), 0.36);
   border-radius: 8px;
-  background: rgba(var(--desktop-overlay-6-rgb), 0.66);
+  background: rgba(var(--desktop-surface-26-rgb), 0.66);
 }
 
 .workspace-agents-list article > div {
@@ -133,12 +133,12 @@
 
 .workspace-agents-list article > span.active {
   color: var(--desktop-green-bright);
-  background: rgba(76, 214, 163, 0.12);
+  background: rgba(var(--desktop-green-bright-rgb), 0.12);
 }
 
 .workspace-agents-list article > span.inactive {
   color: var(--desktop-faint, var(--desktop-gray-9));
-  background: rgba(99, 119, 134, 0.12);
+  background: rgba(var(--desktop-gray-9-rgb), 0.12);
 }
 
 .workspace-agents-feedback {
@@ -182,7 +182,7 @@
   color: var(--desktop-text, var(--desktop-text-bright));
   border: 1px solid rgba(var(--desktop-steel-1-rgb), 0.58);
   border-radius: 6px;
-  background: rgba(var(--desktop-overlay-2-rgb), 0.8);
+  background: rgba(var(--desktop-surface-33-rgb), 0.8);
   font: inherit;
 }
 

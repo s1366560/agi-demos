@@ -29,7 +29,7 @@
 
 .skill-package-archive-picker:hover {
   background: var(--desktop-surface-24);
-  border-color: #71639f;
+  border-color: var(--desktop-border-purple-2);
 }
 
 .skill-package-archive-picker input {
@@ -75,7 +75,7 @@
   color: var(--desktop-purple-pale);
   font-size: 9px;
   font-style: normal;
-  background: #29223f;
+  background: var(--desktop-surface-purple-2);
   border: 1px solid var(--desktop-purple);
   border-radius: 6px;
 }
@@ -126,7 +126,7 @@
 
 .skill-package-checkbox input {
   margin-top: 2px;
-  accent-color: #7f6bd1;
+  accent-color: var(--desktop-purple-checkbox);
 }
 
 .skill-package-checkbox span {
@@ -251,8 +251,8 @@
   align-items: center;
   gap: 5px;
   color: var(--desktop-red-light);
-  background: #2c151b;
-  border-color: #6d313d;
+  background: var(--desktop-surface-red-2);
+  border-color: var(--desktop-border-red-3);
 }
 
 .skill-version-preview {

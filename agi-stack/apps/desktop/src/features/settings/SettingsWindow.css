@@ -162,7 +162,7 @@
 .settings-rail-group button.active {
   color: var(--desktop-cyan);
   background: var(--desktop-surface-cyan-3);
-  border-color: #285467;
+  border-color: var(--desktop-border-cyan-6);
   box-shadow: inset 2px 0 var(--desktop-cyan);
 }
 
