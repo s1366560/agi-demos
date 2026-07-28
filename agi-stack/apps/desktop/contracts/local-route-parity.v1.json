@@ -2,6 +2,39 @@
   "contract_version": "desktop-local-route-parity-v1",
   "routes": [
     {
+      "area": "artifacts",
+      "method": "GET",
+      "uri": "/api/v1/artifacts/route-parity-artifact-conversation:route-parity/content",
+      "source": "artifact",
+      "source_marker": "artifactPath(artifactId, '/content')",
+      "authority": "artifact_content_v2",
+      "body": {}
+    },
+    {
+      "area": "artifacts",
+      "method": "GET",
+      "uri": "/api/v1/artifacts/route-parity-artifact-conversation:route-parity/content/bytes",
+      "source": "artifact",
+      "source_marker": "artifactPath(artifactId, '/content/bytes')",
+      "authority": "artifact_content_v2",
+      "body": {}
+    },
+    {
+      "area": "artifacts",
+      "method": "PUT",
+      "uri": "/api/v1/artifacts/route-parity-artifact-conversation:route-parity/content",
+      "source": "artifact",
+      "source_marker": "artifactPath(artifactId, '/content')",
+      "authority": "artifact_content_v2",
+      "body": {
+        "contract_version": 2,
+        "expected_revision": 0,
+        "content_hash": "sha256:d977b6e3f724e0755acc49039ca68adf5919b935ff39f83706d05335ce24070a",
+        "idempotency_key": "route-parity-artifact-save",
+        "content": "route parity updated"
+      }
+    },
+    {
       "area": "search",
       "method": "GET",
       "uri": "/api/v1/search-enhanced/capabilities",

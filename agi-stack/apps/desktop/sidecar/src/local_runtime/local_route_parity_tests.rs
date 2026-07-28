@@ -18,6 +18,8 @@ const DESKTOP_CLIENT_SOURCE: &str = include_str!("../../../src/api/client.ts");
 const SEARCH_CONTRACT_SOURCE: &str = include_str!("../../../src/api/searchContract.ts");
 const CAPABILITY_CLIENT_SOURCE: &str =
     include_str!("../../../src/features/runtime/workbenchCapabilityClient.ts");
+const ARTIFACT_CLIENT_SOURCE: &str =
+    include_str!("../../../src/features/chat/desktopArtifactClient.ts");
 const SANDBOX_CLIENT_SOURCE: &str =
     include_str!("../../../src/features/sandbox/sandboxRuntimeClient.ts");
 const SANDBOX_SURFACE_CLIENT_SOURCE: &str =
@@ -65,16 +67,65 @@ fn test_state(credential: &str) -> Arc<LocalRuntimeState> {
         .session_store
         .seed_test_session(credential)
         .expect("authenticated test session");
+    let conversation_id = "route-parity-artifact-conversation";
+    state
+        .session_store
+        .insert_conversation(&LocalConversation {
+            id: conversation_id.to_string(),
+            project_id: "local-project".to_string(),
+            tenant_id: "local".to_string(),
+            title: "Route parity artifact".to_string(),
+            workspace_id: Some("local-workspace".to_string()),
+            capability_mode: ConversationCapabilityMode::Code,
+            current_mode: ConversationRunMode::Build,
+            created_at: now_iso(),
+            updated_at: now_iso(),
+        })
+        .expect("insert route parity artifact conversation");
+    let artifact_path =
+        root.join(".agistack/artifacts/route-parity/route-parity-version/route-parity.md");
+    std::fs::create_dir_all(artifact_path.parent().expect("artifact parent"))
+        .expect("create route parity artifact parent");
+    std::fs::write(&artifact_path, "route parity").expect("write route parity artifact");
+    state
+        .session_store
+        .record_artifact_version(
+            conversation_id,
+            None,
+            &json!({
+                "artifact_id": "route-parity",
+                "artifact_version_id": "route-parity-version",
+                "filename": "route-parity.md",
+                "path": artifact_path,
+                "relative_path":
+                    ".agistack/artifacts/route-parity/route-parity-version/route-parity.md",
+                "bytes": 12,
+                "mime_type": "text/markdown",
+                "sources": [],
+                "checks": [],
+            }),
+            &now_iso(),
+        )
+        .expect("record route parity artifact");
     state
 }
 
 fn authenticated_request(method: &str, uri: &str, credential: &str, body: &Value) -> Request<Body> {
-    Request::builder()
+    let mut builder = Request::builder()
         .method(Method::from_bytes(method.as_bytes()).expect("HTTP method"))
         .uri(uri)
         .header("authorization", format!("Bearer {credential}"))
         .header("x-agistack-launch", credential)
-        .header("content-type", "application/json")
+        .header("content-type", "application/json");
+    if let (Some(expected_revision), Some(idempotency_key)) = (
+        body.get("expected_revision").and_then(Value::as_u64),
+        body.get("idempotency_key").and_then(Value::as_str),
+    ) {
+        builder = builder
+            .header("x-expected-revision", expected_revision)
+            .header("idempotency-key", idempotency_key);
+    }
+    builder
         .body(Body::from(body.to_string()))
         .expect("authenticated route parity request")
 }
@@ -101,6 +152,7 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
 
     for route in contract.routes {
         let source = match route.source.as_str() {
+            "artifact" => ARTIFACT_CLIENT_SOURCE,
             "capability" => CAPABILITY_CLIENT_SOURCE,
             "client" => DESKTOP_CLIENT_SOURCE,
             "search" => SEARCH_CONTRACT_SOURCE,
@@ -196,6 +248,33 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
                 assert_eq!(payload["contract_version"], 1);
                 assert_eq!(payload["authority"], "native_workspace");
                 assert_eq!(payload["isolation"], "not_applicable");
+            }
+        } else if route.authority == "artifact_content_v2" {
+            assert_eq!(
+                response.status(),
+                StatusCode::OK,
+                "{} {} must resolve against the Artifact Content V2 authority",
+                route.method,
+                route.uri
+            );
+            if route.uri.ends_with("/content/bytes") {
+                assert_eq!(
+                    response
+                        .headers()
+                        .get("x-content-type-options")
+                        .and_then(|value| value.to_str().ok()),
+                    Some("nosniff")
+                );
+            } else {
+                let payload = response_json(response).await;
+                assert_eq!(
+                    payload["artifact_id"],
+                    "route-parity-artifact-conversation:route-parity"
+                );
+                assert_eq!(
+                    payload["revision"],
+                    if route.method == "PUT" { 1 } else { 0 }
+                );
             }
         } else {
             assert_ne!(
