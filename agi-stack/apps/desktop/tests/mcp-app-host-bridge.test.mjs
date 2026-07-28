@@ -146,6 +146,32 @@ test('MCP resources use the active project scope and resource names are stable',
   ]);
 });
 
+test('MCP resource discovery preserves unavailable and protocol errors', async () => {
+  const context = {
+    projectId: 'project-selected',
+    appId: 'release-dashboard',
+    serverName: 'release-tools',
+    originalToolName: 'show_release_dashboard',
+  };
+
+  await assert.rejects(
+    () => listMCPAppResources({}, context),
+    /MCP App resource proxy is unavailable/u,
+  );
+  await assert.rejects(
+    () =>
+      listMCPAppResources(
+        {
+          listMCPAppResources: async () => {
+            throw new Error('malformed MCP response');
+          },
+        },
+        context,
+      ),
+    /malformed MCP response/u,
+  );
+});
+
 test('MCP App guest messages extract text and external links fail closed', () => {
   assert.equal(
     mcpAppMessageText({ role: 'user', content: [{ type: 'text', text: 'Deploy release' }] }),

@@ -336,7 +336,7 @@ async fn call_tool_by_server_id(
         .map_err(mcp_error_tuple_for)?;
     Ok(Json(json!({
         "result": outcome.result,
-        "is_error": outcome.result.get("isError").and_then(Value::as_bool).unwrap_or(false),
+        "is_error": outcome.is_error,
         "error_message": null,
         "execution_time_ms": started.elapsed().as_secs_f64() * 1_000.0,
         "duplicate": outcome.duplicate,
@@ -440,8 +440,8 @@ async fn tool_call_response(
         .await
         .map_err(mcp_error_tuple_for)?;
     Ok(Json(json!({
-        "content": outcome.result.get("content").and_then(Value::as_array).cloned().unwrap_or_default(),
-        "is_error": outcome.result.get("isError").and_then(Value::as_bool).unwrap_or(false),
+        "content": outcome.content,
+        "is_error": outcome.is_error,
         "error_message": null,
         "error_code": null,
         "duplicate": outcome.duplicate,

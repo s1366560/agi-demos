@@ -29,6 +29,8 @@ fn write_mock_server(root: &std::path::Path) -> PathBuf {
         r#"import json
 import sys
 
+mode = sys.argv[1] if len(sys.argv) > 1 else "normal"
+
 for line in sys.stdin:
     request = json.loads(line)
     method = request.get("method")
@@ -47,10 +49,13 @@ for line in sys.stdin:
             "_meta": {"ui/resourceUri": "ui://route-mock/index.html"},
         }]}
     elif method == "tools/call":
-        result = {
-            "content": [{"type": "text", "text": "route-ok"}],
-            "isError": False,
-        }
+        if mode == "malformed_tool":
+            result = {"unexpected": []}
+        else:
+            result = {
+                "content": [{"type": "text", "text": "route-ok"}],
+                "isError": False,
+            }
     elif method == "resources/list":
         result = {"resources": [{
             "uri": "ui://route-mock/index.html",
@@ -250,6 +255,51 @@ async fn authenticated_routes_drive_real_stdio_tools_resources_and_receipts() {
     assert_eq!(
         response_json(content).await["contents"][0]["text"],
         "<main>route app</main>"
+    );
+
+    let malformed_create = app
+        .clone()
+        .oneshot(request(
+            Method::POST,
+            "/api/v1/mcp",
+            credential,
+            json!({
+                "name": "malformed-tool",
+                "server_type": "stdio",
+                "transport_config": {
+                    "command": python,
+                    "args": [script, "malformed_tool"],
+                    "cwd": ".",
+                    "vault_env_refs": {},
+                },
+                "enabled": true,
+                "project_id": "local-project",
+                "idempotency_key": "create-malformed-tool",
+            }),
+        ))
+        .await
+        .expect("create malformed MCP response");
+    assert_eq!(malformed_create.status(), StatusCode::OK);
+
+    let malformed_call = app
+        .clone()
+        .oneshot(request(
+            Method::POST,
+            "/api/v1/mcp/apps/proxy/tool-call",
+            credential,
+            json!({
+                "project_id": "local-project",
+                "server_name": "malformed-tool",
+                "tool_name": "echo",
+                "arguments": {},
+            }),
+        ))
+        .await
+        .expect("malformed MCP tool response");
+    assert_eq!(malformed_call.status(), StatusCode::BAD_GATEWAY);
+    assert_eq!(
+        response_json(malformed_call).await["reason_code"],
+        "local_mcp_malformed_response"
     );
 
     let wrong_scope = app

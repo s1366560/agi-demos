@@ -110,6 +110,8 @@ pub(super) struct McpServerHealth {
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct McpToolCallOutcome {
     pub(super) result: Value,
+    pub(super) content: Vec<Value>,
+    pub(super) is_error: bool,
     pub(super) duplicate: bool,
 }
 
@@ -351,8 +353,11 @@ impl McpSupervisor {
         if let Some(key) = idempotency_key {
             validate_idempotency_key(key)?;
             if let Some(replay) = self.store.tool_call_receipt(scope, key, &request_hash)? {
+                let (content, is_error) = validate_tool_call_result(&replay)?;
                 return Ok(McpToolCallOutcome {
                     result: replay,
+                    content,
+                    is_error,
                     duplicate: true,
                 });
             }
@@ -364,12 +369,15 @@ impl McpSupervisor {
                 serde_json::json!({ "name": tool_name, "arguments": arguments }),
             )
             .await?;
+        let (content, is_error) = validate_tool_call_result(&result)?;
         if let Some(key) = idempotency_key {
             self.store
                 .save_tool_call_receipt(scope, key, &request_hash, &server.id, &result)?;
         }
         Ok(McpToolCallOutcome {
             result,
+            content,
+            is_error,
             duplicate: false,
         })
     }
@@ -591,6 +599,29 @@ fn validate_resource_uri(value: &str) -> McpResult<()> {
         ));
     }
     Ok(())
+}
+
+fn validate_tool_call_result(result: &Value) -> McpResult<(Vec<Value>, bool)> {
+    let content = result
+        .get("content")
+        .and_then(Value::as_array)
+        .cloned()
+        .ok_or_else(|| {
+            McpSupervisorError::new(
+                "local_mcp_malformed_response",
+                "MCP tools/call content is malformed",
+            )
+        })?;
+    let is_error = result
+        .get("isError")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| {
+            McpSupervisorError::new(
+                "local_mcp_malformed_response",
+                "MCP tools/call error state is malformed",
+            )
+        })?;
+    Ok((content, is_error))
 }
 
 fn definition_hash(scope: &McpScope, input: &McpServerDefinitionInput) -> String {

@@ -100,21 +100,19 @@ export async function listMCPAppResources(
   client: MCPAppHostClient,
   context: MCPAppHostContext,
 ): Promise<MCPAppResourceListResult> {
-  if (!client.listMCPAppResources) return { resources: [] };
-  try {
-    const result = await client.listMCPAppResources(
-      requiredText(context.projectId, 'project id'),
-      context.serverName,
-    );
-    return {
-      resources: result.resources.map((resource) => ({
-        ...resource,
-        name: resource.name ?? resource.uri,
-      })),
-    };
-  } catch {
-    return { resources: [] };
+  if (!client.listMCPAppResources) {
+    throw new Error('MCP App resource proxy is unavailable');
   }
+  const result = await client.listMCPAppResources(
+    requiredText(context.projectId, 'project id'),
+    context.serverName,
+  );
+  return {
+    resources: result.resources.map((resource) => ({
+      ...resource,
+      name: resource.name ?? resource.uri,
+    })),
+  };
 }
 
 export function mcpAppMessageText(params: unknown): string | null {
