@@ -318,6 +318,7 @@ function pendingHitlRequest(overrides = {}) {
     prompt: 'Approve the reviewed mutation',
     decision: validDecisionContext(),
     status: 'pending',
+    authority_revision: 1,
     created_at: '2026-07-14T00:00:40Z',
     responded_at: null,
     ...overrides,
@@ -635,6 +636,16 @@ test('session projection decoder rejects non-pending HITL and extra allowed run 
 test('session projection decoder structurally validates pending HITL authority', () => {
   const validPending = withPendingHitl(validProjection(), pendingHitlRequest());
   assert.equal(decodeSignedProjection(validPending)?.pendingHitl[0]?.id, 'hitl-1');
+  assert.equal(
+    decodeSignedProjection(validPending)?.pendingHitl[0]?.authority_revision,
+    1,
+  );
+
+  const missingAuthorityRevision = withPendingHitl(
+    validProjection(),
+    pendingHitlRequest({ authority_revision: undefined }),
+  );
+  assert.equal(decodeSignedProjection(missingAuthorityRevision), null);
 
   const malformedDecision = withPendingHitl(
     validProjection(),

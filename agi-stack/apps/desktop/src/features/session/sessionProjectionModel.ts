@@ -406,6 +406,7 @@ function readHitl(
   const request = recordValue(value);
   const kind = request ? nonEmptyString(request.kind) : null;
   const status = request ? nonEmptyString(request.status) : null;
+  const authorityRevision = request?.authority_revision;
   if (
     !request ||
     !nonEmptyString(request.id) ||
@@ -415,6 +416,8 @@ function readHitl(
     !hitlKinds.has(kind) ||
     typeof request.prompt !== 'string' ||
     status !== 'pending' ||
+    !nonNegativeInteger(authorityRevision) ||
+    authorityRevision === 0 ||
     !nonEmptyString(request.created_at) ||
     !Object.hasOwn(request, 'run_id') ||
     !Object.hasOwn(request, 'responded_at') ||
@@ -436,6 +439,7 @@ function readHitl(
   }
   return {
     ...(request as DesktopApprovalRequest),
+    authority_revision: authorityRevision as number,
     ...(decision === undefined ? {} : { decision }),
     ...(runRevision === undefined ? {} : { run_revision: runRevision }),
   };

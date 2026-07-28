@@ -19,7 +19,7 @@ use super::{
         ApprovePlanOutcome, DesktopArtifactDelivery, DesktopArtifactStatus, DesktopArtifactVersion,
         DesktopAuthorityError, DesktopExecutionEnvironment, DesktopHitlRequest, DesktopHitlStatus,
         DesktopPermissionProfile, DesktopPlanStatus, DesktopPlanVersion, DesktopRun,
-        DesktopRunStatus, WorkspaceToolGrant,
+        DesktopRunStatus, WorkspaceToolGrant, HITL_PENDING_AUTHORITY_REVISION,
     },
     composer_context::ComposerContextItem,
     provider_usage_store::{self, ProviderUsageRecord, ProviderUsageStatistic},
@@ -103,12 +103,35 @@ pub(super) enum DesktopArtifactContentSaveOutcome {
 }
 
 pub(super) struct HitlResponseCommit<'a> {
+    pub(super) expected_authority_revision: u64,
     pub(super) response_data: &'a Value,
     pub(super) response_actor: &'a str,
     pub(super) response_revision: Option<u64>,
-    pub(super) idempotency_key: Option<&'a str>,
+    pub(super) idempotency_key: &'a str,
     pub(super) workspace_tool_grant: Option<&'a WorkspaceToolGrant>,
     pub(super) now: &'a str,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum HitlResponseCommitOutcome {
+    Committed(DesktopHitlRequest),
+    Duplicate(DesktopHitlRequest),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum HitlResponseCommitError {
+    NotFound,
+    AuthorityConflict {
+        expected_revision: u64,
+        authority_revision: u64,
+    },
+    IdempotencyConflict {
+        authority_revision: u64,
+    },
+    AlreadyAnswered {
+        authority_revision: u64,
+    },
+    Storage(String),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -3757,7 +3780,11 @@ impl DesktopSessionStore {
             .optional()
             .map_err(|error| error.to_string())?;
         value_json
-            .map(|value| serde_json::from_str(&value).map_err(|error| error.to_string()))
+            .map(|value| {
+                serde_json::from_str(&value)
+                    .map(normalize_hitl_request)
+                    .map_err(|error| error.to_string())
+            })
             .transpose()
     }
 
@@ -3772,18 +3799,24 @@ impl DesktopSessionStore {
                  WHERE conversation_id = ?1 ORDER BY created_at DESC, id DESC",
             )
             .map_err(|error| error.to_string())?;
-        typed_rows(statement.query_map([conversation_id], |row| row.get::<_, String>(0)))
+        typed_rows(statement.query_map([conversation_id], |row| row.get::<_, String>(0))).map(
+            |requests: Vec<DesktopHitlRequest>| {
+                requests.into_iter().map(normalize_hitl_request).collect()
+            },
+        )
     }
 
     pub(super) fn mark_hitl_responded(
         &self,
         request_id: &str,
         response: HitlResponseCommit<'_>,
-    ) -> Result<DesktopHitlRequest, String> {
-        let mut connection = self.connection()?;
+    ) -> Result<HitlResponseCommitOutcome, HitlResponseCommitError> {
+        let mut connection = self
+            .connection()
+            .map_err(HitlResponseCommitError::Storage)?;
         let transaction = connection
             .transaction()
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| HitlResponseCommitError::Storage(error.to_string()))?;
         let value_json = transaction
             .query_row(
                 "SELECT value_json FROM desktop_hitl_requests WHERE id = ?1",
@@ -3791,19 +3824,55 @@ impl DesktopSessionStore {
                 |row| row.get::<_, String>(0),
             )
             .optional()
-            .map_err(|error| error.to_string())?
-            .ok_or_else(|| "HITL request not found".to_string())?;
-        let mut request: DesktopHitlRequest =
-            serde_json::from_str(&value_json).map_err(|error| error.to_string())?;
-        if request.status == DesktopHitlStatus::Responded {
-            return Ok(request);
+            .map_err(|error| HitlResponseCommitError::Storage(error.to_string()))?
+            .ok_or(HitlResponseCommitError::NotFound)?;
+        let mut request: DesktopHitlRequest = serde_json::from_str(&value_json)
+            .map_err(|error| HitlResponseCommitError::Storage(error.to_string()))?;
+        if request.status == DesktopHitlStatus::Responded
+            && request.authority_revision == HITL_PENDING_AUTHORITY_REVISION
+        {
+            request.authority_revision = HITL_PENDING_AUTHORITY_REVISION + 1;
         }
+        if request.status == DesktopHitlStatus::Responded {
+            if response.expected_authority_revision.checked_add(1)
+                != Some(request.authority_revision)
+            {
+                return Err(HitlResponseCommitError::AuthorityConflict {
+                    expected_revision: response.expected_authority_revision,
+                    authority_revision: request.authority_revision,
+                });
+            }
+            if request.idempotency_key.as_deref() == Some(response.idempotency_key) {
+                if request.response_data.as_ref() == Some(response.response_data) {
+                    transaction
+                        .commit()
+                        .map_err(|error| HitlResponseCommitError::Storage(error.to_string()))?;
+                    return Ok(HitlResponseCommitOutcome::Duplicate(request));
+                }
+                return Err(HitlResponseCommitError::IdempotencyConflict {
+                    authority_revision: request.authority_revision,
+                });
+            }
+            return Err(HitlResponseCommitError::AlreadyAnswered {
+                authority_revision: request.authority_revision,
+            });
+        }
+        if response.expected_authority_revision != request.authority_revision {
+            return Err(HitlResponseCommitError::AuthorityConflict {
+                expected_revision: response.expected_authority_revision,
+                authority_revision: request.authority_revision,
+            });
+        }
+        request.authority_revision =
+            request.authority_revision.checked_add(1).ok_or_else(|| {
+                HitlResponseCommitError::Storage("HITL authority revision overflowed".to_string())
+            })?;
         request.status = DesktopHitlStatus::Responded;
         request.responded_at = Some(response.now.to_string());
         request.response_data = Some(response.response_data.clone());
         request.response_actor = Some(response.response_actor.to_string());
         request.response_revision = response.response_revision;
-        request.idempotency_key = response.idempotency_key.map(ToString::to_string);
+        request.idempotency_key = Some(response.idempotency_key.to_string());
         if let Some(grant) = response.workspace_tool_grant {
             let active_grant = transaction
                 .query_row(
@@ -3815,7 +3884,7 @@ impl DesktopSessionStore {
                     |row| row.get::<_, String>(0),
                 )
                 .optional()
-                .map_err(|error| error.to_string())?;
+                .map_err(|error| HitlResponseCommitError::Storage(error.to_string()))?;
             if active_grant.is_none() {
                 transaction
                     .execute(
@@ -3831,13 +3900,15 @@ impl DesktopSessionStore {
                             grant.revision as i64,
                             grant.created_by,
                             grant.created_at,
-                            serde_json::to_string(grant).map_err(|error| error.to_string())?,
+                            serde_json::to_string(grant).map_err(|error| {
+                                HitlResponseCommitError::Storage(error.to_string())
+                            })?,
                         ],
                     )
-                    .map_err(|error| error.to_string())?;
+                    .map_err(|error| HitlResponseCommitError::Storage(error.to_string()))?;
             }
         }
-        transaction
+        let updated = transaction
             .execute(
                 "UPDATE desktop_hitl_requests
                  SET status = 'responded', responded_at = ?2, value_json = ?3
@@ -3845,12 +3916,21 @@ impl DesktopSessionStore {
                 params![
                     request_id,
                     response.now,
-                    serde_json::to_string(&request).map_err(|error| error.to_string())?,
+                    serde_json::to_string(&request)
+                        .map_err(|error| HitlResponseCommitError::Storage(error.to_string()))?,
                 ],
             )
-            .map_err(|error| error.to_string())?;
-        transaction.commit().map_err(|error| error.to_string())?;
-        Ok(request)
+            .map_err(|error| HitlResponseCommitError::Storage(error.to_string()))?;
+        if updated != 1 {
+            return Err(HitlResponseCommitError::AuthorityConflict {
+                expected_revision: response.expected_authority_revision,
+                authority_revision: request.authority_revision,
+            });
+        }
+        transaction
+            .commit()
+            .map_err(|error| HitlResponseCommitError::Storage(error.to_string()))?;
+        Ok(HitlResponseCommitOutcome::Committed(request))
     }
 
     pub(super) fn workspace_tool_grant_active(
@@ -4450,6 +4530,15 @@ fn invocation_status_name(status: InvocationStatus) -> &'static str {
         InvocationStatus::Failed => "failed",
         InvocationStatus::UnknownOutcome => "unknown_outcome",
     }
+}
+
+fn normalize_hitl_request(mut request: DesktopHitlRequest) -> DesktopHitlRequest {
+    if request.status == DesktopHitlStatus::Responded
+        && request.authority_revision == HITL_PENDING_AUTHORITY_REVISION
+    {
+        request.authority_revision = HITL_PENDING_AUTHORITY_REVISION + 1;
+    }
+    request
 }
 
 pub(super) fn recover_inflight_tool_invocations(
@@ -5700,6 +5789,90 @@ mod tests {
     }
 
     #[test]
+    fn hitl_response_commit_is_revision_guarded_and_idempotent() {
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        let request = DesktopHitlRequest {
+            id: "hitl-authority".to_string(),
+            conversation_id: "conversation-authority".to_string(),
+            run_id: None,
+            round: 1,
+            kind: agistack_core::agent::types::HitlKind::Clarification,
+            prompt: "Choose an answer".to_string(),
+            decision: None,
+            status: DesktopHitlStatus::Pending,
+            authority_revision: 1,
+            created_at: "2026-07-20T00:00:00Z".to_string(),
+            responded_at: None,
+            response_data: None,
+            response_actor: None,
+            response_revision: None,
+            idempotency_key: None,
+        };
+        store.insert_hitl_request(&request).expect("insert HITL");
+
+        let committed = store
+            .mark_hitl_responded(
+                &request.id,
+                HitlResponseCommit {
+                    expected_authority_revision: 1,
+                    response_data: &json!({ "answer": "approved" }),
+                    response_actor: "owner",
+                    response_revision: None,
+                    idempotency_key: "hitl-authority:1",
+                    workspace_tool_grant: None,
+                    now: "2026-07-20T00:00:01Z",
+                },
+            )
+            .expect("commit response");
+        assert!(matches!(
+            committed,
+            HitlResponseCommitOutcome::Committed(ref request)
+                if request.authority_revision == 2
+        ));
+
+        let duplicate = store
+            .mark_hitl_responded(
+                &request.id,
+                HitlResponseCommit {
+                    expected_authority_revision: 1,
+                    response_data: &json!({ "answer": "approved" }),
+                    response_actor: "owner",
+                    response_revision: None,
+                    idempotency_key: "hitl-authority:1",
+                    workspace_tool_grant: None,
+                    now: "2026-07-20T00:00:02Z",
+                },
+            )
+            .expect("replay response");
+        assert!(matches!(
+            duplicate,
+            HitlResponseCommitOutcome::Duplicate(ref request)
+                if request.authority_revision == 2
+        ));
+
+        let conflict = store
+            .mark_hitl_responded(
+                &request.id,
+                HitlResponseCommit {
+                    expected_authority_revision: 1,
+                    response_data: &json!({ "answer": "denied" }),
+                    response_actor: "owner",
+                    response_revision: None,
+                    idempotency_key: "hitl-authority:1",
+                    workspace_tool_grant: None,
+                    now: "2026-07-20T00:00:03Z",
+                },
+            )
+            .expect_err("changed idempotent payload");
+        assert!(matches!(
+            conflict,
+            HitlResponseCommitError::IdempotencyConflict {
+                authority_revision: 2
+            }
+        ));
+    }
+
+    #[test]
     fn workspace_tool_grant_is_cross_conversation_revocable_and_survives_reopen() {
         let path = std::env::temp_dir().join(format!(
             "agistack-workspace-tool-grant-{}.db",
@@ -5729,6 +5902,7 @@ mod tests {
                 prompt: "Allow write".to_string(),
                 decision: None,
                 status: DesktopHitlStatus::Pending,
+                authority_revision: 1,
                 created_at: "2026-07-20T00:00:00Z".to_string(),
                 responded_at: None,
                 response_data: None,
@@ -5753,6 +5927,7 @@ mod tests {
                 .mark_hitl_responded(
                     &request.id,
                     HitlResponseCommit {
+                        expected_authority_revision: 1,
                         response_data: &json!({
                             "action": "allow_always",
                             "granted": true,
@@ -5760,7 +5935,7 @@ mod tests {
                         }),
                         response_actor: "owner",
                         response_revision: None,
-                        idempotency_key: Some("grant-hitl:1"),
+                        idempotency_key: "grant-hitl:1",
                         workspace_tool_grant: Some(&grant),
                         now: "2026-07-20T00:00:01Z",
                     },

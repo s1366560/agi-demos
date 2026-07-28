@@ -648,6 +648,10 @@ fn mark_request_responded(
     now: DateTime<Utc>,
 ) -> Result<(), AutomationLedgerError> {
     let now_text = now.to_rfc3339();
+    request.authority_revision = request
+        .authority_revision
+        .checked_add(1)
+        .ok_or_else(|| invalid_authority("automation HITL authority revision overflowed"))?;
     request.status = DesktopHitlStatus::Responded;
     request.responded_at = Some(now_text.clone());
     request.response_data = Some(response_data.clone());

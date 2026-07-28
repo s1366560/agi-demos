@@ -8,6 +8,7 @@ export type HitlAuthorityRecovery = {
 
 const SETTLED_REASON_CODES = new Set([
   'hitl_already_answered',
+  'hitl_answered_resume_failed',
   'hitl_request_expired',
 ]);
 

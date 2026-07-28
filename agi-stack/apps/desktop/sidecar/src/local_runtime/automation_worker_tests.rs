@@ -132,6 +132,7 @@ mod tests {
                     prompt: "Continue?".to_string(),
                     decision: None,
                     status: DesktopHitlStatus::Pending,
+                    authority_revision: 1,
                     created_at: "2099-10-05T12:00:00Z".to_string(),
                     responded_at: None,
                     response_data: None,

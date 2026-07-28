@@ -119,6 +119,7 @@ use authority_store::{
     DesktopArtifactStatus, DesktopArtifactVersion, DesktopAuthorityError,
     DesktopExecutionEnvironment, DesktopExecutionEnvironmentKind, DesktopHitlRequest,
     DesktopHitlStatus, DesktopPermissionProfile, DesktopRun, DesktopRunStatus, WorkspaceToolGrant,
+    HITL_PENDING_AUTHORITY_REVISION,
 };
 use authorized_tool_host::AuthorizedRunToolHost;
 use changes::{ChangeLineKind, ChangeSnapshot, ChangeSnapshotStatus, GitChangesInspector};
@@ -134,7 +135,7 @@ use provider_usage_store::ProviderUsageRecord;
 use resource_registry::{ManagedResourceKind, ResourceRegistryError, WorkspaceAgentPolicyMutation};
 use session_store::{
     DesktopClientTurnClaimError, DesktopSessionStore, DesktopTimelineCursor, DesktopTimelinePage,
-    HitlResponseCommit,
+    HitlResponseCommit, HitlResponseCommitError, HitlResponseCommitOutcome,
 };
 use steering::{ChangeReferenceSide, RunInputDelivery, RunInputReference, RunInputStatus};
 use task_session::{
@@ -2143,6 +2144,7 @@ impl LocalRuntimeState {
             prompt: pending.prompt.clone(),
             decision: pending.decision.as_deref().cloned(),
             status: DesktopHitlStatus::Pending,
+            authority_revision: HITL_PENDING_AUTHORITY_REVISION,
             created_at: now_iso(),
             responded_at: None,
             response_data: None,
@@ -7412,6 +7414,7 @@ fn append_review_decision(
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct HitlResponseBody {
     request_id: String,
     hitl_type: String,
@@ -7426,6 +7429,32 @@ async fn respond_to_hitl(
     Extension(authenticated): Extension<AuthenticatedContext>,
     Json(body): Json<HitlResponseBody>,
 ) -> LocalJsonResult {
+    let expected_authority_revision = body
+        .expected_revision
+        .filter(|revision| *revision > 0)
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "detail": "expected_revision must be a positive HITL authority revision",
+                    "reason_code": "hitl_authority_revision_required",
+                })),
+            )
+        })?;
+    let idempotency_key = body
+        .idempotency_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|key| (8..=255).contains(&key.len()))
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "detail": "idempotency_key must contain 8 to 255 characters",
+                    "reason_code": "hitl_idempotency_key_required",
+                })),
+            )
+        })?;
     let request = state
         .session_store
         .hitl_request(&body.request_id)
@@ -7447,7 +7476,8 @@ async fn respond_to_hitl(
         return Err((
             StatusCode::NOT_IMPLEMENTED,
             Json(json!({
-                "detail": "Secure environment-variable responses are not available in the local runtime"
+                "detail": "Secure environment-variable responses are not available in the local runtime",
+                "reason_code": "local_secure_env_response_unavailable",
             })),
         ));
     }
@@ -7482,25 +7512,12 @@ async fn respond_to_hitl(
             ));
         }
         if !is_automation_request {
-            let same_payload = request.response_data.as_ref() == Some(&body.response_data);
-            let same_key = body.idempotency_key.as_deref().is_none()
-                || request.idempotency_key.as_deref() == body.idempotency_key.as_deref();
-            if same_payload && same_key {
-                return Ok(Json(json!({
-                    "success": true,
-                    "status": "responded",
-                    "request_id": request.id,
-                    "conversation_id": request.conversation_id,
-                    "run_id": request.run_id,
-                    "revision": request.response_revision,
-                })));
-            }
-            return Err((
-                StatusCode::CONFLICT,
-                Json(json!({
-                    "detail": "HITL request was already answered with a different payload"
-                })),
-            ));
+            return answered_hitl_outcome(
+                &request,
+                &body.response_data,
+                expected_authority_revision,
+                idempotency_key,
+            );
         }
     }
     let answer = hitl_response_answer(request.kind, &body.response_data).ok_or_else(|| {
@@ -7522,9 +7539,19 @@ async fn respond_to_hitl(
             })),
         ));
     }
-    if let (Some(run_id), Some(expected_revision)) =
-        (request.run_id.as_deref(), body.expected_revision)
-    {
+    if expected_authority_revision != request.authority_revision {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(json!({
+                "detail": "HITL authority revision conflict",
+                "reason_code": "hitl_authority_revision_conflict",
+                "expected_revision": expected_authority_revision,
+                "authority_revision": request.authority_revision,
+                "authority_status": "pending",
+            })),
+        ));
+    }
+    if let Some(run_id) = request.run_id.as_deref() {
         let run = state
             .session_store
             .run(run_id)
@@ -7535,13 +7562,15 @@ async fn respond_to_hitl(
                     Json(json!({ "detail": "run not found" })),
                 )
             })?;
-        if run.revision != expected_revision {
+        if !matches!(
+            run.status,
+            DesktopRunStatus::NeedsInput | DesktopRunStatus::NeedsApproval
+        ) {
             return Err((
                 StatusCode::CONFLICT,
                 Json(json!({
-                    "detail": "run revision conflict",
-                    "expected_revision": expected_revision,
-                    "actual_revision": run.revision,
+                    "detail": "run is not awaiting human input",
+                    "reason_code": "hitl_run_not_waiting",
                 })),
             ));
         }
@@ -7561,7 +7590,7 @@ async fn respond_to_hitl(
         &request.id,
         &answer,
         &body.response_data,
-        body.idempotency_key.as_deref(),
+        Some(idempotency_key),
         Utc::now(),
     )
     .await
@@ -7582,6 +7611,20 @@ async fn respond_to_hitl(
             authority,
             duplicate,
         }) => {
+            let response_authority_revision = state
+                .session_store
+                .hitl_request(&request.id)
+                .map_err(local_store_error)?
+                .ok_or_else(|| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({
+                            "detail": "automation HITL response authority is missing",
+                            "reason_code": "local_automation_hitl_authority_unavailable",
+                        })),
+                    )
+                })?
+                .authority_revision;
             if !duplicate {
                 let mut item = state.timeline_item(
                     "hitl_responded",
@@ -7612,6 +7655,9 @@ async fn respond_to_hitl(
                 "run_id": null,
                 "automation_run_id": authority.run_id,
                 "revision": null,
+                "authority_revision": response_authority_revision,
+                "authority_status": "answered",
+                "duplicate": duplicate,
             })));
         }
         Err(automation_hitl::AutomationHitlResponseError::Checkpoint(reason_code)) => {
@@ -7670,10 +7716,14 @@ async fn respond_to_hitl(
         .map_err(execution_environment_error)?;
 
     let Some(control) = state.claim_agent_run(&conversation.id, request.run_id.as_deref()) else {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "conversation already running" })),
-        ));
+        return wait_for_competing_hitl_response(
+            &state,
+            &request.id,
+            &body.response_data,
+            expected_authority_revision,
+            idempotency_key,
+        )
+        .await;
     };
     if let Some(run) = engine_run.as_ref() {
         if let Err(error) = ensure_checkpoint_control_authority(&state, run).await {
@@ -7681,6 +7731,60 @@ async fn respond_to_hitl(
             return Err(error);
         }
     }
+
+    let response_commit = state.session_store.mark_hitl_responded(
+        &request.id,
+        HitlResponseCommit {
+            expected_authority_revision,
+            response_data: &body.response_data,
+            response_actor: "local_user",
+            response_revision: None,
+            idempotency_key,
+            workspace_tool_grant: workspace_tool_grant.as_ref(),
+            now: &now_iso(),
+        },
+    );
+    let committed_request = match response_commit {
+        Ok(HitlResponseCommitOutcome::Committed(request)) => request,
+        Ok(HitlResponseCommitOutcome::Duplicate(request)) => {
+            state.release_agent_run(&conversation.id);
+            return Ok(Json(json!({
+                "success": true,
+                "status": "responded",
+                "duplicate": true,
+                "request_id": request.id,
+                "conversation_id": request.conversation_id,
+                "run_id": request.run_id,
+                "revision": request.response_revision,
+                "authority_revision": request.authority_revision,
+                "authority_status": "answered",
+            })));
+        }
+        Err(error) => {
+            state.release_agent_run(&conversation.id);
+            return Err(hitl_response_commit_error(error));
+        }
+    };
+    let mut item = state.timeline_item(
+        "hitl_responded",
+        conversation.id.clone(),
+        None,
+        Some("user"),
+        None,
+        json!({
+            "request_id": request.id,
+            "requestId": request.id,
+            "hitl_type": hitl_kind_name(request.kind),
+            "answered": true,
+            "run_id": request.run_id,
+            "decision": request.decision,
+            "response_actor": "local_user",
+            "authority_revision": committed_request.authority_revision,
+        }),
+    );
+    item["requestId"] = json!(request.id);
+    item["answered"] = json!(true);
+    state.append_timeline(&conversation.id, item);
 
     let accepted = match engine
         .accept_human_response(&conversation.id, &request.id, &answer)
@@ -7691,7 +7795,12 @@ async fn respond_to_hitl(
             state.release_agent_run(&conversation.id);
             return Err((
                 StatusCode::CONFLICT,
-                Json(json!({ "detail": error.to_string() })),
+                Json(json!({
+                    "detail": error.to_string(),
+                    "reason_code": "hitl_answered_resume_failed",
+                    "authority_revision": committed_request.authority_revision,
+                    "authority_status": "answered",
+                })),
             ));
         }
     };
@@ -7742,41 +7851,6 @@ async fn respond_to_hitl(
         None
     };
 
-    if let Err(error) = state.session_store.mark_hitl_responded(
-        &request.id,
-        HitlResponseCommit {
-            response_data: &body.response_data,
-            response_actor: "local_user",
-            response_revision: authoritative_run.as_ref().map(|run| run.revision),
-            idempotency_key: body.idempotency_key.as_deref(),
-            workspace_tool_grant: workspace_tool_grant.as_ref(),
-            now: &now_iso(),
-        },
-    ) {
-        state.release_agent_run(&conversation.id);
-        return Err(local_store_error(error));
-    }
-    let mut item = state.timeline_item(
-        "hitl_responded",
-        conversation.id.clone(),
-        None,
-        Some("user"),
-        None,
-        json!({
-            "request_id": request.id,
-            "requestId": request.id,
-            "hitl_type": hitl_kind_name(request.kind),
-            "answered": true,
-            "run_id": request.run_id,
-            "decision": request.decision,
-            "response_actor": "local_user",
-            "response_revision": authoritative_run.as_ref().map(|run| run.revision),
-        }),
-    );
-    item["requestId"] = json!(request.id);
-    item["answered"] = json!(true);
-    state.append_timeline(&conversation.id, item);
-
     let response = json!({
         "success": true,
         "status": "running",
@@ -7784,6 +7858,9 @@ async fn respond_to_hitl(
         "conversation_id": conversation.id,
         "run_id": authoritative_run.as_ref().map(|run| run.id.clone()),
         "revision": authoritative_run.as_ref().map(|run| run.revision),
+        "authority_revision": committed_request.authority_revision,
+        "authority_status": "answered",
+        "duplicate": false,
     });
     let goal = accepted.goal;
     let run_state = Arc::clone(&state);
@@ -7793,6 +7870,140 @@ async fn respond_to_hitl(
             .await;
     });
     Ok(Json(response))
+}
+
+async fn wait_for_competing_hitl_response(
+    state: &LocalRuntimeState,
+    request_id: &str,
+    response_data: &Value,
+    expected_authority_revision: u64,
+    idempotency_key: &str,
+) -> LocalJsonResult {
+    for _ in 0..50 {
+        let request = state
+            .session_store
+            .hitl_request(request_id)
+            .map_err(local_store_error)?
+            .ok_or_else(|| {
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(json!({
+                        "detail": "HITL request not found",
+                        "reason_code": "hitl_request_not_found",
+                    })),
+                )
+            })?;
+        if request.status == DesktopHitlStatus::Responded {
+            return answered_hitl_outcome(
+                &request,
+                response_data,
+                expected_authority_revision,
+                idempotency_key,
+            );
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+    Err((
+        StatusCode::CONFLICT,
+        Json(json!({
+            "detail": "HITL response authority is being claimed",
+            "reason_code": "hitl_response_in_progress",
+            "authority_revision": expected_authority_revision,
+            "authority_status": "pending",
+        })),
+    ))
+}
+
+fn answered_hitl_outcome(
+    request: &DesktopHitlRequest,
+    response_data: &Value,
+    expected_authority_revision: u64,
+    idempotency_key: &str,
+) -> LocalJsonResult {
+    if expected_authority_revision.checked_add(1) != Some(request.authority_revision) {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(json!({
+                "detail": "HITL authority revision conflict",
+                "reason_code": "hitl_authority_revision_conflict",
+                "expected_revision": expected_authority_revision,
+                "authority_revision": request.authority_revision,
+                "authority_status": "answered",
+            })),
+        ));
+    }
+    let same_payload = request.response_data.as_ref() == Some(response_data);
+    let same_key = request.idempotency_key.as_deref() == Some(idempotency_key);
+    if same_payload && same_key {
+        return Ok(Json(json!({
+            "success": true,
+            "status": "responded",
+            "duplicate": true,
+            "request_id": request.id,
+            "conversation_id": request.conversation_id,
+            "run_id": request.run_id,
+            "revision": request.response_revision,
+            "authority_revision": request.authority_revision,
+            "authority_status": "answered",
+        })));
+    }
+    let reason_code = if same_key {
+        "hitl_idempotency_conflict"
+    } else {
+        "hitl_already_answered"
+    };
+    Err((
+        StatusCode::CONFLICT,
+        Json(json!({
+            "detail": "HITL request was already answered",
+            "reason_code": reason_code,
+            "authority_revision": request.authority_revision,
+            "authority_status": "answered",
+        })),
+    ))
+}
+
+fn hitl_response_commit_error(error: HitlResponseCommitError) -> (StatusCode, Json<Value>) {
+    match error {
+        HitlResponseCommitError::NotFound => (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "detail": "HITL request not found",
+                "reason_code": "hitl_request_not_found",
+            })),
+        ),
+        HitlResponseCommitError::AuthorityConflict {
+            expected_revision,
+            authority_revision,
+        } => (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "detail": "HITL authority revision conflict",
+                "reason_code": "hitl_authority_revision_conflict",
+                "expected_revision": expected_revision,
+                "authority_revision": authority_revision,
+            })),
+        ),
+        HitlResponseCommitError::IdempotencyConflict { authority_revision } => (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "detail": "HITL idempotency key is already bound to a different response",
+                "reason_code": "hitl_idempotency_conflict",
+                "authority_revision": authority_revision,
+                "authority_status": "answered",
+            })),
+        ),
+        HitlResponseCommitError::AlreadyAnswered { authority_revision } => (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "detail": "HITL request was already answered",
+                "reason_code": "hitl_already_answered",
+                "authority_revision": authority_revision,
+                "authority_status": "answered",
+            })),
+        ),
+        HitlResponseCommitError::Storage(error) => local_store_error(error),
+    }
 }
 
 fn valid_permission_response(response_data: &Value) -> bool {
@@ -17854,11 +18065,15 @@ mod tests {
             needs_approval.revision
         );
         assert_eq!(
+            messages_payload["approval_requests"][0]["authority_revision"],
+            HITL_PENDING_AUTHORITY_REVISION
+        );
+        assert_eq!(
             messages_payload["approval_requests"][0]["decision"]["risk"]["level"],
             "medium"
         );
 
-        let response = local_router(Arc::clone(&state))
+        let stale = local_router(Arc::clone(&state))
             .oneshot(
                 Request::builder()
                     .method("POST")
@@ -17870,16 +18085,93 @@ mod tests {
                             "request_id": "permission-hitl",
                             "hitl_type": "permission",
                             "response_data": { "granted": true },
-                            "expected_revision": needs_approval.revision,
-                            "idempotency_key": "permission-hitl:approve",
+                            "expected_revision": 2,
+                            "idempotency_key": "permission-hitl:stale",
                         })
                         .to_string(),
                     ))
                     .expect("request"),
             )
             .await
-            .expect("response");
-        assert_eq!(response.status(), StatusCode::OK);
+            .expect("stale response");
+        assert_eq!(stale.status(), StatusCode::CONFLICT);
+        let stale_body = axum::body::to_bytes(stale.into_body(), usize::MAX)
+            .await
+            .expect("stale response body");
+        let stale_payload: Value =
+            serde_json::from_slice(&stale_body).expect("stale response json");
+        assert_eq!(
+            stale_payload["reason_code"],
+            "hitl_authority_revision_conflict"
+        );
+        assert_eq!(
+            state
+                .session_store
+                .hitl_request("permission-hitl")
+                .expect("load pending request")
+                .expect("pending request")
+                .status,
+            DesktopHitlStatus::Pending
+        );
+
+        let response_command = json!({
+            "request_id": "permission-hitl",
+            "hitl_type": "permission",
+            "response_data": { "granted": true },
+            "expected_revision": HITL_PENDING_AUTHORITY_REVISION,
+            "idempotency_key": "permission-hitl:approve",
+        })
+        .to_string();
+        let first_request = Request::builder()
+            .method("POST")
+            .uri("/api/v1/agent/hitl/respond")
+            .header("authorization", "Bearer launch-secret")
+            .header("content-type", "application/json")
+            .body(Body::from(response_command.clone()))
+            .expect("first request");
+        let second_request = Request::builder()
+            .method("POST")
+            .uri("/api/v1/agent/hitl/respond")
+            .header("authorization", "Bearer launch-secret")
+            .header("content-type", "application/json")
+            .body(Body::from(response_command))
+            .expect("second request");
+        let (first_response, second_response) = tokio::join!(
+            local_router(Arc::clone(&state)).oneshot(first_request),
+            local_router(Arc::clone(&state)).oneshot(second_request),
+        );
+        let mut response_payloads = Vec::new();
+        for response in [
+            first_response.expect("first response"),
+            second_response.expect("second response"),
+        ] {
+            assert_eq!(response.status(), StatusCode::OK);
+            let response_body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .expect("HITL response body");
+            response_payloads
+                .push(serde_json::from_slice::<Value>(&response_body).expect("HITL response json"));
+        }
+        assert!(response_payloads
+            .iter()
+            .all(|payload| payload["authority_revision"] == 2));
+        assert!(response_payloads
+            .iter()
+            .all(|payload| payload["authority_status"] == "answered"));
+        assert_eq!(
+            response_payloads
+                .iter()
+                .filter(|payload| payload["duplicate"] == true)
+                .count(),
+            1
+        );
+        assert_eq!(
+            response_payloads
+                .iter()
+                .filter(|payload| payload["duplicate"] == false)
+                .count(),
+            1
+        );
 
         let mut final_run = None;
         for _ in 0..100 {
@@ -17910,9 +18202,10 @@ mod tests {
             .expect("load HITL")
             .expect("HITL");
         assert_eq!(request.status, DesktopHitlStatus::Responded);
+        assert_eq!(request.authority_revision, 2);
         assert_eq!(request.response_data, Some(json!({ "granted": true })));
         assert_eq!(request.response_actor.as_deref(), Some("local_user"));
-        assert_eq!(request.response_revision, Some(needs_approval.revision + 1));
+        assert_eq!(request.response_revision, None);
         assert_eq!(
             request.idempotency_key.as_deref(),
             Some("permission-hitl:approve")
@@ -17930,7 +18223,7 @@ mod tests {
                             "request_id": "permission-hitl",
                             "hitl_type": "permission",
                             "response_data": { "granted": true },
-                            "expected_revision": needs_approval.revision,
+                            "expected_revision": HITL_PENDING_AUTHORITY_REVISION,
                             "idempotency_key": "permission-hitl:approve",
                         })
                         .to_string(),
@@ -17940,6 +18233,12 @@ mod tests {
             .await
             .expect("response");
         assert_eq!(replay.status(), StatusCode::OK);
+        let replay_body = axum::body::to_bytes(replay.into_body(), usize::MAX)
+            .await
+            .expect("HITL replay body");
+        let replay_payload: Value = serde_json::from_slice(&replay_body).expect("HITL replay json");
+        assert_eq!(replay_payload["authority_revision"], 2);
+        assert_eq!(replay_payload["duplicate"], true);
 
         let conflicting_replay = local_router(Arc::clone(&state))
             .oneshot(
@@ -17953,6 +18252,7 @@ mod tests {
                             "request_id": "permission-hitl",
                             "hitl_type": "permission",
                             "response_data": { "granted": false },
+                            "expected_revision": HITL_PENDING_AUTHORITY_REVISION,
                             "idempotency_key": "permission-hitl:deny",
                         })
                         .to_string(),
@@ -18010,7 +18310,7 @@ mod tests {
                     .header("authorization", "Bearer launch-secret")
                     .header("content-type", "application/json")
                     .body(Body::from(
-                        r#"{"request_id":"env-hitl","hitl_type":"env_var","response_data":{"value":"must-not-persist"}}"#,
+                        r#"{"request_id":"env-hitl","hitl_type":"env_var","response_data":{"value":"must-not-persist"},"expected_revision":1,"idempotency_key":"env-hitl:respond"}"#,
                     ))
                     .expect("request"),
             )
