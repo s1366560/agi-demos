@@ -1,5 +1,56 @@
 # Desktop QA Log
 
+## Desktop/Web parity contract baseline: 2026-07-28
+
+- The machine-readable contract lives in
+  `contracts/desktop-web-parity/parity-manifest.v1.json`, with JSON schemas and shared live-event,
+  history-replay, and capability-snapshot fixtures beside it.
+- Reference revisions are pinned to prototype `61454b2ead1cedda584e95afee9f471aac7851fb`,
+  audited Desktop baseline `fe425f5ce75f8722249033bf5571c7e7466d05e1`, and the Web/Desktop
+  contract and audit source snapshot `9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47`.
+- Each manifest case records source entries, locale, viewport, data state, interaction state,
+  expected observable result, and any intentional native deviation. A target disposition is not
+  runtime proof; Browser and native Electron evidence must still be attached for affected surfaces.
+- `tests/run.mjs` discovers every `tests/*.test.mjs` module in stable order and fails closed if its
+  inventory omits or duplicates a test. This replaces the hand-maintained list that skipped
+  `agent-definition-events.test.mjs` and `sandbox-upload-client.test.mjs`.
+- The supported complete validation entry remains `make -C agi-stack desktop-check`, which uses
+  the Desktop package's Corepack-pinned pnpm `10.24.0`, exercises the real sidecar integration, and
+  builds the Electron renderer/main/preload bundle.
+- Desktop JS/TS verification can be run from `agi-stack/apps/desktop` with
+  `corepack pnpm test`; it does not replace `make -C agi-stack run-desktop` for native behavior.
+
+## Desktop/Web parity implementation evidence: 2026-07-28
+
+- `make -C agi-stack desktop-check` passed outside the restricted command sandbox: Rust sidecar
+  233/233, Desktop runner 1195/1195 with the two real-sidecar cases executed, and Electron
+  main/preload/renderer type-check plus production build. The initial sandboxed Rust run failed only
+  where tests attempted loopback listeners (`Operation not permitted`); the unrestricted rerun
+  passed those same cases.
+- `make -C agi-stack desktop-bundle` produced the local unsigned macOS arm64 zip and DMG from the
+  current sidecar source. `make -C agi-stack desktop-bundle-smoke` returned
+  `DESKTOP_BUNDLE_SMOKE_OK`. This is local bundle evidence, not notarization, Authenticode,
+  cross-platform packaging, or updater-feed evidence.
+- Native Electron was launched only through `make -C agi-stack run-desktop`. Computer Use verified
+  trusted local-session restoration, the first-class Automations and My Work entries, notification
+  review/delivery/quiet-hours controls, and the allow-listed Web control-plane entry. With no
+  `AGISTACK_WEB_CONTROL_PLANE_ORIGIN`, the main process rejected the deep link instead of opening an
+  arbitrary URL.
+- The restarted native shell also exercised the main-owned screenshot authorization boundary:
+  Escape rejected capture, returned a structured renderer error, and produced no preview or
+  attachment. macOS locked before the newly gated authorize-to-preview path could be repeated, so
+  the positive path remains pending native re-verification even though its policy, IPC, PNG-bound,
+  and renderer-preview tests pass.
+- Native QA exposed a local conversation-catalog mismatch: `unbound_only=true` was ignored by the
+  sidecar, so the strict Desktop client rejected bound sessions returned for the unbound task group.
+  The sidecar now filters before pagination. A mixed bound/unbound Rust regression test passes, and
+  the restarted native shell shows the authoritative empty unbound-task state while retaining the
+  three bound workspace sessions.
+- This pass does not claim complete parity for interactive terminal/VNC/file browsing, the complete
+  Workspace Collaboration canvas, full A2UI surfaces, every local managed-resource/MCP App route,
+  or cloud-to-local automation execution. Those entries remain unavailable or require later
+  contract-backed implementation.
+
 ## Validation history: 2026-07-09 through 2026-07-23
 
 ### Verified

@@ -3,6 +3,27 @@
 > Historical entries mentioning Tauri document earlier validation runs. Electron is now the only
 > supported desktop shell; current build and release evidence lives in `ELECTRON.md` and `QA.md`.
 
+## Desktop/Web parity evidence contract
+
+Date: 2026-07-28
+
+- Overall prototype reference:
+  `61454b2ead1cedda584e95afee9f471aac7851fb`.
+- Audited Desktop baseline:
+  `fe425f5ce75f8722249033bf5571c7e7466d05e1`.
+- Web/Desktop source snapshot represented by the v1 contract:
+  `9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47`.
+- Versioned manifest:
+  `contracts/desktop-web-parity/parity-manifest.v1.json`.
+- Shared semantic states cover live WebSocket completion, durable history replay, and structured
+  capability availability. Web and Desktop expected view models must remain byte-for-byte
+  equivalent in those fixtures.
+- Visual acceptance still requires identical locale, viewport, device scale factor, data state,
+  and interaction state. Contract success alone is not a screenshot, Browser QA, native Electron,
+  sidecar, vault, signing, or updater pass.
+- Native Electron validation must continue to launch from the repository root with
+  `make -C agi-stack run-desktop`.
+
 ## Comparison target
 
 - Source visual truth: `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/login-screen.png`
