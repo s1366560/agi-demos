@@ -6,7 +6,7 @@ All request/response models for the Agent API endpoints.
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from src.domain.model.agent import Conversation
 
@@ -405,6 +405,7 @@ class HITLRequestResponse(BaseModel):
     created_at: str
     expires_at: str | None = None
     status: str
+    authority_revision: int = Field(ge=1)
 
 
 class PendingHITLResponse(BaseModel):
@@ -462,6 +463,33 @@ class HITLResponseRequest(BaseModel):
     request_id: str
     hitl_type: str  # "clarification", "decision", "env_var", "permission"
     response_data: dict[str, Any]  # Type-specific response data
+    contract_version: Literal[2] | None = None
+    expected_revision: int | None = Field(default=None, strict=True, ge=1)
+    idempotency_key: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+        pattern=r"^[!-~]+$",
+    )
+
+    @model_validator(mode="after")
+    def validate_authority_contract(self) -> "HITLResponseRequest":
+        """Require a complete V2 command whenever any authority field is present."""
+        contract_requested = any(
+            value is not None
+            for value in (
+                self.contract_version,
+                self.expected_revision,
+                self.idempotency_key,
+            )
+        )
+        if not contract_requested:
+            return self
+        if self.expected_revision is None or self.idempotency_key is None:
+            raise ValueError(
+                "expected_revision and idempotency_key must form a complete HITL authority command"
+            )
+        return self
 
     # For clarification: {"answer": "user answer"}
     # For decision: {"decision": "option_id"}

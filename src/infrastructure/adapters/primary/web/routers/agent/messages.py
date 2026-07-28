@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.hitl_response_contract import hitl_authority_revision
 from src.configuration.di_container import DIContainer
 from src.configuration.factories import create_llm_client
 from src.domain.events.types import (
@@ -296,8 +297,10 @@ def _build_hitl_status_map(hitl_requests: list[Any]) -> dict[str, Any]:
     """Build HITL status map from database requests."""
     hitl_status_map: dict[str, dict[str, Any]] = {}
     for req in hitl_requests:
+        status = req.status.value if hasattr(req.status, "value") else req.status
         hitl_status_map[req.id] = {
-            "status": req.status.value if hasattr(req.status, "value") else req.status,
+            "status": status,
+            "authority_revision": hitl_authority_revision(status),
             "response": req.response,
             "response_metadata": req.response_metadata or {},
         }
@@ -779,7 +782,11 @@ def _build_a2ui_action_asked(
         "title": data.get("title"),
         "timeout_seconds": data.get("timeout_seconds"),
         "status": status,
-        "answered": status in ("answered", "completed"),
+        "answered": status in ("answered", "processing", "completed"),
+        "authority_revision": status_info.get(
+            "authority_revision",
+            hitl_authority_revision(status or "pending"),
+        ),
         "allowed_actions": allowed_actions,
     }
 

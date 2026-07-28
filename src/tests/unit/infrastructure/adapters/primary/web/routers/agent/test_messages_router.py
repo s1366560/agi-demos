@@ -628,6 +628,7 @@ def test_build_timeline_includes_a2ui_action_asked() -> None:
             "timeout_seconds": 300,
             "status": "completed",
             "answered": True,
+            "authority_revision": 2,
             "allowed_actions": [{"source_component_id": "button-1", "action_name": "approve"}],
         }
     ]
