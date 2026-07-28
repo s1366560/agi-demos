@@ -17,6 +17,10 @@ use super::{
         settle_operation_with_result, AutomationClock, AutomationExecutionRecord,
         AutomationLedgerError, AutomationOperationClaim, AutomationRunStatus,
     },
+    automation_hitl::{
+        reconcile_waiting_human, resume_answered_wait, validate_waiting_outcome,
+        AutomationHitlAuthority, AutomationHitlResumeOutcome,
+    },
     session_store::DesktopSessionStore,
 };
 
@@ -26,6 +30,21 @@ pub(super) struct AutomationWorkerExecution {
     pub(super) event_count: u64,
     pub(super) execution_time_ms: u64,
     pub(super) conversation_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct AutomationWorkerWait {
+    pub(super) request_id: String,
+    pub(super) result_summary: Value,
+    pub(super) event_count: u64,
+    pub(super) execution_time_ms: u64,
+    pub(super) conversation_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum AutomationExecutorOutcome {
+    Completed(AutomationWorkerExecution),
+    WaitingHuman(AutomationWorkerWait),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -55,7 +74,16 @@ pub(super) trait AutomationExecutor: Send + Sync {
     async fn execute(
         &self,
         claim: &AutomationOperationClaim,
-    ) -> Result<AutomationWorkerExecution, AutomationExecutorError>;
+    ) -> Result<AutomationExecutorOutcome, AutomationExecutorError>;
+
+    async fn recover_answered_hitl(
+        &self,
+        _authority: &AutomationHitlAuthority,
+    ) -> Result<(), AutomationExecutorError> {
+        Err(AutomationExecutorError::permanent(
+            "local_automation_hitl_recovery_unsupported",
+        ))
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -103,6 +131,9 @@ impl AutomationWorkerConfig {
 pub(super) struct AutomationWorkerDrainReport {
     pub(super) scheduled: usize,
     pub(super) claimed: usize,
+    pub(super) hitl_requeued: usize,
+    pub(super) hitl_expired: usize,
+    pub(super) waiting_human: usize,
     pub(super) succeeded: usize,
     pub(super) failed: usize,
     pub(super) timed_out: usize,
@@ -157,10 +188,27 @@ impl AutomationWorker {
     pub(super) async fn drain_once(
         &self,
     ) -> Result<AutomationWorkerDrainReport, AutomationWorkerError> {
+        let mut hitl_reconciliation = reconcile_waiting_human(&self.store, self.clock.as_ref())?;
+        let mut hitl_requeued = 0;
+        for authority in hitl_reconciliation.answered {
+            self.executor
+                .recover_answered_hitl(&authority)
+                .await
+                .map_err(|error| {
+                    AutomationWorkerError::Ledger(AutomationLedgerError::InvalidRecord(error.code))
+                })?;
+            match resume_answered_wait(&self.store, &authority.request_id, self.clock.now())? {
+                AutomationHitlResumeOutcome::Requeued => hitl_requeued += 1,
+                AutomationHitlResumeOutcome::Expired => hitl_reconciliation.expired += 1,
+                AutomationHitlResumeOutcome::AlreadyResumed => {}
+            }
+        }
         let scheduled =
             dispatch_due_schedules(&self.store, self.clock.as_ref(), self.config.batch_size)?;
         let mut report = AutomationWorkerDrainReport {
             scheduled: scheduled.enqueued,
+            hitl_requeued,
+            hitl_expired: hitl_reconciliation.expired,
             ..Default::default()
         };
         for _ in 0..self.config.batch_size {
@@ -218,7 +266,7 @@ impl AutomationWorker {
         };
 
         match outcome {
-            Some(Ok(execution)) => {
+            Some(Ok(AutomationExecutorOutcome::Completed(execution))) => {
                 settle_operation_with_result(
                     &self.store,
                     claim,
@@ -233,6 +281,28 @@ impl AutomationWorker {
                     self.clock.as_ref(),
                 )?;
                 report.succeeded += 1;
+            }
+            Some(Ok(AutomationExecutorOutcome::WaitingHuman(wait))) => {
+                validate_waiting_outcome(
+                    &self.store,
+                    claim,
+                    &wait.conversation_id,
+                    &wait.request_id,
+                )?;
+                settle_operation_with_result(
+                    &self.store,
+                    claim,
+                    AutomationRunStatus::WaitingHuman,
+                    AutomationExecutionRecord {
+                        error_code: None,
+                        result_summary: Some(wait.result_summary),
+                        event_count: wait.event_count,
+                        execution_time_ms: wait.execution_time_ms,
+                        conversation_id: Some(wait.conversation_id),
+                    },
+                    self.clock.as_ref(),
+                )?;
+                report.waiting_human += 1;
             }
             Some(Err(error)) if error.retryable => {
                 if retry_operation(

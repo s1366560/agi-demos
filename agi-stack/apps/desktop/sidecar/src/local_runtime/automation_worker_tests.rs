@@ -7,20 +7,24 @@ mod tests {
         time::Duration,
     };
 
+    use agistack_core::agent::types::HitlKind;
     use async_trait::async_trait;
     use chrono::{DateTime, Utc};
     use serde_json::{json, Value};
     use tokio::sync::Notify;
 
     use crate::local_runtime::{
+        authority_store::{DesktopHitlRequest, DesktopHitlStatus},
         automation_dispatcher::{
             enqueue_manual_run, list_runs, AutomationClock, AutomationOperationClaim,
             ManualRunCommand, SystemAutomationClock,
         },
+        automation_hitl::reserve_authority,
         automation_store,
         automation_worker::{
-            AutomationExecutor, AutomationExecutorError, AutomationWorker, AutomationWorkerConfig,
-            AutomationWorkerExecution, AutomationWorkerHandle,
+            AutomationExecutor, AutomationExecutorError, AutomationExecutorOutcome,
+            AutomationWorker, AutomationWorkerConfig, AutomationWorkerExecution,
+            AutomationWorkerHandle, AutomationWorkerWait,
         },
         session_store::DesktopSessionStore,
     };
@@ -47,7 +51,7 @@ mod tests {
         async fn execute(
             &self,
             _claim: &AutomationOperationClaim,
-        ) -> Result<AutomationWorkerExecution, AutomationExecutorError> {
+        ) -> Result<AutomationExecutorOutcome, AutomationExecutorError> {
             self.entered.notify_one();
             pending().await
         }
@@ -60,14 +64,14 @@ mod tests {
     }
 
     struct ScriptedExecutor {
-        outcomes: Mutex<VecDeque<Result<AutomationWorkerExecution, AutomationExecutorError>>>,
+        outcomes: Mutex<VecDeque<Result<AutomationExecutorOutcome, AutomationExecutorError>>>,
         run_ids: Mutex<Vec<String>>,
     }
 
     impl ScriptedExecutor {
         fn new(
             outcomes: impl IntoIterator<
-                Item = Result<AutomationWorkerExecution, AutomationExecutorError>,
+                Item = Result<AutomationExecutorOutcome, AutomationExecutorError>,
             >,
         ) -> Self {
             Self {
@@ -82,7 +86,7 @@ mod tests {
         async fn execute(
             &self,
             claim: &AutomationOperationClaim,
-        ) -> Result<AutomationWorkerExecution, AutomationExecutorError> {
+        ) -> Result<AutomationExecutorOutcome, AutomationExecutorError> {
             self.run_ids
                 .lock()
                 .expect("executed run ids")
@@ -92,6 +96,62 @@ mod tests {
                 .expect("scripted outcomes")
                 .pop_front()
                 .expect("scripted executor outcome")
+        }
+    }
+
+    struct WaitingExecutor {
+        store: DesktopSessionStore,
+        run_ids: Mutex<Vec<String>>,
+    }
+
+    #[async_trait]
+    impl AutomationExecutor for WaitingExecutor {
+        async fn execute(
+            &self,
+            claim: &AutomationOperationClaim,
+        ) -> Result<AutomationExecutorOutcome, AutomationExecutorError> {
+            self.run_ids
+                .lock()
+                .expect("waiting executor run ids")
+                .push(claim.run_id.clone());
+            reserve_authority(
+                &self.store,
+                claim,
+                "conversation-waiting-human",
+                "worker-hitl-request",
+                "2099-10-05T12:00:00Z",
+            )
+            .expect("reserve worker HITL authority");
+            self.store
+                .insert_hitl_request(&DesktopHitlRequest {
+                    id: "worker-hitl-request".to_string(),
+                    conversation_id: "conversation-waiting-human".to_string(),
+                    run_id: None,
+                    round: 1,
+                    kind: HitlKind::Decision,
+                    prompt: "Continue?".to_string(),
+                    decision: None,
+                    status: DesktopHitlStatus::Pending,
+                    created_at: "2099-10-05T12:00:00Z".to_string(),
+                    responded_at: None,
+                    response_data: None,
+                    response_actor: None,
+                    response_revision: None,
+                    idempotency_key: None,
+                })
+                .expect("insert worker HITL request");
+            Ok(AutomationExecutorOutcome::WaitingHuman(
+                AutomationWorkerWait {
+                    request_id: "worker-hitl-request".to_string(),
+                    result_summary: json!({
+                        "status": "waiting_human",
+                        "hitl_request_id": "worker-hitl-request",
+                    }),
+                    event_count: 1,
+                    execution_time_ms: 20,
+                    conversation_id: "conversation-waiting-human".to_string(),
+                },
+            ))
         }
     }
 
@@ -118,12 +178,14 @@ mod tests {
             .expect("enqueue batch run");
         }
         let executor = Arc::new(ScriptedExecutor::new((0..3).map(|index| {
-            Ok(AutomationWorkerExecution {
-                result_summary: json!({ "batch": index }),
-                event_count: 2,
-                execution_time_ms: 25,
-                conversation_id: format!("conversation-batch-{index}"),
-            })
+            Ok(AutomationExecutorOutcome::Completed(
+                AutomationWorkerExecution {
+                    result_summary: json!({ "batch": index }),
+                    event_count: 2,
+                    execution_time_ms: 25,
+                    conversation_id: format!("conversation-batch-{index}"),
+                },
+            ))
         })));
         let worker = AutomationWorker::new(
             store.clone(),
@@ -197,12 +259,14 @@ mod tests {
             Err(AutomationExecutorError::retryable(
                 "local_agent_temporarily_unavailable",
             )),
-            Ok(AutomationWorkerExecution {
-                result_summary: json!({ "answer": "recovered" }),
-                event_count: 1,
-                execution_time_ms: 40,
-                conversation_id: "conversation-retry".to_string(),
-            }),
+            Ok(AutomationExecutorOutcome::Completed(
+                AutomationWorkerExecution {
+                    result_summary: json!({ "answer": "recovered" }),
+                    event_count: 1,
+                    execution_time_ms: 40,
+                    conversation_id: "conversation-retry".to_string(),
+                },
+            )),
         ]));
         let worker = AutomationWorker::new(
             store.clone(),
@@ -279,6 +343,66 @@ mod tests {
             .await
             .expect("bounded worker shutdown");
         assert!(!handle.is_running());
+    }
+
+    #[tokio::test]
+    async fn waiting_human_outcome_parks_the_same_run_without_retrying() {
+        let clock = Arc::new(FixedClock::at("2099-10-05T12:00:00Z"));
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        seed_job(&store, "job-waiting-human", 0, clock.now());
+        let receipt = enqueue_manual_run(
+            &store,
+            ManualRunCommand {
+                user_id: "local-user",
+                project_id: "local-project",
+                job_id: "job-waiting-human",
+                expected_revision: 1,
+                idempotency_key: "run-waiting-human-1",
+                request_hash: "hash-waiting-human-1",
+                conversation_id: None,
+            },
+            clock.as_ref(),
+        )
+        .expect("enqueue waiting run");
+        let executor = Arc::new(WaitingExecutor {
+            store: store.clone(),
+            run_ids: Mutex::new(Vec::new()),
+        });
+        let worker = AutomationWorker::new(
+            store.clone(),
+            Arc::clone(&executor) as Arc<dyn AutomationExecutor>,
+            clock,
+            AutomationWorkerConfig {
+                worker_id: "waiting-human-worker".to_string(),
+                batch_size: 1,
+                lease_duration: Duration::from_secs(30),
+                heartbeat_interval: Duration::from_secs(10),
+                poll_interval: Duration::from_millis(10),
+                retry_backoff: Duration::ZERO,
+                shutdown_grace: Duration::from_millis(100),
+            },
+        )
+        .expect("worker");
+
+        let first = worker.drain_once().await.expect("park waiting run");
+        assert_eq!(first.waiting_human, 1);
+        assert_eq!(first.requeued, 0);
+        let second = worker
+            .drain_once()
+            .await
+            .expect("waiting run remains parked");
+        assert_eq!(second.claimed, 0);
+        assert_eq!(executor.run_ids.lock().expect("executed run ids").len(), 1);
+
+        let (runs, total) = list_runs(&store, "local-project", "job-waiting-human", 10, 0)
+            .expect("waiting run history");
+        assert_eq!(total, 1);
+        assert_eq!(runs[0]["id"], receipt.run_id);
+        assert_eq!(runs[0]["status"], "waiting_human");
+        assert_eq!(
+            runs[0]["result_summary"]["hitl_request_id"],
+            "worker-hitl-request"
+        );
     }
 
     fn seed_job(

@@ -83,12 +83,29 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), String> {
                created_at TEXT NOT NULL,
                PRIMARY KEY(user_id, project_id, job_id, idempotency_key)
              );
+             CREATE TABLE IF NOT EXISTS desktop_automation_hitl_authorities (
+               request_id TEXT PRIMARY KEY,
+               run_id TEXT NOT NULL UNIQUE,
+               operation_id TEXT NOT NULL UNIQUE,
+               runtime_execution_id TEXT NOT NULL UNIQUE,
+               tenant_id TEXT NOT NULL,
+               project_id TEXT NOT NULL,
+               conversation_id TEXT NOT NULL,
+               deadline_at_ms INTEGER NOT NULL,
+               response_answer TEXT,
+               response_claimed_at TEXT,
+               created_at TEXT NOT NULL
+             );
              CREATE INDEX IF NOT EXISTS idx_desktop_automation_runs_job
                ON desktop_automation_runs(project_id, job_id, accepted_at DESC);
              CREATE INDEX IF NOT EXISTS idx_desktop_automation_operations_claim
                ON desktop_automation_operations(status, available_at_ms, created_at);
              CREATE INDEX IF NOT EXISTS idx_desktop_automation_receipts_scope
                ON desktop_automation_run_receipts(user_id, project_id, job_id, created_at);
+             CREATE INDEX IF NOT EXISTS idx_desktop_automation_hitl_scope
+               ON desktop_automation_hitl_authorities(
+                 tenant_id, project_id, conversation_id, created_at
+               );
              CREATE TRIGGER IF NOT EXISTS desktop_automation_schedule_after_insert
              AFTER INSERT ON desktop_automation_jobs
              BEGIN
@@ -197,6 +214,16 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), String> {
         ("desktop_automation_runs", "result_summary_json", "TEXT"),
         ("desktop_automation_runs", "event_count", "INTEGER"),
         ("desktop_automation_runs", "execution_time_ms", "INTEGER"),
+        (
+            "desktop_automation_hitl_authorities",
+            "response_answer",
+            "TEXT",
+        ),
+        (
+            "desktop_automation_hitl_authorities",
+            "response_claimed_at",
+            "TEXT",
+        ),
     ] {
         ensure_column(connection, table, column, definition)?;
     }
