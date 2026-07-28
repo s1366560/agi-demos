@@ -6,6 +6,7 @@ use std::{
     time::Duration,
 };
 
+use futures_util::{stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -26,7 +27,12 @@ mod tool_call_lease;
 mod websocket;
 
 use http::{HttpRuntime, SseRuntime};
-use remote_common::{validate_remote_header_names, validate_remote_input, InitializedServer};
+#[cfg(test)]
+pub(super) use remote_common::remote_credential_reference;
+use remote_common::{
+    request_timeout, validate_remote_credential_bindings, validate_remote_header_names,
+    validate_remote_input, InitializedServer,
+};
 use stdio::StdioRuntime;
 use store::McpStore;
 use websocket::WebSocketRuntime;
@@ -189,12 +195,13 @@ impl fmt::Display for McpSupervisorError {
 
 type McpResult<T> = Result<T, McpSupervisorError>;
 
+#[derive(Clone)]
 pub(super) struct McpSupervisor {
     store: McpStore,
     workspace_root: PathBuf,
-    credential_vault: Mutex<Option<ApplicationCredentialVault>>,
+    credential_vault: Arc<Mutex<Option<ApplicationCredentialVault>>>,
     limits: SupervisorLimits,
-    runtimes: Mutex<HashMap<String, Arc<AsyncMutex<McpRuntime>>>>,
+    runtimes: Arc<Mutex<HashMap<String, Arc<AsyncMutex<McpRuntime>>>>>,
 }
 
 enum McpRuntime {
@@ -303,9 +310,9 @@ impl McpSupervisor {
         Ok(Self {
             store: McpStore::new(session_store)?,
             workspace_root,
-            credential_vault: Mutex::new(credential_vault),
+            credential_vault: Arc::new(Mutex::new(credential_vault)),
             limits,
-            runtimes: Mutex::new(HashMap::new()),
+            runtimes: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -317,6 +324,9 @@ impl McpSupervisor {
     ) -> McpResult<McpServerDefinition> {
         validate_scope(scope)?;
         validate_definition(&input)?;
+        if input.transport != McpTransport::Stdio {
+            validate_remote_credential_bindings(scope, &input)?;
+        }
         validate_idempotency_key(idempotency_key)?;
         let request_hash = definition_hash(scope, &input);
         self.store
@@ -390,9 +400,20 @@ impl McpSupervisor {
     }
 
     pub(super) async fn recover_all_enabled(&self) -> McpResult<()> {
-        for server in self.store.enabled_servers()? {
-            let _ = self.ensure_initialized(&server).await;
-        }
+        let supervisor = self.clone();
+        tokio::spawn(async move {
+            let Ok(servers) = supervisor.store.enabled_servers() else {
+                return;
+            };
+            stream::iter(servers)
+                .for_each_concurrent(4, move |server| {
+                    let supervisor = supervisor.clone();
+                    async move {
+                        let _ = supervisor.ensure_initialized(&server).await;
+                    }
+                })
+                .await;
+        });
         Ok(())
     }
 
@@ -561,37 +582,49 @@ impl McpSupervisor {
     ) -> McpResult<Value> {
         let runtime = self.runtime(server)?;
         let credential_vault = self.credential_vault()?;
-        let mut runtime = runtime.lock().await;
-        runtime
-            .request(
-                server,
-                &self.workspace_root,
-                credential_vault.as_ref(),
-                method,
-                params,
-                self.limits,
-            )
-            .await
-            .inspect_err(|error| {
-                let _ = self.store.record_runtime_error(server, error.reason_code());
-            })
+        let operation_timeout = self
+            .limits
+            .initialize_timeout
+            .saturating_add(self.limits.request_timeout);
+        let result = tokio::time::timeout(operation_timeout, async {
+            let mut runtime = runtime.lock().await;
+            runtime
+                .request(
+                    server,
+                    &self.workspace_root,
+                    credential_vault.as_ref(),
+                    method,
+                    params,
+                    self.limits,
+                )
+                .await
+        })
+        .await
+        .unwrap_or_else(|_| Err(request_timeout()));
+        result.inspect_err(|error| {
+            let _ = self.store.record_runtime_error(server, error.reason_code());
+        })
     }
 
     async fn ensure_initialized(&self, server: &McpServerDefinition) -> McpResult<()> {
         let runtime = self.runtime(server)?;
         let credential_vault = self.credential_vault()?;
-        let mut runtime = runtime.lock().await;
-        let initialized = runtime
-            .ensure_initialized(
-                server,
-                &self.workspace_root,
-                credential_vault.as_ref(),
-                self.limits,
-            )
-            .await
-            .inspect_err(|error| {
-                let _ = self.store.record_runtime_error(server, error.reason_code());
-            })?;
+        let initialized = tokio::time::timeout(self.limits.initialize_timeout, async {
+            let mut runtime = runtime.lock().await;
+            runtime
+                .ensure_initialized(
+                    server,
+                    &self.workspace_root,
+                    credential_vault.as_ref(),
+                    self.limits,
+                )
+                .await
+        })
+        .await
+        .unwrap_or_else(|_| Err(request_timeout()))
+        .inspect_err(|error| {
+            let _ = self.store.record_runtime_error(server, error.reason_code());
+        })?;
         self.store
             .record_runtime_ready(server, &initialized.server_info)
             .map_err(|_| storage_error())

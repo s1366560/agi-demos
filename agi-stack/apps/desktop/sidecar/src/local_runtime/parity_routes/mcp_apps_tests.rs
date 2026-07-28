@@ -353,6 +353,17 @@ async fn remote_registration_accepts_only_header_vault_refs_and_never_exposes_re
     let root = test_root();
     fs::create_dir_all(&root).expect("create remote route root");
     let credential = "mcp-remote-route-secret";
+    let reference = mcp_supervisor::remote_credential_reference(
+        &mcp_supervisor::McpScope {
+            tenant_id: "local".to_string(),
+            project_id: "local-project".to_string(),
+        },
+        "remote-route",
+        mcp_supervisor::McpTransport::Http,
+        "http://127.0.0.1:12345/mcp",
+        "authorization",
+    )
+    .expect("derive scoped route credential reference");
     let app = local_router(test_state(&root, credential));
     let response = app
         .oneshot(request(
@@ -365,7 +376,7 @@ async fn remote_registration_accepts_only_header_vault_refs_and_never_exposes_re
                 "transport_config": {
                     "url": "http://127.0.0.1:12345/mcp",
                     "vault_header_refs": {
-                        "authorization": "private-vault-record-id"
+                        "authorization": reference
                     },
                 },
                 "enabled": false,
@@ -386,7 +397,7 @@ async fn remote_registration_accepts_only_header_vault_refs_and_never_exposes_re
         json!(["authorization"])
     );
     assert_eq!(server["transport_config"]["vault_env_names"], json!([]));
-    assert!(!server.to_string().contains("private-vault-record-id"));
+    assert!(!server.to_string().contains(&reference));
     fs::remove_dir_all(root).expect("remove remote route root");
 }
 
@@ -436,4 +447,16 @@ async fn capability_snapshot_only_advertises_live_transports_and_fails_closed_fo
     assert_eq!(snapshot["credential_authority"], "application_vault");
     assert_eq!(snapshot["redirect_policy"], "deny");
     fs::remove_dir_all(root).expect("remove capability route root");
+}
+
+#[test]
+fn indeterminate_tool_call_is_a_stable_unavailable_conflict() {
+    let (status, Json(body)) =
+        super::mcp_apps::mcp_error_tuple_for(mcp_supervisor::McpSupervisorError::new(
+            "local_mcp_tool_call_indeterminate",
+            "MCP tool call dispatch completed without a verifiable local receipt",
+        ));
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["availability"], "unavailable");
+    assert_eq!(body["reason_code"], "local_mcp_tool_call_indeterminate");
 }

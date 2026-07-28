@@ -723,13 +723,14 @@ fn mcp_error(error: McpSupervisorError) -> LocalJsonResult {
     Err(mcp_error_tuple_for(error))
 }
 
-fn mcp_error_tuple_for(error: McpSupervisorError) -> (StatusCode, Json<Value>) {
+pub(super) fn mcp_error_tuple_for(error: McpSupervisorError) -> (StatusCode, Json<Value>) {
     let status = match error.reason_code() {
         "local_mcp_server_not_found" | "local_mcp_app_not_found" => StatusCode::NOT_FOUND,
         "local_mcp_idempotency_conflict"
         | "local_mcp_server_name_conflict"
         | "local_mcp_tool_call_in_progress"
-        | "local_mcp_tool_call_lease_lost" => StatusCode::CONFLICT,
+        | "local_mcp_tool_call_lease_lost"
+        | "local_mcp_tool_call_indeterminate" => StatusCode::CONFLICT,
         "local_mcp_elicitation_bridge_unavailable" | "local_mcp_client_request_unavailable" => {
             StatusCode::NOT_IMPLEMENTED
         }
@@ -769,7 +770,13 @@ fn mcp_error_tuple(
             "contract_version": CONTRACT_VERSION,
             "mode": "local",
             "capability": "mcp_apps",
-            "availability": if status == StatusCode::NOT_IMPLEMENTED { "unavailable" } else { "available" },
+            "availability": if status == StatusCode::NOT_IMPLEMENTED
+                || reason_code == "local_mcp_tool_call_indeterminate"
+            {
+                "unavailable"
+            } else {
+                "available"
+            },
             "reason_code": reason_code,
             "code": reason_code,
             "detail": detail,

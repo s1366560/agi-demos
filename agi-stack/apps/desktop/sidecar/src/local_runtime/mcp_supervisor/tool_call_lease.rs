@@ -25,6 +25,7 @@ pub(super) enum ToolCallReservation {
     Acquired(ToolCallLease),
     Replay(Value),
     Pending,
+    Indeterminate,
 }
 
 pub(super) async fn execute_tool_call(
@@ -65,15 +66,44 @@ pub(super) async fn execute_tool_call(
                 });
             }
             ToolCallReservation::Acquired(lease) => {
-                let result = supervisor
+                supervisor
+                    .store
+                    .mark_tool_call_dispatched(&lease, now_millis())?;
+                let result = match supervisor
                     .request(
                         server,
                         "tools/call",
                         serde_json::json!({ "name": tool_name, "arguments": arguments }),
                     )
-                    .await?;
-                let (content, is_error) = validate_tool_call_result(&result)?;
-                supervisor.store.complete_tool_call(&lease, &result)?;
+                    .await
+                {
+                    Ok(result) => result,
+                    Err(_) => {
+                        let _ = supervisor
+                            .store
+                            .mark_tool_call_indeterminate(&lease, now_millis());
+                        return Err(tool_call_indeterminate());
+                    }
+                };
+                let (content, is_error) = match validate_tool_call_result(&result) {
+                    Ok(validated) => validated,
+                    Err(_) => {
+                        let _ = supervisor
+                            .store
+                            .mark_tool_call_indeterminate(&lease, now_millis());
+                        return Err(tool_call_indeterminate());
+                    }
+                };
+                if supervisor
+                    .store
+                    .complete_tool_call(&lease, &result)
+                    .is_err()
+                {
+                    let _ = supervisor
+                        .store
+                        .mark_tool_call_indeterminate(&lease, now_millis());
+                    return Err(tool_call_indeterminate());
+                }
                 return Ok(McpToolCallOutcome {
                     result,
                     content,
@@ -88,6 +118,7 @@ pub(super) async fn execute_tool_call(
                 let remaining = wait_deadline.saturating_duration_since(Instant::now());
                 sleep(supervisor.limits.tool_call_poll_interval.min(remaining)).await;
             }
+            ToolCallReservation::Indeterminate => return Err(tool_call_indeterminate()),
         }
     }
 }
@@ -145,7 +176,7 @@ impl McpStore {
                     .query_row(
                         "SELECT server_id, request_hash, status, lease_expires_at_ms,
                                 fence_token, response_json
-                         FROM desktop_mcp_tool_call_leases_v2
+                         FROM desktop_mcp_tool_call_operations_v3
                          WHERE tenant_id = ?1 AND project_id = ?2 AND idempotency_key = ?3",
                         params![scope.tenant_id, scope.project_id, idempotency_key],
                         |row| {
@@ -183,7 +214,36 @@ impl McpStore {
                             transaction.commit().map_err(|error| error.to_string())?;
                             return Ok(ToolCallReservation::Replay(response));
                         }
-                        if status != "pending" {
+                        if status == "indeterminate" {
+                            transaction.commit().map_err(|error| error.to_string())?;
+                            return Ok(ToolCallReservation::Indeterminate);
+                        }
+                        if status == "dispatched" {
+                            if stored_expiry > now_ms {
+                                transaction.commit().map_err(|error| error.to_string())?;
+                                return Ok(ToolCallReservation::Pending);
+                            }
+                            let updated = transaction
+                                .execute(
+                                    "UPDATE desktop_mcp_tool_call_operations_v3
+                                     SET status = 'indeterminate', updated_at_ms = ?4
+                                     WHERE tenant_id = ?1 AND project_id = ?2
+                                       AND idempotency_key = ?3 AND status = 'dispatched'",
+                                    params![
+                                        scope.tenant_id,
+                                        scope.project_id,
+                                        idempotency_key,
+                                        now_ms,
+                                    ],
+                                )
+                                .map_err(|error| error.to_string())?;
+                            if updated != 1 {
+                                return Err("tool_call_lease_lost".to_string());
+                            }
+                            transaction.commit().map_err(|error| error.to_string())?;
+                            return Ok(ToolCallReservation::Indeterminate);
+                        }
+                        if status != "pre_dispatch" {
                             return Err("stored tool call lease status is invalid".to_string());
                         }
                         if stored_expiry > now_ms {
@@ -195,11 +255,11 @@ impl McpStore {
                             .ok_or_else(|| "tool call fence is exhausted".to_string())?;
                         let updated = transaction
                             .execute(
-                                "UPDATE desktop_mcp_tool_call_leases_v2
+                                "UPDATE desktop_mcp_tool_call_operations_v3
                                  SET lease_token = ?4, lease_expires_at_ms = ?5,
                                      fence_token = ?6, updated_at_ms = ?7
                                  WHERE tenant_id = ?1 AND project_id = ?2
-                                   AND idempotency_key = ?3 AND status = 'pending'
+                                   AND idempotency_key = ?3 AND status = 'pre_dispatch'
                                    AND fence_token = ?8 AND lease_expires_at_ms <= ?7",
                                 params![
                                     scope.tenant_id,
@@ -221,12 +281,12 @@ impl McpStore {
                     None => {
                         transaction
                             .execute(
-                                "INSERT INTO desktop_mcp_tool_call_leases_v2(
+                                "INSERT INTO desktop_mcp_tool_call_operations_v3(
                                    tenant_id, project_id, idempotency_key, server_id,
                                    request_hash, status, lease_token, lease_expires_at_ms,
                                    fence_token, response_json, created_at_ms, updated_at_ms
                                  ) VALUES (
-                                   ?1, ?2, ?3, ?4, ?5, 'pending', ?6, ?7, 1, NULL, ?8, ?8
+                                   ?1, ?2, ?3, ?4, ?5, 'pre_dispatch', ?6, ?7, 1, NULL, ?8, ?8
                                  )",
                                 params![
                                     scope.tenant_id,
@@ -257,6 +317,60 @@ impl McpStore {
             .map_err(map_lease_store_error)
     }
 
+    pub(super) fn mark_tool_call_dispatched(
+        &self,
+        lease: &ToolCallLease,
+        now_ms: i64,
+    ) -> McpResult<()> {
+        self.update_tool_call_status(lease, "pre_dispatch", "dispatched", now_ms)
+    }
+
+    pub(super) fn mark_tool_call_indeterminate(
+        &self,
+        lease: &ToolCallLease,
+        now_ms: i64,
+    ) -> McpResult<()> {
+        self.update_tool_call_status(lease, "dispatched", "indeterminate", now_ms)
+    }
+
+    fn update_tool_call_status(
+        &self,
+        lease: &ToolCallLease,
+        expected_status: &str,
+        next_status: &str,
+        now_ms: i64,
+    ) -> McpResult<()> {
+        self.session_store
+            .with_local_mcp_connection(|connection| {
+                let updated = connection
+                    .execute(
+                        "UPDATE desktop_mcp_tool_call_operations_v3
+                         SET status = ?8, updated_at_ms = ?9
+                         WHERE tenant_id = ?1 AND project_id = ?2 AND idempotency_key = ?3
+                           AND server_id = ?4 AND request_hash = ?5 AND status = ?7
+                           AND lease_token = ?6 AND fence_token = ?10",
+                        params![
+                            lease.tenant_id,
+                            lease.project_id,
+                            lease.idempotency_key,
+                            lease.server_id,
+                            lease.request_hash,
+                            lease.lease_token,
+                            expected_status,
+                            next_status,
+                            now_ms,
+                            lease.fence_token,
+                        ],
+                    )
+                    .map_err(|error| error.to_string())?;
+                if updated != 1 {
+                    return Err("tool_call_lease_lost".to_string());
+                }
+                Ok(())
+            })
+            .map_err(map_lease_store_error)
+    }
+
     pub(super) fn complete_tool_call(
         &self,
         lease: &ToolCallLease,
@@ -271,10 +385,10 @@ impl McpStore {
                 let now_ms = now_millis();
                 let updated = transaction
                     .execute(
-                        "UPDATE desktop_mcp_tool_call_leases_v2
+                        "UPDATE desktop_mcp_tool_call_operations_v3
                          SET status = 'completed', response_json = ?8, updated_at_ms = ?9
                          WHERE tenant_id = ?1 AND project_id = ?2 AND idempotency_key = ?3
-                           AND server_id = ?4 AND request_hash = ?5 AND status = 'pending'
+                           AND server_id = ?4 AND request_hash = ?5 AND status = 'dispatched'
                            AND lease_token = ?6 AND fence_token = ?7",
                         params![
                             lease.tenant_id,
@@ -337,5 +451,12 @@ fn tool_call_in_progress() -> McpSupervisorError {
     McpSupervisorError::new(
         "local_mcp_tool_call_in_progress",
         "MCP tool call with this idempotency key is still in progress",
+    )
+}
+
+fn tool_call_indeterminate() -> McpSupervisorError {
+    McpSupervisorError::new(
+        "local_mcp_tool_call_indeterminate",
+        "MCP tool call dispatch completed without a verifiable local receipt",
     )
 }

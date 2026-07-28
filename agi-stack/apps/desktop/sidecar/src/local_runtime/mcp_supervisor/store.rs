@@ -74,7 +74,32 @@ CREATE TABLE IF NOT EXISTS desktop_mcp_tool_call_leases_v2 (
   created_at_ms INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL,
   PRIMARY KEY(tenant_id, project_id, idempotency_key)
-);";
+);
+CREATE TABLE IF NOT EXISTS desktop_mcp_tool_call_operations_v3 (
+  tenant_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  server_id TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  status TEXT NOT NULL
+    CHECK(status IN ('pre_dispatch', 'dispatched', 'indeterminate', 'completed')),
+  lease_token TEXT NOT NULL,
+  lease_expires_at_ms INTEGER NOT NULL,
+  fence_token INTEGER NOT NULL CHECK(fence_token >= 1),
+  response_json TEXT,
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL,
+  PRIMARY KEY(tenant_id, project_id, idempotency_key)
+);
+INSERT OR IGNORE INTO desktop_mcp_tool_call_operations_v3(
+  tenant_id, project_id, idempotency_key, server_id, request_hash, status,
+  lease_token, lease_expires_at_ms, fence_token, response_json, created_at_ms, updated_at_ms
+)
+SELECT tenant_id, project_id, idempotency_key, server_id, request_hash,
+       CASE status WHEN 'completed' THEN 'completed' ELSE 'indeterminate' END,
+       lease_token, lease_expires_at_ms, fence_token, response_json, created_at_ms, updated_at_ms
+FROM desktop_mcp_tool_call_leases_v2
+;";
 
 #[derive(Clone)]
 pub(super) struct McpStore {
@@ -307,7 +332,11 @@ impl McpStore {
         server_info: &Value,
     ) -> Result<(), String> {
         self.session_store.with_local_mcp_connection(|connection| {
-            connection
+            let transaction = connection
+                .transaction_with_behavior(TransactionBehavior::Immediate)
+                .map_err(|error| error.to_string())?;
+            let now = chrono::Utc::now().to_rfc3339();
+            let updated = transaction
                 .execute(
                     "UPDATE desktop_mcp_servers_v1
                      SET runtime_status = 'healthy', reason_code = NULL, server_info_json = ?4,
@@ -318,11 +347,22 @@ impl McpStore {
                         server.project_id,
                         server.id,
                         server_info.to_string(),
-                        chrono::Utc::now().to_rfc3339(),
+                        now,
                     ],
                 )
-                .map(|_| ())
-                .map_err(|error| error.to_string())
+                .map_err(|error| error.to_string())?;
+            if updated != 1 {
+                return Err("MCP server runtime row was not found".to_string());
+            }
+            transaction
+                .execute(
+                    "UPDATE desktop_mcp_apps_v1
+                     SET status = 'healthy', revision = revision + 1, updated_at = ?4
+                     WHERE tenant_id = ?1 AND project_id = ?2 AND server_id = ?3",
+                    params![server.tenant_id, server.project_id, server.id, now],
+                )
+                .map_err(|error| error.to_string())?;
+            transaction.commit().map_err(|error| error.to_string())
         })
     }
 
@@ -332,7 +372,11 @@ impl McpStore {
         reason_code: &str,
     ) -> Result<(), String> {
         self.session_store.with_local_mcp_connection(|connection| {
-            connection
+            let transaction = connection
+                .transaction_with_behavior(TransactionBehavior::Immediate)
+                .map_err(|error| error.to_string())?;
+            let now = chrono::Utc::now().to_rfc3339();
+            let updated = transaction
                 .execute(
                     "UPDATE desktop_mcp_servers_v1
                      SET runtime_status = 'error', reason_code = ?4, updated_at = ?5
@@ -342,11 +386,22 @@ impl McpStore {
                         server.project_id,
                         server.id,
                         reason_code,
-                        chrono::Utc::now().to_rfc3339(),
+                        now,
                     ],
                 )
-                .map(|_| ())
-                .map_err(|error| error.to_string())
+                .map_err(|error| error.to_string())?;
+            if updated != 1 {
+                return Err("MCP server runtime row was not found".to_string());
+            }
+            transaction
+                .execute(
+                    "UPDATE desktop_mcp_apps_v1
+                     SET status = 'error', revision = revision + 1, updated_at = ?4
+                     WHERE tenant_id = ?1 AND project_id = ?2 AND server_id = ?3",
+                    params![server.tenant_id, server.project_id, server.id, now],
+                )
+                .map_err(|error| error.to_string())?;
+            transaction.commit().map_err(|error| error.to_string())
         })
     }
 

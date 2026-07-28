@@ -36,7 +36,8 @@ use crate::application_vault::ApplicationCredentialVault;
 
 use super::{
     mcp_supervisor::{
-        McpScope, McpServerDefinitionInput, McpSupervisor, McpTransport, SupervisorLimits,
+        remote_credential_reference, McpScope, McpServerDefinitionInput, McpSupervisor,
+        McpTransport, SupervisorLimits,
     },
     DesktopSessionStore,
 };
@@ -53,6 +54,7 @@ enum MockMode {
     Redirect,
     DisconnectOnce,
     Elicitation,
+    PhasedDeadline,
 }
 
 #[derive(Clone)]
@@ -140,6 +142,7 @@ async fn streamable_http(
     if !authorized(&headers) {
         return StatusCode::UNAUTHORIZED.into_response();
     }
+    let method = request.get("method").and_then(Value::as_str);
     match state.mode {
         MockMode::Timeout => {
             tokio::time::sleep(Duration::from_secs(5)).await;
@@ -167,10 +170,17 @@ async fn streamable_http(
                 .body(Body::from("x".repeat(128 * 1024)))
                 .expect("oversized response");
         }
+        MockMode::PhasedDeadline => {
+            let delay = if method == Some("initialize") {
+                Duration::from_millis(120)
+            } else {
+                Duration::from_millis(80)
+            };
+            tokio::time::sleep(delay).await;
+        }
         MockMode::Normal | MockMode::DisconnectOnce | MockMode::Elicitation => {}
     }
 
-    let method = request.get("method").and_then(Value::as_str);
     if method != Some("initialize")
         && (headers
             .get("mcp-session-id")
@@ -219,6 +229,45 @@ async fn streamable_http(
             .insert("mcp-session-id", HeaderValue::from_static("mock-session"));
     }
     response
+}
+
+#[tokio::test]
+async fn initialize_notification_and_request_share_one_total_deadline() {
+    let root = root("total-deadline");
+    fs::create_dir_all(&root).expect("create total deadline root");
+    let mock = MockRemoteServer::spawn(MockMode::PhasedDeadline).await;
+    let active_scope = scope();
+    let credential_vault = vault(&root);
+    let mut test_limits = limits();
+    test_limits.initialize_timeout = Duration::from_millis(150);
+    test_limits.request_timeout = Duration::from_millis(100);
+    let supervisor = McpSupervisor::new(
+        DesktopSessionStore::in_memory().expect("total deadline session store"),
+        root.clone(),
+        Some(credential_vault.clone()),
+        test_limits,
+    )
+    .expect("total deadline supervisor");
+    let server = supervisor
+        .create_server(
+            &active_scope,
+            definition(
+                &credential_vault,
+                "total-deadline",
+                McpTransport::Http,
+                mock.http_url(),
+            ),
+            "create-total-deadline",
+        )
+        .expect("create total deadline server");
+    let started = tokio::time::Instant::now();
+    let error = supervisor
+        .list_tools(&active_scope, &server.id)
+        .await
+        .expect_err("operation stages must share one total deadline");
+    assert_eq!(error.reason_code(), "local_mcp_request_timeout");
+    assert!(started.elapsed() < Duration::from_millis(400));
+    fs::remove_dir_all(root).expect("remove total deadline root");
 }
 
 fn sse_response(messages: impl IntoIterator<Item = Value>) -> Response {
@@ -277,6 +326,10 @@ async fn legacy_message(
     if !authorized(&headers) {
         return StatusCode::UNAUTHORIZED.into_response();
     }
+    if state.mode == MockMode::Timeout {
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        return StatusCode::GATEWAY_TIMEOUT.into_response();
+    }
     let Some(sender) = state.legacy_events.lock().await.clone() else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
@@ -302,6 +355,42 @@ async fn legacy_message(
             .await;
     }
     StatusCode::ACCEPTED.into_response()
+}
+
+#[tokio::test]
+async fn legacy_sse_post_without_response_is_bounded() {
+    let root = root("sse-post-timeout");
+    fs::create_dir_all(&root).expect("create SSE timeout root");
+    let mock = MockRemoteServer::spawn(MockMode::Timeout).await;
+    let active_scope = scope();
+    let credential_vault = vault(&root);
+    let supervisor = McpSupervisor::new(
+        DesktopSessionStore::in_memory().expect("SSE timeout session store"),
+        root.clone(),
+        Some(credential_vault.clone()),
+        limits(),
+    )
+    .expect("SSE timeout supervisor");
+    let server = supervisor
+        .create_server(
+            &active_scope,
+            definition(
+                &credential_vault,
+                "sse-post-timeout",
+                McpTransport::Sse,
+                mock.sse_url(),
+            ),
+            "create-sse-post-timeout",
+        )
+        .expect("create SSE timeout server");
+    let started = tokio::time::Instant::now();
+    let error = supervisor
+        .list_tools(&active_scope, &server.id)
+        .await
+        .expect_err("legacy SSE POST must time out");
+    assert_eq!(error.reason_code(), "local_mcp_request_timeout");
+    assert!(started.elapsed() < Duration::from_secs(2));
+    fs::remove_dir_all(root).expect("remove SSE timeout root");
 }
 
 async fn websocket_upgrade(
@@ -436,17 +525,41 @@ fn scope() -> McpScope {
     }
 }
 
-fn definition(name: &str, transport: McpTransport, endpoint: String) -> McpServerDefinitionInput {
+fn definition(
+    credential_vault: &ApplicationCredentialVault,
+    name: &str,
+    transport: McpTransport,
+    endpoint: String,
+) -> McpServerDefinitionInput {
+    let reference =
+        remote_credential_reference(&scope(), name, transport, &endpoint, "Authorization")
+            .expect("derive scoped remote credential reference");
+    credential_vault
+        .put(&reference, AUTHORIZATION_VALUE)
+        .expect("store scoped remote MCP authorization");
     McpServerDefinitionInput {
         name: name.to_string(),
         description: Some("remote MCP integration test".to_string()),
         transport,
         command: vec![endpoint],
         cwd: None,
-        vault_env_refs: BTreeMap::from([(
-            "Authorization".to_string(),
-            "mcp.remote.authorization".to_string(),
-        )]),
+        vault_env_refs: BTreeMap::from([("Authorization".to_string(), reference)]),
+        enabled: true,
+    }
+}
+
+fn definition_without_credentials(
+    name: &str,
+    transport: McpTransport,
+    endpoint: String,
+) -> McpServerDefinitionInput {
+    McpServerDefinitionInput {
+        name: name.to_string(),
+        description: Some("remote MCP integration test".to_string()),
+        transport,
+        command: vec![endpoint],
+        cwd: None,
+        vault_env_refs: BTreeMap::new(),
         enabled: true,
     }
 }
@@ -468,11 +581,7 @@ fn limits() -> SupervisorLimits {
 }
 
 fn vault(root: &std::path::Path) -> ApplicationCredentialVault {
-    let vault = ApplicationCredentialVault::open(root).expect("test application vault");
-    vault
-        .put("mcp.remote.authorization", AUTHORIZATION_VALUE)
-        .expect("store remote MCP authorization");
-    vault
+    ApplicationCredentialVault::open(root).expect("test application vault")
 }
 
 #[tokio::test]
@@ -486,8 +595,14 @@ async fn remote_transports_round_trip_tools_resources_health_and_restart_recover
 
     {
         let store = DesktopSessionStore::open(&database).expect("session store");
-        let supervisor = McpSupervisor::new(store, root.clone(), Some(vault(&root)), limits())
-            .expect("remote MCP supervisor");
+        let credential_vault = vault(&root);
+        let supervisor = McpSupervisor::new(
+            store,
+            root.clone(),
+            Some(credential_vault.clone()),
+            limits(),
+        )
+        .expect("remote MCP supervisor");
         for (name, transport, endpoint) in [
             ("http", McpTransport::Http, mock.http_url()),
             ("sse", McpTransport::Sse, mock.sse_url()),
@@ -496,7 +611,7 @@ async fn remote_transports_round_trip_tools_resources_health_and_restart_recover
             let server = supervisor
                 .create_server(
                     &active_scope,
-                    definition(name, transport, endpoint),
+                    definition(&credential_vault, name, transport, endpoint),
                     &format!("create-{name}"),
                 )
                 .expect("create remote MCP server");
@@ -558,10 +673,11 @@ async fn remote_transports_fail_closed_for_timeout_status_redirect_malformed_and
     let root = root("failures");
     fs::create_dir_all(&root).expect("create remote MCP root");
     let active_scope = scope();
+    let credential_vault = vault(&root);
     let supervisor = McpSupervisor::new(
         DesktopSessionStore::in_memory().expect("session store"),
         root.clone(),
-        Some(vault(&root)),
+        Some(credential_vault.clone()),
         limits(),
     )
     .expect("remote MCP supervisor");
@@ -588,7 +704,7 @@ async fn remote_transports_fail_closed_for_timeout_status_redirect_malformed_and
         let server = supervisor
             .create_server(
                 &active_scope,
-                definition(name, McpTransport::Http, mock.http_url()),
+                definition(&credential_vault, name, McpTransport::Http, mock.http_url()),
                 &format!("create-{name}"),
             )
             .expect("create failing remote MCP server");
@@ -603,7 +719,12 @@ async fn remote_transports_fail_closed_for_timeout_status_redirect_malformed_and
     let server = supervisor
         .create_server(
             &active_scope,
-            definition("redirect", McpTransport::Http, redirect.redirect_url()),
+            definition(
+                &credential_vault,
+                "redirect",
+                McpTransport::Http,
+                redirect.redirect_url(),
+            ),
             "create-redirect",
         )
         .expect("create redirecting MCP server");
@@ -615,7 +736,7 @@ async fn remote_transports_fail_closed_for_timeout_status_redirect_malformed_and
 
     let insecure = supervisor.create_server(
         &active_scope,
-        definition(
+        definition_without_credentials(
             "insecure",
             McpTransport::Http,
             "http://example.com/mcp".to_string(),
@@ -637,10 +758,11 @@ async fn websocket_reconnects_after_disconnect_and_correlates_notifications_by_r
     fs::create_dir_all(&root).expect("create remote MCP root");
     let mock = MockRemoteServer::spawn(MockMode::DisconnectOnce).await;
     let active_scope = scope();
+    let credential_vault = vault(&root);
     let supervisor = McpSupervisor::new(
         DesktopSessionStore::in_memory().expect("session store"),
         root.clone(),
-        Some(vault(&root)),
+        Some(credential_vault.clone()),
         limits(),
     )
     .expect("remote MCP supervisor");
@@ -648,6 +770,7 @@ async fn websocket_reconnects_after_disconnect_and_correlates_notifications_by_r
         .create_server(
             &active_scope,
             definition(
+                &credential_vault,
                 "websocket-reconnect",
                 McpTransport::Websocket,
                 mock.websocket_url(),
@@ -712,17 +835,23 @@ async fn remote_elicitation_is_rejected_when_no_authoritative_user_response_brid
     fs::create_dir_all(&root).expect("create remote MCP root");
     let mock = MockRemoteServer::spawn(MockMode::Elicitation).await;
     let active_scope = scope();
+    let credential_vault = vault(&root);
     let supervisor = McpSupervisor::new(
         DesktopSessionStore::in_memory().expect("session store"),
         root.clone(),
-        Some(vault(&root)),
+        Some(credential_vault.clone()),
         limits(),
     )
     .expect("remote MCP supervisor");
     let server = supervisor
         .create_server(
             &active_scope,
-            definition("elicitation", McpTransport::Websocket, mock.websocket_url()),
+            definition(
+                &credential_vault,
+                "elicitation",
+                McpTransport::Websocket,
+                mock.websocket_url(),
+            ),
             "create-elicitation",
         )
         .expect("create elicitation MCP server");

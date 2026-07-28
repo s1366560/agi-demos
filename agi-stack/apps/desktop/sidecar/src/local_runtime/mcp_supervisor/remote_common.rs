@@ -11,13 +11,17 @@ use reqwest::{
     Client, Response,
 };
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use tokio::net::lookup_host;
 use url::{Host, Url};
 use zeroize::Zeroize;
 
 use crate::application_vault::ApplicationCredentialVault;
 
-use super::{McpResult, McpServerDefinition, McpSupervisorError, McpTransport, SupervisorLimits};
+use super::{
+    McpResult, McpScope, McpServerDefinition, McpServerDefinitionInput, McpSupervisorError,
+    McpTransport, SupervisorLimits,
+};
 
 pub(super) const STREAMABLE_HTTP_PROTOCOL_VERSION: &str = "2025-03-26";
 pub(super) const MAX_CORRELATION_MESSAGES: usize = 64;
@@ -32,6 +36,7 @@ const RESERVED_REMOTE_HEADERS: [&str; 8] = [
     "mcp-session-id",
     "transfer-encoding",
 ];
+const MCP_REMOTE_CREDENTIAL_PREFIX: &str = "mcp-remote-credential.v1";
 
 #[derive(Clone)]
 pub(super) struct ResolvedEndpoint {
@@ -52,7 +57,11 @@ pub(super) struct SseEvent {
 
 #[derive(Default)]
 pub(super) struct SseDecoder {
-    buffer: Vec<u8>,
+    line: Vec<u8>,
+    event: Option<String>,
+    data: Vec<u8>,
+    has_data: bool,
+    swallow_lf: bool,
 }
 
 impl SseDecoder {
@@ -60,23 +69,102 @@ impl SseDecoder {
         &mut self,
         chunk: &[u8],
         max_frame_bytes: usize,
+        max_aggregate_bytes: usize,
     ) -> McpResult<Vec<SseEvent>> {
-        self.buffer.extend_from_slice(chunk);
+        if chunk.len() > max_frame_bytes {
+            return Err(response_too_large());
+        }
         let mut events = Vec::new();
-        while let Some((end, delimiter_len)) = event_boundary(&self.buffer) {
-            if end > max_frame_bytes {
+        let mut emitted_bytes = 0_usize;
+        for byte in chunk.iter().copied() {
+            if self.swallow_lf {
+                self.swallow_lf = false;
+                if byte == b'\n' {
+                    continue;
+                }
+            }
+            let event = match byte {
+                b'\r' => {
+                    self.swallow_lf = true;
+                    self.finish_line(max_frame_bytes, max_aggregate_bytes)?
+                }
+                b'\n' => self.finish_line(max_frame_bytes, max_aggregate_bytes)?,
+                value => {
+                    self.line.push(value);
+                    if self.line.len() > max_frame_bytes
+                        || self.current_allocation() > max_aggregate_bytes
+                    {
+                        return Err(response_too_large());
+                    }
+                    None
+                }
+            };
+            let Some(event) = event else {
+                continue;
+            };
+            emitted_bytes = emitted_bytes
+                .saturating_add(event.data.len())
+                .saturating_add(event.event.as_ref().map_or(0, String::len));
+            if events.len() >= MAX_CORRELATION_MESSAGES || emitted_bytes > max_aggregate_bytes {
                 return Err(response_too_large());
             }
-            let raw = self.buffer.drain(..end).collect::<Vec<_>>();
-            self.buffer.drain(..delimiter_len);
-            if let Some(event) = parse_event(&raw)? {
-                events.push(event);
-            }
+            events.push(event);
         }
-        if self.buffer.len() > max_frame_bytes {
+        if self.current_allocation() > max_aggregate_bytes {
             return Err(response_too_large());
         }
         Ok(events)
+    }
+
+    fn finish_line(
+        &mut self,
+        max_frame_bytes: usize,
+        max_aggregate_bytes: usize,
+    ) -> McpResult<Option<SseEvent>> {
+        let line = std::mem::take(&mut self.line);
+        if line.is_empty() {
+            if !self.has_data {
+                self.event = None;
+                return Ok(None);
+            }
+            self.has_data = false;
+            return Ok(Some(SseEvent {
+                event: self.event.take(),
+                data: std::mem::take(&mut self.data),
+            }));
+        }
+        if line.first() == Some(&b':') {
+            return Ok(None);
+        }
+        let separator = line.iter().position(|byte| *byte == b':');
+        let (field, raw_value) = separator.map_or((&line[..], &[][..]), |index| {
+            (&line[..index], &line[index.saturating_add(1)..])
+        });
+        let value = raw_value.strip_prefix(b" ").unwrap_or(raw_value);
+        if field == b"event" {
+            self.event = Some(
+                std::str::from_utf8(value)
+                    .map_err(|_| malformed_response())?
+                    .to_string(),
+            );
+        } else if field == b"data" {
+            if self.has_data {
+                self.data.push(b'\n');
+            }
+            self.data.extend_from_slice(value);
+            self.has_data = true;
+        }
+        if self.data.len() > max_frame_bytes || self.current_allocation() > max_aggregate_bytes {
+            return Err(response_too_large());
+        }
+        Ok(None)
+    }
+
+    fn current_allocation(&self) -> usize {
+        self.line
+            .len()
+            .saturating_add(self.data.len())
+            .saturating_add(self.event.as_ref().map_or(0, String::len))
     }
 }
 
@@ -111,8 +199,55 @@ pub(super) fn validate_remote_header_names(
     Ok(())
 }
 
+pub(super) fn validate_remote_credential_bindings(
+    scope: &McpScope,
+    input: &McpServerDefinitionInput,
+) -> McpResult<()> {
+    let endpoint = input.command.first().ok_or_else(endpoint_invalid)?;
+    for (header_name, reference) in &input.vault_env_refs {
+        let expected = remote_credential_reference(
+            scope,
+            &input.name,
+            input.transport,
+            endpoint,
+            header_name,
+        )?;
+        if reference != &expected {
+            return Err(remote_credential_scope_invalid());
+        }
+    }
+    Ok(())
+}
+
+pub(in crate::local_runtime) fn remote_credential_reference(
+    scope: &McpScope,
+    server_name: &str,
+    transport: McpTransport,
+    endpoint: &str,
+    header_name: &str,
+) -> McpResult<String> {
+    let url = validate_remote_url(endpoint, transport, false)?;
+    let header_name = HeaderName::from_str(header_name).map_err(|_| remote_header_invalid())?;
+    let mut digest = Sha256::new();
+    digest.update(b"memstack-desktop-mcp-remote-credential-v1\0");
+    digest.update(scope.tenant_id.as_bytes());
+    digest.update(b"\0");
+    digest.update(scope.project_id.as_bytes());
+    digest.update(b"\0");
+    digest.update(server_name.as_bytes());
+    digest.update(b"\0");
+    digest.update(url.origin().ascii_serialization().as_bytes());
+    digest.update(b"\0");
+    digest.update(header_name.as_str().as_bytes());
+    Ok(format!(
+        "{MCP_REMOTE_CREDENTIAL_PREFIX}.{:x}",
+        digest.finalize()
+    ))
+}
+
 pub(super) async fn resolve_remote_endpoint(
     server: &McpServerDefinition,
+    lookup_timeout: Duration,
 ) -> McpResult<ResolvedEndpoint> {
     let url = validate_remote_definition(server)?;
     let host = url.host_str().ok_or_else(endpoint_invalid)?.to_string();
@@ -120,8 +255,9 @@ pub(super) async fn resolve_remote_endpoint(
     let addresses = match url.host().ok_or_else(endpoint_invalid)? {
         Host::Ipv4(address) => vec![SocketAddr::new(IpAddr::V4(address), port)],
         Host::Ipv6(address) => vec![SocketAddr::new(IpAddr::V6(address), port)],
-        Host::Domain(domain) => lookup_host((domain, port))
+        Host::Domain(domain) => tokio::time::timeout(lookup_timeout, lookup_host((domain, port)))
             .await
+            .map_err(|_| request_timeout())?
             .map_err(|_| endpoint_resolution_rejected())?
             .collect(),
     };
@@ -141,16 +277,18 @@ pub(super) fn remote_headers(
     credential_vault: Option<&ApplicationCredentialVault>,
 ) -> McpResult<HeaderMap> {
     let mut headers = HeaderMap::new();
+    if server.vault_env_refs.is_empty() {
+        return Ok(headers);
+    }
+    let broker = McpRemoteCredentialBroker {
+        vault: credential_vault.ok_or_else(vault_unavailable)?,
+    };
     for (name, reference) in &server.vault_env_refs {
         let header_name = HeaderName::from_str(name).map_err(|_| remote_header_invalid())?;
         if RESERVED_REMOTE_HEADERS.contains(&header_name.as_str()) {
             return Err(remote_header_invalid());
         }
-        let mut value = credential_vault
-            .ok_or_else(vault_unavailable)?
-            .get(reference)
-            .map_err(|_| vault_unavailable())?
-            .ok_or_else(vault_unavailable)?;
+        let mut value = broker.resolve(server, &header_name, reference)?;
         let header_value = match HeaderValue::from_str(&value) {
             Ok(header_value) => header_value,
             Err(_) => {
@@ -162,6 +300,39 @@ pub(super) fn remote_headers(
         headers.insert(header_name, header_value);
     }
     Ok(headers)
+}
+
+struct McpRemoteCredentialBroker<'a> {
+    vault: &'a ApplicationCredentialVault,
+}
+
+impl McpRemoteCredentialBroker<'_> {
+    fn resolve(
+        &self,
+        server: &McpServerDefinition,
+        header_name: &HeaderName,
+        reference: &str,
+    ) -> McpResult<String> {
+        let scope = McpScope {
+            tenant_id: server.tenant_id.clone(),
+            project_id: server.project_id.clone(),
+        };
+        let endpoint = server.command.first().ok_or_else(endpoint_invalid)?;
+        let expected = remote_credential_reference(
+            &scope,
+            &server.name,
+            server.transport,
+            endpoint,
+            header_name.as_str(),
+        )?;
+        if reference != expected {
+            return Err(remote_credential_scope_invalid());
+        }
+        self.vault
+            .get(reference)
+            .map_err(|_| vault_unavailable())?
+            .ok_or_else(vault_unavailable)
+    }
 }
 
 pub(super) fn build_client(endpoint: &ResolvedEndpoint) -> McpResult<Client> {
@@ -522,43 +693,6 @@ fn is_globally_routable_v4(octets: [u8; 4]) -> bool {
     }
 }
 
-fn event_boundary(buffer: &[u8]) -> Option<(usize, usize)> {
-    buffer
-        .windows(2)
-        .position(|window| window == b"\n\n")
-        .map(|index| (index, 2))
-        .or_else(|| {
-            buffer
-                .windows(4)
-                .position(|window| window == b"\r\n\r\n")
-                .map(|index| (index, 4))
-        })
-}
-
-fn parse_event(raw: &[u8]) -> McpResult<Option<SseEvent>> {
-    let text = std::str::from_utf8(raw).map_err(|_| malformed_response())?;
-    let mut event = None;
-    let mut data = Vec::new();
-    for line in text.lines() {
-        let line = line.trim_end_matches('\r');
-        if line.starts_with(':') {
-            continue;
-        }
-        if let Some(value) = line.strip_prefix("event:") {
-            event = Some(value.trim_start().to_string());
-        } else if let Some(value) = line.strip_prefix("data:") {
-            if !data.is_empty() {
-                data.push(b'\n');
-            }
-            data.extend_from_slice(value.trim_start().as_bytes());
-        }
-    }
-    if data.is_empty() {
-        return Ok(None);
-    }
-    Ok(Some(SseEvent { event, data }))
-}
-
 fn endpoint_invalid() -> McpSupervisorError {
     McpSupervisorError::new(
         "local_mcp_endpoint_invalid",
@@ -584,5 +718,12 @@ fn remote_header_invalid() -> McpSupervisorError {
     McpSupervisorError::new(
         "local_mcp_remote_header_invalid",
         "MCP remote header vault reference is invalid",
+    )
+}
+
+fn remote_credential_scope_invalid() -> McpSupervisorError {
+    McpSupervisorError::new(
+        "local_mcp_remote_credential_scope_invalid",
+        "MCP remote credential reference is outside its tenant, project, server, or origin scope",
     )
 }

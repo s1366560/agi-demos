@@ -73,7 +73,7 @@ impl HttpRuntime {
         }
         self.reset(server, credential_vault, limits).await;
         self.enforce_backoff()?;
-        let endpoint = match resolve_remote_endpoint(server).await {
+        let endpoint = match resolve_remote_endpoint(server, limits.initialize_timeout).await {
             Ok(endpoint) => endpoint,
             Err(error) => {
                 self.fail(server, credential_vault, limits).await;
@@ -389,7 +389,7 @@ impl SseRuntime {
         }
         self.stop();
         self.enforce_backoff()?;
-        let endpoint = match resolve_remote_endpoint(server).await {
+        let endpoint = match resolve_remote_endpoint(server, limits.initialize_timeout).await {
             Ok(endpoint) => endpoint,
             Err(error) => {
                 self.fail(limits);
@@ -641,13 +641,13 @@ impl SseRuntime {
             HeaderValue::from_static("application/json"),
         );
         headers.insert(header::ACCEPT, HeaderValue::from_static("application/json"));
-        let response = client
-            .post(endpoint)
-            .headers(headers)
-            .body(encoded)
-            .send()
-            .await
-            .map_err(|_| connection_closed())?;
+        let response = timeout(
+            limits.request_timeout,
+            client.post(endpoint).headers(headers).body(encoded).send(),
+        )
+        .await
+        .map_err(|_| request_timeout())?
+        .map_err(|_| connection_closed())?;
         if response.status().is_redirection() {
             return Err(McpSupervisorError::new(
                 "local_mcp_redirect_rejected",
@@ -684,9 +684,11 @@ impl SseRuntime {
             if received > aggregate_remaining {
                 return Err(response_too_large());
             }
-            connection
-                .pending
-                .extend(connection.decoder.push(&chunk, limits.max_frame_bytes)?);
+            connection.pending.extend(connection.decoder.push(
+                &chunk,
+                limits.max_frame_bytes,
+                limits.max_aggregate_bytes,
+            )?);
             if let Some(event) = connection.pending.pop_front() {
                 return Ok(event);
             }
@@ -756,7 +758,7 @@ async fn response_messages(
             if aggregate > limits.max_aggregate_bytes {
                 return Err(response_too_large());
             }
-            for event in decoder.push(&chunk, limits.max_frame_bytes)? {
+            for event in decoder.push(&chunk, limits.max_frame_bytes, limits.max_aggregate_bytes)? {
                 if event.event.as_deref().is_some_and(|kind| kind != "message") {
                     continue;
                 }

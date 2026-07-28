@@ -64,7 +64,7 @@ impl WebSocketRuntime {
         self.stop(limits).await;
         self.enforce_backoff()?;
         let connected: McpResult<WebSocket> = async {
-            let endpoint = resolve_remote_endpoint(server).await?;
+            let endpoint = resolve_remote_endpoint(server, limits.initialize_timeout).await?;
             let headers = remote_headers(server, credential_vault)?;
             connect_websocket(&endpoint, &headers, limits).await
         }

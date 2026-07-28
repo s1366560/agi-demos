@@ -28,7 +28,8 @@ use uuid::Uuid;
 use super::{
     http::HttpRuntime,
     remote_common::{
-        is_globally_routable, validate_remote_url, validate_resolved_addresses, ResolvedEndpoint,
+        is_globally_routable, remote_credential_reference, remote_headers, resolve_remote_endpoint,
+        validate_remote_url, validate_resolved_addresses, ResolvedEndpoint, SseDecoder,
     },
     store::McpStore,
     tool_call_lease::ToolCallReservation,
@@ -36,7 +37,10 @@ use super::{
     McpScope, McpServerDefinition, McpServerDefinitionInput, McpSupervisor, McpTransport,
     SupervisorLimits,
 };
-use crate::local_runtime::DesktopSessionStore;
+use crate::{
+    application_vault::ApplicationCredentialVault,
+    local_runtime::{DesktopSessionStore, LocalRuntimeService},
+};
 
 enum WebSocketBehavior {
     Oversized(usize),
@@ -406,6 +410,393 @@ fn resolved_remote_policy_rejects_mixed_or_non_global_dns_answers() {
     .expect("canonical localhost answers");
 }
 
+#[test]
+fn remote_credentials_are_bound_to_mcp_scope_server_origin_and_header() {
+    let root = root("credential-scope");
+    fs::create_dir_all(&root).expect("create credential scope root");
+    let vault = ApplicationCredentialVault::open(&root).expect("open credential scope vault");
+    vault
+        .put("trusted-session.v1", "must-not-be-reused")
+        .expect("store trusted-session fixture");
+    let mut server = remote_server("http://127.0.0.1:12345/mcp".to_string(), 1);
+    server.vault_env_refs = BTreeMap::from([(
+        "authorization".to_string(),
+        "trusted-session.v1".to_string(),
+    )]);
+    let supervisor = McpSupervisor::new(
+        DesktopSessionStore::in_memory().expect("credential scope session store"),
+        root.clone(),
+        Some(vault.clone()),
+        limits(),
+    )
+    .expect("credential scope supervisor");
+    let registration_error = supervisor
+        .create_server(
+            &scope(),
+            McpServerDefinitionInput {
+                name: server.name.clone(),
+                description: None,
+                transport: server.transport,
+                command: server.command.clone(),
+                cwd: None,
+                vault_env_refs: server.vault_env_refs.clone(),
+                enabled: true,
+            },
+            "create-unscoped-credential",
+        )
+        .expect_err("unscoped credential must be rejected during registration");
+    assert_eq!(
+        registration_error.reason_code(),
+        "local_mcp_remote_credential_scope_invalid"
+    );
+    let general_error = remote_headers(&server, Some(&vault))
+        .expect_err("general vault record must not be accepted as MCP credential");
+    assert_eq!(
+        general_error.reason_code(),
+        "local_mcp_remote_credential_scope_invalid"
+    );
+
+    let wrong_scope = McpScope {
+        tenant_id: server.tenant_id.clone(),
+        project_id: "another-project".to_string(),
+    };
+    let wrong_reference = remote_credential_reference(
+        &wrong_scope,
+        &server.name,
+        server.transport,
+        &server.command[0],
+        "authorization",
+    )
+    .expect("derive wrong-scope reference");
+    vault
+        .put(&wrong_reference, "wrong-scope-secret")
+        .expect("store wrong-scope fixture");
+    server
+        .vault_env_refs
+        .insert("authorization".to_string(), wrong_reference);
+    let scope_error = remote_headers(&server, Some(&vault))
+        .expect_err("cross-project MCP credential must be rejected");
+    assert_eq!(
+        scope_error.reason_code(),
+        "local_mcp_remote_credential_scope_invalid"
+    );
+
+    let reference = remote_credential_reference(
+        &scope(),
+        &server.name,
+        server.transport,
+        &server.command[0],
+        "authorization",
+    )
+    .expect("derive scoped MCP credential reference");
+    vault
+        .put(&reference, "Bearer scoped-secret")
+        .expect("store scoped MCP credential");
+    server
+        .vault_env_refs
+        .insert("authorization".to_string(), reference.clone());
+    let mut wrong_server = server.clone();
+    wrong_server.name = "another-server".to_string();
+    assert_eq!(
+        remote_headers(&wrong_server, Some(&vault))
+            .expect_err("credential must not cross server bindings")
+            .reason_code(),
+        "local_mcp_remote_credential_scope_invalid"
+    );
+    let mut wrong_origin = server.clone();
+    wrong_origin.command = vec!["http://127.0.0.1:12346/mcp".to_string()];
+    assert_eq!(
+        remote_headers(&wrong_origin, Some(&vault))
+            .expect_err("credential must not cross remote origins")
+            .reason_code(),
+        "local_mcp_remote_credential_scope_invalid"
+    );
+    let headers = remote_headers(&server, Some(&vault)).expect("resolve scoped MCP credential");
+    assert_eq!(
+        headers
+            .get("authorization")
+            .and_then(|value| value.to_str().ok()),
+        Some("Bearer scoped-secret")
+    );
+    fs::remove_dir_all(root).expect("remove credential scope root");
+}
+
+#[test]
+fn server_and_app_runtime_health_transitions_are_atomic_and_clear_errors() {
+    let root = root("health-truth");
+    fs::create_dir_all(&root).expect("create health truth root");
+    let supervisor = McpSupervisor::new(
+        DesktopSessionStore::in_memory().expect("health truth session store"),
+        root.clone(),
+        None,
+        limits(),
+    )
+    .expect("health truth supervisor");
+    let active_scope = scope();
+    let server = supervisor
+        .create_server(
+            &active_scope,
+            McpServerDefinitionInput {
+                name: "health-truth".to_string(),
+                description: None,
+                transport: McpTransport::Stdio,
+                command: vec!["/bin/false".to_string()],
+                cwd: None,
+                vault_env_refs: BTreeMap::new(),
+                enabled: true,
+            },
+            "create-health-truth",
+        )
+        .expect("create health truth server");
+    supervisor
+        .store
+        .record_tools_and_apps(
+            &server,
+            &[json!({
+                "name": "render",
+                "_meta": {"ui/resourceUri": "ui://health-truth/index.html"},
+            })],
+        )
+        .expect("record healthy app");
+    assert_eq!(
+        supervisor
+            .list_apps(&active_scope)
+            .expect("list healthy apps")[0]
+            .status,
+        "healthy"
+    );
+
+    supervisor
+        .store
+        .record_runtime_error(&server, "local_mcp_connection_closed")
+        .expect("record runtime failure");
+    assert_eq!(
+        supervisor
+            .health(&active_scope, &server.id)
+            .expect("failed server health")
+            .status,
+        "error"
+    );
+    assert_eq!(
+        supervisor
+            .list_apps(&active_scope)
+            .expect("list failed apps")[0]
+            .status,
+        "error"
+    );
+
+    supervisor
+        .store
+        .record_runtime_ready(&server, &json!({"name": "health-truth", "version": "1"}))
+        .expect("record runtime recovery");
+    let health = supervisor
+        .health(&active_scope, &server.id)
+        .expect("recovered server health");
+    assert_eq!(health.status, "healthy");
+    assert_eq!(health.reason_code, None);
+    assert_eq!(
+        supervisor
+            .list_apps(&active_scope)
+            .expect("list recovered apps")[0]
+            .status,
+        "healthy"
+    );
+    fs::remove_dir_all(root).expect("remove health truth root");
+}
+
+#[test]
+fn sse_decoder_accepts_cr_lf_crlf_and_chunk_split_newlines() {
+    let mut decoder = SseDecoder::default();
+    let mut events = decoder
+        .push(b"event: message\rdata: first\r\n\r", 1024, 4096)
+        .expect("decode mixed first chunk");
+    events.extend(
+        decoder
+            .push(b"\ndata: second\n\n", 1024, 4096)
+            .expect("decode split CRLF and LF event"),
+    );
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0].event.as_deref(), Some("message"));
+    assert_eq!(events[0].data, b"first");
+    assert_eq!(events[1].event, None);
+    assert_eq!(events[1].data, b"second");
+}
+
+#[test]
+fn sse_decoder_rejects_chunk_event_flood_and_total_allocation_growth() {
+    let mut decoder = SseDecoder::default();
+    let flood = "data: x\n\n".repeat(65);
+    let flood_error = decoder
+        .push(flood.as_bytes(), flood.len(), flood.len().saturating_mul(2))
+        .expect_err("event flood must be rejected");
+    assert_eq!(flood_error.reason_code(), "local_mcp_response_too_large");
+
+    let mut decoder = SseDecoder::default();
+    let chunk_error = decoder
+        .push(b"data: oversized chunk", 8, 64)
+        .expect_err("oversized chunk must be rejected before buffering");
+    assert_eq!(chunk_error.reason_code(), "local_mcp_response_too_large");
+
+    let mut decoder = SseDecoder::default();
+    let allocation_error = decoder
+        .push(b"data: 012345678901234567890123456789", 64, 16)
+        .expect_err("aggregate decoder allocation must be bounded");
+    assert_eq!(
+        allocation_error.reason_code(),
+        "local_mcp_response_too_large"
+    );
+}
+
+#[tokio::test]
+async fn dns_lookup_is_bounded_by_its_deadline() {
+    let server = remote_server("https://example.com/mcp".to_string(), 1);
+    let started = tokio::time::Instant::now();
+    let error = match resolve_remote_endpoint(&server, Duration::ZERO).await {
+        Err(error) => error,
+        Ok(_) => panic!("zero DNS deadline must fail closed"),
+    };
+    assert_eq!(error.reason_code(), "local_mcp_request_timeout");
+    assert!(started.elapsed() < Duration::from_millis(100));
+}
+
+#[tokio::test]
+async fn per_server_mutex_wait_is_inside_the_total_request_deadline() {
+    let root = root("mutex-deadline");
+    fs::create_dir_all(&root).expect("create mutex deadline root");
+    let mut test_limits = limits();
+    test_limits.initialize_timeout = Duration::from_millis(30);
+    test_limits.request_timeout = Duration::from_millis(30);
+    let supervisor = McpSupervisor::new(
+        DesktopSessionStore::in_memory().expect("mutex deadline session store"),
+        root.clone(),
+        None,
+        test_limits,
+    )
+    .expect("mutex deadline supervisor");
+    let active_scope = scope();
+    let server = supervisor
+        .create_server(
+            &active_scope,
+            McpServerDefinitionInput {
+                name: "mutex-deadline".to_string(),
+                description: None,
+                transport: McpTransport::Websocket,
+                command: vec!["ws://127.0.0.1:9/mcp".to_string()],
+                cwd: None,
+                vault_env_refs: BTreeMap::new(),
+                enabled: true,
+            },
+            "create-mutex-deadline",
+        )
+        .expect("create mutex deadline server");
+    let runtime = supervisor
+        .runtime(&server)
+        .expect("resolve mutex deadline runtime");
+    let _guard = runtime.lock().await;
+    let started = tokio::time::Instant::now();
+    let error = supervisor
+        .list_tools(&active_scope, &server.id)
+        .await
+        .expect_err("runtime mutex wait must time out");
+    assert_eq!(error.reason_code(), "local_mcp_request_timeout");
+    assert!(started.elapsed() < Duration::from_millis(250));
+    fs::remove_dir_all(root).expect("remove mutex deadline root");
+}
+
+#[tokio::test]
+async fn enabled_server_recovery_is_bounded_background_work() {
+    let root = root("background-recovery");
+    fs::create_dir_all(&root).expect("create background recovery root");
+    let mut test_limits = limits();
+    test_limits.initialize_timeout = Duration::from_millis(25);
+    test_limits.request_timeout = Duration::from_millis(25);
+    let supervisor = McpSupervisor::new(
+        DesktopSessionStore::in_memory().expect("background recovery session store"),
+        root.clone(),
+        None,
+        test_limits,
+    )
+    .expect("background recovery supervisor");
+    let active_scope = scope();
+    supervisor
+        .create_server(
+            &active_scope,
+            McpServerDefinitionInput {
+                name: "bad-recovery".to_string(),
+                description: None,
+                transport: McpTransport::Http,
+                command: vec!["http://127.0.0.1:9/mcp".to_string()],
+                cwd: None,
+                vault_env_refs: BTreeMap::new(),
+                enabled: true,
+            },
+            "create-bad-recovery",
+        )
+        .expect("create bad recovery server");
+    let started = tokio::time::Instant::now();
+    supervisor
+        .recover_all_enabled()
+        .await
+        .expect("schedule enabled server recovery");
+    assert!(started.elapsed() < Duration::from_millis(20));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    fs::remove_dir_all(root).expect("remove background recovery root");
+}
+
+#[tokio::test]
+async fn local_runtime_listener_starts_before_bad_remote_recovery_finishes() {
+    let root = root("listener-before-recovery");
+    let app_data = root.join("app-data");
+    let workspace = root.join("workspace");
+    fs::create_dir_all(&app_data).expect("create listener app data");
+    fs::create_dir_all(&workspace).expect("create listener workspace");
+    let database = app_data.join("agistack-desktop-sessions.db");
+    let seeder = McpSupervisor::new(
+        DesktopSessionStore::open(&database).expect("listener seed session store"),
+        workspace.clone(),
+        None,
+        limits(),
+    )
+    .expect("listener seed supervisor");
+    seeder
+        .create_server(
+            &scope(),
+            McpServerDefinitionInput {
+                name: "bad-startup-remote".to_string(),
+                description: None,
+                transport: McpTransport::Http,
+                command: vec!["http://127.0.0.1:9/mcp".to_string()],
+                cwd: None,
+                vault_env_refs: BTreeMap::new(),
+                enabled: true,
+            },
+            "create-bad-startup-remote",
+        )
+        .expect("seed bad startup remote");
+    drop(seeder);
+
+    let vault = ApplicationCredentialVault::open(&app_data).expect("listener application vault");
+    let started = tokio::time::Instant::now();
+    let runtime = tokio::time::timeout(
+        Duration::from_secs(2),
+        LocalRuntimeService::start(app_data, workspace, vault),
+    )
+    .await
+    .expect("local runtime startup deadline")
+    .expect("start local runtime with bad remote");
+    assert!(started.elapsed() < Duration::from_secs(2));
+    let url = Url::parse(&runtime.status().api_base_url).expect("parse local runtime URL");
+    let address = (
+        url.host_str().expect("local runtime host"),
+        url.port().expect("local runtime port"),
+    );
+    tokio::net::TcpStream::connect(address)
+        .await
+        .expect("listener must accept connections before recovery completes");
+    runtime.shutdown().await;
+    fs::remove_dir_all(root).expect("remove listener startup root");
+}
+
 #[tokio::test]
 async fn websocket_connection_falls_back_across_ordered_dual_stack_addresses() {
     let listener = TcpListener::bind("127.0.0.1:0")
@@ -496,7 +887,21 @@ async fn websocket_request_timeout_bounds_a_stalled_send_and_receive_cycle() {
         )
         .await
         .expect_err("stalled WebSocket send must time out");
-    assert_eq!(error.reason_code(), "local_mcp_request_timeout");
+    assert_eq!(error.reason_code(), "local_mcp_tool_call_indeterminate");
+    let replay_error = supervisor
+        .call_tool(
+            &active_scope,
+            &server_id,
+            "echo",
+            json!({"payload": "x".repeat(8 * 1024 * 1024)}),
+            Some("stalled-send-key"),
+        )
+        .await
+        .expect_err("indeterminate tool call must never be replayed");
+    assert_eq!(
+        replay_error.reason_code(),
+        "local_mcp_tool_call_indeterminate"
+    );
     assert!(started.elapsed() < Duration::from_secs(2));
     drop(supervisor);
     fs::remove_dir_all(root).expect("remove stalled-send root");
@@ -606,7 +1011,7 @@ async fn pending_tool_call_returns_structured_in_progress_without_remote_reexecu
 }
 
 #[test]
-fn expired_persisted_lease_is_recovered_and_fences_the_stale_owner() {
+fn expired_pre_dispatch_lease_is_recovered_and_fences_the_stale_owner() {
     let root = root("lease-recovery");
     fs::create_dir_all(&root).expect("create lease recovery root");
     let database = root.join("desktop.db");
@@ -648,10 +1053,13 @@ fn expired_persisted_lease_is_recovered_and_fences_the_stale_owner() {
         _ => panic!("expired lease must be acquired"),
     };
     let stale_error = reopened
-        .complete_tool_call(&stale, &json!({"content": []}))
+        .mark_tool_call_dispatched(&stale, 1_012)
         .expect_err("stale owner must be fenced");
     assert_eq!(stale_error.reason_code(), "local_mcp_tool_call_lease_lost");
     let response = json!({"content": [{"type": "text", "text": "ok"}], "isError": false});
+    reopened
+        .mark_tool_call_dispatched(&current, 1_012)
+        .expect("mark current lease dispatched");
     reopened
         .complete_tool_call(&current, &response)
         .expect("complete current lease");
@@ -671,4 +1079,69 @@ fn expired_persisted_lease_is_recovered_and_fences_the_stale_owner() {
     }
     drop(reopened);
     fs::remove_dir_all(root).expect("remove lease recovery root");
+}
+
+#[test]
+fn dispatched_tool_call_is_indeterminate_after_restart_and_never_taken_over() {
+    let root = root("indeterminate-restart");
+    fs::create_dir_all(&root).expect("create indeterminate restart root");
+    let database = root.join("desktop.db");
+    let active_scope = scope();
+    let first_store = McpStore::new(
+        DesktopSessionStore::open(&database).expect("first indeterminate session store"),
+    )
+    .expect("first MCP store");
+    let dispatched = match first_store
+        .reserve_tool_call(
+            &active_scope,
+            "indeterminate-key",
+            "request-hash",
+            "server-id",
+            1_000,
+            Duration::from_millis(10),
+        )
+        .expect("reserve pre-dispatch lease")
+    {
+        ToolCallReservation::Acquired(lease) => lease,
+        _ => panic!("first lease must be acquired"),
+    };
+    first_store
+        .mark_tool_call_dispatched(&dispatched, 1_001)
+        .expect("mark persisted call dispatched");
+    drop(first_store);
+
+    let reopened = McpStore::new(
+        DesktopSessionStore::open(&database).expect("reopened indeterminate session store"),
+    )
+    .expect("reopened MCP store");
+    match reopened
+        .reserve_tool_call(
+            &active_scope,
+            "indeterminate-key",
+            "request-hash",
+            "server-id",
+            2_000,
+            Duration::from_millis(10),
+        )
+        .expect("read dispatched lease after restart")
+    {
+        ToolCallReservation::Indeterminate => {}
+        _ => panic!("dispatched lease must be indeterminate after owner expiry"),
+    }
+    match reopened
+        .reserve_tool_call(
+            &active_scope,
+            "indeterminate-key",
+            "request-hash",
+            "server-id",
+            3_000,
+            Duration::from_millis(10),
+        )
+        .expect("repeat indeterminate reservation")
+    {
+        ToolCallReservation::Indeterminate => {}
+        _ => panic!("indeterminate lease must never be taken over"),
+    }
+    drop(reopened);
+    fs::remove_dir_all(root).expect("remove indeterminate restart root");
 }

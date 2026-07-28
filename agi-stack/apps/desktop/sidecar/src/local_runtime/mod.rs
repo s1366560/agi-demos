@@ -188,12 +188,6 @@ impl LocalRuntimeService {
         state.start_automation_worker_with_config(
             automation_worker::AutomationWorkerConfig::local_default(),
         )?;
-        state
-            .mcp_supervisor
-            .recover_all_enabled()
-            .await
-            .map_err(|error| error.to_string())?;
-
         let app = local_router(Arc::clone(&state));
         let listener = TcpListener::bind(("127.0.0.1", 0))
             .await
@@ -205,6 +199,11 @@ impl LocalRuntimeService {
                 eprintln!("agistack local runtime stopped: {error}");
             }
         });
+        state
+            .mcp_supervisor
+            .recover_all_enabled()
+            .await
+            .map_err(|error| error.to_string())?;
 
         Ok(Self {
             state,
