@@ -259,7 +259,7 @@
   place-items: center;
   border: 1px solid var(--desktop-border);
   border-radius: 50%;
-  background: #192535;
+  background: var(--desktop-surface-31);
   color: var(--desktop-cyan);
 }
 

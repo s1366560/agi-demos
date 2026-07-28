@@ -5,7 +5,7 @@
   display: grid;
   place-items: center;
   padding: 26px;
-  background: rgb(3 7 11 / 76%);
+  background: rgba(var(--desktop-overlay-1-rgb), 76%);
   backdrop-filter: blur(3px);
 }
 
@@ -17,7 +17,7 @@
   overflow: hidden;
   color: var(--desktop-text);
   background: var(--desktop-surface-3);
-  border: 1px solid #384657;
+  border: 1px solid var(--desktop-border-6);
   border-radius: 11px;
   box-shadow: 0 30px 80px rgba(var(--desktop-black-rgb), 55%);
 }
@@ -88,7 +88,7 @@
   padding: 0 8px;
   color: var(--desktop-gray-6);
   background: var(--desktop-surface-5);
-  border: 1px solid #2f3b49;
+  border: 1px solid var(--desktop-border-18);
   border-radius: 6px;
 }
 
@@ -108,7 +108,7 @@
   height: 29px;
   place-items: center;
   justify-self: end;
-  color: #8391a3;
+  color: var(--desktop-gray-12);
   background: transparent;
   border: 1px solid var(--desktop-border-20);
   border-radius: 5px;
@@ -152,7 +152,7 @@
   gap: 8px;
   align-items: center;
   padding: 7px 8px;
-  color: #708094;
+  color: var(--desktop-gray-23);
   text-align: left;
   background: transparent;
   border: 1px solid transparent;
@@ -161,17 +161,17 @@
 
 .settings-rail-group button.active {
   color: var(--desktop-cyan);
-  background: #13232d;
+  background: var(--desktop-surface-cyan-3);
   border-color: #285467;
   box-shadow: inset 2px 0 var(--desktop-cyan);
 }
 
 .settings-rail-group button.active strong {
-  color: #eef7fa;
+  color: var(--desktop-text-bright);
 }
 
 .settings-rail-group button.active small {
-  color: #7e96a3;
+  color: var(--desktop-gray-11);
 }
 
 .settings-rail-group button > span {
@@ -188,7 +188,7 @@
 
 .settings-rail-group small {
   overflow: hidden;
-  color: #556477;
+  color: var(--desktop-gray-17);
   font-size: 7px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -226,9 +226,9 @@
   gap: 7px;
   padding: 8px;
   margin: auto 4px 4px;
-  color: #647487;
-  background: #0f161f;
-  border: 1px solid #2b3744;
+  color: var(--desktop-gray-7);
+  background: var(--desktop-surface-14);
+  border: 1px solid var(--desktop-border-15);
   border-radius: 6px;
 }
 
@@ -239,7 +239,7 @@
 
 .settings-window-scope strong {
   overflow: hidden;
-  color: #9fb0be;
+  color: var(--desktop-gray-29);
   font-size: 8px;
   text-overflow: ellipsis;
   white-space: nowrap;

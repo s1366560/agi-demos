@@ -17,8 +17,8 @@
   overflow: hidden;
   border: 1px solid rgba(var(--desktop-steel-3-rgb), 0.26);
   border-radius: 18px;
-  background: #0c121b;
-  color: #edf6ff;
+  background: var(--desktop-surface-11);
+  color: var(--desktop-text-bright);
   box-shadow: 0 28px 90px rgba(var(--desktop-black-rgb), 0.55);
 }
 
@@ -69,7 +69,7 @@
   place-items: center;
   border: 1px solid rgba(var(--desktop-steel-3-rgb), 0.22);
   border-radius: 9px;
-  color: #a8b8c8;
+  color: var(--desktop-gray-31);
   background: transparent;
 }
 
@@ -105,7 +105,7 @@
   border: 1px solid rgba(var(--desktop-steel-3-rgb), 0.26);
   border-radius: 9px;
   padding: 0 12px;
-  color: #c8d7e5;
+  color: var(--desktop-text-pale);
   background: transparent;
 }
 
@@ -147,7 +147,7 @@
 .plugin-activity-trace code,
 .plugin-activity-diagnostics code,
 .plugin-activity-timeline code {
-  color: #a8c5db;
+  color: var(--desktop-gray-35);
   font-size: 10px;
 }
 
@@ -160,13 +160,13 @@
 .plugin-activity-metrics span {
   padding: 5px 8px;
   border-radius: 7px;
-  color: #9eb0c1;
+  color: var(--desktop-gray-29);
   background: rgba(98, 217, 239, 0.08);
   font-size: 10px;
 }
 
 .plugin-activity-metrics b {
-  color: #dff9ff;
+  color: var(--desktop-text-ice);
 }
 
 .plugin-activity-diagnostics,
@@ -216,7 +216,7 @@
 
 .plugin-activity-diagnostics p,
 .plugin-activity-timeline p {
-  color: #b9c8d7;
+  color: var(--desktop-gray-35);
   font-size: 11px;
   line-height: 1.45;
 }
@@ -259,7 +259,7 @@
   border-radius: 9px;
   padding: 0 12px;
   outline: none;
-  color: #edf6ff;
+  color: var(--desktop-text-bright);
   background: var(--desktop-surface-26);
 }
 
@@ -301,7 +301,7 @@
   place-items: center;
   align-content: center;
   gap: 12px;
-  color: #9fb2c5;
+  color: var(--desktop-gray-29);
 }
 
 .plugin-management-state svg {
@@ -359,14 +359,14 @@
 
 .plugin-management-footer button.primary {
   border: 1px solid #62d9ef;
-  color: #041018;
+  color: var(--desktop-surface-2);
   background: #70dff2;
 }
 
 .plugin-management-footer button.secondary,
 .plugin-management-footer button.danger-ghost {
   border: 1px solid rgba(var(--desktop-steel-3-rgb), 0.26);
-  color: #c8d7e5;
+  color: var(--desktop-text-pale);
   background: transparent;
 }
 

@@ -51,7 +51,7 @@
 }
 
 .desktop-login-brand span {
-  color: #6e7d90;
+  color: var(--desktop-gray-22);
   font-size: 9px;
 }
 
@@ -70,7 +70,7 @@
 
 .desktop-login-story-copy h1 {
   margin: 14px 0;
-  color: #eef5fb;
+  color: var(--desktop-text-bright);
   font-size: clamp(34px, 3.3vw, 52px);
   font-weight: 680;
   line-height: 1.02;
@@ -98,9 +98,9 @@
   align-items: center;
   gap: 11px;
   padding: 9px 11px;
-  color: #6e8293;
+  color: var(--desktop-gray-10);
   background: var(--desktop-surface-13);
-  border: 1px solid #242f3b;
+  border: 1px solid var(--desktop-border-4);
   border-radius: 7px;
 }
 
@@ -117,12 +117,12 @@
 }
 
 .desktop-login-proof-list b {
-  color: #bdc8d3;
+  color: var(--desktop-gray-33);
   font-size: 9px;
 }
 
 .desktop-login-proof-list span {
-  color: #69788b;
+  color: var(--desktop-gray-22);
   font-size: 8px;
   line-height: 1.4;
 }
@@ -152,14 +152,14 @@
   padding: 3px;
   margin-bottom: 24px;
   background: var(--desktop-surface-10);
-  border: 1px solid #283545;
+  border: 1px solid var(--desktop-border-5);
   border-radius: 8px;
 }
 
 .desktop-login-mode button {
   height: 34px;
   padding: 0 12px;
-  color: #748396;
+  color: var(--desktop-gray-25);
   font-size: 9px;
   font-weight: 650;
   background: transparent;
@@ -168,8 +168,8 @@
 }
 
 .desktop-login-mode button[aria-pressed='true'] {
-  color: #dce7ef;
-  background: #14232d;
+  color: var(--desktop-text-mist);
+  background: var(--desktop-surface-30);
   border-color: #31677a;
   box-shadow: 0 1px 8px rgba(var(--desktop-black-rgb), 24%);
 }
@@ -192,7 +192,7 @@
 
 .desktop-login-card > header p {
   margin: 0 0 24px;
-  color: #7d8b9d;
+  color: var(--desktop-gray-11);
   font-size: 10px;
 }
 
@@ -204,17 +204,17 @@
   align-items: center;
   gap: 9px;
   padding: 0 12px;
-  color: #d8e2ec;
+  color: var(--desktop-text-soft);
   font-size: 10px;
   font-weight: 650;
   text-align: left;
   background: var(--desktop-surface-15);
-  border: 1px solid #354457;
+  border: 1px solid var(--desktop-border-20);
   border-radius: 7px;
 }
 
 .desktop-login-sso:hover {
-  background: #13212b;
+  background: var(--desktop-surface-30);
   border-color: #477086;
 }
 
@@ -230,7 +230,7 @@
 
 .desktop-login-sso > svg {
   justify-self: end;
-  color: #6f8193;
+  color: var(--desktop-gray-10);
 }
 
 .desktop-login-divider {
@@ -238,7 +238,7 @@
   align-items: center;
   gap: 10px;
   margin: 20px 0;
-  color: #586679;
+  color: var(--desktop-gray-18);
   font-size: 8px;
 }
 
@@ -246,7 +246,7 @@
 .desktop-login-divider::after {
   height: 1px;
   flex: 1;
-  background: #242e3a;
+  background: var(--desktop-border-4);
   content: '';
 }
 
@@ -254,7 +254,7 @@
   display: grid;
   gap: 7px;
   margin-bottom: 14px;
-  color: #a3afbd;
+  color: var(--desktop-gray-29);
   font-size: 9px;
   font-weight: 650;
 }
@@ -264,10 +264,10 @@
   width: 100%;
   height: 42px;
   padding: 0 11px;
-  color: #e4ebf3;
+  color: var(--desktop-text-frost);
   font-size: 10px;
   background: var(--desktop-surface-6);
-  border: 1px solid #344153;
+  border: 1px solid var(--desktop-border-20);
   border-radius: 7px;
   outline: 0;
 }
@@ -287,7 +287,7 @@
 .desktop-login-password input {
   min-width: 0;
   flex: 1;
-  color: #e4ebf3;
+  color: var(--desktop-text-frost);
   font-size: 10px;
   background: transparent;
   border: 0;
@@ -299,7 +299,7 @@
   width: 28px;
   height: 28px;
   padding: 0;
-  color: #69788b;
+  color: var(--desktop-gray-22);
   background: transparent;
   border: 0;
   place-items: center;
@@ -325,7 +325,7 @@
 
 .desktop-login-options > label span {
   gap: 7px;
-  color: #7b899a;
+  color: var(--desktop-gray-26);
   font-size: 8px;
 }
 
@@ -335,7 +335,7 @@
   height: 15px;
   color: var(--desktop-cyan);
   font-style: normal;
-  border: 1px solid #3b4858;
+  border: 1px solid var(--desktop-border-20);
   border-radius: 4px;
   place-items: center;
 }
@@ -351,11 +351,11 @@
 .desktop-login-error {
   padding: 8px 10px;
   margin: -5px 0 12px;
-  color: #ef8d98;
+  color: var(--desktop-red-soft);
   font-size: 8px;
   line-height: 1.4;
   background: var(--desktop-surface-red);
-  border: 1px solid #66333a;
+  border: 1px solid var(--desktop-border-red);
   border-radius: 6px;
 }
 
@@ -366,7 +366,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: white;
+  color: var(--desktop-white);
   font-size: 10px;
   font-weight: 700;
   background: var(--desktop-cyan-deep);
@@ -386,7 +386,7 @@
 
 .desktop-login-legal {
   margin: 13px 0 0;
-  color: #536173;
+  color: var(--desktop-gray-1);
   font-size: 7px;
   line-height: 1.5;
   text-align: center;
@@ -424,7 +424,7 @@
   padding: 24px;
   color: var(--desktop-text);
   background: var(--desktop-surface-10);
-  border: 1px solid #344457;
+  border: 1px solid var(--desktop-border-20);
   border-radius: 10px;
   box-shadow: 0 22px 70px rgba(var(--desktop-black-rgb), 48%);
   outline: 0;
@@ -438,7 +438,7 @@
   width: 28px;
   height: 28px;
   padding: 0;
-  color: #6c7b8e;
+  color: var(--desktop-gray-22);
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -447,9 +447,9 @@
 
 .desktop-device-auth-close:hover,
 .desktop-device-auth-close:focus-visible {
-  color: #d5dfe9;
+  color: var(--desktop-text-soft);
   background: var(--desktop-surface-15);
-  border-color: #354457;
+  border-color: var(--desktop-border-20);
   outline: 0;
 }
 
@@ -459,7 +459,7 @@
   height: 40px;
   margin-bottom: 17px;
   color: var(--desktop-cyan);
-  background: #102832;
+  background: var(--desktop-surface-cyan-3);
   border: 1px solid var(--desktop-border-cyan-3);
   border-radius: 9px;
   place-items: center;
@@ -467,8 +467,8 @@
 
 .desktop-device-auth-dialog.expired .desktop-device-auth-icon {
   color: var(--desktop-amber-light);
-  background: #251d14;
-  border-color: #675033;
+  background: var(--desktop-surface-amber-2);
+  border-color: var(--desktop-border-amber-2);
 }
 
 .desktop-device-auth-icon svg {
@@ -489,7 +489,7 @@
 
 .desktop-device-auth-dialog > header h2 {
   margin: 8px 0 7px;
-  color: #edf4fa;
+  color: var(--desktop-text-bright);
   font-size: 22px;
   letter-spacing: -0.04em;
 }
@@ -497,7 +497,7 @@
 .desktop-device-auth-dialog > header p {
   max-width: 360px;
   margin: 0;
-  color: #7d8b9d;
+  color: var(--desktop-gray-11);
   font-size: 9px;
   line-height: 1.55;
 }
@@ -509,7 +509,7 @@
   margin-top: 21px;
   text-align: center;
   background: var(--desktop-surface-17);
-  border: 1px solid #2d3b4a;
+  border: 1px solid var(--desktop-border-17);
   border-radius: 8px;
 }
 
@@ -523,7 +523,7 @@
 }
 
 .desktop-device-auth-code > strong {
-  color: #eef8fb;
+  color: var(--desktop-text-ice);
   font: 700 25px/1.15 Menlo, Monaco, Consolas, monospace;
   letter-spacing: 0.18em;
 }
@@ -546,14 +546,14 @@
   padding: 10px 11px;
   margin-top: 10px;
   color: var(--desktop-cyan);
-  background: #101e26;
+  background: var(--desktop-surface-cyan-2);
   border: 1px solid #285465;
   border-radius: 7px;
 }
 
 .desktop-device-auth-status.expired {
   color: var(--desktop-amber-light);
-  background: #211a12;
+  background: var(--desktop-surface-amber-2);
   border-color: var(--desktop-border-amber);
 }
 
@@ -571,7 +571,7 @@
 }
 
 .desktop-device-auth-status b {
-  color: #c6d8df;
+  color: var(--desktop-text-pale);
   font-size: 9px;
 }
 
@@ -587,11 +587,11 @@
 .desktop-device-auth-error {
   padding: 9px 10px;
   margin-top: 10px;
-  color: #ef9aa3;
+  color: var(--desktop-red-soft);
   font-size: 8px;
   line-height: 1.4;
   background: var(--desktop-surface-red);
-  border: 1px solid #66333a;
+  border: 1px solid var(--desktop-border-red);
   border-radius: 6px;
 }
 
@@ -610,23 +610,23 @@
   justify-content: center;
   gap: 6px;
   padding: 0 12px;
-  color: #96a5b6;
+  color: var(--desktop-muted);
   font-size: 8px;
   font-weight: 650;
   background: var(--desktop-surface-25);
-  border: 1px solid #354153;
+  border: 1px solid var(--desktop-border-20);
   border-radius: 6px;
 }
 
 .desktop-device-auth-actions .primary {
-  color: white;
+  color: var(--desktop-white);
   background: var(--desktop-cyan-deep);
   border-color: var(--desktop-border-cyan-4);
 }
 
 .desktop-device-auth-actions button:hover,
 .desktop-device-auth-actions button:focus-visible {
-  color: white;
+  color: var(--desktop-white);
   border-color: #477086;
   outline: 0;
 }

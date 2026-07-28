@@ -114,12 +114,12 @@
 
 .workspace-tree-workspace-action > i[data-status='active'] {
   background: var(--desktop-green-vivid-2);
-  box-shadow: 0 0 8px rgba(84, 214, 139, 0.55);
+  box-shadow: 0 0 8px rgba(var(--desktop-green-glow-rgb), 0.55);
 }
 
 .workspace-tree-workspace-action > i[data-status='attention'] {
   background: var(--desktop-amber);
-  box-shadow: 0 0 8px rgba(245, 180, 76, 0.42);
+  box-shadow: 0 0 8px rgba(var(--desktop-amber-soft-rgb), 0.42);
 }
 
 .workspace-tree-workspace-action > i[data-status='danger'] {

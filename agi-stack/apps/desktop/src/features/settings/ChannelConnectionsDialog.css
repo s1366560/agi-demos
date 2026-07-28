@@ -3,14 +3,14 @@
 .channel-connections-toolbar > div { display: grid; gap: 4px; color: #8de4bd; font-size: 12px; }
 .channel-connections-toolbar em { color: var(--desktop-red-pale); font-style: normal; }
 .channel-connections-toolbar button, .channel-connection-actions button { display: inline-flex; gap: 6px; align-items: center; justify-content: center; min-height: 34px; border: 1px solid rgba(var(--desktop-steel-3-rgb), 0.25); border-radius: 8px; padding: 0 11px; color: var(--desktop-text-frost); background: var(--desktop-surface-26); }
-.channel-connections-toolbar button.primary { border-color: rgba(76, 211, 234, 0.5); color: #051016; background: #62d7eb; }
+.channel-connections-toolbar button.primary { border-color: rgba(76, 211, 234, 0.5); color: var(--desktop-surface-2); background: #62d7eb; }
 .channel-connections-body { min-height: 300px; }
 .channel-connections-list { display: grid; gap: 12px; }
-.channel-connections-list article { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; padding: 16px; border: 1px solid rgba(var(--desktop-steel-3-rgb), 0.2); border-radius: 12px; background: #101822; }
+.channel-connections-list article { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; padding: 16px; border: 1px solid rgba(var(--desktop-steel-3-rgb), 0.2); border-radius: 12px; background: var(--desktop-surface-22); }
 .channel-connection-summary h3 { margin: 8px 0 2px; font-size: 15px; }
-.channel-connection-summary p, .channel-connection-summary small { margin: 0; color: #8296a9; font-size: 12px; }
+.channel-connection-summary p, .channel-connection-summary small { margin: 0; color: var(--desktop-gray-12); font-size: 12px; }
 .channel-connection-summary small { display: block; margin-top: 6px; color: var(--desktop-red-pale); }
-.channel-status { display: inline-flex; gap: 5px; align-items: center; color: #9fb2c5; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+.channel-status { display: inline-flex; gap: 5px; align-items: center; color: var(--desktop-gray-29); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
 .channel-status.connected { color: #78e2b0; }
 .channel-status.error, .channel-status.circuit_open { color: var(--desktop-red-pale); }
 .channel-connection-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }

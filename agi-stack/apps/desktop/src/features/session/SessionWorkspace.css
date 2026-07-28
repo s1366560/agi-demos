@@ -183,7 +183,7 @@
 }
 
 .session-workspace-more button:hover,
-.session-workspace-more button:focus-visible { color: var(--desktop-text); background: #151d28; }
+.session-workspace-more button:focus-visible { color: var(--desktop-text); background: var(--desktop-surface-29); }
 .session-workspace-more button.danger { color: var(--red-9); }
 .session-workspace-more button:disabled { opacity: 0.42; }
 
@@ -268,7 +268,7 @@
   color: var(--desktop-text);
   font: inherit;
   font-size: 10px;
-  background: #070c12;
+  background: var(--desktop-surface-16);
   border: 1px solid var(--desktop-border);
   border-radius: 6px;
   outline: none;
@@ -407,7 +407,7 @@
 
 .session-pane-privacy {
   padding: 2px 6px;
-  background: #121a24;
+  background: var(--desktop-surface-25);
   border: 1px solid var(--desktop-border-soft);
   border-radius: 999px;
 }
@@ -573,7 +573,7 @@
 .session-context-section dd {
   overflow: hidden;
   margin: 3px 0 0;
-  color: #c9d4e2;
+  color: var(--desktop-text-pale);
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -600,7 +600,7 @@
 .session-context-surfaces > button:hover,
 .session-context-surfaces > button:focus-visible {
   color: var(--cyan-9);
-  background: #101721;
+  background: var(--desktop-surface-14);
   border-color: var(--desktop-border-soft);
   outline: none;
 }
@@ -639,7 +639,7 @@
 .session-workspace-thread .message-stack { padding-bottom: 30px; }
 .session-workspace-thread .chat-composer {
   position: static;
-  background: #090f16;
+  background: var(--desktop-surface-4);
   box-shadow: 0 -1px 0 var(--desktop-border-soft);
 }
 .session-workspace-thread .chat-composer-input,
@@ -705,7 +705,7 @@
   border-radius: 8px;
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--cyan-9) 10%, transparent), transparent 54%),
-    #0b121b;
+    var(--desktop-surface-11);
 }
 
 .session-current-activity-head {
@@ -764,7 +764,7 @@
 .session-current-activity dd {
   overflow: hidden;
   margin: 0;
-  color: #cdd9e8;
+  color: var(--desktop-text-pale);
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -968,13 +968,13 @@
   gap: 4px;
   min-width: 0;
   padding: 10px;
-  background: #090f16;
+  background: var(--desktop-surface-4);
 }
 
 .session-overview-facts dd {
   overflow: hidden;
   margin: 0;
-  color: #c8d4e2;
+  color: var(--desktop-text-pale);
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;

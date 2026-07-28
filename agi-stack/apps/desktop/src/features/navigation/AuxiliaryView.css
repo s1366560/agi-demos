@@ -13,7 +13,7 @@
 }
 
 .auxiliary-view > header > span {
-  color: #627186;
+  color: var(--desktop-gray-20);
   font-size: 8px;
   font-weight: 800;
   letter-spacing: 0.13em;
@@ -28,7 +28,7 @@
 
 .auxiliary-view > header p {
   margin: 0;
-  color: #8190a3;
+  color: var(--desktop-gray-12);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -51,7 +51,7 @@
 }
 
 .overview-grid article > span {
-  color: #69788a;
+  color: var(--desktop-gray-22);
   font-size: 7px;
   font-weight: 800;
   letter-spacing: 0.12em;

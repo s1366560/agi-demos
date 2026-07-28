@@ -1,6 +1,6 @@
 .settings-panel {
   overflow: hidden;
-  background: #0d121a;
+  background: var(--desktop-surface-12);
   border: 1px solid var(--desktop-border-4);
   border-radius: 8px;
 }
@@ -35,7 +35,7 @@
 .settings-workspace-page .settings-page-heading p,
 .settings-general-page .settings-page-heading p,
 .settings-preference-page .settings-page-heading p {
-  color: #7f8ea1;
+  color: var(--desktop-gray-11);
   font-size: 10px;
 }
 
@@ -45,7 +45,7 @@
   align-items: center;
   gap: 9px;
   padding: 12px 14px;
-  background: #0f151e;
+  background: var(--desktop-surface-14);
   border-bottom: 1px solid var(--desktop-border-4);
 }
 
@@ -78,7 +78,7 @@
   color: var(--desktop-cyan);
   font-size: 7px;
   font-style: normal;
-  background: #10232b;
+  background: var(--desktop-surface-cyan);
   border: 1px solid #2b5362;
   border-radius: 4px;
 }
@@ -108,7 +108,7 @@
 }
 
 .settings-row > span strong {
-  color: #b8c4d0;
+  color: var(--desktop-gray-33);
   font-size: 9px;
 }
 
@@ -120,7 +120,7 @@
 .settings-row > b {
   max-width: 55%;
   overflow: hidden;
-  color: #8593a5;
+  color: var(--desktop-gray-27);
   font-size: 8px;
   font-weight: 500;
   text-align: right;
@@ -129,7 +129,8 @@
 }
 
 .settings-account-profile,
-.settings-security-panel {
+.settings-security-panel,
+.settings-control-plane-panel {
   max-width: 880px;
 }
 
@@ -139,7 +140,7 @@
   align-items: center;
   gap: 12px;
   padding: 15px;
-  background: #0f151e;
+  background: var(--desktop-surface-14);
   border-bottom: 1px solid var(--desktop-border-4);
 }
 
@@ -156,11 +157,12 @@
 }
 
 .settings-account-hero > div > small {
-  color: #748397;
+  color: var(--desktop-gray-25);
   font-size: 8px;
 }
 
-.settings-security-panel > header > span {
+.settings-security-panel > header > span,
+.settings-control-plane-panel > header > span {
   flex: 1;
 }
 
@@ -184,8 +186,8 @@
   justify-content: space-between;
   gap: 14px;
   padding: 10px 13px;
-  color: #c1d1d9;
-  background: #0f1e25;
+  color: var(--desktop-text-pale);
+  background: var(--desktop-surface-cyan-2);
   border: 1px solid #2c5361;
   border-radius: 7px;
 }
@@ -198,7 +200,7 @@
 }
 
 .settings-current-context small {
-  color: #618194;
+  color: var(--desktop-gray-24);
   font-size: 7px;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -213,7 +215,7 @@
 
 .settings-current-context strong i {
   margin: 0 6px;
-  color: #587081;
+  color: var(--desktop-gray-18);
   font-style: normal;
 }
 
@@ -229,7 +231,7 @@
 
 .settings-context-step {
   padding: 14px;
-  background: #0d121a;
+  background: var(--desktop-surface-12);
   border: 1px solid var(--desktop-border-4);
   border-radius: 8px;
 }
@@ -250,7 +252,7 @@
   place-items: center;
   color: var(--desktop-cyan);
   font-size: 8px;
-  background: #10242d;
+  background: var(--desktop-surface-cyan-2);
   border: 1px solid var(--desktop-border-cyan);
   border-radius: 50%;
 }
@@ -343,7 +345,7 @@
 .settings-tenant-list > button.active,
 .settings-project-grid > button.active {
   background: var(--desktop-surface-cyan);
-  border-color: #2c7084;
+  border-color: var(--desktop-border-cyan-5);
 }
 
 .settings-tenant-list > button:disabled,
@@ -357,9 +359,9 @@
   width: 33px;
   height: 33px;
   place-items: center;
-  color: #7f90a2;
+  color: var(--desktop-gray-11);
   background: var(--desktop-surface-28);
-  border: 1px solid #314050;
+  border: 1px solid var(--desktop-border-6);
   border-radius: 7px;
 }
 
@@ -416,9 +418,9 @@ button.active > .settings-choice-icon {
   gap: 12px;
   padding: 10px 12px;
   background: var(--desktop-surface-23);
-  border: 1px solid #30404e;
+  border: 1px solid var(--desktop-border-6);
   border-radius: 7px;
-  box-shadow: 0 -12px 26px rgb(8 12 18 / 55%);
+  box-shadow: 0 -12px 26px rgba(var(--desktop-overlay-11-rgb), 55%);
 }
 
 .settings-context-apply > div {
@@ -427,7 +429,7 @@ button.active > .settings-choice-icon {
   align-items: center;
   gap: 8px;
   margin-right: auto;
-  color: #718295;
+  color: var(--desktop-gray-24);
 }
 
 .settings-context-apply > div > span {
@@ -437,7 +439,7 @@ button.active > .settings-choice-icon {
 }
 
 .settings-context-apply strong {
-  color: #acb8c4;
+  color: var(--desktop-gray-31);
   font-size: 8px;
 }
 
@@ -474,7 +476,7 @@ button.active > .settings-choice-icon {
   align-items: center;
   gap: 10px;
   padding: 10px;
-  color: #718196;
+  color: var(--desktop-gray-24);
   text-align: left;
   background: var(--desktop-surface-5);
   border: 1px solid var(--desktop-border-4);
@@ -483,7 +485,7 @@ button.active > .settings-choice-icon {
 
 .settings-language-options > button.active {
   background: var(--desktop-surface-cyan);
-  border-color: #2a7185;
+  border-color: var(--desktop-border-cyan-5);
 }
 
 .settings-language-options > button > span {
@@ -491,10 +493,10 @@ button.active > .settings-choice-icon {
   width: 34px;
   height: 34px;
   place-items: center;
-  color: #8291a3;
+  color: var(--desktop-gray-12);
   font-size: 10px;
   font-weight: 800;
-  background: #17202b;
+  background: var(--desktop-surface-30);
   border-radius: 7px;
 }
 
@@ -511,7 +513,7 @@ button.active > .settings-choice-icon {
 }
 
 .settings-language-options strong {
-  color: #c0cbd6;
+  color: var(--desktop-gray-33);
   font-size: 10px;
 }
 
@@ -538,7 +540,7 @@ button.active > .settings-choice-icon {
   align-items: center;
   gap: 9px;
   padding: 10px;
-  color: #718196;
+  color: var(--desktop-gray-24);
   text-align: left;
   background: var(--desktop-surface-5);
   border: 1px solid var(--desktop-border-4);
@@ -546,7 +548,7 @@ button.active > .settings-choice-icon {
 }
 
 .settings-resource-entry-grid > button:hover {
-  background: #101b24;
+  background: var(--desktop-surface-26);
   border-color: #31596a;
 }
 
@@ -564,7 +566,7 @@ button.active > .settings-choice-icon {
 }
 
 .settings-resource-entry-grid strong {
-  color: #c0cbd6;
+  color: var(--desktop-gray-33);
   font-size: 9px;
 }
 
@@ -750,7 +752,6 @@ button.active > .settings-choice-icon {
   height: 34px;
   padding: 0 9px;
   color: var(--desktop-text-pale);
-  color-scheme: dark;
   background: var(--desktop-surface-5);
   border: 1px solid var(--desktop-border-4);
   border-radius: 6px;

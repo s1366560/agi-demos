@@ -31,7 +31,7 @@
 
 .new-thread-heading p {
   margin: 0;
-  color: var(--gray-10, #8b98a9);
+  color: var(--gray-10, var(--desktop-gray-13));
   font-size: 10.5px;
 }
 
@@ -44,7 +44,7 @@
   border: 1px solid var(--gray-a5, var(--desktop-border-10));
   border-radius: 20px;
   background: var(--gray-a2, var(--desktop-surface-14));
-  color: #8d9aac;
+  color: var(--desktop-gray-13);
   font-size: 8.5px;
 }
 
@@ -73,7 +73,7 @@
   border: 0;
   outline: none;
   background: transparent;
-  color: var(--gray-12, #eef4fa);
+  color: var(--gray-12, var(--desktop-text-bright));
   font: inherit;
   font-size: 12.5px;
   line-height: 1.55;
@@ -81,7 +81,7 @@
 }
 
 .new-thread-composer textarea::placeholder {
-  color: #556375;
+  color: var(--desktop-gray-17);
 }
 
 .new-thread-composer-toolbar {
@@ -89,7 +89,7 @@
   align-items: center;
   gap: 8px;
   padding: 9px 11px;
-  border-top: 1px solid #1b2430;
+  border-top: 1px solid var(--desktop-border-7);
 }
 
 .composer-pickers {
@@ -151,7 +151,7 @@
 .picker-chip > b {
   max-width: 156px;
   overflow: hidden;
-  color: #c3cedb;
+  color: var(--desktop-text-pale);
   font-weight: 650;
   text-overflow: ellipsis;
 }
@@ -161,7 +161,7 @@
   border: 0;
   outline: none;
   background: transparent;
-  color: #c3cedb;
+  color: var(--desktop-text-pale);
   font: inherit;
   font-weight: 650;
 }
@@ -185,7 +185,7 @@
   border: 1px solid #267e96;
   border-radius: 8px;
   background: #11313e;
-  color: #dff8ff;
+  color: var(--desktop-text-ice);
 }
 
 .new-thread-view .send-button:disabled {
@@ -201,7 +201,7 @@
 .new-thread-notice,
 .new-thread-error {
   margin: 9px 4px 0;
-  color: #a9b5c5;
+  color: var(--desktop-gray-30);
   font-size: 9px;
 }
 
@@ -235,7 +235,7 @@
 
 .new-thread-suggestions > button:hover {
   border-color: #2c5566;
-  background: #101a23;
+  background: var(--desktop-surface-15);
 }
 
 .new-thread-suggestions svg {
@@ -243,7 +243,7 @@
   height: 13px;
   flex: none;
   margin-top: 1px;
-  color: #5f7185;
+  color: var(--desktop-gray-3);
 }
 
 .new-thread-suggestions span,
@@ -255,12 +255,12 @@
 }
 
 .new-thread-suggestions b {
-  color: #b9c4d2;
+  color: var(--desktop-gray-34);
   font-size: 9px;
 }
 
 .new-thread-suggestions small {
-  color: #667587;
+  color: var(--desktop-gray-8);
   font-size: 7.5px;
   line-height: 1.4;
 }
@@ -277,14 +277,14 @@
 }
 
 .new-thread-recent > header span {
-  color: #627186;
+  color: var(--desktop-gray-20);
   font-size: 8px;
   font-weight: 800;
   letter-spacing: 0.13em;
 }
 
 .new-thread-recent > header em {
-  color: #556375;
+  color: var(--desktop-gray-17);
   font-size: 8px;
   font-style: normal;
 }
@@ -317,7 +317,7 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #617085;
+  background: var(--desktop-gray-4);
 }
 
 .new-thread-recent .thread-status.active {
@@ -332,12 +332,12 @@
 }
 
 .new-thread-recent b {
-  color: #a5b1c0;
+  color: var(--desktop-gray-29);
   font-size: 9px;
 }
 
 .new-thread-recent small {
-  color: #5c6b7e;
+  color: var(--desktop-gray-19);
   font-size: 7.5px;
 }
 

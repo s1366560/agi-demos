@@ -295,7 +295,7 @@
   max-height: min(760px, calc(100vh - 48px));
   overflow: auto;
   border: 1px solid var(--desktop-border);
-  background: #0b121d;
+  background: var(--desktop-surface-11);
 }
 
 .automation-editor-form {

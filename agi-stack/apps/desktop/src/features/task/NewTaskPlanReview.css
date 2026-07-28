@@ -66,14 +66,14 @@
 }
 
 .new-task-plan-objective small {
-  color: #5e7187;
+  color: var(--desktop-gray-3);
   font-size: 7px;
   font-weight: 800;
   letter-spacing: 0.13em;
 }
 
 .new-task-plan-objective strong {
-  color: #d9e3ed;
+  color: var(--desktop-text-soft);
   font-size: 10px;
 }
 
@@ -155,12 +155,12 @@
 .new-task-step-toggle span {
   width: 13px;
   height: 13px;
-  border: 1px solid #465568;
+  border: 1px solid var(--desktop-gray-14);
   border-radius: 50%;
 }
 
 .new-task-step-index {
-  color: #506074;
+  color: var(--desktop-gray-15);
   font: 8px ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -171,14 +171,14 @@
 }
 
 .new-task-step-copy strong {
-  color: #d4dfe9;
+  color: var(--desktop-text-soft);
   font-size: 9px;
   line-height: 1.35;
 }
 
 .new-task-step-copy small,
 .new-task-step-copy span {
-  color: #59697c;
+  color: var(--desktop-gray-2);
   font-size: 7px;
 }
 
@@ -189,7 +189,7 @@
 }
 
 .new-task-plan-step time {
-  color: #59697c;
+  color: var(--desktop-gray-2);
   font-size: 8px;
   text-align: right;
 }
@@ -200,7 +200,7 @@
   border: 1px solid var(--desktop-border-13);
   border-radius: 5px;
   background: var(--desktop-surface-14);
-  color: #77879a;
+  color: var(--desktop-gray-10);
 }
 
 .new-task-plan-step.editing {
@@ -217,7 +217,7 @@
 .new-task-step-editor label {
   display: grid;
   gap: 6px;
-  color: #8494a7;
+  color: var(--desktop-gray-12);
   font-size: 8px;
 }
 
@@ -236,14 +236,14 @@
   border: 1px solid var(--desktop-border-13);
   border-radius: 5px;
   background: var(--desktop-surface-14);
-  color: #98a8ba;
+  color: var(--desktop-gray-29);
   font-size: 8px;
 }
 
 .new-task-step-editor button.primary {
   border-color: #28738c;
   background: #176b84;
-  color: #eefaff;
+  color: var(--desktop-text-ice);
 }
 
 .new-task-add-step {
@@ -287,13 +287,13 @@
 }
 
 .new-task-preview-stats strong {
-  color: #d6e0ea;
+  color: var(--desktop-text-soft);
   font-size: 11px;
 }
 
 .new-task-run-preview section h3 {
   margin: 0 0 9px;
-  color: #b9c6d3;
+  color: var(--desktop-gray-34);
   font-size: 9px;
 }
 
@@ -359,12 +359,12 @@
 }
 
 .new-task-permission-profile strong {
-  color: #bdcad7;
+  color: var(--desktop-gray-34);
   font-size: 8px;
 }
 
 .new-task-permission-profile small {
-  color: #5a697c;
+  color: var(--desktop-gray-2);
   font-size: 7px;
   line-height: 1.35;
 }
@@ -372,7 +372,7 @@
 .new-task-permission-profile button i {
   width: 10px;
   height: 10px;
-  border: 1px solid #445366;
+  border: 1px solid var(--desktop-gray-14);
   border-radius: 50%;
 }
 
@@ -402,7 +402,7 @@
 .new-task-revision-composer label {
   display: grid;
   gap: 7px;
-  color: #8b9bad;
+  color: var(--desktop-gray-13);
   font-size: 8px;
 }
 
@@ -442,7 +442,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #5c6b7d;
+  color: var(--desktop-gray-19);
   font-size: 8px;
 }
 
@@ -456,7 +456,7 @@
   border: 1px solid var(--desktop-border-13);
   border-radius: 6px;
   background: var(--desktop-surface-14);
-  color: #98a8ba;
+  color: var(--desktop-gray-29);
   font-size: 9px;
 }
 
@@ -477,7 +477,7 @@
 }
 
 .new-task-review-footer-summary > span {
-  color: #5c6b7d;
+  color: var(--desktop-gray-19);
   font-size: 8px;
 }
 

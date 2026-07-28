@@ -1,9 +1,9 @@
 .session-context-window-canvas {
-  --context-system: #72a7ff;
-  --context-user: #5ed39f;
-  --context-assistant: #b78cff;
-  --context-tool: #efb25f;
-  --context-summary: #4fc7d7;
+  --context-system: rgb(var(--desktop-blue-rgb));
+  --context-user: var(--desktop-green-light);
+  --context-assistant: var(--desktop-purple-bright);
+  --context-tool: var(--desktop-amber);
+  --context-summary: var(--desktop-cyan-soft);
   display: flex;
   min-height: 100%;
   flex-direction: column;

@@ -1,8 +1,8 @@
 .session-execution-insights-canvas {
-  --insights-routing: #74a7ff;
-  --insights-selection: #b28cff;
-  --insights-policy: #59d3a5;
-  --insights-toolset: #f3b35e;
+  --insights-routing: rgb(var(--desktop-blue-rgb));
+  --insights-selection: var(--desktop-purple-bright);
+  --insights-policy: var(--desktop-green-light);
+  --insights-toolset: var(--desktop-amber);
   display: flex;
   min-height: 100%;
   flex-direction: column;
@@ -293,7 +293,7 @@
   width: 13px;
   height: 13px;
   flex: 0 0 auto;
-  color: var(--amber-10, #e7a735);
+  color: var(--amber-10, var(--desktop-amber));
 }
 
 .session-insights-evidence {
@@ -402,7 +402,7 @@
 }
 
 .session-insights-selection-stages > div.has-warning {
-  border-color: color-mix(in srgb, var(--amber-9, #d99a2b) 50%, var(--gray-6));
+  border-color: color-mix(in srgb, var(--amber-9, var(--desktop-amber)) 50%, var(--gray-6));
 }
 
 .session-insights-selection-stages strong {
@@ -429,10 +429,10 @@
 .session-insights-budget-warning {
   gap: 9px;
   padding: 9px 10px;
-  border: 1px solid color-mix(in srgb, var(--amber-9, #d99a2b) 46%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber-9, var(--desktop-amber)) 46%, transparent);
   border-radius: 8px;
-  color: var(--amber-11, #ffc45c);
-  background: color-mix(in srgb, var(--amber-4, #533b12) 32%, transparent);
+  color: var(--amber-11, var(--desktop-amber-dim));
+  background: color-mix(in srgb, var(--amber-4, var(--desktop-surface-amber)) 32%, transparent);
 }
 
 .session-insights-budget-warning svg {

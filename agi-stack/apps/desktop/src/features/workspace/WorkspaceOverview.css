@@ -383,9 +383,9 @@
   height: 26px;
   margin-left: -5px;
   place-items: center;
-  border: 2px solid #0a1019;
+  border: 2px solid var(--desktop-surface-19);
   border-radius: 50%;
-  background: #192535;
+  background: var(--desktop-surface-31);
   color: var(--desktop-cyan);
   font-size: 10px;
   font-weight: 800;

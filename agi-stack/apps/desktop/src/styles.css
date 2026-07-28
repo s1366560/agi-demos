@@ -620,7 +620,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   min-width: 0;
   padding: 0 10px;
   border-bottom: 1px solid rgba(var(--desktop-slate-rgb), 0.08);
-  background: #0b0f16;
+  background: var(--desktop-surface-7);
 }
 
 .app-shell.desktop-window .titlebar {
@@ -645,7 +645,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .titlebar-workspace-name {
   min-width: 0;
-  color: #edf1f8;
+  color: var(--desktop-text-bright);
   font-size: 14px;
   line-height: 18px;
 }
@@ -992,7 +992,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   grid-template-rows: 44px minmax(0, 1fr) auto;
   overflow: hidden;
   border-right: 1px solid var(--desktop-border);
-  background: #151b22;
+  background: var(--desktop-panel-2);
 }
 
 .app-shell.desktop-window .copilot-sidebar {
@@ -1015,7 +1015,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   min-height: 44px;
   padding: 0 12px;
   border-bottom: 1px solid var(--desktop-border);
-  background: #151b22;
+  background: var(--desktop-panel-2);
 }
 
 .sidebar-nav-controls {
@@ -1581,7 +1581,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   overscroll-behavior: contain;
   border: 1px solid var(--desktop-border);
   border-radius: 8px;
-  background: #151a22;
+  background: var(--desktop-panel-2);
   color: var(--desktop-text);
   box-shadow: 0 24px 90px rgba(var(--desktop-black-rgb), 0.52);
 }
@@ -1749,7 +1749,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   overflow: hidden;
   border: 1px solid var(--desktop-border);
   border-radius: 10px;
-  background: #121820;
+  background: var(--desktop-surface-22);
   box-shadow: 0 26px 90px rgba(var(--desktop-black-rgb), 0.55);
 }
 
@@ -2244,7 +2244,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   overflow: hidden;
   border: 1px solid var(--desktop-border);
   border-radius: 7px;
-  background: #0c1119;
+  background: var(--desktop-surface-10);
   box-shadow: none;
 }
 
@@ -2538,7 +2538,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 0 28px 0 9px;
   border: 1px solid var(--desktop-border);
   border-radius: 7px;
-  background: #0a111a;
+  background: var(--desktop-surface-20);
   color: var(--desktop-text);
   font: inherit;
   font-size: 11px;
@@ -3862,7 +3862,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 12px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 8px;
-  background: rgba(8, 13, 21, 0.78);
+  background: var(--desktop-surface-17);
 }
 
 .artifact-version-heading {
@@ -3976,7 +3976,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   gap: 4px;
   min-width: 0;
   padding: 8px;
-  background: #0b111a;
+  background: var(--desktop-surface-10);
 }
 
 .artifact-version-facts dt {
@@ -4072,7 +4072,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   border: 1px solid rgba(var(--desktop-amber-soft-rgb), 0.25);
   border-radius: 7px;
   background: rgba(var(--desktop-amber-soft-rgb), 0.06);
-  color: #f5b747;
+  color: rgb(var(--desktop-amber-soft-rgb));
 }
 
 .artifact-delivery-receipt {
@@ -4127,7 +4127,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
   outline: 0;
-  background: #080d15;
+  background: var(--desktop-surface-2);
   color: var(--desktop-text);
   font: inherit;
   font-size: 11px;
@@ -4365,7 +4365,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .overview-summary,
 .sandbox-panel {
   border: 1px solid var(--desktop-border-soft);
-  background: rgba(12, 18, 28, 0.82);
+  background: rgba(var(--desktop-overlay-15-rgb), 0.82);
 }
 
 .message {
@@ -4492,7 +4492,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .transcript-content,
 .timeline-detail-summary {
   margin: 0;
-  color: #cad4e2;
+  color: var(--desktop-text-pale);
   line-height: 1.55;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -4501,7 +4501,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .markdown-content {
   min-width: 0;
   max-width: 100%;
-  color: #cad4e2;
+  color: var(--desktop-text-pale);
   font-size: inherit;
   line-height: 1.55;
   overflow-wrap: anywhere;
@@ -4532,7 +4532,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .markdown-content h4,
 .markdown-content h5,
 .markdown-content h6 {
-  color: #dce5f1;
+  color: var(--desktop-text-mist);
   line-height: 1.4;
 }
 
@@ -4565,7 +4565,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
   background: rgba(var(--desktop-overlay-1-rgb), 0.42);
-  color: #b8c4d4;
+  color: var(--desktop-gray-33);
   font-size: 0.92em;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -4575,7 +4575,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .markdown-content code {
   border-radius: 4px;
   background: rgba(var(--desktop-slate-rgb), 0.12);
-  color: #dce7f5;
+  color: var(--desktop-text-frost);
   font-size: 0.94em;
 }
 
@@ -4697,7 +4697,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .timeline-row.artifact .timeline-row-icon {
-  color: #a8b3c5;
+  color: var(--desktop-gray-30);
 }
 
 .timeline-row-icon svg {
@@ -4707,7 +4707,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .timeline-row-title {
   flex: 0 0 auto;
-  color: #d8e0ec;
+  color: var(--desktop-text-soft);
   font-size: 12px;
   font-weight: 650;
   line-height: 18px;
@@ -4755,7 +4755,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .timeline-status.error {
   border-color: rgba(var(--desktop-red-rgb), 0.24);
   background: rgba(var(--desktop-red-rgb), 0.09);
-  color: #ffadb7;
+  color: var(--desktop-red-light);
 }
 
 .timeline-status.waiting {
@@ -4896,7 +4896,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .tool-file-metadata-head > span {
-  color: #d8e0ec;
+  color: var(--desktop-text-soft);
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -4938,7 +4938,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .tool-match-row span {
   min-width: 0;
   overflow: hidden;
-  color: #d5deea;
+  color: var(--desktop-text-soft);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -5035,7 +5035,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   overflow: auto;
   border: 0;
   background: transparent;
-  color: #c3cedd;
+  color: var(--desktop-text-pale);
   font-size: 0.92em;
   line-height: 1.5;
   white-space: pre;
@@ -5059,7 +5059,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   bottom: 24px;
   left: 0;
   height: 44px;
-  background: linear-gradient(180deg, transparent, rgba(5, 10, 16, 0.92));
+  background: linear-gradient(180deg, transparent, rgba(var(--desktop-overlay-1-rgb), 0.92));
   pointer-events: none;
 }
 
@@ -5084,7 +5084,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 /* highlight.js token palette tuned to the desktop dark theme */
 .hljs-comment,
 .hljs-quote {
-  color: #5d6b80;
+  color: var(--desktop-gray-19);
   font-style: italic;
 }
 
@@ -5127,7 +5127,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .hljs-deletion {
-  color: #ffadb7;
+  color: var(--desktop-red-light);
 }
 
 .hljs-emphasis {
@@ -5239,7 +5239,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .message.timeline-row.thought .timeline-row-title {
-  color: #aab6cc;
+  color: var(--desktop-gray-30);
   font-weight: 600;
 }
 
@@ -5250,7 +5250,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .thought-content {
   padding-left: 10px;
   border-left: 2px solid rgba(143, 157, 196, 0.28);
-  color: #8794a8;
+  color: var(--desktop-gray-27);
   font-size: 0.96em;
 }
 
@@ -5438,7 +5438,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .composer-status-button:hover,
 .composer-status-button:focus-visible {
   box-shadow:
-    inset 0 0 0 1px rgba(206, 219, 234, 0.42),
+    inset 0 0 0 1px rgba(var(--desktop-slate-rgb), 0.42),
     0 0 0 4px rgba(var(--desktop-cyan-rgb), 0.12);
 }
 
@@ -5496,7 +5496,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   height: 34px;
   border-color: rgba(var(--desktop-green-rgb), 0.2);
   background: #2dbf7f;
-  color: #03120d;
+  color: rgb(var(--desktop-black-rgb));
 }
 
 .board-command-slash:hover,
@@ -5690,7 +5690,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   min-height: 38px;
   padding: 7px 10px;
   border-bottom: 1px solid var(--desktop-border-soft);
-  background: rgba(5, 10, 17, 0.7);
+  background: var(--desktop-surface-1);
 }
 
 .board-settings-panel strong {
@@ -6052,7 +6052,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   overflow: hidden;
   border: 1px solid rgba(var(--desktop-slate-rgb), 0.22);
   border-radius: 7px;
-  background: rgba(14, 22, 33, 0.92);
+  background: var(--desktop-surface-14);
   color: var(--desktop-muted);
   cursor: pointer;
   text-align: left;
@@ -6347,7 +6347,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .workspace-overview-shell {
   grid-template-rows: auto minmax(0, 1fr);
   background:
-    radial-gradient(circle at 72% -18%, rgba(32, 168, 207, 0.1), transparent 38%),
+    radial-gradient(circle at 72% -18%, rgba(var(--desktop-cyan-rgb), 0.1), transparent 38%),
     var(--desktop-surface-2);
 }
 
@@ -6804,7 +6804,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   min-height: 280px;
   border: 1px solid var(--desktop-border);
   border-radius: 7px;
-  background: #02050a;
+  background: rgb(var(--desktop-overlay-1-rgb));
 }
 
 .desktop-placeholder {
@@ -6963,7 +6963,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   padding: 12px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
-  background: rgba(5, 8, 13, 0.58);
+  background: var(--desktop-surface-1);
 }
 
 .usage-plan-header,
@@ -7014,7 +7014,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   width: 100%;
   height: 100%;
   border-radius: inherit;
-  background: #d7e4f4;
+  background: var(--desktop-text-soft);
 }
 
 .composer-control-tray {
@@ -7072,7 +7072,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   overscroll-behavior: contain;
   border: 1px solid var(--desktop-border);
   border-radius: 8px;
-  background: #121820;
+  background: var(--desktop-surface-22);
   box-shadow: 0 16px 50px rgba(var(--desktop-black-rgb), 0.42);
 }
 
@@ -7226,7 +7226,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 }
 
 .composer-model-search:focus-within {
-  border-color: #2c7085;
+  border-color: var(--desktop-border-cyan-5);
   color: var(--desktop-cyan);
 }
 
@@ -7292,7 +7292,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   min-height: 26px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 999px;
-  background: #0d131d;
+  background: var(--desktop-surface-21);
   color: var(--desktop-muted);
   font-size: 11px;
   line-height: 1;

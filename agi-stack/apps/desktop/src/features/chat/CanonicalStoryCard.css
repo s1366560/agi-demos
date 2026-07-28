@@ -6,7 +6,7 @@
   border: 1px solid rgba(var(--desktop-cyan-dim-rgb), 0.26);
   border-radius: 8px;
   background: rgba(8, 17, 24, 0.82);
-  color: #cbd5e1;
+  color: var(--desktop-text-pale);
 }
 
 .canonical-story-toggle {
@@ -49,7 +49,7 @@
 
 .canonical-story-heading > strong {
   overflow: hidden;
-  color: #e2e8f0;
+  color: var(--desktop-text);
   font-size: 13px;
   font-weight: 650;
   text-overflow: ellipsis;
@@ -74,7 +74,7 @@
 }
 
 .canonical-story-summary {
-  color: #8291a4;
+  color: var(--desktop-gray-12);
   font-size: 10px;
 }
 
@@ -119,7 +119,7 @@
 .canonical-story-invest.is-pass,
 .canonical-story-criteria .is-pass,
 .canonical-story-dependencies .is-pass {
-  color: #34d399;
+  color: var(--desktop-green);
 }
 
 .canonical-story-invest.is-warning {
@@ -233,7 +233,7 @@
 }
 
 .canonical-story-invest-details strong {
-  color: #91a0b1;
+  color: var(--desktop-gray-28);
   font-size: 10px;
   text-transform: capitalize;
 }

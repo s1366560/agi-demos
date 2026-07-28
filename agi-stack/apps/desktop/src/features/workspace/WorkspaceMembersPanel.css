@@ -88,7 +88,7 @@
 }
 
 .workspace-members-read-only {
-  color: #d6b46e;
+  color: rgb(var(--desktop-gold-rgb));
   border-color: rgba(var(--desktop-gold-rgb), 0.35);
 }
 

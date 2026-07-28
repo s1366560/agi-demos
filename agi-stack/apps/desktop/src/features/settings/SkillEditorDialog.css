@@ -20,6 +20,6 @@
   gap: 10px;
   align-items: center;
   justify-content: center;
-  color: #91a3b4;
+  color: var(--desktop-gray-28);
   font-size: 12px;
 }

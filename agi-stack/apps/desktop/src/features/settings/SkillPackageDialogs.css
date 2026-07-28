@@ -22,13 +22,13 @@
   padding: 12px 14px;
   color: var(--desktop-text-pale);
   background: var(--desktop-surface-11);
-  border: 1px dashed #425064;
+  border: 1px dashed var(--desktop-gray-14);
   border-radius: 9px;
   cursor: pointer;
 }
 
 .skill-package-archive-picker:hover {
-  background: #101925;
+  background: var(--desktop-surface-24);
   border-color: #71639f;
 }
 
@@ -258,7 +258,7 @@
 .skill-version-preview {
   padding: 12px;
   background: var(--desktop-surface-2);
-  border: 1px solid #3c4655;
+  border: 1px solid var(--desktop-border-6);
   border-radius: 8px;
 }
 
@@ -289,7 +289,7 @@
 .skill-version-preview header button {
   min-height: 26px;
   padding: 0 8px;
-  color: #aebdcb;
+  color: var(--desktop-gray-31);
   font-size: 8px;
   background: var(--desktop-surface-31);
   border: 1px solid var(--desktop-border-21);

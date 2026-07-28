@@ -87,7 +87,10 @@ test('session messages use the mission-control narrative hierarchy', () => {
   assert.match(chatSource, /<MessageActionMenu[\s\S]*content=\{content\}/);
   assert.doesNotMatch(chatSource, /className="session-message-context sr-only"/);
   assert.match(chatStyles, /\.session-thread-avatar \{[\s\S]*display: grid/);
-  assert.match(chatStyles, /\.session-thread-message\.user \.session-message-surface \{[\s\S]*background: #161d27/);
+  assert.match(
+    chatStyles,
+    /\.session-thread-message\.user \.session-message-surface \{[\s\S]*background: var\(--desktop-surface-29\)/,
+  );
   assert.match(chatStyles, /\.session-thread-message\.agent \{[\s\S]*background: transparent/);
   assert.match(chatStyles, /\.session-message-actions \{[\s\S]*opacity: 0/);
   assert.doesNotMatch(chatStyles, /\.session-thread-message\.agent \.transcript-meta \{[\s\S]*opacity: 0/);
@@ -576,6 +579,61 @@ test('session composer exposes localized context actions and compact delivery co
   assert.match(chatSource, /t\('session\.queueNext'\)/);
   assert.match(chatStyles, /\.session-composer-context-actions/);
   assert.match(chatStyles, /\.session-chat-narrative \.composer-delivery-switch/);
+});
+
+test('session composer keeps voice and delivery controls in the trailing action group', () => {
+  const trailingActionsStart = chatSource.indexOf('className="composer-right-actions"');
+  const sendButtonStart = chatSource.indexOf('className="send-pill"', trailingActionsStart);
+  const trailingActions = chatSource.slice(trailingActionsStart, sendButtonStart);
+
+  assert.notEqual(trailingActionsStart, -1);
+  assert.notEqual(sendButtonStart, -1);
+  assert.match(trailingActions, /composer-voice-button is-/);
+  assert.match(trailingActions, /composer-call-button is-/);
+  assert.match(trailingActions, /className="composer-delivery-switch"/);
+  assert.match(
+    chatStyles,
+    /\.session-chat-narrative \.composer-right-actions\s*\{[\s\S]*margin-left:\s*auto/,
+  );
+});
+
+test('session composer uses a consistent typography scale and radius system', () => {
+  assert.match(
+    chatStyles,
+    /\.session-chat-narrative \.session-composer-editor\s*\{[\s\S]*--session-composer-radius:\s*8px;[\s\S]*--session-composer-control-radius:\s*6px;[\s\S]*--session-composer-font-size:\s*11px;/,
+  );
+  assert.match(
+    chatStyles,
+    /\.session-chat-narrative \.chat-composer-input,[\s\S]*font-family:\s*inherit;[\s\S]*font-size:\s*var\(--session-composer-font-size\);/,
+  );
+  assert.match(
+    chatStyles,
+    /\.session-composer-context-actions \.composer-plus-compact,[\s\S]*\.session-composer-context-actions \.prompt-template-library > button,[\s\S]*\.session-composer-context-actions > button\s*\{[\s\S]*border-radius:\s*var\(--session-composer-control-radius\);[\s\S]*font-family:\s*inherit;[\s\S]*font-size:\s*var\(--session-composer-font-size\);[\s\S]*font-weight:\s*500;/,
+  );
+  assert.doesNotMatch(
+    chatStyles,
+    /font:\s*500 var\(--session-composer-font-size\)\/1 inherit;/,
+  );
+  assert.match(
+    chatStyles,
+    /\.session-composer-context-actions \.composer-model-button\s*\{[\s\S]*border-radius:\s*var\(--session-composer-control-radius\);[\s\S]*font-size:\s*var\(--session-composer-font-size\);/,
+  );
+  assert.match(
+    chatStyles,
+    /\.session-chat-narrative \.composer-voice-button\s*\{[\s\S]*border-radius:\s*var\(--session-composer-control-radius\);[\s\S]*font-family:\s*inherit;/,
+  );
+  assert.match(
+    chatStyles,
+    /\.session-chat-narrative \.composer-delivery-switch\s*\{[\s\S]*border-radius:\s*var\(--session-composer-control-radius\);/,
+  );
+  assert.match(
+    chatStyles,
+    /\.session-chat-narrative \.composer-delivery-switch button\s*\{[\s\S]*border-radius:\s*var\(--session-composer-control-radius\);[\s\S]*font-size:\s*var\(--session-composer-font-size\);/,
+  );
+  assert.match(
+    chatStyles,
+    /\.session-chat-narrative \.send-pill\s*\{[\s\S]*border-radius:\s*var\(--session-composer-control-radius\);/,
+  );
 });
 
 test('chat copy and diagnostics are localized in both supported locales', () => {

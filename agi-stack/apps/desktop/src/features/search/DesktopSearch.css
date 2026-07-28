@@ -107,7 +107,7 @@
 .desktop-search__modes button:hover,
 .desktop-search__modes button.is-active,
 .desktop-search__modes button[aria-pressed="true"] {
-  color: #dffaff;
+  color: var(--desktop-text-ice);
   border-color: rgba(var(--desktop-cyan-rgb), 0.48);
   background: rgba(var(--desktop-cyan-rgb), 0.12);
 }

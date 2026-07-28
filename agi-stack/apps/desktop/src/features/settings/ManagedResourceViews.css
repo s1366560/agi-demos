@@ -34,7 +34,7 @@
 
 .managed-resource-catalog > header h1 {
   margin: 3px 0 0;
-  color: #e7edf4;
+  color: var(--desktop-text);
   font-size: 17px;
   letter-spacing: -0.03em;
 }
@@ -46,16 +46,16 @@
   gap: 7px;
   padding: 0 9px;
   margin: 3px 12px 8px;
-  color: #5c6a7c;
-  background: #090e14;
-  border: 1px solid #2c3745;
+  color: var(--desktop-gray-18);
+  background: var(--desktop-surface-3);
+  border: 1px solid var(--desktop-border-17);
   border-radius: 6px;
 }
 
 .managed-resource-search input {
   min-width: 0;
   flex: 1;
-  color: #e2e9f1;
+  color: var(--desktop-text-frost);
   font-size: 9px;
   background: transparent;
   border: 0;
@@ -86,7 +86,7 @@
 
 .managed-resource-filters button.active {
   color: var(--desktop-text-soft);
-  background: #19232f;
+  background: var(--desktop-surface-31);
 }
 
 .managed-resource-filters button:focus-visible,
@@ -138,7 +138,7 @@
 }
 
 .managed-resource-item.selected {
-  background: #14222b;
+  background: var(--desktop-surface-cyan);
   border-color: #285265;
   box-shadow: inset 2px 0 var(--desktop-cyan);
 }
@@ -148,7 +148,7 @@
   width: 29px;
   height: 29px;
   place-items: center;
-  color: #7d8da0;
+  color: var(--desktop-gray-11);
   background: var(--desktop-surface-28);
   border: 1px solid var(--desktop-border-17);
   border-radius: 7px;
@@ -180,7 +180,7 @@
   justify-content: center;
   min-height: 32px;
   padding: 0 11px;
-  color: #dce8f2;
+  color: var(--desktop-text-frost);
   font-size: 11px;
   font-weight: 650;
   background: var(--desktop-surface-31);
@@ -196,7 +196,7 @@
 }
 
 .managed-resource-create {
-  color: #061117;
+  color: var(--desktop-surface-2);
   background: #5ccae8;
   border-color: #69d6f3;
 }
@@ -215,7 +215,7 @@
   border: 1px solid rgba(var(--desktop-steel-3-rgb), 0.25);
   border-radius: 9px;
   padding: 0 12px;
-  color: #b9c9d8;
+  color: var(--desktop-gray-35);
   background: transparent;
 }
 
@@ -244,7 +244,7 @@
 
 .managed-resource-item-copy b {
   overflow: hidden;
-  color: #dfe7f0;
+  color: var(--desktop-text-soft);
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -287,7 +287,7 @@
   font-size: 7px;
   white-space: nowrap;
   background: var(--desktop-surface-30);
-  border: 1px solid #374352;
+  border: 1px solid var(--desktop-border-6);
   border-radius: 9px;
 }
 
@@ -346,7 +346,7 @@
 
 .managed-resource-breadcrumb b {
   overflow: hidden;
-  color: #aab7c5;
+  color: var(--desktop-gray-30);
   text-overflow: ellipsis;
 }
 
@@ -448,7 +448,7 @@
 
 .managed-resource-identity h1 {
   margin: 5px 0;
-  color: #edf3f8;
+  color: var(--desktop-text-bright);
   font-size: 23px;
   letter-spacing: -0.04em;
 }
@@ -456,7 +456,7 @@
 .managed-resource-identity p {
   max-width: 620px;
   margin: 0;
-  color: #8190a2;
+  color: var(--desktop-gray-12);
   font-size: 9px;
   line-height: 1.55;
 }
@@ -472,7 +472,7 @@
 .managed-resource-chip,
 .managed-resource-chips span {
   padding: 4px 7px;
-  color: #8c9bad;
+  color: var(--desktop-gray-13);
   font-size: 7px;
   background: var(--desktop-surface-29);
   border: 1px solid var(--desktop-border-18);
@@ -484,7 +484,7 @@
   align-items: center;
   gap: 4px;
   padding: 4px 7px;
-  color: #8c9bad;
+  color: var(--desktop-gray-13);
   font-size: 7px;
   background: var(--desktop-surface-29);
   border: 1px solid var(--desktop-border-18);
@@ -519,7 +519,7 @@
   height: 38px;
   align-items: center;
   padding: 0 28px;
-  color: #e9f0f7;
+  color: var(--desktop-text);
   font-size: 8px;
   background: var(--desktop-surface-12);
   border-top: 1px solid var(--desktop-border-5);
@@ -540,7 +540,7 @@
   align-items: center;
   gap: 8px;
   padding: 9px 11px;
-  color: #e58b96;
+  color: var(--desktop-red-soft);
   font-size: 8px;
   background: var(--desktop-surface-red);
   border: 1px solid var(--desktop-border-red);
@@ -572,7 +572,7 @@
   display: block;
   margin-top: 5px;
   overflow: hidden;
-  color: #c7d1dc;
+  color: var(--desktop-text-pale);
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -623,7 +623,7 @@
 }
 
 .managed-resource-card-empty strong {
-  color: #a8b4c0;
+  color: var(--desktop-gray-30);
   font-size: 9px;
 }
 
@@ -645,7 +645,7 @@
 
 .managed-resource-catalog-state strong,
 .managed-resource-detail-empty strong {
-  color: #94a2b1;
+  color: var(--desktop-gray-28);
   font-size: 10px;
 }
 
@@ -662,10 +662,10 @@
 .managed-resource-catalog-state button {
   height: 26px;
   padding: 0 9px;
-  color: #b8c4d0;
+  color: var(--desktop-gray-32);
   font-size: 8px;
   background: var(--desktop-surface-29);
-  border: 1px solid #344254;
+  border: 1px solid var(--desktop-border-20);
   border-radius: 5px;
 }
 
