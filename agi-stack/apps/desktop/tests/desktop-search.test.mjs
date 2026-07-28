@@ -17,7 +17,10 @@ const source = readFileSync(
   'utf8',
 );
 
-function renderSearch(projectId = 'project-1') {
+function renderSearch(
+  projectId = 'project-1',
+  capability = { available: true, reason_code: null },
+) {
   return renderToStaticMarkup(
     React.createElement(
       I18nProvider,
@@ -27,6 +30,8 @@ function renderSearch(projectId = 'project-1') {
         tenantId: 'tenant-1',
         projectId,
         projectName: projectId ? 'Desktop Search' : null,
+        capability,
+        capabilityLoading: false,
         onOpenProjectSettings: () => {},
       }),
     ),
@@ -50,6 +55,18 @@ test('desktop search requires an authoritative project before issuing requests',
 
   assert.match(markup, /Choose a project to search/);
   assert.match(markup, /Open workspace settings/);
+  assert.doesNotMatch(markup, /type="submit"/);
+});
+
+test('desktop search fails closed when no structured capability is available', () => {
+  const markup = renderSearch('project-1', {
+    available: false,
+    reason_code: 'search_capability_contract_unavailable',
+  });
+
+  assert.match(markup, /Search is unavailable/);
+  assert.match(markup, /aria-label="Search is unavailable"/);
+  assert.match(markup, /data-reason-code="search_capability_contract_unavailable"/);
   assert.doesNotMatch(markup, /type="submit"/);
 });
 

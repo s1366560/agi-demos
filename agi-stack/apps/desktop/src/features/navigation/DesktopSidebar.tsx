@@ -9,6 +9,7 @@ import {
   MagnifyingGlassIcon,
   PersonIcon,
   PlusIcon,
+  RocketIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
@@ -72,6 +73,7 @@ type DesktopSidebarProps = {
 
 const primaryItems = [
   { id: 'my-work', labelKey: 'nav.myWork', icon: DashboardIcon },
+  { id: 'automations', labelKey: 'nav.automations', icon: RocketIcon },
   { id: 'search', labelKey: 'nav.search', icon: MagnifyingGlassIcon },
 ] as const;
 

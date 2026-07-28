@@ -623,6 +623,27 @@ async fn capabilities_and_error_envelopes_are_fastapi_compatible() {
         capabilities["search_types"]["faceted"]["endpoint"],
         "/api/v1/search-enhanced/faceted"
     );
+    assert_eq!(
+        capabilities["search_types"]["semantic"]["endpoint"],
+        "/api/v1/memory/search"
+    );
+    assert_eq!(
+        capabilities["search_types"]["advanced"]["endpoint"],
+        "/api/v1/search-enhanced/advanced"
+    );
+    assert_eq!(
+        capabilities["search_types"]["advanced"]["parameters"],
+        json!({
+            "query": "string (required)",
+            "strategy": "string (optional)",
+            "focal_node_uuid": "string (optional)",
+            "reranker": "string (optional)",
+            "limit": "integer (1-200)",
+            "tenant_id": "string (optional)",
+            "project_id": "string (optional)",
+            "since": "ISO datetime string (optional)",
+        })
+    );
     let golden: Value = serde_json::from_str(include_str!(
         "../../tests/golden/enhanced_search_capabilities.json"
     ))

@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MemStack Desktop and Web Parity Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "references", "cases"],
+  "properties": {
+    "$schema": { "type": "string", "minLength": 1 },
+    "schema_version": { "const": "1.0.0" },
+    "references": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prototype_revision",
+        "audited_desktop_revision",
+        "web_revision",
+        "desktop_revision"
+      ],
+      "properties": {
+        "prototype_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "audited_desktop_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "web_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "desktop_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "area",
+          "references",
+          "source_entries",
+          "locale",
+          "viewport",
+          "data_state",
+          "interaction_state",
+          "expected_observable_result",
+          "native_deviation",
+          "target_disposition",
+          "fixture"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+          "area": {
+            "enum": ["conversation", "capabilities"]
+          },
+          "references": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["prototype_revision", "web_revision", "desktop_revision"],
+            "properties": {
+              "prototype_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+              "web_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+              "desktop_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+            }
+          },
+          "source_entries": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["prototype", "web", "desktop"],
+            "properties": {
+              "prototype": { "type": "string", "minLength": 1 },
+              "web": { "type": "string", "minLength": 1 },
+              "desktop": { "type": "string", "minLength": 1 }
+            }
+          },
+          "locale": { "enum": ["en-US", "zh-CN"] },
+          "viewport": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["width", "height", "device_scale_factor"],
+            "properties": {
+              "width": { "type": "number", "minimum": 1 },
+              "height": { "type": "number", "minimum": 1 },
+              "device_scale_factor": { "type": "number", "minimum": 1 }
+            }
+          },
+          "data_state": { "type": "string", "minLength": 1 },
+          "interaction_state": { "type": "string", "minLength": 1 },
+          "expected_observable_result": { "type": "string", "minLength": 1 },
+          "native_deviation": { "type": ["string", "null"] },
+          "target_disposition": {
+            "enum": ["equivalent", "native_equivalent", "web_only_deep_link"]
+          },
+          "fixture": {
+            "type": "string",
+            "pattern": "^fixtures/[a-z0-9-]+\\.v1\\.json$"
+          }
+        }
+      }
+    }
+  }
+}

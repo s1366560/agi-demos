@@ -573,6 +573,20 @@ async fn search_capabilities() -> Json<Value> {
                     "project_id": "string (optional)",
                 },
             },
+            "advanced": {
+                "description": "Advanced search with configurable strategy and reranking",
+                "endpoint": "/api/v1/search-enhanced/advanced",
+                "parameters": {
+                    "query": "string (required)",
+                    "strategy": "string (optional)",
+                    "focal_node_uuid": "string (optional)",
+                    "reranker": "string (optional)",
+                    "limit": "integer (1-200)",
+                    "tenant_id": "string (optional)",
+                    "project_id": "string (optional)",
+                    "since": "ISO datetime string (optional)",
+                },
+            },
             "graph_traversal": {
                 "description": "Search by traversing the knowledge graph",
                 "endpoint": "/api/v1/search-enhanced/graph-traversal",

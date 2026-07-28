@@ -101,8 +101,13 @@ export function hitlResponsePresentation(
     return value ? { labelKey: 'chat.response.answer', value } : null;
   }
   if (hitlType === 'decision') {
-    const value = stringValue(item.decision ?? payload?.decision);
-    return value ? { labelKey: 'chat.response.decision', value } : null;
+    const value = stringOrListValue(item.decision ?? payload?.decision);
+    return value
+      ? {
+          labelKey: 'chat.response.decision',
+          value: Array.isArray(value) ? value.join(', ') : value,
+        }
+      : null;
   }
   if (hitlType === 'env_var') {
     const names = responseVariableNames(item, payload);
@@ -144,7 +149,7 @@ function applyResponse(
     return { ...item, answered: true, answer: stringValue(data.answer) ?? '' };
   }
   if (responseType === 'decision_answered') {
-    return { ...item, answered: true, decision: stringValue(data.decision) ?? '' };
+    return { ...item, answered: true, decision: stringOrListValue(data.decision) ?? '' };
   }
   if (responseType === 'env_var_provided') {
     return { ...item, answered: true, providedVariables: responseVariableNames(data, data) };
@@ -226,6 +231,12 @@ function recordValue(value: unknown): Record<string, unknown> | null {
 
 function stringValue(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function stringOrListValue(value: unknown): string | string[] | null {
+  if (!Array.isArray(value)) return stringValue(value);
+  const values = [...new Set(value.flatMap((candidate) => stringListValue(candidate)))];
+  return values.length > 0 ? values : null;
 }
 
 function booleanValue(value: unknown): boolean | null {

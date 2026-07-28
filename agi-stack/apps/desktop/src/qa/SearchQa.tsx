@@ -82,6 +82,8 @@ function SearchQa() {
           tenantId="tenant-search-qa"
           projectId={state === 'no-project' ? '' : 'project-search-qa'}
           projectName={state === 'no-project' ? null : 'Desktop Search QA'}
+          capability={{ available: true, reason_code: null }}
+          capabilityLoading={false}
           onOpenProjectSettings={() => {
             document.documentElement.dataset.qaSettingsOpened = 'true';
           }}

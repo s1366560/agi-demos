@@ -23,6 +23,10 @@ import type {
   TenantSummary,
 } from '../../types';
 import { SettingsState } from './ManagedResourceViews';
+import {
+  type NotificationDelivery,
+  useNotificationPreferences,
+} from './notificationPreferences';
 import { projectsForTenant, type SettingsSection } from './settingsNavigationModel';
 import './SettingsCorePages.css';
 
@@ -196,13 +200,53 @@ export function WorkspaceSettingsPage({
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [controlPlaneOpening, setControlPlaneOpening] = useState(false);
+  const [controlPlaneError, setControlPlaneError] = useState<string | null>(null);
+  const [webControlPlaneCapability, setWebControlPlaneCapability] =
+    useState<WebControlPlaneCapability>({
+      availability: 'unavailable',
+      contractVersion: 1,
+      reasonCode: 'capability_snapshot_loading',
+      source: 'none',
+    });
   const applyingRef = useRef(false);
+  const getCapabilities = window.__MEMSTACK_DESKTOP__?.getCapabilities;
+  const openWebControlPlane = window.__MEMSTACK_DESKTOP__?.openWebControlPlane;
 
   useEffect(() => {
     setTenantId(config.tenantId);
     setProjectId(config.projectId);
     setProjects(projectsForTenant(auth.projects, config.tenantId));
   }, [auth.projects, config.projectId, config.tenantId]);
+
+  useEffect(() => {
+    let active = true;
+    if (!getCapabilities) {
+      setWebControlPlaneCapability({
+        availability: 'unavailable',
+        contractVersion: 1,
+        reasonCode: 'capability_snapshot_unavailable',
+        source: 'none',
+      });
+      return;
+    }
+    void getCapabilities()
+      .then((snapshot) => {
+        if (active) setWebControlPlaneCapability(snapshot.webControlPlane);
+      })
+      .catch(() => {
+        if (!active) return;
+        setWebControlPlaneCapability({
+          availability: 'unavailable',
+          contractVersion: 1,
+          reasonCode: 'capability_snapshot_unavailable',
+          source: 'none',
+        });
+      });
+    return () => {
+      active = false;
+    };
+  }, [getCapabilities]);
 
   useEffect(() => {
     if (!tenantId) return;
@@ -265,6 +309,30 @@ export function WorkspaceSettingsPage({
     } finally {
       applyingRef.current = false;
       setApplying(false);
+    }
+  };
+
+  const openProjectControlPlane = async () => {
+    if (
+      webControlPlaneCapability.availability !== 'available' ||
+      !openWebControlPlane ||
+      !config.tenantId ||
+      !config.projectId
+    ) {
+      return;
+    }
+    setControlPlaneOpening(true);
+    setControlPlaneError(null);
+    try {
+      await openWebControlPlane({
+        destination: 'project-settings',
+        tenantId: config.tenantId,
+        projectId: config.projectId,
+      });
+    } catch (caught) {
+      setControlPlaneError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setControlPlaneOpening(false);
     }
   };
 
@@ -386,6 +454,34 @@ export function WorkspaceSettingsPage({
         {selectedTenant?.name || t('settings.notAvailable')} /{' '}
         {selectedProject?.name || t('settings.noProjectSelected')}
       </span>
+
+      <section className="settings-panel settings-control-plane-panel">
+        <header>
+          <GlobeIcon />
+          <span>
+            <strong>{t('settings.webControlPlane')}</strong>
+            <small>{t('settings.webControlPlaneDescription')}</small>
+          </span>
+          <Button
+            disabled={
+              webControlPlaneCapability.availability !== 'available' ||
+              !openWebControlPlane ||
+              !config.tenantId ||
+              !config.projectId ||
+              controlPlaneOpening
+            }
+            loading={controlPlaneOpening}
+            onClick={() => void openProjectControlPlane()}
+          >
+            {t('settings.openWebControlPlane')}
+          </Button>
+        </header>
+        {controlPlaneError ? (
+          <div className="settings-inline-error" role="alert">
+            {controlPlaneError}
+          </div>
+        ) : null}
+      </section>
     </SettingsPage>
   );
 }
@@ -523,11 +619,7 @@ export function PreferenceSummaryPage({
           ['settings.density', 'settings.densityValue'],
           ['settings.motion', 'settings.motionValue'],
         ]
-      : [
-          ['settings.reviewAlerts', 'settings.reviewAlertsValue'],
-          ['settings.delivery', 'settings.deliveryValue'],
-          ['settings.quietHours', 'settings.quietHoursValue'],
-        ];
+      : [];
 
   return (
     <SettingsPage
@@ -562,21 +654,172 @@ export function PreferenceSummaryPage({
           </div>
         </section>
       ) : null}
-      <section className="settings-panel settings-preference-summary">
-        <header>
-          <Icon />
-          <span>
-            <strong>{t(`settings.${section}Summary`)}</strong>
-            <small>{t(`settings.${section}SummaryDescription`)}</small>
-          </span>
-        </header>
-        <div className="settings-rows">
-          {rows.map(([label, value]) => (
-            <SettingsRow key={label} label={t(label)} value={t(value)} />
-          ))}
-        </div>
-      </section>
+      {section === 'notifications' ? (
+        <NotificationPreferenceControls />
+      ) : (
+        <section className="settings-panel settings-preference-summary">
+          <header>
+            <Icon />
+            <span>
+              <strong>{t(`settings.${section}Summary`)}</strong>
+              <small>{t(`settings.${section}SummaryDescription`)}</small>
+            </span>
+          </header>
+          <div className="settings-rows">
+            {rows.map(([label, value]) => (
+              <SettingsRow key={label} label={t(label)} value={t(value)} />
+            ))}
+          </div>
+        </section>
+      )}
     </SettingsPage>
+  );
+}
+
+function NotificationPreferenceControls() {
+  const { t } = useI18n();
+  const { preferences, setPreferences } = useNotificationPreferences();
+  const deliveryOptions: Array<{
+    value: NotificationDelivery;
+    label: string;
+  }> = [
+    {
+      value: 'desktop_and_in_app',
+      label: t('settings.deliveryDesktopAndInApp'),
+    },
+    {
+      value: 'desktop',
+      label: t('settings.deliveryDesktopOnly'),
+    },
+    {
+      value: 'in_app',
+      label: t('settings.deliveryInAppOnly'),
+    },
+  ];
+
+  return (
+    <section className="settings-panel settings-preference-summary">
+      <header>
+        <BellIcon />
+        <span>
+          <strong>{t('settings.notificationsSummary')}</strong>
+          <small>{t('settings.notificationsSummaryDescription')}</small>
+        </span>
+      </header>
+      <div className="settings-notification-controls">
+        <PreferenceSwitch
+          label={t('settings.reviewAlerts')}
+          description={t('settings.reviewAlertsDescription')}
+          checked={preferences.reviewAlerts}
+          onChange={(reviewAlerts) =>
+            setPreferences((current) => ({ ...current, reviewAlerts }))
+          }
+        />
+        <fieldset className="settings-delivery-options">
+          <legend>{t('settings.delivery')}</legend>
+          <p>{t('settings.deliveryDescription')}</p>
+          <div role="radiogroup" aria-label={t('settings.deliveryGroupLabel')}>
+            {deliveryOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={preferences.delivery === option.value}
+                className={preferences.delivery === option.value ? 'active' : ''}
+                onClick={() =>
+                  setPreferences((current) => ({
+                    ...current,
+                    delivery: option.value,
+                  }))
+                }
+              >
+                {option.label}
+                {preferences.delivery === option.value ? <CheckCircledIcon /> : null}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+        <PreferenceSwitch
+          label={t('settings.quietHours')}
+          description={t('settings.quietHoursDescription')}
+          checked={preferences.quietHours.enabled}
+          onChange={(enabled) =>
+            setPreferences((current) => ({
+              ...current,
+              quietHours: { ...current.quietHours, enabled },
+            }))
+          }
+        />
+        {preferences.quietHours.enabled ? (
+          <div className="settings-quiet-hours">
+            <label>
+              <span>{t('settings.quietHoursStart')}</span>
+              <input
+                type="time"
+                value={preferences.quietHours.start}
+                onChange={(event) =>
+                  setPreferences((current) => ({
+                    ...current,
+                    quietHours: {
+                      ...current.quietHours,
+                      start: event.currentTarget.value,
+                    },
+                  }))
+                }
+              />
+            </label>
+            <label>
+              <span>{t('settings.quietHoursEnd')}</span>
+              <input
+                type="time"
+                value={preferences.quietHours.end}
+                onChange={(event) =>
+                  setPreferences((current) => ({
+                    ...current,
+                    quietHours: {
+                      ...current.quietHours,
+                      end: event.currentTarget.value,
+                    },
+                  }))
+                }
+              />
+            </label>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function PreferenceSwitch({
+  label,
+  description,
+  checked,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="settings-preference-switch-row">
+      <span>
+        <strong>{label}</strong>
+        <small>{description}</small>
+      </span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        className={checked ? 'active' : ''}
+        onClick={() => onChange(!checked)}
+      >
+        <i aria-hidden="true" />
+        {t(checked ? 'settings.preferenceOn' : 'settings.preferenceOff')}
+      </button>
+    </div>
   );
 }
 

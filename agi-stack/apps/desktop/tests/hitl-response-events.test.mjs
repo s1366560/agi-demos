@@ -85,6 +85,21 @@ test('live HITL replies update their original request without appending response
   assert.equal(settled[4].sourceComponentId, 'approve-button');
 });
 
+test('multi-select decision replies retain only structured option identities', () => {
+  const decision = applyHitlResponseStreamEvent([asked('decision_asked', 'decision-many')], {
+    type: 'decision_answered',
+    data: { request_id: 'decision-many', decision: ['safe', 'observable', '', 42] },
+  });
+
+  assert.equal(decision.handled, true);
+  assert.equal(decision.items[0].answered, true);
+  assert.deepEqual(decision.items[0].decision, ['safe', 'observable']);
+  assert.deepEqual(
+    hitlResponsePresentation(decision.items[0], 'decision'),
+    { labelKey: 'chat.response.decision', value: 'safe, observable' },
+  );
+});
+
 test('HITL reply matching is request- and request-type-specific while legacy permission replies remain supported', () => {
   const pending = [asked('clarification_asked', 'shared'), asked('permission_asked', 'shared')];
   const permission = applyHitlResponseStreamEvent(pending, {

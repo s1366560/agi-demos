@@ -1,0 +1,44 @@
+{
+  "$schema": "../parity-fixture.schema.json",
+  "schema_version": "1.0.0",
+  "case_id": "conversation-history-replay",
+  "kind": "history_replay",
+  "source_contract": "sessions_history durable records",
+  "input": {
+    "transport": "sessions_history",
+    "records": [
+      {
+        "event_type": "assistant_message",
+        "message_id": "message-parity-1",
+        "payload": {
+          "content": "Parity complete.",
+          "is_partial": false
+        }
+      }
+    ]
+  },
+  "web_expected_view_model": {
+    "active_message_id": null,
+    "timeline": [
+      {
+        "key": "message-parity-1",
+        "message_id": "message-parity-1",
+        "role": "assistant",
+        "text": "Parity complete.",
+        "state": "completed"
+      }
+    ]
+  },
+  "desktop_expected_view_model": {
+    "active_message_id": null,
+    "timeline": [
+      {
+        "key": "message-parity-1",
+        "message_id": "message-parity-1",
+        "role": "assistant",
+        "text": "Parity complete.",
+        "state": "completed"
+      }
+    ]
+  }
+}

@@ -10,7 +10,7 @@ import {
 } from '@radix-ui/react-icons';
 import { AlertDialog, Badge, Button, Heading, Switch, Text } from '@radix-ui/themes';
 
-import { DesktopApiClient, DesktopApiError } from '../../api/client';
+import { DesktopApiError } from '../../api/client';
 import { useI18n } from '../../i18n';
 import type {
   AutomationCapabilities,
@@ -18,7 +18,13 @@ import type {
   AutomationJob,
   AutomationRun,
 } from '../../types';
+import type { DesktopCapabilityAvailability } from '../runtime/capabilitySnapshot';
 import { AutomationEditorDialog } from './AutomationEditorDialog';
+import {
+  automationRunAttemptKey,
+  settleAutomationRunAttempt,
+  type DesktopAutomationApi,
+} from './automationClient';
 import {
   automationActionAvailability,
   automationCapabilityReasonCode,
@@ -36,18 +42,10 @@ import {
 import './AutomationsPage.css';
 
 type AutomationsPageProps = {
-  api: Pick<
-    DesktopApiClient,
-    | 'createAutomation'
-    | 'deleteAutomation'
-    | 'getAutomationCapabilities'
-    | 'listAutomations'
-    | 'listAutomationRuns'
-    | 'toggleAutomation'
-    | 'updateAutomation'
-  >;
+  api: DesktopAutomationApi;
   projectId: string;
   projectName?: string | null;
+  runCapability: DesktopCapabilityAvailability;
   onOpenProjectSettings: () => void;
   onOpenConnection: () => void;
 };
@@ -56,8 +54,8 @@ export function AutomationsPage({
   api,
   projectId,
   projectName,
+  runCapability,
   onOpenProjectSettings,
-  onOpenConnection,
 }: AutomationsPageProps) {
   const { locale, t } = useI18n();
   const [jobs, setJobs] = useState<AutomationJob[]>([]);
@@ -68,12 +66,14 @@ export function AutomationsPage({
   const [error, setError] = useState<string | null>(null);
   const [runsError, setRunsError] = useState<string | null>(null);
   const [capabilities, setCapabilities] = useState<AutomationCapabilities | null>(null);
-  const [unavailable, setUnavailable] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorJob, setEditorJob] = useState<AutomationJob | null>(null);
   const [mutationBusy, setMutationBusy] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const mutationKeys = useRef(new Map<string, string>());
+  const runAttempts = useRef(
+    new Map<string, { fingerprint: string; idempotencyKey: string }>(),
+  );
   const selectedJob = useMemo(
     () => jobs.find((job) => job.id === selectedJobId) ?? jobs[0] ?? null,
     [jobs, selectedJobId],
@@ -86,41 +86,30 @@ export function AutomationsPage({
         setSelectedJobId('');
         setCapabilities(null);
         setError(null);
-        setUnavailable(false);
         return;
       }
       setLoading(true);
       setError(null);
-      setUnavailable(false);
       try {
-        const [response, capabilityResponse] = await Promise.all([
-          api.listAutomations(projectId, signal),
-          api.getAutomationCapabilities(projectId, signal).catch((caught) => {
-            if (signal?.aborted) throw caught;
-            if (caught instanceof DesktopApiError && [404, 405, 501].includes(caught.status)) {
-              return null;
-            }
-            throw caught;
-          }),
-        ]);
+        const response = await api.listAutomations(projectId, signal);
         setJobs(response.items);
-        setCapabilities(capabilityResponse);
         setSelectedJobId((current) =>
           response.items.some((job) => job.id === current)
             ? current
             : (response.items[0]?.id ?? ''),
         );
+        try {
+          setCapabilities(await api.getAutomationCapabilities(projectId, signal));
+        } catch (caught) {
+          if (signal?.aborted) throw caught;
+          setCapabilities(null);
+        }
       } catch (caught) {
         if (signal?.aborted) return;
-        const capabilityUnavailable =
-          caught instanceof DesktopApiError && [404, 405, 501].includes(caught.status);
         setJobs([]);
         setCapabilities(null);
         setSelectedJobId('');
-        setUnavailable(capabilityUnavailable);
-        setError(
-          capabilityUnavailable ? null : caught instanceof Error ? caught.message : String(caught),
-        );
+        setError(caught instanceof Error ? caught.message : String(caught));
       } finally {
         if (!signal?.aborted) setLoading(false);
       }
@@ -266,6 +255,44 @@ export function AutomationsPage({
     }
   };
 
+  const runJob = async (job: AutomationJob) => {
+    setMutationBusy(true);
+    setMutationError(null);
+    const attemptScope = `${projectId}:${job.id}`;
+    const attemptInput = {
+      expected_revision: job.revision,
+      conversation_id: job.conversation_id ?? undefined,
+    };
+    const idempotencyKey = automationRunAttemptKey(
+      runAttempts.current,
+      attemptScope,
+      attemptInput,
+    );
+    try {
+      await api.runAutomation(
+        job.id,
+        {
+          ...attemptInput,
+          idempotency_key: idempotencyKey,
+        },
+        projectId,
+      );
+      settleAutomationRunAttempt(runAttempts.current, attemptScope);
+      const [jobResponse, runResponse] = await Promise.all([
+        api.listAutomations(projectId),
+        api.listAutomationRuns(job.id, projectId),
+      ]);
+      setJobs(jobResponse.items);
+      setRuns(runResponse.items);
+    } catch (caught) {
+      settleAutomationRunAttempt(runAttempts.current, attemptScope, caught);
+      setMutationError(caught instanceof Error ? caught.message : String(caught));
+      if (caught instanceof DesktopApiError && caught.status === 409) void loadJobs();
+    } finally {
+      setMutationBusy(false);
+    }
+  };
+
   return (
     <section className="automations-page" aria-labelledby="automations-title">
       <header className="automations-header">
@@ -332,13 +359,6 @@ export function AutomationsPage({
           body={t('automations.projectRequiredBody')}
           action={<Button onClick={onOpenProjectSettings}>{t('automations.openSettings')}</Button>}
         />
-      ) : unavailable ? (
-        <AutomationEmpty
-          icon={<ActivityLogIcon />}
-          title={t('automations.unavailable')}
-          body={t('automations.unavailableBody')}
-          action={<Button onClick={onOpenConnection}>{t('automations.openConnection')}</Button>}
-        />
       ) : error && jobs.length === 0 ? (
         <AutomationEmpty
           error
@@ -387,9 +407,11 @@ export function AutomationsPage({
               loadError={runsError}
               mutationError={mutationError}
               capabilities={capabilities}
+              runtimeRunCapability={runCapability}
               busy={mutationBusy}
               onEdit={() => openEdit(selectedJob)}
               onToggle={() => void toggleJob(selectedJob)}
+              onRun={() => void runJob(selectedJob)}
               onDelete={() => void deleteJob(selectedJob)}
             />
           ) : null}
@@ -449,9 +471,11 @@ function AutomationDetail({
   loadError,
   mutationError,
   capabilities,
+  runtimeRunCapability,
   busy,
   onEdit,
   onToggle,
+  onRun,
   onDelete,
 }: {
   job: AutomationJob;
@@ -461,9 +485,11 @@ function AutomationDetail({
   loadError: string | null;
   mutationError: string | null;
   capabilities: AutomationCapabilities | null;
+  runtimeRunCapability: DesktopCapabilityAvailability;
   busy: boolean;
   onEdit: () => void;
   onToggle: () => void;
+  onRun: () => void;
   onDelete: () => void;
 }) {
   const { t } = useI18n();
@@ -472,11 +498,18 @@ function AutomationDetail({
   const environmentId = automationEnvironmentId(job);
   const permissionProfile = automationPermissionProfile(job);
   const lastRunStatus = automationLastRunStatus(job);
-  const runCapability = automationActionAvailability(capabilities, 'run_now', {
-    handler_available: false,
+  const declaredRunCapability = automationActionAvailability(capabilities, 'run_now', {
+    handler_available: true,
     revision_required: true,
     durable_execution_required: true,
   });
+  const runCapability = runtimeRunCapability.available
+    ? declaredRunCapability
+    : {
+        allowed: false,
+        reason_code:
+          runtimeRunCapability.reason_code ?? 'capability_contract_unavailable',
+      };
   const editCapability = automationActionAvailability(capabilities, 'edit', {
     handler_available: true,
     revision_required: true,
@@ -546,6 +579,7 @@ function AutomationDetail({
           <Button
             disabled={busy || !runCapability.allowed}
             aria-describedby={!runCapability.allowed ? 'automation-mutation-capability' : undefined}
+            onClick={onRun}
           >
             <RocketIcon /> {t('automations.runNow')}
           </Button>
@@ -578,11 +612,13 @@ function AutomationDetail({
         <AutomationFact label={t('automations.delivery')} value={job.delivery.kind} />
       </dl>
 
-      <div id="automation-mutation-capability" className="automation-capability-note" role="note">
-        <strong>{t('automations.executionUnavailableTitle')}</strong>
-        <span>{capabilityReason}</span>
-        <span>{t('automations.executionUnavailableBody')}</span>
-      </div>
+      {!runCapability.allowed ? (
+        <div id="automation-mutation-capability" className="automation-capability-note" role="note">
+          <strong>{t('automations.executionUnavailableTitle')}</strong>
+          <span>{capabilityReason}</span>
+          <span>{t('automations.executionUnavailableBody')}</span>
+        </div>
+      ) : null}
 
       {mutationError ? (
         <div className="automation-inline-error" role="alert">

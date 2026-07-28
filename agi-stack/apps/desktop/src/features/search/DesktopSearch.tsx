@@ -14,6 +14,7 @@ import type {
   DesktopSearchResponse,
 } from '../../api/searchContract';
 import { useI18n } from '../../i18n';
+import type { DesktopCapabilityAvailability } from '../runtime/capabilitySnapshot';
 import {
   commaSeparatedSearchValues,
   DESKTOP_SEARCH_PAGE_SIZE,
@@ -30,6 +31,9 @@ type DesktopSearchProps = {
   tenantId: string;
   projectId: string;
   projectName: string | null;
+  capability: DesktopCapabilityAvailability;
+  capabilityLoading: boolean;
+  onRetryCapability?: () => void;
   onOpenProjectSettings?: () => void;
 };
 
@@ -56,6 +60,9 @@ export function DesktopSearch({
   tenantId,
   projectId,
   projectName,
+  capability,
+  capabilityLoading,
+  onRetryCapability,
   onOpenProjectSettings,
 }: DesktopSearchProps) {
   const { t } = useI18n();
@@ -101,7 +108,7 @@ export function DesktopSearch({
     setExecutedLimit(DESKTOP_SEARCH_PAGE_SIZE);
     setSelectedIds([]);
     setCopyNotice(null);
-  }, [projectId, tenantId]);
+  }, [capability.available, projectId, tenantId]);
 
   useEffect(
     () => () => {
@@ -199,6 +206,7 @@ export function DesktopSearch({
   };
 
   const executeSearch = async (request: DesktopSearchRequest) => {
+    if (!capability.available) return;
     if (!tenantId.trim() || !projectId.trim()) return;
 
     abortRef.current?.abort();
@@ -307,6 +315,40 @@ export function DesktopSearch({
             </button>
           ) : null}
         </div>
+      </section>
+    );
+  }
+
+  if (capabilityLoading) {
+    return (
+      <section className="desktop-search" aria-label={t('search.capability.loading.title')}>
+        <SearchState
+          icon={<MagnifyingGlassIcon width="28" height="28" aria-hidden="true" />}
+          title={t('search.capability.loading.title')}
+          description={t('search.capability.loading.description')}
+        />
+      </section>
+    );
+  }
+
+  if (!capability.available) {
+    return (
+      <section
+        className="desktop-search"
+        aria-label={t('search.capability.unavailable.title')}
+        data-reason-code={capability.reason_code ?? 'capability_snapshot_unavailable'}
+      >
+        <SearchState
+          icon={<MagnifyingGlassIcon width="28" height="28" aria-hidden="true" />}
+          title={t('search.capability.unavailable.title')}
+          description={t('search.capability.unavailable.description')}
+        />
+        {onRetryCapability ? (
+          <button type="button" className="desktop-search__load-more" onClick={onRetryCapability}>
+            <ReloadIcon aria-hidden="true" />
+            {t('search.retry')}
+          </button>
+        ) : null}
       </section>
     );
   }

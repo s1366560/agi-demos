@@ -1,0 +1,73 @@
+{
+  "$schema": "../parity-fixture.schema.json",
+  "schema_version": "1.0.0",
+  "case_id": "local-capability-snapshot",
+  "kind": "capability_snapshot",
+  "source_contract": "DesktopCapabilitySnapshot v1",
+  "input": {
+    "snapshot": {
+      "version": "1.0.0",
+      "mode": "local",
+      "capabilities": {
+        "automation_run": {
+          "available": false,
+          "reason_code": "local_scheduler_unavailable"
+        },
+        "search": {
+          "available": false,
+          "reason_code": "local_search_routes_unavailable"
+        },
+        "workspace_collaboration": {
+          "available": false,
+          "reason_code": "local_workspace_collaboration_unavailable"
+        },
+        "sandbox_isolation": {
+          "available": false,
+          "reason_code": "local_isolation_not_applicable"
+        }
+      }
+    }
+  },
+  "web_expected_view_model": {
+    "mode": "local",
+    "features": {
+      "automation_run": {
+        "available": false,
+        "reason_code": "local_scheduler_unavailable"
+      },
+      "search": {
+        "available": false,
+        "reason_code": "local_search_routes_unavailable"
+      },
+      "workspace_collaboration": {
+        "available": false,
+        "reason_code": "local_workspace_collaboration_unavailable"
+      },
+      "sandbox_isolation": {
+        "available": false,
+        "reason_code": "local_isolation_not_applicable"
+      }
+    }
+  },
+  "desktop_expected_view_model": {
+    "mode": "local",
+    "features": {
+      "automation_run": {
+        "available": false,
+        "reason_code": "local_scheduler_unavailable"
+      },
+      "search": {
+        "available": false,
+        "reason_code": "local_search_routes_unavailable"
+      },
+      "workspace_collaboration": {
+        "available": false,
+        "reason_code": "local_workspace_collaboration_unavailable"
+      },
+      "sandbox_isolation": {
+        "available": false,
+        "reason_code": "local_isolation_not_applicable"
+      }
+    }
+  }
+}

@@ -1,10 +1,12 @@
 import {
   app,
   BrowserWindow,
+  desktopCapturer,
   dialog,
   ipcMain,
   net,
   protocol,
+  screen,
   session,
   shell,
   systemPreferences,
@@ -16,6 +18,13 @@ import { dirname, isAbsolute, join, normalize, parse, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
+  DisplayCaptureAuthorizationGate,
+  assertPngCaptureWithinLimit,
+  captureThumbnailSize,
+  selectExactDisplaySource,
+  type DesktopDisplayCapture,
+} from './displayCapturePolicy';
+import {
   RENDERER_ENTRY_URL,
   RENDERER_PROTOCOL_HOST,
   RENDERER_PROTOCOL_SCHEME,
@@ -25,6 +34,12 @@ import {
 import { isTrustedAudioMediaPermission } from './mediaPermissionPolicy';
 import { SidecarSupervisor } from './sidecarSupervisor';
 import { startAutomaticUpdates } from './updater';
+import {
+  SIGNED_WEB_CONTROL_PLANE_ORIGIN,
+  buildWebControlPlaneUrl,
+  resolveWebControlPlaneConfiguration,
+  type DesktopNativeCapabilitySnapshot,
+} from './webControlPlanePolicy';
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
 const rendererDirectory = join(currentDirectory, '../renderer');
@@ -41,6 +56,12 @@ const SIDECAR_COMMANDS = new Set([
   'local_runtime_status',
   'local_runtime_configure',
 ]);
+const captureAuthorizationGate = new DisplayCaptureAuthorizationGate();
+const webControlPlaneConfiguration = resolveWebControlPlaneConfiguration({
+  developmentOrigin: process.env.AGISTACK_WEB_CONTROL_PLANE_ORIGIN,
+  isPackaged: app.isPackaged,
+  signedOrigin: SIGNED_WEB_CONTROL_PLANE_ORIGIN,
+});
 
 type DesktopCommandArgs = Record<string, unknown> | undefined;
 
@@ -115,6 +136,79 @@ function validateDeviceAuthorizationUrl(args: DesktopCommandArgs): string {
   return authorizationUrl.toString();
 }
 
+async function captureCurrentDisplay(): Promise<DesktopDisplayCapture> {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    throw new Error('desktop window is unavailable');
+  }
+  const captureWindow = mainWindow;
+  const authorization = await captureAuthorizationGate.authorize(async () => {
+    const result = await dialog.showMessageBox(captureWindow, {
+      buttons: ['Capture display', 'Cancel'],
+      cancelId: 1,
+      defaultId: 1,
+      detail:
+        'The screenshot stays in a local preview until you explicitly attach it.',
+      message: 'Allow MemStack to capture the display containing this window?',
+      noLink: true,
+      title: 'Capture current display',
+      type: 'question',
+    });
+    return result.response === 0;
+  });
+  captureAuthorizationGate.consume(authorization);
+  if (captureWindow.isDestroyed()) {
+    throw new Error('desktop window is unavailable');
+  }
+  const targetDisplay = screen.getDisplayMatching(captureWindow.getBounds());
+  const targetDisplayId = String(targetDisplay.id);
+  const thumbnailSize = captureThumbnailSize(
+    targetDisplay.size.width,
+    targetDisplay.size.height,
+    targetDisplay.scaleFactor,
+  );
+  const sources = await desktopCapturer.getSources({
+    types: ['screen'],
+    thumbnailSize,
+    fetchWindowIcons: false,
+  });
+  const source = selectExactDisplaySource(
+    sources.map((candidate) => ({
+      displayId: candidate.display_id,
+      value: candidate,
+    })),
+    targetDisplayId,
+  ).value;
+  const png = source.thumbnail.toPNG();
+  const pngBytes = assertPngCaptureWithinLimit(png);
+  const captureSize = source.thumbnail.getSize();
+  return {
+    dataUrl: `data:image/png;base64,${png.toString('base64')}`,
+    displayId: targetDisplayId,
+    height: captureSize.height,
+    mimeType: 'image/png',
+    pngBytes,
+    width: captureSize.width,
+  };
+}
+
+async function openWebControlPlane(args: DesktopCommandArgs): Promise<void> {
+  if (
+    webControlPlaneConfiguration.capability.availability !== 'available' ||
+    webControlPlaneConfiguration.origin === null
+  ) {
+    throw new Error(webControlPlaneConfiguration.capability.reasonCode);
+  }
+  const target = buildWebControlPlaneUrl(webControlPlaneConfiguration.origin, args);
+  await shell.openExternal(target, { activate: true });
+}
+
+function desktopNativeCapabilities(): DesktopNativeCapabilitySnapshot {
+  return Object.freeze({
+    contractVersion: 1,
+    webControlPlane: webControlPlaneConfiguration.capability,
+  });
+}
+
 async function executeDesktopCommand(
   event: IpcMainInvokeEvent,
   command: unknown,
@@ -126,8 +220,15 @@ async function executeDesktopCommand(
   switch (command) {
     case 'frontend_ready':
       return undefined;
+    case 'get_desktop_capabilities':
+      return desktopNativeCapabilities();
     case 'open_device_authorization_url':
       await shell.openExternal(validateDeviceAuthorizationUrl(args), { activate: true });
+      return undefined;
+    case 'capture_current_display':
+      return captureCurrentDisplay();
+    case 'open_web_control_plane':
+      await openWebControlPlane(args);
       return undefined;
     case 'request_microphone_access':
       return process.platform === 'darwin'

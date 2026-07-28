@@ -12,6 +12,9 @@ const theme = require('/tmp/agistack-desktop-test-dist/src/theme.js');
 const { PreferenceSummaryPage } = require(
   '/tmp/agistack-desktop-test-dist/src/features/settings/SettingsCorePages.js'
 );
+const notificationPreferences = require(
+  '/tmp/agistack-desktop-test-dist/src/features/settings/notificationPreferences.js'
+);
 
 const stylesCss = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
@@ -31,6 +34,13 @@ const {
   parseThemePreference,
   resolveTheme,
 } = theme;
+const {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  NOTIFICATION_PREFERENCES_STORAGE_KEY,
+  parseNotificationPreferences,
+  readNotificationPreferences,
+  writeNotificationPreferences,
+} = notificationPreferences;
 
 function blockTokens(blockSource) {
   const tokens = new Map();
@@ -225,4 +235,142 @@ test('stored light preference marks the light radio as checked', () => {
   const lightRadio = markup.match(/<button[^>]*aria-checked="true"[^>]*>[\s\S]*?<\/button>/);
   assert.ok(lightRadio, 'one radio must be checked');
   assert.ok(lightRadio[0].includes('Light'));
+});
+
+test('notification preferences use a versioned storage contract with safe defaults', () => {
+  assert.equal(
+    NOTIFICATION_PREFERENCES_STORAGE_KEY,
+    'agistack.desktop.notification-preferences:v1'
+  );
+  assert.deepEqual(DEFAULT_NOTIFICATION_PREFERENCES, {
+    reviewAlerts: true,
+    delivery: 'desktop_and_in_app',
+    quietHours: {
+      enabled: false,
+      start: '22:00',
+      end: '08:00',
+    },
+  });
+  assert.deepEqual(parseNotificationPreferences(null), DEFAULT_NOTIFICATION_PREFERENCES);
+  assert.deepEqual(
+    parseNotificationPreferences(
+      JSON.stringify({
+        version: 1,
+        reviewAlerts: false,
+        delivery: 'in_app',
+        quietHours: { enabled: true, start: '21:30', end: '07:15' },
+      })
+    ),
+    {
+      reviewAlerts: false,
+      delivery: 'in_app',
+      quietHours: { enabled: true, start: '21:30', end: '07:15' },
+    }
+  );
+  for (const invalid of [
+    '{',
+    JSON.stringify({ version: 2 }),
+    JSON.stringify({
+      version: 1,
+      reviewAlerts: 'yes',
+      delivery: 'email',
+      quietHours: { enabled: true, start: 'night', end: 'morning' },
+    }),
+  ]) {
+    assert.deepEqual(parseNotificationPreferences(invalid), DEFAULT_NOTIFICATION_PREFERENCES);
+  }
+});
+
+test('notification preference persistence reads and writes the complete immutable snapshot', () => {
+  const writes = [];
+  const storage = {
+    value: null,
+    getItem(key) {
+      assert.equal(key, NOTIFICATION_PREFERENCES_STORAGE_KEY);
+      return this.value;
+    },
+    setItem(key, value) {
+      assert.equal(key, NOTIFICATION_PREFERENCES_STORAGE_KEY);
+      this.value = value;
+      writes.push(value);
+    },
+  };
+  const next = {
+    reviewAlerts: false,
+    delivery: 'desktop',
+    quietHours: { enabled: true, start: '23:00', end: '06:30' },
+  };
+
+  writeNotificationPreferences(next, storage);
+
+  assert.equal(writes.length, 1);
+  assert.deepEqual(JSON.parse(writes[0]), { version: 1, ...next });
+  assert.deepEqual(readNotificationPreferences(storage), next);
+  assert.notEqual(readNotificationPreferences(storage), next);
+  assert.notEqual(readNotificationPreferences(storage).quietHours, next.quietHours);
+});
+
+test('notification settings render persisted switches, delivery choices, and quiet hours', () => {
+  const stored = JSON.stringify({
+    version: 1,
+    reviewAlerts: false,
+    delivery: 'in_app',
+    quietHours: { enabled: true, start: '21:30', end: '07:15' },
+  });
+  const previousWindow = globalThis.window;
+  globalThis.window = {
+    localStorage: {
+      getItem: (key) => {
+        if (key === 'agistack.desktop.locale') return 'en';
+        if (key === NOTIFICATION_PREFERENCES_STORAGE_KEY) return stored;
+        return null;
+      },
+      setItem: () => {},
+    },
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  };
+  try {
+    const markup = renderToStaticMarkup(
+      React.createElement(
+        I18nProvider,
+        null,
+        React.createElement(
+          ThemePreferenceProvider,
+          null,
+          React.createElement(PreferenceSummaryPage, { section: 'notifications' })
+        )
+      )
+    );
+
+    assert.equal((markup.match(/role="switch"/g) || []).length, 2);
+    assert.ok(markup.includes('aria-checked="false"'));
+    assert.ok(markup.includes('role="radiogroup"'));
+    assert.equal((markup.match(/role="radio"/g) || []).length, 3);
+    assert.ok(markup.includes('In-app only'));
+    assert.equal((markup.match(/aria-checked="true"/g) || []).length, 2);
+    assert.match(markup, /type="time"[^>]*value="21:30"/);
+    assert.match(markup, /type="time"[^>]*value="07:15"/);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
+test('notification preference i18n keys exist in both dictionaries', () => {
+  const keys = [
+    'settings.reviewAlertsDescription',
+    'settings.preferenceOn',
+    'settings.preferenceOff',
+    'settings.deliveryGroupLabel',
+    'settings.deliveryDesktopAndInApp',
+    'settings.deliveryDesktopOnly',
+    'settings.deliveryInAppOnly',
+    'settings.quietHoursDescription',
+    'settings.quietHoursStart',
+    'settings.quietHoursEnd',
+  ];
+  for (const key of keys) {
+    const occurrences = i18nSource.split(`'${key}':`).length - 1;
+    assert.ok(occurrences >= 2, `${key} must exist in enUS and zhCN (found ${occurrences})`);
+  }
 });

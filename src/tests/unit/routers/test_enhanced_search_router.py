@@ -7,6 +7,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.primary.web.routers.enhanced_search import (
+    get_search_capabilities,
     memory_search,
     search_advanced,
     search_by_community,
@@ -71,6 +72,28 @@ async def _add_other_tenant_project(
 
 @pytest.mark.unit
 class TestEnhancedSearchRouter:
+    async def test_capabilities_declare_advanced_without_removing_semantic(
+        self,
+        test_user: User,
+    ) -> None:
+        capabilities = await get_search_capabilities(current_user=test_user)
+
+        assert capabilities["search_types"]["semantic"]["endpoint"] == "/api/v1/memory/search"
+        assert (
+            capabilities["search_types"]["advanced"]["endpoint"]
+            == "/api/v1/search-enhanced/advanced"
+        )
+        assert capabilities["search_types"]["advanced"]["parameters"] == {
+            "query": "string (required)",
+            "strategy": "string (optional)",
+            "focal_node_uuid": "string (optional)",
+            "reranker": "string (optional)",
+            "limit": "integer (1-200)",
+            "tenant_id": "string (optional)",
+            "project_id": "string (optional)",
+            "since": "ISO datetime string (optional)",
+        }
+
     @pytest.mark.asyncio
     async def test_graph_traversal_forwards_relationship_types_safely(
         self,

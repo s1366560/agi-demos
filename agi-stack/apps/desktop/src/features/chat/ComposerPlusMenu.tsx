@@ -23,6 +23,11 @@ import {
   type ComposerCatalog,
   type ComposerCatalogClient,
 } from './composerCatalogModel';
+import {
+  desktopScreenshotFile,
+  readDesktopScreenshotPreview,
+  type DesktopScreenshotPreview,
+} from './desktopScreenshotModel';
 
 const COMMANDS = [
   { id: '/plan', descriptionKey: 'composer.commandPlanDescription' },
@@ -77,9 +82,15 @@ export function ComposerPlusMenu({
   const [expanded, setExpanded] = useState<Category['id'] | null>(null);
   const [catalog, setCatalog] = useState<ComposerCatalog | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [screenshotPreview, setScreenshotPreview] =
+    useState<DesktopScreenshotPreview | null>(null);
+  const [screenshotBusy, setScreenshotBusy] = useState(false);
+  const [screenshotError, setScreenshotError] = useState<string | null>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const screenshotButtonRef = useRef<HTMLButtonElement>(null);
+  const captureCurrentDisplay = window.__MEMSTACK_DESKTOP__?.captureCurrentDisplay;
 
   useEffect(() => {
     if (!open) return;
@@ -246,6 +257,8 @@ export function ComposerPlusMenu({
   function close(restoreFocus = false) {
     setOpen(false);
     setExpanded(null);
+    setScreenshotPreview(null);
+    setScreenshotError(null);
     if (restoreFocus) {
       window.requestAnimationFrame(() => triggerRef.current?.focus());
     }
@@ -261,6 +274,41 @@ export function ComposerPlusMenu({
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (!selectedFiles.length) return;
     void onUploadFiles(selectedFiles);
+  }
+
+  async function captureScreenshot() {
+    if (!captureCurrentDisplay) return;
+    setScreenshotBusy(true);
+    setScreenshotError(null);
+    try {
+      const capture = await captureCurrentDisplay();
+      setScreenshotPreview(readDesktopScreenshotPreview(capture));
+    } catch (caught) {
+      setScreenshotError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setScreenshotBusy(false);
+    }
+  }
+
+  async function confirmScreenshot() {
+    if (!screenshotPreview) return;
+    setScreenshotBusy(true);
+    setScreenshotError(null);
+    try {
+      const file = desktopScreenshotFile(screenshotPreview);
+      await onUploadFiles([file]);
+      close(true);
+    } catch (caught) {
+      setScreenshotError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setScreenshotBusy(false);
+    }
+  }
+
+  function cancelScreenshot() {
+    setScreenshotPreview(null);
+    setScreenshotError(null);
+    window.requestAnimationFrame(() => screenshotButtonRef.current?.focus());
   }
 
   return (
@@ -305,10 +353,29 @@ export function ComposerPlusMenu({
                         <b><ImageIcon aria-hidden="true" />{t('composer.filesAndPhotos')}</b>
                         <small>{t('composer.filesAndPhotosDescription')}</small>
                       </button>
-                      <button className="plus-menu-item" type="button" disabled>
+                      <button
+                        ref={screenshotButtonRef}
+                        className="plus-menu-item"
+                        type="button"
+                        disabled={
+                          !captureCurrentDisplay ||
+                          screenshotBusy ||
+                          uploadingFileCount > 0
+                        }
+                        onClick={() => void captureScreenshot()}
+                      >
                         <b><CameraIcon aria-hidden="true" />{t('composer.screenshot')}</b>
-                        <small>{t('composer.screenshotUnavailable')}</small>
+                        <small>
+                          {captureCurrentDisplay
+                            ? t('composer.screenshotDescription')
+                            : t('composer.screenshotUnavailable')}
+                        </small>
                       </button>
+                      {screenshotError ? (
+                        <div className="plus-menu-empty" role="alert">
+                          {t('composer.screenshotFailed', { error: screenshotError })}
+                        </div>
+                      ) : null}
                       {uploadingFileCount ? (
                         <div className="plus-menu-empty" role="status" aria-live="polite">
                           {t('composer.uploadingFiles', { count: uploadingFileCount })}
@@ -337,6 +404,44 @@ export function ComposerPlusMenu({
               ) : null}
             </div>
           ))}
+          {screenshotPreview ? (
+            <section
+              className="desktop-screenshot-preview"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="desktop-screenshot-preview-title"
+            >
+              <strong id="desktop-screenshot-preview-title">
+                {t('composer.screenshotPreviewTitle')}
+              </strong>
+              <img
+                src={screenshotPreview.dataUrl}
+                alt={t('composer.screenshotPreviewAlt')}
+              />
+              <small>
+                {t('composer.screenshotPreviewSize', {
+                  width: screenshotPreview.width,
+                  height: screenshotPreview.height,
+                })}
+              </small>
+              <div>
+                <button
+                  type="button"
+                  disabled={screenshotBusy}
+                  onClick={cancelScreenshot}
+                >
+                  {t('composer.screenshotCancel')}
+                </button>
+                <button
+                  type="button"
+                  disabled={screenshotBusy}
+                  onClick={() => void confirmScreenshot()}
+                >
+                  {t('composer.screenshotConfirm')}
+                </button>
+              </div>
+            </section>
+          ) : null}
         </div>
       ) : null}
       <input

@@ -1,0 +1,52 @@
+{
+  "$schema": "../parity-fixture.schema.json",
+  "schema_version": "1.0.0",
+  "case_id": "conversation-live-events",
+  "kind": "live_events",
+  "source_contract": "Agent WebSocket event stream",
+  "input": {
+    "transport": "websocket",
+    "events": [
+      {
+        "type": "assistant_message",
+        "message_id": "message-parity-1",
+        "data": {
+          "content": "Parity",
+          "is_partial": true
+        }
+      },
+      {
+        "type": "text_end",
+        "message_id": "message-parity-1",
+        "data": {
+          "content": "Parity complete.",
+          "is_partial": false
+        }
+      }
+    ]
+  },
+  "web_expected_view_model": {
+    "active_message_id": null,
+    "timeline": [
+      {
+        "key": "message-parity-1",
+        "message_id": "message-parity-1",
+        "role": "assistant",
+        "text": "Parity complete.",
+        "state": "completed"
+      }
+    ]
+  },
+  "desktop_expected_view_model": {
+    "active_message_id": null,
+    "timeline": [
+      {
+        "key": "message-parity-1",
+        "message_id": "message-parity-1",
+        "role": "assistant",
+        "text": "Parity complete.",
+        "state": "completed"
+      }
+    ]
+  }
+}

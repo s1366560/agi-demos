@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.test.json",
+  "compilerOptions": {
+    "outDir": "/tmp/agistack-desktop-native-bridge-test-dist"
+  },
+  "include": [
+    "electron/main/displayCapturePolicy.ts",
+    "electron/main/webControlPlanePolicy.ts"
+  ]
+}

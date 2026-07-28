@@ -189,6 +189,15 @@ function AutomationsQa() {
         return { ...jobs[0]!, enabled: input.enabled, revision: 8 };
       },
       async deleteAutomation() {},
+      async runAutomation(automationId: string) {
+        return {
+          receipt_id: 'qa-receipt',
+          run_id: 'qa-run',
+          job_id: automationId,
+          status: 'queued',
+          duplicate: false,
+        };
+      },
       async listAutomationRuns(automationId: string) {
         return { items: runs.filter((run) => run.job_id === automationId), total: runs.length };
       },
@@ -217,6 +226,14 @@ function AutomationsQa() {
           api={api}
           projectId="local-project"
           projectName="Desktop Client"
+          runCapability={
+            state === 'unavailable'
+              ? {
+                  available: false,
+                  reason_code: 'automation_capability_contract_unavailable',
+                }
+              : { available: true, reason_code: null }
+          }
           onOpenProjectSettings={() => {}}
           onOpenConnection={() => {}}
         />

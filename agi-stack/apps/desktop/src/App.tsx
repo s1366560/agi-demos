@@ -85,6 +85,7 @@ import {
   type WorkspaceSsoPresentation,
 } from './features/auth/LoginScreen';
 import { AutomationsPage } from './features/automations/AutomationsPage';
+import { createDesktopAutomationApi } from './features/automations/automationClient';
 import {
   normalizeDeviceAuthorizationInterval,
   resolveDeviceAuthorizationUrl,
@@ -250,7 +251,10 @@ import {
   resolveEarlierTimelinePage,
 } from './features/session/sessionTimelinePaginationModel';
 import { MyWorkQueue } from './features/my-work/MyWorkQueue';
+import { desktopCapability } from './features/runtime/capabilitySnapshot';
 import { runtimeTransportIdentityChanged } from './features/runtime/runtimeConfigModel';
+import { useDesktopCapabilitySnapshot } from './features/runtime/useDesktopCapabilitySnapshot';
+import { createDesktopWorkbenchCapabilityClient } from './features/runtime/workbenchCapabilityClient';
 import {
   countMyWorkGroups,
   myWorkConversationMatchesScope,
@@ -1888,6 +1892,14 @@ export function App() {
       : null;
   const scopedConversationId = scopedConversation?.id ?? '';
   const api = useMemo(() => new DesktopApiClient(config), [config]);
+  const automationApi = useMemo(
+    () => createDesktopAutomationApi(api, config),
+    [api, config],
+  );
+  const workbenchCapabilityClient = useMemo(
+    () => createDesktopWorkbenchCapabilityClient(automationApi, config),
+    [automationApi, config],
+  );
   const chatComposerApi = useMemo(
     () => (config.workspaceId.trim() ? api : unboundComposerCatalogClient(api)),
     [api, config.workspaceId],
@@ -1921,6 +1933,15 @@ export function App() {
     config,
     localRuntimeStatus,
     runsInNativeDesktop,
+  );
+  const desktopCapabilityState = useDesktopCapabilitySnapshot(
+    workbenchCapabilityClient,
+    identityAuthenticated && showRuntimeConfig,
+  );
+  const searchCapability = desktopCapability(desktopCapabilityState.snapshot, 'search');
+  const automationRunCapability = desktopCapability(
+    desktopCapabilityState.snapshot,
+    'automation_run',
   );
   const runtimeModelRole: LlmRoutingRole =
     scopedConversation?.agent_config?.capability_mode === 'code' ? 'coding' : 'default';
@@ -7482,6 +7503,9 @@ export function App() {
       tenantId={config.tenantId}
       projectId={config.projectId}
       projectName={selectedProject?.name ?? selectedProject?.id ?? null}
+      capability={searchCapability}
+      capabilityLoading={desktopCapabilityState.loading}
+      onRetryCapability={desktopCapabilityState.reload}
       onOpenProjectSettings={openWorkspaceSettings}
     />
   );
@@ -7489,9 +7513,10 @@ export function App() {
   const renderAutomationsPage = () => (
     <AutomationsPage
       key={config.projectId || 'no-project'}
-      api={api}
+      api={automationApi}
       projectId={config.projectId}
       projectName={selectedProject?.name ?? selectedProject?.id ?? null}
+      runCapability={automationRunCapability}
       onOpenProjectSettings={openWorkspaceSettings}
       onOpenConnection={openConnectionSettings}
     />

@@ -123,6 +123,54 @@ export function automationCapabilityReasonCode(
     : 'capability_contract_unavailable';
 }
 
+export function normalizeAutomationCapabilities(
+  input: unknown,
+): AutomationCapabilities | null {
+  if (
+    !isExactRecord(input, [
+      'schema_version',
+      'read',
+      'revision_guarded',
+      'idempotency_guarded',
+      'durable_execution',
+      'supported_read_trigger_kinds',
+      'create',
+      'edit',
+      'toggle',
+      'run_now',
+      'delete',
+    ]) ||
+    input.schema_version !== 1 ||
+    typeof input.read !== 'boolean' ||
+    typeof input.revision_guarded !== 'boolean' ||
+    typeof input.idempotency_guarded !== 'boolean' ||
+    typeof input.durable_execution !== 'boolean' ||
+    !isExactStringSet(input.supported_read_trigger_kinds, ['manual', 'schedule', 'event'])
+  ) {
+    return null;
+  }
+
+  const create = normalizeAutomationActionCapability(input.create);
+  const edit = normalizeAutomationActionCapability(input.edit);
+  const toggle = normalizeAutomationActionCapability(input.toggle);
+  const runNow = normalizeAutomationActionCapability(input.run_now);
+  const deleteCapability = normalizeAutomationActionCapability(input.delete);
+  if (!create || !edit || !toggle || !runNow || !deleteCapability) return null;
+  return {
+    schema_version: 1,
+    read: input.read,
+    revision_guarded: input.revision_guarded,
+    idempotency_guarded: input.idempotency_guarded,
+    durable_execution: input.durable_execution,
+    supported_read_trigger_kinds: input.supported_read_trigger_kinds,
+    create,
+    edit,
+    toggle,
+    run_now: runNow,
+    delete: deleteCapability,
+  };
+}
+
 export function automationRunStatus(status: string): AutomationRunStatus {
   if (
     status === 'queued' ||
@@ -189,4 +237,46 @@ function stringValue(value: unknown): string | null {
 
 function numberValue(value: unknown): string | null {
   return typeof value === 'number' && Number.isFinite(value) ? String(value) : null;
+}
+
+function normalizeAutomationActionCapability(
+  input: unknown,
+): AutomationActionCapability | null {
+  if (
+    !isRecord(input) ||
+    !Object.keys(input).every((key) => key === 'allowed' || key === 'reason_code') ||
+    typeof input.allowed !== 'boolean'
+  ) {
+    return null;
+  }
+  if (input.allowed) {
+    if (input.reason_code !== undefined && input.reason_code !== null) return null;
+    return { allowed: true, ...(input.reason_code === null ? { reason_code: null } : {}) };
+  }
+  if (typeof input.reason_code !== 'string' || !input.reason_code.trim()) return null;
+  return { allowed: false, reason_code: input.reason_code };
+}
+
+function isExactRecord(
+  input: unknown,
+  expectedKeys: readonly string[],
+): input is Record<string, unknown> {
+  if (!isRecord(input)) return false;
+  const keys = Object.keys(input).sort();
+  const expected = [...expectedKeys].sort();
+  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+}
+
+function isRecord(input: unknown): input is Record<string, unknown> {
+  return typeof input === 'object' && input !== null && !Array.isArray(input);
+}
+
+function isExactStringSet(input: unknown, expectedValues: readonly string[]): input is string[] {
+  if (!Array.isArray(input) || !input.every((item) => typeof item === 'string')) return false;
+  const values = [...input].sort();
+  const expected = [...expectedValues].sort();
+  return (
+    values.length === expected.length &&
+    values.every((value, index) => value === expected[index])
+  );
 }

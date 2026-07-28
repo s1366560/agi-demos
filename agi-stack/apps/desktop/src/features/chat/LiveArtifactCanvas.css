@@ -1,4 +1,5 @@
 .live-artifact-canvas {
+  position: relative;
   display: grid;
   min-height: 0;
   border-bottom: 1px solid var(--gray-a5);
@@ -13,18 +14,18 @@
   padding: 14px 16px 10px;
 }
 
-.live-artifact-canvas > header > span,
-.live-artifact-canvas > header > span > span {
+.artifact-canvas-heading,
+.artifact-canvas-heading > span {
   display: flex;
   min-width: 0;
 }
 
-.live-artifact-canvas > header > span {
+.artifact-canvas-heading {
   align-items: center;
   gap: 10px;
 }
 
-.live-artifact-canvas > header > span > span {
+.artifact-canvas-heading > span {
   flex-direction: column;
   gap: 2px;
 }
@@ -40,6 +41,44 @@
   color: var(--gray-10);
 }
 
+.artifact-canvas-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.artifact-canvas-header-actions button,
+.artifact-canvas-mode-switcher button,
+.artifact-canvas-notice button,
+.artifact-canvas-confirmation button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid var(--gray-a6);
+  border-radius: 7px;
+  background: var(--color-panel-solid);
+  color: var(--gray-11);
+  cursor: pointer;
+}
+
+.artifact-canvas-header-actions button:hover,
+.artifact-canvas-mode-switcher button:hover,
+.artifact-canvas-confirmation button:hover {
+  border-color: var(--gray-a8);
+  color: var(--gray-12);
+}
+
+.artifact-canvas-header-actions button:disabled,
+.artifact-canvas-tab button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .live-artifact-canvas > nav {
   display: flex;
   gap: 4px;
@@ -48,29 +87,75 @@
   border-bottom: 1px solid var(--gray-a5);
 }
 
-.live-artifact-canvas > nav button {
-  padding: 8px 10px;
-  border: 0;
+.artifact-canvas-tab {
+  display: inline-flex;
+  align-items: center;
   border-bottom: 2px solid transparent;
+}
+
+.artifact-canvas-tab > button {
+  border: 0;
   background: transparent;
   color: var(--gray-10);
   cursor: pointer;
   white-space: nowrap;
 }
 
-.live-artifact-canvas > nav button:hover,
-.live-artifact-canvas > nav button.selected {
+.artifact-canvas-tab > button[role='tab'] {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 6px 8px 10px;
+}
+
+.artifact-canvas-tab-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 28px;
+  padding: 0;
+}
+
+.artifact-canvas-tab:hover > button,
+.artifact-canvas-tab.selected > button {
   color: var(--gray-12);
 }
 
-.live-artifact-canvas > nav button.selected {
+.artifact-canvas-tab.selected {
   border-bottom-color: var(--accent-9);
+}
+
+.artifact-canvas-mode-switcher {
+  display: flex;
+  gap: 6px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--gray-a4);
+}
+
+.artifact-canvas-mode-switcher button.selected {
+  border-color: var(--accent-8);
+  background: var(--accent-a3);
+  color: var(--accent-11);
 }
 
 .live-artifact-canvas > article {
   min-height: 180px;
   max-height: 42vh;
   overflow: auto;
+}
+
+.live-artifact-canvas textarea {
+  display: block;
+  width: 100%;
+  min-height: 240px;
+  resize: vertical;
+  padding: 16px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--gray-12);
+  font: 13px/1.65 var(--code-font-family, ui-monospace, SFMono-Regular, Menlo, monospace);
 }
 
 .live-artifact-canvas pre {
@@ -81,4 +166,93 @@
   font: 13px/1.65 var(--code-font-family, ui-monospace, SFMono-Regular, Menlo, monospace);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.artifact-canvas-markdown {
+  padding: 16px 20px;
+  color: var(--gray-12);
+  line-height: 1.65;
+}
+
+.artifact-canvas-markdown pre {
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--gray-a3);
+}
+
+.artifact-markdown-link {
+  color: var(--accent-11);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+
+.artifact-markdown-image {
+  color: var(--gray-10);
+}
+
+.artifact-canvas-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--gray-a5);
+  color: var(--gray-11);
+  font-size: 12px;
+}
+
+.artifact-canvas-notice button {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 4px;
+}
+
+.artifact-canvas-confirmation-backdrop {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: var(--black-a7);
+}
+
+.artifact-canvas-confirmation {
+  width: min(420px, 100%);
+  padding: 18px;
+  border: 1px solid var(--gray-a6);
+  border-radius: 10px;
+  background: var(--color-panel-solid);
+  box-shadow: var(--shadow-5);
+}
+
+.artifact-canvas-confirmation p {
+  margin: 8px 0 16px;
+  color: var(--gray-11);
+}
+
+.artifact-canvas-confirmation > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .live-artifact-canvas > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .artifact-canvas-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .artifact-canvas-header-actions button span {
+    display: none;
+  }
+
+  .artifact-canvas-mode-switcher {
+    overflow-x: auto;
+  }
 }

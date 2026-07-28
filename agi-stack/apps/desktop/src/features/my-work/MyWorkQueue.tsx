@@ -5,6 +5,7 @@ import {
   CheckCircledIcon,
   CodeIcon,
   ExclamationTriangleIcon,
+  ReloadIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
@@ -36,12 +37,18 @@ export function MyWorkQueue({
   items,
   error,
   loading,
+  mode,
   projectName,
   workspaceLabels,
+  onRefresh,
   onOpenSession,
 }: MyWorkQueueProps) {
   const { locale, t } = useI18n();
-  const groups = useMemo(() => groupMyWorkDisplayItems(items), [items]);
+  const groups = useMemo(() => groupMyWorkDisplayItems(items, mode), [items, mode]);
+  const visibleItemCount = useMemo(
+    () => groups.reduce((count, group) => count + group.items.length, 0),
+    [groups],
+  );
 
   return (
     <main className="my-work-inbox" aria-busy={loading} aria-label={t('myWork.title')}>
@@ -50,6 +57,12 @@ export function MyWorkQueue({
           <span>{t('myWork.eyebrow')}</span>
           <h1>{t('myWork.inboxTitle')}</h1>
           <p>{t('myWork.inboxDescription')}</p>
+        </div>
+        <div className="my-work-inbox-actions">
+          <button type="button" disabled={loading} onClick={onRefresh}>
+            <ReloadIcon className={loading ? 'spinning' : undefined} />
+            {t('common.refresh')}
+          </button>
         </div>
       </header>
 
@@ -63,7 +76,7 @@ export function MyWorkQueue({
         </section>
       ) : null}
 
-      {!error && !loading && items.length === 0 ? (
+      {!error && !loading && visibleItemCount === 0 ? (
         <section className="my-work-inbox-state" role="status">
           <CheckCircledIcon />
           <div>

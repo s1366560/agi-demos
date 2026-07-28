@@ -97,7 +97,7 @@ test('My Work renders the source inbox queue anatomy', () => {
 
   assert.match(markup, /MY WORK/);
   assert.match(markup, />Inbox</);
-  assert.doesNotMatch(markup, /class="my-work-inbox-actions"/);
+  assert.match(markup, /class="my-work-inbox-actions"/);
   assert.equal((markup.match(/class="my-work-inbox-group /g) ?? []).length, 3);
   assert.match(markup, /Needs input/);
   assert.match(markup, /Running/);
@@ -136,6 +136,39 @@ test('My Work keeps Work and Code items together in one cross-mode inbox', () =>
   assert.match(markup, />Inbox</);
   assert.match(markup, /class="my-work-inbox-groups"/);
   assert.doesNotMatch(markup, /my-work-filter-unavailable|role="group"/);
+});
+
+test('My Work applies the selected capability mode and keeps unclassified authority visible', () => {
+  const markup = renderMyWork({
+    mode: 'code',
+    items: [
+      { ...items[0], title: 'Work input', capability_mode: 'work' },
+      { ...items[1], title: 'Code approval', capability_mode: 'code' },
+      { ...items[2], title: 'Unclassified run', capability_mode: null },
+      { ...items[3], title: 'Code review', capability_mode: 'code' },
+    ],
+  });
+
+  assert.doesNotMatch(markup, /Work input/);
+  assert.match(markup, /Code approval/);
+  assert.match(markup, /Unclassified run/);
+  assert.match(markup, /Code review/);
+  assert.equal((markup.match(/class="my-work-inbox-card"/g) ?? []).length, 3);
+});
+
+test('My Work exposes a localized refresh action wired to the supplied callback', () => {
+  const markup = renderMyWork({ loading: true });
+
+  assert.match(markup, /class="my-work-inbox-actions"/);
+  assert.match(markup, />Refresh</);
+  assert.match(markup, /disabled=""/);
+  assert.match(
+    require('node:fs').readFileSync(
+      new URL('../src/features/my-work/MyWorkQueue.tsx', import.meta.url),
+      'utf8'
+    ),
+    /onClick=\{onRefresh\}/
+  );
 });
 
 test('My Work search owns Command-K while the global palette remains the fallback', () => {

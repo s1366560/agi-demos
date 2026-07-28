@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Flex, Text, TextArea } from '@radix-ui/themes';
 
 import { useI18n } from '../../i18n';
@@ -13,10 +13,18 @@ import {
   validateApprovalRequest,
 } from '../session/sessionDecisionModel';
 import type { A2UIActionView } from './a2uiAction';
+import {
+  buildDecisionResponse,
+  buildEnvVarResponse,
+  formatHitlRemaining,
+  hitlDecisionView,
+  hitlEnvVarView,
+  hitlRequestExpiry,
+  toggleDecisionSelection,
+} from './hitlResponseCardModel';
 import { hitlResponsePresentation } from './hitlResponseEventModel';
 import {
   booleanPayloadField,
-  timelineHitlFields,
   timelineHitlOptions,
   timelineHitlQuestion,
   timelineHitlRequestId,
@@ -38,23 +46,46 @@ export function HitlResponseCard({
   approvalRequest?: DesktopApprovalRequest;
 }) {
   const { t } = useI18n();
+  const decisionView = hitlDecisionView(item);
+  const envVarView = hitlEnvVarView(item);
   const [answer, setAnswer] = useState('');
   const [envValues, setEnvValues] = useState<Record<string, string>>({});
+  const [decisionSelections, setDecisionSelections] = useState<string[]>(() =>
+    decisionView.defaultOption ? [decisionView.defaultOption] : [],
+  );
+  const [customDecisionSelected, setCustomDecisionSelected] = useState(
+    () =>
+      decisionView.selectionMode === 'single' &&
+      decisionView.allowCustom &&
+      !decisionView.defaultOption &&
+      decisionView.options.length === 0,
+  );
+  const [saveEnvironmentValues, setSaveEnvironmentValues] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const requestId = timelineHitlRequestId(item);
   const options = timelineHitlOptions(item);
-  const fields = timelineHitlFields(item);
   const answered = Boolean(item.answered);
+  const expiry = hitlRequestExpiry(item, approvalRequest, nowMs);
   const authorityDisabled = !answered && !canRespond;
+  const responseDisabled = !answered && (!canRespond || !expiry.canRespond);
   const allowCustom =
-    item.allowCustom ?? booleanPayloadField(item, 'allow_custom') ?? options.length === 0;
+    hitlType === 'decision'
+      ? decisionView.allowCustom
+      : item.allowCustom ?? booleanPayloadField(item, 'allow_custom') ?? options.length === 0;
   const question = timelineHitlQuestion(item, t);
   const approvalValidation = approvalRequest ? validateApprovalRequest(approvalRequest) : null;
   const responsePresentation = hitlResponsePresentation(item, hitlType);
 
+  useEffect(() => {
+    if (answered || expiry.state !== 'active') return;
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [answered, expiry.expiresAt, expiry.state]);
+
   const submit = async (responseData: Record<string, unknown>) => {
-    if (!requestId || answered || busy || authorityDisabled) return;
+    if (!requestId || answered || busy || responseDisabled) return;
     setBusy(true);
     setSubmitError(null);
     try {
@@ -74,7 +105,7 @@ export function HitlResponseCard({
   };
 
   const submitApproval = async (action: 'approve' | 'request_changes') => {
-    if (!approvalRequest || answered || busy || authorityDisabled) return;
+    if (!approvalRequest || answered || busy || responseDisabled) return;
     setBusy(true);
     setSubmitError(null);
     try {
@@ -92,12 +123,29 @@ export function HitlResponseCard({
         {question}
       </Text>
       <div className="agent-run-meta">
-        <span>{t(answered ? 'chat.status.answered' : 'chat.status.waitingForInput')}</span>
+        <span>
+          {t(
+            answered
+              ? 'chat.status.answered'
+              : expiry.state === 'expired'
+                ? 'chat.requestExpired'
+                : expiry.state === 'invalid'
+                  ? 'chat.invalidExpiry'
+                  : 'chat.status.waitingForInput',
+          )}
+        </span>
         {requestId ? <span>{requestId}</span> : <span>{t('chat.missingRequestId')}</span>}
+        {expiry.state === 'active' ? (
+          <span>
+            {t('chat.expiresIn', {
+              time: formatHitlRemaining(expiry.remainingSeconds),
+            })}
+          </span>
+        ) : null}
       </div>
 
       {responsePresentation ? (
-        <div className="timeline-hitl-response" role="status">
+        <div className="timeline-hitl-response" role="status" aria-readonly="true">
           <span>{t(responsePresentation.labelKey)}</span>
           <strong>
             {responsePresentation.valueKey
@@ -110,6 +158,16 @@ export function HitlResponseCard({
       {authorityDisabled ? (
         <Text size="1" color="amber">
           {t('session.authorityActionUnavailable')}
+        </Text>
+      ) : null}
+      {!answered && expiry.state === 'expired' ? (
+        <Text size="1" color="red" role="alert">
+          {t('chat.requestExpired')}
+        </Text>
+      ) : null}
+      {!answered && expiry.state === 'invalid' ? (
+        <Text size="1" color="red" role="alert">
+          {t('chat.invalidExpiry')}
         </Text>
       ) : null}
 
@@ -179,7 +237,7 @@ export function HitlResponseCard({
           <Button
             size="1"
             color="green"
-            disabled={authorityDisabled || !requestId || busy || !approvalValidation?.canApprove}
+            disabled={responseDisabled || !requestId || busy || !approvalValidation?.canApprove}
             loading={busy}
             onClick={() => void submit({ action: 'allow', granted: true, scope: 'once' })}
           >
@@ -190,7 +248,7 @@ export function HitlResponseCard({
             color="green"
             variant="soft"
             disabled={
-              authorityDisabled ||
+              responseDisabled ||
               !requestId ||
               busy ||
               !approvalValidation?.canApprove ||
@@ -209,7 +267,7 @@ export function HitlResponseCard({
             size="1"
             color="red"
             variant="soft"
-            disabled={authorityDisabled || !requestId || busy}
+            disabled={responseDisabled || !requestId || busy}
             onClick={() =>
               void submit({ action: 'deny', granted: false, scope: 'once' })
             }
@@ -222,42 +280,200 @@ export function HitlResponseCard({
       {!answered && hitlType === 'env_var' ? (
         <div className="timeline-detail-block">
           <span>{t('chat.environmentValues')}</span>
-          {fields.map((field) => (
+          {envVarView.fields.map((field) => (
             <label key={field.name}>
-              <span>{field.label}</span>
-              <input
-                type="password"
-                autoComplete="off"
-                disabled={authorityDisabled || busy}
-                required={field.required}
-                value={envValues[field.name] ?? ''}
-                onChange={(event) =>
-                  setEnvValues((current) => ({
-                    ...current,
-                    [field.name]: event.currentTarget.value,
-                  }))
-                }
-              />
+              <span>
+                {field.label}
+                {!field.required ? ` · ${t('chat.optionalField')}` : ''}
+              </span>
+              {field.description ? <small>{field.description}</small> : null}
+              {field.inputElement === 'textarea' ? (
+                <textarea
+                  autoComplete="off"
+                  disabled={responseDisabled || busy}
+                  required={field.required}
+                  placeholder={field.placeholder ?? undefined}
+                  value={envValues[field.name] ?? ''}
+                  onChange={(event) =>
+                    setEnvValues((current) => ({
+                      ...current,
+                      [field.name]: event.currentTarget.value,
+                    }))
+                  }
+                />
+              ) : (
+                <input
+                  type={
+                    field.inputElement === 'password'
+                      ? 'password'
+                      : field.inputElement === 'url'
+                        ? 'url'
+                        : 'text'
+                  }
+                  autoComplete="off"
+                  disabled={responseDisabled || busy}
+                  required={field.required}
+                  placeholder={field.placeholder ?? undefined}
+                  value={envValues[field.name] ?? ''}
+                  onChange={(event) =>
+                    setEnvValues((current) => ({
+                      ...current,
+                      [field.name]: event.currentTarget.value,
+                    }))
+                  }
+                />
+              )}
             </label>
           ))}
+          {envVarView.allowSave ? (
+            <label>
+              <input
+                type="checkbox"
+                checked={saveEnvironmentValues}
+                disabled={responseDisabled || busy}
+                onChange={(event) => setSaveEnvironmentValues(event.currentTarget.checked)}
+              />
+              <span>{t('chat.saveEnvironmentValues')}</span>
+            </label>
+          ) : null}
           <Button
             size="1"
             disabled={
               !requestId ||
-              authorityDisabled ||
+              responseDisabled ||
               busy ||
-              fields.length === 0 ||
-              fields.some((field) => field.required && !envValues[field.name]?.trim())
+              !buildEnvVarResponse(envValues, saveEnvironmentValues, envVarView)
             }
             loading={busy}
-            onClick={() => void submit({ values: envValues })}
+            onClick={() => {
+              const response = buildEnvVarResponse(
+                envValues,
+                saveEnvironmentValues,
+                envVarView,
+              );
+              if (response) void submit(response);
+            }}
           >
             {t('chat.submitSecurely')}
           </Button>
         </div>
       ) : null}
 
-      {!answered && (hitlType === 'clarification' || hitlType === 'decision') ? (
+      {!answered && hitlType === 'decision' ? (
+        <div className="timeline-detail-block">
+          {decisionView.selectionMode === 'multiple' ? (
+            <small>
+              {decisionView.maxSelections
+                ? t('chat.selectionLimit', { count: decisionView.maxSelections })
+                : t('chat.selectOneOrMore')}
+            </small>
+          ) : null}
+          {decisionView.options.map((option) => {
+            const selected = decisionSelections.includes(option.value);
+            const selectOption = () => {
+              setCustomDecisionSelected(false);
+              setDecisionSelections((current) =>
+                toggleDecisionSelection(current, option.value, decisionView),
+              );
+            };
+            return (
+              <label key={option.value}>
+                {decisionView.selectionMode === 'multiple' ? (
+                  <input
+                    type="checkbox"
+                    checked={selected}
+                    disabled={responseDisabled || busy}
+                    onChange={selectOption}
+                  />
+                ) : (
+                  <input
+                    type="radio"
+                    name={`hitl-decision-${requestId}`}
+                    checked={selected}
+                    disabled={responseDisabled || busy}
+                    onChange={selectOption}
+                  />
+                )}
+                <span>
+                  <strong>{option.label}</strong>
+                  {option.recommended ? <em>{t('chat.recommended')}</em> : null}
+                  {option.description ? <small>{option.description}</small> : null}
+                  {option.riskLevel ? (
+                    <small>
+                      {t('chat.risk')}: {option.riskLevel}
+                    </small>
+                  ) : null}
+                  {option.estimatedTime ? (
+                    <small>
+                      {t('chat.estimatedTime')}: {option.estimatedTime}
+                    </small>
+                  ) : null}
+                  {option.estimatedCost ? (
+                    <small>
+                      {t('chat.estimatedCost')}: {option.estimatedCost}
+                    </small>
+                  ) : null}
+                  {option.risks.map((risk) => (
+                    <small key={risk}>{risk}</small>
+                  ))}
+                </span>
+              </label>
+            );
+          })}
+          {decisionView.allowCustom ? (
+            <>
+              <label>
+                <input
+                  type="radio"
+                  name={`hitl-decision-${requestId}`}
+                  checked={customDecisionSelected}
+                  disabled={responseDisabled || busy}
+                  onChange={() => {
+                    setCustomDecisionSelected(true);
+                    setDecisionSelections([]);
+                  }}
+                />
+                <span>{t('chat.enterDecision')}</span>
+              </label>
+              <TextArea
+                size="1"
+                value={answer}
+                disabled={responseDisabled || busy || !customDecisionSelected}
+                placeholder={t('chat.enterDecision')}
+                onChange={(event) => setAnswer(event.currentTarget.value)}
+              />
+            </>
+          ) : null}
+          <Button
+            size="1"
+            disabled={
+              responseDisabled ||
+              !requestId ||
+              busy ||
+              !buildDecisionResponse(
+                decisionSelections,
+                customDecisionSelected,
+                answer,
+                decisionView,
+              )
+            }
+            loading={busy}
+            onClick={() => {
+              const response = buildDecisionResponse(
+                decisionSelections,
+                customDecisionSelected,
+                answer,
+                decisionView,
+              );
+              if (response) void submit(response);
+            }}
+          >
+            {t('chat.confirmSelection')}
+          </Button>
+        </div>
+      ) : null}
+
+      {!answered && hitlType === 'clarification' ? (
         <div className="timeline-detail-block">
           {options.length ? (
             <Flex gap="2" wrap="wrap">
@@ -265,16 +481,10 @@ export function HitlResponseCard({
                 <Button
                   size="1"
                   variant="soft"
-                  disabled={authorityDisabled || !requestId || busy}
+                  disabled={responseDisabled || !requestId || busy}
                   title={option.description}
                   key={option.value}
-                  onClick={() =>
-                    void submit(
-                      hitlType === 'clarification'
-                        ? { answer: option.value }
-                        : { decision: option.value },
-                    )
-                  }
+                  onClick={() => void submit({ answer: option.value })}
                 >
                   {option.label}
                 </Button>
@@ -286,23 +496,15 @@ export function HitlResponseCard({
               <TextArea
                 size="1"
                 value={answer}
-                disabled={authorityDisabled || busy}
-                placeholder={t(
-                  hitlType === 'decision' ? 'chat.enterDecision' : 'chat.enterAnswer',
-                )}
+                disabled={responseDisabled || busy}
+                placeholder={t('chat.enterAnswer')}
                 onChange={(event) => setAnswer(event.currentTarget.value)}
               />
               <Button
                 size="1"
-                disabled={authorityDisabled || !requestId || busy || !answer.trim()}
+                disabled={responseDisabled || !requestId || busy || !answer.trim()}
                 loading={busy}
-                onClick={() =>
-                  void submit(
-                    hitlType === 'clarification'
-                      ? { answer: answer.trim() }
-                      : { decision: answer.trim() },
-                  )
-                }
+                onClick={() => void submit({ answer: answer.trim() })}
               >
                 {t('chat.submitResponse')}
               </Button>
@@ -318,7 +520,7 @@ export function HitlResponseCard({
               <Button
                 size="1"
                 variant="soft"
-                disabled={authorityDisabled || !requestId || busy}
+                disabled={responseDisabled || !requestId || busy}
                 loading={busy}
                 key={`${action.sourceComponentId}:${action.actionName}`}
                 onClick={() =>

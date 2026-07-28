@@ -1,0 +1,90 @@
+{
+  "$schema": "./parity-manifest.schema.json",
+  "schema_version": "1.0.0",
+  "references": {
+    "prototype_revision": "61454b2ead1cedda584e95afee9f471aac7851fb",
+    "audited_desktop_revision": "fe425f5ce75f8722249033bf5571c7e7466d05e1",
+    "web_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47",
+    "desktop_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47"
+  },
+  "cases": [
+    {
+      "id": "conversation-live-events",
+      "area": "conversation",
+      "references": {
+        "prototype_revision": "61454b2ead1cedda584e95afee9f471aac7851fb",
+        "web_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47",
+        "desktop_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47"
+      },
+      "source_entries": {
+        "prototype": "design-prototype/memstack-desktop-agent-mission-control/src/components/ConversationDetail.jsx",
+        "web": "web/src/services/agent/messageRouter.ts",
+        "desktop": "agi-stack/apps/desktop/src/features/chat/chatTimelineModel.ts"
+      },
+      "locale": "en-US",
+      "viewport": {
+        "width": 1440,
+        "height": 1024,
+        "device_scale_factor": 1
+      },
+      "data_state": "One assistant message streams text and reaches a terminal text_end event.",
+      "interaction_state": "The conversation is open while WebSocket events arrive in order.",
+      "expected_observable_result": "Web and Desktop expose one stable assistant row keyed by message_id with the same final text and completed state.",
+      "native_deviation": null,
+      "target_disposition": "equivalent",
+      "fixture": "fixtures/live-events.v1.json"
+    },
+    {
+      "id": "conversation-history-replay",
+      "area": "conversation",
+      "references": {
+        "prototype_revision": "61454b2ead1cedda584e95afee9f471aac7851fb",
+        "web_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47",
+        "desktop_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47"
+      },
+      "source_entries": {
+        "prototype": "design-prototype/memstack-desktop-agent-mission-control/src/components/ConversationDetail.jsx",
+        "web": "web/src/stores/agent/streamEventHandlers.ts",
+        "desktop": "agi-stack/apps/desktop/src/features/session/sessionProjectionModel.ts"
+      },
+      "locale": "en-US",
+      "viewport": {
+        "width": 1100,
+        "height": 800,
+        "device_scale_factor": 1
+      },
+      "data_state": "Durable sessions_history contains the completed assistant message.",
+      "interaction_state": "The user switches away from the conversation and reopens it.",
+      "expected_observable_result": "History replay produces the same stable assistant row as the live stream without duplicating message_id.",
+      "native_deviation": null,
+      "target_disposition": "equivalent",
+      "fixture": "fixtures/history-replay.v1.json"
+    },
+    {
+      "id": "local-capability-snapshot",
+      "area": "capabilities",
+      "references": {
+        "prototype_revision": "61454b2ead1cedda584e95afee9f471aac7851fb",
+        "web_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47",
+        "desktop_revision": "9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47"
+      },
+      "source_entries": {
+        "prototype": "design-prototype/memstack-desktop-agent-mission-control/src/components/Settings.jsx",
+        "web": "web/src/services/agentService.ts",
+        "desktop": "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts"
+      },
+      "locale": "zh-CN",
+      "viewport": {
+        "width": 1440,
+        "height": 1024,
+        "device_scale_factor": 1
+      },
+      "data_state": "The structured local capability snapshot marks Search and Workspace Collaboration unavailable until their local authority routes exist.",
+      "interaction_state": "The user opens a feature entry before any feature request is sent.",
+      "expected_observable_result": "Both clients derive availability only from the structured snapshot; Search and Workspace Collaboration fail closed with stable reason codes, while isolated sandbox remains not applicable in local mode.",
+      "native_deviation": "Local workspace and terminal are native equivalents; isolated cloud sandbox is intentionally unavailable.",
+      "target_disposition": "native_equivalent",
+      "fixture": "fixtures/capability-snapshot.v1.json"
+    }
+  ]
+}
