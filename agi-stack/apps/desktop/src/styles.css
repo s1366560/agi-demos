@@ -217,6 +217,29 @@
   --desktop-cyan-neon-rgb: 19, 176, 219;
   --desktop-cyan-glow-rgb: 79, 209, 231;
   --desktop-green-glow-rgb: 76, 221, 168;
+  /* Phase-3 accent/text tokens (ChatPanel migration) */
+  --desktop-text-cyan: #c9edf5;
+  --desktop-gray-36: #718091;
+  --desktop-cyan-muted: #6caec0;
+  --desktop-cyan-soft: #53d0ef;
+  --desktop-gray-37: #9faab6;
+  --desktop-red-pale-3: #fca5a5;
+  --desktop-border-22: #263342;
+  /* Phase-3 RGB channel tokens for rgba(var(...), alpha) usage */
+  --desktop-cyan-frost-rgb: 103, 232, 249;
+  --desktop-sky-rgb: 56, 189, 248;
+  --desktop-indigo-rgb: 129, 140, 248;
+  --desktop-steel-4-rgb: 72, 104, 122;
+  --desktop-teal-rgb: 45, 212, 191;
+  --desktop-overlay-17-rgb: 15, 25, 35;
+  --desktop-cyan-dusk-rgb: 27, 113, 138;
+  --desktop-teal-muted-rgb: 98, 144, 139;
+  --desktop-yellow-rgb: 250, 204, 21;
+  --desktop-overlay-18-rgb: 30, 41, 59;
+  --desktop-cyan-dusk-2-rgb: 31, 116, 145;
+  --desktop-indigo-dim-rgb: 90, 99, 129;
+  --desktop-steel-5-rgb: 56, 81, 96;
+  --desktop-amber-deep-rgb: 120, 53, 15;
 }
 
 /* Light theme overrides. Every --desktop-* token from :root must be redefined
@@ -442,6 +465,30 @@
   --desktop-cyan-neon-rgb: 10, 132, 168;
   --desktop-cyan-glow-rgb: 21, 156, 187;
   --desktop-green-glow-rgb: 18, 160, 111;
+
+  /* Phase-3 accent/text tokens (ChatPanel migration) */
+  --desktop-text-cyan: #0e7490;
+  --desktop-gray-36: #5a6c80;
+  --desktop-cyan-muted: #357c8c;
+  --desktop-cyan-soft: #159cbb;
+  --desktop-gray-37: #495a6d;
+  --desktop-red-pale-3: #a43043;
+  --desktop-border-22: #c9d3df;
+  /* Phase-3 RGB channel tokens (overlays stay dark translucent) */
+  --desktop-cyan-frost-rgb: 8, 145, 178;
+  --desktop-sky-rgb: 2, 132, 199;
+  --desktop-indigo-rgb: 79, 70, 229;
+  --desktop-steel-4-rgb: 60, 88, 108;
+  --desktop-teal-rgb: 13, 148, 136;
+  --desktop-overlay-17-rgb: 15, 25, 35;
+  --desktop-cyan-dusk-rgb: 11, 94, 117;
+  --desktop-teal-muted-rgb: 77, 124, 119;
+  --desktop-yellow-rgb: 161, 98, 7;
+  --desktop-overlay-18-rgb: 30, 41, 59;
+  --desktop-cyan-dusk-2-rgb: 12, 98, 122;
+  --desktop-indigo-dim-rgb: 84, 91, 140;
+  --desktop-steel-5-rgb: 74, 98, 114;
+  --desktop-amber-deep-rgb: 146, 64, 14;
 }
 
 * {
@@ -5076,7 +5123,7 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 
 .hljs-built_in,
 .hljs-builtin-name {
-  color: #53d0ef;
+  color: var(--desktop-cyan-soft);
 }
 
 .hljs-deletion {

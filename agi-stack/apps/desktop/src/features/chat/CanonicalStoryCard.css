@@ -244,7 +244,7 @@
 
 .canonical-story-card.is-invalid {
   border-color: rgba(var(--desktop-amber-hot-rgb), 0.35);
-  background: rgba(120, 53, 15, 0.13);
+  background: rgba(var(--desktop-amber-deep-rgb), 0.13);
   color: #fcd34d;
 }
 

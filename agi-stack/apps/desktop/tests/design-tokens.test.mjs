@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 const srcRoot = new URL('../src/', import.meta.url);
-const excludedCss = 'features/chat/ChatPanel.css'; // foreign concurrent-session changes
 
 const collectCssFiles = (dirUrl, prefix = '') => {
   const files = [];
@@ -18,7 +17,8 @@ const collectCssFiles = (dirUrl, prefix = '') => {
 };
 
 const cssFiles = collectCssFiles(srcRoot);
-const migratedCssFiles = cssFiles.filter((file) => file !== excludedCss);
+// Phase 3 tokenized ChatPanel.css; every src CSS file is now covered by all guards.
+const migratedCssFiles = cssFiles;
 const readSrc = (file) => readFileSync(new URL(file, srcRoot), 'utf8');
 const blankComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, (match) => ' '.repeat(match.length));
 
@@ -98,6 +98,8 @@ const migratedHexLiterals = [
   'a58cff', 'd8cfff', '65d6a4', '63d78f', '52d68a', '54d68b', '53f0cf',
   'e98598', 'ffb6be', 'fecaca', 'c68c94', 'e5a54b', 'fbbf24',
   '146f87', '177c96', '8bd2ff', '8ee9ff',
+  // phase-3: ChatPanel.css values meeting the >=3-in-file (or >=2 cross-file) bar
+  'c9edf5', '718091', '6caec0', '53d0ef', '9faab6', 'fca5a5', '263342',
 ];
 
 // Full phase-1 channel list: rgb triples replaced by --desktop-*-rgb tokens.
@@ -114,9 +116,14 @@ const migratedChannels = [
   [36, 178, 222], [65, 158, 216], [87, 181, 239], [214, 180, 110],
   [229, 139, 149], [19, 176, 219], [4, 8, 14], [79, 209, 231],
   [76, 221, 168], [10, 14, 21],
+  // phase-3: ChatPanel.css comma-rgba families meeting the occurrence bar
+  [103, 232, 249], [56, 189, 248], [129, 140, 248], [72, 104, 122],
+  [45, 212, 191], [15, 25, 35], [27, 113, 138], [98, 144, 139],
+  [250, 204, 21], [30, 41, 59], [31, 116, 145], [90, 99, 129],
+  [56, 81, 96], [120, 53, 15],
 ];
 
-test('migrated hex and rgba literals stay out of value position outside ChatPanel.css', () => {
+test('migrated hex and rgba literals stay out of value position in every src CSS file', () => {
   const offenders = [];
   const hexRes = migratedHexLiterals.map((hex) => [hex, new RegExp(`#${hex}\\b`, 'i')]);
   // Matches both comma form rgba(r, g, b, a) and slash form rgb(r g b / a) —
@@ -140,10 +147,10 @@ test('migrated hex and rgba literals stay out of value position outside ChatPane
   assert.deepEqual(offenders, []);
 });
 
-test('hardcoded hex color budget ratchets down (phase-2 baseline: 787)', () => {
+test('hardcoded hex color budget ratchets down (phase-3 baseline: 985, includes ChatPanel.css)', () => {
   // This budget may only go DOWN. Lower the number whenever a migration pass
   // removes more hardcoded hex colors; never raise it.
-  const HEX_BUDGET = 787;
+  const HEX_BUDGET = 985;
   let count = 0;
   for (const file of migratedCssFiles) {
     for (const value of declarationValues(readSrc(file))) {
