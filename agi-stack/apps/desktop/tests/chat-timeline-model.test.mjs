@@ -4816,6 +4816,42 @@ test('streaming thought chunks merge into one readable timeline item and then se
   assert.equal(items[0].metadata.streaming, false);
 });
 
+test('an unassociated final thought settles the only active stream with authoritative content', () => {
+  let items = mergeThoughtStreamChunk([], {
+    kind: 'start',
+    messageId: 'execution-message-1',
+    content: '',
+    eventTimeUs: 1_000_000,
+    eventCounter: 1,
+  });
+  items = mergeThoughtStreamChunk(items, {
+    kind: 'delta',
+    messageId: 'execution-message-1',
+    content: '。序顺的误错',
+    eventTimeUs: 1_100_000,
+    eventCounter: 2,
+  });
+  items = mergeThoughtStreamChunk(items, {
+    kind: 'complete',
+    messageId: eventScopedStreamMessageId(
+      'conversation-1',
+      'thought',
+      1_200_000,
+      3,
+    ),
+    content: '正确顺序。',
+    eventTimeUs: 1_200_000,
+    eventCounter: 3,
+  });
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].message_id, 'execution-message-1');
+  assert.equal(items[0].content, '正确顺序。');
+  assert.equal(items[0].metadata.streaming, false);
+  assert.equal(items[0].metadata.thoughtCompletionEventTimeUs, 1_200_000);
+  assert.equal(items[0].metadata.thoughtCompletionEventCounter, 3);
+});
+
 test('a second thought stream under the same Agent message remains a separate step', () => {
   const completed = mergeThoughtStreamChunk([], {
     kind: 'complete',
@@ -4882,6 +4918,121 @@ test('completed thought skeleton reconciles with its history row in either arriv
       ['thought-1200000-3'],
     );
   }
+});
+
+test('display hides a legacy internal goal-control exchange after a substantive answer', () => {
+  const items = [
+    {
+      id: 'user-1',
+      type: 'user_message',
+      role: 'user',
+      content: '你有哪些工具？',
+      eventTimeUs: 1_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'thought-answer',
+      type: 'thought',
+      content: '整理可用工具。',
+      eventTimeUs: 2_000_000,
+      eventCounter: 2,
+    },
+    {
+      id: 'assistant-answer',
+      type: 'assistant_message',
+      role: 'assistant',
+      content: '我可以使用文件、终端和浏览器工具。',
+      eventTimeUs: 3_000_000,
+      eventCounter: 3,
+    },
+    {
+      id: 'thought-control',
+      type: 'thought',
+      content: 'The runtime asks for a completion signal.',
+      eventTimeUs: 4_000_000,
+      eventCounter: 4,
+    },
+    {
+      id: 'assistant-control',
+      type: 'assistant_message',
+      role: 'assistant',
+      content: '{"goal_achieved":true,"reason":"The informational request is complete."}',
+      eventTimeUs: 5_000_000,
+      eventCounter: 5,
+    },
+    {
+      id: 'suggestions-1',
+      type: 'suggestions',
+      eventTimeUs: 6_000_000,
+      eventCounter: 6,
+      payload: { suggestions: ['继续'] },
+    },
+  ];
+
+  assert.deepEqual(
+    timelineItemsForDisplay(items).map((item) => item.id),
+    ['user-1', 'thought-answer', 'assistant-answer'],
+  );
+});
+
+test('display preserves a standalone assistant answer that uses the goal signal JSON shape', () => {
+  const items = [
+    {
+      id: 'user-1',
+      type: 'user_message',
+      role: 'user',
+      content: 'Return the completion object.',
+      eventTimeUs: 1_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'assistant-1',
+      type: 'assistant_message',
+      role: 'assistant',
+      content: '{"goal_achieved":true,"reason":"Requested JSON response."}',
+      eventTimeUs: 2_000_000,
+      eventCounter: 2,
+    },
+  ];
+
+  assert.deepEqual(
+    timelineItemsForDisplay(items).map((item) => item.id),
+    ['user-1', 'assistant-1'],
+  );
+});
+
+test('display preserves a requested goal-shaped follow-up when no control thought precedes it', () => {
+  const items = [
+    {
+      id: 'user-1',
+      type: 'user_message',
+      role: 'user',
+      content: 'Explain the result, then return the completion object.',
+      eventTimeUs: 1_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'assistant-explanation',
+      type: 'assistant_message',
+      role: 'assistant',
+      content: 'The requested work completed successfully.',
+      eventTimeUs: 2_000_000,
+      eventCounter: 2,
+    },
+    {
+      id: 'assistant-json',
+      type: 'assistant_message',
+      role: 'assistant',
+      content: '{"goal_achieved":true,"reason":"Requested JSON response."}',
+      eventTimeUs: 3_000_000,
+      eventCounter: 3,
+    },
+  ];
+
+  assert.deepEqual(
+    timelineItemsForDisplay(items).map((item) => item.id),
+    ['user-1', 'assistant-explanation', 'assistant-json'],
+  );
 });
 
 test('live Agent events route thought start, delta, and completion through the stream merger', () => {
@@ -5056,6 +5207,101 @@ test('history tool calls replace live delta skeletons without leaving a running 
     assert.equal(pairs[0].result?.id, 'observe-300-3');
     assert.equal(toolCallPairStatus(pairs[0]), 'complete');
   }
+});
+
+test('persisted act delta skeletons yield to canonical executions like the Web client', () => {
+  const pairs = pairToolCallItems([
+    {
+      id: 'act_delta-100-0',
+      type: 'act',
+      toolName: 'export_artifact',
+      execution_id: 'call-export-1',
+      eventTimeUs: 100,
+      eventCounter: 0,
+    },
+    {
+      id: 'act-200-0',
+      type: 'act',
+      toolName: 'export_artifact',
+      execution_id: 'exec-export-1',
+      eventTimeUs: 200,
+      eventCounter: 0,
+    },
+    {
+      id: 'observe-300-0',
+      type: 'observe',
+      toolName: 'export_artifact',
+      execution_id: 'exec-export-1',
+      eventTimeUs: 300,
+      eventCounter: 0,
+    },
+    {
+      id: 'act_delta-400-0',
+      type: 'act',
+      toolName: 'todoread',
+      execution_id: 'call-todoread-1',
+      eventTimeUs: 400,
+      eventCounter: 0,
+    },
+    {
+      id: 'act-500-0',
+      type: 'act',
+      toolName: 'todoread',
+      execution_id: 'exec-todoread-1',
+      eventTimeUs: 500,
+      eventCounter: 0,
+    },
+    {
+      id: 'observe-600-0',
+      type: 'observe',
+      toolName: 'todoread',
+      execution_id: 'exec-todoread-1',
+      eventTimeUs: 600,
+      eventCounter: 0,
+    },
+    {
+      id: 'act_delta-700-0',
+      type: 'act',
+      toolName: 'todowrite',
+      execution_id: 'call-todowrite-1',
+      eventTimeUs: 700,
+      eventCounter: 0,
+    },
+    {
+      id: 'act_delta-800-0',
+      type: 'act',
+      toolName: 'write_file',
+      execution_id: 'call-write-1',
+      metadata: { streaming: true },
+      eventTimeUs: 800,
+      eventCounter: 0,
+    },
+  ]);
+
+  assert.deepEqual(
+    pairs.map((pair) => ({
+      call: pair.call.id,
+      result: pair.result?.id ?? null,
+      status: toolCallPairStatus(pair),
+    })),
+    [
+      {
+        call: 'act-200-0',
+        result: 'observe-300-0',
+        status: 'complete',
+      },
+      {
+        call: 'act-500-0',
+        result: 'observe-600-0',
+        status: 'complete',
+      },
+      {
+        call: 'act_delta-800-0',
+        result: null,
+        status: 'running',
+      },
+    ],
+  );
 });
 
 test('reused weak call ids never merge distinct strong tool executions', () => {

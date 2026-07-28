@@ -2387,109 +2387,109 @@ function ChatComposer({
             onInsert={insertPromptTemplate}
           />
         ) : null}
-        {voiceTranscriptionConfig ? (
-          <button
-            className={`composer-voice-button is-${voice.state}`}
-            type="button"
-            aria-label={t(voiceActive ? 'composer.voice.stop' : 'composer.voice.start')}
-            aria-pressed={voiceActive}
-            title={
-              voiceDisabledReason ??
-              t(voiceActive ? 'composer.voice.stop' : 'composer.voice.start')
-            }
-            disabled={
-              disabled ||
-              sending ||
-              uploadingAttachments ||
-              voiceCallActive ||
-              voiceConnection.availability !== 'available'
-            }
-            onClick={() => void toggleVoice()}
-          >
-            <VoiceMicrophoneIcon active={voiceActive} />
-            {voiceActive ? (
-              <span className="composer-voice-wave" aria-hidden="true">
-                <i />
-                <i />
-                <i />
-              </span>
-            ) : null}
-          </button>
-        ) : null}
-        {voiceTranscriptionConfig ? (
-          <button
-            className={`composer-voice-button composer-call-button is-${voiceCall.status}`}
-            type="button"
-            aria-label={t(
-              voiceCallActive ? 'composer.voiceCall.end' : 'composer.voiceCall.start',
-            )}
-            aria-pressed={voiceCallActive}
-            title={
-              voiceCallActive
-                ? t('composer.voiceCall.end')
-                : voiceCallDisabledReason ?? t('composer.voiceCall.start')
-            }
-            disabled={
-              !voiceCallActive &&
-              (disabled ||
-                sending ||
-                responseStreaming ||
-                uploadingAttachments ||
-                voiceActive ||
-                voiceCallConnection.availability !== 'available')
-            }
-            onClick={() => void toggleVoiceCall()}
-          >
-            <VoiceCallIcon active={voiceCallActive} />
-          </button>
-        ) : null}
-        {composerPresentation.showCommands ? (
-          <button
-            className="composer-slash-button"
-            type="button"
-            aria-label={t('chat.slashCommands')}
-            title={t('chat.slashCommands')}
-            onClick={(event) => onOpenCommands(event.currentTarget)}
-          >
-            /
-          </button>
-        ) : null}
-        {runInputDeliveryOptions.length ? (
-          <div className="composer-delivery-switch" aria-label={t('session.deliveryMode')}>
-            {runInputDeliveryOptions.map((delivery) => (
-              <button
-                type="button"
-                className={runInputDelivery === delivery ? 'is-active' : ''}
-                aria-pressed={runInputDelivery === delivery}
-                onClick={() => onRunInputDeliveryChange(delivery)}
-                key={delivery}
-              >
-                {delivery === 'steer_now'
-                  ? t('session.steerNow')
-                  : t('session.queueNext')}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {composerPresentation.showRuntimeControls &&
-        runtimeTargetLabel &&
-        runtimeTargetOptions?.length &&
-        onRuntimeTargetChange ? (
-          <ComposerControls
-            disabledHint={disabledReason}
-            modelLabel={modelLabel}
-            modelOptions={modelOptions}
-            modelValue={selectedModelValue}
-            modelPending={modelSwitching}
-            modelError={modelError}
-            runtimeTargetLabel={runtimeTargetLabel}
-            runtimeTargetOptions={runtimeTargetOptions}
-            onModelChange={onModelChange}
-            onModelReset={onModelReset}
-            onRuntimeTargetChange={onRuntimeTargetChange}
-          />
-        ) : null}
         <Flex align="center" gap="2" className="composer-right-actions">
+          {voiceTranscriptionConfig ? (
+            <button
+              className={`composer-voice-button is-${voice.state}`}
+              type="button"
+              aria-label={t(voiceActive ? 'composer.voice.stop' : 'composer.voice.start')}
+              aria-pressed={voiceActive}
+              title={
+                voiceDisabledReason ??
+                t(voiceActive ? 'composer.voice.stop' : 'composer.voice.start')
+              }
+              disabled={
+                disabled ||
+                sending ||
+                uploadingAttachments ||
+                voiceCallActive ||
+                voiceConnection.availability !== 'available'
+              }
+              onClick={() => void toggleVoice()}
+            >
+              <VoiceMicrophoneIcon active={voiceActive} />
+              {voiceActive ? (
+                <span className="composer-voice-wave" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+              ) : null}
+            </button>
+          ) : null}
+          {voiceTranscriptionConfig ? (
+            <button
+              className={`composer-voice-button composer-call-button is-${voiceCall.status}`}
+              type="button"
+              aria-label={t(
+                voiceCallActive ? 'composer.voiceCall.end' : 'composer.voiceCall.start',
+              )}
+              aria-pressed={voiceCallActive}
+              title={
+                voiceCallActive
+                  ? t('composer.voiceCall.end')
+                  : voiceCallDisabledReason ?? t('composer.voiceCall.start')
+              }
+              disabled={
+                !voiceCallActive &&
+                (disabled ||
+                  sending ||
+                  responseStreaming ||
+                  uploadingAttachments ||
+                  voiceActive ||
+                  voiceCallConnection.availability !== 'available')
+              }
+              onClick={() => void toggleVoiceCall()}
+            >
+              <VoiceCallIcon active={voiceCallActive} />
+            </button>
+          ) : null}
+          {composerPresentation.showCommands ? (
+            <button
+              className="composer-slash-button"
+              type="button"
+              aria-label={t('chat.slashCommands')}
+              title={t('chat.slashCommands')}
+              onClick={(event) => onOpenCommands(event.currentTarget)}
+            >
+              /
+            </button>
+          ) : null}
+          {runInputDeliveryOptions.length ? (
+            <div className="composer-delivery-switch" aria-label={t('session.deliveryMode')}>
+              {runInputDeliveryOptions.map((delivery) => (
+                <button
+                  type="button"
+                  className={runInputDelivery === delivery ? 'is-active' : ''}
+                  aria-pressed={runInputDelivery === delivery}
+                  onClick={() => onRunInputDeliveryChange(delivery)}
+                  key={delivery}
+                >
+                  {delivery === 'steer_now'
+                    ? t('session.steerNow')
+                    : t('session.queueNext')}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {composerPresentation.showRuntimeControls &&
+          runtimeTargetLabel &&
+          runtimeTargetOptions?.length &&
+          onRuntimeTargetChange ? (
+            <ComposerControls
+              disabledHint={disabledReason}
+              modelLabel={modelLabel}
+              modelOptions={modelOptions}
+              modelValue={selectedModelValue}
+              modelPending={modelSwitching}
+              modelError={modelError}
+              runtimeTargetLabel={runtimeTargetLabel}
+              runtimeTargetOptions={runtimeTargetOptions}
+              onModelChange={onModelChange}
+              onModelReset={onModelReset}
+              onRuntimeTargetChange={onRuntimeTargetChange}
+            />
+          ) : null}
           {composerPresentation.showRuntimeStatus ? (
             <span
               className={`composer-status-button composer-status-dot ${

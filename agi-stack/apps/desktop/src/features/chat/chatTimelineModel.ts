@@ -202,7 +202,73 @@ export function timelineItemsForDisplay(items: AgentTimelineItem[]): AgentTimeli
     const message = channelInboundMessageForDisplay(item);
     return message ? [message] : [];
   });
-  return foldAssistantExecutionDuplicatesForDisplay(visibleItems);
+  return foldAssistantExecutionDuplicatesForDisplay(
+    foldInternalGoalControlItemsForDisplay(visibleItems),
+  );
+}
+
+/**
+ * Legacy runs persisted the runtime's structured completion handshake as a
+ * second assistant response. Treat that exact protocol object as control data
+ * only when the user turn already contains a substantive assistant response,
+ * and remove the reasoning step dedicated to producing the handshake.
+ */
+function foldInternalGoalControlItemsForDisplay(
+  items: AgentTimelineItem[],
+): AgentTimelineItem[] {
+  const hiddenIndexes = new Set<number>();
+  let previousAssistantIndex = -1;
+
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (isUserTimelineItem(item)) {
+      previousAssistantIndex = -1;
+      continue;
+    }
+    if (!isAssistantTimelineItem(item)) continue;
+    if (!isStructuredGoalControlMessage(item)) {
+      previousAssistantIndex = index;
+      continue;
+    }
+    if (previousAssistantIndex < 0) continue;
+
+    let controlThoughtIndex = -1;
+    for (
+      let thoughtIndex = index - 1;
+      thoughtIndex > previousAssistantIndex;
+      thoughtIndex -= 1
+    ) {
+      if (items[thoughtIndex].type !== 'thought') continue;
+      controlThoughtIndex = thoughtIndex;
+      break;
+    }
+    if (controlThoughtIndex < 0) continue;
+    hiddenIndexes.add(index);
+    hiddenIndexes.add(controlThoughtIndex);
+  }
+
+  return hiddenIndexes.size
+    ? items.filter((_, index) => !hiddenIndexes.has(index))
+    : items;
+}
+
+function isStructuredGoalControlMessage(item: AgentTimelineItem): boolean {
+  if (!isAssistantTimelineItem(item) || typeof item.content !== 'string') return false;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(item.content.trim());
+  } catch {
+    return false;
+  }
+  if (!isRecord(parsed)) return false;
+  const keys = Object.keys(parsed).sort();
+  return (
+    keys.length === 2 &&
+    keys[0] === 'goal_achieved' &&
+    keys[1] === 'reason' &&
+    typeof parsed.goal_achieved === 'boolean' &&
+    typeof parsed.reason === 'string'
+  );
 }
 
 function channelInboundMessageForDisplay(item: AgentTimelineItem): AgentTimelineItem | null {
@@ -792,7 +858,13 @@ export function mergeThoughtStreamChunk(
   existing: AgentTimelineItem[],
   chunk: ThoughtStreamChunk,
 ): AgentTimelineItem[] {
-  const activeIndex = findActiveThoughtIndex(existing, chunk.messageId);
+  const exactActiveIndex = findActiveThoughtIndex(existing, chunk.messageId);
+  const activeIndex =
+    exactActiveIndex >= 0
+      ? exactActiveIndex
+      : chunk.kind === 'complete' && chunk.messageId.startsWith('unassociated-')
+        ? findOnlyActiveThoughtIndex(existing)
+        : -1;
   if (chunk.kind !== 'start' && activeIndex >= 0) {
     const updated = existing.map((item, index) => {
       if (index !== activeIndex) return item;
@@ -861,6 +933,17 @@ function findActiveThoughtIndex(items: AgentTimelineItem[], messageId: string): 
     }
   }
   return -1;
+}
+
+function findOnlyActiveThoughtIndex(items: AgentTimelineItem[]): number {
+  let activeIndex = -1;
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item.type !== 'thought' || item.metadata?.streaming !== true) continue;
+    if (activeIndex >= 0) return -1;
+    activeIndex = index;
+  }
+  return activeIndex;
 }
 
 function findActiveAssistantTextIndex(items: AgentTimelineItem[], messageId: string): number {
@@ -1213,7 +1296,20 @@ function sortTimelineItems(items: AgentTimelineItem[]): AgentTimelineItem[] {
 export function pairToolCallItems(items: AgentTimelineItem[]): ToolCallPair[] {
   const pairs: ToolCallPair[] = [];
   const pendingPairIndexes: number[] = [];
+
   for (const item of items) {
+    // Web keeps act_delta in activeToolCalls and only appends the canonical act
+    // to history. The history API currently projects a persisted delta as an
+    // act_delta-* act whose execution_id is still the preparation call id.
+    // Ignore that stale skeleton, but keep a genuinely streaming delta and a
+    // locally promoted delta that already carries the canonical execution id.
+    if (
+      isTransientToolTimelineItem(item) &&
+      item.metadata?.streaming !== true &&
+      !transientToolItemHasCanonicalExecution(item)
+    ) {
+      continue;
+    }
     if (item.type === 'act') {
       pairs.push({ call: item, result: null });
       pendingPairIndexes.push(pairs.length - 1);
@@ -1233,6 +1329,13 @@ export function pairToolCallItems(items: AgentTimelineItem[]): ToolCallPair[] {
     pairs.push({ call: item, result: null });
   }
   return pairs;
+}
+
+function transientToolItemHasCanonicalExecution(item: AgentTimelineItem): boolean {
+  const payload = isRecord(item.payload) ? item.payload : null;
+  return [item.tool_execution_id, payload?.tool_execution_id, payload?.execution_id].some(
+    (identifier) => typeof identifier === 'string' && identifier.length > 0,
+  );
 }
 
 export function toolActivityRows(items: AgentTimelineItem[]): ToolActivityRow[] {
