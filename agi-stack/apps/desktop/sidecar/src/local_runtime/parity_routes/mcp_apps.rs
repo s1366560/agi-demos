@@ -52,22 +52,34 @@ async fn capabilities(
         "transports": {
             "stdio": {
                 "availability": "available",
-                "protocol_version": "2024-11-05",
+                "protocol_negotiation": {
+                    "offered": ["2024-11-05"],
+                    "accepted": ["2024-11-05"],
+                },
                 "reason_code": null,
             },
             "http": {
                 "availability": "available",
-                "protocol_version": "2025-03-26",
+                "protocol_negotiation": {
+                    "offered": ["2025-03-26"],
+                    "accepted": ["2025-03-26"],
+                },
                 "reason_code": null,
             },
             "sse": {
                 "availability": "available",
-                "protocol_version": "2024-11-05",
+                "protocol_negotiation": {
+                    "offered": ["2024-11-05"],
+                    "accepted": ["2024-11-05"],
+                },
                 "reason_code": null,
             },
             "websocket": {
                 "availability": "available",
-                "protocol_version": "2025-03-26",
+                "protocol_negotiation": {
+                    "offered": ["2025-03-26"],
+                    "accepted": ["2025-03-26", "2024-11-05"],
+                },
                 "reason_code": null,
             },
         },
@@ -714,7 +726,10 @@ fn mcp_error(error: McpSupervisorError) -> LocalJsonResult {
 fn mcp_error_tuple_for(error: McpSupervisorError) -> (StatusCode, Json<Value>) {
     let status = match error.reason_code() {
         "local_mcp_server_not_found" | "local_mcp_app_not_found" => StatusCode::NOT_FOUND,
-        "local_mcp_idempotency_conflict" | "local_mcp_server_name_conflict" => StatusCode::CONFLICT,
+        "local_mcp_idempotency_conflict"
+        | "local_mcp_server_name_conflict"
+        | "local_mcp_tool_call_in_progress"
+        | "local_mcp_tool_call_lease_lost" => StatusCode::CONFLICT,
         "local_mcp_elicitation_bridge_unavailable" | "local_mcp_client_request_unavailable" => {
             StatusCode::NOT_IMPLEMENTED
         }

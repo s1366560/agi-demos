@@ -145,6 +145,9 @@ fn test_limits() -> SupervisorLimits {
         max_response_bytes: 256 * 1024,
         max_frame_bytes: 256 * 1024,
         max_aggregate_bytes: 512 * 1024,
+        tool_call_lease_duration: Duration::from_secs(4),
+        tool_call_wait_timeout: Duration::from_millis(500),
+        tool_call_poll_interval: Duration::from_millis(10),
     }
 }
 

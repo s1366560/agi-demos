@@ -5,11 +5,11 @@ use serde_json::{json, Value};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 use tokio_tungstenite::{
-    client_async_tls,
+    client_async_tls_with_config,
     tungstenite::{
         client::IntoClientRequest,
-        protocol::{frame::coding::CloseCode, CloseFrame},
-        Message,
+        protocol::{frame::coding::CloseCode, CloseFrame, WebSocketConfig},
+        Error as WebSocketError, Message,
     },
     MaybeTlsStream, WebSocketStream,
 };
@@ -61,40 +61,12 @@ impl WebSocketRuntime {
                 server_info: self.server_info.clone().unwrap_or_else(|| json!({})),
             });
         }
-        self.stop().await;
+        self.stop(limits).await;
         self.enforce_backoff()?;
         let connected: McpResult<WebSocket> = async {
             let endpoint = resolve_remote_endpoint(server).await?;
-            let mut request = endpoint
-                .url
-                .as_str()
-                .into_client_request()
-                .map_err(|_| connection_closed())?;
             let headers = remote_headers(server, credential_vault)?;
-            for (name, value) in &headers {
-                request.headers_mut().insert(name, value.clone());
-            }
-            let address = endpoint
-                .addresses
-                .first()
-                .copied()
-                .ok_or_else(connection_closed)?;
-            let stream = timeout(limits.initialize_timeout, TcpStream::connect(address))
-                .await
-                .map_err(|_| request_timeout())?
-                .map_err(|_| connection_closed())?;
-            let (socket, response) =
-                timeout(limits.initialize_timeout, client_async_tls(request, stream))
-                    .await
-                    .map_err(|_| request_timeout())?
-                    .map_err(|_| connection_closed())?;
-            if response.status().as_u16() != 101 {
-                return Err(McpSupervisorError::new(
-                    "local_mcp_websocket_handshake_failed",
-                    "MCP WebSocket handshake did not switch protocols",
-                ));
-            }
-            Ok(socket)
+            connect_websocket(&endpoint, &headers, limits).await
         }
         .await;
         let socket = match connected {
@@ -148,16 +120,20 @@ impl WebSocketRuntime {
             self.fail(limits).await;
             return Err(malformed_response());
         };
-        if let Err(error) = self
-            .send_message(
+        if let Err(error) = timeout(
+            limits.initialize_timeout,
+            self.send_message(
                 &json!({
                     "jsonrpc": "2.0",
                     "method": "notifications/initialized",
                     "params": {},
                 }),
                 limits,
-            )
-            .await
+            ),
+        )
+        .await
+        .map_err(|_| request_timeout())
+        .and_then(|result| result)
         {
             self.fail(limits).await;
             return Err(error);
@@ -205,10 +181,12 @@ impl WebSocketRuntime {
             "method": method,
             "params": params,
         });
-        self.send_message(&request, limits).await?;
-        timeout(request_deadline, self.read_response(request_id, limits))
-            .await
-            .map_err(|_| request_timeout())?
+        timeout(request_deadline, async {
+            self.send_message(&request, limits).await?;
+            self.read_response(request_id, limits).await
+        })
+        .await
+        .map_err(|_| request_timeout())?
     }
 
     async fn send_message(&mut self, message: &Value, limits: SupervisorLimits) -> McpResult<()> {
@@ -236,7 +214,7 @@ impl WebSocketRuntime {
                 .next()
                 .await
                 .ok_or_else(connection_closed)?
-                .map_err(|_| connection_closed())?;
+                .map_err(map_websocket_error)?;
             let bytes = match frame {
                 Message::Text(text) => text.into_bytes(),
                 Message::Binary(bytes) => bytes,
@@ -291,21 +269,85 @@ impl WebSocketRuntime {
     }
 
     async fn fail(&mut self, limits: SupervisorLimits) {
-        self.stop().await;
+        self.stop(limits).await;
         self.consecutive_failures = self.consecutive_failures.saturating_add(1);
         self.retry_after = Some(Instant::now() + retry_delay(self.consecutive_failures, limits));
     }
 
-    async fn stop(&mut self) {
+    async fn stop(&mut self, limits: SupervisorLimits) {
         self.initialized_revision = None;
         self.server_info = None;
         if let Some(mut socket) = self.socket.take() {
-            let _ = socket
-                .close(Some(CloseFrame {
+            let _ = timeout(
+                limits.request_timeout.min(Duration::from_millis(250)),
+                socket.close(Some(CloseFrame {
                     code: CloseCode::Normal,
                     reason: "local supervisor reset".into(),
-                }))
-                .await;
+                })),
+            )
+            .await;
         }
+    }
+}
+
+pub(super) async fn connect_websocket(
+    endpoint: &super::remote_common::ResolvedEndpoint,
+    headers: &reqwest::header::HeaderMap,
+    limits: SupervisorLimits,
+) -> McpResult<WebSocket> {
+    let deadline = tokio::time::Instant::now() + limits.initialize_timeout;
+    let mut last_error = connection_closed();
+    for (index, address) in endpoint.addresses.iter().copied().enumerate() {
+        let attempts_left = endpoint.addresses.len().saturating_sub(index);
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return Err(request_timeout());
+        }
+        let divisor = u32::try_from(attempts_left).unwrap_or(u32::MAX).max(1);
+        let attempt_timeout = remaining / divisor;
+        let attempt = async {
+            let stream = TcpStream::connect(address)
+                .await
+                .map_err(|_| connection_closed())?;
+            let mut request = endpoint
+                .url
+                .as_str()
+                .into_client_request()
+                .map_err(|_| connection_closed())?;
+            for (name, value) in headers {
+                request.headers_mut().insert(name, value.clone());
+            }
+            let config = WebSocketConfig {
+                write_buffer_size: limits.max_request_bytes.clamp(1024, 64 * 1024),
+                max_write_buffer_size: limits.max_request_bytes.saturating_add(64 * 1024),
+                max_message_size: Some(limits.max_aggregate_bytes),
+                max_frame_size: Some(limits.max_frame_bytes),
+                ..WebSocketConfig::default()
+            };
+            let (socket, response) =
+                client_async_tls_with_config(request, stream, Some(config), None)
+                    .await
+                    .map_err(map_websocket_error)?;
+            if response.status().as_u16() != 101 {
+                return Err(McpSupervisorError::new(
+                    "local_mcp_websocket_handshake_failed",
+                    "MCP WebSocket handshake did not switch protocols",
+                ));
+            }
+            Ok(socket)
+        };
+        match timeout(attempt_timeout, attempt).await {
+            Ok(Ok(socket)) => return Ok(socket),
+            Ok(Err(error)) => last_error = error,
+            Err(_) => last_error = request_timeout(),
+        }
+    }
+    Err(last_error)
+}
+
+fn map_websocket_error(error: WebSocketError) -> McpSupervisorError {
+    match error {
+        WebSocketError::Capacity(_) => response_too_large(),
+        _ => connection_closed(),
     }
 }

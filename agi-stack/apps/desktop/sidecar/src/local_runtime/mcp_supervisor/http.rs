@@ -31,15 +31,15 @@ struct HttpResponseMessages {
 }
 
 pub(super) struct HttpRuntime {
-    client: Option<Client>,
-    endpoint: Option<ResolvedEndpoint>,
-    session_id: Option<HeaderValue>,
-    protocol_version: Option<HeaderValue>,
-    initialized_revision: Option<u64>,
-    server_info: Option<Value>,
-    next_request_id: u64,
-    consecutive_failures: u32,
-    retry_after: Option<Instant>,
+    pub(super) client: Option<Client>,
+    pub(super) endpoint: Option<ResolvedEndpoint>,
+    pub(super) session_id: Option<HeaderValue>,
+    pub(super) protocol_version: Option<HeaderValue>,
+    pub(super) initialized_revision: Option<u64>,
+    pub(super) server_info: Option<Value>,
+    pub(super) next_request_id: u64,
+    pub(super) consecutive_failures: u32,
+    pub(super) retry_after: Option<Instant>,
 }
 
 impl HttpRuntime {
@@ -71,19 +71,19 @@ impl HttpRuntime {
                 server_info: self.server_info.clone().unwrap_or_else(|| json!({})),
             });
         }
-        self.stop();
+        self.reset(server, credential_vault, limits).await;
         self.enforce_backoff()?;
         let endpoint = match resolve_remote_endpoint(server).await {
             Ok(endpoint) => endpoint,
             Err(error) => {
-                self.fail(limits);
+                self.fail(server, credential_vault, limits).await;
                 return Err(error);
             }
         };
         let client = match build_client(&endpoint) {
             Ok(client) => client,
             Err(error) => {
-                self.fail(limits);
+                self.fail(server, credential_vault, limits).await;
                 return Err(error);
             }
         };
@@ -110,7 +110,7 @@ impl HttpRuntime {
         let initialize = match initialize {
             Ok(result) => result,
             Err(error) => {
-                self.fail(limits);
+                self.fail(server, credential_vault, limits).await;
                 return Err(error);
             }
         };
@@ -119,7 +119,7 @@ impl HttpRuntime {
             .and_then(Value::as_str)
             .filter(|version| *version == STREAMABLE_HTTP_PROTOCOL_VERSION);
         if protocol_version.is_none() {
-            self.fail(limits);
+            self.fail(server, credential_vault, limits).await;
             return Err(McpSupervisorError::new(
                 "local_mcp_protocol_version_unsupported",
                 "MCP Streamable HTTP protocol version is unsupported",
@@ -131,7 +131,7 @@ impl HttpRuntime {
             .filter(|value| value.is_object())
             .cloned();
         let Some(server_info) = server_info else {
-            self.fail(limits);
+            self.fail(server, credential_vault, limits).await;
             return Err(malformed_response());
         };
         if let Err(error) = self
@@ -147,7 +147,7 @@ impl HttpRuntime {
             )
             .await
         {
-            self.fail(limits);
+            self.fail(server, credential_vault, limits).await;
             return Err(error);
         }
         self.initialized_revision = Some(server.revision);
@@ -173,7 +173,7 @@ impl HttpRuntime {
         {
             Ok(result) => Ok(result),
             Err(error) => {
-                self.fail(limits);
+                self.fail(server, credential_vault, limits).await;
                 Err(error)
             }
         }
@@ -341,21 +341,6 @@ impl HttpRuntime {
             return Err(restart_backoff());
         }
         Ok(())
-    }
-
-    fn fail(&mut self, limits: SupervisorLimits) {
-        self.stop();
-        self.consecutive_failures = self.consecutive_failures.saturating_add(1);
-        self.retry_after = Some(Instant::now() + retry_delay(self.consecutive_failures, limits));
-    }
-
-    fn stop(&mut self) {
-        self.client = None;
-        self.endpoint = None;
-        self.session_id = None;
-        self.protocol_version = None;
-        self.initialized_revision = None;
-        self.server_info = None;
     }
 }
 

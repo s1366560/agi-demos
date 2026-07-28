@@ -15,10 +15,14 @@ use crate::application_vault::ApplicationCredentialVault;
 
 use super::DesktopSessionStore;
 
+#[cfg(test)]
+mod hardening_tests;
 mod http;
+mod http_session;
 mod remote_common;
 mod stdio;
 mod store;
+mod tool_call_lease;
 mod websocket;
 
 use http::{HttpRuntime, SseRuntime};
@@ -131,6 +135,9 @@ pub(super) struct SupervisorLimits {
     pub(super) max_response_bytes: usize,
     pub(super) max_frame_bytes: usize,
     pub(super) max_aggregate_bytes: usize,
+    pub(super) tool_call_lease_duration: Duration,
+    pub(super) tool_call_wait_timeout: Duration,
+    pub(super) tool_call_poll_interval: Duration,
 }
 
 impl Default for SupervisorLimits {
@@ -144,6 +151,9 @@ impl Default for SupervisorLimits {
             max_response_bytes: 1024 * 1024,
             max_frame_bytes: 1024 * 1024,
             max_aggregate_bytes: 4 * 1024 * 1024,
+            tool_call_lease_duration: Duration::from_secs(45),
+            tool_call_wait_timeout: Duration::from_secs(2),
+            tool_call_poll_interval: Duration::from_millis(25),
         }
     }
 }
@@ -448,15 +458,16 @@ impl McpSupervisor {
         }));
         if let Some(key) = idempotency_key {
             validate_idempotency_key(key)?;
-            if let Some(replay) = self.store.tool_call_receipt(scope, key, &request_hash)? {
-                let (content, is_error) = validate_tool_call_result(&replay)?;
-                return Ok(McpToolCallOutcome {
-                    result: replay,
-                    content,
-                    is_error,
-                    duplicate: true,
-                });
-            }
+            return tool_call_lease::execute_tool_call(
+                self,
+                scope,
+                &server,
+                tool_name,
+                arguments,
+                key,
+                &request_hash,
+            )
+            .await;
         }
         let result = self
             .request(
@@ -466,10 +477,6 @@ impl McpSupervisor {
             )
             .await?;
         let (content, is_error) = validate_tool_call_result(&result)?;
-        if let Some(key) = idempotency_key {
-            self.store
-                .save_tool_call_receipt(scope, key, &request_hash, &server.id, &result)?;
-        }
         Ok(McpToolCallOutcome {
             result,
             content,

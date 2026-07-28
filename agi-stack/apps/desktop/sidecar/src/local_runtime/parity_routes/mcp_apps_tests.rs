@@ -415,7 +415,19 @@ async fn capability_snapshot_only_advertises_live_transports_and_fails_closed_fo
             "available"
         );
         assert!(snapshot["transports"][transport]["reason_code"].is_null());
+        assert!(
+            snapshot["transports"][transport]["protocol_version"].is_null(),
+            "fixed protocol_version must not imply negotiation is unavailable"
+        );
     }
+    assert_eq!(
+        snapshot["transports"]["http"]["protocol_negotiation"]["accepted"],
+        json!(["2025-03-26"])
+    );
+    assert_eq!(
+        snapshot["transports"]["websocket"]["protocol_negotiation"]["accepted"],
+        json!(["2025-03-26", "2024-11-05"])
+    );
     assert_eq!(snapshot["elicitation"]["availability"], "unavailable");
     assert_eq!(
         snapshot["elicitation"]["reason_code"],

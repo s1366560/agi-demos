@@ -59,11 +59,26 @@ CREATE TABLE IF NOT EXISTS desktop_mcp_receipts_v1 (
   response_json TEXT NOT NULL,
   created_at TEXT NOT NULL,
   PRIMARY KEY(tenant_id, project_id, idempotency_key)
+);
+CREATE TABLE IF NOT EXISTS desktop_mcp_tool_call_leases_v2 (
+  tenant_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  server_id TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('pending', 'completed')),
+  lease_token TEXT NOT NULL,
+  lease_expires_at_ms INTEGER NOT NULL,
+  fence_token INTEGER NOT NULL CHECK(fence_token >= 1),
+  response_json TEXT,
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL,
+  PRIMARY KEY(tenant_id, project_id, idempotency_key)
 );";
 
 #[derive(Clone)]
 pub(super) struct McpStore {
-    session_store: DesktopSessionStore,
+    pub(super) session_store: DesktopSessionStore,
 }
 
 impl McpStore {
@@ -451,73 +466,6 @@ impl McpStore {
                         app_from_row,
                     )
                     .optional()
-                    .map_err(|error| error.to_string())
-            })
-            .map_err(|_| storage_error())
-    }
-
-    pub(super) fn tool_call_receipt(
-        &self,
-        scope: &McpScope,
-        idempotency_key: &str,
-        request_hash: &str,
-    ) -> McpResult<Option<Value>> {
-        let record = self
-            .session_store
-            .with_local_mcp_connection(|connection| {
-                connection
-                    .query_row(
-                        "SELECT request_hash, response_json
-                         FROM desktop_mcp_receipts_v1
-                         WHERE tenant_id = ?1 AND project_id = ?2 AND idempotency_key = ?3",
-                        params![scope.tenant_id, scope.project_id, idempotency_key],
-                        |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
-                    )
-                    .optional()
-                    .map_err(|error| error.to_string())
-            })
-            .map_err(|_| storage_error())?;
-        let Some((stored_hash, response_json)) = record else {
-            return Ok(None);
-        };
-        if stored_hash != request_hash {
-            return Err(McpSupervisorError::new(
-                "local_mcp_idempotency_conflict",
-                "MCP idempotency key is already bound to a different request",
-            ));
-        }
-        serde_json::from_str(&response_json)
-            .map(Some)
-            .map_err(|_| storage_error())
-    }
-
-    pub(super) fn save_tool_call_receipt(
-        &self,
-        scope: &McpScope,
-        idempotency_key: &str,
-        request_hash: &str,
-        server_id: &str,
-        response: &Value,
-    ) -> McpResult<()> {
-        self.session_store
-            .with_local_mcp_connection(|connection| {
-                connection
-                    .execute(
-                        "INSERT INTO desktop_mcp_receipts_v1(
-                           tenant_id, project_id, idempotency_key, operation, target_id,
-                           request_hash, response_json, created_at
-                         ) VALUES (?1, ?2, ?3, 'tools_call', ?4, ?5, ?6, ?7)",
-                        params![
-                            scope.tenant_id,
-                            scope.project_id,
-                            idempotency_key,
-                            server_id,
-                            request_hash,
-                            response.to_string(),
-                            chrono::Utc::now().to_rfc3339(),
-                        ],
-                    )
-                    .map(|_| ())
                     .map_err(|error| error.to_string())
             })
             .map_err(|_| storage_error())

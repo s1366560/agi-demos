@@ -128,17 +128,7 @@ pub(super) async fn resolve_remote_endpoint(
     if addresses.is_empty() {
         return Err(endpoint_resolution_rejected());
     }
-    let loopback_definition = is_loopback_host(&url);
-    if loopback_definition {
-        if addresses.iter().any(|address| !address.ip().is_loopback()) {
-            return Err(endpoint_resolution_rejected());
-        }
-    } else if addresses
-        .iter()
-        .any(|address| !is_public_address(address.ip()))
-    {
-        return Err(endpoint_resolution_rejected());
-    }
+    validate_resolved_addresses(&url, &addresses)?;
     Ok(ResolvedEndpoint {
         url,
         host,
@@ -359,7 +349,7 @@ pub(super) fn vault_unavailable() -> McpSupervisorError {
     )
 }
 
-fn validate_remote_url(
+pub(super) fn validate_remote_url(
     endpoint: &str,
     transport: McpTransport,
     allow_query: bool,
@@ -382,16 +372,23 @@ fn validate_remote_url(
     {
         return Err(endpoint_invalid());
     }
+    if is_loopback_host(&url) && !has_canonical_loopback_authority(endpoint, &url) {
+        return Err(endpoint_policy_rejected());
+    }
     let is_cleartext = matches!(url.scheme(), "http" | "ws");
     if is_cleartext && !is_loopback_host(&url) {
         return Err(endpoint_policy_rejected());
     }
     if let Some(host) = url.host() {
         match host {
-            Host::Ipv4(address) if !address.is_loopback() && !is_public_address(address.into()) => {
+            Host::Ipv4(address)
+                if !address.is_loopback() && !is_globally_routable(address.into()) =>
+            {
                 return Err(endpoint_policy_rejected());
             }
-            Host::Ipv6(address) if !address.is_loopback() && !is_public_address(address.into()) => {
+            Host::Ipv6(address)
+                if !address.is_loopback() && !is_globally_routable(address.into()) =>
+            {
                 return Err(endpoint_policy_rejected());
             }
             Host::Domain(domain)
@@ -432,27 +429,96 @@ fn is_loopback_host(url: &Url) -> bool {
     }
 }
 
-fn is_public_address(address: IpAddr) -> bool {
-    match address {
-        IpAddr::V4(address) => {
-            !address.is_private()
-                && !address.is_loopback()
-                && !address.is_link_local()
-                && !address.is_broadcast()
-                && !address.is_documentation()
-                && !address.is_multicast()
-                && !address.is_unspecified()
+fn has_canonical_loopback_authority(endpoint: &str, url: &Url) -> bool {
+    let Some(authority) = endpoint
+        .split_once("://")
+        .map(|(_, remainder)| remainder)
+        .and_then(|remainder| remainder.split(['/', '?', '#']).next())
+    else {
+        return false;
+    };
+    let raw_host = if let Some(bracketed) = authority.strip_prefix('[') {
+        bracketed.split_once(']').map(|(host, _)| host)
+    } else {
+        Some(
+            authority
+                .rsplit_once(':')
+                .filter(|(_, port)| port.parse::<u16>().is_ok())
+                .map_or(authority, |(host, _)| host),
+        )
+    };
+    match (url.host(), raw_host) {
+        (Some(Host::Domain("localhost")), Some(host)) => host.eq_ignore_ascii_case("localhost"),
+        (Some(Host::Ipv4(address)), Some(host)) if address.is_loopback() => host == "127.0.0.1",
+        (Some(Host::Ipv6(address)), Some(host)) if address.is_loopback() => {
+            host.eq_ignore_ascii_case("::1")
         }
+        _ => false,
+    }
+}
+
+pub(super) fn validate_resolved_addresses(url: &Url, addresses: &[SocketAddr]) -> McpResult<()> {
+    if addresses.is_empty() {
+        return Err(endpoint_resolution_rejected());
+    }
+    if is_loopback_host(url) {
+        if addresses.iter().all(|address| address.ip().is_loopback()) {
+            return Ok(());
+        }
+    } else if addresses
+        .iter()
+        .all(|address| is_globally_routable(address.ip()))
+    {
+        return Ok(());
+    }
+    Err(endpoint_resolution_rejected())
+}
+
+pub(super) fn is_globally_routable(address: IpAddr) -> bool {
+    match address {
+        IpAddr::V4(address) => is_globally_routable_v4(address.octets()),
         IpAddr::V6(address) => {
             let octets = address.octets();
-            let is_unique_local = octets[0] & 0xfe == 0xfc;
-            let is_unicast_link_local = octets[0] == 0xfe && octets[1] & 0xc0 == 0x80;
-            !address.is_loopback()
-                && !address.is_unspecified()
-                && !address.is_multicast()
-                && !is_unique_local
-                && !is_unicast_link_local
+            if octets[..10] == [0; 10] && octets[10..12] == [0xff, 0xff] {
+                return is_globally_routable_v4([octets[12], octets[13], octets[14], octets[15]]);
+            }
+            let global_unicast = octets[0] & 0xe0 == 0x20;
+            let documentation = octets[..4] == [0x20, 0x01, 0x0d, 0xb8]
+                || (octets[0] == 0x3f && octets[1] & 0xf0 == 0xf0);
+            let discard_only = octets[..8] == [0x01, 0x00, 0, 0, 0, 0, 0, 0];
+            let benchmarking = octets[..6] == [0x20, 0x01, 0, 0x02, 0, 0];
+            let orchid = octets[..3] == [0x20, 0x01, 0] && matches!(octets[3] & 0xf0, 0x10 | 0x20);
+            let transition = octets[..4] == [0x20, 0x01, 0, 0]
+                || octets[..2] == [0x20, 0x02]
+                || octets[..12] == [0, 0x64, 0xff, 0x9b, 0, 0, 0, 0, 0, 0, 0, 0]
+                || octets[..6] == [0, 0x64, 0xff, 0x9b, 0, 1];
+            global_unicast
+                && !documentation
+                && !discard_only
+                && !benchmarking
+                && !orchid
+                && !transition
         }
+    }
+}
+
+fn is_globally_routable_v4(octets: [u8; 4]) -> bool {
+    match octets {
+        [0, ..]
+        | [10, ..]
+        | [127, ..]
+        | [169, 254, ..]
+        | [192, 0, 0, ..]
+        | [192, 0, 2, ..]
+        | [192, 88, 99, ..]
+        | [192, 168, ..]
+        | [198, 18 | 19, ..]
+        | [198, 51, 100, ..]
+        | [203, 0, 113, ..]
+        | [224..=255, ..] => false,
+        [100, second, ..] if second & 0xc0 == 0x40 => false,
+        [172, second, ..] if second & 0xf0 == 0x10 => false,
+        _ => true,
     }
 }
 
