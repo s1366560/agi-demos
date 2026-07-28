@@ -1930,9 +1930,9 @@
 }
 
 .radix-themes.light .forced-skill-message-badge {
-  border-color: rgba(7, 126, 154, 0.28);
-  background: rgba(7, 126, 154, 0.08);
-  color: #116981;
+  border-color: rgba(var(--desktop-cyan-ring-2-rgb), 0.28);
+  background: rgba(var(--desktop-cyan-ring-2-rgb), 0.08);
+  color: var(--desktop-cyan-strong);
 }
 
 .message-attachments {
@@ -2068,14 +2068,11 @@
 
 .radix-themes.light .assistant-artifact-reference {
   border-color: rgba(var(--desktop-cyan-dusk-2-rgb), 0.24);
-  background: rgba(238, 247, 250, 0.84);
-  color: #304a58;
+  color: var(--desktop-text-pale);
 }
 
 .radix-themes.light .assistant-artifact-reference:hover {
   border-color: rgba(var(--desktop-cyan-dusk-2-rgb), 0.42);
-  background: #e9f4f7;
-  color: #173b4b;
 }
 
 .markdown-artifact-image-shell {
@@ -2129,8 +2126,7 @@
 
 .radix-themes.light .markdown-artifact-image-shell {
   border-color: rgba(var(--desktop-cyan-dusk-2-rgb), 0.22);
-  background: rgba(238, 247, 250, 0.82);
-  color: #365361;
+  color: var(--desktop-text-pale);
 }
 
 .artifact-timeline-card {
@@ -2347,24 +2343,16 @@
 }
 
 .radix-themes.light .artifact-timeline-card {
-  border-color: rgba(26, 132, 103, 0.26);
-  background: #f1f8f6;
-  color: #38574e;
+  border-color: rgba(var(--desktop-green-soft-rgb), 0.26);
 }
 
 .radix-themes.light .artifact-timeline-card.status-error {
-  border-color: rgba(173, 56, 67, 0.3);
-  background: #fff5f5;
-}
-
-.radix-themes.light .artifact-timeline-heading > strong,
-.radix-themes.light .artifact-timeline-file strong {
-  color: #24463c;
+  border-color: rgba(var(--desktop-red-strong-rgb), 0.3);
 }
 
 .radix-themes.light .artifact-timeline-image,
 .radix-themes.light .artifact-timeline-file {
-  border-color: rgba(26, 132, 103, 0.18);
+  border-color: rgba(var(--desktop-green-soft-rgb), 0.18);
   background: rgba(var(--desktop-white-rgb), 0.72);
 }
 
@@ -2501,7 +2489,7 @@
 }
 
 .radix-themes.light .mermaid-block-canvas {
-  background: #f8fafc;
+  background: var(--desktop-panel);
 }
 
 .mermaid-block-canvas > div {
@@ -4198,7 +4186,7 @@
   border: 1px solid var(--desktop-border-20);
   border-radius: 13px;
   background: rgba(var(--desktop-surface-34-rgb), 0.98);
-  color: var(--desktop-text, #d8e3ec);
+  color: var(--desktop-text);
   box-shadow:
     0 24px 60px rgba(var(--desktop-black-rgb), 0.48),
     0 0 0 1px rgba(var(--desktop-teal-rgb), 0.04);

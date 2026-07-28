@@ -397,22 +397,22 @@
   --desktop-amber: #b4741c;
   --desktop-red: #d63a4b;
   --desktop-sidebar-width: 220px;
-  /* Surface ladder (light gray to white by luminance) */
+  /* Surface ladder (light to dark by luminance) */
   --desktop-surface-1: #e9edf3;
-  --desktop-surface-2: #eceff5;
-  --desktop-surface-3: #edf1f6;
-  --desktop-surface-4: #eef2f7;
-  --desktop-surface-5: #eff3f8;
-  --desktop-surface-6: #f0f3f7;
-  --desktop-surface-7: #f1f4f8;
-  --desktop-surface-8: #f1f5f9;
-  --desktop-surface-9: #f2f5f9;
-  --desktop-surface-10: #f3f6fa;
-  --desktop-surface-11: #f4f6fa;
-  --desktop-surface-12: #f5f7fb;
-  --desktop-surface-13: #f5f8fb;
-  --desktop-surface-14: #f8fafc;
-  --desktop-surface-15: #fbfcfe;
+  --desktop-surface-2: #e8edf3;
+  --desktop-surface-3: #e8ecf2;
+  --desktop-surface-4: #e7ecf2;
+  --desktop-surface-5: #e7ebf2;
+  --desktop-surface-6: #e6ebf2;
+  --desktop-surface-7: #e6eaf1;
+  --desktop-surface-8: #e5eaf1;
+  --desktop-surface-9: #e4eaf1;
+  --desktop-surface-10: #e4e9f0;
+  --desktop-surface-11: #e3e9f0;
+  --desktop-surface-12: #e3e8f0;
+  --desktop-surface-13: #e3e7f0;
+  --desktop-surface-14: #e2e7ef;
+  --desktop-surface-15: #e1e7ef;
   /* Tinted surfaces */
   --desktop-surface-red: #fbeef0;
   --desktop-surface-cyan: #e3f2f6;
@@ -476,23 +476,23 @@
   --desktop-amber-alt-rgb: 180, 83, 9;
   --desktop-amber-soft-rgb: 196, 122, 30;
 
-  /* Phase-2 surface ladder extension (light gray to white by luminance) */
-  --desktop-surface-16: #ebeef4;
-  --desktop-surface-17: #ebeff5;
-  --desktop-surface-18: #edf1f6;
-  --desktop-surface-19: #f1f4f8;
-  --desktop-surface-20: #f1f5f9;
-  --desktop-surface-21: #f5f8fb;
-  --desktop-surface-22: #f9fbfd;
-  --desktop-surface-23: #fafbfd;
-  --desktop-surface-24: #fafcfe;
-  --desktop-surface-25: #fbfcfe;
-  --desktop-surface-26: #fbfcfe;
-  --desktop-surface-27: #fbfcfe;
-  --desktop-surface-28: #fbfcfe;
-  --desktop-surface-29: #fbfcfe;
-  --desktop-surface-30: #fbfcfe;
-  --desktop-surface-31: #fbfcfe;
+  /* Phase-2 surface ladder extension (light to dark by luminance) */
+  --desktop-surface-16: #e1e7ee;
+  --desktop-surface-17: #e1e6ef;
+  --desktop-surface-18: #e0e6ee;
+  --desktop-surface-19: #e0e5ee;
+  --desktop-surface-20: #dfe5ee;
+  --desktop-surface-21: #dfe5ed;
+  --desktop-surface-22: #dee4ed;
+  --desktop-surface-23: #dee4ec;
+  --desktop-surface-24: #dde3ed;
+  --desktop-surface-25: #dde3ec;
+  --desktop-surface-26: #dce3ec;
+  --desktop-surface-27: #dce2ec;
+  --desktop-surface-28: #dbe2eb;
+  --desktop-surface-29: #dbe1eb;
+  --desktop-surface-30: #dae1eb;
+  --desktop-surface-31: #dae0eb;
   /* Phase-2 tinted surfaces */
   --desktop-surface-purple: #efecf9;
   --desktop-surface-cyan-2: #e3f2f6;
@@ -627,7 +627,7 @@
   --desktop-amber-deep-rgb: 146, 64, 14;
 
   /* Phase-4 neutral surface channels (light = near-white translucent panels) */
-  --desktop-surface-26-rgb: 251, 252, 254;
+  --desktop-surface-26-rgb: 220, 227, 236;
   --desktop-surface-32-rgb: 234, 239, 244;
   --desktop-surface-33-rgb: 235, 240, 246;
   --desktop-surface-34-rgb: 236, 241, 247;

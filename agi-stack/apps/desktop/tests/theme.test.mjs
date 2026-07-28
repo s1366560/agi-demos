@@ -26,6 +26,7 @@ const settingsCoreSource = readFileSync(
 );
 const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const themeInitSource = readFileSync(new URL('../public/theme-init.js', import.meta.url), 'utf8');
+const themeSource = readFileSync(new URL('../src/theme.tsx', import.meta.url), 'utf8');
 
 const {
   DEFAULT_THEME_PREFERENCE,
@@ -174,6 +175,18 @@ test('no-flash bootstrap script is referenced from index.html and stays in sync'
   assert.match(indexHtml, /<script src="\/theme-init\.js"><\/script>/);
   assert.ok(themeInitSource.includes(THEME_STORAGE_KEY));
   assert.ok(themeInitSource.includes('prefers-color-scheme: dark'));
+});
+
+test('meta theme-color follows the resolved theme background', () => {
+  // index.html declares the dark default; the bootstrap script and the provider
+  // effect both rewrite it to the resolved theme's --desktop-bg value.
+  assert.match(indexHtml, /<meta name="theme-color" content="#0b111a" \/>/);
+  for (const source of [themeInitSource, themeSource]) {
+    assert.ok(source.includes('meta[name="theme-color"]'));
+    assert.ok(source.includes('#f6f8fb'), 'light theme-color must match light --desktop-bg');
+    assert.ok(source.includes('#0b111a'), 'dark theme-color must stay #0b111a');
+  }
+  assert.equal(lightTokens.get('--desktop-bg'), '#f6f8fb');
 });
 
 test('appearance settings page renders a localized radiogroup in English', () => {

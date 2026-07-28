@@ -134,6 +134,10 @@ const migratedHexLiterals = [
   'f3aab4', 'f3b2b8', 'f4a6a6', 'f6c983', 'f6d5a3', 'f8c273', 'fb7185', 'fcd34d',
   'ff7f8b', 'ff8793', 'ff8b96', 'ff8e86', 'ff8e8e', 'ff8e99', 'ff9c9c', 'ffaaa3',
   'ffaaaa', 'ffb0aa', 'ffb4bc', 'ffc0c0', 'ffc8c8', 'ffd7dc',
+  // phase-5: final light-theme cleanup — residual singletons mapped to tokens
+  '8eb7c2', '334155', '0f172a', '92400e', '116981', '304a58', 'e9f4f7', '173b4b',
+  '365361', 'f1f8f6', '38574e', 'fff5f5', '24463c', 'f8fafc', 'd8e3ec', '42b99b',
+  '55b7ce', '94a3b8', '0d131d', '0a111b', '657a8c', '273947', '71869a', 'b8cad7',
 ];
 
 // Full phase-1 channel list: rgb triples replaced by --desktop-*-rgb tokens.
@@ -171,6 +175,9 @@ const migratedChannels = [
   [91, 91, 138], [92, 155, 181], [98, 217, 239], [99, 119, 134], [124, 34, 34], [130, 148, 157],
   [139, 156, 246], [143, 157, 196], [146, 64, 14], [151, 174, 190], [153, 27, 27], [185, 28, 28],
   [212, 92, 101], [232, 161, 173], [255, 107, 107], [255, 108, 124], [255, 182, 190],
+  // phase-5: rgba channels folded into existing channel tokens (light overrides)
+  [7, 126, 154], [238, 247, 250], [26, 132, 103], [173, 56, 67], [217, 119, 6],
+  [8, 145, 178], [248, 250, 252],
 ];
 
 test('migrated hex and rgba literals stay out of value position in every src CSS file', () => {
@@ -197,10 +204,10 @@ test('migrated hex and rgba literals stay out of value position in every src CSS
   assert.deepEqual(offenders, []);
 });
 
-test('hardcoded hex color budget ratchets down (phase-4 baseline: 25)', () => {
+test('hardcoded hex color budget ratchets down (phase-5 baseline: 0)', () => {
   // This budget may only go DOWN. Lower the number whenever a migration pass
   // removes more hardcoded hex colors; never raise it.
-  const HEX_BUDGET = 25;
+  const HEX_BUDGET = 0;
   let count = 0;
   for (const file of migratedCssFiles) {
     for (const value of declarationValues(readSrc(file))) {

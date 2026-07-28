@@ -189,6 +189,9 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
+// Exported HTML must render standalone, without the app's stylesheets, so the
+// palette below is intentionally hardcoded to a fixed light scheme instead of
+// referencing --desktop-* tokens; exports stay theme-neutral by design.
 export function conversationExportToHtml(
   snapshot: ConversationExportSnapshot,
   options?: ConversationExportRenderOptions,

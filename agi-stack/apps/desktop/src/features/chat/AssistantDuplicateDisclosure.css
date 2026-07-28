@@ -79,7 +79,7 @@
 .assistant-duplicate-disclosure li > code {
   min-width: 0;
   overflow: hidden;
-  color: #8eb7c2;
+  color: var(--desktop-gray-29);
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;

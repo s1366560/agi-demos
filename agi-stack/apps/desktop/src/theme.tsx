@@ -76,6 +76,12 @@ export function ThemePreferenceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof document === 'undefined') return;
     document.documentElement.dataset.theme = resolved;
+    // Mirror the resolved theme background (#0b111a dark / #f6f8fb light,
+    // matching --desktop-bg) into the browser chrome meta tag.
+    const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeColorMeta) {
+      themeColorMeta.setAttribute('content', resolved === 'light' ? '#f6f8fb' : '#0b111a');
+    }
   }, [resolved]);
 
   const value = useMemo<ThemePreferenceContextValue>(

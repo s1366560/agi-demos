@@ -27,7 +27,7 @@
   min-height: 56px;
   padding: 10px 12px;
   border-bottom: 1px solid var(--desktop-border-soft);
-  background: #0d131d;
+  background: var(--desktop-surface-21);
 }
 
 .qa-evidence-head > div:first-child {

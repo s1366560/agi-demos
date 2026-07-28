@@ -88,7 +88,7 @@
   gap: 18px;
   padding: 0 18px;
   border-bottom: 1px solid var(--desktop-border-soft);
-  background: #0a111b;
+  background: var(--desktop-surface-20);
 }
 
 .session-steering-qa-titlebar span {
