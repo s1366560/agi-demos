@@ -2594,9 +2594,11 @@ export function App() {
         const request = sessionProjection?.pendingHitl.find(
           (candidate) => candidate.id === submission.requestId,
         );
-        const revisionMatches = request?.run_id
-          ? request.run_revision === submission.expectedRevision
-          : submission.expectedRevision === undefined;
+        const revisionMatches =
+          submission.expectedRevision === undefined
+            ? request?.authority_revision === undefined ||
+              request.authority_revision === null
+            : request?.authority_revision === submission.expectedRevision;
         if (
           !request ||
           request.status !== 'pending' ||

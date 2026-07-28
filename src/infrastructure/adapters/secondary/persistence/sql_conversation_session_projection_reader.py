@@ -23,6 +23,7 @@ from src.application.services.conversation_session_projection_service import (
     WorkspacePlanContextAuthority,
     WorkspacePlanNodeAuthority,
 )
+from src.application.services.hitl_response_contract import HITL_PENDING_AUTHORITY_REVISION
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.artifact_model import ArtifactModel
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -386,6 +387,7 @@ class SqlConversationSessionProjectionReader:
                     options=self._safe_options(record.options),
                     context=context,
                     metadata={"hitl_type": kind},
+                    authority_revision=HITL_PENDING_AUTHORITY_REVISION,
                     created_at=record.created_at,
                     expires_at=record.expires_at,
                 )

@@ -241,6 +241,7 @@ function validCloudProjection() {
         context: { surface: 'session' },
         metadata: { hitl_type: 'decision' },
         status: 'pending',
+        authority_revision: 1,
         created_at: '2026-07-14T00:00:45Z',
         expires_at: '2026-07-14T01:00:45Z',
       },
@@ -393,6 +394,7 @@ test('session projection decoder accepts a scoped cloud workspace authority with
   assert.equal(projection?.tasks[0]?.id, 'cloud-task-1');
   assert.equal(projection?.pendingHitl[0]?.kind, 'decision');
   assert.equal(projection?.pendingHitl[0]?.prompt, 'Continue with the scoped change?');
+  assert.equal(projection?.pendingHitl[0]?.authority_revision, 1);
   assert.equal(projection?.evidenceSummary.artifactVersionCount, null);
   assert.equal(projection?.capabilities.canSendMessage, false);
   assert.equal(projection?.toolInvocations.length, 0);
@@ -426,6 +428,21 @@ test('cloud session projection preserves a pending HITL request without an expir
 
   assert.equal(projection?.pendingHitl[0]?.expires_at, null);
   assert.equal(projection?.capabilities.canRespondToHitl, true);
+});
+
+test('cloud session projection fails closed without the HITL authority revision', () => {
+  const payload = validCloudProjection();
+  delete payload.pending_hitl[0].authority_revision;
+
+  assert.equal(
+    decodeConversationSessionProjection(payload, {
+      conversationId: 'conversation-1',
+      projectId: 'project-1',
+      tenantId: 'tenant-1',
+      workspaceId: 'workspace-1',
+    }),
+    null,
+  );
 });
 
 test('cloud session projection preserves only the structured permission review contract', () => {

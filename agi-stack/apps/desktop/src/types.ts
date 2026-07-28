@@ -1576,6 +1576,7 @@ export type DesktopApprovalRequest = {
   message_id?: string | null;
   run_id?: string | null;
   run_revision?: number | null;
+  authority_revision?: number | null;
   round?: number;
   kind: HitlType;
   prompt: string;

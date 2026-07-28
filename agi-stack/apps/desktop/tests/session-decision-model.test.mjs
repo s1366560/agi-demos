@@ -14,6 +14,7 @@ const completeRequest = {
   conversation_id: 'conversation-1',
   run_id: 'run-1',
   run_revision: 7,
+  authority_revision: 1,
   round: 2,
   kind: 'permission',
   prompt: 'Allow this change?',
@@ -38,6 +39,7 @@ const cloudPermissionRequest = {
   id: 'cloud-permission-1',
   conversation_id: 'conversation-1',
   run_id: null,
+  authority_revision: 1,
   kind: 'permission',
   prompt: 'Allow the reviewed command?',
   status: 'pending',
@@ -108,12 +110,12 @@ test('the latest cloud permission is selected without synthesizing a decision pa
   assert.equal(latestPendingApproval([completeRequest, cloudPermissionRequest])?.id, 'cloud-permission-1');
 });
 
-test('permission approval binds request, run revision, and idempotency key', () => {
+test('permission approval binds request, HITL authority revision, and idempotency key', () => {
   assert.deepEqual(approvalResponseSubmission(completeRequest, 'approve'), {
     requestId: 'approval-1',
     hitlType: 'permission',
-    expectedRevision: 7,
-    idempotencyKey: 'approval-1:7:approve',
+    expectedRevision: 1,
+    idempotencyKey: 'approval-1:1:approve',
     responseData: { granted: true },
   });
 });
@@ -124,8 +126,8 @@ test('request changes carries explicit feedback and denies the permission', () =
     {
       requestId: 'approval-1',
       hitlType: 'permission',
-      expectedRevision: 7,
-      idempotencyKey: 'approval-1:7:request_changes',
+      expectedRevision: 1,
+      idempotencyKey: 'approval-1:1:request_changes',
       responseData: { granted: false, feedback: 'Keep the public API stable' },
     },
   );

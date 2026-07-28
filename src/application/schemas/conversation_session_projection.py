@@ -114,6 +114,7 @@ class SessionPendingHITLResponse(_ProjectionModel):
     context: dict[str, Any]
     metadata: dict[str, Any]
     status: Literal["pending"]
+    authority_revision: int = Field(ge=1)
     created_at: datetime
     expires_at: datetime
 

@@ -89,7 +89,7 @@ export function HitlResponseCard({
     setBusy(true);
     setSubmitError(null);
     try {
-      const expectedRevision = approvalRequest?.run_revision;
+      const expectedRevision = approvalRequest?.authority_revision;
       await onRespond({
         requestId,
         hitlType,

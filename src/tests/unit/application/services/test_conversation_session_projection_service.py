@@ -145,6 +145,7 @@ def snapshot() -> ConversationSessionAuthoritySnapshot:
                 options=(),
                 context={},
                 metadata={"hitl_type": "permission"},
+                authority_revision=1,
                 created_at=NOW - timedelta(minutes=1),
                 expires_at=NOW + timedelta(minutes=4),
             ),
@@ -210,6 +211,7 @@ async def test_builds_discriminated_workspace_session_without_desktop_authority(
     assert projection.pending_hitl[0].request_type == "permission"
     assert projection.pending_hitl[0].question == "Allow the reviewed operation?"
     assert projection.pending_hitl[0].metadata == {"hitl_type": "permission"}
+    assert projection.pending_hitl[0].authority_revision == 1
     assert [item.id for item in projection.artifact_records] == ["artifact-record-1"]
     assert projection.tool_execution_records.total == 3
     assert projection.tool_execution_records.truncated is True
@@ -241,7 +243,8 @@ async def test_builds_discriminated_workspace_session_without_desktop_authority(
         "response_metadata",
     ):
         assert forbidden not in serialized
-    assert "revision" not in payload
+    assert payload["pending_hitl"][0]["authority_revision"] == 1
+    assert "run_revision" not in serialized
 
 
 async def test_standalone_session_uses_conversation_record_authority() -> None:

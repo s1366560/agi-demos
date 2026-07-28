@@ -32,6 +32,11 @@ function item(type, payload) {
   };
 }
 
+test('HITL cards submit the request authority revision, never the run revision', () => {
+  assert.match(cardSource, /approvalRequest\?\.authority_revision/u);
+  assert.doesNotMatch(cardSource, /approvalRequest\?\.run_revision/u);
+});
+
 test('decision model consumes explicit single or multiple selection contracts and rich option facts', () => {
   const multiple = hitlDecisionView(
     item('decision_asked', {

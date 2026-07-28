@@ -127,6 +127,7 @@ class PendingHITLAuthority:
     options: tuple[dict[str, Any], ...]
     context: dict[str, Any]
     metadata: dict[str, Any]
+    authority_revision: int
     created_at: datetime
     expires_at: datetime
 
@@ -378,6 +379,7 @@ class ConversationSessionProjectionService:
             context=source.context,
             metadata=source.metadata,
             status="pending",
+            authority_revision=source.authority_revision,
             created_at=source.created_at,
             expires_at=source.expires_at,
         )

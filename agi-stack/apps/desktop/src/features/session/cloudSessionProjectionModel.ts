@@ -442,6 +442,7 @@ function readCloudHitl(
   const prompt = nonEmptyString(request.question);
   const createdAt = nonEmptyString(request.created_at);
   const expiresAt = request.expires_at === null ? null : nonEmptyString(request.expires_at);
+  const authorityRevision = request.authority_revision;
   const permission =
     kind === 'permission' ? readCloudPermissionRequest(request.permission) : null;
   if (
@@ -451,6 +452,8 @@ function readCloudHitl(
     !['clarification', 'decision', 'env_var', 'permission', 'a2ui_action'].includes(kind) ||
     !prompt ||
     request.status !== 'pending' ||
+    !nonNegativeInteger(authorityRevision) ||
+    authorityRevision === 0 ||
     !createdAt ||
     (request.expires_at !== null && !expiresAt) ||
     !Object.hasOwn(request, 'message_id') ||
@@ -465,6 +468,7 @@ function readCloudHitl(
     kind: kind as DesktopApprovalRequest['kind'],
     prompt,
     status: 'pending',
+    authority_revision: authorityRevision as number,
     created_at: createdAt,
     responded_at: null,
     message_id: (request.message_id as string | null) ?? null,
