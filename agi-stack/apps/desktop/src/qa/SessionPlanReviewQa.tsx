@@ -82,7 +82,7 @@ function SessionPlanReviewQa() {
           minHeight: '100%',
           padding: 36,
           placeItems: 'center',
-          background: '#080c12',
+          background: 'var(--desktop-bg)',
         }}
       >
         <aside

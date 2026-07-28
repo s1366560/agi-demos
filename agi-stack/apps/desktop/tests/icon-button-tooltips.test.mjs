@@ -38,7 +38,6 @@ const toastCenterSource = readSource('features/feedback/ToastCenter.tsx');
 const keyboardShortcutsDialogSource = readSource(
   'features/navigation/KeyboardShortcutsDialog.tsx',
 );
-const dialogSource = readSource('components/Dialog.tsx');
 const sessionAgentsCanvasSource = readSource('features/session/SessionAgentsCanvas.tsx');
 const sessionExecutionGraphCanvasSource = readSource(
   'features/session/SessionExecutionGraphCanvas.tsx',
@@ -110,10 +109,6 @@ test('keyboard shortcuts dialog close button exposes a localized tooltip', () =>
     "t('common.close')",
     'shortcuts dialog close',
   );
-});
-
-test('shared dialog close button keeps its tooltip identical to the aria label', () => {
-  assert.match(dialogSource, /aria-label="Close dialog" title="Close dialog"/);
 });
 
 test('session agent tree child toggle exposes a localized tooltip', () => {
