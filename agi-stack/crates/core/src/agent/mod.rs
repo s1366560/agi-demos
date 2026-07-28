@@ -30,8 +30,8 @@ pub use react::{
     pending_request, ReActControl, ReActEngine, ReActObserver, RunDirective, SteeringInstruction,
 };
 pub use types::{
-    AgentAction, CompletedCall, DecisionAction, DecisionContext, DecisionData, DecisionEvidence,
-    DecisionReversibility, DecisionReversibilityMode, DecisionRisk, DecisionRiskLevel,
-    DecisionScope, DecisionTarget, HitlKind, HitlRequest, HitlResponse, Role, SessionState,
-    SessionStatus, TranscriptEntry,
+    A2uiActionAuthority, A2uiAllowedAction, AgentAction, CompletedCall, DecisionAction,
+    DecisionContext, DecisionData, DecisionEvidence, DecisionReversibility,
+    DecisionReversibilityMode, DecisionRisk, DecisionRiskLevel, DecisionScope, DecisionTarget,
+    HitlKind, HitlRequest, HitlResponse, Role, SessionState, SessionStatus, TranscriptEntry,
 };

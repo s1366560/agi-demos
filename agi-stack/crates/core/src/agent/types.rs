@@ -24,7 +24,7 @@ pub enum AgentAction {
     Finish { answer: String },
 }
 
-/// The four kinds of human-in-the-loop interruption, mirroring the Python
+/// The human-in-the-loop interruption kinds shared by the local and cloud
 /// system's HITL types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -39,6 +39,64 @@ pub enum HitlKind {
     EnvVar,
     /// "Approve this side-effecting action."
     Permission,
+    /// "Interact with this allow-listed A2UI surface action."
+    A2uiAction,
+}
+
+/// One server-authorized action exposed by an A2UI component.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct A2uiAllowedAction {
+    pub source_component_id: String,
+    pub action_name: String,
+}
+
+/// Persisted authority for an A2UI HITL request.
+///
+/// The renderer may only submit an exact `(surface, component, action)` match
+/// from this server-authored structure. The context supplied with a response is
+/// separately bounded and validated by the host.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct A2uiActionAuthority {
+    pub surface_id: String,
+    pub block_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_seconds: Option<u64>,
+    #[serde(default)]
+    pub allowed_actions: Vec<A2uiAllowedAction>,
+}
+
+impl A2uiActionAuthority {
+    pub fn is_structurally_valid(&self) -> bool {
+        fn identifier(value: &str) -> bool {
+            !value.is_empty() && value == value.trim() && value.len() <= 512
+        }
+
+        identifier(&self.surface_id)
+            && identifier(&self.block_id)
+            && match self.title.as_deref() {
+                Some(title) => !title.trim().is_empty() && title.len() <= 1_024,
+                None => true,
+            }
+            && match self.timeout_seconds {
+                Some(seconds) => (1..=86_400).contains(&seconds),
+                None => true,
+            }
+            && (1..=32).contains(&self.allowed_actions.len())
+            && self.allowed_actions.iter().all(|action| {
+                identifier(&action.source_component_id) && identifier(&action.action_name)
+            })
+            && self
+                .allowed_actions
+                .iter()
+                .enumerate()
+                .all(|(index, action)| {
+                    self.allowed_actions[index + 1..]
+                        .iter()
+                        .all(|other| other != action)
+                })
+    }
 }
 
 /// The action the agent is asking a human to authorize. These fields are
@@ -164,6 +222,8 @@ pub struct HitlRequest {
     pub prompt: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decision: Option<Box<DecisionContext>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub a2ui_action: Option<Box<A2uiActionAuthority>>,
 }
 
 impl HitlRequest {
@@ -173,6 +233,7 @@ impl HitlRequest {
             kind,
             prompt: prompt.into(),
             decision: None,
+            a2ui_action: None,
         }
     }
 
@@ -180,14 +241,19 @@ impl HitlRequest {
         self.decision = Some(Box::new(decision));
         self
     }
+
+    pub fn with_a2ui_action(mut self, authority: A2uiActionAuthority) -> Self {
+        self.a2ui_action = Some(Box::new(authority));
+        self
+    }
 }
 
 #[cfg(test)]
 mod hitl_request_tests {
     use super::{
-        DecisionAction, DecisionContext, DecisionData, DecisionEvidence, DecisionReversibility,
-        DecisionReversibilityMode, DecisionRisk, DecisionRiskLevel, DecisionScope, DecisionTarget,
-        HitlKind, HitlRequest,
+        A2uiActionAuthority, A2uiAllowedAction, DecisionAction, DecisionContext, DecisionData,
+        DecisionEvidence, DecisionReversibility, DecisionReversibilityMode, DecisionRisk,
+        DecisionRiskLevel, DecisionScope, DecisionTarget, HitlKind, HitlRequest,
     };
 
     #[test]
@@ -250,6 +316,40 @@ mod hitl_request_tests {
 
         assert_eq!(decoded.id, "clarify-1");
         assert!(decoded.decision.is_none());
+        assert!(decoded.a2ui_action.is_none());
+    }
+
+    #[test]
+    fn a2ui_action_authority_round_trips_with_exact_allowlist() {
+        let request = HitlRequest::new(
+            "a2ui-release-1",
+            HitlKind::A2uiAction,
+            "Choose the release action",
+        )
+        .with_a2ui_action(A2uiActionAuthority {
+            surface_id: "release-surface".to_string(),
+            block_id: "release-artifact".to_string(),
+            title: Some("Release approval".to_string()),
+            timeout_seconds: Some(300),
+            allowed_actions: vec![A2uiAllowedAction {
+                source_component_id: "approve-button".to_string(),
+                action_name: "approve".to_string(),
+            }],
+        });
+
+        let encoded = serde_json::to_string(&request).expect("serialize A2UI request");
+        let decoded: HitlRequest =
+            serde_json::from_str(&encoded).expect("deserialize A2UI request");
+
+        assert_eq!(decoded, request);
+        assert_eq!(
+            decoded.a2ui_action.expect("A2UI authority").allowed_actions[0].action_name,
+            "approve"
+        );
+        assert!(request
+            .a2ui_action
+            .as_deref()
+            .is_some_and(A2uiActionAuthority::is_structurally_valid));
     }
 }
 

@@ -41,7 +41,13 @@ const runStatuses = new Set<DesktopRunStatus>([
 ]);
 const planStatuses = new Set(['draft', 'approved']);
 const artifactStatuses = new Set(['draft', 'ready', 'approved', 'delivered', 'superseded']);
-const hitlKinds = new Set(['clarification', 'decision', 'env_var', 'permission']);
+const hitlKinds = new Set([
+  'clarification',
+  'decision',
+  'env_var',
+  'permission',
+  'a2ui_action',
+]);
 const invocationStatuses = new Set([
   'prepared',
   'executing',

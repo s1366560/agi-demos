@@ -2135,6 +2135,7 @@ impl LocalRuntimeState {
         let Some(pending) = state.pending_hitl.as_ref() else {
             return Err("session is awaiting input without a pending HITL request".to_string());
         };
+        validate_pending_hitl_authority(pending)?;
         let request = DesktopHitlRequest {
             id: pending.id.clone(),
             conversation_id: conversation_id.to_string(),
@@ -2143,6 +2144,7 @@ impl LocalRuntimeState {
             kind: pending.kind,
             prompt: pending.prompt.clone(),
             decision: pending.decision.as_deref().cloned(),
+            a2ui_action: pending.a2ui_action.as_deref().cloned(),
             status: DesktopHitlStatus::Pending,
             authority_revision: HITL_PENDING_AUTHORITY_REVISION,
             created_at: now_iso(),
@@ -2158,28 +2160,42 @@ impl LocalRuntimeState {
                 && existing.kind == request.kind
                 && existing.prompt == request.prompt
                 && existing.decision == request.decision
+                && existing.a2ui_action == request.a2ui_action
             {
                 return Ok(Some(existing));
             }
             return Err(format!("HITL request id collision: {}", request.id));
         }
         self.session_store.insert_hitl_request(&request)?;
+        let mut payload = json!({
+            "request_id": request.id,
+            "requestId": request.id,
+            "hitl_type": hitl_kind_name(request.kind),
+            "question": request.prompt,
+            "answered": false,
+            "round": request.round,
+            "run_id": request.run_id,
+            "decision": request.decision,
+            "authority_revision": request.authority_revision,
+        });
+        if let Some(authority) = request.a2ui_action.as_ref() {
+            payload["surface_id"] = json!(authority.surface_id);
+            payload["block_id"] = json!(authority.block_id);
+            payload["title"] = json!(authority.title);
+            payload["timeout_seconds"] = json!(authority.timeout_seconds);
+            payload["allowed_actions"] = json!(authority.allowed_actions);
+            payload["surface_data"] = json!({
+                "surface_id": authority.surface_id,
+                "allowed_actions": authority.allowed_actions,
+            });
+        }
         let mut item = self.timeline_item(
             hitl_timeline_type(request.kind),
             conversation_id.to_string(),
             None,
             None,
             Some(request.prompt.clone()),
-            json!({
-                "request_id": request.id,
-                "requestId": request.id,
-                "hitl_type": hitl_kind_name(request.kind),
-                "question": request.prompt,
-                "answered": false,
-                "round": request.round,
-                "run_id": request.run_id,
-                "decision": request.decision,
-            }),
+            payload,
         );
         item["requestId"] = json!(request.id);
         item["question"] = json!(request.prompt);
@@ -2527,6 +2543,7 @@ fn hitl_kind_name(kind: HitlKind) -> &'static str {
         HitlKind::Decision => "decision",
         HitlKind::EnvVar => "env_var",
         HitlKind::Permission => "permission",
+        HitlKind::A2uiAction => "a2ui_action",
     }
 }
 
@@ -2536,7 +2553,31 @@ fn hitl_timeline_type(kind: HitlKind) -> &'static str {
         HitlKind::Decision => "decision_asked",
         HitlKind::EnvVar => "env_var_requested",
         HitlKind::Permission => "permission_asked",
+        HitlKind::A2uiAction => "a2ui_action_asked",
     }
+}
+
+fn validate_pending_hitl_authority(
+    request: &agistack_core::agent::types::HitlRequest,
+) -> Result<(), String> {
+    let Some(authority) = request.a2ui_action.as_deref() else {
+        return if request.kind == HitlKind::A2uiAction {
+            Err("A2UI HITL request is missing persisted action authority".to_string())
+        } else {
+            Ok(())
+        };
+    };
+    if request.kind != HitlKind::A2uiAction {
+        return Err("non-A2UI HITL request contains A2UI action authority".to_string());
+    }
+    if !authority.is_structurally_valid() {
+        return Err("A2UI HITL request has invalid action authority".to_string());
+    }
+    Ok(())
+}
+
+fn bounded_identifier(value: &str) -> bool {
+    !value.is_empty() && value == value.trim() && value.len() <= 512
 }
 
 fn local_router(state: Arc<LocalRuntimeState>) -> Router {
@@ -7487,6 +7528,9 @@ async fn respond_to_hitl(
             Json(json!({ "detail": "invalid permission response" })),
         ));
     }
+    if request.kind == HitlKind::A2uiAction {
+        validate_a2ui_action_response(&request, &body.response_data)?;
+    }
     let is_automation_request =
         match automation_hitl::authority_for_request(&state.session_store, &request.id) {
             Ok(authority) => authority.is_some(),
@@ -7765,22 +7809,33 @@ async fn respond_to_hitl(
             return Err(hitl_response_commit_error(error));
         }
     };
+    let answered_timeline_type = if request.kind == HitlKind::A2uiAction {
+        "a2ui_action_answered"
+    } else {
+        "hitl_responded"
+    };
+    let mut answered_payload = json!({
+        "request_id": request.id,
+        "requestId": request.id,
+        "hitl_type": hitl_kind_name(request.kind),
+        "answered": true,
+        "run_id": request.run_id,
+        "decision": request.decision,
+        "response_actor": "local_user",
+        "authority_revision": committed_request.authority_revision,
+    });
+    if request.kind == HitlKind::A2uiAction {
+        answered_payload["action_name"] = body.response_data["action_name"].clone();
+        answered_payload["source_component_id"] = body.response_data["source_component_id"].clone();
+        answered_payload["surface_id"] = body.response_data["surface_id"].clone();
+    }
     let mut item = state.timeline_item(
-        "hitl_responded",
+        answered_timeline_type,
         conversation.id.clone(),
         None,
         Some("user"),
         None,
-        json!({
-            "request_id": request.id,
-            "requestId": request.id,
-            "hitl_type": hitl_kind_name(request.kind),
-            "answered": true,
-            "run_id": request.run_id,
-            "decision": request.decision,
-            "response_actor": "local_user",
-            "authority_revision": committed_request.authority_revision,
-        }),
+        answered_payload,
     );
     item["requestId"] = json!(request.id);
     item["answered"] = json!(true);
@@ -8031,6 +8086,145 @@ fn valid_permission_response(response_data: &Value) -> bool {
     )
 }
 
+fn validate_a2ui_action_response(
+    request: &DesktopHitlRequest,
+    response_data: &Value,
+) -> Result<(), (StatusCode, Json<Value>)> {
+    let response = response_data.as_object().ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "detail": "A2UI action response must be an object",
+                "reason_code": "a2ui_action_response_invalid",
+            })),
+        )
+    })?;
+    if response.keys().any(|key| {
+        !matches!(
+            key.as_str(),
+            "surface_id" | "source_component_id" | "action_name" | "context"
+        )
+    }) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "detail": "A2UI action response contains unsupported fields",
+                "reason_code": "a2ui_action_response_invalid",
+            })),
+        ));
+    }
+    let surface_id = response
+        .get("surface_id")
+        .and_then(Value::as_str)
+        .filter(|value| bounded_identifier(value))
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "detail": "A2UI action response has no valid surface",
+                    "reason_code": "a2ui_action_response_invalid",
+                })),
+            )
+        })?;
+    let source_component_id = response
+        .get("source_component_id")
+        .and_then(Value::as_str)
+        .filter(|value| bounded_identifier(value))
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "detail": "A2UI action response has no valid source component",
+                    "reason_code": "a2ui_action_response_invalid",
+                })),
+            )
+        })?;
+    let action_name = response
+        .get("action_name")
+        .and_then(Value::as_str)
+        .filter(|value| bounded_identifier(value))
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "detail": "A2UI action response has no valid action",
+                    "reason_code": "a2ui_action_response_invalid",
+                })),
+            )
+        })?;
+    let authority = request.a2ui_action.as_ref().ok_or_else(|| {
+        (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "detail": "A2UI action authority is unavailable",
+                "reason_code": "a2ui_action_authority_unavailable",
+            })),
+        )
+    })?;
+    if authority.surface_id != surface_id {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(json!({
+                "detail": "A2UI surface does not match persisted authority",
+                "reason_code": "a2ui_surface_authority_mismatch",
+            })),
+        ));
+    }
+    if !authority.allowed_actions.iter().any(|allowed| {
+        allowed.source_component_id == source_component_id && allowed.action_name == action_name
+    }) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "detail": "A2UI action is not allowed",
+                "reason_code": "a2ui_action_not_allowed",
+            })),
+        ));
+    }
+    if let Some(context) = response.get("context") {
+        let context = context.as_object().ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "detail": "A2UI action context must be a primitive object",
+                    "reason_code": "a2ui_action_context_invalid",
+                })),
+            )
+        })?;
+        let serialized = serde_json::to_vec(context).map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "detail": "A2UI action context is invalid",
+                    "reason_code": "a2ui_action_context_invalid",
+                })),
+            )
+        })?;
+        let valid = context.len() <= 32
+            && serialized.len() <= 16 * 1_024
+            && context.iter().all(|(key, value)| {
+                !key.trim().is_empty()
+                    && key.len() <= 128
+                    && !matches!(key.as_str(), "__proto__" | "prototype" | "constructor")
+                    && match value {
+                        Value::Bool(_) | Value::Number(_) => true,
+                        Value::String(text) => text.len() <= 4 * 1_024,
+                        _ => false,
+                    }
+            });
+        if !valid {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "detail": "A2UI action context must contain bounded primitive values",
+                    "reason_code": "a2ui_action_context_invalid",
+                })),
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn workspace_tool_grant_from_hitl(
     authenticated: &AuthenticatedContext,
     request: &DesktopHitlRequest,
@@ -8105,6 +8299,7 @@ fn hitl_response_answer(kind: HitlKind, response_data: &Value) -> Option<String>
             .and_then(Value::as_bool)
             .map(|granted| if granted { "approved" } else { "denied" }.to_string()),
         HitlKind::EnvVar => None,
+        HitlKind::A2uiAction => serde_json::to_string(response_data).ok(),
     }
 }
 
@@ -8114,7 +8309,7 @@ fn hitl_response_approves(kind: HitlKind, response_data: &Value) -> bool {
         HitlKind::Decision => {
             response_data.get("decision").and_then(Value::as_str) == Some("approved")
         }
-        HitlKind::Clarification | HitlKind::EnvVar => false,
+        HitlKind::Clarification | HitlKind::EnvVar | HitlKind::A2uiAction => false,
     }
 }
 
@@ -18333,6 +18528,180 @@ mod tests {
         assert!(!serde_json::to_string(&request)
             .expect("serialize request")
             .contains("must-not-persist"));
+    }
+
+    #[tokio::test]
+    async fn a2ui_hitl_enforces_persisted_surface_action_authority_and_redacts_history() {
+        use agistack_core::agent::types::{A2uiActionAuthority, A2uiAllowedAction, HitlRequest};
+
+        let state = test_state("launch-secret");
+        let conversation = LocalConversation {
+            id: "conversation-a2ui-hitl".to_string(),
+            project_id: "local-project".to_string(),
+            tenant_id: "local".to_string(),
+            title: "A2UI approval".to_string(),
+            workspace_id: Some("local-workspace".to_string()),
+            capability_mode: ConversationCapabilityMode::Work,
+            current_mode: ConversationRunMode::Plan,
+            created_at: now_iso(),
+            updated_at: now_iso(),
+        };
+        state
+            .session_store
+            .insert_conversation(&conversation)
+            .expect("insert conversation");
+        let mut suspended = SessionState::new(
+            conversation.id.clone(),
+            "Choose the release action",
+            Some("local-project"),
+        );
+        suspended.status = SessionStatus::AwaitingInput;
+        suspended.pending_hitl = Some(
+            HitlRequest::new(
+                "a2ui-release-hitl",
+                HitlKind::A2uiAction,
+                "Choose the release action",
+            )
+            .with_a2ui_action(A2uiActionAuthority {
+                surface_id: "release-surface".to_string(),
+                block_id: "release-artifact".to_string(),
+                title: Some("Release approval".to_string()),
+                timeout_seconds: Some(300),
+                allowed_actions: vec![A2uiAllowedAction {
+                    source_component_id: "approve-button".to_string(),
+                    action_name: "approve".to_string(),
+                }],
+            }),
+        );
+        state
+            .checkpoints
+            .save(&suspended)
+            .await
+            .expect("save checkpoint");
+        state
+            .persist_pending_hitl(&conversation.id, None, &suspended)
+            .expect("persist pending A2UI HITL");
+
+        let asked = state
+            .session_store
+            .timeline(&conversation.id, 20)
+            .expect("load timeline")
+            .into_iter()
+            .find(|item| item["type"] == "a2ui_action_asked")
+            .expect("A2UI request timeline item");
+        assert_eq!(asked["payload"]["surface_id"], "release-surface");
+        assert_eq!(asked["payload"]["block_id"], "release-artifact");
+        assert_eq!(
+            asked["payload"]["allowed_actions"],
+            json!([{
+                "source_component_id": "approve-button",
+                "action_name": "approve",
+            }])
+        );
+        assert_eq!(
+            asked["payload"]["authority_revision"],
+            HITL_PENDING_AUTHORITY_REVISION
+        );
+
+        let app = local_router(Arc::clone(&state));
+        let forbidden = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/agent/hitl/respond",
+                "launch-secret",
+                json!({
+                    "request_id": "a2ui-release-hitl",
+                    "hitl_type": "a2ui_action",
+                    "response_data": {
+                        "surface_id": "release-surface",
+                        "source_component_id": "approve-button",
+                        "action_name": "delete",
+                        "context": {},
+                    },
+                    "expected_revision": HITL_PENDING_AUTHORITY_REVISION,
+                    "idempotency_key": "a2ui-release:delete",
+                }),
+            ))
+            .await
+            .expect("forbidden response");
+        assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+
+        let unsafe_context = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/agent/hitl/respond",
+                "launch-secret",
+                json!({
+                    "request_id": "a2ui-release-hitl",
+                    "hitl_type": "a2ui_action",
+                    "response_data": {
+                        "surface_id": "release-surface",
+                        "source_component_id": "approve-button",
+                        "action_name": "approve",
+                        "context": {"nested": {"secret": "must-not-persist"}},
+                    },
+                    "expected_revision": HITL_PENDING_AUTHORITY_REVISION,
+                    "idempotency_key": "a2ui-release:unsafe",
+                }),
+            ))
+            .await
+            .expect("unsafe context response");
+        assert_eq!(unsafe_context.status(), StatusCode::BAD_REQUEST);
+
+        let response_body = json!({
+            "request_id": "a2ui-release-hitl",
+            "hitl_type": "a2ui_action",
+            "response_data": {
+                "surface_id": "release-surface",
+                "source_component_id": "approve-button",
+                "action_name": "approve",
+                "context": {"release": "2026.07", "approved": true},
+            },
+            "expected_revision": HITL_PENDING_AUTHORITY_REVISION,
+            "idempotency_key": "a2ui-release:approve",
+        });
+        let accepted = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/agent/hitl/respond",
+                "launch-secret",
+                response_body.clone(),
+            ))
+            .await
+            .expect("accepted response");
+        assert_eq!(accepted.status(), StatusCode::OK);
+        let accepted_payload = response_json(accepted).await;
+        assert_eq!(accepted_payload["authority_status"], "answered");
+        assert_eq!(accepted_payload["duplicate"], false);
+
+        let replay = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/agent/hitl/respond",
+                "launch-secret",
+                response_body,
+            ))
+            .await
+            .expect("idempotent replay");
+        assert_eq!(replay.status(), StatusCode::OK);
+        assert_eq!(response_json(replay).await["duplicate"], true);
+
+        let timeline = state
+            .session_store
+            .timeline(&conversation.id, 50)
+            .expect("load answered timeline");
+        let answered = timeline
+            .iter()
+            .find(|item| item["type"] == "a2ui_action_answered")
+            .expect("A2UI answered timeline item");
+        assert_eq!(answered["payload"]["action_name"], "approve");
+        assert_eq!(answered["payload"]["source_component_id"], "approve-button");
+        let history = serde_json::to_string(&timeline).expect("serialize timeline");
+        assert!(!history.contains("2026.07"));
+        assert!(!history.contains("must-not-persist"));
     }
 
     fn seed_controlled_run(

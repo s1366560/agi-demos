@@ -2,7 +2,7 @@ use std::sync::Mutex;
 
 use agistack_adapters_mem::{InMemoryCheckpointStore, StubLlm, SystemClock};
 use agistack_adapters_postgres::{AutomationPayload, AutomationRunStatus, CronOperationStatus};
-use agistack_core::agent::HitlRequest;
+use agistack_core::agent::{A2uiActionAuthority, A2uiAllowedAction, HitlRequest};
 use agistack_plugin_host::HotPlugRegistry;
 use chrono::Duration as ChronoDuration;
 use serde_json::Value;
@@ -480,6 +480,46 @@ async fn automation_observer_persists_non_secret_hitl_with_run_correlation() {
     assert_eq!(
         requests[0].request_metadata.as_ref().expect("metadata")["automation_run_id"],
         "run-1"
+    );
+}
+
+#[tokio::test]
+async fn automation_observer_persists_exact_a2ui_action_authority() {
+    let store = Arc::new(FakeHitlStore::default());
+    let observer = hitl_observer(store.clone());
+    let request = HitlRequest::new(
+        "request-a2ui",
+        HitlKind::A2uiAction,
+        "Choose the release action",
+    )
+    .with_a2ui_action(A2uiActionAuthority {
+        surface_id: "release-surface".to_string(),
+        block_id: "release-artifact".to_string(),
+        title: Some("Release approval".to_string()),
+        timeout_seconds: Some(300),
+        allowed_actions: vec![A2uiAllowedAction {
+            source_component_id: "approve-button".to_string(),
+            action_name: "approve".to_string(),
+        }],
+    });
+
+    observer
+        .on_human_request("run-1", 2, &request)
+        .await
+        .expect("persist A2UI HITL");
+
+    let requests = store.requests.lock().expect("HITL request lock");
+    assert_eq!(requests[0].request_type, "a2ui_action");
+    assert_eq!(
+        requests[0].request_metadata.as_ref().expect("metadata")["allowed_actions"],
+        json!([{
+            "source_component_id": "approve-button",
+            "action_name": "approve",
+        }])
+    );
+    assert_eq!(
+        requests[0].request_metadata.as_ref().expect("metadata")["surface_id"],
+        "release-surface"
     );
 }
 

@@ -666,6 +666,41 @@ test('session projection decoder structurally validates pending HITL authority',
   assert.equal(decodeSignedProjection(leakedResponseState), null);
 });
 
+test('session projection decoder preserves local A2UI response authority', () => {
+  const request = pendingHitlRequest({
+    kind: 'a2ui_action',
+    prompt: 'Choose the release action',
+    a2ui_action: {
+      surface_id: 'release-surface',
+      block_id: 'release-artifact',
+      title: 'Release approval',
+      timeout_seconds: 300,
+      allowed_actions: [
+        {
+          source_component_id: 'approve-button',
+          action_name: 'approve',
+        },
+      ],
+    },
+  });
+  delete request.decision;
+  const projection = withPendingHitl(
+    validProjection(),
+    request,
+  );
+
+  const decoded = decodeSignedProjection(projection);
+
+  assert.equal(decoded?.pendingHitl[0]?.kind, 'a2ui_action');
+  assert.deepEqual(decoded?.pendingHitl[0]?.a2ui_action?.allowed_actions, [
+    {
+      source_component_id: 'approve-button',
+      action_name: 'approve',
+    },
+  ]);
+  assert.equal(decoded?.capabilities.canRespondToHitl, true);
+});
+
 test('session projection decoder enforces invocation binding and evidence summary integrity', () => {
   const invalidInvocation = validProjection();
   invalidInvocation.tool_invocations = [

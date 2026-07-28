@@ -1582,6 +1582,16 @@ export type DesktopApprovalRequest = {
   prompt: string;
   decision?: DecisionContext | null;
   permission?: PermissionRequestContext | null;
+  a2ui_action?: {
+    surface_id: string;
+    block_id: string;
+    title?: string | null;
+    timeout_seconds?: number | null;
+    allowed_actions: Array<{
+      source_component_id: string;
+      action_name: string;
+    }>;
+  } | null;
   status: 'pending' | 'responded';
   created_at: string;
   expires_at?: string | null;

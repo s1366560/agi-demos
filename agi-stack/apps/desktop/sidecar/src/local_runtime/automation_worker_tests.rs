@@ -131,6 +131,7 @@ mod tests {
                     kind: HitlKind::Decision,
                     prompt: "Continue?".to_string(),
                     decision: None,
+                    a2ui_action: None,
                     status: DesktopHitlStatus::Pending,
                     authority_revision: 1,
                     created_at: "2099-10-05T12:00:00Z".to_string(),
