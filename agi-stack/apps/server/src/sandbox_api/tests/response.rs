@@ -63,6 +63,39 @@ fn sandbox_runtime_capabilities_do_not_claim_canonical_run_authority() {
 }
 
 #[test]
+fn sandbox_runtime_capabilities_publish_terminal_v2_only_when_authority_is_ready() {
+    let actual =
+        serde_json::to_value(SandboxRuntimeCapabilitiesResponse::terminal_v2_available()).unwrap();
+    assert_eq!(
+        actual,
+        serde_json::json!({
+            "service_version": "0.1.0",
+            "contract_version": 2,
+            "terminal_interactive": {
+                "availability": "available",
+                "contract_version": 1,
+                "reason_code": null
+            },
+            "terminal_resume": {
+                "availability": "available",
+                "contract_version": 2,
+                "reason_code": null
+            },
+            "files": {
+                "availability": "unavailable",
+                "contract_version": 1,
+                "reason_code": "sandbox_file_api_unavailable"
+            },
+            "kasm_vnc": {
+                "availability": "available",
+                "contract_version": 1,
+                "reason_code": null
+            }
+        })
+    );
+}
+
+#[test]
 fn sandbox_profiles_match_python_wire_shape() {
     let response = SandboxProfilesResponse {
         profiles: SANDBOX_PROFILE_INFOS,

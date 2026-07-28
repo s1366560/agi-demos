@@ -37,6 +37,31 @@ test('terminal WebSocket keeps launch capability and user session in separate su
   assert.doesNotMatch(openedUrl, /launch-capability|authenticated-session/);
 });
 
+test('TerminalSessionV2 resume authority uses a WebSocket subprotocol instead of the URL', () => {
+  let openedUrl = '';
+  let openedProtocols;
+  class FakeWebSocket {
+    constructor(url, protocols) {
+      openedUrl = String(url);
+      openedProtocols = protocols;
+    }
+  }
+  openTerminalSocket(
+    'wss://api.memstack.test/api/v1/projects/p1/sandbox/terminal/sessions/s1/ws',
+    'authenticated-session',
+    '',
+    FakeWebSocket,
+    'high-entropy-resume-token'
+  );
+  assert.deepEqual(openedProtocols, [
+    'memstack.auth',
+    'authenticated-session',
+    'memstack.terminal-v2',
+    'high-entropy-resume-token',
+  ]);
+  assert.doesNotMatch(openedUrl, /resume-token|authenticated-session/);
+});
+
 test('terminal authority revocation is a structured terminal error', () => {
   assert.deepEqual(
     terminalFrame(
@@ -49,6 +74,7 @@ test('terminal authority revocation is a structured terminal error', () => {
     {
       line: '[authority revoked] run revision changed',
       error: 'terminal_authority_revoked',
+      disconnect: { kind: 'authority_revoked' },
     }
   );
   assert.deepEqual(terminalFrame(JSON.stringify({ type: 'output', data: 'ready\n' })), {
@@ -68,6 +94,15 @@ test('terminal session loss remains a stable structured reconnect boundary', () 
     {
       line: '[session lost] registry no longer owns this PTY',
       error: 'terminal_session_lost',
+      disconnect: { kind: 'session_lost' },
+    }
+  );
+  assert.deepEqual(
+    terminalFrame(JSON.stringify({ type: 'terminal_session_lost', refetch: true })),
+    {
+      line: '[session lost] ',
+      error: 'terminal_session_lost',
+      disconnect: { kind: 'session_lost' },
     }
   );
   assert.deepEqual(

@@ -282,6 +282,10 @@ import {
   type SandboxRuntimeCapability,
 } from './features/sandbox/sandboxRuntimeClient';
 import {
+  terminalSessionV2SocketUrl,
+  type TerminalSessionV2,
+} from './features/sandbox/terminalSessionV2';
+import {
   useSandboxRuntimeSurface,
   type SessionSandboxRuntimeSurface,
 } from './features/sandbox/useSandboxRuntimeSurface';
@@ -1760,6 +1764,7 @@ export function App() {
   const [selectedTaskId, setSelectedTaskId] = useState('');
   const [sandboxBusy, setSandboxBusy] = useState(false);
   const [terminal, setTerminal] = useState<TerminalServiceResponse | null>(null);
+  const [terminalV2, setTerminalV2] = useState<TerminalSessionV2 | null>(null);
   const [agentConversationSession, setAgentConversationSession] =
     useState<AgentConversationSession | null>(null);
   const agentConversationSessionRef = useRef(agentConversationSession);
@@ -6077,7 +6082,35 @@ export function App() {
             ),
           );
         }
-        throw new Error(t('session.terminalAuthorityMismatch'));
+        if (terminalStartGenerationRef.current !== requestGeneration) return;
+        const session = result.value;
+        const currentRun = currentArtifactRunRef.current;
+        if (
+          !currentRun ||
+          session.project_id !== currentRun.project_id ||
+          session.conversation_id !== currentRun.conversation_id ||
+          session.run_id !== currentRun.id ||
+          session.run_revision !== currentRun.revision ||
+          session.environment_id !== currentRun.environment?.id
+        ) {
+          throw new Error(t('session.terminalAuthorityMismatch'));
+        }
+        terminalProxy.clear();
+        setTerminalV2(session);
+        setTerminal({
+          success: true,
+          session_id: session.session_id,
+          run_id: session.run_id,
+          run_revision: session.run_revision,
+          conversation_id: session.conversation_id,
+          project_id: session.project_id,
+          environment_id: session.environment_id,
+          created_at: session.created_at,
+          expires_at: session.expires_at,
+          resumable: true,
+          cwd: session.cwd,
+        });
+        return;
       }
       if (config.mode !== 'local') {
         throw new Error(t('session.terminalCapabilityUnavailable'));
@@ -6089,6 +6122,7 @@ export function App() {
         throw new Error(t('session.terminalAuthorityMismatch'));
       }
       terminalProxy.clear();
+      setTerminalV2(null);
       setTerminal(response);
     });
   };
@@ -6202,15 +6236,41 @@ export function App() {
   const terminalUrl = useMemo(() => {
     if (!terminalMatchesCurrentRun || !terminal?.session_id) return null;
     try {
+      if (
+        config.mode === 'cloud' &&
+        terminalV2 &&
+        terminalV2.session_id === terminal.session_id
+      ) {
+        return terminalSessionV2SocketUrl(config.apiBaseUrl, terminalV2);
+      }
       return api.terminalProxyUrl(terminal.session_id, terminal.project_id);
     } catch {
       return null;
     }
-  }, [api, terminal?.project_id, terminal?.session_id, terminalMatchesCurrentRun]);
+  }, [
+    api,
+    config.apiBaseUrl,
+    config.mode,
+    terminal?.project_id,
+    terminal?.session_id,
+    terminalMatchesCurrentRun,
+    terminalV2,
+  ]);
+  const terminalRecovery = useMemo(
+    () =>
+      terminalMatchesCurrentRun && terminalV2
+        ? {
+            session: terminalV2,
+            onRefetchRun: () => invalidateSessionAuthority(),
+          }
+        : undefined,
+    [invalidateSessionAuthority, terminalMatchesCurrentRun, terminalV2],
+  );
   const terminalProxy = useTerminalProxy(
     terminalUrl,
     desktopApiCredential(config),
     desktopLaunchCapability(config),
+    terminalRecovery,
   );
   const terminalBinding = useMemo(
     () => terminalBindingState(terminal, currentArtifactRun, terminalProxy.status),

@@ -126,7 +126,7 @@ export function SessionTerminalCanvas({
             ? ` · ${currentRun.environment.workspace_path}`
             : ''}
       </Text>
-      {terminal ? (
+      {terminal && terminal.resumable !== true ? (
         <Text size="1" color="gray">
           {t('session.terminalNonResumable')}
         </Text>

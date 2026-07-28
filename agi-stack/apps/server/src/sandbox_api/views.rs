@@ -29,6 +29,33 @@ pub(super) struct SandboxRuntimeCapabilitiesResponse {
 }
 
 impl SandboxRuntimeCapabilitiesResponse {
+    pub(super) fn terminal_v2_available() -> Self {
+        Self {
+            service_version: "0.1.0",
+            contract_version: 2,
+            terminal_interactive: SandboxRuntimeCapabilityResponse {
+                availability: "available",
+                contract_version: 1,
+                reason_code: None,
+            },
+            terminal_resume: SandboxRuntimeCapabilityResponse {
+                availability: "available",
+                contract_version: 2,
+                reason_code: None,
+            },
+            files: SandboxRuntimeCapabilityResponse {
+                availability: "unavailable",
+                contract_version: 1,
+                reason_code: Some("sandbox_file_api_unavailable"),
+            },
+            kasm_vnc: SandboxRuntimeCapabilityResponse {
+                availability: "available",
+                contract_version: 1,
+                reason_code: None,
+            },
+        }
+    }
+
     pub(super) fn canonical_run_authority_unavailable() -> Self {
         Self {
             service_version: "0.1.0",
@@ -172,6 +199,38 @@ pub(super) struct StartDesktopQuery {
 #[derive(Debug, Deserialize)]
 pub(super) struct TerminalWsQuery {
     pub(super) session_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct CreateTerminalSessionV2Request {
+    pub(super) run_id: String,
+    pub(super) expected_run_revision: i32,
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct ResumeTerminalSessionV2Request {
+    pub(super) resume_token: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct TerminalSessionV2WsQuery {
+    pub(super) resume_token: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub(super) struct TerminalSessionV2Response {
+    pub(super) contract_version: u8,
+    pub(super) session_id: String,
+    pub(super) resume_token: String,
+    pub(super) project_id: String,
+    pub(super) conversation_id: String,
+    pub(super) run_id: String,
+    pub(super) run_revision: i32,
+    pub(super) environment_id: String,
+    pub(super) cwd: String,
+    pub(super) created_at: String,
+    pub(super) expires_at: String,
+    pub(super) resumable: bool,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
