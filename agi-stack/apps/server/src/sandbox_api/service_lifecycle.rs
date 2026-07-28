@@ -29,6 +29,7 @@ impl ProjectSandboxService {
             http_registry: in_memory_http_service_registry(),
             config_source: None,
             runtime_auth: None,
+            terminal_v2: None,
         }
     }
 
@@ -45,6 +46,17 @@ impl ProjectSandboxService {
         registry: SharedHttpServiceRegistry,
     ) -> Self {
         self.http_registry = registry;
+        self
+    }
+
+    pub(crate) fn with_terminal_v2_authority(
+        mut self,
+        pool: agistack_adapters_postgres::PgPool,
+    ) -> Self {
+        self.terminal_v2 = Some(Arc::new(TerminalV2Service::new(
+            pool,
+            Arc::clone(&self.http_registry),
+        )));
         self
     }
 

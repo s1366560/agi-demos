@@ -1402,6 +1402,49 @@ fn p5_sandbox_http_control_plane_rules_are_exact() {
 }
 
 #[test]
+fn terminal_session_v2_routes_are_exact_rust_owned_authority_surfaces() {
+    for (method, path) in [
+        (Method::GET, "/api/v1/projects/p1/sandbox/capabilities"),
+        (
+            Method::POST,
+            "/api/v1/projects/p1/sandbox/terminal/sessions",
+        ),
+        (
+            Method::POST,
+            "/api/v1/projects/p1/sandbox/terminal/sessions/session-1/resume",
+        ),
+        (
+            Method::GET,
+            "/api/v1/projects/p1/sandbox/terminal/sessions/session-1/ws",
+        ),
+    ] {
+        assert_eq!(
+            upstream_for_request(&method, path, &ups()),
+            "http://rust:8088",
+            "{method} {path} should route to rust",
+        );
+    }
+
+    for (method, path) in [
+        (Method::GET, "/api/v1/projects/p1/sandbox/terminal/sessions"),
+        (
+            Method::POST,
+            "/api/v1/projects/p1/sandbox/terminal/sessions/session-1",
+        ),
+        (
+            Method::GET,
+            "/api/v1/projects/p1/sandbox/terminal/sessions/session-1/resume",
+        ),
+    ] {
+        assert_eq!(
+            upstream_for_request(&method, path, &ups()),
+            "http://python:8000",
+            "{method} {path} should remain on python",
+        );
+    }
+}
+
+#[test]
 fn p4_graph_search_rules_are_exact() {
     for (method, path) in [
         (Method::GET, "/api/v1/graph/communities"),

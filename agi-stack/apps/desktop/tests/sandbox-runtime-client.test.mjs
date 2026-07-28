@@ -68,6 +68,90 @@ test('cloud terminal operations fail closed without canonical run authority', as
   }
 });
 
+test('cloud terminal operations use strict TerminalSessionV2 create and resume routes', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const expiresAt = new Date(Date.now() + 300_000).toISOString();
+  const createdAt = new Date(Date.now() - 1_000).toISOString();
+  globalThis.fetch = async (input, init) => {
+    calls.push({ url: String(input), init });
+    const body = JSON.parse(String(init?.body ?? '{}'));
+    const isResume = String(input).endsWith('/sessions/session-1/resume');
+    return new Response(
+      JSON.stringify({
+        contract_version: 2,
+        session_id: isResume ? 'session-1' : 'session-created',
+        resume_token: isResume ? body.resume_token : 'created-resume-token',
+        project_id: 'project/1',
+        conversation_id: 'conversation-1',
+        run_id: 'run-1',
+        run_revision: 4,
+        environment_id: 'environment-1',
+        cwd: '/workspace/project',
+        created_at: createdAt,
+        expires_at: expiresAt,
+        resumable: true,
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } }
+    );
+  };
+
+  try {
+    const client = createSandboxRuntimeClient(
+      {
+        ...DEFAULT_CONFIG,
+        apiBaseUrl: 'https://api.memstack.test',
+        apiKey: 'session-credential',
+        mode: 'cloud',
+        projectId: 'project/1',
+      },
+      {
+        ...SANDBOX_RUNTIME_CAPABILITIES_UNAVAILABLE,
+        terminal_interactive: {
+          availability: 'available',
+          contract_version: 1,
+          reason_code: null,
+        },
+        terminal_resume: {
+          availability: 'available',
+          contract_version: 2,
+          reason_code: null,
+        },
+      }
+    );
+
+    const created = await client.createTerminalSession('project/1', 'run-1', 4);
+    const resumed = await client.resumeTerminalSession(
+      'project/1',
+      'session-1',
+      'resume-token'
+    );
+
+    assert.equal(created.status, 'ready');
+    assert.equal(created.value.session_id, 'session-created');
+    assert.equal(resumed.status, 'ready');
+    assert.equal(resumed.value.resume_token, 'resume-token');
+    assert.equal(
+      calls[0].url,
+      'https://api.memstack.test/api/v1/projects/project%2F1/sandbox/terminal/sessions'
+    );
+    assert.deepEqual(JSON.parse(calls[0].init.body), {
+      run_id: 'run-1',
+      expected_run_revision: 4,
+    });
+    assert.equal(
+      calls[1].url,
+      'https://api.memstack.test/api/v1/projects/project%2F1/sandbox/terminal/sessions/session-1/resume'
+    );
+    assert.deepEqual(JSON.parse(calls[1].init.body), {
+      resume_token: 'resume-token',
+    });
+    assert.equal(calls[0].init.headers.get('Authorization'), 'Bearer session-credential');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('sandbox file operations fail closed without a declared structured authority', async () => {
   const originalFetch = globalThis.fetch;
   let calls = 0;

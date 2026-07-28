@@ -266,9 +266,13 @@ pub(super) async fn get_project_sandbox_runtime_capabilities(
     Path(project_id): Path<String>,
 ) -> SandboxApiResult<Json<SandboxRuntimeCapabilitiesResponse>> {
     ensure_project_access(&app, &identity, &project_id).await?;
-    Ok(Json(
-        SandboxRuntimeCapabilitiesResponse::canonical_run_authority_unavailable(),
-    ))
+    let capabilities = match app.sandboxes.terminal_v2.as_ref() {
+        Some(service) if service.is_available() => {
+            SandboxRuntimeCapabilitiesResponse::terminal_v2_available()
+        }
+        _ => SandboxRuntimeCapabilitiesResponse::canonical_run_authority_unavailable(),
+    };
+    Ok(Json(capabilities))
 }
 
 pub(super) async fn start_project_terminal(

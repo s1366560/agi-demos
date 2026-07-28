@@ -110,14 +110,12 @@ export function terminalSessionV2SocketUrl(
       apiBaseUrl,
       `/api/v1/projects/${encodeURIComponent(
         session.project_id,
-      )}/sandbox/terminal/proxy/ws`,
+      )}/sandbox/terminal/sessions/${encodeURIComponent(session.session_id)}/ws`,
     ),
   );
   if (target.protocol === 'https:') target.protocol = 'wss:';
   else if (target.protocol === 'http:') target.protocol = 'ws:';
   else throw new Error('terminal API origin must use HTTP or HTTPS');
-  target.searchParams.set('session_id', session.session_id);
-  target.searchParams.set('resume_token', session.resume_token);
   return target.toString();
 }
 

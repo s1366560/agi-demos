@@ -9,6 +9,10 @@ pub(crate) type SharedHttpServiceRegistry = Arc<dyn HttpServiceRegistry>;
 
 #[async_trait]
 pub(crate) trait HttpServiceRegistry: Send + Sync {
+    fn is_durable(&self) -> bool {
+        false
+    }
+
     async fn upsert(
         &self,
         project_id: &str,
@@ -45,6 +49,29 @@ pub(crate) trait HttpServiceRegistry: Send + Sync {
         project_id: &str,
         session_id: &str,
     ) -> SandboxApiResult<Option<TerminalSessionRecord>>;
+    async fn upsert_terminal_session_v2(
+        &self,
+        _record: TerminalSessionV2Record,
+        _ttl_seconds: i64,
+    ) -> SandboxApiResult<()> {
+        Err(SandboxApiError::service_unavailable(
+            "TerminalSessionV2 requires durable Redis state",
+        ))
+    }
+    async fn get_terminal_session_v2(
+        &self,
+        _project_id: &str,
+        _session_id: &str,
+    ) -> SandboxApiResult<Option<TerminalSessionV2Record>> {
+        Ok(None)
+    }
+    async fn remove_terminal_session_v2(
+        &self,
+        _project_id: &str,
+        _session_id: &str,
+    ) -> SandboxApiResult<()> {
+        Ok(())
+    }
     async fn create_mcp_upstream_token(
         &self,
         record: McpUpstreamTokenRecord,
@@ -210,6 +237,10 @@ impl HttpServiceRegistry for InMemoryHttpServiceRegistry {
 
 #[async_trait]
 impl HttpServiceRegistry for agistack_adapters_redis::RedisSandboxHttpRegistry {
+    fn is_durable(&self) -> bool {
+        true
+    }
+
     async fn upsert(
         &self,
         project_id: &str,
@@ -341,6 +372,77 @@ impl HttpServiceRegistry for agistack_adapters_redis::RedisSandboxHttpRegistry {
             last_seen_at_ms: record.last_seen_at_ms,
             expires_at_ms: record.expires_at_ms,
         }))
+    }
+
+    async fn upsert_terminal_session_v2(
+        &self,
+        record: TerminalSessionV2Record,
+        ttl_seconds: i64,
+    ) -> SandboxApiResult<()> {
+        let record = agistack_adapters_redis::SandboxTerminalSessionV2Record {
+            contract_version: record.contract_version,
+            session_id: record.session_id,
+            resume_token_hash: record.resume_token_hash,
+            tenant_id: record.tenant_id,
+            project_id: record.project_id,
+            conversation_id: record.conversation_id,
+            run_id: record.run_id,
+            run_revision: record.run_revision,
+            environment_id: record.environment_id,
+            cwd: record.cwd,
+            environment_source: record.environment_source,
+            cwd_source: record.cwd_source,
+            created_at_ms: record.created_at_ms,
+            expires_at_ms: record.expires_at_ms,
+        };
+        agistack_adapters_redis::RedisSandboxHttpRegistry::upsert_terminal_session_v2(
+            self,
+            &record,
+            ttl_seconds.max(1) as u64,
+        )
+        .await
+        .map_err(SandboxApiError::internal)
+    }
+
+    async fn get_terminal_session_v2(
+        &self,
+        project_id: &str,
+        session_id: &str,
+    ) -> SandboxApiResult<Option<TerminalSessionV2Record>> {
+        let record = agistack_adapters_redis::RedisSandboxHttpRegistry::get_terminal_session_v2(
+            self, project_id, session_id,
+        )
+        .await
+        .map_err(SandboxApiError::internal)?;
+        Ok(record.map(|record| TerminalSessionV2Record {
+            contract_version: record.contract_version,
+            session_id: record.session_id,
+            resume_token_hash: record.resume_token_hash,
+            tenant_id: record.tenant_id,
+            project_id: record.project_id,
+            conversation_id: record.conversation_id,
+            run_id: record.run_id,
+            run_revision: record.run_revision,
+            environment_id: record.environment_id,
+            cwd: record.cwd,
+            environment_source: record.environment_source,
+            cwd_source: record.cwd_source,
+            created_at_ms: record.created_at_ms,
+            expires_at_ms: record.expires_at_ms,
+        }))
+    }
+
+    async fn remove_terminal_session_v2(
+        &self,
+        project_id: &str,
+        session_id: &str,
+    ) -> SandboxApiResult<()> {
+        agistack_adapters_redis::RedisSandboxHttpRegistry::remove_terminal_session_v2(
+            self, project_id, session_id,
+        )
+        .await
+        .map_err(SandboxApiError::internal)?;
+        Ok(())
     }
 
     async fn create_mcp_upstream_token(

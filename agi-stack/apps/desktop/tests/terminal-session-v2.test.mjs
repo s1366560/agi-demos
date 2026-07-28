@@ -53,7 +53,7 @@ test('TerminalSessionV2 requires the complete scoped resumable authority', () =>
 test('TerminalSessionV2 socket URL carries only scoped session resume authority', () => {
   assert.equal(
     terminalSessionV2SocketUrl('https://api.memstack.test', session),
-    'wss://api.memstack.test/api/v1/projects/project%2F1/sandbox/terminal/proxy/ws?session_id=terminal-session-1&resume_token=resume-token-1'
+    'wss://api.memstack.test/api/v1/projects/project%2F1/sandbox/terminal/sessions/terminal-session-1/ws'
   );
 });
 

@@ -1,4 +1,8 @@
 import type { DesktopRuntimeConfig } from '../../types';
+import {
+  createCloudTerminalSession,
+  resumeCloudTerminalSession,
+} from './terminalSessionV2Client';
 import type { TerminalSessionV2 } from './terminalSessionV2';
 
 export type SandboxRuntimeCapability = {
@@ -289,6 +293,12 @@ function createHttpSandboxRuntimeClient(
   config: DesktopRuntimeConfig,
   capabilities: SandboxRuntimeCapabilities,
 ): SandboxRuntimeClient {
+  const terminalAvailable =
+    config.mode === 'cloud' &&
+    capabilities.terminal_interactive.availability === 'available' &&
+    capabilities.terminal_interactive.contract_version === 1 &&
+    capabilities.terminal_resume.availability === 'available' &&
+    capabilities.terminal_resume.contract_version === 2;
   const unavailableTerminal = async (): Promise<
     SandboxRuntimeResult<TerminalSessionV2>
   > => ({
@@ -299,8 +309,36 @@ function createHttpSandboxRuntimeClient(
   });
 
   return Object.freeze({
-    createTerminalSession: unavailableTerminal,
-    resumeTerminalSession: unavailableTerminal,
+    createTerminalSession: async (
+      requestedProjectId: string,
+      runId: string,
+      expectedRunRevision: number,
+      signal?: AbortSignal,
+    ): Promise<SandboxRuntimeResult<TerminalSessionV2>> => {
+      if (!terminalAvailable) return unavailableTerminal();
+      return createCloudTerminalSession(
+        config,
+        requestedProjectId,
+        runId,
+        expectedRunRevision,
+        signal,
+      );
+    },
+    resumeTerminalSession: async (
+      requestedProjectId: string,
+      sessionId: string,
+      resumeToken: string,
+      signal?: AbortSignal,
+    ): Promise<SandboxRuntimeResult<TerminalSessionV2>> => {
+      if (!terminalAvailable) return unavailableTerminal();
+      return resumeCloudTerminalSession(
+        config,
+        requestedProjectId,
+        sessionId,
+        resumeToken,
+        signal,
+      );
+    },
     listFiles: (async (
       request: SandboxFileListRequest,
       signal?: AbortSignal,

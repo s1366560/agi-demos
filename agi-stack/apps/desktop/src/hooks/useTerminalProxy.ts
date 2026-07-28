@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import {
+  terminalReconnectDecision,
+  type TerminalDisconnectEvent,
+  type TerminalSessionV2,
+} from '../features/sandbox/terminalSessionV2';
 import type { TerminalConnectionStatus } from '../types';
 
 type TerminalProxyState = {
@@ -17,6 +22,10 @@ export function useTerminalProxy(
   url: string | null,
   credential: string,
   launchCapability: string,
+  recovery?: {
+    session: TerminalSessionV2 | null;
+    onRefetchRun: (reasonCode: string) => void;
+  },
 ): TerminalProxyState {
   const socketRef = useRef<WebSocket | null>(null);
   const generationRef = useRef(0);
@@ -58,51 +67,91 @@ export function useTerminalProxy(
       return;
     }
 
-    setStatus('connecting');
-    const socket = openTerminalSocket(url, credential, launchCapability);
-    socketRef.current = socket;
-    let failed = false;
-    const isCurrent = () => generationRef.current === generation && socketRef.current === socket;
+    let disposed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectAttempts = 0;
+    let disconnectEvent: TerminalDisconnectEvent | null = null;
+    const recoveryConfig = recovery;
 
-    socket.onopen = () => {
-      if (!isCurrent()) return;
-      setStatus('connected');
-      setError(null);
-      socket.send(JSON.stringify({ type: 'resize', cols: 120, rows: 32 }));
+    const connect = () => {
+      if (disposed || generationRef.current !== generation) return;
+      setStatus('connecting');
+      const socket = openTerminalSocket(
+        url,
+        credential,
+        launchCapability,
+        WebSocket,
+        recoveryConfig?.session?.resume_token ?? '',
+      );
+      socketRef.current = socket;
+      const isCurrent = () =>
+        !disposed && generationRef.current === generation && socketRef.current === socket;
+
+      socket.onopen = () => {
+        if (!isCurrent()) return;
+        disconnectEvent = null;
+        setStatus('connected');
+        setError(null);
+        socket.send(JSON.stringify({ type: 'resize', cols: 120, rows: 32 }));
+      };
+      socket.onerror = () => {
+        if (!isCurrent()) return;
+        setError('terminal_websocket_error');
+      };
+      socket.onclose = (event) => {
+        if (!isCurrent()) return;
+        socketRef.current = null;
+        const session = recoveryConfig?.session ?? null;
+        if (!session || !recoveryConfig) {
+          setStatus(event.code === 1000 ? 'closed' : 'error');
+          if (event.code !== 1000) setError('terminal_websocket_error');
+          return;
+        }
+        const decision = terminalReconnectDecision(
+          session,
+          disconnectEvent ?? (event.code === 1000 ? { kind: 'normal_close' } : { kind: 'abnormal_close' }),
+          reconnectAttempts,
+        );
+        if (decision.action === 'resume') {
+          reconnectAttempts += 1;
+          setStatus('connecting');
+          setError(null);
+          reconnectTimer = setTimeout(connect, decision.delay_ms);
+          return;
+        }
+        setStatus(decision.action === 'refetch_run' ? 'error' : 'closed');
+        setError(decision.reason_code);
+        if (decision.action === 'refetch_run') {
+          recoveryConfig.onRefetchRun(decision.reason_code);
+        }
+      };
+      socket.onmessage = (message) => {
+        if (!isCurrent()) return;
+        const frame = terminalFrame(message.data);
+        pendingLinesRef.current.push(frame.line);
+        scheduleLinesFlush();
+        if (frame.disconnect) disconnectEvent = frame.disconnect;
+        if (frame.error) {
+          setStatus('error');
+          setError(frame.error);
+          socket.close();
+        }
+      };
     };
-    socket.onerror = () => {
-      if (!isCurrent()) return;
-      failed = true;
-      setStatus('error');
-      setError('terminal_websocket_error');
-    };
-    socket.onclose = () => {
-      if (!isCurrent()) return;
-      socketRef.current = null;
-      if (!failed) setStatus('closed');
-    };
-    socket.onmessage = (message) => {
-      if (!isCurrent()) return;
-      const frame = terminalFrame(message.data);
-      pendingLinesRef.current.push(frame.line);
-      scheduleLinesFlush();
-      if (frame.error) {
-        failed = true;
-        setStatus('error');
-        setError(frame.error);
-        socket.close();
-      }
-    };
+    connect();
 
     return () => {
+      disposed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (generationRef.current === generation) generationRef.current += 1;
-      if (socketRef.current === socket) socketRef.current = null;
+      const socket = socketRef.current;
+      socketRef.current = null;
       linesFlushCancelRef.current?.();
       linesFlushCancelRef.current = null;
       pendingLinesRef.current = [];
-      socket.close();
+      socket?.close();
     };
-  }, [credential, launchCapability, scheduleLinesFlush, url]);
+  }, [credential, launchCapability, recovery, scheduleLinesFlush, url]);
 
   return {
     status,
@@ -141,16 +190,20 @@ export function openTerminalSocket(
   credential: string,
   launchCapability: string,
   Socket: typeof WebSocket = WebSocket,
+  resumeToken = '',
 ): WebSocket {
-  return new Socket(
-    url,
-    launchCapability
-      ? ['memstack.launch', launchCapability, 'memstack.auth', credential]
-      : ['memstack.auth', credential],
-  );
+  const protocols = launchCapability
+    ? ['memstack.launch', launchCapability, 'memstack.auth', credential]
+    : ['memstack.auth', credential];
+  if (resumeToken) protocols.push('memstack.terminal-v2', resumeToken);
+  return new Socket(url, protocols);
 }
 
-export function terminalFrame(data: unknown): { line: string; error: string | null } {
+export function terminalFrame(data: unknown): {
+  line: string;
+  error: string | null;
+  disconnect?: TerminalDisconnectEvent;
+} {
   if (typeof data !== 'string') return { line: '[binary terminal frame]', error: null };
   try {
     const parsed = JSON.parse(data);
@@ -163,16 +216,18 @@ export function terminalFrame(data: unknown): { line: string; error: string | nu
       const rows = String(record.rows ?? '');
       return { line: `[connected] session=${sessionId} ${cols}x${rows}`, error: null };
     }
-    if (record.type === 'authority_revoked') {
+    if (record.type === 'authority_revoked' || record.type === 'terminal_authority_revoked') {
       return {
         line: `[authority revoked] ${String(record.message ?? '')}`,
         error: String(record.code ?? 'terminal_authority_revoked'),
+        disconnect: { kind: 'authority_revoked' },
       };
     }
-    if (record.type === 'session_lost') {
+    if (record.type === 'session_lost' || record.type === 'terminal_session_lost') {
       return {
         line: `[session lost] ${String(record.message ?? '')}`,
         error: 'terminal_session_lost',
+        disconnect: { kind: 'session_lost' },
       };
     }
     if (record.type === 'error') {

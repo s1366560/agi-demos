@@ -1069,9 +1069,12 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
         sandbox_service = sandbox_service
             .with_project_config_source(Arc::new(PgProjectSandboxConfigSource::new(repo)));
     }
+    sandbox_service = sandbox_service.with_http_service_registry(sandbox_http_registry);
+    if let Some(pool) = workspace_plan_pool.clone() {
+        sandbox_service = sandbox_service.with_terminal_v2_authority(pool);
+    }
     let sandboxes = Arc::new(
         sandbox_service
-            .with_http_service_registry(sandbox_http_registry)
             .with_tool_host(Arc::clone(&tool_host))
             .with_ws_mcp_connector(),
     );
