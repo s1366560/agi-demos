@@ -66,7 +66,12 @@ export class ManagedResourcesClient {
     const payload = await this.request<unknown>(`/api/v1/skills/?${params.toString()}`, {
       signal,
     });
-    return readArray<ManagedSkill>(payload, ['skills', 'items', 'data']);
+    return readArray<ManagedSkill>(
+      payload,
+      ['skills', 'items', 'data'],
+      'skills',
+      this.createError,
+    );
   }
 
   async setManagedSkillStatus(
@@ -285,7 +290,12 @@ export class ManagedResourcesClient {
       `/api/v1/agent/definitions?${params.toString()}`,
       { signal },
     );
-    return readArray<ManagedAgentDefinition>(payload, ['definitions', 'items', 'data']);
+    return readArray<ManagedAgentDefinition>(
+      payload,
+      ['definitions', 'items', 'data'],
+      'agent_definitions',
+      this.createError,
+    );
   }
 
   async listManagedExternalAcpAgents(signal?: AbortSignal): Promise<ManagedExternalAcpAgent[]> {
@@ -294,12 +304,12 @@ export class ManagedResourcesClient {
       `/api/v1/acp/tenants/${encodeURIComponent(tenantId)}/external-agents`,
       { signal },
     );
-    return readArray<ManagedExternalAcpAgent>(payload, [
-      'agents',
-      'items',
-      'externalAgents',
-      'data',
-    ]);
+    return readArray<ManagedExternalAcpAgent>(
+      payload,
+      ['agents', 'items', 'externalAgents', 'data'],
+      'external_acp_agents',
+      this.createError,
+    );
   }
 
   async listPromptTemplates(
@@ -438,7 +448,12 @@ export class ManagedResourcesClient {
     const payload = await this.request<unknown>(`/api/v1/subagents/?${params.toString()}`, {
       signal,
     });
-    return readArray<ManagedSubAgent>(payload, ['subagents', 'items', 'data']);
+    return readArray<ManagedSubAgent>(
+      payload,
+      ['subagents', 'items', 'data'],
+      'subagents',
+      this.createError,
+    );
   }
 
   async setManagedSubAgentEnabled(
@@ -694,14 +709,25 @@ function normalizePromptTemplateVariable(value: unknown): PromptTemplateVariable
   };
 }
 
-function readArray<T>(payload: unknown, keys: string[]): T[] {
+function readArray<T>(
+  payload: unknown,
+  keys: string[],
+  collection: string,
+  createError: ManagedResourcesErrorFactory,
+): T[] {
   if (Array.isArray(payload)) return payload as T[];
-  if (!isRecord(payload)) return [];
-  for (const key of keys) {
-    const value = payload[key];
-    if (Array.isArray(value)) return value as T[];
+  if (isRecord(payload)) {
+    for (const key of keys) {
+      if (!Object.prototype.hasOwnProperty.call(payload, key)) continue;
+      const value = payload[key];
+      if (Array.isArray(value)) return value as T[];
+      break;
+    }
   }
-  return [];
+  throw createError('Managed resource list contract is invalid', 502, {
+    code: 'managed_resource_list_contract_invalid',
+    collection,
+  });
 }
 
 function managedSkillPackageResourceId(
