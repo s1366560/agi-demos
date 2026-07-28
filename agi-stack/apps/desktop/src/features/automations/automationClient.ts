@@ -184,7 +184,7 @@ async function runAutomation(
       {
         method: 'POST',
         headers,
-        body: JSON.stringify(input),
+        body: JSON.stringify({ ...input, contract_version: 2 }),
       },
     );
   } catch {

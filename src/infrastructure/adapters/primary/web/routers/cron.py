@@ -13,6 +13,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.cron import (
+    AutomationRunCommandV2,
+    AutomationRunReceiptResponse,
     CronActionCapability,
     CronJobCapabilitiesResponse,
     CronJobCreate,
@@ -26,6 +28,14 @@ from src.application.schemas.cron import (
     delivery_config_to_domain,
     payload_config_to_domain,
     schedule_config_to_domain,
+)
+from src.application.services.automation_command_service import (
+    AutomationActor,
+    AutomationCommandIdempotencyConflictError,
+    AutomationCommandRevisionConflictError,
+    AutomationCommandService,
+    AutomationCommandTargetNotFoundError,
+    QueueManualRunCommand,
 )
 from src.application.services.cron_service import (
     CronExecutionUnavailableError,
@@ -41,6 +51,9 @@ from src.infrastructure.adapters.secondary.persistence.database import (
     get_db,
 )
 from src.infrastructure.adapters.secondary.persistence.models import UserProject
+from src.infrastructure.adapters.secondary.persistence.sql_cron_automation_command_repository import (
+    SqlCronAutomationCommandRepository,
+)
 from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
@@ -58,6 +71,10 @@ router = APIRouter(
 
 def _container(db: AsyncSession) -> DIContainer:
     return DIContainer(db)
+
+
+def _automation_command_service(db: AsyncSession) -> AutomationCommandService:
+    return AutomationCommandService(SqlCronAutomationCommandRepository(db))
 
 
 def _raise_mutation_unavailable(exc: CronMutationUnavailableError) -> Never:
@@ -348,16 +365,16 @@ async def toggle_cron_job(
 
 @router.post(
     "/{job_id}/run",
-    response_model=CronJobResponse,
+    response_model=CronJobResponse | AutomationRunReceiptResponse,
     status_code=202,
 )
 async def trigger_manual_run(
     project_id: str,
     job_id: str,
-    body: ManualRunRequest | None = None,
+    body: AutomationRunCommandV2 | ManualRunRequest | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> CronJobResponse:
+) -> CronJobResponse | AutomationRunReceiptResponse:
     """Trigger a manual execution of a cron job."""
     await _require_project_access(project_id, current_user, db)
     svc = _container(db).cron_job_service()
@@ -365,6 +382,50 @@ async def trigger_manual_run(
     existing = await svc.get_job(job_id)
     if existing is None or existing.project_id != project_id:
         raise HTTPException(status_code=404, detail=_("Cron job not found"))
+
+    if isinstance(body, AutomationRunCommandV2):
+        command_service = _automation_command_service(db)
+        try:
+            receipt = await command_service.queue_manual_run(
+                actor=AutomationActor(
+                    tenant_id=existing.tenant_id,
+                    project_id=project_id,
+                    user_id=current_user.id,
+                ),
+                command=QueueManualRunCommand(
+                    job_id=job_id,
+                    expected_revision=body.expected_revision,
+                    idempotency_key=body.idempotency_key,
+                    conversation_id=body.conversation_id,
+                ),
+            )
+        except AutomationCommandTargetNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=_("Cron job not found")) from exc
+        except AutomationCommandRevisionConflictError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "reason_code": "automation_revision_conflict",
+                    "expected_revision": exc.expected_revision,
+                    "current_revision": exc.current_revision,
+                },
+            ) from exc
+        except AutomationCommandIdempotencyConflictError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"reason_code": "automation_idempotency_conflict"},
+            ) from exc
+        await db.commit()
+        return AutomationRunReceiptResponse(
+            receipt_id=receipt.receipt_id,
+            operation_id=receipt.operation_id,
+            run_id=receipt.run_id,
+            runtime_execution_id=receipt.runtime_execution_id,
+            job_id=receipt.job_id,
+            job_revision=receipt.job_revision,
+            status=receipt.status,
+            duplicate=receipt.duplicate,
+        )
 
     conversation_id_override = body.conversation_id if body else None
     try:

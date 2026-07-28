@@ -140,6 +140,7 @@ test('automation run-now uses the scoped guarded contract without expanding Desk
     assert.equal(calls[0]?.init?.headers.get('Authorization'), 'Bearer authenticated-session');
     assert.equal(calls[0]?.init?.headers.get('X-Agistack-Launch'), 'launch-capability');
     assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
+      contract_version: 2,
       expected_revision: 7,
       idempotency_key: 'run-now-1',
       conversation_id: 'conversation-1',
