@@ -2427,6 +2427,8 @@ test('automation reads and capability authority stay project scoped', async () =
     const client = new DesktopApiClient({
       ...DEFAULT_CONFIG,
       projectId: 'project/1',
+      workspaceId: 'workspace/1',
+      mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:8088',
       apiKey: 'authenticated-session',
     });
@@ -2440,7 +2442,7 @@ test('automation reads and capability authority stay project scoped', async () =
       calls.map((call) => String(call.input)),
       [
         'http://127.0.0.1:8088/api/v1/projects/project%2F1/cron-jobs?include_disabled=true&limit=100&offset=0',
-        'http://127.0.0.1:8088/api/v1/projects/project%2F1/cron-jobs/capabilities',
+        'http://127.0.0.1:8088/api/v1/projects/project%2F1/cron-jobs/capabilities?workspace_id=workspace%2F1',
         'http://127.0.0.1:8088/api/v1/projects/project%2F1/cron-jobs/automation%2F1',
         'http://127.0.0.1:8088/api/v1/projects/project%2F1/cron-jobs/automation%2F1/runs?limit=50&offset=0',
       ],

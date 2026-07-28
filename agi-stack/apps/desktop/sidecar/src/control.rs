@@ -142,6 +142,7 @@ pub(crate) async fn run() -> Result<(), String> {
         };
         write_json_line(&mut output, &response).await?;
     }
+    state.runtime.shutdown().await;
     Ok(())
 }
 

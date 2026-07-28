@@ -123,8 +123,13 @@ export function createDesktopAutomationApi(
   config: DesktopRuntimeConfig,
 ): DesktopAutomationApi {
   return {
-    createAutomation: (...args: Parameters<BaseAutomationApi['createAutomation']>) =>
-      baseApi.createAutomation(...args),
+    createAutomation: (input, projectId) =>
+      baseApi.createAutomation(
+        config.mode === 'local' && config.workspaceId.trim()
+          ? { ...input, workspace_id: input.workspace_id ?? config.workspaceId.trim() }
+          : input,
+        projectId,
+      ),
     deleteAutomation: (...args: Parameters<BaseAutomationApi['deleteAutomation']>) =>
       baseApi.deleteAutomation(...args),
     getAutomationCapabilities: async (
