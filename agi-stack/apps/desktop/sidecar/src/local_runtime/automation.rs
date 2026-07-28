@@ -12,12 +12,14 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use super::{
+    automation_dispatcher::{self, AutomationLedgerError, ManualRunCommand, SystemAutomationClock},
     automation_store::{self, AutomationStoreError},
     ensure_active_project, now_iso, AuthenticatedContext, LocalJsonResult, LocalRuntimeState,
 };
 
 const DEFAULT_PAGE_SIZE: i64 = 50;
 const DEFAULT_TIMEOUT_SECONDS: u64 = 300;
+const AUTOMATION_RUN_CONTRACT_VERSION: u64 = 2;
 
 #[derive(Debug, Default, Deserialize)]
 pub(super) struct ListQuery {
@@ -114,6 +116,17 @@ pub(super) struct ToggleAutomationRequest {
 pub(super) struct DeleteAutomationRequest {
     idempotency_key: String,
     expected_revision: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct RunAutomationRequest {
+    #[serde(default = "default_run_contract_version")]
+    contract_version: u64,
+    expected_revision: u64,
+    idempotency_key: String,
+    #[serde(default)]
+    conversation_id: Option<String>,
 }
 
 fn validate_page(limit: Option<i64>, offset: Option<i64>) -> Result<(), (StatusCode, Json<Value>)> {
@@ -329,7 +342,41 @@ pub(super) async fn list_runs(
     validate_page(query.limit, query.offset)?;
     automation_store::get(&state.session_store, &project_id, &automation_id)
         .map_err(store_error)?;
-    Ok(Json(json!({ "items": [], "total": 0 })))
+    let (items, total) = automation_dispatcher::list_runs(
+        &state.session_store,
+        &project_id,
+        &automation_id,
+        query.limit.unwrap_or(DEFAULT_PAGE_SIZE),
+        query.offset.unwrap_or_default(),
+    )
+    .map_err(ledger_error)?;
+    Ok(Json(json!({ "items": items, "total": total })))
+}
+
+pub(super) async fn run(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Path((project_id, automation_id)): Path<(String, String)>,
+    Json(request): Json<RunAutomationRequest>,
+) -> Result<Response, (StatusCode, Json<Value>)> {
+    ensure_active_project(&authenticated, &project_id)?;
+    validate_run(&request)?;
+    let request_hash = request_hash(&request)?;
+    let receipt = automation_dispatcher::enqueue_manual_run(
+        &state.session_store,
+        ManualRunCommand {
+            user_id: &authenticated.user.user_id,
+            project_id: &project_id,
+            job_id: &automation_id,
+            expected_revision: request.expected_revision,
+            idempotency_key: request.idempotency_key.trim(),
+            request_hash: &request_hash,
+            conversation_id: request.conversation_id.as_deref(),
+        },
+        &SystemAutomationClock,
+    )
+    .map_err(ledger_error)?;
+    Ok((StatusCode::ACCEPTED, Json(receipt)).into_response())
 }
 
 fn validate_create(request: &CreateAutomationRequest) -> Result<(), (StatusCode, Json<Value>)> {
@@ -369,11 +416,58 @@ fn validate_update(request: &UpdateAutomationRequest) -> Result<(), (StatusCode,
     )
 }
 
+fn validate_run(request: &RunAutomationRequest) -> Result<(), (StatusCode, Json<Value>)> {
+    if request.contract_version != AUTOMATION_RUN_CONTRACT_VERSION {
+        return Err(error_with_code(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "automation_contract_version_unsupported",
+            "contract_version must be 2",
+        ));
+    }
+    if request.expected_revision == 0 {
+        return Err(error_with_code(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "automation_expected_revision_invalid",
+            "expected_revision must be a positive integer",
+        ));
+    }
+    validate_run_idempotency_key(&request.idempotency_key)?;
+    if request
+        .conversation_id
+        .as_deref()
+        .is_some_and(|value| value.trim().is_empty())
+    {
+        return Err(error_with_code(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "automation_conversation_id_invalid",
+            "conversation_id must not be empty",
+        ));
+    }
+    Ok(())
+}
+
 fn validate_idempotency_key(value: &str) -> Result<(), (StatusCode, Json<Value>)> {
     if value.trim().is_empty() || value.len() > 200 {
         return Err(error(
             StatusCode::UNPROCESSABLE_ENTITY,
             "idempotency_key must contain between 1 and 200 characters",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_run_idempotency_key(value: &str) -> Result<(), (StatusCode, Json<Value>)> {
+    if value.is_empty()
+        || value.len() > 255
+        || !value
+            .as_bytes()
+            .iter()
+            .all(|byte| (33..=126).contains(byte))
+    {
+        return Err(error_with_code(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "automation_idempotency_key_invalid",
+            "idempotency_key must contain 1 to 255 visible ASCII characters",
         ));
     }
     Ok(())
@@ -545,8 +639,54 @@ fn store_error(error_value: AutomationStoreError) -> (StatusCode, Json<Value>) {
     }
 }
 
+fn ledger_error(error_value: AutomationLedgerError) -> (StatusCode, Json<Value>) {
+    match error_value {
+        AutomationLedgerError::NotFound => error_with_code(
+            StatusCode::NOT_FOUND,
+            "automation_not_found",
+            "Cron job not found",
+        ),
+        AutomationLedgerError::RevisionConflict { expected, actual } => error_with_code(
+            StatusCode::CONFLICT,
+            "automation_revision_conflict",
+            format!("automation revision conflict: expected {expected}, found {actual}"),
+        ),
+        AutomationLedgerError::IdempotencyConflict => error_with_code(
+            StatusCode::CONFLICT,
+            "automation_idempotency_conflict",
+            "automation idempotency key is already bound to a different request",
+        ),
+        AutomationLedgerError::LeaseLost => error_with_code(
+            StatusCode::CONFLICT,
+            "automation_operation_lease_lost",
+            "automation operation lease is no longer authoritative",
+        ),
+        AutomationLedgerError::InvalidRecord(_) => error_with_code(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "local_automation_record_invalid",
+            "local automation record is invalid",
+        ),
+        AutomationLedgerError::Storage(_) => error_with_code(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "local_automation_storage_error",
+            "local automation storage is unavailable",
+        ),
+    }
+}
+
 fn error(status: StatusCode, detail: impl Into<String>) -> (StatusCode, Json<Value>) {
     (status, Json(json!({ "detail": detail.into() })))
+}
+
+fn error_with_code(
+    status: StatusCode,
+    code: &str,
+    detail: impl Into<String>,
+) -> (StatusCode, Json<Value>) {
+    (
+        status,
+        Json(json!({ "code": code, "detail": detail.into() })),
+    )
 }
 
 fn default_true() -> bool {
@@ -570,4 +710,8 @@ fn default_timezone() -> String {
 
 fn default_timeout_seconds() -> u64 {
     DEFAULT_TIMEOUT_SECONDS
+}
+
+fn default_run_contract_version() -> u64 {
+    AUTOMATION_RUN_CONTRACT_VERSION
 }

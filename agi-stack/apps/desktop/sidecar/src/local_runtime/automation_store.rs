@@ -42,7 +42,8 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), String> {
              CREATE INDEX IF NOT EXISTS idx_desktop_automation_mutations_scope
                ON desktop_automation_mutations(user_id, project_id, created_at DESC);",
         )
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    super::automation_dispatcher::initialize_schema(connection)
 }
 
 pub(super) fn list(
