@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal, TypedDict, cast
 
@@ -10,12 +9,9 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
-    File,
-    Form,
     Header,
     HTTPException,
     Request,
-    UploadFile,
     status,
 )
 from fastapi.responses import Response
@@ -61,6 +57,10 @@ from src.infrastructure.adapters.primary.web.routers.workspace_collaboration_pay
 )
 from src.infrastructure.adapters.primary.web.routers.workspace_collaboration_secondary_dispatch import (
     dispatch_secondary_workspace_mutation,
+)
+from src.infrastructure.adapters.primary.web.routers.workspace_collaboration_upload import (
+    require_bounded_upload_content_length,
+    stage_workspace_upload_request,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
@@ -228,16 +228,13 @@ async def mutate_workspace_collaboration_surface(
     "/mutations/files/upload",
     response_model=WorkspaceCollaborationMutationReceiptResponse,
 )
-async def upload_workspace_collaboration_file(  # noqa: PLR0913
+async def upload_workspace_collaboration_file(
     tenant_id: str,
     project_id: str,
     workspace_id: str,
     request: Request,
-    background_tasks: BackgroundTasks,
     expected_revision: ExpectedRevisionHeader,
     idempotency_key: IdempotencyKeyHeader,
-    file: UploadFile = File(...),
-    parent_path: str = Form("/"),
     current_user: User = Depends(get_current_user),
     current_actor: ActorIdentity = Depends(get_current_actor),
     db: AsyncSession = Depends(get_db),
@@ -246,6 +243,7 @@ async def upload_workspace_collaboration_file(  # noqa: PLR0913
     ),
 ) -> WorkspaceCollaborationMutationReceiptResponse:
     """Upload with content-bound idempotency while keeping file bytes out of JSON."""
+    require_bounded_upload_content_length(request)
     await require_workspace_access(
         db,
         current_user,
@@ -254,8 +252,7 @@ async def upload_workspace_collaboration_file(  # noqa: PLR0913
         workspace_id,
         require_editor=True,
     )
-    content = await file.read()
-    await file.seek(0)
+    staged = await stage_workspace_upload_request(request)
     actor = _actor(
         tenant_id=tenant_id,
         project_id=project_id,
@@ -269,23 +266,26 @@ async def upload_workspace_collaboration_file(  # noqa: PLR0913
         expected_revision=expected_revision,
         idempotency_key=idempotency_key,
         payload={
-            "parent_path": parent_path,
-            "file_name": file.filename or "",
-            "content_type": file.content_type or "",
-            "size_bytes": len(content),
-            "sha256": hashlib.sha256(content).hexdigest(),
+            "parent_path": staged.parent_path,
+            "file_name": staged.filename,
+            "content_type": staged.content_type,
+            "size_bytes": staged.size_bytes,
+            "sha256": staged.checksum_sha256,
         },
     )
     try:
         reserved = await service.reserve(actor=actor, command=command)
         if reserved.dispatch_required:
-            await blackboard.upload_file(
+            await blackboard.upload_staged_file(
                 tenant_id=tenant_id,
                 project_id=project_id,
                 workspace_id=workspace_id,
                 request=request,
-                file=file,
-                parent_path=parent_path,
+                staged_path=staged.path,
+                parent_path=staged.parent_path,
+                filename=staged.filename,
+                size_bytes=staged.size_bytes,
+                checksum_sha256=staged.checksum_sha256,
                 current_user=current_user,
                 current_actor=current_actor,
                 db=db,
@@ -305,6 +305,8 @@ async def upload_workspace_collaboration_file(  # noqa: PLR0913
     except WorkspaceCollaborationMutationError as exc:
         await db.rollback()
         raise _authority_http_error(exc) from exc
+    finally:
+        staged.path.unlink(missing_ok=True)
     return _receipt_response(finalized)
 
 

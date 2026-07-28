@@ -5,8 +5,11 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import insert, select
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.dml import Insert
 
 from src.application.services.workspace_collaboration_authority import (
     WorkspaceCollaborationActor,
@@ -54,21 +57,13 @@ class SqlWorkspaceCollaborationAuthorityRepository:
             )
             return self._to_receipt(existing, duplicate=True, dispatch_required=False)
 
-        authority = await self._find_authority(actor=actor, lock=True)
-        current_revision = 0 if authority is None else int(authority.revision)
+        authority = await self._ensure_authority(actor=actor)
+        current_revision = int(authority.revision)
         if current_revision != command.expected_revision:
             raise WorkspaceCollaborationRevisionConflictError(
                 expected_revision=command.expected_revision,
                 current_revision=current_revision,
             )
-        if authority is None:
-            authority = WorkspaceCollaborationAuthorityModel(
-                workspace_id=actor.workspace_id,
-                tenant_id=actor.tenant_id,
-                project_id=actor.project_id,
-                revision=current_revision,
-            )
-            self._session.add(authority)
 
         receipt = WorkspaceCollaborationMutationReceiptModel(
             id=str(uuid.uuid4()),
@@ -110,16 +105,7 @@ class SqlWorkspaceCollaborationAuthorityRepository:
             command=command,
             request_hash=request_hash,
         )
-        authority = await self._find_authority(actor=actor, lock=True)
-        if authority is None:
-            authority = WorkspaceCollaborationAuthorityModel(
-                workspace_id=actor.workspace_id,
-                tenant_id=actor.tenant_id,
-                project_id=actor.project_id,
-                revision=command.expected_revision,
-            )
-            self._session.add(authority)
-            await self._session.flush()
+        authority = await self._ensure_authority(actor=actor)
 
         current_revision = int(authority.revision)
         if current_revision < command.expected_revision:
@@ -175,6 +161,52 @@ class SqlWorkspaceCollaborationAuthorityRepository:
             statement = statement.with_for_update()
         result = await self._session.execute(refresh_select_statement(statement))
         return result.scalar_one_or_none()
+
+    async def _ensure_authority(
+        self,
+        *,
+        actor: WorkspaceCollaborationActor,
+    ) -> WorkspaceCollaborationAuthorityModel:
+        bind = self._session.get_bind()
+        dialect_name = getattr(getattr(bind, "dialect", None), "name", "")
+        await self._session.execute(
+            self._authority_insert_statement(
+                actor=actor,
+                dialect_name=dialect_name,
+            )
+        )
+        authority = await self._find_authority(actor=actor, lock=True)
+        if authority is None:
+            raise WorkspaceCollaborationAuthorityCorruptError(
+                "Workspace Collaboration authority scope is inconsistent"
+            )
+        return authority
+
+    @staticmethod
+    def _authority_insert_statement(
+        *,
+        actor: WorkspaceCollaborationActor,
+        dialect_name: str,
+    ) -> Insert:
+        values = {
+            "workspace_id": actor.workspace_id,
+            "tenant_id": actor.tenant_id,
+            "project_id": actor.project_id,
+            "revision": 0,
+        }
+        if dialect_name == "postgresql":
+            return (
+                postgresql_insert(WorkspaceCollaborationAuthorityModel)
+                .values(**values)
+                .on_conflict_do_nothing(index_elements=["workspace_id"])
+            )
+        if dialect_name == "sqlite":
+            return (
+                sqlite_insert(WorkspaceCollaborationAuthorityModel)
+                .values(**values)
+                .on_conflict_do_nothing(index_elements=["workspace_id"])
+            )
+        return insert(WorkspaceCollaborationAuthorityModel).values(**values)
 
     async def _find_receipt(
         self,

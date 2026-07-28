@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.workspace_collaboration_authority import (
@@ -151,3 +152,29 @@ async def test_workspace_authority_fails_closed_for_revision_idempotency_and_sco
                 user_id=actor.user_id,
             )
         )
+
+
+@pytest.mark.unit
+def test_workspace_authority_initialization_is_postgresql_upsert() -> None:
+    actor = WorkspaceCollaborationActor(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        user_id="user-1",
+    )
+
+    statement = SqlWorkspaceCollaborationAuthorityRepository._authority_insert_statement(
+        actor=actor,
+        dialect_name="postgresql",
+    )
+    sql = str(
+        statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+
+    assert "ON CONFLICT (workspace_id) DO NOTHING" in sql
+    assert "'workspace-1'" in sql
+    assert "'tenant-1'" in sql
+    assert "'project-1'" in sql

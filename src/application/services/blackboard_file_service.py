@@ -8,7 +8,9 @@ import logging
 import mimetypes
 import os
 import shutil
+import tempfile
 from collections.abc import AsyncIterator
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -112,6 +114,38 @@ def _resolve_storage_path(workspace_id: str, storage_key: str) -> Path:
     except ValueError as exc:
         raise ValueError("Invalid storage path") from exc
     return storage_path
+
+
+def _upload_staging_root() -> Path:
+    root = (STORAGE_ROOT / ".staging").resolve()
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return root
+
+
+def create_upload_staging_path() -> Path:
+    """Create a private same-filesystem staging target for one bounded upload."""
+    descriptor, raw_path = tempfile.mkstemp(
+        prefix="workspace-upload-",
+        dir=_upload_staging_root(),
+    )
+    try:
+        os.fchmod(descriptor, 0o600)
+    finally:
+        os.close(descriptor)
+    return Path(raw_path)
+
+
+def _resolve_upload_staging_path(staged_path: Path) -> Path:
+    if staged_path.is_symlink():
+        raise ValueError("Invalid staged upload path")
+    try:
+        resolved = staged_path.resolve(strict=True)
+        resolved.relative_to(_upload_staging_root())
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError("Invalid staged upload path") from exc
+    if not resolved.is_file():
+        raise ValueError("Invalid staged upload path")
+    return resolved
 
 
 class BlackboardFileService:
@@ -220,6 +254,78 @@ class BlackboardFileService:
             checksum_sha256=checksum_sha256,
         )
         return await self._file_repo.save(bb_file)
+
+    async def upload_staged_file(
+        self,
+        tenant_id: str,
+        project_id: str,
+        workspace_id: str,
+        actor_user_id: str,
+        actor_user_name: str,
+        parent_path: str,
+        filename: str,
+        staged_path: Path,
+        size_bytes: int,
+        checksum_sha256: str,
+        actor: ActorIdentity | None = None,
+    ) -> BlackboardFile:
+        """Atomically consume one bounded staging file without loading it into memory."""
+        workspace = await self._require_workspace_scope(tenant_id, project_id, workspace_id)
+        await self._require_editor(workspace.id, actor_user_id)
+        safe_path = _validate_path(parent_path)
+        safe_filename = _validate_filename(filename)
+        if size_bytes < 0 or size_bytes > MAX_FILE_SIZE:
+            raise ValueError(f"File exceeds maximum size of {MAX_FILE_SIZE} bytes")
+        if len(checksum_sha256) != 64:
+            raise ValueError("Invalid staged upload checksum")
+        try:
+            _ = bytes.fromhex(checksum_sha256)
+        except ValueError as exc:
+            raise ValueError("Invalid staged upload checksum") from exc
+
+        source_path = _resolve_upload_staging_path(staged_path)
+        if source_path.stat().st_size != size_bytes:
+            raise ValueError("Staged upload size does not match its authority metadata")
+        await self._ensure_name_available(workspace.id, safe_path, safe_filename)
+
+        file_id = BlackboardFile.generate_id()
+        storage_key = f"{file_id}/{safe_filename}"
+        storage_path = _resolve_storage_path(workspace.id, storage_key)
+        storage_path.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(source_path, storage_path)
+
+        content_type = mimetypes.guess_type(safe_filename)[0] or "application/octet-stream"
+        uploader_type, uploader_id, uploader_name = _resolve_uploader(
+            actor, actor_user_id, actor_user_name
+        )
+        bb_file = BlackboardFile(
+            id=file_id,
+            workspace_id=workspace.id,
+            parent_path=safe_path,
+            name=safe_filename,
+            is_directory=False,
+            file_size=size_bytes,
+            content_type=content_type,
+            storage_key=storage_key,
+            uploader_type=uploader_type,
+            uploader_id=uploader_id,
+            uploader_name=uploader_name,
+            checksum_sha256=checksum_sha256,
+        )
+        try:
+            return await self._file_repo.save(bb_file)
+        except BaseException:
+            self.discard_uploaded_file_storage(bb_file)
+            raise
+
+    def discard_uploaded_file_storage(self, bb_file: BlackboardFile) -> None:
+        """Remove physical bytes for an upload whose database transaction did not commit."""
+        if bb_file.is_directory or not bb_file.storage_key:
+            return
+        storage_path = _resolve_storage_path(bb_file.workspace_id, bb_file.storage_key)
+        storage_path.unlink(missing_ok=True)
+        with suppress(OSError):
+            storage_path.parent.rmdir()
 
     async def read_file(
         self,
