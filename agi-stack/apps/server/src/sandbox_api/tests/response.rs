@@ -54,9 +54,9 @@ fn sandbox_runtime_capabilities_do_not_claim_canonical_run_authority() {
                 "reason_code": "sandbox_file_api_unavailable"
             },
             "kasm_vnc": {
-                "availability": "unavailable",
+                "availability": "available",
                 "contract_version": 1,
-                "reason_code": "kasm_proxy_contract_unavailable"
+                "reason_code": null
             }
         })
     );

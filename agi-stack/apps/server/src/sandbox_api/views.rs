@@ -49,9 +49,9 @@ impl SandboxRuntimeCapabilitiesResponse {
                 reason_code: Some("sandbox_file_api_unavailable"),
             },
             kasm_vnc: SandboxRuntimeCapabilityResponse {
-                availability: "unavailable",
+                availability: "available",
                 contract_version: 1,
-                reason_code: Some("kasm_proxy_contract_unavailable"),
+                reason_code: None,
             },
         }
     }
