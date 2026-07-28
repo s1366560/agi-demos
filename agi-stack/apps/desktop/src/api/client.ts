@@ -436,8 +436,13 @@ export class DesktopApiClient {
     signal?: AbortSignal,
   ): Promise<AutomationCapabilityEnvelope> {
     const resolvedProjectId = requireValue(projectId, 'project id');
+    const params = new URLSearchParams();
+    if (this.config.mode === 'local' && this.config.workspaceId.trim()) {
+      params.set('workspace_id', this.config.workspaceId.trim());
+    }
+    const query = params.size ? `?${params.toString()}` : '';
     return this.request<AutomationCapabilityEnvelope>(
-      `/api/v1/projects/${encodeURIComponent(resolvedProjectId)}/cron-jobs/capabilities`,
+      `/api/v1/projects/${encodeURIComponent(resolvedProjectId)}/cron-jobs/capabilities${query}`,
       { signal },
     );
   }

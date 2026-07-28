@@ -16,6 +16,8 @@ async-trait.workspace = true
 axum = { version = "0.7", features = ["ws"] }
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+chrono-tz = "0.10.4"
+croner = "3.0.1"
 futures-util = "0.3"
 getrandom = "0.2"
 hmac = "0.12"
@@ -30,7 +32,7 @@ tower-http = { version = "0.6", features = ["cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 url = "2"
-uuid = { version = "1", features = ["v4"] }
+uuid = { version = "1", features = ["v4", "v5"] }
 zeroize = "1"
 
 agistack-core = { path = "../../../crates/core" }

@@ -1810,6 +1810,7 @@ export type AutomationJob = {
   payload: AutomationConfig;
   delivery: AutomationConfig;
   conversation_mode: string;
+  workspace_id?: string | null;
   conversation_id?: string | null;
   timezone: string;
   stagger_seconds: number;
@@ -1836,6 +1837,7 @@ export type AutomationCreateInput = {
   payload: AutomationConfig;
   delivery?: AutomationConfig;
   conversation_mode?: 'reuse' | 'fresh';
+  workspace_id?: string | null;
   conversation_id?: string | null;
   timezone?: string;
   stagger_seconds?: number;

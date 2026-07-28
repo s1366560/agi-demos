@@ -61,9 +61,17 @@ mod authority_store;
 mod authorized_tool_host;
 mod automation;
 mod automation_dispatcher;
+mod automation_dispatcher_schema;
 #[cfg(test)]
 mod automation_dispatcher_tests;
+mod automation_executor;
+mod automation_ledger_support;
+mod automation_schedule;
+mod automation_schedule_dispatcher;
 mod automation_store;
+mod automation_worker;
+#[cfg(test)]
+mod automation_worker_tests;
 mod changes;
 mod composer_context;
 #[cfg(test)]
@@ -161,6 +169,9 @@ impl LocalRuntimeService {
             provider_credentials,
         )?);
         state.reconcile_recovered_runs_from_checkpoints().await?;
+        state.start_automation_worker_with_config(
+            automation_worker::AutomationWorkerConfig::local_default(),
+        )?;
 
         let app = local_router(Arc::clone(&state));
         let listener = TcpListener::bind(("127.0.0.1", 0))
@@ -178,6 +189,10 @@ impl LocalRuntimeService {
             state,
             api_base_url,
         })
+    }
+
+    pub(crate) async fn shutdown(&self) {
+        self.state.stop_automation_worker().await;
     }
 
     pub(crate) fn save_local_trusted_session(&self, value: &str) -> Result<(), String> {
@@ -827,6 +842,7 @@ struct LocalRuntimeState {
     event_counter: AtomicU64,
     terminal_sessions: Mutex<HashMap<String, TerminalSessionLease>>,
     agent_runs: Mutex<HashMap<String, ActiveAgentRun>>,
+    automation_worker: Mutex<Option<automation_worker::AutomationWorkerHandle>>,
     #[cfg(test)]
     agent_run_claim_attempts: AtomicU64,
     #[cfg(test)]
@@ -1141,6 +1157,7 @@ impl LocalRuntimeState {
             event_counter: AtomicU64::new(1),
             terminal_sessions: Mutex::new(HashMap::new()),
             agent_runs: Mutex::new(HashMap::new()),
+            automation_worker: Mutex::new(None),
             #[cfg(test)]
             agent_run_claim_attempts: AtomicU64::new(0),
             #[cfg(test)]
@@ -1150,6 +1167,133 @@ impl LocalRuntimeState {
             #[cfg(test)]
             mock_llm_enabled: AtomicU8::new(0),
             events,
+        })
+    }
+
+    fn start_automation_worker_with_config(
+        self: &Arc<Self>,
+        config: automation_worker::AutomationWorkerConfig,
+    ) -> Result<(), String> {
+        let mut slot = self
+            .automation_worker
+            .lock()
+            .expect("local automation worker");
+        if slot
+            .as_ref()
+            .is_some_and(automation_worker::AutomationWorkerHandle::is_running)
+        {
+            return Ok(());
+        }
+        let executor = Arc::new(automation_executor::LocalAutomationAgentExecutor::new(
+            Arc::downgrade(self),
+        ));
+        let worker = automation_worker::AutomationWorker::new(
+            self.session_store.clone(),
+            executor,
+            Arc::new(automation_dispatcher::SystemAutomationClock),
+            config,
+        )
+        .map_err(|error| error.to_string())?;
+        *slot = Some(automation_worker::AutomationWorkerHandle::spawn(worker));
+        Ok(())
+    }
+
+    async fn stop_automation_worker(&self) {
+        let handle = self
+            .automation_worker
+            .lock()
+            .expect("local automation worker")
+            .take();
+        if let Some(handle) = handle {
+            handle.shutdown().await;
+        }
+    }
+
+    fn automation_worker_running(&self) -> bool {
+        self.automation_worker
+            .lock()
+            .expect("local automation worker")
+            .as_ref()
+            .is_some_and(automation_worker::AutomationWorkerHandle::is_running)
+    }
+
+    fn automation_runtime_available_for_workspace(
+        &self,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+    ) -> bool {
+        self.automation_worker_running()
+            && automation_executor::validate_workspace_scope(
+                self,
+                tenant_id,
+                project_id,
+                workspace_id,
+            )
+            .is_ok()
+            && self.automation_agent_authority_for_workspace(tenant_id, project_id, workspace_id)
+    }
+
+    fn validate_automation_execution_authority(
+        &self,
+        tenant_id: &str,
+        project_id: &str,
+        job_snapshot: &Value,
+        command_conversation_id: Option<&str>,
+    ) -> Result<(), &'static str> {
+        if !self.automation_worker_running() {
+            return Err("durable_automation_execution_unavailable");
+        }
+        let workspace_id = automation_executor::execution_workspace_id(
+            self,
+            tenant_id,
+            project_id,
+            job_snapshot,
+            command_conversation_id,
+        )?;
+        if !self.automation_agent_authority_for_workspace(tenant_id, project_id, &workspace_id) {
+            return Err("local_automation_provider_unavailable");
+        }
+        Ok(())
+    }
+
+    fn automation_agent_authority_for_workspace(
+        &self,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+    ) -> bool {
+        #[cfg(test)]
+        if self.mock_llm_enabled.load(Ordering::Acquire) != 0 {
+            return true;
+        }
+        let policy = match self.session_store.workspace_llm_routing_policy(
+            tenant_id,
+            project_id,
+            workspace_id,
+            Utc::now().timestamp_millis(),
+        ) {
+            Ok(policy) => policy,
+            Err(_) => return false,
+        };
+        let targets = match routing_targets_for_role(&policy, LlmWorkloadRole::Default) {
+            Ok(targets) => targets,
+            Err(_) => return false,
+        };
+        let runtime = self
+            .provider_runtime
+            .lock()
+            .expect("provider runtime state");
+        targets.into_iter().any(|target| {
+            let key = ProviderRuntimeKey {
+                tenant_id: tenant_id.to_string(),
+                provider_id: target.provider_id,
+            };
+            let Some(mut binding) = runtime.bindings.get(&key).cloned() else {
+                return false;
+            };
+            binding.model = target.model_id;
+            llm_from_runtime_binding(binding, runtime.credentials.get(&key).cloned()).is_some()
         })
     }
 
@@ -9027,6 +9171,18 @@ mod tests {
         state
     }
 
+    fn test_automation_worker_config() -> automation_worker::AutomationWorkerConfig {
+        automation_worker::AutomationWorkerConfig {
+            worker_id: format!("test-automation-worker-{}", Uuid::new_v4()),
+            batch_size: 2,
+            lease_duration: std::time::Duration::from_secs(2),
+            heartbeat_interval: std::time::Duration::from_millis(250),
+            poll_interval: std::time::Duration::from_millis(10),
+            retry_backoff: std::time::Duration::ZERO,
+            shutdown_grace: std::time::Duration::from_millis(100),
+        }
+    }
+
     fn test_state_with_counting_checkpoints(
         token: &str,
     ) -> (Arc<LocalRuntimeState>, Arc<CountingCheckpointStore>) {
@@ -12287,7 +12443,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("migrated schema version");
-        assert_eq!(version, 20);
+        assert_eq!(version, 21);
         let selection_table: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
@@ -12376,13 +12532,13 @@ mod tests {
             let connection =
                 rusqlite::Connection::open(&future_path).expect("open future database");
             connection
-                .execute_batch("PRAGMA user_version = 21;")
+                .execute_batch("PRAGMA user_version = 22;")
                 .expect("mark future schema version");
         }
         let error = DesktopSessionStore::open(&future_path)
             .err()
             .expect("future schema must be rejected");
-        assert!(error.contains("newer than supported schema version 20"));
+        assert!(error.contains("newer than supported schema version 21"));
 
         std::fs::remove_dir_all(root).expect("remove schema test root");
     }
@@ -13171,7 +13327,7 @@ mod tests {
         let schema_version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("schema version");
-        assert_eq!(schema_version, 20);
+        assert_eq!(schema_version, 21);
         drop(connection);
         std::fs::remove_dir_all(root).expect("remove test root");
     }
@@ -15452,6 +15608,40 @@ mod tests {
         assert_eq!(replay.status(), StatusCode::OK);
         assert_eq!(response_json(replay).await["id"], automation_id);
 
+        let unsupported_delivery = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/projects/local-project/cron-jobs",
+                "automation-read-secret",
+                json!({
+                    "idempotency_key": "create-webhook-job",
+                    "name": "Webhook job",
+                    "schedule": {
+                        "kind": "every",
+                        "config": { "interval_seconds": 60 }
+                    },
+                    "payload": {
+                        "kind": "agent_turn",
+                        "config": { "message": "Deliver by webhook" }
+                    },
+                    "delivery": {
+                        "kind": "webhook",
+                        "config": { "url": "https://example.invalid/hook" }
+                    }
+                }),
+            ))
+            .await
+            .expect("unsupported local webhook delivery");
+        assert_eq!(
+            unsupported_delivery.status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+        assert_eq!(
+            response_json(unsupported_delivery).await["code"],
+            "local_automation_webhook_delivery_unavailable"
+        );
+
         let jobs = app
             .clone()
             .oneshot(authenticated_json_request(
@@ -15472,7 +15662,7 @@ mod tests {
             .clone()
             .oneshot(authenticated_json_request(
                 "GET",
-                "/api/v1/projects/local-project/cron-jobs/capabilities",
+                "/api/v1/projects/local-project/cron-jobs/capabilities?workspace_id=local-workspace",
                 "automation-read-secret",
                 json!({}),
             ))
@@ -15484,7 +15674,7 @@ mod tests {
             json!({
                 "service_version": "0.1.0",
                 "contract_version": "2.0.0",
-                "schema_version": 1,
+                "schema_version": 2,
                 "read": true,
                 "revision_guarded": true,
                 "idempotency_guarded": true,
@@ -15622,7 +15812,25 @@ mod tests {
     #[tokio::test]
     async fn local_automation_run_v2_returns_one_durable_receipt_and_history_record() {
         let state = test_state("automation-run-v2-secret");
-        let app = local_router(state);
+        state
+            .start_automation_worker_with_config(test_automation_worker_config())
+            .expect("start automation worker");
+        let app = local_router(Arc::clone(&state));
+        let capabilities = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/projects/local-project/cron-jobs/capabilities?workspace_id=local-workspace",
+                "automation-run-v2-secret",
+                json!({}),
+            ))
+            .await
+            .expect("available automation capabilities");
+        assert_eq!(capabilities.status(), StatusCode::OK);
+        let capabilities = response_json(capabilities).await;
+        assert_eq!(capabilities["durable_execution"], true);
+        assert_eq!(capabilities["run_now"]["allowed"], true);
+        assert!(capabilities["run_now"]["reason_code"].is_null());
         let created = app
             .clone()
             .oneshot(authenticated_json_request(
@@ -15640,7 +15848,8 @@ mod tests {
                     "payload": {
                         "kind": "agent_turn",
                         "config": { "message": "Execute the V2 job" }
-                    }
+                    },
+                    "workspace_id": "local-workspace"
                 }),
             ))
             .await
@@ -15652,8 +15861,7 @@ mod tests {
         let run_request = json!({
             "contract_version": 2,
             "expected_revision": 1,
-            "idempotency_key": "run-v2-idempotency",
-            "conversation_id": "conversation-run-v2"
+            "idempotency_key": "run-v2-idempotency"
         });
 
         let accepted = app
@@ -15729,26 +15937,199 @@ mod tests {
             "automation_contract_version_unsupported"
         );
 
+        let history_path = format!(
+            "/api/v1/projects/local-project/cron-jobs/{automation_id}/runs?limit=50&offset=0"
+        );
+        let history = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            loop {
+                let history = app
+                    .clone()
+                    .oneshot(authenticated_json_request(
+                        "GET",
+                        &history_path,
+                        "automation-run-v2-secret",
+                        json!({}),
+                    ))
+                    .await
+                    .expect("list durable automation runs");
+                assert_eq!(history.status(), StatusCode::OK);
+                let history = response_json(history).await;
+                if history["items"][0]["status"] == "success" {
+                    break history;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("automation run reaches terminal history");
+        assert_eq!(history["total"], 1);
+        assert_eq!(history["items"][0]["id"], accepted["run_id"]);
+        assert_eq!(history["items"][0]["status"], "success");
+        assert_eq!(
+            history["items"][0]["result_summary"]["authority"],
+            "local_scoped_agent"
+        );
+        state.stop_automation_worker().await;
+        let replay_after_shutdown = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                &run_path,
+                "automation-run-v2-secret",
+                run_request,
+            ))
+            .await
+            .expect("replay completed run after worker shutdown");
+        assert_eq!(replay_after_shutdown.status(), StatusCode::ACCEPTED);
+        let replay_after_shutdown = response_json(replay_after_shutdown).await;
+        assert_eq!(replay_after_shutdown["receipt_id"], accepted["receipt_id"]);
+        assert_eq!(replay_after_shutdown["run_id"], accepted["run_id"]);
+        assert_eq!(replay_after_shutdown["duplicate"], true);
+    }
+
+    #[tokio::test]
+    async fn local_automation_run_fails_closed_without_a_live_worker_and_does_not_enqueue() {
+        let state = test_state("automation-run-unavailable-secret");
+        let app = local_router(Arc::clone(&state));
+        let created = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/projects/local-project/cron-jobs",
+                "automation-run-unavailable-secret",
+                json!({
+                    "idempotency_key": "create-unavailable-job",
+                    "name": "Unavailable run job",
+                    "enabled": true,
+                    "schedule": {
+                        "kind": "every",
+                        "config": { "interval_seconds": 60 }
+                    },
+                    "payload": {
+                        "kind": "agent_turn",
+                        "config": { "message": "Do not leave this queued" }
+                    }
+                }),
+            ))
+            .await
+            .expect("create unavailable automation");
+        assert_eq!(created.status(), StatusCode::CREATED);
+        let created = response_json(created).await;
+        let automation_id = created["id"].as_str().expect("automation id");
+        let response = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                &format!("/api/v1/projects/local-project/cron-jobs/{automation_id}/run"),
+                "automation-run-unavailable-secret",
+                json!({
+                    "contract_version": 2,
+                    "expected_revision": 1,
+                    "idempotency_key": "run-unavailable"
+                }),
+            ))
+            .await
+            .expect("unavailable run response");
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            response_json(response).await["code"],
+            "durable_automation_execution_unavailable"
+        );
+
         let history = app
             .oneshot(authenticated_json_request(
                 "GET",
                 &format!(
                     "/api/v1/projects/local-project/cron-jobs/{automation_id}/runs?limit=50&offset=0"
                 ),
-                "automation-run-v2-secret",
+                "automation-run-unavailable-secret",
                 json!({}),
             ))
             .await
-            .expect("list durable automation runs");
+            .expect("unavailable run history");
         assert_eq!(history.status(), StatusCode::OK);
-        let history = response_json(history).await;
-        assert_eq!(history["total"], 1);
-        assert_eq!(history["items"][0]["id"], accepted["run_id"]);
-        assert_eq!(history["items"][0]["status"], "queued");
+        assert_eq!(response_json(history).await["total"], 0);
+    }
+
+    #[tokio::test]
+    async fn local_automation_never_selects_the_first_workspace_for_an_unscoped_job() {
+        let state = test_state("automation-unscoped-secret");
+        state
+            .session_store
+            .insert_workspace(&json!({
+                "id": "workspace-that-must-not-be-selected",
+                "tenant_id": "local",
+                "project_id": "local-project",
+                "name": "Must not be selected",
+                "description": null,
+                "status": "active",
+                "created_at": now_iso(),
+                "updated_at": now_iso(),
+            }))
+            .expect("insert alternative workspace");
+        state
+            .start_automation_worker_with_config(test_automation_worker_config())
+            .expect("start automation worker");
+        let app = local_router(Arc::clone(&state));
+        let created = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/projects/local-project/cron-jobs",
+                "automation-unscoped-secret",
+                json!({
+                    "idempotency_key": "create-unscoped-job",
+                    "name": "Unscoped job",
+                    "enabled": true,
+                    "schedule": {
+                        "kind": "every",
+                        "config": { "interval_seconds": 60 }
+                    },
+                    "payload": {
+                        "kind": "agent_turn",
+                        "config": { "message": "Must not choose a workspace implicitly" }
+                    }
+                }),
+            ))
+            .await
+            .expect("create unscoped automation");
+        assert_eq!(created.status(), StatusCode::CREATED);
+        let created = response_json(created).await;
+        let automation_id = created["id"].as_str().expect("automation id");
+
+        let response = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                &format!("/api/v1/projects/local-project/cron-jobs/{automation_id}/run"),
+                "automation-unscoped-secret",
+                json!({
+                    "contract_version": 2,
+                    "expected_revision": 1,
+                    "idempotency_key": "run-unscoped"
+                }),
+            ))
+            .await
+            .expect("unscoped run response");
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(
-            history["items"][0]["result_summary"]["reason_code"],
-            "local_automation_execution_runtime_unavailable"
+            response_json(response).await["code"],
+            "local_automation_workspace_required"
         );
+
+        let history = app
+            .oneshot(authenticated_json_request(
+                "GET",
+                &format!(
+                    "/api/v1/projects/local-project/cron-jobs/{automation_id}/runs?limit=50&offset=0"
+                ),
+                "automation-unscoped-secret",
+                json!({}),
+            ))
+            .await
+            .expect("unscoped run history");
+        assert_eq!(history.status(), StatusCode::OK);
+        assert_eq!(response_json(history).await["total"], 0);
+        state.stop_automation_worker().await;
     }
 
     #[tokio::test]

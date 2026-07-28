@@ -65,6 +65,36 @@ test('the narrow automation API preserves the versioned capability authority', a
   assert.deepEqual(await api.getAutomationCapabilities(), envelope);
 });
 
+test('local automation creation binds the job to the selected workspace explicitly', async () => {
+  const calls = [];
+  const baseApi = {
+    createAutomation: async (input, projectId) => {
+      calls.push({ input, projectId });
+      return { ...input, id: 'automation-1', project_id: projectId };
+    },
+  };
+  const api = createDesktopAutomationApi(baseApi, {
+    ...DEFAULT_CONFIG,
+    mode: 'local',
+    projectId: 'project-1',
+    workspaceId: 'workspace-1',
+  });
+
+  await api.createAutomation(
+    {
+      idempotency_key: 'create-1',
+      name: 'Scoped automation',
+      schedule: { kind: 'every', config: { interval_seconds: 60 } },
+      payload: { kind: 'agent_turn', config: { message: 'Run it' } },
+    },
+    'project-1',
+  );
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].projectId, 'project-1');
+  assert.equal(calls[0].input.workspace_id, 'workspace-1');
+});
+
 test('automation run-now uses the scoped guarded contract without expanding DesktopApiClient', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;

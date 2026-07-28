@@ -13,9 +13,13 @@ use uuid::Uuid;
 
 use super::{
     automation_dispatcher::{self, AutomationLedgerError, ManualRunCommand, SystemAutomationClock},
+    automation_executor,
     automation_store::{self, AutomationStoreError},
     ensure_active_project, now_iso, AuthenticatedContext, LocalJsonResult, LocalRuntimeState,
 };
+use validation::{validate_create, validate_idempotency_key, validate_run, validate_update};
+
+mod validation;
 
 const DEFAULT_PAGE_SIZE: i64 = 50;
 const DEFAULT_TIMEOUT_SECONDS: u64 = 300;
@@ -34,6 +38,11 @@ pub(super) struct ListQuery {
 pub(super) struct RunListQuery {
     limit: Option<i64>,
     offset: Option<i64>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub(super) struct CapabilityQuery {
+    workspace_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -60,6 +69,8 @@ pub(super) struct CreateAutomationRequest {
     delivery: AutomationConfig,
     #[serde(default = "default_conversation_mode")]
     conversation_mode: String,
+    #[serde(default)]
+    workspace_id: Option<String>,
     #[serde(default)]
     conversation_id: Option<String>,
     #[serde(default = "default_timezone")]
@@ -93,6 +104,8 @@ pub(super) struct UpdateAutomationRequest {
     delivery: Option<AutomationConfig>,
     #[serde(default)]
     conversation_mode: Option<String>,
+    #[serde(default)]
+    workspace_id: Option<String>,
     #[serde(default)]
     conversation_id: Option<String>,
     #[serde(default)]
@@ -166,25 +179,46 @@ pub(super) async fn list(
 }
 
 pub(super) async fn capabilities(
+    State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
     Path(project_id): Path<String>,
+    Query(query): Query<CapabilityQuery>,
 ) -> LocalJsonResult {
     ensure_active_project(&authenticated, &project_id)?;
+    let workspace_id = query
+        .workspace_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let durable_execution = workspace_id.is_some_and(|workspace_id| {
+        state.automation_runtime_available_for_workspace(
+            &authenticated.workspace.tenant_id,
+            &project_id,
+            workspace_id,
+        )
+    });
+    let reason_code = if durable_execution {
+        Value::Null
+    } else if workspace_id.is_none() {
+        json!("automation_workspace_scope_unavailable")
+    } else {
+        json!("durable_automation_execution_unavailable")
+    };
     Ok(Json(json!({
         "service_version": LOCAL_AUTOMATION_SERVICE_VERSION,
         "contract_version": LOCAL_AUTOMATION_CONTRACT_VERSION,
-        "schema_version": 1,
+        "schema_version": 2,
         "read": true,
         "revision_guarded": true,
         "idempotency_guarded": true,
-        "durable_execution": false,
+        "durable_execution": durable_execution,
         "supported_read_trigger_kinds": ["manual", "schedule", "event"],
         "create": { "allowed": true },
         "edit": { "allowed": true },
         "toggle": { "allowed": true },
         "run_now": {
-            "allowed": false,
-            "reason_code": "durable_automation_execution_unavailable",
+            "allowed": durable_execution,
+            "reason_code": reason_code,
         },
         "delete": { "allowed": true },
     })))
@@ -214,6 +248,7 @@ pub(super) async fn create(
         "payload": request.payload,
         "delivery": request.delivery,
         "conversation_mode": request.conversation_mode,
+        "workspace_id": request.workspace_id,
         "conversation_id": request.conversation_id,
         "timezone": request.timezone,
         "stagger_seconds": request.stagger_seconds,
@@ -225,6 +260,12 @@ pub(super) async fn create(
         "updated_at": Value::Null,
     });
     let request_hash = request_hash(&request)?;
+    validate_explicit_target_scope(
+        &state,
+        &authenticated.workspace.tenant_id,
+        &project_id,
+        &job,
+    )?;
     let outcome = automation_store::create(
         &state.session_store,
         &authenticated.user.user_id,
@@ -264,7 +305,9 @@ pub(super) async fn update(
     validate_update(&request)?;
     let request_hash = request_hash(&request)?;
     let operation = format!("update:{automation_id}");
-    let schedule_changed = request.schedule.is_some();
+    let schedule_changed = request.schedule.is_some()
+        || request.workspace_id.is_some()
+        || request.conversation_id.is_some();
     let outcome = automation_store::update(
         &state.session_store,
         &authenticated.user.user_id,
@@ -366,168 +409,70 @@ pub(super) async fn run(
     ensure_active_project(&authenticated, &project_id)?;
     validate_run(&request)?;
     let request_hash = request_hash(&request)?;
+    let command = ManualRunCommand {
+        user_id: &authenticated.user.user_id,
+        project_id: &project_id,
+        job_id: &automation_id,
+        expected_revision: request.expected_revision,
+        idempotency_key: request.idempotency_key.trim(),
+        request_hash: &request_hash,
+        conversation_id: request.conversation_id.as_deref(),
+    };
+    if let Some(receipt) =
+        automation_dispatcher::lookup_manual_run_receipt(&state.session_store, command)
+            .map_err(ledger_error)?
+    {
+        return Ok((StatusCode::ACCEPTED, Json(receipt)).into_response());
+    }
+    let job = automation_store::get(&state.session_store, &project_id, &automation_id)
+        .map_err(store_error)?;
+    if let Err(reason_code) = state.validate_automation_execution_authority(
+        &authenticated.workspace.tenant_id,
+        &project_id,
+        &job,
+        request.conversation_id.as_deref(),
+    ) {
+        return Err(error_with_code(
+            StatusCode::SERVICE_UNAVAILABLE,
+            reason_code,
+            "local automation execution authority is unavailable for the requested scope",
+        ));
+    }
     let receipt = automation_dispatcher::enqueue_manual_run(
         &state.session_store,
-        ManualRunCommand {
-            user_id: &authenticated.user.user_id,
-            project_id: &project_id,
-            job_id: &automation_id,
-            expected_revision: request.expected_revision,
-            idempotency_key: request.idempotency_key.trim(),
-            request_hash: &request_hash,
-            conversation_id: request.conversation_id.as_deref(),
-        },
+        command,
         &SystemAutomationClock,
     )
     .map_err(ledger_error)?;
     Ok((StatusCode::ACCEPTED, Json(receipt)).into_response())
 }
 
-fn validate_create(request: &CreateAutomationRequest) -> Result<(), (StatusCode, Json<Value>)> {
-    validate_idempotency_key(&request.idempotency_key)?;
-    validate_name(&request.name)?;
-    validate_config(&request.schedule, &["at", "every", "cron"], "schedule")?;
-    validate_config(&request.payload, &["system_event", "agent_turn"], "payload")?;
-    validate_config(
-        &request.delivery,
-        &["none", "announce", "webhook"],
-        "delivery",
-    )?;
-    validate_conversation_mode(&request.conversation_mode)?;
-    validate_runtime_limits(request.timeout_seconds, request.max_retries)
-}
-
-fn validate_update(request: &UpdateAutomationRequest) -> Result<(), (StatusCode, Json<Value>)> {
-    validate_idempotency_key(&request.idempotency_key)?;
-    if let Some(name) = request.name.as_deref() {
-        validate_name(name)?;
-    }
-    if let Some(schedule) = request.schedule.as_ref() {
-        validate_config(schedule, &["at", "every", "cron"], "schedule")?;
-    }
-    if let Some(payload) = request.payload.as_ref() {
-        validate_config(payload, &["system_event", "agent_turn"], "payload")?;
-    }
-    if let Some(delivery) = request.delivery.as_ref() {
-        validate_config(delivery, &["none", "announce", "webhook"], "delivery")?;
-    }
-    if let Some(mode) = request.conversation_mode.as_deref() {
-        validate_conversation_mode(mode)?;
-    }
-    validate_runtime_limits(
-        request.timeout_seconds.unwrap_or(DEFAULT_TIMEOUT_SECONDS),
-        request.max_retries.unwrap_or_default(),
-    )
-}
-
-fn validate_run(request: &RunAutomationRequest) -> Result<(), (StatusCode, Json<Value>)> {
-    if request.contract_version != AUTOMATION_RUN_CONTRACT_VERSION {
-        return Err(error_with_code(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "automation_contract_version_unsupported",
-            "contract_version must be 2",
-        ));
-    }
-    if request.expected_revision == 0 {
-        return Err(error_with_code(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "automation_expected_revision_invalid",
-            "expected_revision must be a positive integer",
-        ));
-    }
-    validate_run_idempotency_key(&request.idempotency_key)?;
-    if request
-        .conversation_id
-        .as_deref()
-        .is_some_and(|value| value.trim().is_empty())
-    {
-        return Err(error_with_code(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "automation_conversation_id_invalid",
-            "conversation_id must not be empty",
-        ));
-    }
-    Ok(())
-}
-
-fn validate_idempotency_key(value: &str) -> Result<(), (StatusCode, Json<Value>)> {
-    if value.trim().is_empty() || value.len() > 200 {
-        return Err(error(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "idempotency_key must contain between 1 and 200 characters",
-        ));
-    }
-    Ok(())
-}
-
-fn validate_run_idempotency_key(value: &str) -> Result<(), (StatusCode, Json<Value>)> {
-    if value.is_empty()
-        || value.len() > 255
-        || !value
-            .as_bytes()
-            .iter()
-            .all(|byte| (33..=126).contains(byte))
-    {
-        return Err(error_with_code(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "automation_idempotency_key_invalid",
-            "idempotency_key must contain 1 to 255 visible ASCII characters",
-        ));
-    }
-    Ok(())
-}
-
-fn validate_name(value: &str) -> Result<(), (StatusCode, Json<Value>)> {
-    if value.trim().is_empty() || value.len() > 200 {
-        return Err(error(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "name must contain between 1 and 200 characters",
-        ));
-    }
-    Ok(())
-}
-
-fn validate_config(
-    config: &AutomationConfig,
-    allowed: &[&str],
-    field: &str,
+fn validate_explicit_target_scope(
+    state: &LocalRuntimeState,
+    tenant_id: &str,
+    project_id: &str,
+    job: &Value,
 ) -> Result<(), (StatusCode, Json<Value>)> {
-    if !allowed.contains(&config.kind.as_str()) {
-        return Err(error(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            format!("unsupported {field} kind"),
-        ));
+    let has_explicit_target = job
+        .get("workspace_id")
+        .and_then(Value::as_str)
+        .is_some_and(|value| !value.trim().is_empty())
+        || job
+            .get("conversation_id")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.trim().is_empty());
+    if !has_explicit_target {
+        return Ok(());
     }
-    Ok(())
-}
-
-fn validate_conversation_mode(value: &str) -> Result<(), (StatusCode, Json<Value>)> {
-    if !matches!(value, "reuse" | "fresh") {
-        return Err(error(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "conversation_mode must be reuse or fresh",
-        ));
-    }
-    Ok(())
-}
-
-fn validate_runtime_limits(
-    timeout_seconds: u64,
-    max_retries: u64,
-) -> Result<(), (StatusCode, Json<Value>)> {
-    if timeout_seconds == 0 || timeout_seconds > 86_400 {
-        return Err(error(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "timeout_seconds must be between 1 and 86400",
-        ));
-    }
-    if max_retries > 20 {
-        return Err(error(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "max_retries must be less than or equal to 20",
-        ));
-    }
-    Ok(())
+    automation_executor::execution_workspace_id(state, tenant_id, project_id, job, None)
+        .map(|_| ())
+        .map_err(|reason_code| {
+            error_with_code(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                reason_code,
+                "automation execution target is outside the active scope or unavailable",
+            )
+        })
 }
 
 fn apply_update(
@@ -567,6 +512,9 @@ fn apply_update(
     }
     if let Some(value) = request.conversation_mode.as_deref() {
         set_field(job, "conversation_mode", Value::from(value))?;
+    }
+    if let Some(value) = request.workspace_id.as_deref() {
+        set_field(job, "workspace_id", Value::from(value))?;
     }
     if let Some(value) = request.conversation_id.as_deref() {
         set_field(job, "conversation_id", Value::from(value))?;
