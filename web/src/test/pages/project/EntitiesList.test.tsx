@@ -34,6 +34,7 @@ vi.mock('../../../services/graphService', () => ({
 
 vi.mock('react-router-dom', () => ({
   useParams: vi.fn(() => ({ tenantId: 'tenant-route-1', projectId: 'test-project-1' })),
+  useSearchParams: vi.fn(() => [new URLSearchParams(), vi.fn()]),
 }));
 
 vi.mock('react-i18next', () => ({
