@@ -15,12 +15,13 @@ use tokio::{
 use crate::application_vault::ApplicationCredentialVault;
 
 use super::{
-    McpResult, McpServerDefinition, McpSupervisorError, SupervisorLimits, MCP_PROTOCOL_VERSION,
+    remote_common::{
+        credential_reference, elicitation_unavailable, server_request_rejection,
+        unsupported_client_request, InitializedServer,
+    },
+    McpCredentialKind, McpResult, McpScope, McpServerDefinition, McpSupervisorError,
+    SupervisorLimits, MCP_PROTOCOL_VERSION,
 };
-
-pub(super) struct InitializedServer {
-    pub(super) server_info: Value,
-}
 
 struct StdioChild {
     child: Child,
@@ -299,6 +300,24 @@ fn spawn_child(
         .stderr(Stdio::null())
         .kill_on_drop(true);
     for (name, reference) in &server.vault_env_refs {
+        let expected = credential_reference(
+            &McpScope {
+                tenant_id: server.tenant_id.clone(),
+                project_id: server.project_id.clone(),
+            },
+            &server.name,
+            server.transport,
+            &server.command,
+            server.cwd.as_deref(),
+            McpCredentialKind::Env,
+            name,
+        )?;
+        if reference != &expected {
+            return Err(McpSupervisorError::new(
+                "local_mcp_remote_credential_scope_invalid",
+                "MCP credential reference is outside its tenant, project, server, or target scope",
+            ));
+        }
         let value = credential_vault
             .ok_or_else(vault_unavailable)?
             .get(reference)
@@ -361,6 +380,21 @@ async fn read_response(
         let response: Value = serde_json::from_slice(&line).map_err(|_| malformed_response())?;
         if response.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
             return Err(malformed_response());
+        }
+        if let Some((rejection, elicitation)) = server_request_rejection(&response)? {
+            let mut encoded = serde_json::to_vec(&rejection).map_err(|_| malformed_response())?;
+            encoded.push(b'\n');
+            child
+                .stdin
+                .write_all(&encoded)
+                .await
+                .map_err(|_| process_exited())?;
+            child.stdin.flush().await.map_err(|_| process_exited())?;
+            return Err(if elicitation {
+                elicitation_unavailable()
+            } else {
+                unsupported_client_request()
+            });
         }
         let Some(response_id) = response.get("id").and_then(Value::as_u64) else {
             continue;

@@ -143,6 +143,11 @@ fn test_limits() -> SupervisorLimits {
         retry_max: Duration::from_millis(20),
         max_request_bytes: 128 * 1024,
         max_response_bytes: 256 * 1024,
+        max_frame_bytes: 256 * 1024,
+        max_aggregate_bytes: 512 * 1024,
+        tool_call_lease_duration: Duration::from_secs(4),
+        tool_call_wait_timeout: Duration::from_millis(500),
+        tool_call_poll_interval: Duration::from_millis(10),
     }
 }
 
@@ -192,7 +197,7 @@ async fn stdio_supervisor_round_trips_and_recovers_from_persisted_definitions() 
                 &server_id,
                 "echo",
                 json!({"message": "hello"}),
-                Some("call-echo-once"),
+                "call-echo-once",
             )
             .await
             .expect("call MCP tool");
@@ -204,7 +209,7 @@ async fn stdio_supervisor_round_trips_and_recovers_from_persisted_definitions() 
                 &server_id,
                 "echo",
                 json!({"message": "hello"}),
-                Some("call-echo-once"),
+                "call-echo-once",
             )
             .await
             .expect("replay MCP tool call");
@@ -242,7 +247,7 @@ async fn stdio_supervisor_round_trips_and_recovers_from_persisted_definitions() 
                 &server_id,
                 "echo",
                 json!({"after": "restart"}),
-                None,
+                "call-echo-after-restart",
             )
             .await
             .expect("call after restart");
@@ -264,8 +269,8 @@ async fn stdio_supervisor_fails_closed_for_timeout_crash_malformed_and_conflicti
             root.clone(),
             None,
             SupervisorLimits {
-                initialize_timeout: Duration::from_millis(300),
-                request_timeout: Duration::from_millis(300),
+                initialize_timeout: Duration::from_secs(1),
+                request_timeout: Duration::from_secs(1),
                 retry_base: Duration::from_millis(500),
                 retry_max: Duration::from_millis(500),
                 ..test_limits()
@@ -343,7 +348,7 @@ async fn stdio_supervisor_fails_closed_for_timeout_crash_malformed_and_conflicti
             &healthy.id,
             "echo",
             json!({"value": 1}),
-            Some("same-key"),
+            "same-key",
         )
         .await
         .expect("initial idempotent call");
@@ -353,31 +358,28 @@ async fn stdio_supervisor_fails_closed_for_timeout_crash_malformed_and_conflicti
             &healthy.id,
             "echo",
             json!({"value": 2}),
-            Some("same-key"),
+            "same-key",
         )
         .await
         .expect_err("conflicting idempotency replay");
     assert_eq!(conflict.reason_code(), "local_mcp_idempotency_conflict");
 
-    let unsupported = supervisor.create_server(
-        &active_scope,
-        McpServerDefinitionInput {
-            name: "remote".to_string(),
-            description: None,
-            transport: McpTransport::Http,
-            command: vec!["https://example.invalid/mcp".to_string()],
-            cwd: None,
-            vault_env_refs: BTreeMap::new(),
-            enabled: true,
-        },
-        "create-remote",
-    );
-    assert_eq!(
-        unsupported
-            .expect_err("HTTP remains explicit unavailable")
-            .reason_code(),
-        "local_mcp_http_transport_unavailable"
-    );
+    let remote = supervisor
+        .create_server(
+            &active_scope,
+            McpServerDefinitionInput {
+                name: "remote".to_string(),
+                description: None,
+                transport: McpTransport::Http,
+                command: vec!["https://example.invalid/mcp".to_string()],
+                cwd: None,
+                vault_env_refs: BTreeMap::new(),
+                enabled: true,
+            },
+            "create-remote",
+        )
+        .expect("HTTP definition is accepted before runtime resolution");
+    assert_eq!(remote.runtime_status, "stopped");
 
     fs::remove_dir_all(root).expect("remove MCP failure test root");
 }

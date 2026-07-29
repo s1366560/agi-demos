@@ -82,6 +82,8 @@ mod composer_context;
 mod local_route_parity_tests;
 #[cfg(test)]
 mod managed_resource_tests;
+#[cfg(test)]
+mod mcp_remote_transport_tests;
 mod mcp_supervisor;
 #[cfg(test)]
 mod mcp_supervisor_tests;
@@ -182,28 +184,30 @@ impl LocalRuntimeService {
             .mcp_supervisor
             .install_credential_vault(mcp_credential_vault)
             .map_err(|error| error.to_string())?;
+        state
+            .mcp_supervisor
+            .prepare_startup_recovery()
+            .map_err(|error| error.to_string())?;
         state.reconcile_recovered_runs_from_checkpoints().await?;
         state.start_automation_worker_with_config(
             automation_worker::AutomationWorkerConfig::local_default(),
         )?;
-        state
-            .mcp_supervisor
-            .recover_all_enabled()
-            .await
-            .map_err(|error| error.to_string())?;
-
         let app = local_router(Arc::clone(&state));
         let listener = TcpListener::bind(("127.0.0.1", 0))
             .await
             .map_err(|error| error.to_string())?;
         let addr = listener.local_addr().map_err(|error| error.to_string())?;
         let api_base_url = format!("http://{addr}");
+        state
+            .mcp_supervisor
+            .recover_all_enabled()
+            .await
+            .map_err(|error| error.to_string())?;
         tokio::spawn(async move {
             if let Err(error) = axum::serve(listener, app).await {
                 eprintln!("agistack local runtime stopped: {error}");
             }
         });
-
         Ok(Self {
             state,
             api_base_url,

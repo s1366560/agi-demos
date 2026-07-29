@@ -47,6 +47,11 @@ export const settingsSectionMeta = {
     description: 'settings.modelsDescription',
     Icon: CubeIcon,
   },
+  mcp: {
+    label: 'settings.mcp',
+    description: 'settings.mcpDescription',
+    Icon: ComponentInstanceIcon,
+  },
   skills: {
     label: 'settings.skills',
     description: 'settings.skillsDescription',

@@ -23,6 +23,7 @@ import {
   safeMCPAppExternalUrl,
 } from './mcpAppHostBridge';
 import type { MCPAppCanvasState, MCPAppCanvasTab } from './mcpAppCanvasEventModel';
+import { createMcpAppHostClient } from './mcpAppsClient';
 import './DesktopMCPAppCanvas.css';
 
 const LazyAppRenderer = React.lazy(async () => {
@@ -110,6 +111,7 @@ export function DesktopMCPAppCanvas({
   onClose,
 }: DesktopMCPAppCanvasProps) {
   const { t } = useI18n();
+  const mcpAppsClient = useMemo(() => createMcpAppHostClient(api), [api]);
   const active =
     state.tabs.find((candidate) => candidate.id === state.activeTabId) ??
     state.tabs[state.tabs.length - 1];
@@ -129,16 +131,16 @@ export function DesktopMCPAppCanvas({
     [active?.appId, active?.serverName, active?.toolName, projectId],
   );
   const handleCallTool = useCallback<NonNullable<AppRendererProps['onCallTool']>>(
-    async (params) => callMCPAppTool(api, hostContext, params),
-    [api, hostContext],
+    async (params) => callMCPAppTool(mcpAppsClient, hostContext, params),
+    [hostContext, mcpAppsClient],
   );
   const handleReadResource = useCallback<NonNullable<AppRendererProps['onReadResource']>>(
-    async ({ uri }) => readMCPAppResource(api, hostContext, uri),
-    [api, hostContext],
+    async ({ uri }) => readMCPAppResource(mcpAppsClient, hostContext, uri),
+    [hostContext, mcpAppsClient],
   );
   const handleListResources = useCallback<NonNullable<AppRendererProps['onListResources']>>(
-    async () => listMCPAppResources(api, hostContext),
-    [api, hostContext],
+    async () => listMCPAppResources(mcpAppsClient, hostContext),
+    [hostContext, mcpAppsClient],
   );
   const handleMessage = useCallback<NonNullable<AppRendererProps['onMessage']>>(
     async (params) => {

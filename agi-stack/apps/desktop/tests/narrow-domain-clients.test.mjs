@@ -10,6 +10,7 @@ const {
   createManagedResourcesClient,
 } = require('/tmp/agistack-desktop-test-dist/src/features/settings/managedResourcesClient.js');
 const {
+  createMcpAppHostClient,
   createMcpAppsClient,
 } = require('/tmp/agistack-desktop-test-dist/src/features/chat/mcpAppsClient.js');
 const {
@@ -80,10 +81,18 @@ test('narrow domain clients expose only their contract and preserve authority ca
     'readResource',
   ]);
   await mcp.listApps('project-1');
+  const host = createMcpAppHostClient({
+    callMCPAppTool: async (...args) => {
+      calls.push(['mcp.host.call', ...args]);
+      return { content: [], is_error: false };
+    },
+  });
+  assert.deepEqual(Object.keys(host), ['callMCPAppTool']);
+  await host.callMCPAppTool('app-1', 'render', {}, 'desktop-mcp-tool-call:narrow-1');
 
   assert.deepEqual(
     calls.map(([name]) => name),
-    ['managed.list', 'mcp.list'],
+    ['managed.list', 'mcp.list', 'mcp.host.call'],
   );
 });
 

@@ -62,6 +62,29 @@ async def _allow_project_access(*_args: Any, **_kwargs: Any) -> None:
 
 
 @pytest.mark.unit
+async def test_direct_cloud_tool_call_fails_closed_for_idempotency_key() -> None:
+    body = apps_router.MCPDirectToolCallRequest(
+        project_id="project-1",
+        server_name="server-1",
+        tool_name="visible-tool",
+        arguments={},
+        idempotency_key="desktop-mcp-tool-call:cloud-1",
+    )
+
+    response = await apps_router.proxy_tool_call_direct(
+        request=SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace())),
+        body=body,
+        db=SimpleNamespace(),
+        tenant_id="tenant-1",
+        current_user=SimpleNamespace(id="user-1"),
+    )
+
+    assert response.is_error is True
+    assert response.error_code == -32000
+    assert response.error_message == "cloud_mcp_tool_idempotency_unavailable"
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_proxy_resource_read_sanitizes_mcp_errors(
     monkeypatch: pytest.MonkeyPatch,

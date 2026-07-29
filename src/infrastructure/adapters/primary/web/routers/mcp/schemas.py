@@ -124,6 +124,12 @@ class MCPToolCallRequest(BaseModel):
     server_id: str = Field(..., description="MCP server ID")
     tool_name: str = Field(..., description="Tool name to call")
     arguments: dict[str, Any] = Field(default_factory=dict, description="Tool arguments")
+    idempotency_key: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=256,
+        description="Replay-safe key when durable idempotency is enabled",
+    )
 
 
 class MCPToolCallResponse(BaseModel):
@@ -210,6 +216,12 @@ class MCPAppToolCallRequest(BaseModel):
 
     tool_name: str = Field(..., description="Name of the MCP tool to call")
     arguments: dict[str, Any] = Field(default_factory=dict, description="Tool call arguments")
+    idempotency_key: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=256,
+        description="Replay-safe key when durable idempotency is enabled",
+    )
 
 
 class MCPAppToolCallResponse(BaseModel):
