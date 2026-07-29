@@ -564,19 +564,24 @@
 
 .session-context-section dl {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px 8px;
+  gap: 6px;
   margin: 0;
 }
 
-.session-context-section dl > div { min-width: 0; }
-.session-context-section dl > div.wide { grid-column: 1 / -1; }
+.session-context-section dl > div {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
 .session-context-section dt { color: var(--desktop-faint); font-size: 8px; }
 .session-context-section dd {
   overflow: hidden;
-  margin: 3px 0 0;
+  margin: 0;
   color: var(--desktop-text-pale);
   font-size: 9px;
+  text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
