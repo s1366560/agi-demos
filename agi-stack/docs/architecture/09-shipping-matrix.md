@@ -70,7 +70,10 @@ crate,**绝不泄漏回核心或端口签名**;wasm 路径用 `WasmClock` + 内�
 
 - **iOS 真机签名分发**:本轮在模拟器实跑;真机需开发者证书 + provisioning + TestFlight/App Store。
 - **CI 固化交叉编译**:Android `.so`/Kotlin 与 iOS XCFramework/Swift artifact jobs 已接入;UniFFI 绑定 microbenchmarks 已纳入 `make bench`;签名分发与 `cargo-component`(完整 Component Model guest)仍待补。
-- **桌面发布补齐**:`make desktop-bundle`、`make desktop-bundle-smoke` 与 macOS CI bundle artifact 已接入;真实安装/启动 smoke、自动更新通道、平台 entitlements 与 Windows/Linux 分发仍待补。
+- **桌面发布证明**:`desktop-release.yml` 已接入 parity preflight、macOS universal
+  签名/公证/stapler/`spctl`、Windows 安装包与 sidecar Authenticode、Linux AppImage/deb
+  解包 smoke、三平台 updater 元数据校验和不可变 release evidence；生产分发状态仍必须由
+  获得授权的真实 `v0.1.0` tag CI 产物证明，本地 bundle smoke 不替代该证据。
 - **Web 持久层**:IndexedDB snapshot host store 已接 `bindings-wasm`;deterministic smoke 已覆盖 reload-style restore、missing-store upgrade 与 offline/open failure;真实浏览器 reload/offline/upgrade e2e 与 wa-sqlite 评估仍待补。
 - **生产重型适配器**:Postgres+pgvector、端上 llama.cpp/Candle 大模型(数百 MB)。
 - **Python 后端逐能力绞杀替换**:按 [05 §1](05-roadmap.md) 绞杀者式增量迁移,新旧并行多季度。

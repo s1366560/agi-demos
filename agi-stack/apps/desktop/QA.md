@@ -1,5 +1,47 @@
 # Desktop QA Log
 
+## Desktop/Web parity completion audit: 2026-07-29
+
+- The implementation baseline is parity merge `1fb5636ae76eaebbccca9b3c236dfc403ed7d154`;
+  current validation ran from `main@7503434b42bf6e62c110ba9603466c66985fb625`.
+- Wave A is implemented: xterm input/resize/output, scoped Terminal Session V2 resume, canonical
+  session-lost handling, credential-free KasmVNC framing with reconnect/fullscreen/Escape, and
+  bounded project-scoped sandbox file list/read/download.
+- Wave B is implemented: local Search, managed Skills/Plugins/Agents/SubAgents, MCP App supervisor
+  routes, and durable Automations with leases, fencing, restart recovery, HITL continuation,
+  replay-safe Run Now receipts, and persisted run history. The client/router parity test reports
+  no declared local route difference; operations without local authority remain structured
+  unavailable by contract.
+- Wave C is implemented: the Workspace Collaboration canvas exposes Goals/Tasks, Discussion,
+  Status, Collaboration, Members, Genes, Files, Notes, Topology, and Settings. A2UI v0.8 supports
+  begin/update/data/delete with the complete 17-component Desktop registry and persisted action
+  allow-list. HITL answer claims, already-answered recovery, reconnect/cursor-gap refetch, expiry,
+  and secret-redacted history are authority-backed.
+- Wave D is implemented: cloud and local Artifact content use revision/hash/idempotency authority;
+  the canvas preserves drafts on conflicts and supports authenticated HTML, PDF, image, audio,
+  video, sanitized SVG, DOCX, and XLSX previews with legacy/unsupported download fallback.
+- `make -C agi-stack desktop-check` passed at the current HEAD: Rust sidecar 319/319, Desktop
+  1359/1359 with real-sidecar coverage and no skips, and Electron main/preload/renderer type-check
+  plus production build.
+- `make -C agi-stack desktop-browser-qa` passed 417/417 Playwright checks: 416 matrix variants
+  generated from 39 QA fixtures across `en-US`/`zh-CN`, `1440x1024`/`1100x800`, and light/dark,
+  plus the matrix inventory guard. Stateful A2UI, HITL, Workspace Collaboration, Sandbox, and
+  Artifact preview variants are included where applicable.
+- Native Electron launched only through `make -C agi-stack run-desktop`; Computer Use verified the
+  restored trusted cloud session, My Work, Automations, Search, Settings, the allow-listed resource
+  sections, and structured fail-closed capability states without changing vault contents. This run
+  exposed missing cloud Search capability version fields in both Python and Rust authorities;
+  `7503434b4` adds the required `service_version` and `contract_version` with focused tests. The
+  already-running non-reloading API continued serving the old contract, so the positive native
+  Search state must be rechecked after the next supported backend restart.
+- The tag release implementation is complete and fail-closed: parity preflight, macOS universal
+  signing/notarization/stapler/`spctl`, Windows installer and sidecar Authenticode, Linux
+  AppImage/deb extraction checks, exact updater metadata validation, and immutable per-platform
+  release evidence. Production release verification remains pending a real authorized `v0.1.0`
+  tag CI run; no local build can satisfy that evidence row.
+- The worktree also contains pre-existing concurrent Sidebar/Session/Workspace/ResizeHandle edits.
+  They are not parity-completion evidence and are intentionally excluded from this audit commit.
+
 ## Desktop/Web parity contract baseline: 2026-07-28
 
 - The machine-readable contract lives in
@@ -46,10 +88,10 @@
   The sidecar now filters before pagination. A mixed bound/unbound Rust regression test passes, and
   the restarted native shell shows the authoritative empty unbound-task state while retaining the
   three bound workspace sessions.
-- This pass does not claim complete parity for interactive terminal/VNC/file browsing, the complete
-  Workspace Collaboration canvas, full A2UI surfaces, every local managed-resource/MCP App route,
-  or cloud-to-local automation execution. Those entries remain unavailable or require later
-  contract-backed implementation.
+- At this 2026-07-28 checkpoint, interactive terminal/VNC/file browsing, the complete Workspace
+  Collaboration canvas, full A2UI surfaces, every local managed-resource/MCP App route, and
+  cloud-to-local automation execution were not yet claimed. The 2026-07-29 completion audit above
+  supersedes that implementation status while preserving this entry as historical evidence.
 
 ## Validation history: 2026-07-09 through 2026-07-23
 

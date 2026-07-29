@@ -35,7 +35,7 @@ test('versioned parity manifest pins the audited reference revisions and case st
   );
   assert.equal(
     manifest.references.desktop_revision,
-    '9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47',
+    '1fb5636ae76eaebbccca9b3c236dfc403ed7d154',
   );
   assert.deepEqual(
     manifest.cases
