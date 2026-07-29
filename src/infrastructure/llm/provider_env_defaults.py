@@ -175,7 +175,7 @@ _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
         llm_model=_EnvField(("DEEPSEEK_MODEL",), "deepseek-chat"),
         llm_small_model=_EnvField(("DEEPSEEK_SMALL_MODEL",), "deepseek-v4-flash"),
         reranker_model=_EnvField(("DEEPSEEK_RERANK_MODEL",), "deepseek-chat"),
-        base_url=_EnvField(("DEEPSEEK_BASE_URL",), "https://api.deepseek.com"),
+        base_url=_EnvField(("DEEPSEEK_BASE_URL",), "https://api.deepseek.com/v1"),
     ),
     ProviderType.MINIMAX: _ProviderEnvProfile(
         api_key=_EnvField(("MINIMAX_API_KEY",)),
@@ -183,7 +183,7 @@ _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
         llm_small_model=_EnvField(("MINIMAX_SMALL_MODEL",), "MiniMax-M2.5-highspeed"),
         embedding_model=_EnvField(("MINIMAX_EMBEDDING_MODEL",), "embo-01"),
         reranker_model=_EnvField(("MINIMAX_RERANK_MODEL",), "MiniMax-M2.5-highspeed"),
-        base_url=_EnvField(("MINIMAX_BASE_URL",), "https://api.minimax.io/anthropic/v1"),
+        base_url=_EnvField(("MINIMAX_BASE_URL",), "https://api.minimax.io/v1"),
     ),
     ProviderType.MINIMAX_CODING: _ProviderEnvProfile(
         api_key=_EnvField(("MINIMAX_API_KEY",)),
@@ -196,7 +196,7 @@ _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
         reranker_model=_EnvField(("MINIMAX_RERANK_MODEL",), "MiniMax-M2.5-highspeed"),
         base_url=_EnvField(
             ("MINIMAX_CODING_BASE_URL", "MINIMAX_BASE_URL"),
-            "https://api.minimax.io/anthropic/v1",
+            "https://api.minimax.io/v1",
         ),
     ),
     ProviderType.MINIMAX_EMBEDDING: _ProviderEnvProfile(

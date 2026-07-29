@@ -280,7 +280,7 @@ def _env_deepseek() -> dict[str, Any]:
         "llm_model": os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
         "llm_small_model": os.getenv("DEEPSEEK_SMALL_MODEL", "deepseek-v4-flash"),
         "reranker_model": os.getenv("DEEPSEEK_RERANK_MODEL"),
-        "base_url": os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+        "base_url": os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
     }
 
 
@@ -291,7 +291,7 @@ def _env_minimax() -> dict[str, Any]:
         "llm_small_model": os.getenv("MINIMAX_SMALL_MODEL", "MiniMax-M2.5-highspeed"),
         "embedding_model": os.getenv("MINIMAX_EMBEDDING_MODEL", "embo-01"),
         "reranker_model": os.getenv("MINIMAX_RERANK_MODEL"),
-        "base_url": os.getenv("MINIMAX_BASE_URL", "https://api.minimax.io/anthropic/v1"),
+        "base_url": os.getenv("MINIMAX_BASE_URL", "https://api.minimax.io/v1"),
     }
 
 

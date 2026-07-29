@@ -231,7 +231,7 @@ def test_resolve_provider_env_defaults_supports_deepseek(
     assert defaults.llm_model == "deepseek-reasoner"
     assert defaults.llm_model_source == "DEEPSEEK_MODEL"
     assert defaults.llm_small_model == "deepseek-v4-flash"
-    assert defaults.base_url == "https://api.deepseek.com"
+    assert defaults.base_url == "https://api.deepseek.com/v1"
     assert defaults.api_key_env_vars == ("DEEPSEEK_API_KEY",)
 
 
@@ -278,7 +278,7 @@ def test_resolve_provider_env_defaults_uses_models_dev_api_bases(
     defaults = resolve_provider_env_defaults(ProviderType.MINIMAX)
 
     assert defaults.api_key == "minimax-key"
-    assert defaults.base_url == "https://api.minimax.io/anthropic/v1"
+    assert defaults.base_url == "https://api.minimax.io/v1"
 
 
 def test_resolve_provider_env_defaults_handles_unprofiled_provider() -> None:

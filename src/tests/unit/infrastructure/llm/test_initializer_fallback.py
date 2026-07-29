@@ -70,7 +70,7 @@ def test_build_provider_configs_supports_deepseek_bootstrap(monkeypatch):
     assert configs[0].operation_type == OperationType.LLM
     assert configs[0].llm_model == "deepseek-chat"
     assert configs[0].llm_small_model == "deepseek-v4-flash"
-    assert configs[0].base_url == "https://api.deepseek.com"
+    assert configs[0].base_url == "https://api.deepseek.com/v1"
     assert configs[0].pool_enabled is True
 
 
