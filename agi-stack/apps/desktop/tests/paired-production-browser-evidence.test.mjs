@@ -489,7 +489,7 @@ test("paired Browser observation produces a standalone evidence run with pending
     },
     toolchain: {
       node: "v22",
-      web_pnpm: "10.24.0",
+      web_pnpm: "11.15.1",
       desktop_pnpm: "11.15.1",
       vite_web: "7.3.6",
       electron_vite: "5.0.0",

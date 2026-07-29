@@ -210,7 +210,7 @@ function createReceiptFixture(t, sourceRevision = "a".repeat(40)) {
     },
     toolchain: {
       node: "v22.0.0",
-      web_pnpm: "10.24.0",
+      web_pnpm: "11.15.1",
       desktop_pnpm: "11.15.1",
       vite_web: "7.3.0",
       electron_vite: "5.0.0",
@@ -247,7 +247,7 @@ test("paired receipt binds source, canonical roots, and live output bytes", (t) 
     receipt.outputs.desktop_renderer.preview_out_dir,
     "out/renderer",
   );
-  assert.equal(receipt.toolchain.web_pnpm, "10.24.0");
+  assert.equal(receipt.toolchain.web_pnpm, "11.15.1");
   assert.equal(receipt.toolchain.desktop_pnpm, "11.15.1");
   assert.deepEqual(validateJsonSchema(attestationSchema, receipt), []);
   assert.deepEqual(

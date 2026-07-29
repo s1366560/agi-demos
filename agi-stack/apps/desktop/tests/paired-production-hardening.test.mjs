@@ -7,6 +7,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,7 +19,10 @@ import {
   computeRendererTreeDigest,
   validatePairedRendererBuildReceipt,
 } from "../browser-qa/production-renderer-build-attestation.mjs";
-import { runPairedProductionGuarded } from "../browser-qa/run-paired-production.mjs";
+import {
+  runPairedProductionGuarded,
+  runPinnedPnpmBuild,
+} from "../browser-qa/run-paired-production.mjs";
 import { decodePlaywrightPng } from "../contracts/desktop-web-parity/paired-evidence-packet-validator.mjs";
 
 const repositoryRoot = new URL("../../../../", import.meta.url);
@@ -172,6 +176,20 @@ test("qa:paired-production is the single build-and-browser orchestration entry",
   assert.match(pairedRunnerSource, /AGISTACK_PAIRED_INVOCATION_NONCE/u);
 });
 
+test("paired production rejects an unhashed package-manager declaration", (t) => {
+  const packageRoot = mkdtempSync(join(tmpdir(), "paired-pnpm-pin-"));
+  t.after(() => rmSync(packageRoot, { recursive: true, force: true }));
+  writeFileSync(
+    join(packageRoot, "package.json"),
+    `${JSON.stringify({ packageManager: "pnpm@11.15.1" })}\n`,
+  );
+
+  assert.throws(
+    () => runPinnedPnpmBuild(packageRoot, "build"),
+    /integrity-qualified pnpm packageManager declaration/u,
+  );
+});
+
 test("renderer receipt binds distinct build intervals, commands, roots, locks, and nonce", (t) => {
   const fixtureRoot = mkdtempSync(join(tmpdir(), "paired-receipt-"));
   t.after(() => rmSync(fixtureRoot, { recursive: true, force: true }));
@@ -217,7 +235,7 @@ test("renderer receipt binds distinct build intervals, commands, roots, locks, a
     },
     toolchain: {
       node: "v22.0.0",
-      web_pnpm: "10.24.0",
+      web_pnpm: "11.15.1",
       desktop_pnpm: "11.15.1",
       vite_web: "7.3.0",
       electron_vite: "5.0.0",

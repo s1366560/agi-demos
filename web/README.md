@@ -19,8 +19,8 @@ Additional web docs start at [web/docs/README.md](docs/README.md).
 | Visualization | Cytoscape, Chart.js, Mermaid, KaTeX, Three.js/react-three-fiber |
 | Tests | Vitest, Testing Library, Playwright |
 
-Vite 7 requires Node `^20.19.0 || >=22.12.0`. Dependencies are managed with pnpm; the
-package declares `pnpm@10.24.0`.
+Vite 7 requires Node `^20.19.0 || >=22.12.0`; CI standardizes on Node 22. Dependencies are
+managed with the integrity-qualified `pnpm@11.15.1` declaration in `package.json`.
 
 ## Commands
 

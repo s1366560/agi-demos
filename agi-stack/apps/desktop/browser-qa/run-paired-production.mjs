@@ -29,6 +29,8 @@ const WEB_OUTPUT_ROOT = resolve(WEB_ROOT, "dist");
 const DESKTOP_OUTPUT_ROOT = resolve(DESKTOP_ROOT, "out/renderer");
 const PAIRED_RESULT_ROOT = resolve(DESKTOP_ROOT, "browser-qa/paired-results");
 const REVISION_PATTERN = /^[0-9a-f]{40}$/u;
+const PACKAGE_MANAGER_PATTERN =
+  /^pnpm@([^+]+)\+sha512\.[0-9a-f]{128}$/u;
 const RUNNER_PHASES = new Set([
   "preflight",
   "prepare_outputs",
@@ -64,10 +66,16 @@ function packageManagerVersion(packageRoot) {
     readFileSync(resolve(packageRoot, "package.json"), "utf8"),
   );
   const declaration = packageJson.packageManager;
-  if (typeof declaration !== "string" || !declaration.startsWith("pnpm@")) {
-    throw new Error(`${packageRoot} must pin pnpm with packageManager`);
+  const match =
+    typeof declaration === "string"
+      ? PACKAGE_MANAGER_PATTERN.exec(declaration)
+      : null;
+  if (match === null) {
+    throw new Error(
+      `${packageRoot} must use an integrity-qualified pnpm packageManager declaration`,
+    );
   }
-  return declaration.replace(/^pnpm@([^+]+)(?:\+.*)?$/u, "$1");
+  return match[1];
 }
 
 function installedPackageVersion(packageRoot, packageName) {

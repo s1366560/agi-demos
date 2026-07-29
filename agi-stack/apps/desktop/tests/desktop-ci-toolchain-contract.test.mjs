@@ -6,6 +6,14 @@ import test from "node:test";
 import { parse, parseAllDocuments } from "yaml";
 
 const PNPM_VERSION = "11.15.1";
+const PNPM_INTEGRITY =
+  "81350b07e53c9538a02f1f2303b4290fa2d7be04e56e2a970c4cc4b417dc761de196edabd49d55c7dc9580db81007c44143e4e3d7e462b3000d23c255122d065";
+const PACKAGE_MANAGER_DECLARATION =
+  `pnpm@${PNPM_VERSION}+sha512.${PNPM_INTEGRITY}`;
+const PNPM_SETUP_ACTION =
+  "pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320";
+const NODE_SETUP_ACTION =
+  "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020";
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const desktopRoot = fileURLToPath(new URL("..", import.meta.url));
 
@@ -15,9 +23,11 @@ const readDesktopFile = (path) =>
   readFileSync(new URL(path, `file://${desktopRoot}/`), "utf8");
 
 const ciWorkflow = parse(readRepositoryFile(".github/workflows/ci.yml"));
+const e2eWorkflow = parse(readRepositoryFile(".github/workflows/e2e.yml"));
 const releaseWorkflow = parse(
   readRepositoryFile(".github/workflows/desktop-release.yml"),
 );
+const webPackage = JSON.parse(readRepositoryFile("web/package.json"));
 const desktopPackage = JSON.parse(readDesktopFile("package.json"));
 const desktopWorkspace = parse(readDesktopFile("pnpm-workspace.yaml"));
 const desktopLockDocuments = parseAllDocuments(
@@ -30,6 +40,25 @@ const makefile = readRepositoryFile("agi-stack/Makefile");
 
 const pnpmSetupSteps = (job) =>
   job.steps.filter((step) => step.uses?.startsWith("pnpm/action-setup@"));
+const nodeSetupSteps = (job) =>
+  job.steps.filter((step) => step.uses?.startsWith("actions/setup-node@"));
+
+const assertFrontendToolchain = (job) => {
+  assert.deepEqual(
+    pnpmSetupSteps(job).map((step) => ({
+      uses: step.uses,
+      version: step.with.version,
+    })),
+    [{ uses: PNPM_SETUP_ACTION, version: PNPM_VERSION }],
+  );
+  assert.deepEqual(
+    nodeSetupSteps(job).map((step) => ({
+      uses: step.uses,
+      version: step.with["node-version"],
+    })),
+    [{ uses: NODE_SETUP_ACTION, version: "22" }],
+  );
+};
 
 test("ordinary PR CI runs the complete desktop parity gate", () => {
   const webJob = ciWorkflow.jobs.web;
@@ -125,9 +154,11 @@ test("ordinary PR CI runs the complete desktop parity gate", () => {
   assert.equal(uploadEvidence.with["retention-days"], 30);
 });
 
-test("desktop packaging uses one pinned pnpm toolchain and explicit build policy", () => {
-  assert.equal(desktopPackage.packageManager, `pnpm@${PNPM_VERSION}`);
+test("Web, Desktop, CI, E2E, and release use one integrity-pinned pnpm toolchain", () => {
+  assert.equal(webPackage.packageManager, PACKAGE_MANAGER_DECLARATION);
+  assert.equal(desktopPackage.packageManager, PACKAGE_MANAGER_DECLARATION);
   assert.equal(desktopPackage.devEngines.packageManager.version, PNPM_VERSION);
+  assert.equal(desktopPackage.devEngines.packageManager.onFail, "error");
   assert.equal(desktopPackage.pnpm, undefined);
   assert.equal(desktopPackage.devDependencies["electron-builder"], "26.15.3");
   assert.deepEqual(desktopWorkspace.packages, ["."]);
@@ -161,11 +192,10 @@ test("desktop packaging uses one pinned pnpm toolchain and explicit build policy
   );
   assert.match(makefile, /^PNPM\s+\?=\s+corepack pnpm$/mu);
 
-  const desktopCiJob = ciWorkflow.jobs["agi-stack-desktop-bundle"];
-  assert.deepEqual(
-    pnpmSetupSteps(desktopCiJob).map((step) => step.with.version),
-    [PNPM_VERSION],
-  );
+  assertFrontendToolchain(ciWorkflow.jobs.web);
+  assertFrontendToolchain(ciWorkflow.jobs["agi-stack-desktop-bundle"]);
+  assertFrontendToolchain(e2eWorkflow.jobs["web-smoke"]);
+  assertFrontendToolchain(e2eWorkflow.jobs["backend-e2e"]);
 
   const releasePnpmSteps = Object.values(releaseWorkflow.jobs).flatMap(
     pnpmSetupSteps,
@@ -173,6 +203,30 @@ test("desktop packaging uses one pinned pnpm toolchain and explicit build policy
   assert.ok(releasePnpmSteps.length > 0);
   assert.ok(
     releasePnpmSteps.every((step) => step.with.version === PNPM_VERSION),
+  );
+  assert.ok(
+    releasePnpmSteps.every((step) => step.uses === PNPM_SETUP_ACTION),
+  );
+  const releaseNodeSteps = Object.values(releaseWorkflow.jobs).flatMap(
+    nodeSetupSteps,
+  );
+  assert.ok(releaseNodeSteps.length > 0);
+  assert.ok(
+    releaseNodeSteps.every(
+      (step) =>
+        step.uses === NODE_SETUP_ACTION && step.with["node-version"] === "22",
+    ),
+  );
+
+  const activeToolchainContract = JSON.stringify({
+    packages: [webPackage, desktopPackage],
+    ci: ciWorkflow,
+    e2e: e2eWorkflow,
+    release: releaseWorkflow,
+  });
+  assert.doesNotMatch(
+    activeToolchainContract,
+    /pmOnFail["']?\s*[:=]\s*["']?ignore/iu,
   );
 
   const releaseBuilderCommands = releaseWorkflow.jobs.build.steps
