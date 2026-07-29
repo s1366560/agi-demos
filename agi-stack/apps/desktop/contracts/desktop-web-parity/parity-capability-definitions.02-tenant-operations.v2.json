@@ -261,6 +261,24 @@
           "authority": "web_service"
         },
         {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/objectives",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/workspaces/{workspace_id}/plan?outbox_limit=0&event_limit=0&include_details=false&recover_stale_attempts=false",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/workspaces/{workspace_id}/tasks",
+          "authority": "web_service"
+        },
+        {
           "surface": "desktop_cloud",
           "method": "GET",
           "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
@@ -349,17 +367,22 @@
       "actions": [
         "view",
         "list",
-        "create"
+        "inspect-summary",
+        "create",
+        "open-blackboard"
       ],
       "web_actions": [
         "view",
         "list",
-        "create"
+        "inspect-summary",
+        "create",
+        "open-blackboard"
       ],
       "cloud_actions": [
         "view",
         "list",
         "create",
+        "open-blackboard",
         "update",
         "manage-members",
         "bind-agent",
@@ -368,12 +391,13 @@
       "local_actions": [
         "view",
         "list",
-        "create"
+        "create",
+        "open-blackboard"
       ],
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": ["view", "list"],
+          "actions": ["view", "list", "inspect-summary", "open-blackboard"],
           "authentication": "authenticated",
           "authorization": ["workspace_member"],
           "enforcement": "enforced",
@@ -389,7 +413,7 @@
         },
         {
           "surface": "desktop_cloud",
-          "actions": ["view", "list"],
+          "actions": ["view", "list", "open-blackboard"],
           "authentication": "authenticated",
           "authorization": ["workspace_member"],
           "enforcement": "enforced",
@@ -421,7 +445,7 @@
         },
         {
           "surface": "desktop_local",
-          "actions": ["view", "list"],
+          "actions": ["view", "list", "open-blackboard"],
           "authentication": "authenticated",
           "authorization": ["workspace_member"],
           "enforcement": "enforced",
@@ -457,7 +481,7 @@
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceCreateDialog.tsx",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
       ],
-      "judgment_rationale": "Tenant Workspace list and creation share one Web source pair and one scheduling model; settings, member management, and Agent binding are owned by their separately audited production capability rather than inferred from service methods. Cloud Desktop wires list and create through the dock and create dialog, update and Agent binding through the workspace editor role, and member management through the workspace owner role using App, the API client, WorkspaceSettingsDialog, WorkspaceMembersPanel, workspaceMembersModel, WorkspaceAgentBindingsPanel, and workspaceAgentBindingsModel. The authority has no workspace manager role; delete and the complete routed lifecycle remain absent. Local Desktop supports authenticated native list and create while the remaining lifecycle and collaboration mutations are unavailable."
+      "judgment_rationale": "Tenant Workspace list and creation share one Web source pair and one scheduling model. WorkspaceList also opens Blackboard and loads each workspace summary from objectives, then a plan snapshot, then tasks as the fallback. Settings, member management, and Agent binding are owned by their separately audited production capability rather than inferred from service methods. Cloud Desktop wires list and create through the dock and create dialog, opens the native Blackboard, applies update and Agent binding through the workspace editor role, and reserves member management for the workspace owner using App, the API client, WorkspaceSettingsDialog, WorkspaceMembersPanel, workspaceMembersModel, WorkspaceAgentBindingsPanel, and workspaceAgentBindingsModel. The authority has no workspace manager role; delete and the complete routed lifecycle remain absent. Local Desktop supports authenticated native list, create, and Blackboard navigation while the remaining lifecycle and collaboration mutations are unavailable."
     },
     {
       "id": "tenant-tenant-tasks",

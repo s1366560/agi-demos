@@ -108,7 +108,8 @@
       "permissions": [
         "authenticated",
         "tenant_access",
-        "tenant_admin_for_evolution_mutations"
+        "tenant_admin_for_config_and_tenant_run",
+        "tenant_admin_or_project_contributor_for_job_review"
       ],
       "actions": [
         "view",
@@ -148,13 +149,37 @@
           "surface": "web",
           "actions": [
             "configure",
-            "run",
+            "run"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
             "apply-job",
             "reject-job"
           ],
           "authentication": "authenticated",
           "authorization": [
             "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "apply-job",
+            "reject-job"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_contributor"
           ],
           "enforcement": "enforced",
           "feature_gate": null
@@ -174,6 +199,18 @@
         {
           "surface": "desktop_cloud",
           "actions": [
+            "view"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
             "run",
             "apply-job",
             "reject-job"
@@ -181,6 +218,20 @@
           "authentication": "authenticated",
           "authorization": [
             "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "run",
+            "apply-job",
+            "reject-job"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_contributor"
           ],
           "enforcement": "enforced",
           "feature_gate": null
@@ -200,7 +251,7 @@
         "agi-stack/apps/desktop/src/api/managedResourcesClient.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs"
       ],
-      "judgment_rationale": "Cloud Desktop exposes a per-skill evolution dialog with run and review actions but lacks the canonical tenant overview, configuration, and complete routed state matrix. Local Desktop already has a native dialog, client calls, and sidecar route stubs, but the stubs still return the legacy not_applicable state instead of the native-equivalent unavailable or available contract required by this plan."
+      "judgment_rationale": "The Web tenant overview reads evolution status and configuration, while tenant-scoped configuration and runs require tenant administration. Apply and reject use scope-sensitive authorization: tenant-scoped jobs require tenant administration, while the project contributor branch permits owner, admin, and member skill writers and excludes project viewers. Cloud Desktop exposes a per-skill evolution dialog whose project-scoped jobs use that same branch for run and review, but it lacks the canonical tenant overview, configuration, and complete routed state matrix. Local Desktop already has a native dialog, client calls, and sidecar route stubs, but the stubs still return the legacy not_applicable state instead of the native-equivalent unavailable or available contract required by this plan."
     },
     {
       "id": "tenant-tenant-patterns",

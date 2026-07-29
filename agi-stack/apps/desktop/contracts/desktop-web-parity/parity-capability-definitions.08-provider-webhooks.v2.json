@@ -617,11 +617,22 @@
       ],
       "permissions": [
         "authenticated",
-        "tenant_admin"
+        "tenant_admin",
+        "events_feature_for_event_type_catalog"
       ],
       "actions": [
         "view",
         "list",
+        "list-event-types",
+        "create",
+        "update",
+        "delete",
+        "copy-secret"
+      ],
+      "web_actions": [
+        "view",
+        "list",
+        "list-event-types",
         "create",
         "update",
         "delete",
@@ -644,6 +655,18 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "list-event-types"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": "events"
         }
       ],
       "cloud_status": "planned",
@@ -651,7 +674,7 @@
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_webhook_authority_required",
       "local_deviation": "Tenant webhook registration and secret rotation require an addressable Cloud service authority. Local Desktop keeps the native route contract but does not create an unaudited host callback service.",
-      "judgment_rationale": "Webhooks is a registered canonical tenant route backed by the tenant webhook service. Desktop has no audited native management surface; Local automation also declares webhook delivery unavailable, so Local is explicitly cloud-only rather than an external-browser fallback."
+      "judgment_rationale": "Webhooks is a registered canonical tenant route backed by the tenant webhook service. Creation requires an event selected from the event type catalog, and that catalog is served by /events/types behind the events feature gate; a disabled or failed catalog is therefore a structured unavailable or error state for creation rather than an ungated tenant-admin action. Webhook CRUD and secret copy remain tenant-admin operations without that feature gate. Desktop has no audited native management surface; Local automation also declares webhook delivery unavailable, so Local is explicitly cloud-only rather than an external-browser fallback."
     }
   ],
   "source_ownership": {

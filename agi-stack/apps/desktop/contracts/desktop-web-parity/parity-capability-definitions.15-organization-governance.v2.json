@@ -230,8 +230,6 @@
             "navigate-tenant-settings",
             "navigate-members",
             "navigate-clusters",
-            "list-clusters",
-            "inspect-cluster-status",
             "navigate-audit"
           ],
           "authentication": "authenticated",
@@ -239,6 +237,19 @@
             "tenant_member"
           ],
           "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "list-clusters",
+            "inspect-cluster-status"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "missing",
           "feature_gate": null
         },
         {
@@ -282,13 +293,13 @@
         }
       ],
       "web_status": "partial",
-      "web_reason_code": "organization_registry_gene_policy_tenant_authorization_missing",
+      "web_reason_code": "organization_registry_gene_policy_authorization_and_cluster_route_tenant_scope_incomplete",
       "cloud_status": "planned",
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_organization_governance_not_applicable",
       "local_deviation": "Organization membership, registries, SMTP credentials, clusters, audit, and Gene policies require Cloud tenant authority. Local renderer state never stores registry or SMTP secrets.",
-      "judgment_rationale": "OrgSettingsLayout and its information, member, cluster, audit, registry, SMTP, and Gene-policy children form one canonical organization settings area. Organization Info is read-only and links to Tenant Settings. OrgClusters loads the cluster collection, renders health and status summaries, and links to cluster details in addition to navigation. Registry and Gene-policy endpoints currently lack tenant membership and administration enforcement, so the Web surface is degraded even though cluster and SMTP reads require membership and SMTP mutations require administration. Desktop has no native routed implementation, and the multi-user organization authority is not replicated locally."
+      "judgment_rationale": "OrgSettingsLayout and its information, member, cluster, audit, registry, SMTP, and Gene-policy children form one canonical organization settings area. Organization Info is read-only and links to Tenant Settings. Registry and Gene-policy endpoints lack tenant membership and administration enforcement. In addition, OrgClusters calls the unscoped cluster collection while the backend resolves get_current_user_tenant from the user's first membership, so list-clusters and inspect-cluster-status are not enforced against a non-default route tenant. Cluster and SMTP controls, registry controls, and Gene-policy controls remain present, but these authorization and scope defects make Web degraded. Desktop has no native routed implementation, and the multi-user organization authority is not replicated locally."
     },
     {
       "id": "tenant-tenant-settings",

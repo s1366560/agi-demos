@@ -101,12 +101,14 @@
           "feature_gate": null
         }
       ],
+      "web_status": "partial",
+      "web_reason_code": "web_trust_policy_default_workspace_scope_invalid",
       "cloud_status": "planned",
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_trust_governance_not_applicable",
       "local_deviation": "Local execution permissions remain governed by explicit sidecar and Electron capability contracts; they do not create an offline copy of tenant trust policy authority.",
-      "judgment_rationale": "TrustPolicies is the canonical tenant policy administration surface. Existing Desktop permission gates are enforcement consumers, not a policy management implementation; the Cloud route is planned and Local tenant governance is intentionally not applicable."
+      "judgment_rationale": "TrustPolicies is the canonical tenant policy administration surface. Web is degraded because an empty workspace filter is serialized as workspace_id 'default', while the backend requires a real WorkspaceModel ID in the selected tenant and provides no default-workspace resolver, so the initial list returns 404. With a valid workspace ID, list, create, and revoke remain available and tenant-member and tenant-admin enforcement remains intact, so the production actions are retained. Existing Desktop permission gates are enforcement consumers, not a policy management implementation; the Cloud route is planned and Local tenant governance is intentionally not applicable."
     },
     {
       "id": "tenant-tenant-decision-records",
@@ -205,12 +207,14 @@
           "feature_gate": null
         }
       ],
+      "web_status": "partial",
+      "web_reason_code": "web_decision_records_default_workspace_scope_invalid",
       "cloud_status": "planned",
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_decision_ledger_not_applicable",
       "local_deviation": "Local HITL responses and sealed replay metadata remain scoped runtime records; they must not be promoted into the Cloud tenant decision ledger without its authority.",
-      "judgment_rationale": "DecisionRecords lists persisted tenant trust decisions and approval outcomes, inspects the selected list record without a detail GET, and resolves pending approvals as allow-once, allow-always, or deny. Desktop HITL UI does not provide this searchable governance ledger, and Local mode must distinguish runtime decisions from Cloud tenant records."
+      "judgment_rationale": "DecisionRecords lists persisted trust decisions and approval outcomes, inspects the selected list record without a detail GET, and resolves pending approvals as allow-once, allow-always, or deny. Web is degraded because an empty workspace filter is serialized as workspace_id 'default', while the backend requires a real workspace ID in the selected tenant and has no default-workspace resolver, so the initial list returns 404. With a valid workspace ID, list, filter, inspect, and resolution remain available and tenant-member and tenant-admin enforcement remains intact, so all actions are retained. Desktop HITL UI does not provide this searchable governance ledger, and Local mode must distinguish runtime decisions from Cloud tenant records."
     },
     {
       "id": "tenant-tenant-billing",

@@ -89,24 +89,44 @@ test("Projects records the detail read used by the edit route", () => {
   );
 });
 
-test("Tenant Workspaces limits Web authority to its routed list and create pages", () => {
+test("Tenant Workspaces records the production summary and Blackboard navigation", () => {
   const capability = readCapability(
     "parity-capability-definitions.02-tenant-operations.v2.json",
     "tenant-tenant-workspaces",
   );
-  const expectedWebActions = ["view", "list", "create"];
+  const expectedWebActions = [
+    "view",
+    "list",
+    "inspect-summary",
+    "create",
+    "open-blackboard",
+  ];
 
   assert.deepEqual(capability.actions, expectedWebActions);
   assert.deepEqual(capability.web_actions, expectedWebActions);
   assert.deepEqual(contractKeys(capability, "web"), [
     "GET /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
     "POST /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
+    "GET /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/objectives",
+    "GET /api/v1/workspaces/{workspace_id}/plan?outbox_limit=0&event_limit=0&include_details=false&recover_stale_attempts=false",
+    "GET /api/v1/workspaces/{workspace_id}/tasks",
   ]);
   assert.deepEqual(permissionActions(capability, "web").sort(), [
     "create",
+    "inspect-summary",
     "list",
+    "open-blackboard",
     "view",
   ]);
+  for (const surface of ["desktop_cloud", "desktop_local"]) {
+    const surfaceActions =
+      surface === "desktop_cloud"
+        ? capability.cloud_actions
+        : capability.local_actions;
+    assert.ok(surfaceActions.includes("open-blackboard"), surface);
+    assert.ok(permissionActions(capability, surface).includes("open-blackboard"));
+  }
+  assert.match(capability.judgment_rationale, /objectives.*plan.*tasks/u);
 });
 
 test("Tenant Workspaces binds native settings entries, contracts, and permissions", () => {
@@ -230,6 +250,44 @@ test("Workflow Patterns excludes unbound detail and reset authorities", () => {
     "list",
     "view",
   ]);
+});
+
+test("Skill Evolution records scope-sensitive job review permissions", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.05-agent-evolution.v2.json",
+    "tenant-tenant-evolution",
+  );
+
+  for (const action of ["configure", "run"]) {
+    assert.deepEqual(
+      permissionRequirementsForAction(capability, "web", action).map(
+        (requirement) => requirement.authorization,
+      ),
+      [["tenant_admin"]],
+      action,
+    );
+  }
+  for (const action of ["apply-job", "reject-job"]) {
+    assert.deepEqual(
+      permissionRequirementsForAction(capability, "web", action).map(
+        (requirement) => requirement.authorization,
+      ),
+      [["tenant_admin"], ["project_contributor"]],
+      `web ${action}`,
+    );
+  }
+  for (const action of ["run", "apply-job", "reject-job"]) {
+    assert.deepEqual(
+      permissionRequirementsForAction(capability, "desktop_cloud", action).map(
+        (requirement) => requirement.authorization,
+      ),
+      [["tenant_admin"], ["project_contributor"]],
+      `desktop_cloud ${action}`,
+    );
+  }
+  assert.match(capability.judgment_rationale, /project-scoped jobs/u);
+  assert.match(capability.judgment_rationale, /scope-sensitive/u);
+  assert.match(capability.judgment_rationale, /excludes project viewers/u);
 });
 
 test("Skills records the evolution read bound by SkillDetail", () => {
@@ -461,6 +519,51 @@ test("Cloud Providers excludes Local-only routing mutation and discovery", () =>
   assert.ok(
     cloudContracts.includes("GET /api/v1/llm-providers/models/{provider_type}"),
   );
+});
+
+test("Webhooks records the gated event type catalog used by creation", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.08-provider-webhooks.v2.json",
+    "tenant-tenant-webhooks",
+  );
+
+  assert.ok(
+    contractKeys(capability, "web").includes("GET /api/v1/events/types"),
+  );
+  assert.ok(capability.actions.includes("list-event-types"));
+  assert.ok(capability.web_actions.includes("list-event-types"));
+  assert.deepEqual(
+    permissionRequirementsForAction(
+      capability,
+      "web",
+      "list-event-types",
+    ),
+    [
+      {
+        surface: "web",
+        actions: ["list-event-types"],
+        authentication: "authenticated",
+        authorization: ["tenant_member"],
+        enforcement: "enforced",
+        feature_gate: "events",
+      },
+    ],
+  );
+  for (const action of ["create", "update", "delete"]) {
+    const requirements = permissionRequirementsForAction(
+      capability,
+      "web",
+      action,
+    );
+    assert.equal(requirements.length, 1, action);
+    assert.deepEqual(requirements[0].authorization, ["tenant_admin"]);
+    assert.equal(requirements[0].feature_gate, null);
+  }
+  assert.ok(
+    capability.permissions.includes("events_feature_for_event_type_catalog"),
+  );
+  assert.match(capability.judgment_rationale, /event type catalog/u);
+  assert.match(capability.judgment_rationale, /feature gate/u);
 });
 
 test("Provider types are bound by ProviderConfigModal across all three product surfaces", () => {

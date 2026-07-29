@@ -476,10 +476,10 @@
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": ["view", "list", "list-items"],
+          "actions": ["view", "list", "list-items", "deploy-from-template"],
           "authentication": "authenticated",
           "authorization": ["tenant_member"],
-          "enforcement": "enforced",
+          "enforcement": "missing",
           "feature_gate": null
         },
         {
@@ -488,21 +488,22 @@
             "create",
             "delete",
             "publish",
-            "clone",
-            "deploy-from-template"
+            "clone"
           ],
           "authentication": "authenticated",
           "authorization": ["tenant_admin"],
-          "enforcement": "enforced",
+          "enforcement": "missing",
           "feature_gate": null
         }
       ],
+      "web_status": "partial",
+      "web_reason_code": "web_instance_template_route_tenant_scope_mismatch",
       "cloud_status": "planned",
       "local_status": "planned",
       "local_policy": "native_equivalent",
       "local_reason_code": "local_instance_template_authority_planned",
       "local_deviation": "Local templates must describe only sidecar-supported resources and keep imported files within the workspace root and declared size and MIME limits.",
-      "judgment_rationale": "InstanceTemplateList and TemplateDetail form a dedicated canonical lifecycle distinct from the general template marketplace. The production pages support list, create, detail, list-items, delete, publish, clone, and deploy-from-template. They do not call update, unpublish, add-item, or remove-item APIs. No routed native editor or Local sidecar contract currently proves parity, although a bounded single-machine equivalent is meaningful."
+      "judgment_rationale": "InstanceTemplateList and TemplateDetail form a dedicated canonical lifecycle distinct from the general template marketplace. The production pages expose list, create, detail, list-items, delete, publish, clone, and deploy-from-template, and do not call update, unpublish, add-item, or remove-item APIs. Deploy-from-template only navigates to instance creation, whose production authority requires an authenticated tenant member rather than tenant administration. Web is degraded because template calls and instance creation do not carry the route tenant while the backend resolves get_current_user_tenant from the user's first membership, so non-default tenant routes read and mutate the first tenant; route-selected tenant member and admin enforcement is therefore missing. All actions remain present for the resolved first tenant. No routed native editor or Local sidecar contract currently proves parity, although a bounded single-machine equivalent is meaningful."
     }
   ],
   "source_ownership": {

@@ -84,6 +84,33 @@ test("Instance Templates limits APIs to production page callers", () => {
   assert.ok(
     permissionActions(templates, "web", "tenant_member").includes("list-items"),
   );
+  assert.ok(
+    permissionActions(templates, "web", "tenant_member").includes(
+      "deploy-from-template",
+    ),
+  );
+  assert.equal(
+    permissionActions(templates, "web", "tenant_admin").includes(
+      "deploy-from-template",
+    ),
+    false,
+  );
+  assert.equal(templates.web_status, "partial");
+  assert.equal(
+    templates.web_reason_code,
+    "web_instance_template_route_tenant_scope_mismatch",
+  );
+  assert.deepEqual(templates.web_actions ?? templates.actions, templates.actions);
+  const webRequirements = templates.permission_requirements.filter(
+    (requirement) => requirement.surface === "web",
+  );
+  assert.equal(webRequirements.length, 2);
+  for (const requirement of webRequirements) {
+    assert.equal(requirement.enforcement, "missing");
+  }
+  assert.match(templates.judgment_rationale, /route tenant/u);
+  assert.match(templates.judgment_rationale, /first membership/u);
+  assert.match(templates.judgment_rationale, /instance creation/u);
 });
 
 test("Gene Market records the evolution history shown by Gene Detail", () => {
@@ -153,6 +180,53 @@ test("Decision Records inspects the selected list row without a detail GET", () 
   assert.ok(
     permissionActions(decisions, "web", "tenant_member").includes("inspect"),
   );
+  assert.equal(decisions.web_status, "partial");
+  assert.equal(
+    decisions.web_reason_code,
+    "web_decision_records_default_workspace_scope_invalid",
+  );
+  assert.deepEqual(decisions.web_actions ?? decisions.actions, [
+    "view",
+    "list",
+    "filter",
+    "inspect",
+    "resolve-approval",
+  ]);
+  assert.ok(
+    decisions.permission_requirements
+      .filter((requirement) => requirement.surface === "web")
+      .every((requirement) => requirement.enforcement === "enforced"),
+  );
+  assert.match(decisions.judgment_rationale, /workspace_id 'default'/u);
+  assert.match(decisions.judgment_rationale, /real workspace ID/u);
+  assert.match(decisions.judgment_rationale, /404/u);
+});
+
+test("Trust Policies records its invalid default workspace projection", () => {
+  const policies = readCapability(
+    "parity-capability-definitions.14-tenant-governance-policy.v2.json",
+    "tenant-tenant-trust-policies",
+  );
+
+  assert.equal(policies.web_status, "partial");
+  assert.equal(
+    policies.web_reason_code,
+    "web_trust_policy_default_workspace_scope_invalid",
+  );
+  assert.deepEqual(policies.web_actions ?? policies.actions, [
+    "view",
+    "list",
+    "create",
+    "revoke",
+  ]);
+  assert.ok(
+    policies.permission_requirements
+      .filter((requirement) => requirement.surface === "web")
+      .every((requirement) => requirement.enforcement === "enforced"),
+  );
+  assert.match(policies.judgment_rationale, /workspace_id 'default'/u);
+  assert.match(policies.judgment_rationale, /real WorkspaceModel ID/u);
+  assert.match(policies.judgment_rationale, /404/u);
 });
 
 test("Billing derives invoice rows from the billing response", () => {
@@ -188,8 +262,36 @@ test("Organization Settings records the cluster status projection", () => {
   assert.equal(orgSettings.web_status, "partial");
   assert.equal(
     orgSettings.web_reason_code,
-    "organization_registry_gene_policy_tenant_authorization_missing",
+    "organization_registry_gene_policy_authorization_and_cluster_route_tenant_scope_incomplete",
   );
+  assert.deepEqual(orgSettings.web_actions ?? orgSettings.actions, orgSettings.actions);
+
+  const clusterRequirement = orgSettings.permission_requirements.find(
+    (requirement) =>
+      requirement.surface === "web" &&
+      requirement.actions.includes("list-clusters"),
+  );
+  assert.ok(clusterRequirement);
+  assert.deepEqual(clusterRequirement.actions, [
+    "list-clusters",
+    "inspect-cluster-status",
+  ]);
+  assert.deepEqual(clusterRequirement.authorization, ["tenant_member"]);
+  assert.equal(clusterRequirement.enforcement, "missing");
+
+  const generalMemberRequirement = orgSettings.permission_requirements.find(
+    (requirement) =>
+      requirement.surface === "web" &&
+      requirement.actions.includes("inspect-stats"),
+  );
+  assert.ok(generalMemberRequirement);
+  assert.equal(generalMemberRequirement.enforcement, "enforced");
+  assert.equal(
+    generalMemberRequirement.actions.includes("list-clusters"),
+    false,
+  );
+  assert.match(orgSettings.judgment_rationale, /first membership/u);
+  assert.match(orgSettings.judgment_rationale, /non-default route tenant/u);
 });
 
 test("Project Workspaces records the production summary projection", () => {
@@ -410,21 +512,37 @@ test("Project Entities does not claim its unused entity detail API", () => {
   );
 });
 
-test("Project Communities records its rebuild task lifecycle", () => {
+test("Project Communities degrades unreachable rebuild history controls", () => {
   const communities = readCapability(
     "parity-capability-definitions.18-project-knowledge-graph.v2.json",
     "project-project-communities",
   );
-  const taskActions = [
+  const availableActions = [
+    "view",
+    "list",
+    "inspect-members",
+    "rebuild",
     "stream-rebuild-progress",
     "cancel-rebuild",
+  ];
+  const unreachableActions = [
     "list-task-history",
     "retry-task",
     "stop-task",
   ];
   const webContracts = contractKeys(communities, "web");
 
-  for (const action of taskActions) {
+  assert.equal(communities.web_status, "partial");
+  assert.equal(
+    communities.web_reason_code,
+    "web_community_rebuild_task_history_scope_mismatch",
+  );
+  assert.deepEqual(communities.actions, [
+    ...availableActions,
+    ...unreachableActions,
+  ]);
+  assert.deepEqual(communities.web_actions, availableActions);
+  for (const action of availableActions) {
     assert.ok(communities.web_actions.includes(action), `missing ${action}`);
     assert.ok(
       permissionActions(communities, "web", "project_member").includes(action),
@@ -435,14 +553,30 @@ test("Project Communities records its rebuild task lifecycle", () => {
     "GET /api/v1/tasks/{task_id}/stream",
     "POST /api/v1/tasks/{task_id}/cancel",
     "GET /api/v1/tasks/recent",
+  ]) {
+    assert.ok(webContracts.includes(contract), `missing ${contract}`);
+  }
+  for (const action of unreachableActions) {
+    assert.equal(communities.web_actions.includes(action), false, action);
+    assert.equal(
+      permissionActions(communities, "web", "project_member").includes(action),
+      false,
+      action,
+    );
+  }
+  for (const contract of [
     "POST /api/v1/tasks/{task_id}/retry",
     "POST /api/v1/tasks/{task_id}/stop",
   ]) {
-    assert.ok(webContracts.includes(contract), `missing ${contract}`);
+    assert.equal(webContracts.includes(contract), false, contract);
   }
   assert.match(communities.judgment_rationale, /CommunitiesList\.tsx/u);
   assert.match(communities.judgment_rationale, /communities\/index\.tsx/u);
   assert.match(communities.judgment_rationale, /TaskList\.tsx/u);
+  assert.match(communities.judgment_rationale, /entity_id/u);
+  assert.match(communities.judgment_rationale, /project-(?:scoped|wide)/u);
+  assert.match(communities.judgment_rationale, /\/tasks\/recent/u);
+  assert.match(communities.judgment_rationale, /empty history/u);
   assert.match(communities.judgment_rationale, /source-content/u);
 });
 

@@ -45,10 +45,7 @@
         "inspect-members",
         "rebuild",
         "stream-rebuild-progress",
-        "cancel-rebuild",
-        "list-task-history",
-        "retry-task",
-        "stop-task"
+        "cancel-rebuild"
       ],
       "api_contracts": [
         {
@@ -85,18 +82,6 @@
           "surface": "web",
           "method": "GET",
           "path": "/api/v1/tasks/recent",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
-          "path": "/api/v1/tasks/{task_id}/retry",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
-          "path": "/api/v1/tasks/{task_id}/stop",
           "authority": "web_service"
         },
         {
@@ -169,10 +154,7 @@
             "inspect-members",
             "rebuild",
             "stream-rebuild-progress",
-            "cancel-rebuild",
-            "list-task-history",
-            "retry-task",
-            "stop-task"
+            "cancel-rebuild"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -182,11 +164,13 @@
           "feature_gate": null
         }
       ],
+      "web_status": "partial",
+      "web_reason_code": "web_community_rebuild_task_history_scope_mismatch",
       "cloud_status": "planned",
       "local_status": "planned",
       "local_policy": "native_equivalent",
       "local_reason_code": "local_community_projection_authority_planned",
-      "judgment_rationale": "The auditable routed module CommunitiesList.tsx is a pure re-export to communities/index.tsx, whose production implementation lists Communities, loads members, starts rebuilds, streams and cancels the active rebuild task, and embeds TaskList.tsx for recent-task listing, retry and stop controls. The structured runtime dependency graph proves both implementation files are reachable from the routed wrapper, and the inventory binds every reviewed path node to the audited revision with SHA-256; source-content integrity remains distinct from execution evidence. Desktop has no native communities management route, and Local needs a real community projection rather than a textual search approximation."
+      "judgment_rationale": "The auditable routed module CommunitiesList.tsx re-exports communities/index.tsx, which lists communities, inspects members, starts a project-scoped rebuild, streams progress from the returned task ID, and cancels that active task. The selected-community detail also embeds TaskList.tsx with entity_id=selectedCommunity.uuid and entity_type=community, so it still calls /tasks/recent on mount and every five seconds. Project-wide rebuild_communities task records have no entity_id and /tasks/recent applies both filters, leaving an empty history whose retry and stop controls are unreachable from this page; Web is therefore partial and degraded. The structured dependency graph still proves both implementation files are reachable from the routed wrapper, and the inventory binds every reviewed path node to the audited revision with SHA-256; source-content integrity remains distinct from execution evidence. Desktop has no native communities management route, and Local needs a real community projection rather than a textual search approximation."
     },
     {
       "id": "project-project-graph",
