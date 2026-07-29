@@ -76,7 +76,8 @@ class ArtifactContentCommitReconciler:
         await self._mark_safely(
             object_key,
             lease_token=lease_token,
-            status="deleted" if deleted else "missing",
+            status="deleted" if deleted else "pending",
+            last_error_code=None if deleted else "storage_object_not_observed",
         )
 
     async def record_pending(
@@ -85,12 +86,14 @@ class ArtifactContentCommitReconciler:
         *,
         reason_code: str,
         last_error_code: str,
+        next_attempt_at: datetime | None = None,
     ) -> None:
         """Persist a retryable orphan from a failed immediate cleanup."""
         await self._record_pending_safely(
             outcome,
             reason_code=reason_code,
             last_error_code=last_error_code,
+            next_attempt_at=next_attempt_at,
         )
 
     async def _inspect_and_stage(
@@ -136,6 +139,7 @@ class ArtifactContentCommitReconciler:
                 outcome,
                 reason_code="commit_not_observed",
                 status="pending",
+                next_attempt_at=datetime.now(UTC),
             )
             now = datetime.now(UTC)
             leased = await repository.lease_orphan_gc(
@@ -154,23 +158,19 @@ class ArtifactContentCommitReconciler:
         *,
         reason_code: str,
         last_error_code: str,
+        next_attempt_at: datetime | None = None,
     ) -> None:
-        try:
-            async with self._session_factory() as session:
-                repository = SqlArtifactContentAuthorityRepository(session)
-                await self._record_orphan(
-                    repository,
-                    outcome,
-                    reason_code=reason_code,
-                    status="pending",
-                    last_error_code=last_error_code,
-                )
-                await session.commit()
-        except Exception:
-            logger.error(
-                "Artifact content orphan candidate could not be persisted; object retained",
-                exc_info=True,
+        async with self._session_factory() as session:
+            repository = SqlArtifactContentAuthorityRepository(session)
+            await self._record_orphan(
+                repository,
+                outcome,
+                reason_code=reason_code,
+                status="pending",
+                last_error_code=last_error_code,
+                next_attempt_at=next_attempt_at,
             )
+            await session.commit()
 
     async def _mark_safely(
         self,
@@ -179,6 +179,7 @@ class ArtifactContentCommitReconciler:
         lease_token: str,
         status: str,
         last_error_code: str | None = None,
+        next_attempt_at: datetime | None = None,
     ) -> None:
         try:
             async with self._session_factory() as session:
@@ -240,6 +241,7 @@ class ArtifactContentCommitReconciler:
         reason_code: str,
         status: str,
         last_error_code: str | None = None,
+        next_attempt_at: datetime | None = None,
     ) -> None:
         object_key = outcome.uploaded_object_key
         if object_key is None:
@@ -254,4 +256,5 @@ class ArtifactContentCommitReconciler:
             reason_code=reason_code,
             status=status,
             last_error_code=last_error_code,
+            next_attempt_at=next_attempt_at,
         )

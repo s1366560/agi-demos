@@ -15,7 +15,7 @@ from src.application.services.artifact_content_contract import (
     ArtifactContentSaveCommand,
 )
 from src.application.services.artifact_service import ArtifactService
-from src.domain.model.artifact.artifact import ArtifactStatus
+from src.domain.model.artifact.artifact import Artifact as DomainArtifact, ArtifactStatus
 from src.domain.ports.services.storage_service_port import (
     StorageObjectMetadata,
     UploadResult,
@@ -164,6 +164,16 @@ def _service(
     )
 
 
+async def _noop_orphan_recorder(
+    _outcome,
+    *,
+    reason_code: str,
+    last_error_code: str,
+    next_attempt_at=None,
+) -> None:
+    del reason_code, last_error_code, next_attempt_at
+
+
 @pytest.mark.unit
 async def test_persistent_artifact_authority_survives_service_rebuild_and_content_save(
     test_engine,
@@ -198,6 +208,7 @@ async def test_persistent_artifact_authority_survives_service_rebuild_and_conten
         content_service = ArtifactContentAuthorityService(
             repository=SqlArtifactContentAuthorityRepository(session),
             storage_service=storage,  # type: ignore[arg-type]
+            orphan_recorder=_noop_orphan_recorder,
         )
         scope = await content_service.resolve_scope(ARTIFACT_ID)
         assert scope is not None
@@ -297,3 +308,72 @@ async def test_failed_upload_remains_durably_error_after_service_rebuild(
         assert model is not None
         assert model.status == ArtifactStatus.ERROR.value
         assert model.error_message == "storage unavailable"
+
+
+@pytest.mark.unit
+async def test_same_artifact_id_cannot_overwrite_another_scope(
+    test_engine,
+) -> None:
+    sessions = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    storage = LifecycleStorage()
+    async with sessions() as session:
+        await _seed_scope(session)
+        user = User(
+            id="artifact-lifecycle-user-2",
+            email="artifact-lifecycle-2@example.com",
+            hashed_password="hashed",
+            is_active=True,
+            is_superuser=False,
+        )
+        session.add_all(
+            [
+                user,
+                Tenant(
+                    id=f"{TENANT_ID}-other",
+                    name="Artifact Lifecycle Other",
+                    slug="artifact-lifecycle-other",
+                    owner_id=user.id,
+                ),
+                Project(
+                    id=f"{PROJECT_ID}-other",
+                    tenant_id=f"{TENANT_ID}-other",
+                    name="Artifact Lifecycle Other",
+                    owner_id=user.id,
+                ),
+            ]
+        )
+        await session.commit()
+
+    first = await _service(sessions, storage).create_artifact(
+        file_content=b"first",
+        filename="first.txt",
+        project_id=PROJECT_ID,
+        tenant_id=TENANT_ID,
+        conversation_id=CONVERSATION_ID,
+        artifact_id=ARTIFACT_ID,
+    )
+    repository = SqlArtifactRepository(sessions)
+    second = DomainArtifact(
+        id=ARTIFACT_ID,
+        project_id=f"{PROJECT_ID}-other",
+        tenant_id=f"{TENANT_ID}-other",
+        filename="second.txt",
+        mime_type=first.mime_type,
+        category=first.category,
+        size_bytes=len(b"second"),
+        object_key=first.object_key,
+        source_tool=first.source_tool,
+        source_path=first.source_path,
+        metadata=dict(first.metadata),
+        status=first.status,
+    )
+
+    with pytest.raises(RuntimeError, match="Artifact scope conflict"):
+        await repository.save(second)
+
+    assert first.tenant_id == TENANT_ID
+    recovered = await _service(sessions, storage).get_artifact(ARTIFACT_ID)
+    assert recovered is not None
+    assert recovered.tenant_id == TENANT_ID
+    assert recovered.project_id == PROJECT_ID
+    assert recovered.filename == "first.txt"

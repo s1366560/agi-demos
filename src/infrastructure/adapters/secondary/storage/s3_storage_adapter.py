@@ -259,11 +259,10 @@ class S3StorageAdapter(StorageServicePort):
         self._require_storage_size(metadata.size_bytes, max_bytes)
         async with await self._get_client() as s3:
             try:
-                response = await s3.get_object(
-                    Bucket=self._bucket,
-                    Key=object_key,
-                    Range=f"bytes=0-{max_bytes}",
-                )
+                request = {"Bucket": self._bucket, "Key": object_key}
+                if metadata.size_bytes > 0:
+                    request["Range"] = f"bytes=0-{max_bytes}"
+                response = await s3.get_object(**request)
                 body = response["Body"]
                 chunks: list[bytes] = []
                 total = 0

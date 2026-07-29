@@ -93,6 +93,16 @@ async def _commit_artifact_content_outcome(
     """Commit once, reconcile only a definitive failure, and preserve cancellation."""
     commit_error, cancellation = await _settle_artifact_side_effect(db.commit())
     if commit_error is not None:
+        if isinstance(commit_error, asyncio.CancelledError):
+            logger.warning(
+                "Artifact content commit was cancelled after dispatch",
+                exc_info=(type(commit_error), commit_error, commit_error.__traceback__),
+            )
+        else:
+            logger.error(
+                "Artifact content request transaction commit failed",
+                exc_info=(type(commit_error), commit_error, commit_error.__traceback__),
+            )
         rollback_error, rollback_cancellation = await _settle_artifact_side_effect(db.rollback())
         cancellation = cancellation or rollback_cancellation
         if rollback_error is not None:
@@ -470,24 +480,38 @@ async def download_artifact(
     if download is None:
         raise HTTPException(status_code=404, detail=_("Artifact content not found"))
     try:
-        await db.commit()
-    except Exception:
-        await download.discard()
+        commit_error, cancellation = await _settle_artifact_side_effect(db.commit())
+        if cancellation is not None:
+            raise cancellation
+        if commit_error is not None:
+            raise commit_error
+        return StreamingResponse(
+            content=download.iter_chunks(),
+            media_type=download.mime_type,
+            background=BackgroundTask(download.discard),
+            headers={
+                "Cache-Control": "private, no-store",
+                "Content-Disposition": "attachment",
+                "Content-Length": str(download.size_bytes),
+                "X-Content-Type-Options": "nosniff",
+                "X-Artifact-Revision": str(download.revision),
+                "X-Artifact-Content-Hash": download.content_hash,
+            },
+        )
+    except BaseException:
+        discard_error, _discard_cancellation = await _settle_artifact_side_effect(
+            download.discard()
+        )
+        if discard_error is not None:
+            logger.warning(
+                "Failed to discard staged Artifact download",
+                exc_info=(
+                    type(discard_error),
+                    discard_error,
+                    discard_error.__traceback__,
+                ),
+            )
         raise
-
-    return StreamingResponse(
-        content=download.iter_chunks(),
-        media_type=download.mime_type,
-        background=BackgroundTask(download.discard),
-        headers={
-            "Cache-Control": "private, no-store",
-            "Content-Disposition": "attachment",
-            "Content-Length": str(download.size_bytes),
-            "X-Content-Type-Options": "nosniff",
-            "X-Artifact-Revision": str(download.revision),
-            "X-Artifact-Content-Hash": download.content_hash,
-        },
-    )
 
 
 @router.get("/{artifact_id}/content", response_model=ArtifactContentResponse)

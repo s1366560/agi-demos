@@ -123,6 +123,7 @@ class ArtifactContentAuthorityRepositoryPort(ABC):
         reason_code: str,
         status: str,
         last_error_code: str | None = None,
+        next_attempt_at: datetime | None = None,
     ) -> None:
         """Persist or refresh an auditable provisional-object GC record."""
 

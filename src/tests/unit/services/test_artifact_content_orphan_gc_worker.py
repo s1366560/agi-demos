@@ -297,6 +297,60 @@ async def test_worker_retries_after_restart_and_records_real_delete_history(test
 
 
 @pytest.mark.unit
+async def test_worker_requires_two_missing_observations_and_reclaims_late_object(
+    test_engine,
+) -> None:
+    sessions = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    storage = RecordingGcStorage()
+    orphan_key = "artifacts/orphan-late-put"
+    clock_value = datetime(2030, 7, 28, 11, 15, tzinfo=UTC)
+
+    async with sessions() as session:
+        scope = await _seed_authority(session)
+        await _record_pending(session, scope, orphan_key)
+
+    worker = ArtifactContentOrphanGcWorker(
+        session_factory=sessions,
+        storage_service=storage,  # type: ignore[arg-type]
+        owner_id="worker-late-put",
+        clock=lambda: clock_value,
+        batch_size=1,
+        lease_seconds=30,
+    )
+    assert await worker.run_once() == 1
+
+    async with sessions() as session:
+        first_observation = (
+            await session.execute(
+                select(ArtifactContentOrphanGcModel).where(
+                    ArtifactContentOrphanGcModel.object_key == orphan_key
+                )
+            )
+        ).scalar_one()
+        assert first_observation.status == "pending"
+        assert first_observation.attempts == 1
+        assert first_observation.last_error_code == "storage_object_not_observed"
+        retry_at = first_observation.next_attempt_at
+
+    storage.objects.add(orphan_key)
+    clock_value = retry_at + timedelta(seconds=1)
+    assert await worker.run_once() == 1
+
+    async with sessions() as session:
+        recovered = (
+            await session.execute(
+                select(ArtifactContentOrphanGcModel).where(
+                    ArtifactContentOrphanGcModel.object_key == orphan_key
+                )
+            )
+        ).scalar_one()
+        assert recovered.status == "deleted"
+        assert recovered.attempts == 2
+        assert recovered.last_error_code is None
+        assert orphan_key not in storage.objects
+
+
+@pytest.mark.unit
 async def test_worker_blocks_on_fresh_locked_authority_before_delete(test_engine) -> None:
     sessions = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
     storage = RecordingGcStorage()

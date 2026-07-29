@@ -2,7 +2,9 @@
 
 import asyncio
 import hashlib
+import os
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -61,6 +63,16 @@ INITIAL_OBJECT_KEY = "artifacts/tenant-artifact-v2/project-artifact-v2/report.tx
 
 def _hash(content: str) -> str:
     return f"sha256:{hashlib.sha256(content.encode('utf-8')).hexdigest()}"
+
+
+async def _noop_orphan_recorder(
+    _outcome,
+    *,
+    reason_code: str,
+    last_error_code: str,
+    next_attempt_at: datetime | None = None,
+) -> None:
+    del reason_code, last_error_code, next_attempt_at
 
 
 class DurableRecordingStorage:
@@ -283,7 +295,7 @@ def _service(
     return ArtifactContentAuthorityService(
         repository=SqlArtifactContentAuthorityRepository(session),
         storage_service=storage,  # type: ignore[arg-type]
-        orphan_recorder=orphan_recorder,
+        orphan_recorder=orphan_recorder or _noop_orphan_recorder,
     )
 
 
@@ -477,7 +489,58 @@ async def test_uploaded_object_is_cleaned_when_upload_await_is_cancelled(
     uploaded_key = storage.uploads[0]
     assert storage.deletes == [uploaded_key]
     assert uploaded_key not in storage.objects
-    recorder.assert_not_awaited()
+    recorder.assert_awaited_once()
+    assert recorder.await_args.kwargs["reason_code"] == "upload_provisional"
+    assert recorder.await_args.kwargs["last_error_code"] == "upload_in_progress"
+    assert recorder.await_args.kwargs["next_attempt_at"] > datetime.now(UTC)
+
+
+@pytest.mark.unit
+async def test_upload_records_durable_grace_candidate_before_put_can_finish(
+    test_engine,
+    monkeypatch,
+) -> None:
+    sessions = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    storage = DurableRecordingStorage()
+    upload_started = asyncio.Event()
+    release_upload = asyncio.Event()
+    original_upload = storage.upload_file
+
+    async def controlled_upload(*args: Any, **kwargs: Any) -> UploadResult:
+        upload_started.set()
+        await release_upload.wait()
+        return await original_upload(*args, **kwargs)
+
+    monkeypatch.setattr(storage, "upload_file", controlled_upload)
+    reconciler = ArtifactContentCommitReconciler(
+        session_factory=sessions,
+        storage_service=storage,  # type: ignore[arg-type]
+    )
+
+    async with sessions() as session:
+        await _seed_authority(session)
+        service = _service(session, storage, reconciler.record_pending)
+        scope = await service.resolve_scope(ARTIFACT_ID)
+        assert scope is not None
+        save_task = asyncio.create_task(service.save_content(scope, _command("controlled")))
+        await asyncio.wait_for(upload_started.wait(), timeout=1)
+
+        async with sessions() as audit_session:
+            provisional = (
+                await audit_session.execute(select(ArtifactContentOrphanGcModel))
+            ).scalar_one()
+            assert provisional.status == "pending"
+            assert provisional.reason_code == "upload_provisional"
+            provisional_retry_at = provisional.next_attempt_at
+            if provisional_retry_at.tzinfo is None:
+                provisional_retry_at = provisional_retry_at.replace(tzinfo=UTC)
+            assert provisional_retry_at > datetime.now(UTC)
+
+        save_task.cancel()
+        assert save_task.done() is False
+        release_upload.set()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(save_task, timeout=1)
 
 
 @pytest.mark.unit
@@ -519,7 +582,7 @@ async def test_advance_pointer_cancellation_retains_authoritative_object_and_rec
     assert authority.object_key == receipt.object_key == storage.uploads[0]
     assert authority.object_key in storage.objects
     assert authority.object_key not in storage.deletes
-    recorder.assert_awaited_once()
+    assert recorder.await_count == 2
     assert recorder.await_args.kwargs == {
         "reason_code": "advance_pointer_cancelled",
         "last_error_code": "operation_cancelled",
@@ -556,7 +619,7 @@ async def test_cancelled_immediate_delete_still_records_retryable_candidate(
         ):
             await service.save_content(scope, _command("delete-cancelled"))
 
-    recorder.assert_awaited_once()
+    assert recorder.await_count == 2
     assert recorder.await_args.kwargs == {
         "reason_code": "immediate_delete_cancelled",
         "last_error_code": "storage_delete_cancelled",
@@ -580,7 +643,11 @@ async def test_cancellation_during_orphan_recorder_waits_for_durable_audit(
         *,
         reason_code: str,
         last_error_code: str,
+        next_attempt_at: datetime | None = None,
     ) -> None:
+        if reason_code == "upload_provisional":
+            return
+        del next_attempt_at
         recorder_started.set()
         await release_recorder.wait()
         recorded.append((reason_code, last_error_code))
@@ -633,7 +700,7 @@ async def test_failed_immediate_orphan_delete_is_persisted_through_fresh_recorde
         ):
             await service.save_content(scope, _command("uncommitted"))
 
-    recorder.assert_awaited_once()
+    assert recorder.await_count == 2
     outcome = recorder.await_args.args[0]
     assert outcome.uploaded_object_key in storage.objects
     assert recorder.await_args.kwargs == {
@@ -771,10 +838,12 @@ async def test_same_revision_writers_upload_unique_objects_and_only_gc_loser() -
     first = ArtifactContentAuthorityService(
         repository=repository,  # type: ignore[arg-type]
         storage_service=storage,  # type: ignore[arg-type]
+        orphan_recorder=_noop_orphan_recorder,
     )
     second = ArtifactContentAuthorityService(
         repository=repository,  # type: ignore[arg-type]
         storage_service=storage,  # type: ignore[arg-type]
+        orphan_recorder=_noop_orphan_recorder,
     )
 
     results = await asyncio.gather(
@@ -938,6 +1007,94 @@ async def test_download_is_hash_verified_into_a_disk_backed_bounded_stream(test_
         content = b"".join([chunk async for chunk in download.iter_chunks(chunk_size=2)])
         assert content == b"seed"
         assert not download.staged_path.exists()
+
+
+@pytest.mark.unit
+async def test_stage_download_cancellation_during_stream_removes_private_temp_file(
+    test_engine,
+    monkeypatch,
+    tmp_path,
+) -> None:
+    sessions = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    storage = DurableRecordingStorage()
+    stream_started = asyncio.Event()
+    release_stream = asyncio.Event()
+    staged_path = tmp_path / "cancelled-stream.download"
+    descriptor = os.open(staged_path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
+
+    async def controlled_stream(*args: Any, **kwargs: Any):
+        del args, kwargs
+        stream_started.set()
+        await release_stream.wait()
+        yield b"seed"
+
+    monkeypatch.setattr(storage, "stream_file", controlled_stream)
+    monkeypatch.setattr(
+        "src.application.services.artifact_content_authority_service.tempfile.mkstemp",
+        lambda **_kwargs: (descriptor, str(staged_path)),
+    )
+
+    async with sessions() as session:
+        await _seed_authority(session)
+        service = _service(session, storage)
+        scope = await service.resolve_scope(ARTIFACT_ID)
+        assert scope is not None
+        stage_task = asyncio.create_task(service.stage_download(scope))
+        await asyncio.wait_for(stream_started.wait(), timeout=1)
+        stage_task.cancel()
+        release_stream.set()
+        with pytest.raises(asyncio.CancelledError):
+            await stage_task
+
+    assert not staged_path.exists()
+
+
+@pytest.mark.unit
+async def test_stage_download_cancellation_during_hash_initialization_removes_temp_file(
+    test_engine,
+    monkeypatch,
+    tmp_path,
+) -> None:
+    sessions = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    storage = DurableRecordingStorage()
+    initialize_started = asyncio.Event()
+    release_initialize = asyncio.Event()
+    staged_path = tmp_path / "cancelled-hash-init.download"
+    descriptor = os.open(staged_path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
+
+    async with sessions() as session:
+        await _seed_authority(session)
+        _ = await session.execute(
+            update(ArtifactModel).where(ArtifactModel.id == ARTIFACT_ID).values(content_hash=None)
+        )
+        await session.commit()
+        repository = SqlArtifactContentAuthorityRepository(session)
+        service = ArtifactContentAuthorityService(
+            repository=repository,
+            storage_service=storage,  # type: ignore[arg-type]
+        )
+        scope = await service.resolve_scope(ARTIFACT_ID)
+        assert scope is not None
+
+        async def controlled_initialize(*args: Any, **kwargs: Any):
+            del args, kwargs
+            initialize_started.set()
+            await release_initialize.wait()
+            return None
+
+        monkeypatch.setattr(repository, "initialize_content_hash", controlled_initialize)
+        monkeypatch.setattr(
+            "src.application.services.artifact_content_authority_service.tempfile.mkstemp",
+            lambda **_kwargs: (descriptor, str(staged_path)),
+        )
+        stage_task = asyncio.create_task(service.stage_download(scope))
+        await asyncio.wait_for(initialize_started.wait(), timeout=1)
+        stage_task.cancel()
+        release_initialize.set()
+        with pytest.raises(asyncio.CancelledError):
+            await stage_task
+
+    assert not staged_path.exists()
 
 
 @pytest.mark.unit

@@ -191,7 +191,11 @@ class SqlArtifactContentAuthorityRepository(ArtifactContentAuthorityRepositoryPo
         reason_code: str,
         status: str,
         last_error_code: str | None = None,
+        next_attempt_at: datetime | None = None,
     ) -> None:
+        if next_attempt_at is not None:
+            self._require_timezone_aware(next_attempt_at, name="next attempt")
+        effective_next_attempt = next_attempt_at or datetime.now(UTC)
         statement = (
             select(ArtifactContentOrphanGcModel)
             .where(ArtifactContentOrphanGcModel.object_key == object_key)
@@ -215,6 +219,7 @@ class SqlArtifactContentAuthorityRepository(ArtifactContentAuthorityRepositoryPo
                     reason_code=reason_code,
                     status=status,
                     last_error_code=last_error_code,
+                    next_attempt_at=effective_next_attempt,
                 )
             )
         else:
@@ -244,7 +249,8 @@ class SqlArtifactContentAuthorityRepository(ArtifactContentAuthorityRepositoryPo
                 existing.reason_code = reason_code
                 existing.status = status
                 existing.last_error_code = last_error_code
-                existing.next_attempt_at = datetime.now(UTC)
+                if next_attempt_at is not None:
+                    existing.next_attempt_at = next_attempt_at
                 if status != "pending":
                     existing.lease_owner = None
                     existing.lease_token = None

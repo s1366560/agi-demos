@@ -8,6 +8,7 @@ from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from botocore.exceptions import ClientError
 
 from src.domain.ports.services.storage_service_port import StorageObjectTooLargeError
 from src.infrastructure.adapters.secondary.storage.s3_storage_adapter import S3StorageAdapter
@@ -241,6 +242,56 @@ class TestS3StorageAdapter:
 
         assert mock_s3_client.get_object.await_args.kwargs["Range"] == "bytes=0-4"
         mock_s3_client.get_object.return_value["Body"].read.assert_awaited_once_with(5)
+
+    async def test_bounded_read_empty_object_omits_zero_byte_range(
+        self,
+        storage_adapter,
+        mock_s3_client,
+    ):
+        mock_s3_client.head_object.return_value["ContentLength"] = 0
+        mock_s3_client.get_object.return_value["Body"].read.return_value = b""
+
+        with patch.object(
+            storage_adapter, "_get_client", return_value=AsyncMock()
+        ) as mock_get_client:
+            mock_context = AsyncMock()
+            mock_context.__aenter__ = AsyncMock(return_value=mock_s3_client)
+            mock_context.__aexit__ = AsyncMock(return_value=None)
+            mock_get_client.return_value = mock_context
+
+            content = await storage_adapter.get_file_bounded(
+                "tenant-123/files/empty.txt",
+                max_bytes=4,
+            )
+
+        assert content == b""
+        assert "Range" not in mock_s3_client.get_object.await_args.kwargs
+
+    async def test_bounded_read_missing_after_metadata_returns_none(
+        self,
+        storage_adapter,
+        mock_s3_client,
+    ):
+        mock_s3_client.head_object.return_value["ContentLength"] = 4
+        mock_s3_client.get_object.side_effect = ClientError(
+            {"Error": {"Code": "NoSuchKey"}},
+            "GetObject",
+        )
+
+        with patch.object(
+            storage_adapter, "_get_client", return_value=AsyncMock()
+        ) as mock_get_client:
+            mock_context = AsyncMock()
+            mock_context.__aenter__ = AsyncMock(return_value=mock_s3_client)
+            mock_context.__aexit__ = AsyncMock(return_value=None)
+            mock_get_client.return_value = mock_context
+
+            content = await storage_adapter.get_file_bounded(
+                "tenant-123/files/missing.txt",
+                max_bytes=4,
+            )
+
+        assert content is None
 
     async def test_stream_file_reads_bounded_chunks(
         self,

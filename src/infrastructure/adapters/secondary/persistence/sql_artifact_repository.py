@@ -29,6 +29,7 @@ class SqlArtifactRepository(ArtifactRepositoryPort):
                 model = self._new_model(artifact)
                 session.add(model)
             else:
+                self._assert_scope_matches(model, artifact)
                 self._apply_entity(model, artifact)
         return artifact
 
@@ -193,6 +194,15 @@ class SqlArtifactRepository(ArtifactRepositoryPort):
     @staticmethod
     def _to_entities(models: Sequence[ArtifactModel]) -> list[Artifact]:
         return [SqlArtifactRepository._to_entity(model) for model in models]
+
+    @staticmethod
+    def _assert_scope_matches(model: ArtifactModel, artifact: Artifact) -> None:
+        if (
+            model.tenant_id != artifact.tenant_id
+            or model.project_id != artifact.project_id
+            or model.conversation_id != artifact.conversation_id
+        ):
+            raise RuntimeError("Artifact scope conflict")
 
     @staticmethod
     def _to_entity(model: ArtifactModel) -> Artifact:

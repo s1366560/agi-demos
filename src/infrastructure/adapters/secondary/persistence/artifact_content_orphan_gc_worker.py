@@ -145,7 +145,16 @@ class ArtifactContentOrphanGcWorker:
                         seconds=self._retry_delay_seconds(record.attempts)
                     )
                 else:
-                    status = "deleted" if deleted else "missing"
+                    if deleted:
+                        status = "deleted"
+                    elif record.attempts == 0:
+                        status = "pending"
+                        last_error_code = "storage_object_not_observed"
+                        next_attempt_at = now + timedelta(
+                            seconds=self._retry_delay_seconds(record.attempts)
+                        )
+                    else:
+                        status = "missing"
 
             completed = await repository.complete_orphan_gc_lease(
                 record.object_key,

@@ -8,6 +8,7 @@ import secrets
 import tempfile
 from collections.abc import AsyncIterator, Awaitable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
@@ -43,6 +44,7 @@ logger = logging.getLogger(__name__)
 MAX_EDITABLE_ARTIFACT_BYTES = 1_048_576
 MAX_ARTIFACT_PREVIEW_BYTES = 25 * 1_048_576
 MAX_ARTIFACT_DOWNLOAD_BYTES = 50 * 1_048_576
+ARTIFACT_CONTENT_UPLOAD_GC_GRACE_SECONDS = 30
 
 
 async def _run_shielded_to_completion(
@@ -83,6 +85,12 @@ class ArtifactContentTooLargeError(Exception):
         self.max_bytes = max_bytes
 
 
+class ArtifactContentOrphanTrackingError(Exception):
+    """Raised when an immutable upload cannot first obtain durable GC authority."""
+
+    reason_code = "artifact_content_orphan_tracking_failed"
+
+
 @dataclass(frozen=True)
 class ArtifactContentBytes:
     """Authenticated bytes and MIME from the durable metadata pointer."""
@@ -121,7 +129,11 @@ class ArtifactContentDownload:
 
     async def discard(self) -> None:
         """Idempotently remove the private staged file."""
-        await asyncio.to_thread(self.staged_path.unlink, missing_ok=True)
+        cancellation = await _run_shielded_to_completion(
+            asyncio.to_thread(self.staged_path.unlink, missing_ok=True)
+        )
+        if cancellation is not None:
+            raise cancellation
 
 
 @dataclass(frozen=True)
@@ -144,6 +156,7 @@ class ArtifactContentOrphanRecorder(Protocol):
         *,
         reason_code: str,
         last_error_code: str,
+        next_attempt_at: datetime | None = None,
     ) -> None:
         """Persist one retryable orphan without reusing the save transaction."""
 
@@ -225,32 +238,41 @@ class ArtifactContentAuthorityService:
                 authority,
                 max_bytes=max_bytes,
             )
-            if authority.content_hash is None:
-                initialized = await self._repository.initialize_content_hash(
-                    scope,
-                    expected_revision=authority.revision,
-                    expected_object_key=authority.object_key,
+            try:
+                if authority.content_hash is None:
+                    initialized = await self._repository.initialize_content_hash(
+                        scope,
+                        expected_revision=authority.revision,
+                        expected_object_key=authority.object_key,
+                        content_hash=computed_hash,
+                    )
+                    if (
+                        initialized is None
+                        or initialized.revision != authority.revision
+                        or initialized.object_key != authority.object_key
+                    ):
+                        await _run_shielded_to_completion(
+                            self._discard_staged_path(staged_path)
+                        )
+                        continue
+                    authority = initialized
+                if authority.content_hash != computed_hash:
+                    raise ArtifactContentIntegrityError
+                download = ArtifactContentDownload(
+                    scope=scope,
+                    mime_type=normalize_mime_type(authority.mime_type),
+                    revision=authority.revision,
                     content_hash=computed_hash,
+                    size_bytes=authority.size_bytes,
+                    staged_path=staged_path,
                 )
-                if (
-                    initialized is None
-                    or initialized.revision != authority.revision
-                    or initialized.object_key != authority.object_key
-                ):
-                    await self._discard_staged_path(staged_path)
-                    continue
-                authority = initialized
-            if authority.content_hash != computed_hash:
-                await self._discard_staged_path(staged_path)
-                raise ArtifactContentIntegrityError
-            return ArtifactContentDownload(
-                scope=scope,
-                mime_type=normalize_mime_type(authority.mime_type),
-                revision=authority.revision,
-                content_hash=computed_hash,
-                size_bytes=authority.size_bytes,
-                staged_path=staged_path,
-            )
+            except BaseException:
+                _ = await _run_shielded_to_completion(
+                    self._discard_staged_path(staged_path)
+                )
+                raise
+            else:
+                return download
         raise ArtifactContentIntegrityError
 
     async def get_content(self, scope: ArtifactContentScope) -> ArtifactContentContract | None:
@@ -334,6 +356,13 @@ class ArtifactContentAuthorityService:
             idempotency_key=command.idempotency_key,
             request_hash=request_hash,
         )
+        await self._record_orphan_candidate(
+            outcome,
+            reason_code="upload_provisional",
+            last_error_code="upload_in_progress",
+            next_attempt_at=datetime.now(UTC)
+            + timedelta(seconds=ARTIFACT_CONTENT_UPLOAD_GC_GRACE_SECONDS),
+        )
         await self._upload_version(
             content_bytes=content_bytes,
             mime_type=mime_type,
@@ -381,7 +410,8 @@ class ArtifactContentAuthorityService:
         object_key = outcome.uploaded_object_key
         if object_key is None:
             raise RuntimeError("Artifact version upload requires an object key")
-        try:
+
+        async def upload() -> None:
             _ = await self._storage.upload_file(
                 file_content=content_bytes,
                 object_key=object_key,
@@ -394,14 +424,26 @@ class ArtifactContentAuthorityService:
                     "content_hash": outcome.receipt.content_hash,
                 },
             )
+
+        try:
+            delayed_cancellation = await _run_shielded_to_completion(upload())
         except asyncio.CancelledError as cancellation:
-            delayed_cancellation = await _run_shielded_to_completion(self._discard_orphan(outcome))
-            if delayed_cancellation is not None:
-                raise delayed_cancellation from cancellation
+            cleanup_cancellation = await _run_shielded_to_completion(
+                self._discard_orphan(outcome)
+            )
+            if cleanup_cancellation is not None:
+                raise cleanup_cancellation from cancellation
             raise
         except Exception:
             await self._discard_orphan(outcome)
             raise
+        if delayed_cancellation is not None:
+            cleanup_cancellation = await _run_shielded_to_completion(
+                self._discard_orphan(outcome)
+            )
+            if cleanup_cancellation is not None:
+                raise cleanup_cancellation from delayed_cancellation
+            raise delayed_cancellation
 
     async def _ensure_authority_hash(
         self,
@@ -498,16 +540,22 @@ class ArtifactContentAuthorityService:
             if total != authority.size_bytes:
                 raise ArtifactContentIntegrityError
         except StorageObjectTooLargeError as exc:
-            await self._discard_staged_path(staged_path)
+            _ = await _run_shielded_to_completion(
+                self._discard_staged_path(staged_path)
+            )
             raise ArtifactContentTooLargeError(
                 actual_bytes=exc.actual_bytes,
                 max_bytes=exc.max_bytes,
             ) from exc
         except StorageObjectIntegrityError as exc:
-            await self._discard_staged_path(staged_path)
+            _ = await _run_shielded_to_completion(
+                self._discard_staged_path(staged_path)
+            )
             raise ArtifactContentIntegrityError from exc
-        except Exception:
-            await self._discard_staged_path(staged_path)
+        except BaseException:
+            _ = await _run_shielded_to_completion(
+                self._discard_staged_path(staged_path)
+            )
             raise
         return staged_path, f"sha256:{digest.hexdigest()}"
 
@@ -525,6 +573,13 @@ class ArtifactContentAuthorityService:
                 logger.warning(
                     "Artifact content orphan was not present during cleanup: %s",
                     object_key,
+                )
+                await self._record_orphan_candidate(
+                    outcome,
+                    reason_code="immediate_delete_missing",
+                    last_error_code="storage_object_not_observed",
+                    next_attempt_at=datetime.now(UTC)
+                    + timedelta(seconds=ARTIFACT_CONTENT_UPLOAD_GC_GRACE_SECONDS),
                 )
         except asyncio.CancelledError:
             logger.warning(
@@ -555,23 +610,30 @@ class ArtifactContentAuthorityService:
         *,
         reason_code: str,
         last_error_code: str,
+        next_attempt_at: datetime | None = None,
     ) -> None:
         object_key = outcome.uploaded_object_key
         if object_key is None:
             raise RuntimeError("Artifact orphan recording requires an object key")
         if self._orphan_recorder is None:
-            logger.error(
-                "Artifact content orphan candidate has no durable recorder: %s",
-                object_key,
+            raise ArtifactContentOrphanTrackingError
+        recorder_operation: Awaitable[None]
+        if next_attempt_at is None:
+            recorder_operation = self._orphan_recorder(
+                outcome,
+                reason_code=reason_code,
+                last_error_code=last_error_code,
             )
-            return
+        else:
+            recorder_operation = self._orphan_recorder(
+                outcome,
+                reason_code=reason_code,
+                last_error_code=last_error_code,
+                next_attempt_at=next_attempt_at,
+            )
         try:
             delayed_cancellation = await _run_shielded_to_completion(
-                self._orphan_recorder(
-                    outcome,
-                    reason_code=reason_code,
-                    last_error_code=last_error_code,
-                )
+                recorder_operation
             )
         except asyncio.CancelledError:
             logger.error(
@@ -580,13 +642,13 @@ class ArtifactContentAuthorityService:
                 exc_info=True,
             )
             raise
-        except Exception:
+        except Exception as exc:
             logger.error(
                 "Failed to persist uncommitted Artifact content object: %s",
                 object_key,
                 exc_info=True,
             )
-            return
+            raise ArtifactContentOrphanTrackingError from exc
         if delayed_cancellation is not None:
             raise delayed_cancellation
 

@@ -535,6 +535,7 @@ class TestArtifactContentContractV2Router:
         artifact_content_authority_mock,
         artifact_content_commit_reconciler_mock,
         monkeypatch,
+        caplog,
     ) -> None:
         await self._grant_project_access(test_db)
         content_hash = self._hash("commit-fails")
@@ -591,6 +592,12 @@ class TestArtifactContentContractV2Router:
         assert commit_failed.is_set()
         rollback.assert_awaited_once()
         artifact_content_commit_reconciler_mock.reconcile.assert_awaited_once_with(outcome)
+        assert any(
+            record.levelname == "ERROR"
+            and "Artifact content request transaction commit failed" in record.getMessage()
+            and "database commit failed" in (record.exc_text or "")
+            for record in caplog.records
+        )
 
     @pytest.mark.asyncio
     async def test_download_discards_staged_file_when_hash_commit_fails(
@@ -621,6 +628,50 @@ class TestArtifactContentContractV2Router:
 
         with pytest.raises(RuntimeError, match="database commit failed"):
             artifacts_client.get("/api/v1/artifacts/artifact-1/download")
+
+        assert not staged_path.exists()
+
+    @pytest.mark.asyncio
+    async def test_download_cancellation_during_hash_commit_discards_staged_file(
+        self,
+        test_db,
+        artifact_user,
+        artifact_content_authority_mock,
+        monkeypatch,
+        tmp_path,
+    ) -> None:
+        await self._grant_project_access(test_db)
+        staged_path = tmp_path / "cancelled-download-commit"
+        staged_path.write_bytes(b"hello")
+        artifact_content_authority_mock.stage_download.return_value = ArtifactContentDownload(
+            scope=artifact_content_authority_mock.resolve_scope.return_value,
+            mime_type="text/plain",
+            revision=3,
+            content_hash=self._hash("hello"),
+            size_bytes=5,
+            staged_path=staged_path,
+        )
+        commit_started = asyncio.Event()
+        release_commit = asyncio.Event()
+
+        async def controlled_commit() -> None:
+            commit_started.set()
+            await release_commit.wait()
+
+        monkeypatch.setattr(test_db, "commit", controlled_commit)
+        request_task = asyncio.create_task(
+            artifacts_router.download_artifact(
+                artifact_id="artifact-1",
+                current_user=artifact_user,
+                db=test_db,
+                service=artifact_content_authority_mock,
+            )
+        )
+        await asyncio.wait_for(commit_started.wait(), timeout=1)
+        request_task.cancel()
+        release_commit.set()
+        with pytest.raises(asyncio.CancelledError):
+            await request_task
 
         assert not staged_path.exists()
 
