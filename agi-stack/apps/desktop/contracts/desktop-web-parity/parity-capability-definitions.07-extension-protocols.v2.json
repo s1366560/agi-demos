@@ -105,12 +105,6 @@
           "authority": "cloud_service"
         },
         {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/mcp/tools/call",
-          "authority": "cloud_service"
-        },
-        {
           "surface": "desktop_local",
           "method": "GET",
           "path": "/api/v1/mcp",
@@ -118,44 +112,8 @@
         },
         {
           "surface": "desktop_local",
-          "method": "GET",
-          "path": "/api/v1/mcp/{server_id}",
-          "authority": "sidecar"
-        },
-        {
-          "surface": "desktop_local",
           "method": "POST",
           "path": "/api/v1/mcp",
-          "authority": "sidecar"
-        },
-        {
-          "surface": "desktop_local",
-          "method": "POST",
-          "path": "/api/v1/mcp/{server_id}/sync",
-          "authority": "sidecar"
-        },
-        {
-          "surface": "desktop_local",
-          "method": "POST",
-          "path": "/api/v1/mcp/{server_id}/test",
-          "authority": "sidecar"
-        },
-        {
-          "surface": "desktop_local",
-          "method": "POST",
-          "path": "/api/v1/mcp/reconcile/{project_id}",
-          "authority": "sidecar"
-        },
-        {
-          "surface": "desktop_local",
-          "method": "GET",
-          "path": "/api/v1/mcp/tools/all",
-          "authority": "sidecar"
-        },
-        {
-          "surface": "desktop_local",
-          "method": "POST",
-          "path": "/api/v1/mcp/tools/call",
           "authority": "sidecar"
         },
         {
@@ -207,19 +165,12 @@
       "cloud_actions": [
         "view",
         "list",
-        "create",
-        "call-tool"
+        "create"
       ],
       "local_actions": [
         "view",
         "list",
-        "get",
-        "create",
-        "sync",
-        "test",
-        "reconcile",
-        "list-tools",
-        "call-tool"
+        "create"
       ],
       "permission_requirements": [
         {
@@ -275,8 +226,7 @@
         {
           "surface": "desktop_cloud",
           "actions": [
-            "create",
-            "call-tool"
+            "create"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -289,9 +239,7 @@
           "surface": "desktop_local",
           "actions": [
             "view",
-            "list",
-            "get",
-            "list-tools"
+            "list"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -303,11 +251,7 @@
         {
           "surface": "desktop_local",
           "actions": [
-            "create",
-            "sync",
-            "test",
-            "reconcile",
-            "call-tool"
+            "create"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -328,7 +272,7 @@
         "agi-stack/apps/desktop/src/features/settings/MCPServerSettingsPage.tsx",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/mcp_apps.rs"
       ],
-      "judgment_rationale": "Web owns complete MCP server lifecycle, tool, prompt, and log authority. Cloud Desktop currently exposes list, create, and tool call fragments. Local sidecar reliably adds detail, sync, test, reconcile, and tool discovery, while elicitation, client requests, and the complete routed state matrix remain incomplete."
+      "judgment_rationale": "Web owns the complete MCP server lifecycle plus tool, prompt, and log authority. MCPServerSettingsPage and useMCPServerManagement expose refresh/list and create in both Desktop modes. Additional client and sidecar detail, sync, test, reconcile, discovery, and tool-call endpoints are not counted as native surface actions until a production UI binds them; elicitation, client requests, and the complete routed state matrix also remain incomplete."
     },
     {
       "id": "tenant-tenant-acp",
@@ -358,18 +302,6 @@
         },
         {
           "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/acp/tenants/{tenant_id}/runner-instances",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/acp/tenants/{tenant_id}/external-agents",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
           "method": "POST",
           "path": "/api/v1/acp/tenants/{tenant_id}/external-agents",
           "authority": "web_service"
@@ -390,36 +322,6 @@
           "surface": "web",
           "method": "POST",
           "path": "/api/v1/acp/tenants/{tenant_id}/external-agents/{agent_key}/test",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/acp/tenants/{tenant_id}/sessions",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
-          "path": "/api/v1/acp/tenants/{tenant_id}/external-agents/{agent_key}/sessions",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
-          "path": "/api/v1/acp/tenants/{tenant_id}/external-agents/{agent_key}/sessions/{session_id}/prompt",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
-          "path": "/api/v1/acp/tenants/{tenant_id}/external-agents/{agent_key}/sessions/{session_id}/cancel",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "DELETE",
-          "path": "/api/v1/acp/tenants/{tenant_id}/external-agents/{agent_key}/sessions/{session_id}",
           "authority": "web_service"
         },
         {
@@ -450,33 +352,23 @@
         "view",
         "view-status",
         "list-runner-pools",
-        "list-runner-instances",
         "list-agents",
         "create-agent",
         "update-agent",
         "delete-agent",
         "test-agent",
-        "list-sessions",
-        "create-session",
-        "prompt-session",
-        "cancel-session",
-        "close-session"
+        "list-sessions"
       ],
       "web_actions": [
         "view",
         "view-status",
         "list-runner-pools",
-        "list-runner-instances",
         "list-agents",
         "create-agent",
         "update-agent",
         "delete-agent",
         "test-agent",
-        "list-sessions",
-        "create-session",
-        "prompt-session",
-        "cancel-session",
-        "close-session"
+        "list-sessions"
       ],
       "cloud_actions": [],
       "local_actions": [],
@@ -487,7 +379,6 @@
             "view",
             "view-status",
             "list-runner-pools",
-            "list-runner-instances",
             "list-agents",
             "list-sessions"
           ],
@@ -504,11 +395,7 @@
             "create-agent",
             "update-agent",
             "delete-agent",
-            "test-agent",
-            "create-session",
-            "prompt-session",
-            "cancel-session",
-            "close-session"
+            "test-agent"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -523,7 +410,7 @@
       "local_policy": "cloud_only",
       "local_reason_code": "local_external_acp_not_applicable",
       "local_deviation": "External ACP runner pools, agents, and sessions require Cloud connection and governance authority; Local Desktop returns the stable cloud-only reason instead of fabricating an offline service.",
-      "judgment_rationale": "ACP has a complete Web dashboard but no audited native Cloud route. Its external runner and session authority is intentionally cloud-only, so Local Desktop is not applicable."
+      "judgment_rationale": "AcpDashboard reads status and runner pools, renders the Agent and session summaries embedded in status, and exposes external-Agent create, update, delete, and test controls. Separate runner-instance, Agent-list, session-list, and session lifecycle service methods are not called by the production page and are excluded from its API authority. No audited native Cloud route exists, and external ACP authority remains intentionally cloud-only for Local Desktop."
     },
     {
       "id": "tenant-tenant-templates",

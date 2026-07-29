@@ -95,6 +95,12 @@
         },
         {
           "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
           "method": "POST",
           "path": "/api/v1/projects/",
           "authority": "web_service"
@@ -280,6 +286,18 @@
         },
         {
           "surface": "web",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members/{user_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members/{user_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
           "method": "GET",
           "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents",
           "authority": "web_service"
@@ -288,6 +306,12 @@
           "surface": "web",
           "method": "POST",
           "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents/{workspace_agent_id}",
           "authority": "web_service"
         },
         {
@@ -310,14 +334,44 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "POST",
+          "method": "GET",
           "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members",
           "authority": "cloud_service"
         },
         {
           "surface": "desktop_cloud",
           "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members/{user_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members/{user_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
           "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents/{workspace_agent_id}",
           "authority": "cloud_service"
         },
         {
@@ -382,50 +436,76 @@
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": [
-            "view",
-            "list"
-          ],
+          "actions": ["view", "list"],
           "authentication": "authenticated",
-          "authorization": [
-            "workspace_member"
-          ],
+          "authorization": ["workspace_member"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "web",
-          "actions": [
-            "create"
-          ],
+          "actions": ["create"],
           "authentication": "authenticated",
-          "authorization": [
-            "project_member"
-          ],
+          "authorization": ["project_member"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "web",
-          "actions": [
-            "update",
-            "delete",
-            "manage-members",
-            "bind-agent",
-            "unbind-agent"
-          ],
+          "actions": ["update", "delete", "manage-members", "bind-agent", "unbind-agent"],
           "authentication": "authenticated",
-          "authorization": [
-            "workspace_manager"
-          ],
+          "authorization": ["workspace_manager"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": ["view", "list"],
+          "authentication": "authenticated",
+          "authorization": ["workspace_member"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": ["create"],
+          "authentication": "authenticated",
+          "authorization": ["project_member"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": ["update", "manage-members", "bind-agent", "unbind-agent"],
+          "authentication": "authenticated",
+          "authorization": ["workspace_manager"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": ["view", "list"],
+          "authentication": "authenticated",
+          "authorization": ["workspace_member"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": ["create"],
+          "authentication": "authenticated",
+          "authorization": ["project_member"],
           "enforcement": "enforced",
           "feature_gate": null
         }
       ],
       "cloud_status": "partial",
       "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/api/client.ts",
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceDock.tsx",
-        "agi-stack/apps/desktop/src/features/workspace/WorkspaceCreateDialog.tsx"
+        "agi-stack/apps/desktop/src/features/workspace/WorkspaceCreateDialog.tsx",
+        "agi-stack/apps/desktop/src/features/workspace/WorkspaceSettingsDialog.tsx"
       ],
       "local_status": "partial",
       "local_policy": "native_equivalent",
@@ -436,7 +516,7 @@
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceCreateDialog.tsx",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
       ],
-      "judgment_rationale": "Tenant Workspace list and creation share one Web source pair and one scheduling model. Cloud Desktop exposes list, create, update, member, and Agent-binding fragments but not the complete routed lifecycle. Local Desktop supports native list and create while the remaining lifecycle and collaboration mutations are unavailable."
+      "judgment_rationale": "Tenant Workspace list and creation share one Web source pair and one scheduling model. Cloud Desktop wires list and create through the dock and create dialog, and wires update, member, and Agent-binding mutations through App, the API client, and WorkspaceSettingsDialog; delete and the complete routed lifecycle remain absent. Local Desktop supports authenticated native list and create while the remaining lifecycle and collaboration mutations are unavailable."
     },
     {
       "id": "tenant-tenant-tasks",
@@ -567,6 +647,34 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list",
+            "open-workspace"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": [
+            "view",
+            "list",
+            "open-workspace"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
       "cloud_status": "partial",
@@ -580,7 +688,7 @@
         "agi-stack/apps/desktop/src/features/my-work/MyWorkQueue.tsx",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
       ],
-      "judgment_rationale": "Desktop My Work covers a task queue projection, but it is not yet a complete native equivalent of the Web tenant Task Dashboard across all states and task actions."
+      "judgment_rationale": "At revision 3cf279b2f, Web taskAPI consumes the QueueDepth[] authority, TaskDashboard projects the latest queue-depth point as current and preserves every point as history, and focused tests cover populated and empty responses. Desktop My Work covers an authenticated task queue projection, but it is not yet a complete native equivalent of the Web tenant Task Dashboard across all states and task actions."
     },
     {
       "id": "tenant-tenant-analytics",

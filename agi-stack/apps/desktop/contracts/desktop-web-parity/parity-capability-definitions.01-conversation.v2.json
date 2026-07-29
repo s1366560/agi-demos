@@ -141,6 +141,36 @@
           ],
           "enforcement": "missing",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "send-message",
+            "stop-session"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member",
+            "conversation_access"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": [
+            "view",
+            "send-message",
+            "stop-session"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member",
+            "conversation_access"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
       "web_status": "partial",
@@ -160,7 +190,7 @@
         "agi-stack/apps/desktop/src/hooks/useAgentSocket.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
       ],
-      "judgment_rationale": "Agent Workspace is a canonical tenant route. Web roster authority is implemented, but the current WebSocket router does not register the kill_run or steer messages emitted by the Web client. Existing native Cloud and Local workbenches cover core conversation send and stop flows but do not yet cover roster management, individual SubAgent control, attachment import, secure environment HITL, or the complete plan-authority contract."
+      "judgment_rationale": "Agent Workspace is a canonical tenant route. Web roster authority is implemented, but the current WebSocket router does not register the kill_run or steer messages emitted by the Web client. Existing native Cloud and Local workbenches expose authenticated conversation view, send, and stop flows; they do not yet cover roster management, individual SubAgent control, attachment import, secure environment HITL, or the complete plan-authority contract."
     }
   ],
   "source_ownership": {

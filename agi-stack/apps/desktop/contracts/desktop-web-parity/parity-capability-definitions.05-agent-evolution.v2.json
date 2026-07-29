@@ -224,20 +224,8 @@
         },
         {
           "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/agent/workflows/patterns/{pattern_id}",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
           "method": "DELETE",
           "path": "/api/v1/agent/workflows/patterns/{pattern_id}",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
-          "path": "/api/v1/agent/workflows/patterns/reset",
           "authority": "web_service"
         },
         {
@@ -262,21 +250,17 @@
       "permissions": [
         "authenticated",
         "tenant_member_for_read",
-        "tenant_admin_for_delete_and_reset"
+        "tenant_admin_for_delete"
       ],
       "actions": [
         "view",
         "list",
-        "get",
-        "delete",
-        "reset"
+        "delete"
       ],
       "web_actions": [
         "view",
         "list",
-        "get",
-        "delete",
-        "reset"
+        "delete"
       ],
       "cloud_actions": [],
       "local_actions": [],
@@ -285,8 +269,7 @@
           "surface": "web",
           "actions": [
             "view",
-            "list",
-            "get"
+            "list"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -298,8 +281,7 @@
         {
           "surface": "web",
           "actions": [
-            "delete",
-            "reset"
+            "delete"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -312,7 +294,7 @@
       "cloud_status": "planned",
       "local_status": "planned",
       "local_policy": "native_equivalent",
-      "judgment_rationale": "Tenant Workflow Patterns exposes read, delete, and reset authority; it has no create or update contract. No audited native Desktop route currently owns it, so both Desktop modes remain planned."
+      "judgment_rationale": "WorkflowPatterns lists patterns, inspects the selected list item, and exposes delete. Although detail and reset service endpoints exist, the routed page does not call them, so they are not production surface actions. No audited native Desktop route currently owns this capability, so both Desktop modes remain planned."
     }
   ],
   "source_ownership": {

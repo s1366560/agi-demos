@@ -377,6 +377,25 @@
           "feature_gate": null
         },
         {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "search",
+            "filter",
+            "semantic-search",
+            "faceted-search",
+            "temporal-search",
+            "graph-traversal",
+            "community-search"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
           "surface": "desktop_local",
           "actions": [
             "view",

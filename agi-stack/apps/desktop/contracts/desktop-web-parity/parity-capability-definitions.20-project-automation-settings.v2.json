@@ -254,6 +254,37 @@
           "feature_gate": "cron_capabilities_action_allowed"
         },
         {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list",
+            "view-history",
+            "inspect-capabilities"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "create",
+            "update",
+            "delete",
+            "toggle",
+            "run-now"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": "cron_capabilities_action_allowed"
+        },
+        {
           "surface": "desktop_local",
           "actions": [
             "view",
@@ -312,19 +343,19 @@
         "view",
         "update",
         "delete",
-        "configure-sandbox",
         "inspect-sandbox",
-        "open-terminal",
-        "open-desktop"
+        "inspect-sandbox-stats",
+        "restart-sandbox",
+        "terminate-sandbox"
       ],
       "web_actions": [
         "view",
         "update",
         "delete",
-        "configure-sandbox",
         "inspect-sandbox",
-        "open-terminal",
-        "open-desktop"
+        "inspect-sandbox-stats",
+        "restart-sandbox",
+        "terminate-sandbox"
       ],
       "api_contracts": [
         {
@@ -353,24 +384,6 @@
         },
         {
           "surface": "web",
-          "method": "POST",
-          "path": "/api/v1/projects/{project_id}/sandbox",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "DELETE",
-          "path": "/api/v1/projects/{project_id}/sandbox",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/projects/{project_id}/sandbox/health",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
           "method": "GET",
           "path": "/api/v1/projects/{project_id}/sandbox/stats",
           "authority": "web_service"
@@ -383,32 +396,8 @@
         },
         {
           "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/projects/{project_id}/sandbox/sync",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
-          "path": "/api/v1/projects/{project_id}/sandbox/desktop",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
           "method": "DELETE",
-          "path": "/api/v1/projects/{project_id}/sandbox/desktop",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
-          "path": "/api/v1/projects/{project_id}/sandbox/terminal",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "DELETE",
-          "path": "/api/v1/projects/{project_id}/sandbox/terminal",
+          "path": "/api/v1/projects/{project_id}/sandbox",
           "authority": "web_service"
         },
         {
@@ -437,24 +426,6 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/projects/{project_id}/sandbox",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "DELETE",
-          "path": "/api/v1/projects/{project_id}/sandbox",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "GET",
-          "path": "/api/v1/projects/{project_id}/sandbox/health",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
           "method": "GET",
           "path": "/api/v1/projects/{project_id}/sandbox/stats",
           "authority": "cloud_service"
@@ -467,69 +438,15 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "GET",
-          "path": "/api/v1/projects/{project_id}/sandbox/sync",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/projects/{project_id}/sandbox/desktop",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
           "method": "DELETE",
-          "path": "/api/v1/projects/{project_id}/sandbox/desktop",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/projects/{project_id}/sandbox/terminal",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "DELETE",
-          "path": "/api/v1/projects/{project_id}/sandbox/terminal",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_local",
-          "method": "GET",
           "path": "/api/v1/projects/{project_id}/sandbox",
-          "authority": "sidecar"
+          "authority": "cloud_service"
         },
         {
           "surface": "desktop_local",
-          "method": "POST",
-          "path": "/api/v1/projects/{project_id}/sandbox",
-          "authority": "sidecar"
-        },
-        {
-          "surface": "desktop_local",
-          "method": "POST",
-          "path": "/api/v1/projects/{project_id}/sandbox/proxy-auth-cookie",
-          "authority": "sidecar"
-        },
-        {
-          "surface": "desktop_local",
-          "method": "POST",
-          "path": "/api/v1/projects/{project_id}/sandbox/desktop",
-          "authority": "sidecar"
-        },
-        {
-          "surface": "desktop_local",
-          "method": "POST",
-          "path": "/api/v1/projects/{project_id}/sandbox/terminal",
-          "authority": "sidecar"
-        },
-        {
-          "surface": "desktop_local",
-          "method": "POST",
-          "path": "/api/v1/projects/{project_id}/sandbox/execute",
-          "authority": "sidecar"
+          "method": "NONE",
+          "path": "unavailable:local_project_settings_authority_planned",
+          "authority": "none"
         },
         {
           "surface": "native_only",
@@ -543,10 +460,8 @@
           "surface": "web",
           "actions": [
             "view",
-            "configure-sandbox",
             "inspect-sandbox",
-            "open-terminal",
-            "open-desktop"
+            "inspect-sandbox-stats"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -558,7 +473,9 @@
         {
           "surface": "web",
           "actions": [
-            "update"
+            "update",
+            "restart-sandbox",
+            "terminate-sandbox"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -570,6 +487,9 @@
         {
           "surface": "web",
           "actions": [
+            "update",
+            "restart-sandbox",
+            "terminate-sandbox",
             "delete"
           ],
           "authentication": "authenticated",
@@ -585,7 +505,7 @@
       "local_policy": "native_equivalent",
       "local_reason_code": "local_project_settings_authority_planned",
       "local_deviation": "Local project settings may configure bounded workspace and sandbox resources, but secrets and arbitrary host paths must remain outside renderer state and outside the page contract.",
-      "judgment_rationale": "The Web Project Settings page owns project metadata, destructive lifecycle actions and project sandbox controls. The Local sidecar already exposes scoped sandbox get/ensure, execute, terminal and desktop authorities, but Desktop has no complete routed Project Settings page and Local lacks the Cloud lifecycle surface, so both modes remain planned rather than claiming page parity."
+      "judgment_rationale": "The production Web Project Settings page updates or deletes project metadata, reads the sandbox and its stats, and exposes restart and terminate controls. Sandbox reads are project-member safe, update, restart and terminate require project admin or owner authority, and delete remains project-owner only. Ensure, health, sync, execute, terminal, desktop and proxy-cookie endpoints are not called by this routed page and belong to a wider sandbox capability instead. Desktop has no complete routed Project Settings page, so Cloud and Local remain planned rather than claiming page parity."
     }
   ],
   "source_ownership": {

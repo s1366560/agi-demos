@@ -14,6 +14,7 @@ import {
   apiContract,
   normalizeUnavailableDesktopContracts,
 } from "./parity-contract-normalizer.mjs";
+import { assertSurfacePermissionCoverage } from "./parity-permission-coverage.mjs";
 import { mergeDefinitionFragments } from "./definition-fragment-merger.mjs";
 import {
   bindProductionEntrySurfaces,
@@ -101,7 +102,16 @@ assertCount(
   "eager route entries",
 );
 
-const normalizedDefinitions = definitions.capabilities.map(normalizeDefinition);
+const normalizedDefinitions = definitions.capabilities.map((definition) => {
+  const normalized = normalizeDefinition(definition);
+  assertSurfacePermissionCoverage({
+    capabilityId: normalized.id,
+    capabilityKind: normalized.kind,
+    surfaces: normalized.surfaces,
+    permissionRequirements: normalized.permission_requirements,
+  });
+  return normalized;
+});
 const capabilityById = new Map(
   normalizedDefinitions.map((definition) => [definition.id, definition]),
 );
@@ -197,6 +207,8 @@ const judgmentsByCapability = cliOptions.emitInputsPath
 const reviewInputs = [];
 const capabilities = normalizedDefinitions.map((definition) => {
   const webSources = sourcesByCapability.get(definition.id) ?? [];
+  const reviewedAdditionalWebEntries =
+    definition.reviewed_additional_web_entries ?? [];
   const ownedRoutes = (registrationsByCapability.get(definition.id) ?? []).map(
     (routeKey) => productionRouteByKey.get(routeKey),
   );
@@ -205,6 +217,10 @@ const capabilities = normalizedDefinitions.map((definition) => {
     kind: definition.kind,
     ownedRoutes,
     ownedSourceEntries: webSources,
+    reviewedAdditionalWebEntries,
+    auditedSourceEntries: auditedSourceByEntry,
+    sourceOwnerByEntry: sourceOwner,
+    knownCapabilityIds: capabilityById,
     webMissing: definition.web_missing,
   });
   const productionEntries = {
@@ -254,6 +270,11 @@ const capabilities = normalizedDefinitions.map((definition) => {
     web_route_registration_ids:
       registrationsByCapability.get(definition.id) ?? [],
     routed_source_entries: resolvedWebEntries,
+    ...(reviewedAdditionalWebEntries.length > 0
+      ? {
+          reviewed_additional_web_entries: reviewedAdditionalWebEntries,
+        }
+      : {}),
     audited_web_sources: auditedWebSources,
     source_inventory_revisions: {
       web_routes: inventory.source_revision,

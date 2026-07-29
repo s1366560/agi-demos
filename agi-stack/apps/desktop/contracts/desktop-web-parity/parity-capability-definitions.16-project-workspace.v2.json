@@ -319,6 +319,46 @@
           "feature_gate": null
         },
         {
+          "surface": "desktop_cloud",
+          "actions": ["view", "list", "open-blackboard"],
+          "authentication": "authenticated",
+          "authorization": ["workspace_member"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": ["create"],
+          "authentication": "authenticated",
+          "authorization": ["project_member"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "update",
+            "bind-agent",
+            "unbind-agent"
+          ],
+          "authentication": "authenticated",
+          "authorization": ["workspace_editor"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "add-member",
+            "update-member-role",
+            "remove-member"
+          ],
+          "authentication": "authenticated",
+          "authorization": ["workspace_owner"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
           "surface": "desktop_local",
           "actions": ["view", "list", "create", "open-blackboard"],
           "authentication": "authenticated",
@@ -343,7 +383,7 @@
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceDock.tsx",
         "agi-stack/apps/desktop/src/features/workspace/capabilityWorkspaceCollaborationClient.ts"
       ],
-      "judgment_rationale": "The Web project workspace route registrations resolve their shared WorkspaceList and WorkspaceCreate production sources through owned route source entries while preserving the tenant capability as their unique source owner. Cloud Desktop also wires WorkspaceSettingsDialog through App for update, member add/role update/removal, and Agent bind/unbind calls. Each mutation captures tenant/project/workspace scope epoch and context revision, forwards an AbortSignal to the nested Cloud API, and rejects a result after a scope change before updating the projection. Cloud delete is not exposed. The Local sidecar implements nested list/create only, so Local remains partial."
+      "judgment_rationale": "The Web project workspace route registrations resolve their shared WorkspaceList and WorkspaceCreate production sources through owned route source entries while preserving the tenant capability as their unique source owner. Cloud Desktop also wires WorkspaceSettingsDialog through App for update, member add/role update/removal, and Agent bind/unbind calls. Workspace update and Agent binding require editor-or-owner authority, while member add, role update, and removal remain owner-only. Each mutation captures tenant/project/workspace scope epoch and context revision, forwards an AbortSignal to the nested Cloud API, and rejects a result after a scope change before updating the projection. Cloud delete is not exposed. The Local sidecar implements nested list/create only, so Local remains partial."
     },
     {
       "id": "project-blackboard-dynamic-project-blackboard",

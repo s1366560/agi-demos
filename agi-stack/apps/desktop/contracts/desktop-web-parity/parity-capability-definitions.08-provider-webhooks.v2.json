@@ -173,25 +173,7 @@
         {
           "surface": "desktop_cloud",
           "method": "GET",
-          "path": "/api/v1/llm-providers/routing-policy",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "PUT",
-          "path": "/api/v1/llm-providers/routing-policy",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "GET",
           "path": "/api/v1/llm-providers/models/{provider_type}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/llm-providers/{provider_id}/models/discover",
           "authority": "cloud_service"
         },
         {
@@ -322,9 +304,7 @@
         "test-connection",
         "view-usage",
         "view-routing",
-        "update-routing",
-        "list-models",
-        "discover-models"
+        "list-models"
       ],
       "local_actions": [
         "view",
@@ -415,8 +395,7 @@
             "view",
             "list",
             "view-usage",
-            "list-models",
-            "discover-models"
+            "list-models"
           ],
           "authentication": "authenticated",
           "authorization": [],
@@ -446,18 +425,6 @@
           "authentication": "authenticated",
           "authorization": [
             "workspace_member"
-          ],
-          "enforcement": "enforced",
-          "feature_gate": null
-        },
-        {
-          "surface": "desktop_cloud",
-          "actions": [
-            "update-routing"
-          ],
-          "authentication": "authenticated",
-          "authorization": [
-            "workspace_manager"
           ],
           "enforcement": "enforced",
           "feature_gate": null
@@ -526,7 +493,7 @@
         "agi-stack/apps/desktop/src/features/settings/ModelProviderWorkspace.tsx",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/provider_credentials.rs"
       ],
-      "judgment_rationale": "Web owns provider CRUD, assignments, system resilience, model catalog, and environment detection. Tenant members may read their tenant assignment while assignment mutations, provider mutations, health checks, test connections, system status, and environment detection require global administration. Desktop has native vault-safe provider editing, health, usage, model discovery, and revision-aware routing in both modes, but not delete, tenant assignment, or system authority. OAuth is not declared because no callback or redirect authority exists."
+      "judgment_rationale": "Web owns provider CRUD, assignments, system resilience, model catalog, and environment detection. Tenant members may read their tenant assignment while assignment mutations, provider mutations, health checks, test connections, system status, and environment detection require global administration. Cloud Desktop uses the service model catalog and renders a read-only routing projection; it does not call provider discovery or routing-policy mutation authority. Local Desktop retains vault-safe discovery and revision-aware routing. Neither Desktop mode claims delete, tenant assignment, system authority, or OAuth without a callback contract."
     },
     {
       "id": "tenant-tenant-webhooks",

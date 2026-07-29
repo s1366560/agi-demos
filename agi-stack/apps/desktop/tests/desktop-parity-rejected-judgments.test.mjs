@@ -77,6 +77,35 @@ test("Project Workspaces records the audited native Cloud settings mutations", (
   ]) {
     assert.ok(cloudContracts.includes(contract), `missing ${contract}`);
   }
+  const cloudPermissionActions = workspaces.permission_requirements
+    .filter((requirement) => requirement.surface === "desktop_cloud")
+    .flatMap((requirement) => requirement.actions);
+  for (const action of workspaces.cloud_actions) {
+    assert.ok(
+      cloudPermissionActions.includes(action),
+      `missing Cloud permission for ${action}`,
+    );
+  }
+  const cloudEditor = workspaces.permission_requirements.find(
+    (requirement) =>
+      requirement.surface === "desktop_cloud" &&
+      requirement.authorization.includes("workspace_editor"),
+  );
+  const cloudOwner = workspaces.permission_requirements.find(
+    (requirement) =>
+      requirement.surface === "desktop_cloud" &&
+      requirement.authorization.includes("workspace_owner"),
+  );
+  assert.deepEqual(cloudEditor?.actions, [
+    "update",
+    "bind-agent",
+    "unbind-agent",
+  ]);
+  assert.deepEqual(cloudOwner?.actions, [
+    "add-member",
+    "update-member-role",
+    "remove-member",
+  ]);
 
   assert.match(workspaces.judgment_rationale, /scope epoch/u);
   assert.match(workspaces.judgment_rationale, /context revision/u);

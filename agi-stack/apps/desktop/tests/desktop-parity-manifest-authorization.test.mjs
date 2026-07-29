@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
+import { assertSurfacePermissionCoverage } from "../contracts/desktop-web-parity/parity-permission-coverage.mjs";
 import { validateJsonSchema } from "../contracts/desktop-web-parity/schema-validator.mjs";
 
 const contractRoot = new URL(
@@ -136,4 +137,91 @@ test("all capability definitions declare reviewed authorization requirements exp
   );
   assert.doesNotMatch(generatorSource, /defaultPermissionRequirements/u);
   assert.doesNotMatch(generatorSource, /authorization:\s*\[\.\.\.declared\]/u);
+});
+
+test("every advertised surface action has an explicit permission requirement", () => {
+  assert.match(generatorSource, /assertSurfacePermissionCoverage/u);
+  const surfaces = {
+    web: { allowed_actions: ["view"] },
+    desktop_cloud: { allowed_actions: ["view", "update"] },
+    desktop_local: { allowed_actions: [] },
+    native_only: { allowed_actions: [] },
+  };
+  const permissionRequirements = [
+    {
+      surface: "web",
+      actions: ["view"],
+      authentication: "authenticated",
+      authorization: ["tenant_member"],
+      enforcement: "enforced",
+      feature_gate: null,
+    },
+    {
+      surface: "desktop_cloud",
+      actions: ["view", "update"],
+      authentication: "authenticated",
+      authorization: ["tenant_admin"],
+      enforcement: "enforced",
+      feature_gate: null,
+    },
+  ];
+
+  assert.doesNotThrow(() =>
+    assertSurfacePermissionCoverage({
+      capabilityId: "complete-capability",
+      surfaces,
+      permissionRequirements,
+    }),
+  );
+  assert.throws(
+    () =>
+      assertSurfacePermissionCoverage({
+        capabilityId: "incomplete-capability",
+        surfaces,
+        permissionRequirements: permissionRequirements.map((requirement) =>
+          requirement.surface === "desktop_cloud"
+            ? { ...requirement, actions: ["view"] }
+            : requirement,
+        ),
+      }),
+    /incomplete-capability\.desktop_cloud.*update/u,
+  );
+});
+
+test("native-only permissions cover the same Electron boundary in both Desktop modes", () => {
+  const nativeSurfaces = {
+    web: { allowed_actions: [] },
+    desktop_cloud: { allowed_actions: ["invoke"] },
+    desktop_local: { allowed_actions: ["invoke"] },
+    native_only: { allowed_actions: ["invoke"] },
+  };
+  const nativePermission = [
+    {
+      surface: "native_only",
+      actions: ["invoke"],
+      authentication: "native_shell",
+      authorization: ["allowlisted_preload_bridge"],
+      enforcement: "enforced",
+      feature_gate: null,
+    },
+  ];
+
+  assert.doesNotThrow(() =>
+    assertSurfacePermissionCoverage({
+      capabilityId: "native-boundary",
+      capabilityKind: "native_only",
+      surfaces: nativeSurfaces,
+      permissionRequirements: nativePermission,
+    }),
+  );
+  assert.throws(
+    () =>
+      assertSurfacePermissionCoverage({
+        capabilityId: "ordinary-capability",
+        capabilityKind: "canonical",
+        surfaces: nativeSurfaces,
+        permissionRequirements: nativePermission,
+      }),
+    /ordinary-capability\.desktop_cloud.*invoke/u,
+  );
 });

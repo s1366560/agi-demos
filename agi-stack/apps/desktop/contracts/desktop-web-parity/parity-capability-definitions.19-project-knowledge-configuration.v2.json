@@ -221,34 +221,143 @@
       "domain": "extensions",
       "scope": ["tenant", "project"],
       "web_route_ids": ["project-project-channels"],
+      "reviewed_additional_web_entries": [
+        {
+          "source_entry": "web/src/pages/tenant/PluginHub.tsx",
+          "source_owner_capability_id": "tenant-tenant-plugins",
+          "route_registration_id": "production-route-path-tenant-tenantid-project-projectid-channels",
+          "relationship": "canonical_redirect_target"
+        }
+      ],
       "api_method": "GET",
       "api_path": "/api/v1/channels/projects/{project_id}/configs",
-      "permissions": ["authenticated", "project_member", "project_admin"],
+      "permissions": [
+        "authenticated",
+        "tenant_member",
+        "tenant_admin",
+        "tenant_owner",
+        "project_member",
+        "project_admin",
+        "project_owner"
+      ],
       "actions": [
         "view",
         "list",
-        "create",
-        "update",
-        "delete",
-        "test",
-        "inspect-status",
-        "manage-plugin"
+        "install",
+        "enable",
+        "disable",
+        "uninstall",
+        "reload",
+        "view-channel-catalog",
+        "view-channel-schema",
+        "view-config-schema",
+        "view-config",
+        "update-config",
+        "list-channel-configs",
+        "create-channel-config",
+        "update-channel-config",
+        "delete-channel-config",
+        "test-channel-config"
       ],
       "web_actions": [
         "view",
         "list",
-        "create",
-        "update",
-        "delete",
-        "test",
-        "inspect-status",
-        "manage-plugin"
+        "install",
+        "enable",
+        "disable",
+        "uninstall",
+        "reload",
+        "view-channel-catalog",
+        "view-channel-schema",
+        "view-config-schema",
+        "view-config",
+        "update-config",
+        "list-channel-configs",
+        "create-channel-config",
+        "update-channel-config",
+        "delete-channel-config",
+        "test-channel-config"
       ],
-      "cloud_actions": ["view", "list", "create", "update", "delete", "test"],
+      "cloud_actions": [
+        "view",
+        "view-channel-catalog",
+        "view-channel-schema",
+        "list-channel-configs",
+        "create-channel-config",
+        "update-channel-config",
+        "delete-channel-config",
+        "test-channel-config"
+      ],
       "api_contracts": [
         {
           "surface": "web",
           "method": "GET",
+          "path": "/api/v1/channels/tenants/{tenant_id}/plugins",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/channels/tenants/{tenant_id}/plugins/channel-catalog",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/channels/tenants/{tenant_id}/plugins/channel-catalog/{channel_type}/schema",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/channels/tenants/{tenant_id}/plugins/install",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/enable",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/disable",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/uninstall",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/channels/tenants/{tenant_id}/plugins/reload",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/config-schema",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/config",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/config",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
           "path": "/api/v1/channels/projects/{project_id}/configs",
           "authority": "web_service"
         },
@@ -256,12 +365,6 @@
           "surface": "web",
           "method": "POST",
           "path": "/api/v1/channels/projects/{project_id}/configs",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/channels/configs/{config_id}",
           "authority": "web_service"
         },
         {
@@ -283,16 +386,16 @@
           "authority": "web_service"
         },
         {
-          "surface": "web",
+          "surface": "desktop_cloud",
           "method": "GET",
-          "path": "/api/v1/channels/configs/{config_id}/status",
-          "authority": "web_service"
+          "path": "/api/v1/channels/tenants/{tenant_id}/plugins/channel-catalog",
+          "authority": "cloud_service"
         },
         {
-          "surface": "web",
+          "surface": "desktop_cloud",
           "method": "GET",
-          "path": "/api/v1/channels/projects/{project_id}/observability/summary",
-          "authority": "web_service"
+          "path": "/api/v1/channels/tenants/{tenant_id}/plugins/channel-catalog/{channel_type}/schema",
+          "authority": "cloud_service"
         },
         {
           "surface": "desktop_cloud",
@@ -304,12 +407,6 @@
           "surface": "desktop_cloud",
           "method": "POST",
           "path": "/api/v1/channels/projects/{project_id}/configs",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "GET",
-          "path": "/api/v1/channels/configs/{config_id}",
           "authority": "cloud_service"
         },
         {
@@ -328,18 +425,6 @@
           "surface": "desktop_cloud",
           "method": "POST",
           "path": "/api/v1/channels/configs/{config_id}/test",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "GET",
-          "path": "/api/v1/channels/configs/{config_id}/status",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "GET",
-          "path": "/api/v1/channels/projects/{project_id}/observability/summary",
           "authority": "cloud_service"
         },
         {
@@ -358,7 +443,31 @@
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": ["view", "list", "test", "inspect-status"],
+          "actions": ["view", "list", "view-channel-catalog", "view-channel-schema", "view-config-schema", "view-config"],
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": ["install", "enable", "disable", "uninstall", "reload", "update-config"],
+          "authentication": "authenticated",
+          "authorization": ["tenant_admin"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": ["install", "enable", "disable", "uninstall", "reload", "update-config"],
+          "authentication": "authenticated",
+          "authorization": ["tenant_owner"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": ["list-channel-configs", "test-channel-config"],
           "authentication": "authenticated",
           "authorization": ["project_member"],
           "enforcement": "enforced",
@@ -366,9 +475,65 @@
         },
         {
           "surface": "web",
-          "actions": ["create", "update", "delete", "manage-plugin"],
+          "actions": ["create-channel-config", "update-channel-config", "delete-channel-config"],
           "authentication": "authenticated",
           "authorization": ["project_admin"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": ["create-channel-config", "update-channel-config", "delete-channel-config"],
+          "authentication": "authenticated",
+          "authorization": ["project_owner"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": ["view", "view-channel-catalog", "view-channel-schema", "list-channel-configs", "test-channel-config"],
+          "authentication": "authenticated",
+          "authorization": ["tenant_admin", "project_member"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": ["view", "view-channel-catalog", "view-channel-schema", "list-channel-configs", "test-channel-config"],
+          "authentication": "authenticated",
+          "authorization": ["tenant_owner", "project_member"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": ["create-channel-config", "update-channel-config", "delete-channel-config"],
+          "authentication": "authenticated",
+          "authorization": ["tenant_admin", "project_admin"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": ["create-channel-config", "update-channel-config", "delete-channel-config"],
+          "authentication": "authenticated",
+          "authorization": ["tenant_admin", "project_owner"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": ["create-channel-config", "update-channel-config", "delete-channel-config"],
+          "authentication": "authenticated",
+          "authorization": ["tenant_owner", "project_admin"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": ["create-channel-config", "update-channel-config", "delete-channel-config"],
+          "authentication": "authenticated",
+          "authorization": ["tenant_owner", "project_owner"],
           "enforcement": "enforced",
           "feature_gate": null
         }
@@ -376,13 +541,17 @@
       "cloud_status": "partial",
       "cloud_reason_code": "desktop_project_channels_partial",
       "cloud_entries": [
-        "agi-stack/apps/desktop/src/features/settings/ChannelConnectionsDialog.tsx"
+        "agi-stack/apps/desktop/src/api/client.ts",
+        "agi-stack/apps/desktop/src/features/settings/ChannelConnectionsDialog.tsx",
+        "agi-stack/apps/desktop/src/features/settings/useChannelConnectionManagement.ts",
+        "agi-stack/apps/desktop/src/features/settings/SettingsManagementDialogs.tsx",
+        "agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx"
       ],
       "local_status": "not_applicable",
       "local_policy": "native_equivalent",
       "local_reason_code": "local_channel_runtime_not_applicable",
       "local_deviation": "The Local sidecar currently returns the stable local_channel_runtime_not_applicable reason for channel runtime routes; the native dialog must not fall back to a WebView or external browser.",
-      "judgment_rationale": "The canonical Web project Channels route redirects into the plugin surface with project context, while Desktop has a native channel connection dialog. Cloud lacks the complete routed catalog and observability flow, and Local parity routes deliberately report channel runtime as not applicable."
+      "judgment_rationale": "ProjectChannelsRedirect sends the canonical Web project Channels route to PluginHub with project context. That production page owns tenant plugin discovery and lifecycle, plugin configuration, the channel catalog and schema, and project channel-config CRUD and test; it does not call the single-config read, status, or observability APIs, and PluginDetail remains a separate route boundary. Cloud Desktop's native ChannelConnectionsDialog implements only catalog, schema, and channel-config CRUD and test, behind the SettingsWindow admin-or-owner UI gate intersected with tenant and project service authority. Local parity routes deliberately report channel runtime as not applicable."
     },
     {
       "id": "project-project-maintenance",
