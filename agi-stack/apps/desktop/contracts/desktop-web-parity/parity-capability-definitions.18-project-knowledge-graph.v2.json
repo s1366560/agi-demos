@@ -22,13 +22,23 @@
         "view",
         "list",
         "inspect-members",
-        "rebuild"
+        "rebuild",
+        "stream-rebuild-progress",
+        "cancel-rebuild",
+        "list-task-history",
+        "retry-task",
+        "stop-task"
       ],
       "web_actions": [
         "view",
         "list",
         "inspect-members",
-        "rebuild"
+        "rebuild",
+        "stream-rebuild-progress",
+        "cancel-rebuild",
+        "list-task-history",
+        "retry-task",
+        "stop-task"
       ],
       "api_contracts": [
         {
@@ -40,19 +50,43 @@
         {
           "surface": "web",
           "method": "GET",
-          "path": "/api/v1/graph/communities/{community_id}",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "GET",
           "path": "/api/v1/graph/communities/{community_id}/members",
           "authority": "web_service"
         },
         {
           "surface": "web",
           "method": "POST",
-          "path": "/api/v1/graph/communities/rebuild?project_id={project_id}",
+          "path": "/api/v1/graph/communities/rebuild?background=true&project_id={project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tasks/{task_id}/stream",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tasks/{task_id}/cancel",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tasks/recent",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tasks/{task_id}/retry",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tasks/{task_id}/stop",
           "authority": "web_service"
         },
         {
@@ -64,19 +98,43 @@
         {
           "surface": "desktop_cloud",
           "method": "GET",
-          "path": "/api/v1/graph/communities/{community_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "GET",
           "path": "/api/v1/graph/communities/{community_id}/members",
           "authority": "cloud_service"
         },
         {
           "surface": "desktop_cloud",
           "method": "POST",
-          "path": "/api/v1/graph/communities/rebuild?project_id={project_id}",
+          "path": "/api/v1/graph/communities/rebuild?background=true&project_id={project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tasks/{task_id}/stream",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tasks/{task_id}/cancel",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tasks/recent",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tasks/{task_id}/retry",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tasks/{task_id}/stop",
           "authority": "cloud_service"
         },
         {
@@ -99,7 +157,12 @@
             "view",
             "list",
             "inspect-members",
-            "rebuild"
+            "rebuild",
+            "stream-rebuild-progress",
+            "cancel-rebuild",
+            "list-task-history",
+            "retry-task",
+            "stop-task"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -113,7 +176,7 @@
       "local_status": "planned",
       "local_policy": "native_equivalent",
       "local_reason_code": "local_community_projection_authority_planned",
-      "judgment_rationale": "Project Communities has a dedicated Web source and graph-service authority. Desktop has no native communities management route, and Local needs a real community projection rather than a textual search approximation."
+      "judgment_rationale": "The auditable routed module CommunitiesList.tsx is a pure re-export to communities/index.tsx, whose production implementation lists Communities, loads members, starts rebuilds, streams and cancels the active rebuild task, and embeds TaskList.tsx for recent-task listing, retry and stop controls. These imported implementation sources establish the action and API inventory; the routed source-content hash alone is not execution evidence. Desktop has no native communities management route, and Local needs a real community projection rather than a textual search approximation."
     },
     {
       "id": "project-project-graph",
@@ -137,13 +200,15 @@
         "view",
         "navigate-graph",
         "inspect-node",
-        "inspect-edge"
+        "inspect-edge",
+        "export-png"
       ],
       "web_actions": [
         "view",
         "navigate-graph",
         "inspect-node",
-        "inspect-edge"
+        "inspect-edge",
+        "export-png"
       ],
       "api_contracts": [
         {
@@ -178,7 +243,8 @@
             "view",
             "navigate-graph",
             "inspect-node",
-            "inspect-edge"
+            "inspect-edge",
+            "export-png"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -192,7 +258,7 @@
       "local_status": "planned",
       "local_policy": "native_equivalent",
       "local_reason_code": "local_graph_projection_authority_planned",
-      "judgment_rationale": "The Web MemoryGraph source provides a project knowledge-graph explorer. Session execution graphs in Desktop have a different authority and data model, so they are not evidence of this capability; Cloud and Local native equivalents remain planned."
+      "judgment_rationale": "The Web MemoryGraph source provides a project knowledge-graph explorer. Its Cytoscape toolbar is enabled by default and downloads a client-side PNG through exportImage, so export-png is a project-member action with no server API contract. Session execution graphs in Desktop have a different authority and data model, so they are not evidence of this capability; Cloud and Local native equivalents remain planned."
     },
     {
       "id": "project-project-search",

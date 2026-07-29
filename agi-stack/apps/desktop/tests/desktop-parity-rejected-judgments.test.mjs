@@ -217,12 +217,10 @@ test("Project Blackboard Cloud actions match the native discussion UI", () => {
   }
   const cloudContracts = contractKeys(blackboard, "desktop_cloud");
   for (const contract of [
+    "GET /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/authority",
     "GET /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/execution-diagnostics",
     "GET /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts",
-    "POST /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts",
-    "POST /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/pin",
-    "POST /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/unpin",
-    "POST /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/replies",
+    "POST /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/mutations",
   ]) {
     assert.ok(cloudContracts.includes(contract), `missing Cloud ${contract}`);
   }

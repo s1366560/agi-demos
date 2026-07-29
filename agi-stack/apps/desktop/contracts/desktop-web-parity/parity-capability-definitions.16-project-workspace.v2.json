@@ -98,20 +98,12 @@
         "view",
         "list",
         "create",
-        "update",
-        "delete",
-        "assign",
-        "unassign",
         "open-blackboard"
       ],
       "web_actions": [
         "view",
         "list",
         "create",
-        "update",
-        "delete",
-        "assign",
-        "unassign",
         "open-blackboard"
       ],
       "cloud_actions": [
@@ -138,72 +130,6 @@
           "surface": "web",
           "method": "POST",
           "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "PATCH",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "DELETE",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "PATCH",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members/{user_id}",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "DELETE",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members/{user_id}",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "PATCH",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents/{workspace_agent_id}",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "DELETE",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents/{workspace_agent_id}",
           "authority": "web_service"
         },
         {
@@ -303,22 +229,6 @@
           "feature_gate": null
         },
         {
-          "surface": "web",
-          "actions": ["update", "assign", "unassign"],
-          "authentication": "authenticated",
-          "authorization": ["workspace_editor"],
-          "enforcement": "enforced",
-          "feature_gate": null
-        },
-        {
-          "surface": "web",
-          "actions": ["delete"],
-          "authentication": "authenticated",
-          "authorization": ["workspace_owner"],
-          "enforcement": "enforced",
-          "feature_gate": null
-        },
-        {
           "surface": "desktop_cloud",
           "actions": ["view", "list", "open-blackboard"],
           "authentication": "authenticated",
@@ -383,7 +293,7 @@
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceDock.tsx",
         "agi-stack/apps/desktop/src/features/workspace/capabilityWorkspaceCollaborationClient.ts"
       ],
-      "judgment_rationale": "The Web project workspace route registrations resolve their shared WorkspaceList and WorkspaceCreate production sources through owned route source entries while preserving the tenant capability as their unique source owner. Cloud Desktop also wires WorkspaceSettingsDialog through App for update, member add/role update/removal, and Agent bind/unbind calls. Workspace update and Agent binding require editor-or-owner authority, while member add, role update, and removal remain owner-only. Each mutation captures tenant/project/workspace scope epoch and context revision, forwards an AbortSignal to the nested Cloud API, and rejects a result after a scope change before updating the projection. Cloud delete is not exposed. The Local sidecar implements nested list/create only, so Local remains partial."
+      "judgment_rationale": "The two audited Web project-workspace pages expose list, create and navigation into Blackboard only; settings, membership and Agent-assignment controls belong to the separate Blackboard route tree and are not attributed to these pages. Cloud Desktop wires WorkspaceSettingsDialog through App for update, member add/role update/removal, and Agent bind/unbind calls. Workspace update and Agent binding require editor-or-owner authority, while member add, role update, and removal remain owner-only. Each mutation captures tenant/project/workspace scope epoch and context revision, forwards an AbortSignal to the nested Cloud API, and rejects a result after a scope change before updating the projection. Cloud delete is not exposed. The Local sidecar implements nested list/create only, so Local remains partial."
     },
     {
       "id": "project-blackboard-dynamic-project-blackboard",
@@ -394,7 +304,12 @@
       "web_route_ids": ["project-blackboard-dynamic-project-blackboard"],
       "api_method": "GET",
       "api_path": "/api/v1/workspaces/{workspace_id}/plan",
-      "permissions": ["authenticated", "workspace_member", "workspace_editor"],
+      "permissions": [
+        "authenticated",
+        "workspace_member",
+        "workspace_editor",
+        "workspace_owner"
+      ],
       "actions": [
         "view",
         "select-workspace",
@@ -442,13 +357,33 @@
       "cloud_actions": [
         "view",
         "select-workspace",
-        "review-plan",
+        "list-objectives",
+        "list-tasks",
         "inspect-execution-diagnostics",
         "list-posts",
+        "list-replies",
+        "list-agents",
+        "list-members",
+        "list-genes",
+        "list-files",
+        "review-notes",
+        "list-topology-nodes",
+        "list-topology-edges",
+        "view-settings",
+        "create-objective",
+        "create-task",
         "create-post",
         "pin-post",
         "unpin-post",
-        "create-reply"
+        "create-reply",
+        "update-gene",
+        "create-topology-node",
+        "delete-topology-node",
+        "create-topology-edge",
+        "delete-topology-edge",
+        "update-workspace",
+        "add-member",
+        "remove-member"
       ],
       "local_actions": ["view", "select-workspace", "review-plan"],
       "api_contracts": [
@@ -569,6 +504,24 @@
         {
           "surface": "desktop_cloud",
           "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/authority",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/objectives",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/workspaces/{workspace_id}/tasks",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
           "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/execution-diagnostics",
           "authority": "cloud_service"
         },
@@ -580,74 +533,50 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/pin",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/unpin",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/replies",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents",
           "authority": "cloud_service"
         },
         {
           "surface": "desktop_cloud",
           "method": "GET",
-          "path": "/api/v1/workspaces/{workspace_id}/plan",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/genes",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/files?parent_path=%2F",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/workspaces/{workspace_id}/topology/nodes",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/workspaces/{workspace_id}/topology/edges",
           "authority": "cloud_service"
         },
         {
           "surface": "desktop_cloud",
           "method": "POST",
-          "path": "/api/v1/workspaces/{workspace_id}/plan/recover-stale-attempts",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/workspaces/{workspace_id}/plan/outbox/{outbox_id}/retry",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/workspaces/{workspace_id}/plan/iteration/pause",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/workspaces/{workspace_id}/plan/iteration/resume",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/workspaces/{workspace_id}/plan/nodes/{node_id}/request-replan",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/workspaces/{workspace_id}/plan/nodes/{node_id}/reopen",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/workspaces/{workspace_id}/plan/nodes/{node_id}/accept-review",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/mutations",
           "authority": "cloud_service"
         },
         {
@@ -707,9 +636,19 @@
           "actions": [
             "view",
             "select-workspace",
-            "review-plan",
+            "list-objectives",
+            "list-tasks",
             "inspect-execution-diagnostics",
-            "list-posts"
+            "list-posts",
+            "list-replies",
+            "list-agents",
+            "list-members",
+            "list-genes",
+            "list-files",
+            "review-notes",
+            "list-topology-nodes",
+            "list-topology-edges",
+            "view-settings"
           ],
           "authentication": "authenticated",
           "authorization": ["workspace_member"],
@@ -719,13 +658,29 @@
         {
           "surface": "desktop_cloud",
           "actions": [
+            "create-objective",
+            "create-task",
             "create-post",
             "pin-post",
             "unpin-post",
-            "create-reply"
+            "create-reply",
+            "update-gene",
+            "create-topology-node",
+            "delete-topology-node",
+            "create-topology-edge",
+            "delete-topology-edge",
+            "update-workspace"
           ],
           "authentication": "authenticated",
           "authorization": ["workspace_editor"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": ["add-member", "remove-member"],
+          "authentication": "authenticated",
+          "authorization": ["workspace_owner"],
           "enforcement": "enforced",
           "feature_gate": null
         },
@@ -742,6 +697,7 @@
       "cloud_reason_code": "desktop_blackboard_authority_partial",
       "cloud_entries": [
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceCollaborationCanvas.tsx",
+        "agi-stack/apps/desktop/src/features/workspace/WorkspaceCollaborationSurfacePrimitives.tsx",
         "agi-stack/apps/desktop/src/features/workspace/httpWorkspaceCollaborationClient.ts",
         "agi-stack/apps/desktop/src/features/workspace/workspaceCollaborationHttpMutations.ts"
       ],
@@ -753,7 +709,7 @@
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceCollaborationCanvas.tsx",
         "agi-stack/apps/desktop/src/features/workspace/capabilityWorkspaceCollaborationClient.ts"
       ],
-      "judgment_rationale": "Blackboard and the workspace-to-Blackboard redirect form one audited project capability. Web provides execution diagnostics plus list/create/update/delete for discussion posts and replies and post pin/unpin under tenant/project/workspace scope; workspace members read and workspace editors mutate. Cloud Desktop's native discussion UI loads execution diagnostics and posts and exposes create post, pin/unpin and create reply through the HTTP collaboration client. Although the mutation map supports additional protocol actions, update/delete are not listed as Cloud user actions until the production UI exposes them. The Local sidecar implements the plan snapshot only, so Local remains read-only partial."
+      "judgment_rationale": "Blackboard and the workspace-to-Blackboard redirect form one audited project capability. Web provides execution diagnostics plus list/create/update/delete for discussion posts and replies and post pin/unpin under tenant/project/workspace scope; workspace members read and workspace editors mutate. Cloud Desktop's single production WorkspaceCollaborationCanvas exposes Goals, Discussion, Status, Collaboration, Members, Genes, Files, Notes, Topology and Settings. Its HTTP client reads objectives, tasks, diagnostics, posts and replies, Agent and member rosters, Genes, files, workspace notes/settings and topology through the canonical collaboration authority, while visible controls create objectives/tasks/posts/replies, pin posts, add/remove members, update Genes, create/delete topology nodes and edges, and update the workspace through the versioned collaboration mutation endpoint. Reads require workspace membership, ordinary mutations require editor authority and member changes require owner authority. Protocol mutations without a production control remain excluded. The Local sidecar implements the plan snapshot only, so Local remains read-only partial."
     }
   ],
   "source_ownership": {

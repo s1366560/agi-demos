@@ -16,6 +16,7 @@
       "api_path": "/api/v1/projects/{project_id}/members",
       "permissions": [
         "authenticated",
+        "tenant_admin",
         "project_member",
         "project_admin"
       ],
@@ -47,7 +48,7 @@
         {
           "surface": "web",
           "method": "POST",
-          "path": "/api/v1/projects/{project_id}/members",
+          "path": "/api/v1/tenants/{tenant_id}/invitations",
           "authority": "web_service"
         },
         {
@@ -83,7 +84,7 @@
         {
           "surface": "desktop_cloud",
           "method": "POST",
-          "path": "/api/v1/projects/{project_id}/members",
+          "path": "/api/v1/tenants/{tenant_id}/invitations",
           "authority": "cloud_service"
         },
         {
@@ -141,11 +142,15 @@
         },
         {
           "surface": "web",
-          "actions": [
-            "invite",
-            "update-role",
-            "remove"
-          ],
+          "actions": ["invite"],
+          "authentication": "authenticated",
+          "authorization": ["tenant_admin"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": ["update-role", "remove"],
           "authentication": "authenticated",
           "authorization": [
             "project_admin"
@@ -159,7 +164,7 @@
       "local_policy": "native_equivalent",
       "local_reason_code": "local_project_team_authority_planned",
       "local_deviation": "A Local implementation may manage local agent teammates; human invitation and organization membership actions must remain structurally unavailable when no cloud membership authority exists.",
-      "judgment_rationale": "The Web Team page combines project human membership with project-scoped agent teammates. Desktop has workspace member projections but no audited project Team route or equivalent project membership authority, so neither mode is marked implemented."
+      "judgment_rationale": "The Web Team page combines project human membership with project-scoped agent teammates. Its UserManager lists, updates and removes project members, but the visible invitation form sends POST /tenants/{tenant_id}/invitations through invitationService rather than adding a project member. Invitation therefore requires tenant-admin authority, while role changes and removal retain project-admin authority. Desktop has workspace member projections but no audited project Team route or equivalent project membership authority, so neither mode is marked implemented."
     },
     {
       "id": "project-project-memories",
@@ -179,8 +184,7 @@
         "authenticated",
         "project_member",
         "memory_editor",
-        "memory_admin",
-        "resource_owner"
+        "memory_admin"
       ],
       "actions": [
         "view",
@@ -189,7 +193,7 @@
         "update",
         "delete",
         "export",
-        "share",
+        "copy-link",
         "reprocess"
       ],
       "web_actions": [
@@ -199,7 +203,7 @@
         "update",
         "delete",
         "export",
-        "share",
+        "copy-link",
         "reprocess"
       ],
       "api_contracts": [
@@ -240,24 +244,6 @@
           "authority": "web_service"
         },
         {
-          "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/memories/{memory_id}/shares",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
-          "path": "/api/v1/memories/{memory_id}/shares",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "DELETE",
-          "path": "/api/v1/memories/{memory_id}/shares/{share_id}",
-          "authority": "web_service"
-        },
-        {
           "surface": "desktop_cloud",
           "method": "GET",
           "path": "/api/v1/memories/?project_id={project_id}",
@@ -294,24 +280,6 @@
           "authority": "cloud_service"
         },
         {
-          "surface": "desktop_cloud",
-          "method": "GET",
-          "path": "/api/v1/memories/{memory_id}/shares",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/memories/{memory_id}/shares",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "DELETE",
-          "path": "/api/v1/memories/{memory_id}/shares/{share_id}",
-          "authority": "cloud_service"
-        },
-        {
           "surface": "desktop_local",
           "method": "NONE",
           "path": "unavailable:local_memory_management_authority_planned",
@@ -331,7 +299,8 @@
             "view",
             "list",
             "create",
-            "export"
+            "export",
+            "copy-link"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -364,25 +333,13 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
-        },
-        {
-          "surface": "web",
-          "actions": [
-            "share"
-          ],
-          "authentication": "authenticated",
-          "authorization": [
-            "resource_owner"
-          ],
-          "enforcement": "enforced",
-          "feature_gate": null
         }
       ],
       "cloud_status": "planned",
       "local_status": "planned",
       "local_policy": "native_equivalent",
       "local_reason_code": "local_memory_management_authority_planned",
-      "judgment_rationale": "Memory list, creation, detail, client-side JSON export, sharing and reprocessing are one canonical project knowledge capability. The production Web page has no memory-import action. Desktop memory timeline cards are conversation projections rather than this management surface, so they do not establish route parity."
+      "judgment_rationale": "Memory list, creation, detail, client-side JSON export, copy-link and reprocessing are one canonical project knowledge capability. The visible detail-page control uses navigator.clipboard to copy window.location.href; the routed production pages do not call the memory-share APIs, so no server sharing authority is claimed. The production Web page has no memory-import action. Desktop memory timeline cards are conversation projections rather than this management surface, so they do not establish route parity."
     },
     {
       "id": "project-project-entities",

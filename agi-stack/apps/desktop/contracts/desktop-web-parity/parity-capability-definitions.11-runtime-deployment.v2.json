@@ -60,12 +60,6 @@
         },
         {
           "surface": "web",
-          "method": "PUT",
-          "path": "/api/v1/clusters/{cluster_id}/acp-runner-pools/{pool_key}",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
           "method": "POST",
           "path": "/api/v1/clusters/{cluster_id}/acp-runner-pools/{pool_key}/registration-token",
           "authority": "web_service"
@@ -116,12 +110,6 @@
           "surface": "desktop_cloud",
           "method": "POST",
           "path": "/api/v1/clusters/{cluster_id}/acp-runner-pools",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "PUT",
-          "path": "/api/v1/clusters/{cluster_id}/acp-runner-pools/{pool_key}",
           "authority": "cloud_service"
         },
         {
@@ -183,7 +171,7 @@
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_cluster_control_not_applicable",
       "local_deviation": "Cluster and ACP runner-pool administration remain visible as a native route contract in Local mode but require Cloud authority; registration tokens are never synthesized or cached by the renderer.",
-      "judgment_rationale": "Cluster list and detail pages are direct sources for the canonical cluster control plane. Reads require tenant membership while create, update, delete, ACP pool mutation, and registration-token actions require tenant administration; no cluster:read permission exists. Desktop has no audited native implementation, and a single-machine Local runtime cannot honestly claim cluster authority."
+      "judgment_rationale": "Cluster list and detail pages are direct sources for the canonical cluster control plane. Reads require tenant membership while cluster create, update, delete, ACP runner-pool creation, and registration-token actions require tenant administration; the uncalled runner-pool update service method is not surface authority, and no cluster:read permission exists. Desktop has no audited native implementation, and a single-machine Local runtime cannot honestly claim cluster authority."
     },
     {
       "id": "tenant-tenant-deploy",

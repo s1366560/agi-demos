@@ -71,6 +71,26 @@ test("Projects records the detail read used by the edit route", () => {
   );
 });
 
+test("Tenant Workspaces limits Web authority to its routed list and create pages", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.02-tenant-operations.v2.json",
+    "tenant-tenant-workspaces",
+  );
+  const expectedWebActions = ["view", "list", "create"];
+
+  assert.deepEqual(capability.actions, expectedWebActions);
+  assert.deepEqual(capability.web_actions, expectedWebActions);
+  assert.deepEqual(contractKeys(capability, "web"), [
+    "GET /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
+    "POST /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
+  ]);
+  assert.deepEqual(permissionActions(capability, "web").sort(), [
+    "create",
+    "list",
+    "view",
+  ]);
+});
+
 test("Tenant Workspaces binds native settings entries, contracts, and permissions", () => {
   const capability = readCapability(
     "parity-capability-definitions.02-tenant-operations.v2.json",
@@ -90,11 +110,12 @@ test("Tenant Workspaces binds native settings entries, contracts, and permission
     "DELETE /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members/{user_id}",
     "DELETE /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents/{workspace_agent_id}",
   ];
-  for (const surface of ["web", "desktop_cloud"]) {
-    const contracts = contractKeys(capability, surface);
-    for (const contract of requiredMutationContracts) {
-      assert.ok(contracts.includes(contract), `${surface} missing ${contract}`);
-    }
+  const cloudContracts = contractKeys(capability, "desktop_cloud");
+  for (const contract of requiredMutationContracts) {
+    assert.ok(
+      cloudContracts.includes(contract),
+      `desktop_cloud missing ${contract}`,
+    );
   }
 
   for (const contract of [
@@ -231,6 +252,77 @@ test("Cloud Providers excludes Local-only routing mutation and discovery", () =>
   }
   assert.ok(
     cloudContracts.includes("GET /api/v1/llm-providers/models/{provider_type}"),
+  );
+});
+
+test("Web Providers excludes service methods without routed production callers", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.08-provider-webhooks.v2.json",
+    "tenant-tenant-providers",
+  );
+  const webContracts = contractKeys(capability, "web");
+  const webPermissions = permissionActions(capability, "web");
+
+  for (const contract of [
+    "GET /api/v1/llm-providers/{provider_id}",
+    "GET /api/v1/llm-providers/types",
+    "GET /api/v1/llm-providers/tenants/{tenant_id}/provider",
+    "GET /api/v1/llm-providers/models/catalog/search",
+  ]) {
+    assert.equal(webContracts.includes(contract), false, contract);
+  }
+  assert.equal(capability.actions.includes("get"), false);
+  assert.equal(capability.web_actions.includes("get"), false);
+  assert.equal(webPermissions.includes("get"), false);
+  assert.equal(capability.web_actions.includes("search-models"), true);
+  assert.equal(webPermissions.includes("search-models"), true);
+  assert.ok(webContracts.includes("GET /api/v1/llm-providers/models/catalog"));
+});
+
+test("Runtime Instances excludes the unbound general config contract", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.10-runtime-instances.v2.json",
+    "tenant-tenant-instances",
+  );
+
+  for (const surface of ["web", "desktop_cloud"]) {
+    const contracts = contractKeys(capability, surface);
+    assert.equal(
+      contracts.includes("GET /api/v1/instances/{instance_id}/config"),
+      false,
+    );
+    assert.equal(
+      contracts.includes("PUT /api/v1/instances/{instance_id}/config"),
+      false,
+    );
+  }
+  const webContracts = contractKeys(capability, "web");
+  assert.ok(webContracts.includes("GET /api/v1/instances/{instance_id}/llm-config"));
+  assert.ok(webContracts.includes("PUT /api/v1/instances/{instance_id}/llm-config"));
+  assert.ok(capability.actions.includes("configure"));
+  assert.ok(permissionActions(capability, "web").includes("configure"));
+});
+
+test("Clusters excludes the unbound runner-pool update contract", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.11-runtime-deployment.v2.json",
+    "tenant-tenant-clusters",
+  );
+  const updateContract =
+    "PUT /api/v1/clusters/{cluster_id}/acp-runner-pools/{pool_key}";
+
+  for (const surface of ["web", "desktop_cloud"]) {
+    assert.equal(contractKeys(capability, surface).includes(updateContract), false);
+  }
+  assert.ok(
+    contractKeys(capability, "web").includes(
+      "POST /api/v1/clusters/{cluster_id}/acp-runner-pools",
+    ),
+  );
+  assert.ok(
+    contractKeys(capability, "web").includes(
+      "POST /api/v1/clusters/{cluster_id}/acp-runner-pools/{pool_key}/registration-token",
+    ),
   );
 });
 

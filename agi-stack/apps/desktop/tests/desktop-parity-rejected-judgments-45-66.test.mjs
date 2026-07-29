@@ -224,11 +224,21 @@ test("Project Channels Cloud contract matches the native connection dialog", () 
   }
 });
 
-test("Project Cron Jobs declares Cloud read and capability-gated mutation permissions", () => {
+test("Project Cron Jobs separates Web production actions from Desktop capability gates", () => {
   const capability = readCapability(
     "parity-capability-definitions.20-project-automation-settings.v2.json",
     "project-project-cron-jobs",
   );
+  const expectedWebActions = [
+    "view",
+    "list",
+    "create",
+    "update",
+    "delete",
+    "toggle",
+    "run-now",
+    "view-history",
+  ];
   const readActions = [
     "view",
     "list",
@@ -242,6 +252,44 @@ test("Project Cron Jobs declares Cloud read and capability-gated mutation permis
     "toggle",
     "run-now",
   ];
+
+  assert.deepEqual(capability.actions, expectedWebActions);
+  assert.deepEqual(capability.web_actions, expectedWebActions);
+  assert.equal(
+    contractKeys(capability, "web").includes(
+      "GET /api/v1/projects/{project_id}/cron-jobs/capabilities",
+    ),
+    false,
+    "Web must not claim the unconsumed Cron capabilities endpoint",
+  );
+  assert.equal(
+    requirementsForAction(
+      capability,
+      "web",
+      "inspect-capabilities",
+    ).length,
+    0,
+    "Web must not claim the unconsumed inspect-capabilities action",
+  );
+  for (const action of expectedWebActions) {
+    const requirements = requirementsForAction(capability, "web", action);
+    assert.equal(requirements.length, 1, `unexpected Web permission rows for ${action}`);
+    assert.deepEqual(requirements[0].authorization, ["project_member"]);
+    assert.equal(
+      requirements[0].feature_gate,
+      null,
+      `Web ${action} must reflect backend project membership without a client capability gate`,
+    );
+  }
+
+  for (const surface of ["desktop_cloud", "desktop_local"]) {
+    assert.ok(
+      contractKeys(capability, surface).includes(
+        "GET /api/v1/projects/{project_id}/cron-jobs/capabilities",
+      ),
+      `${surface} must retain its structured Cron capability authority`,
+    );
+  }
 
   for (const action of readActions) {
     const requirements = requirementsForAction(

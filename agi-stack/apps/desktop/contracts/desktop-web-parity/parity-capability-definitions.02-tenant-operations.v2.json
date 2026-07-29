@@ -261,60 +261,6 @@
           "authority": "web_service"
         },
         {
-          "surface": "web",
-          "method": "PATCH",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "DELETE",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "PATCH",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members/{user_id}",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "DELETE",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members/{user_id}",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "DELETE",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents/{workspace_agent_id}",
-          "authority": "web_service"
-        },
-        {
           "surface": "desktop_cloud",
           "method": "GET",
           "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
@@ -402,22 +348,12 @@
       "actions": [
         "view",
         "list",
-        "create",
-        "update",
-        "delete",
-        "manage-members",
-        "bind-agent",
-        "unbind-agent"
+        "create"
       ],
       "web_actions": [
         "view",
         "list",
-        "create",
-        "update",
-        "delete",
-        "manage-members",
-        "bind-agent",
-        "unbind-agent"
+        "create"
       ],
       "cloud_actions": [
         "view",
@@ -447,14 +383,6 @@
           "actions": ["create"],
           "authentication": "authenticated",
           "authorization": ["project_member"],
-          "enforcement": "enforced",
-          "feature_gate": null
-        },
-        {
-          "surface": "web",
-          "actions": ["update", "delete", "manage-members", "bind-agent", "unbind-agent"],
-          "authentication": "authenticated",
-          "authorization": ["workspace_manager"],
           "enforcement": "enforced",
           "feature_gate": null
         },
@@ -516,7 +444,7 @@
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceCreateDialog.tsx",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
       ],
-      "judgment_rationale": "Tenant Workspace list and creation share one Web source pair and one scheduling model. Cloud Desktop wires list and create through the dock and create dialog, and wires update, member, and Agent-binding mutations through App, the API client, and WorkspaceSettingsDialog; delete and the complete routed lifecycle remain absent. Local Desktop supports authenticated native list and create while the remaining lifecycle and collaboration mutations are unavailable."
+      "judgment_rationale": "Tenant Workspace list and creation share one Web source pair and one scheduling model; settings, member management, and Agent binding are owned by their separately audited production capability rather than inferred from service methods. Cloud Desktop wires list and create through the dock and create dialog, and wires update, member, and Agent-binding mutations through App, the API client, and WorkspaceSettingsDialog; delete and the complete routed lifecycle remain absent. Local Desktop supports authenticated native list and create while the remaining lifecycle and collaboration mutations are unavailable."
     },
     {
       "id": "tenant-tenant-tasks",

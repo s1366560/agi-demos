@@ -26,14 +26,17 @@
         "delete",
         "toggle",
         "run-now",
-        "view-history",
-        "inspect-capabilities"
+        "view-history"
       ],
       "web_actions": [
         "view",
         "list",
-        "view-history",
-        "inspect-capabilities"
+        "create",
+        "update",
+        "delete",
+        "toggle",
+        "run-now",
+        "view-history"
       ],
       "cloud_actions": [
         "view",
@@ -56,12 +59,6 @@
           "surface": "web",
           "method": "GET",
           "path": "/api/v1/projects/{project_id}/cron-jobs",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/projects/{project_id}/cron-jobs/capabilities",
           "authority": "web_service"
         },
         {
@@ -227,8 +224,12 @@
           "actions": [
             "view",
             "list",
-            "view-history",
-            "inspect-capabilities"
+            "create",
+            "update",
+            "delete",
+            "toggle",
+            "run-now",
+            "view-history"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -236,22 +237,6 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
-        },
-        {
-          "surface": "web",
-          "actions": [
-            "create",
-            "update",
-            "delete",
-            "toggle",
-            "run-now"
-          ],
-          "authentication": "authenticated",
-          "authorization": [
-            "project_member"
-          ],
-          "enforcement": "enforced",
-          "feature_gate": "cron_capabilities_action_allowed"
         },
         {
           "surface": "desktop_cloud",
@@ -317,7 +302,7 @@
         "agi-stack/apps/desktop/src/features/automations/automationClient.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/automation.rs"
       ],
-      "judgment_rationale": "The Cloud capability endpoint currently allows reads only and explicitly denies create, edit, toggle, delete and run-now, so Cloud actions are not reported unconditionally. The Local scheduler supports durable CRUD and history behind its own structured capability gate, while run-now remains scope-dependent. The canonical project route, deep-link restore and matched-state evidence are still incomplete."
+      "judgment_rationale": "The production Web page exposes list, create, update, delete, toggle, run-now and history directly under the backend project-membership check; it does not consume the Cron capability endpoint and therefore has no client capability gate. Cloud Desktop retains the structured Cloud capability authority, which currently allows reads and denies mutations. The Local scheduler supports durable CRUD and history behind its own structured capability gate, while run-now remains scope-dependent. The canonical project route, deep-link restore and matched-state evidence are still incomplete."
     },
     {
       "id": "project-project-settings",

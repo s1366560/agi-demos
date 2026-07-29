@@ -22,18 +22,6 @@
         },
         {
           "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/llm-providers/{provider_id}",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/llm-providers/types",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
           "method": "POST",
           "path": "/api/v1/llm-providers/",
           "authority": "web_service"
@@ -89,12 +77,6 @@
         {
           "surface": "web",
           "method": "GET",
-          "path": "/api/v1/llm-providers/tenants/{tenant_id}/provider",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "GET",
           "path": "/api/v1/llm-providers/system/status",
           "authority": "web_service"
         },
@@ -114,12 +96,6 @@
           "surface": "web",
           "method": "GET",
           "path": "/api/v1/llm-providers/models/catalog",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/llm-providers/models/catalog/search",
           "authority": "web_service"
         },
         {
@@ -259,7 +235,6 @@
       "actions": [
         "view",
         "list",
-        "get",
         "create",
         "update",
         "delete",
@@ -280,7 +255,6 @@
       "web_actions": [
         "view",
         "list",
-        "get",
         "create",
         "update",
         "delete",
@@ -325,7 +299,6 @@
           "actions": [
             "view",
             "list",
-            "get",
             "view-usage",
             "list-models",
             "search-models"
@@ -493,7 +466,7 @@
         "agi-stack/apps/desktop/src/features/settings/ModelProviderWorkspace.tsx",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/provider_credentials.rs"
       ],
-      "judgment_rationale": "Web owns provider CRUD, assignments, system resilience, model catalog, and environment detection. Tenant members may read their tenant assignment while assignment mutations, provider mutations, health checks, test connections, system status, and environment detection require global administration. Cloud Desktop uses the service model catalog and renders a read-only routing projection; it does not call provider discovery or routing-policy mutation authority. Local Desktop retains vault-safe discovery and revision-aware routing. Neither Desktop mode claims delete, tenant assignment, system authority, or OAuth without a callback contract."
+      "judgment_rationale": "Web owns the provider list-backed CRUD controls, assignments, system resilience, model catalog, and environment detection exposed by ProviderList and its production component closure. Model search filters the fetched catalog client-side; uncalled get-by-id, provider-type, tenant-provider, and server-search service methods are not surface authority. Tenant members may read their tenant assignment while assignment mutations, provider mutations, health checks, test connections, system status, and environment detection require global administration. Cloud Desktop uses the service model catalog and renders a read-only routing projection; it does not call provider discovery or routing-policy mutation authority. Local Desktop retains vault-safe discovery and revision-aware routing. Neither Desktop mode claims delete, tenant assignment, system authority, or OAuth without a callback contract."
     },
     {
       "id": "tenant-tenant-webhooks",

@@ -60,18 +60,6 @@
         {
           "surface": "web",
           "method": "GET",
-          "path": "/api/v1/instances/{instance_id}/config",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "PUT",
-          "path": "/api/v1/instances/{instance_id}/config",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "GET",
           "path": "/api/v1/instances/{instance_id}/llm-config",
           "authority": "web_service"
         },
@@ -247,18 +235,6 @@
           "surface": "desktop_cloud",
           "method": "POST",
           "path": "/api/v1/instances/{instance_id}/restart",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "GET",
-          "path": "/api/v1/instances/{instance_id}/config",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "PUT",
-          "path": "/api/v1/instances/{instance_id}/config",
           "authority": "cloud_service"
         },
         {
@@ -484,7 +460,7 @@
       "local_policy": "native_equivalent",
       "local_reason_code": "local_instance_lifecycle_planned",
       "local_deviation": "Local instance lifecycle must be projected from supervised sidecar processes and workspace-scoped storage; it must not expose arbitrary host paths or pretend to support Cloud replicas.",
-      "judgment_rationale": "The Instances capability owns list, create, nested overview, files, channels, members, installed genes, settings, and evolution pages. Reads require current-tenant membership, while channel and Gene mutations enforce tenant administration. Core instance lifecycle, file, member, and configuration mutations currently enforce only membership despite requiring administration, so the Web surface is degraded. Desktop runtime diagnostics are not a substitute for this lifecycle surface; both a Cloud native route and a bounded Local sidecar equivalent remain planned."
+      "judgment_rationale": "The Instances capability owns list, create, nested overview, files, channels, members, installed genes, settings, and evolution pages. Reads require current-tenant membership, while channel and Gene mutations enforce tenant administration. Core instance lifecycle, file, member, and LLM configuration mutations currently enforce only membership despite requiring administration, so the Web surface is degraded; unbound general config service methods are not surface authority. Desktop runtime diagnostics are not a substitute for this lifecycle surface; both a Cloud native route and a bounded Local sidecar equivalent remain planned."
     }
   ],
   "source_ownership": {
