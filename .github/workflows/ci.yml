@@ -73,6 +73,12 @@ jobs:
         run: |
           uv sync --extra dev --extra neo4j
 
+      - name: Configure repository test database
+        env:
+          DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/memstack
+        run: |
+          printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > .env
+
       - name: Validate plugin template packaging
         run: |
           uv build examples/plugins/memstack-plugin-template --wheel --out-dir /tmp/plugin-template-wheels
@@ -155,6 +161,14 @@ jobs:
             --cov-report=xml \
             --cov-report=term-missing \
             --cov-fail-under=72.8
+
+      - name: Prove Workspace authority PostgreSQL triggers and concurrency
+        env:
+          WORKSPACE_AUTHORITY_POSTGRES_URL: postgresql://postgres:testpassword@localhost:5432/memstack
+        run: |
+          uv run pytest \
+            src/tests/integration/test_workspace_collaboration_authority_postgres.py \
+            -q
       
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4.6.0

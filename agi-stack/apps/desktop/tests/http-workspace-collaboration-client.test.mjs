@@ -48,8 +48,19 @@ function scoped(id, extra = {}) {
   return { id, workspace_id: workspaceId, ...extra };
 }
 
-function canonicalResponse(input) {
+function canonicalResponse(input, revision = 7) {
   const url = String(input);
+  const cursor = `workspace:${workspaceId}:revision:${revision}`;
+  if (url === `${encodedBase}/collaboration/authority`) {
+    return json({
+      contract_version: '2.0.0',
+      tenant_id: tenantId,
+      project_id: projectId,
+      workspace_id: workspaceId,
+      revision,
+      cursor,
+    });
+  }
   if (url === encodedBase) {
     return json({
       id: workspaceId,
@@ -57,15 +68,15 @@ function canonicalResponse(input) {
       project_id: projectId,
       name: 'Parity workspace',
       description: 'Canonical workspace notes',
-      revision: 7,
-      cursor: 'cursor-7',
+      revision,
+      cursor,
     });
   }
   if (url === `${encodedBase}/objectives`) {
     return json({
       items: [scoped('objective-1', { title: 'Ship parity' })],
-      revision: 7,
-      cursor: 'cursor-7',
+      revision,
+      cursor,
     });
   }
   if (url === `${encodedRoot}/tasks`) {
@@ -77,8 +88,8 @@ function canonicalResponse(input) {
         scoped('post-1', { title: 'General', is_pinned: false }),
         scoped('post-2', { title: 'Pinned', is_pinned: true }),
       ],
-      revision: 7,
-      cursor: 'cursor-7',
+      revision,
+      cursor,
     });
   }
   if (url === `${encodedBase}/blackboard/execution-diagnostics`) {
@@ -93,8 +104,8 @@ function canonicalResponse(input) {
       pending_adjudications: [],
       evidence_gaps: [],
       recent_tool_failures: [],
-      revision: 7,
-      cursor: 'cursor-7',
+      revision,
+      cursor,
     });
   }
   if (url === `${encodedBase}/agents`) {
@@ -106,15 +117,15 @@ function canonicalResponse(input) {
   if (url === `${encodedBase}/genes`) {
     return json({
       items: [scoped('gene-1', { name: 'Research' })],
-      revision: 7,
-      cursor: 'cursor-7',
+      revision,
+      cursor,
     });
   }
   if (url === `${encodedBase}/blackboard/files?parent_path=%2F`) {
     return json({
       items: [scoped('file-1', { name: 'README.md' })],
-      revision: 7,
-      cursor: 'cursor-7',
+      revision,
+      cursor,
     });
   }
   if (url === `${encodedRoot}/topology/nodes`) {
@@ -123,8 +134,8 @@ function canonicalResponse(input) {
   if (url === `${encodedRoot}/topology/edges`) {
     return json({
       items: [scoped('edge-1', { source_node_id: 'node-1', target_node_id: 'node-2' })],
-      revision: 7,
-      cursor: 'cursor-7',
+      revision,
+      cursor,
     });
   }
   throw new Error(`unexpected canonical request: ${url}`);
@@ -159,9 +170,11 @@ test('loads every Web-aligned Workspace surface from canonical REST authorities'
       assert.equal(states[surface].surface, surface);
       assert.equal(states[surface].authority, 'cloud');
       assert.equal(states[surface].status, 'ready');
-      const hasExplicitAuthority = surface !== 'collaboration' && surface !== 'members';
-      assert.equal(states[surface].revision, hasExplicitAuthority ? 7 : null);
-      assert.equal(states[surface].cursor, hasExplicitAuthority ? 'cursor-7' : null);
+      assert.equal(states[surface].revision, 7);
+      assert.equal(
+        states[surface].cursor,
+        `workspace:${workspaceId}:revision:7`,
+      );
     }
 
     assert.deepEqual(Object.keys(states.goals.data), ['objectives', 'tasks']);
@@ -179,7 +192,9 @@ test('loads every Web-aligned Workspace surface from canonical REST authorities'
     assert.deepEqual(Object.keys(states.settings.data), ['workspace']);
 
     assert.deepEqual(
-      calls.map(({ url }) => url),
+      calls
+        .map(({ url }) => url)
+        .filter((url) => url !== `${encodedBase}/collaboration/authority`),
       [
         `${encodedBase}/objectives`,
         `${encodedRoot}/tasks`,
@@ -200,6 +215,12 @@ test('loads every Web-aligned Workspace surface from canonical REST authorities'
         encodedBase,
       ],
     );
+    assert.equal(
+      calls.filter(
+        ({ url }) => url === `${encodedBase}/collaboration/authority`,
+      ).length,
+      surfaces.length * 2,
+    );
     for (const { init } of calls) {
       assert.equal(init.method, 'GET');
       assert.equal(init.headers.get('Authorization'), 'Bearer workspace-session');
@@ -210,11 +231,14 @@ test('loads every Web-aligned Workspace surface from canonical REST authorities'
   }
 });
 
-test('uses only explicit authority metadata and preserves structural emptiness', async () => {
+test('uses only canonical authority metadata and preserves structural emptiness', async () => {
   const originalFetch = globalThis.fetch;
   let empty = false;
-  globalThis.fetch = async () =>
-    json(
+  globalThis.fetch = async (input) => {
+    if (String(input) === `${encodedBase}/collaboration/authority`) {
+      return canonicalResponse(input, 3);
+    }
+    return json(
       empty
         ? []
         : [
@@ -223,21 +247,22 @@ test('uses only explicit authority metadata and preserves structural emptiness',
               updated_at: '2099-01-01T00:00:00Z',
             }),
           ],
-      { ETag: '"members-v3"' },
+      { ETag: '"ignored-members-v3"' },
     );
+  };
 
   try {
     const client = createHttpWorkspaceCollaborationClient(config());
     const ready = await client.getSurface(workspaceId, 'members');
     assert.equal(ready.status, 'ready');
-    assert.equal(ready.revision, null);
-    assert.equal(ready.cursor, '"members-v3"');
+    assert.equal(ready.revision, 3);
+    assert.equal(ready.cursor, `workspace:${workspaceId}:revision:3`);
 
     empty = true;
     const emptyState = await client.refetchAuthority(workspaceId, 'members');
     assert.equal(emptyState.status, 'empty');
-    assert.equal(emptyState.revision, null);
-    assert.equal(emptyState.cursor, '"members-v3"');
+    assert.equal(emptyState.revision, 3);
+    assert.equal(emptyState.cursor, `workspace:${workspaceId}:revision:3`);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -247,8 +272,11 @@ test('fails closed before or after fetch when Workspace scope drifts', async () 
   const originalFetch = globalThis.fetch;
   let calls = 0;
   let responseMode = 'row';
-  globalThis.fetch = async () => {
+  globalThis.fetch = async (input) => {
     calls += 1;
+    if (String(input) === `${encodedBase}/collaboration/authority`) {
+      return canonicalResponse(input);
+    }
     return responseMode === 'row'
       ? json([scoped('member-1', { workspace_id: 'workspace-other' })])
       : json({ items: [], workspace_id: 'workspace-other' });
@@ -270,7 +298,7 @@ test('fails closed before or after fetch when Workspace scope drifts', async () 
         error instanceof WorkspaceCollaborationContractError &&
         error.reason_code === 'workspace_surface_scope_mismatch',
     );
-    assert.equal(calls, 1);
+    assert.equal(calls, 2);
 
     responseMode = 'envelope';
     await assert.rejects(
@@ -279,7 +307,7 @@ test('fails closed before or after fetch when Workspace scope drifts', async () 
         error instanceof WorkspaceCollaborationContractError &&
         error.reason_code === 'workspace_surface_scope_mismatch',
     );
-    assert.equal(calls, 2);
+    assert.equal(calls, 4);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -296,6 +324,9 @@ test('does not reinterpret HTTP errors or conflicting metadata as capability sta
       });
     }
     const url = String(input);
+    if (url === `${encodedBase}/collaboration/authority`) {
+      return canonicalResponse(input, 3);
+    }
     if (url === encodedBase) {
       return json({
         id: workspaceId,
@@ -342,9 +373,17 @@ test('mutations carry authority headers then canonically refetch', async () => {
   globalThis.fetch = async (input, init) => {
     calls.push({ url: String(input), init });
     if (init.method === 'POST') {
-      return json(scoped('post-created', { title: 'Decision', is_pinned: false }));
+      return json({
+        contract_version: '2.0.0',
+        receipt_id: 'receipt-1',
+        workspace_id: workspaceId,
+        surface: 'discussion',
+        action: 'create_post',
+        revision: 9,
+        duplicate: false,
+      });
     }
-    return canonicalResponse(input);
+    return canonicalResponse(input, 9);
   };
 
   try {
@@ -362,8 +401,9 @@ test('mutations carry authority headers then canonically refetch', async () => {
     });
 
     assert.equal(state.status, 'ready');
-    assert.equal(calls.length, 2);
-    assert.equal(calls[0].url, `${encodedBase}/blackboard/posts`);
+    assert.equal(state.revision, 9);
+    assert.equal(calls.length, 4);
+    assert.equal(calls[0].url, `${encodedBase}/collaboration/mutations`);
     assert.equal(calls[0].init.method, 'POST');
     assert.equal(calls[0].init.headers.get('X-Expected-Revision'), '8');
     assert.equal(calls[0].init.headers.get('Idempotency-Key'), 'workspace-mutation-0001');
@@ -372,10 +412,20 @@ test('mutations carry authority headers then canonically refetch', async () => {
       'sidecar-launch-capability',
     );
     assert.deepEqual(JSON.parse(calls[0].init.body), {
-      title: 'Decision',
-      content: 'Ship it',
+      contract_version: '2.0.0',
+      surface: 'discussion',
+      action: 'create_post',
+      expected_revision: 8,
+      idempotency_key: 'workspace-mutation-0001',
+      payload: {
+        title: 'Decision',
+        content: 'Ship it',
+      },
     });
     assert.equal(calls[1].init.method, 'GET');
+    assert.equal(calls[1].url, `${encodedBase}/collaboration/authority`);
+    assert.equal(calls[2].url, `${encodedBase}/blackboard/posts`);
+    assert.equal(calls[3].url, `${encodedBase}/collaboration/authority`);
 
     const beforeUnsupported = calls.length;
     const unsupported = await client.mutateSurface(workspaceId, 'notes', {

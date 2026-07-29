@@ -155,6 +155,17 @@ async def call_mcp_tool(
             detail=_("MCP server is disabled"),
         )
 
+    if request_data.idempotency_key is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "reason_code": "cloud_mcp_tool_idempotency_unavailable",
+                "message": _(
+                    "Cloud MCP durable tool idempotency is unavailable for this request"
+                ),
+            },
+        )
+
     try:
         # Connect to MCP server and call the tool.
         # NOTE (M10 audit): This creates a fresh MCPClient per call intentionally.

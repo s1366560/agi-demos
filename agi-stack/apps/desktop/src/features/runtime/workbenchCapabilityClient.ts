@@ -5,6 +5,7 @@ import {
 } from '../../api/client';
 import type { DesktopAutomationApi } from '../automations/automationClient';
 import { normalizeAutomationCapabilities } from '../automations/automationModel';
+import { WORKSPACE_HTTP_MUTATION_ACTIONS } from '../workspace/workspaceCollaborationHttpMutations';
 import type { DesktopRuntimeConfig } from '../../types';
 import {
   DESKTOP_CAPABILITY_SNAPSHOT_VERSION,
@@ -265,8 +266,33 @@ export function normalizeWorkspaceCollaborationCapabilityContract(
       negotiation,
     );
   }
+  if (!isRecord(input)) {
+    return unavailable(
+      'workspace_collaboration_capability_contract_invalid',
+      negotiation,
+    );
+  }
   if (
-    !isExactRecord(input, [
+    input.authority !== 'cloud' ||
+    input.canonical_read !== true ||
+    !matchesExactStringArray(
+      input.read_surfaces,
+      WORKSPACE_COLLABORATION_READ_SURFACES,
+    ) ||
+    input.tenant_id !== scope.tenantId ||
+    input.project_id !== scope.projectId ||
+    input.workspace_id !== scope.workspaceId
+  ) {
+    return unavailable(
+      input.tenant_id !== scope.tenantId ||
+        input.project_id !== scope.projectId ||
+        input.workspace_id !== scope.workspaceId
+        ? 'workspace_collaboration_capability_scope_mismatch'
+        : 'workspace_collaboration_capability_contract_invalid',
+      negotiation,
+    );
+  }
+  const capabilityKeys = [
       'service_version',
       'contract_version',
       'authority',
@@ -278,15 +304,30 @@ export function normalizeWorkspaceCollaborationCapabilityContract(
       'canonical_read',
       'read_surfaces',
       'mutations',
-    ]) ||
-    input.authority !== 'cloud' ||
+      'allowed_actions',
+    ];
+  if (
+    input.status === 'available' &&
+    isExactRecord(input, capabilityKeys) &&
+    input.reason_code === null &&
+    isExactRecord(input.mutations, [
+      'allowed',
+      'revision_guarded',
+      'idempotency_guarded',
+      'actions',
+    ]) &&
+    input.mutations.allowed === true &&
+    input.mutations.revision_guarded === true &&
+    input.mutations.idempotency_guarded === true &&
+    matchesWorkspaceMutationActions(input.mutations.actions) &&
+    JSON.stringify(input.allowed_actions) === JSON.stringify(input.mutations.actions)
+  ) {
+    return available(negotiation);
+  }
+  if (
+    !isExactRecord(input, capabilityKeys) ||
     input.status !== 'degraded' ||
     input.reason_code !== WORKSPACE_COLLABORATION_DEGRADED_REASON ||
-    input.canonical_read !== true ||
-    !matchesExactStringArray(
-      input.read_surfaces,
-      WORKSPACE_COLLABORATION_READ_SURFACES,
-    ) ||
     !isExactRecord(input.mutations, [
       'allowed',
       'revision_guarded',
@@ -301,17 +342,20 @@ export function normalizeWorkspaceCollaborationCapabilityContract(
       negotiation,
     );
   }
-  if (
-    input.tenant_id !== scope.tenantId ||
-    input.project_id !== scope.projectId ||
-    input.workspace_id !== scope.workspaceId
-  ) {
-    return unavailable(
-      'workspace_collaboration_capability_scope_mismatch',
-      negotiation,
-    );
-  }
   return degraded(WORKSPACE_COLLABORATION_DEGRADED_REASON, negotiation);
+}
+
+function matchesWorkspaceMutationActions(input: unknown): boolean {
+  const surfaces = Object.keys(WORKSPACE_HTTP_MUTATION_ACTIONS);
+  if (!isExactRecord(input, surfaces)) return false;
+  return surfaces.every((surface) =>
+    matchesExactStringArray(
+      input[surface],
+      WORKSPACE_HTTP_MUTATION_ACTIONS[
+        surface as keyof typeof WORKSPACE_HTTP_MUTATION_ACTIONS
+      ],
+    ),
+  );
 }
 
 async function loadSearchCapability(

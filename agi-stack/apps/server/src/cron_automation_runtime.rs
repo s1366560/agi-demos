@@ -265,14 +265,27 @@ impl ReActObserver for AutomationHitlObserver {
         _round: u64,
         request: &HitlRequest,
     ) -> CoreResult<()> {
-        let request_type = match request.kind {
-            HitlKind::Clarification => "clarification",
-            HitlKind::Decision => "decision",
-            HitlKind::Permission => "permission",
+        let (request_type, a2ui_authority) = match request.kind {
+            HitlKind::Clarification => ("clarification", None),
+            HitlKind::Decision => ("decision", None),
+            HitlKind::Permission => ("permission", None),
             HitlKind::EnvVar => {
                 return Err(CoreError::Tool(
                     "automation env-var HITL requires sealed response support".to_string(),
                 ));
+            }
+            HitlKind::A2uiAction => {
+                let authority = request.a2ui_action.as_deref().ok_or_else(|| {
+                    CoreError::Tool(
+                        "automation A2UI HITL requires persisted action authority".to_string(),
+                    )
+                })?;
+                if !authority.is_structurally_valid() {
+                    return Err(CoreError::Tool(
+                        "automation A2UI HITL action authority is invalid".to_string(),
+                    ));
+                }
+                ("a2ui_action", Some(authority))
             }
         };
         let store = self.store.as_ref().ok_or_else(|| {
@@ -280,6 +293,18 @@ impl ReActObserver for AutomationHitlObserver {
         })?;
         let request_context = serde_json::to_value(request)
             .map_err(|error| CoreError::Storage(format!("encode automation HITL: {error}")))?;
+        let mut request_metadata = json!({
+            "agent_mode": "default",
+            "hitl_type": request_type,
+            "automation_run_id": self.run_id,
+            "runtime_execution_id": self.run_id,
+            "checkpoint_session_id": session_id,
+        });
+        if let Some(authority) = a2ui_authority {
+            request_metadata["surface_id"] = json!(authority.surface_id);
+            request_metadata["block_id"] = json!(authority.block_id);
+            request_metadata["allowed_actions"] = json!(authority.allowed_actions);
+        }
         let pending = NewHitlRequestRecord {
             id: request.id.clone(),
             request_type: request_type.to_string(),
@@ -291,13 +316,7 @@ impl ReActObserver for AutomationHitlObserver {
             question: request.prompt.clone(),
             options: None,
             context: Some(request_context),
-            request_metadata: Some(json!({
-                "agent_mode": "default",
-                "hitl_type": request_type,
-                "automation_run_id": self.run_id,
-                "runtime_execution_id": self.run_id,
-                "checkpoint_session_id": session_id,
-            })),
+            request_metadata: Some(request_metadata),
             expires_at: self.expires_at,
         };
         let _inserted = store.insert_pending(&pending).await?;

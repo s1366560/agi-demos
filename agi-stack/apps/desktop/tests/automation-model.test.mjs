@@ -16,6 +16,7 @@ import {
   automationScheduleValue,
   automationTrigger,
   automationTriggerKind,
+  normalizeAutomationCapabilityEnvelope,
 } from '/tmp/agistack-desktop-test-dist/src/features/automations/automationModel.js';
 
 const job = {
@@ -85,6 +86,43 @@ test('mutation capabilities fail closed when the server contract is absent', () 
       'run_now',
     ),
     { allowed: false, reason_code: 'project_write_required' },
+  );
+});
+
+test('versioned automation capability envelopes preserve negotiation metadata', () => {
+  const envelope = {
+    service_version: '0.1.0',
+    contract_version: '2.0.0',
+    schema_version: 1,
+    read: true,
+    revision_guarded: true,
+    idempotency_guarded: true,
+    durable_execution: false,
+    supported_read_trigger_kinds: ['manual', 'schedule', 'event'],
+    create: { allowed: true },
+    edit: { allowed: true },
+    toggle: { allowed: true },
+    run_now: {
+      allowed: false,
+      reason_code: 'durable_automation_execution_unavailable',
+    },
+    delete: { allowed: true },
+  };
+
+  assert.deepEqual(normalizeAutomationCapabilityEnvelope(envelope), envelope);
+  assert.equal(
+    normalizeAutomationCapabilityEnvelope({
+      ...envelope,
+      unexpected: true,
+    }),
+    null,
+  );
+  assert.equal(
+    normalizeAutomationCapabilityEnvelope({
+      ...envelope,
+      contract_version: undefined,
+    }),
+    null,
   );
 });
 

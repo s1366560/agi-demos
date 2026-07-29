@@ -7,9 +7,10 @@ mod tests {
     use uuid::Uuid;
 
     use crate::local_runtime::automation_dispatcher::{
-        claim_next_operation, enqueue_manual_run, list_runs, recover_startup_state,
-        settle_operation, AutomationClock, AutomationLedgerError, AutomationRunStatus,
-        ManualRunCommand,
+        claim_next_operation, dispatch_due_schedules, enqueue_manual_run, list_runs,
+        lookup_manual_run_receipt, recover_startup_state, renew_operation_lease, settle_operation,
+        settle_operation_with_result, AutomationClock, AutomationExecutionRecord,
+        AutomationLedgerError, AutomationRunStatus, ManualRunCommand,
     };
     use crate::local_runtime::{automation_store, session_store::DesktopSessionStore};
 
@@ -76,6 +77,7 @@ mod tests {
             },
             "delivery": { "kind": "none", "config": {} },
             "conversation_mode": "fresh",
+            "workspace_id": "local-workspace",
             "conversation_id": null,
             "timezone": "UTC",
             "stagger_seconds": 0,
@@ -181,10 +183,25 @@ mod tests {
 
         let recovered_at = FixedAutomationClock::at("2099-04-05T08:01:00Z");
         let store = DesktopSessionStore::open(&path).expect("reopen session store");
-        let recovered =
-            recover_startup_state(&store, &recovered_at).expect("recover expired operation");
-        assert_eq!(recovered.expired_operations, 1);
-        assert_eq!(recovered.requeued_runs, 1);
+        let replay = lookup_manual_run_receipt(
+            &store,
+            ManualRunCommand {
+                user_id: "local-user",
+                project_id: "local-project",
+                job_id: "job-restart",
+                expected_revision: 1,
+                idempotency_key: "run-restart-1",
+                request_hash: "restart-hash",
+                conversation_id: None,
+            },
+        )
+        .expect("lookup recovered receipt")
+        .expect("recovered receipt");
+        assert_eq!(replay.status, AutomationRunStatus::Queued);
+        assert_eq!(
+            recover_startup_state(&store, &recovered_at).expect("recovery is idempotent"),
+            Default::default()
+        );
 
         let second_claim = claim_next_operation(
             &store,
@@ -300,5 +317,120 @@ mod tests {
                 .expect("UTC timestamp"),
         };
         assert_eq!(clock.now().timestamp_millis(), 4_083_998_400_000);
+    }
+
+    #[test]
+    fn due_schedule_dispatch_is_exactly_once_and_advances_the_cursor() {
+        let created = FixedAutomationClock::at("2099-07-01T09:30:00Z");
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        seed_job(&store, "job-due", 1, 1, true, created.now());
+
+        let projected =
+            dispatch_due_schedules(&store, &created, 8).expect("project initial schedule");
+        assert_eq!(projected.due, 0);
+        assert_eq!(projected.enqueued, 0);
+        assert_eq!(
+            schedule_cursor(&store, "job-due"),
+            (
+                "active".to_string(),
+                Some("2099-07-01T09:31:00+00:00".to_string()),
+                None,
+            )
+        );
+
+        let due = FixedAutomationClock::at("2099-07-01T09:31:00Z");
+        let first = dispatch_due_schedules(&store, &due, 8).expect("dispatch due schedule");
+        let replay = dispatch_due_schedules(&store, &due, 8).expect("replay due schedule");
+        assert_eq!(first.due, 1);
+        assert_eq!(first.enqueued, 1);
+        assert_eq!(replay.due, 0);
+        assert_eq!(replay.enqueued, 0);
+
+        let (runs, total) =
+            list_runs(&store, "local-project", "job-due", 50, 0).expect("scheduled history");
+        assert_eq!(total, 1);
+        assert_eq!(runs[0]["trigger_type"], "scheduled");
+        assert_eq!(runs[0]["status"], "queued");
+        assert_eq!(
+            schedule_cursor(&store, "job-due"),
+            (
+                "active".to_string(),
+                Some("2099-07-01T09:32:00+00:00".to_string()),
+                Some("scheduled:1:2099-07-01T09:31:00+00:00".to_string()),
+            )
+        );
+    }
+
+    #[test]
+    fn renewed_lease_survives_recovery_and_terminal_history_keeps_execution_evidence() {
+        let started = FixedAutomationClock::at("2099-08-02T08:00:00Z");
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        seed_job(&store, "job-renew", 1, 1, true, started.now());
+        enqueue_manual_run(
+            &store,
+            ManualRunCommand {
+                user_id: "local-user",
+                project_id: "local-project",
+                job_id: "job-renew",
+                expected_revision: 1,
+                idempotency_key: "run-renew-1",
+                request_hash: "renew-hash",
+                conversation_id: None,
+            },
+            &started,
+        )
+        .expect("enqueue run");
+        let claim = claim_next_operation(&store, "worker-renew", Duration::from_secs(30), &started)
+            .expect("claim operation")
+            .expect("queued operation");
+
+        let heartbeat = FixedAutomationClock::at("2099-08-02T08:00:20Z");
+        assert!(
+            renew_operation_lease(&store, &claim, Duration::from_secs(30), &heartbeat,)
+                .expect("renew lease")
+        );
+        let before_expiry = FixedAutomationClock::at("2099-08-02T08:00:35Z");
+        assert_eq!(
+            recover_startup_state(&store, &before_expiry).expect("recover before expiry"),
+            Default::default()
+        );
+
+        settle_operation_with_result(
+            &store,
+            &claim,
+            AutomationRunStatus::Success,
+            AutomationExecutionRecord {
+                error_code: None,
+                result_summary: Some(json!({ "answer": "durable result" })),
+                event_count: 3,
+                execution_time_ms: 1_250,
+                conversation_id: Some("local-automation-conversation".to_string()),
+            },
+            &before_expiry,
+        )
+        .expect("settle renewed operation");
+        let (runs, total) =
+            list_runs(&store, "local-project", "job-renew", 50, 0).expect("run history");
+        assert_eq!(total, 1);
+        assert_eq!(runs[0]["status"], "success");
+        assert_eq!(runs[0]["duration_ms"], 1_250);
+        assert_eq!(runs[0]["result_summary"]["answer"], "durable result");
+        assert_eq!(runs[0]["conversation_id"], "local-automation-conversation");
+    }
+
+    fn schedule_cursor(
+        store: &DesktopSessionStore,
+        job_id: &str,
+    ) -> (String, Option<String>, Option<String>) {
+        store
+            .connection()
+            .expect("connection")
+            .query_row(
+                "SELECT availability, next_fire_at, last_occurrence_key
+                 FROM desktop_automation_schedule_state WHERE job_id = ?1",
+                [job_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("schedule cursor")
     }
 }

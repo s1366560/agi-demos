@@ -13,6 +13,7 @@ const { classifyHitlAuthorityRecovery } = require(
 test('already answered and expired authority settle stale clients after canonical refetch', () => {
   for (const [status, reasonCode] of [
     [409, 'hitl_already_answered'],
+    [409, 'hitl_answered_resume_failed'],
     [410, 'hitl_request_expired'],
   ]) {
     assert.deepEqual(

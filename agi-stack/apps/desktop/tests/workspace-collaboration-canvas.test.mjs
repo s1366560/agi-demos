@@ -70,6 +70,21 @@ test('active-tab loading aborts replaced work and mutations always canonical-ref
   assert.ok(canonicalRefetch > mutationCall);
 });
 
+test('reconnect, cursor gaps, and scoped deltas invalidate then canonical-refetch', () => {
+  assert.match(componentSource, /authorityInvalidation/u);
+  assert.match(componentSource, /lastAuthorityInvalidationRef/u);
+  assert.match(componentSource, /invalidateWorkspaceSurfaceAuthority\(/u);
+  assert.match(componentSource, /loadSurface\(surface,\s*'canonical'\)/u);
+});
+
+test('failed or unavailable mutations retain local drafts instead of resolving as success', () => {
+  assert.match(componentSource, /Promise<boolean>/u);
+  assert.match(componentSource, /return false;/u);
+  assert.match(componentSource, /return true;/u);
+  assert.match(componentSource, /if \(!succeeded\) return false;/u);
+  assert.doesNotMatch(componentSource, /\.then\(\(\) => \{\s*set(?:Title|Body|Reply|SourceId)/u);
+});
+
 test('every authority state remains explicit and refreshable', () => {
   for (const status of ['loading', 'empty', 'stale', 'error', 'unavailable']) {
     assert.match(componentSource, new RegExp(`'${status}'`, 'u'));
@@ -93,15 +108,19 @@ test('surface-specific interactions cover goals, discussion, members, genes, and
     'unpin_post',
     'add_member',
     'remove_member',
-    'toggle_gene',
-    'create_topology_node',
-    'delete_topology_node',
-    'create_topology_edge',
-    'delete_topology_edge',
-    'update_settings',
+    'update_gene',
+    'create_node',
+    'delete_node',
+    'create_edge',
+    'delete_edge',
+    'update_workspace',
   ]) {
     assert.match(componentSource, new RegExp(`'${action}'`, 'u'));
   }
+  assert.doesNotMatch(
+    componentSource,
+    /'toggle_gene'|'create_topology_node'|'delete_topology_node'|'create_topology_edge'|'delete_topology_edge'|'update_settings'/u,
+  );
 });
 
 test('Notes is a read-only derived projection and all owned copy uses collaboration keys', () => {

@@ -37,11 +37,52 @@ const availableSnapshot = {
   },
 };
 
-test('sandbox capability snapshot is exact, versioned, and fail closed', () => {
+const localRuntimeSnapshot = {
+  service_version: '0.1.0',
+  contract_version: 2,
+  terminal_interactive: {
+    availability: 'available',
+    contract_version: 1,
+    reason_code: null,
+  },
+  terminal_resume: {
+    availability: 'unavailable',
+    contract_version: 2,
+    reason_code: 'local_terminal_resume_unavailable',
+  },
+  files: {
+    availability: 'available',
+    contract_version: 1,
+    reason_code: null,
+  },
+  kasm_vnc: {
+    availability: 'not_applicable',
+    contract_version: 1,
+    reason_code: 'local_kasm_vnc_not_applicable',
+  },
+};
+
+test('sandbox capability snapshot negotiates minimum versions and fails closed below them', () => {
   assert.deepEqual(parseSandboxRuntimeCapabilitySnapshot(availableSnapshot), availableSnapshot);
-  assert.equal(
-    parseSandboxRuntimeCapabilitySnapshot({ ...availableSnapshot, inferred: true }),
-    null
+  assert.deepEqual(
+    parseSandboxRuntimeCapabilitySnapshot({
+      ...availableSnapshot,
+      contract_version: 3,
+      terminal_resume: {
+        ...availableSnapshot.terminal_resume,
+        contract_version: 3,
+        retained_sequences: 512,
+      },
+      inferred: true,
+    }),
+    {
+      ...availableSnapshot,
+      contract_version: 3,
+      terminal_resume: {
+        ...availableSnapshot.terminal_resume,
+        contract_version: 3,
+      },
+    }
   );
   assert.equal(
     parseSandboxRuntimeCapabilitySnapshot({
@@ -60,6 +101,13 @@ test('sandbox capability snapshot is exact, versioned, and fail closed', () => {
       },
     }),
     null
+  );
+});
+
+test('local runtime snapshot preserves native terminal and file authority without Kasm inference', () => {
+  assert.deepEqual(
+    parseSandboxRuntimeCapabilitySnapshot(localRuntimeSnapshot),
+    localRuntimeSnapshot
   );
 });
 

@@ -2,6 +2,39 @@
   "contract_version": "desktop-local-route-parity-v1",
   "routes": [
     {
+      "area": "artifacts",
+      "method": "GET",
+      "uri": "/api/v1/artifacts/route-parity-artifact-conversation:route-parity/content",
+      "source": "artifact",
+      "source_marker": "artifactPath(artifactId, '/content')",
+      "authority": "artifact_content_v2",
+      "body": {}
+    },
+    {
+      "area": "artifacts",
+      "method": "GET",
+      "uri": "/api/v1/artifacts/route-parity-artifact-conversation:route-parity/content/bytes",
+      "source": "artifact",
+      "source_marker": "artifactPath(artifactId, '/content/bytes')",
+      "authority": "artifact_content_v2",
+      "body": {}
+    },
+    {
+      "area": "artifacts",
+      "method": "PUT",
+      "uri": "/api/v1/artifacts/route-parity-artifact-conversation:route-parity/content",
+      "source": "artifact",
+      "source_marker": "artifactPath(artifactId, '/content')",
+      "authority": "artifact_content_v2",
+      "body": {
+        "contract_version": 2,
+        "expected_revision": 0,
+        "content_hash": "sha256:d977b6e3f724e0755acc49039ca68adf5919b935ff39f83706d05335ce24070a",
+        "idempotency_key": "route-parity-artifact-save",
+        "content": "route parity updated"
+      }
+    },
+    {
       "area": "search",
       "method": "GET",
       "uri": "/api/v1/search-enhanced/capabilities",
@@ -102,53 +135,102 @@
       "uri": "/api/v1/skills/?tenant_id=local",
       "source": "client",
       "source_marker": "/api/v1/skills/?${params.toString()}",
-      "authority": "structured_unavailable",
-      "body": {}
+      "authority": "local_registry",
+      "expected_status": 200,
+      "body": {
+        "contract_version": 2,
+        "expected_revision": 0,
+        "idempotency_key": "parity-skill-create",
+        "resource_id": "parity-skill",
+        "value": {
+          "name": "Parity skill",
+          "description": "Local route parity fixture.",
+          "tools": ["read"],
+          "scope": "tenant",
+          "full_content": "# Parity skill",
+          "metadata": {}
+        },
+        "vault_refs": []
+      }
     },
     {
       "area": "skills",
       "method": "PATCH",
-      "uri": "/api/v1/skills/implementation/status?status=disabled&tenant_id=local",
+      "uri": "/api/v1/skills/parity-skill/status?status=disabled&tenant_id=local",
       "source": "client",
       "source_marker": "/status?${params.toString()}",
       "authority": "local_registry",
-      "body": {}
+      "expected_status": 200,
+      "body": {
+        "contract_version": 2,
+        "expected_revision": 0,
+        "idempotency_key": "parity-skill-disable",
+        "value": {
+          "status": "disabled"
+        },
+        "vault_refs": []
+      }
     },
     {
       "area": "skills",
       "method": "GET",
-      "uri": "/api/v1/skills/implementation/content?tenant_id=local",
+      "uri": "/api/v1/skills/parity-skill/content?tenant_id=local",
       "source": "client",
       "source_marker": "/content?${params.toString()}",
-      "authority": "structured_unavailable",
+      "authority": "local_registry",
+      "expected_status": 200,
       "body": {}
     },
     {
       "area": "skills",
       "method": "PUT",
-      "uri": "/api/v1/skills/implementation/content?tenant_id=local",
+      "uri": "/api/v1/skills/parity-skill/content?tenant_id=local",
       "source": "client",
       "source_marker": "/content?${params.toString()}",
-      "authority": "structured_unavailable",
-      "body": {}
+      "authority": "local_registry",
+      "expected_status": 200,
+      "body": {
+        "contract_version": 2,
+        "expected_revision": 1,
+        "idempotency_key": "parity-skill-content",
+        "value": {
+          "full_content": "# Parity skill\n\nUpdated content."
+        },
+        "vault_refs": []
+      }
     },
     {
       "area": "skills",
       "method": "PUT",
-      "uri": "/api/v1/skills/implementation?tenant_id=local",
+      "uri": "/api/v1/skills/parity-skill?tenant_id=local",
       "source": "client",
       "source_marker": "/api/v1/skills/${encodeURIComponent(skillId)}?${params.toString()}",
-      "authority": "structured_unavailable",
-      "body": {}
+      "authority": "local_registry",
+      "expected_status": 200,
+      "body": {
+        "contract_version": 2,
+        "expected_revision": 2,
+        "idempotency_key": "parity-skill-update",
+        "value": {
+          "description": "Updated local route parity fixture."
+        },
+        "vault_refs": []
+      }
     },
     {
       "area": "skills",
       "method": "DELETE",
-      "uri": "/api/v1/skills/implementation?tenant_id=local",
+      "uri": "/api/v1/skills/parity-skill?tenant_id=local",
       "source": "client",
       "source_marker": "/api/v1/skills/${encodeURIComponent(skillId)}?${params.toString()}",
-      "authority": "structured_unavailable",
-      "body": {}
+      "authority": "local_registry",
+      "expected_status": 200,
+      "body": {
+        "contract_version": 2,
+        "expected_revision": 3,
+        "idempotency_key": "parity-skill-delete",
+        "vault_refs": []
+      }
     },
     {
       "area": "skills",
@@ -156,8 +238,22 @@
       "uri": "/api/v1/skills/import?tenant_id=local",
       "source": "client",
       "source_marker": "/api/v1/skills/import?${params.toString()}",
-      "authority": "structured_unavailable",
-      "body": {}
+      "authority": "local_registry",
+      "expected_status": 200,
+      "body": {
+        "contract_version": 2,
+        "expected_revision": 0,
+        "idempotency_key": "parity-skill-import",
+        "resource_id": "parity-imported-skill",
+        "value": {
+          "scope": "tenant",
+          "skill_md_content": "---\nname: parity-imported-skill\ndescription: Imported local route parity fixture.\nallowed-tools:\n  - read\n---\n\n# Imported parity skill",
+          "resource_files": {
+            "references/example.md": "Fixture resource."
+          }
+        },
+        "vault_refs": []
+      }
     },
     {
       "area": "skills",
@@ -171,37 +267,47 @@
     {
       "area": "skills",
       "method": "GET",
-      "uri": "/api/v1/skills/implementation/versions?tenant_id=local",
+      "uri": "/api/v1/skills/parity-imported-skill/versions?tenant_id=local",
       "source": "client",
       "source_marker": "/versions?${params.toString()}",
-      "authority": "structured_unavailable",
+      "authority": "local_registry",
+      "expected_status": 200,
       "body": {}
     },
     {
       "area": "skills",
       "method": "POST",
-      "uri": "/api/v1/skills/implementation/rollback?tenant_id=local",
+      "uri": "/api/v1/skills/parity-imported-skill/rollback?tenant_id=local",
       "source": "client",
       "source_marker": "/rollback?${params.toString()}",
-      "authority": "structured_unavailable",
-      "body": {}
+      "authority": "local_registry",
+      "expected_status": 200,
+      "body": {
+        "contract_version": 2,
+        "expected_revision": 0,
+        "idempotency_key": "parity-skill-rollback",
+        "target_revision": 0,
+        "vault_refs": []
+      }
     },
     {
       "area": "skills",
       "method": "GET",
-      "uri": "/api/v1/skills/implementation/export?tenant_id=local",
+      "uri": "/api/v1/skills/parity-imported-skill/export?tenant_id=local",
       "source": "client",
       "source_marker": "/export?${params.toString()}",
-      "authority": "structured_unavailable",
+      "authority": "local_registry",
+      "expected_status": 200,
       "body": {}
     },
     {
       "area": "skills",
       "method": "GET",
-      "uri": "/api/v1/skills/implementation/versions/1?tenant_id=local",
+      "uri": "/api/v1/skills/parity-imported-skill/versions/1?tenant_id=local",
       "source": "client",
       "source_marker": "/versions/${versionNumber}?${params.toString()}",
-      "authority": "structured_unavailable",
+      "authority": "local_registry",
+      "expected_status": 200,
       "body": {}
     },
     {
@@ -390,37 +496,73 @@
       "uri": "/api/v1/agent/definitions?tenant_id=local",
       "source": "client",
       "source_marker": "/api/v1/agent/definitions${query",
-      "authority": "structured_unavailable",
-      "body": {}
+      "authority": "local_registry",
+      "expected_status": 200,
+      "body": {
+        "contract_version": 2,
+        "expected_revision": 0,
+        "idempotency_key": "parity-agent-create",
+        "resource_id": "parity-agent",
+        "value": {
+          "name": "parity-agent",
+          "display_name": "Parity Agent",
+          "system_prompt": "Exercise the local route contract.",
+          "project_id": "local-project",
+          "enabled": true
+        },
+        "vault_refs": []
+      }
     },
     {
       "area": "agents",
       "method": "PATCH",
-      "uri": "/api/v1/agent/definitions/builtin%3Aall-access/enabled?tenant_id=local&project_id=local-project",
+      "uri": "/api/v1/agent/definitions/parity-agent/enabled?tenant_id=local&project_id=local-project",
       "source": "client",
       "source_marker": "/enabled${",
       "authority": "local_registry",
+      "expected_status": 200,
       "body": {
-        "enabled": false
+        "contract_version": 2,
+        "expected_revision": 0,
+        "idempotency_key": "parity-agent-disable",
+        "value": {
+          "enabled": false
+        },
+        "vault_refs": []
       }
     },
     {
       "area": "agents",
       "method": "PUT",
-      "uri": "/api/v1/agent/definitions/custom-agent?tenant_id=local",
+      "uri": "/api/v1/agent/definitions/parity-agent?tenant_id=local",
       "source": "client",
       "source_marker": "/api/v1/agent/definitions/${encodeURIComponent(definitionId)}${",
-      "authority": "structured_unavailable",
-      "body": {}
+      "authority": "local_registry",
+      "expected_status": 200,
+      "body": {
+        "contract_version": 2,
+        "expected_revision": 1,
+        "idempotency_key": "parity-agent-update",
+        "value": {
+          "display_name": "Updated Parity Agent"
+        },
+        "vault_refs": []
+      }
     },
     {
       "area": "agents",
       "method": "DELETE",
-      "uri": "/api/v1/agent/definitions/custom-agent?tenant_id=local",
+      "uri": "/api/v1/agent/definitions/parity-agent?tenant_id=local",
       "source": "client",
       "source_marker": "/api/v1/agent/definitions/${encodeURIComponent(definitionId)}${",
-      "authority": "structured_unavailable",
-      "body": {}
+      "authority": "local_registry",
+      "expected_status": 200,
+      "body": {
+        "contract_version": 2,
+        "expected_revision": 2,
+        "idempotency_key": "parity-agent-delete",
+        "vault_refs": []
+      }
     },
     {
       "area": "agents",
@@ -437,7 +579,8 @@
       "uri": "/api/v1/agent/templates?tenant_id=local&limit=100&offset=0",
       "source": "client",
       "source_marker": "/api/v1/agent/templates?${params.toString()}",
-      "authority": "structured_unavailable",
+      "authority": "local_registry",
+      "expected_status": 200,
       "body": {}
     },
     {
@@ -446,17 +589,35 @@
       "uri": "/api/v1/agent/templates?tenant_id=local",
       "source": "client",
       "source_marker": "/api/v1/agent/templates?${params.toString()}",
-      "authority": "structured_unavailable",
-      "body": {}
+      "authority": "local_registry",
+      "expected_status": 200,
+      "body": {
+        "contract_version": 2,
+        "expected_revision": 0,
+        "idempotency_key": "parity-template-create",
+        "resource_id": "parity-template",
+        "value": {
+          "title": "Parity template",
+          "content": "Summarize {{input}}.",
+          "category": "custom"
+        },
+        "vault_refs": []
+      }
     },
     {
       "area": "agents",
       "method": "DELETE",
-      "uri": "/api/v1/agent/templates/template-1",
+      "uri": "/api/v1/agent/templates/parity-template",
       "source": "client",
       "source_marker": "/api/v1/agent/templates/${encodeURIComponent(requireValue(templateId, 'template id'))}",
-      "authority": "structured_unavailable",
-      "body": {}
+      "authority": "local_registry",
+      "expected_status": 200,
+      "body": {
+        "contract_version": 2,
+        "expected_revision": 0,
+        "idempotency_key": "parity-template-delete",
+        "vault_refs": []
+      }
     },
     {
       "area": "subagents",
@@ -464,7 +625,8 @@
       "uri": "/api/v1/subagents/?tenant_id=local",
       "source": "client",
       "source_marker": "/api/v1/subagents/?${params.toString()}",
-      "authority": "structured_unavailable",
+      "authority": "local_registry",
+      "expected_status": 200,
       "body": {}
     },
     {
@@ -473,17 +635,40 @@
       "uri": "/api/v1/subagents/?tenant_id=local",
       "source": "client",
       "source_marker": "/api/v1/subagents/?${params.toString()}",
-      "authority": "structured_unavailable",
-      "body": {}
+      "authority": "local_registry",
+      "expected_status": 200,
+      "body": {
+        "contract_version": 2,
+        "expected_revision": 0,
+        "idempotency_key": "parity-subagent-create",
+        "resource_id": "parity-subagent",
+        "value": {
+          "name": "parity-subagent",
+          "display_name": "Parity SubAgent",
+          "system_prompt": "Exercise the local route contract.",
+          "project_id": "local-project",
+          "enabled": true
+        },
+        "vault_refs": []
+      }
     },
     {
       "area": "subagents",
       "method": "PATCH",
-      "uri": "/api/v1/subagents/subagent-1/enable?enabled=true&tenant_id=local",
+      "uri": "/api/v1/subagents/parity-subagent/enable?enabled=false&tenant_id=local",
       "source": "client",
       "source_marker": "/api/v1/subagents/${encodeURIComponent(subagentId)}/enable?",
-      "authority": "structured_unavailable",
-      "body": {}
+      "authority": "local_registry",
+      "expected_status": 200,
+      "body": {
+        "contract_version": 2,
+        "expected_revision": 0,
+        "idempotency_key": "parity-subagent-disable",
+        "value": {
+          "enabled": false
+        },
+        "vault_refs": []
+      }
     },
     {
       "area": "subagents",
@@ -515,20 +700,35 @@
     {
       "area": "subagents",
       "method": "PUT",
-      "uri": "/api/v1/subagents/subagent-1?tenant_id=local",
+      "uri": "/api/v1/subagents/parity-subagent?tenant_id=local",
       "source": "client",
       "source_marker": "/api/v1/subagents/${encodeURIComponent(subagentId)}?${params.toString()}",
-      "authority": "structured_unavailable",
-      "body": {}
+      "authority": "local_registry",
+      "expected_status": 200,
+      "body": {
+        "contract_version": 2,
+        "expected_revision": 1,
+        "idempotency_key": "parity-subagent-update",
+        "value": {
+          "display_name": "Updated Parity SubAgent"
+        },
+        "vault_refs": []
+      }
     },
     {
       "area": "subagents",
       "method": "DELETE",
-      "uri": "/api/v1/subagents/subagent-1?tenant_id=local",
+      "uri": "/api/v1/subagents/parity-subagent?tenant_id=local",
       "source": "client",
       "source_marker": "/api/v1/subagents/${encodeURIComponent(subagentId)}?${params.toString()}",
-      "authority": "structured_unavailable",
-      "body": {}
+      "authority": "local_registry",
+      "expected_status": 200,
+      "body": {
+        "contract_version": 2,
+        "expected_revision": 2,
+        "idempotency_key": "parity-subagent-delete",
+        "vault_refs": []
+      }
     },
     {
       "area": "mcp_apps",
@@ -536,8 +736,49 @@
       "uri": "/api/v1/mcp/apps?project_id=local-project",
       "source": "client",
       "source_marker": "/api/v1/mcp/apps?${params.toString()}",
-      "authority": "structured_unavailable",
+      "authority": "local_mcp_supervisor",
       "body": {}
+    },
+    {
+      "area": "mcp_apps",
+      "method": "POST",
+      "uri": "/api/v1/mcp/credentials/provision",
+      "source": "client",
+      "source_marker": "/api/v1/mcp/credentials/provision",
+      "authority": "local_mcp_supervisor",
+      "body": {
+        "project_id": "local-project",
+        "server_name": "parity-remote",
+        "server_type": "http",
+        "transport_config": {
+          "url": "http://127.0.0.1:9/mcp"
+        },
+        "credential_kind": "header",
+        "credential_name": "authorization",
+        "secret": "route-parity-value",
+        "idempotency_key": "parity-mcp-credential"
+      }
+    },
+    {
+      "area": "mcp_apps",
+      "method": "POST",
+      "uri": "/api/v1/mcp",
+      "source": "client",
+      "source_marker": "this.request<DesktopMCPServerSummary>('/api/v1/mcp'",
+      "authority": "local_mcp_supervisor",
+      "body": {
+        "name": "parity-remote",
+        "server_type": "http",
+        "transport_config": {
+          "url": "http://127.0.0.1:9/mcp",
+          "credential_header_names": [
+            "authorization"
+          ]
+        },
+        "enabled": false,
+        "project_id": "local-project",
+        "idempotency_key": "parity-mcp-create"
+      }
     },
     {
       "area": "mcp_apps",
@@ -545,10 +786,25 @@
       "uri": "/api/v1/mcp/apps/app-1/tool-call",
       "source": "client",
       "source_marker": "/api/v1/mcp/apps/${encodeURIComponent(requireValue(appId, 'MCP App id'))}/tool-call",
-      "authority": "structured_unavailable",
+      "authority": "local_mcp_supervisor",
       "body": {
         "tool_name": "example",
-        "arguments": {}
+        "arguments": {},
+        "idempotency_key": "parity-mcp-app-call"
+      }
+    },
+    {
+      "area": "mcp_apps",
+      "method": "POST",
+      "uri": "/api/v1/mcp/tools/call",
+      "source": "client",
+      "source_marker": "/api/v1/mcp/tools/call",
+      "authority": "local_mcp_supervisor",
+      "body": {
+        "server_id": "route-contract-mcp-server",
+        "tool_name": "example",
+        "arguments": {},
+        "idempotency_key": "parity-mcp-server-call"
       }
     },
     {
@@ -557,12 +813,13 @@
       "uri": "/api/v1/mcp/apps/proxy/tool-call",
       "source": "client",
       "source_marker": "/api/v1/mcp/apps/proxy/tool-call",
-      "authority": "structured_unavailable",
+      "authority": "local_mcp_supervisor",
       "body": {
         "project_id": "local-project",
         "server_name": "example",
         "tool_name": "example",
-        "arguments": {}
+        "arguments": {},
+        "idempotency_key": "parity-mcp-direct-call"
       }
     },
     {
@@ -571,7 +828,7 @@
       "uri": "/api/v1/mcp/apps/resources/read",
       "source": "client",
       "source_marker": "/api/v1/mcp/apps/resources/read",
-      "authority": "structured_unavailable",
+      "authority": "local_mcp_supervisor",
       "body": {
         "project_id": "local-project",
         "uri": "file:///example"
@@ -583,10 +840,19 @@
       "uri": "/api/v1/mcp/apps/resources/list",
       "source": "client",
       "source_marker": "/api/v1/mcp/apps/resources/list",
-      "authority": "structured_unavailable",
+      "authority": "local_mcp_supervisor",
       "body": {
         "project_id": "local-project"
       }
+    },
+    {
+      "area": "sandbox_runtime",
+      "method": "GET",
+      "uri": "/api/v1/projects/local-project/sandbox/capabilities",
+      "source": "sandbox_surface",
+      "source_marker": "/sandbox/capabilities",
+      "authority": "sandbox_capabilities",
+      "body": {}
     },
     {
       "area": "sandbox_files",

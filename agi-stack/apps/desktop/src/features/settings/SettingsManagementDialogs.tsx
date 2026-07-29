@@ -1,6 +1,7 @@
 import type { AuthState, DesktopRuntimeConfig } from '../../types';
 import { AgentDefinitionEditorDialog } from './AgentDefinitionEditorDialog';
 import { ChannelConnectionsDialog } from './ChannelConnectionsDialog';
+import { MCPServerCreateDialog } from './MCPServerDialog';
 import {
   PluginConfigDialog,
   PluginInstallDialog,
@@ -11,6 +12,7 @@ import { SubAgentEditorDialog } from './SubAgentEditorDialog';
 import { SubAgentLibraryDialog } from './SubAgentLibraryDialog';
 import type { useAgentDefinitionManagement } from './useAgentDefinitionManagement';
 import type { useChannelConnectionManagement } from './useChannelConnectionManagement';
+import type { useMCPServerManagement } from './useMCPServerManagement';
 import type { usePluginManagement } from './usePluginManagement';
 import type { useSkillManagement } from './useSkillManagement';
 import type { useSkillPackageManagement } from './useSkillPackageManagement';
@@ -26,6 +28,7 @@ export function SettingsManagementDialogs({
   skillPackages,
   plugins,
   channels,
+  mcpServers,
   subagentDefinitions,
   subagents,
 }: {
@@ -37,6 +40,7 @@ export function SettingsManagementDialogs({
   skillPackages: ReturnType<typeof useSkillPackageManagement>;
   plugins: ReturnType<typeof usePluginManagement>;
   channels: ReturnType<typeof useChannelConnectionManagement>;
+  mcpServers: ReturnType<typeof useMCPServerManagement>;
   subagentDefinitions: ReturnType<typeof useSubAgentDefinitionManagement>;
   subagents: ReturnType<typeof useSubAgentLibraryManagement>;
 }) {
@@ -92,6 +96,15 @@ export function SettingsManagementDialogs({
       ) : null}
       <PluginRuntimeActivityDialog management={plugins} />
       <ChannelConnectionsDialog management={channels} />
+      {mcpServers.dialog?.kind === 'create' ? (
+        <MCPServerCreateDialog
+          key={mcpServers.dialog.key}
+          busy={mcpServers.dialogBusy}
+          error={mcpServers.dialogError}
+          onClose={mcpServers.closeDialog}
+          onSubmit={(input) => void mcpServers.create(input)}
+        />
+      ) : null}
       {subagentDefinitions.dialog ? (
         <SubAgentEditorDialog
           key={subagentDefinitions.dialog.key}

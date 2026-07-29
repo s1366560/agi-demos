@@ -49,6 +49,24 @@ _TOOL_VISIBILITY_TTL = 60.0  # seconds
 _TOOL_VISIBILITY_LOCK = asyncio.Lock()
 
 
+def _cloud_tool_idempotency_unavailable(idempotency_key: str) -> MCPAppToolCallResponse:
+    """Fail closed rather than silently ignoring a replay-safe Desktop contract."""
+    return MCPAppToolCallResponse(
+        content=[
+            {
+                "type": "text",
+                "text": (
+                    "Cloud MCP durable tool idempotency is unavailable for "
+                    f"key {idempotency_key}"
+                ),
+            }
+        ],
+        is_error=True,
+        error_message="cloud_mcp_tool_idempotency_unavailable",
+        error_code=-32000,
+    )
+
+
 async def _get_cached_tool_visibility(
     mcp_manager: Any,
     project_id: str,
@@ -188,6 +206,12 @@ class MCPDirectToolCallRequest(BaseModel):
     server_name: str = Field(..., description="MCP server name in the sandbox")
     tool_name: str = Field(..., description="Name of the MCP tool to call")
     arguments: dict[str, Any] = Field(default_factory=dict, description="Tool call arguments")
+    idempotency_key: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=256,
+        description="Replay-safe key when durable idempotency is enabled",
+    )
 
 
 @router.post("/proxy/tool-call", response_model=MCPAppToolCallResponse)
@@ -203,6 +227,8 @@ async def proxy_tool_call_direct(
     Used when the MCP App was auto-discovered during an agent session
     and has no persistent DB record (synthetic app_id like ``_synthetic_<tool>``).
     """
+    if body.idempotency_key is not None:
+        return _cloud_tool_idempotency_unavailable(body.idempotency_key)
     try:
         _ = await resolve_project_tenant_id_for_access(
             db,
@@ -348,6 +374,9 @@ async def proxy_tool_call(
         current_user.id,
         MCP_PROJECT_WRITE_ROLES,
     )
+
+    if body.idempotency_key is not None:
+        return _cloud_tool_idempotency_unavailable(body.idempotency_key)
 
     try:
         container = get_container_with_db(request, db)

@@ -382,6 +382,10 @@ pub fn app(state: GatewayState) -> axum::Router {
             get(websocket_proxy),
         )
         .route(
+            "/api/v1/projects/:project_id/sandbox/terminal/sessions/:session_id/ws",
+            get(websocket_proxy),
+        )
+        .route(
             "/api/v1/projects/:project_id/sandbox/mcp/proxy",
             get(websocket_proxy),
         )

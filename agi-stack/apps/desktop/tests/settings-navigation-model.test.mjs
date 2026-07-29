@@ -16,6 +16,7 @@ const labels = {
   appearance: ['Appearance', 'Theme and density'],
   notifications: ['Notifications', 'Review alerts'],
   models: ['Models', 'Providers and routing'],
+  mcp: ['MCP servers', 'Tool servers and credentials'],
   skills: ['Skills', 'Reusable instructions'],
   plugins: ['Plugins', 'External capabilities'],
   agents: ['Agents', 'Roles and autonomy'],
@@ -26,7 +27,10 @@ test('settings information architecture matches the approved prototype order', (
   assert.deepEqual(SETTINGS_GROUPS, [
     { id: 'account_context', sections: ['account', 'workspace'] },
     { id: 'preferences', sections: ['general', 'appearance', 'notifications'] },
-    { id: 'ai_resources', sections: ['models', 'skills', 'plugins', 'agents', 'subagents'] },
+    {
+      id: 'ai_resources',
+      sections: ['models', 'mcp', 'skills', 'plugins', 'agents', 'subagents'],
+    },
   ]);
 });
 
@@ -45,6 +49,7 @@ test('empty settings search preserves the full section order', () => {
     'appearance',
     'notifications',
     'models',
+    'mcp',
     'skills',
     'plugins',
     'agents',

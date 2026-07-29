@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from fastapi import (
@@ -677,6 +679,82 @@ async def upload_file(
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
+
+
+async def upload_staged_file(
+    *,
+    tenant_id: str,
+    project_id: str,
+    workspace_id: str,
+    request: Request,
+    staged_path: Path,
+    parent_path: str,
+    filename: str,
+    size_bytes: int,
+    checksum_sha256: str,
+    current_user: User,
+    current_actor: ActorIdentity,
+    db: AsyncSession,
+) -> BlackboardFileResponse:
+    """Persist one already-bounded staging file without materializing its bytes."""
+    service = _file_service_from_request(request, db)
+    bb_file = None
+    committed = False
+    try:
+        bb_file = await service.upload_staged_file(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            actor_user_id=current_user.id,
+            actor_user_name=_current_user_label(current_user),
+            parent_path=parent_path,
+            filename=filename,
+            staged_path=staged_path,
+            size_bytes=size_bytes,
+            checksum_sha256=checksum_sha256,
+            actor=current_actor,
+        )
+        response = _to_file_response(bb_file)
+        await publish_workspace_event(
+            db,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            event_type=AgentEventType.BLACKBOARD_FILE_CREATED,
+            payload=_blackboard_event_payload(
+                {
+                    "file": response.model_dump(mode="json"),
+                    "file_id": response.id,
+                    "parent_path": response.parent_path,
+                    "name": response.name,
+                    "is_directory": response.is_directory,
+                }
+            ),
+            metadata=_blackboard_event_metadata(tenant_id, project_id),
+        )
+        commit_task = asyncio.create_task(db.commit())
+        try:
+            await asyncio.shield(commit_task)
+        except asyncio.CancelledError:
+            await asyncio.shield(commit_task)
+            committed = True
+            raise
+        committed = True
+        return response
+    except BaseException as exc:
+        if not committed:
+            try:
+                await asyncio.shield(db.rollback())
+            except BaseException:
+                logger.exception("workspace staged upload rollback failed")
+            if bb_file is not None:
+                try:
+                    service.discard_uploaded_file_storage(bb_file)
+                except Exception:
+                    logger.exception("workspace staged upload compensation failed")
+        if isinstance(exc, Exception):
+            raise _map_error(exc) from exc
+        raise
 
 
 @router.get("/files/{file_id}/download")

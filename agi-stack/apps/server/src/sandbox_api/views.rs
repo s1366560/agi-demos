@@ -12,6 +12,161 @@ fn default_auto_create() -> bool {
 }
 
 #[derive(Debug, Serialize, PartialEq)]
+pub(super) struct SandboxRuntimeCapabilityResponse {
+    pub(super) availability: &'static str,
+    pub(super) contract_version: u8,
+    pub(super) reason_code: Option<&'static str>,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub(super) struct SandboxRuntimeCapabilitiesResponse {
+    pub(super) service_version: &'static str,
+    pub(super) contract_version: u8,
+    pub(super) terminal_interactive: SandboxRuntimeCapabilityResponse,
+    pub(super) terminal_resume: SandboxRuntimeCapabilityResponse,
+    pub(super) files: SandboxRuntimeCapabilityResponse,
+    pub(super) kasm_vnc: SandboxRuntimeCapabilityResponse,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum TerminalV2CapabilityState {
+    Available,
+    CanonicalAuthorityUnavailable,
+    SandboxUnavailable,
+    SandboxNotRunning,
+    TerminalUrlUnavailable,
+    RegistryUnavailable,
+    AuthorityUnavailable,
+    InstanceAffinityUnavailable,
+    NotApplicable,
+}
+
+impl SandboxRuntimeCapabilitiesResponse {
+    pub(super) fn with_files_available(mut self, available: bool) -> Self {
+        self.files = if available {
+            SandboxRuntimeCapabilityResponse {
+                availability: "available",
+                contract_version: 1,
+                reason_code: None,
+            }
+        } else {
+            SandboxRuntimeCapabilityResponse {
+                availability: "unavailable",
+                contract_version: 1,
+                reason_code: Some("sandbox_file_api_unavailable"),
+            }
+        };
+        self
+    }
+
+    #[cfg(test)]
+    pub(super) fn terminal_v2_available() -> Self {
+        Self::from_terminal_v2_state(TerminalV2CapabilityState::Available)
+    }
+
+    #[cfg(test)]
+    pub(super) fn canonical_run_authority_unavailable() -> Self {
+        Self::from_terminal_v2_state(TerminalV2CapabilityState::CanonicalAuthorityUnavailable)
+    }
+
+    pub(super) fn from_terminal_v2_state(state: TerminalV2CapabilityState) -> Self {
+        let (resume_availability, resume_reason) = match state {
+            TerminalV2CapabilityState::Available => ("available", None),
+            TerminalV2CapabilityState::CanonicalAuthorityUnavailable => (
+                "unavailable",
+                Some("terminal_session_v2_canonical_run_authority_unavailable"),
+            ),
+            TerminalV2CapabilityState::SandboxUnavailable => (
+                "unavailable",
+                Some("terminal_session_v2_sandbox_unavailable"),
+            ),
+            TerminalV2CapabilityState::SandboxNotRunning => (
+                "unavailable",
+                Some("terminal_session_v2_sandbox_not_running"),
+            ),
+            TerminalV2CapabilityState::TerminalUrlUnavailable => (
+                "unavailable",
+                Some("terminal_session_v2_terminal_url_unavailable"),
+            ),
+            TerminalV2CapabilityState::RegistryUnavailable => (
+                "unavailable",
+                Some("terminal_session_v2_registry_unavailable"),
+            ),
+            TerminalV2CapabilityState::AuthorityUnavailable => (
+                "unavailable",
+                Some("terminal_session_v2_authority_unavailable"),
+            ),
+            TerminalV2CapabilityState::InstanceAffinityUnavailable => (
+                "unavailable",
+                Some("terminal_session_v2_instance_affinity_unavailable"),
+            ),
+            TerminalV2CapabilityState::NotApplicable => {
+                ("not_applicable", Some("terminal_session_v2_not_applicable"))
+            }
+        };
+        let terminal_interactive = match state {
+            TerminalV2CapabilityState::Available
+            | TerminalV2CapabilityState::RegistryUnavailable
+            | TerminalV2CapabilityState::AuthorityUnavailable
+            | TerminalV2CapabilityState::InstanceAffinityUnavailable => {
+                SandboxRuntimeCapabilityResponse {
+                    availability: "available",
+                    contract_version: 1,
+                    reason_code: None,
+                }
+            }
+            TerminalV2CapabilityState::CanonicalAuthorityUnavailable => {
+                SandboxRuntimeCapabilityResponse {
+                    availability: "degraded",
+                    contract_version: 1,
+                    reason_code: Some("terminal_interactive_canonical_run_authority_unavailable"),
+                }
+            }
+            TerminalV2CapabilityState::NotApplicable => SandboxRuntimeCapabilityResponse {
+                availability: "not_applicable",
+                contract_version: 1,
+                reason_code: Some("terminal_interactive_not_applicable"),
+            },
+            TerminalV2CapabilityState::SandboxUnavailable => SandboxRuntimeCapabilityResponse {
+                availability: "unavailable",
+                contract_version: 1,
+                reason_code: Some("terminal_interactive_sandbox_unavailable"),
+            },
+            TerminalV2CapabilityState::SandboxNotRunning => SandboxRuntimeCapabilityResponse {
+                availability: "unavailable",
+                contract_version: 1,
+                reason_code: Some("terminal_interactive_sandbox_not_running"),
+            },
+            TerminalV2CapabilityState::TerminalUrlUnavailable => SandboxRuntimeCapabilityResponse {
+                availability: "unavailable",
+                contract_version: 1,
+                reason_code: Some("terminal_interactive_url_unavailable"),
+            },
+        };
+        Self {
+            service_version: "0.1.0",
+            contract_version: 2,
+            terminal_interactive,
+            terminal_resume: SandboxRuntimeCapabilityResponse {
+                availability: resume_availability,
+                contract_version: 2,
+                reason_code: resume_reason,
+            },
+            files: SandboxRuntimeCapabilityResponse {
+                availability: "unavailable",
+                contract_version: 1,
+                reason_code: Some("sandbox_file_api_unavailable"),
+            },
+            kasm_vnc: SandboxRuntimeCapabilityResponse {
+                availability: "available",
+                contract_version: 1,
+                reason_code: None,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Serialize, PartialEq)]
 pub(super) struct ProjectSandboxResponse {
     pub(super) sandbox_id: String,
     pub(super) project_id: String,
@@ -126,6 +281,39 @@ pub(super) struct StartDesktopQuery {
 #[derive(Debug, Deserialize)]
 pub(super) struct TerminalWsQuery {
     pub(super) session_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct CreateTerminalSessionV2Request {
+    pub(super) run_id: String,
+    pub(super) expected_run_revision: i32,
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct ResumeTerminalSessionV2Request {
+    pub(super) resume_token: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct TerminalSessionV2WsQuery {
+    #[serde(default)]
+    pub(super) after_sequence: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub(super) struct TerminalSessionV2Response {
+    pub(super) contract_version: u8,
+    pub(super) session_id: String,
+    pub(super) resume_token: String,
+    pub(super) project_id: String,
+    pub(super) conversation_id: String,
+    pub(super) run_id: String,
+    pub(super) run_revision: i32,
+    pub(super) environment_id: String,
+    pub(super) cwd: String,
+    pub(super) created_at: String,
+    pub(super) expires_at: String,
+    pub(super) resumable: bool,
 }
 
 #[derive(Debug, Serialize, PartialEq)]

@@ -14,12 +14,19 @@ use uuid::Uuid;
 use super::*;
 
 const ROUTE_CONTRACT: &str = include_str!("../../../contracts/local-route-parity.v1.json");
-const DESKTOP_CLIENT_SOURCE: &str = include_str!("../../../src/api/client.ts");
+const DESKTOP_CLIENT_SOURCE: &str = concat!(
+    include_str!("../../../src/api/client.ts"),
+    include_str!("../../../src/api/managedResourcesClient.ts"),
+);
 const SEARCH_CONTRACT_SOURCE: &str = include_str!("../../../src/api/searchContract.ts");
 const CAPABILITY_CLIENT_SOURCE: &str =
     include_str!("../../../src/features/runtime/workbenchCapabilityClient.ts");
+const ARTIFACT_CLIENT_SOURCE: &str =
+    include_str!("../../../src/features/chat/desktopArtifactClient.ts");
 const SANDBOX_CLIENT_SOURCE: &str =
     include_str!("../../../src/features/sandbox/sandboxRuntimeClient.ts");
+const SANDBOX_SURFACE_CLIENT_SOURCE: &str =
+    include_str!("../../../src/features/sandbox/sandboxRuntimeSurfaceClient.ts");
 
 #[derive(Debug, Deserialize)]
 struct LocalRouteContract {
@@ -35,6 +42,8 @@ struct LocalRouteProbe {
     source: String,
     source_marker: String,
     authority: String,
+    #[serde(default)]
+    expected_status: Option<u16>,
     body: Value,
 }
 
@@ -63,16 +72,72 @@ fn test_state(credential: &str) -> Arc<LocalRuntimeState> {
         .session_store
         .seed_test_session(credential)
         .expect("authenticated test session");
+    let conversation_id = "route-parity-artifact-conversation";
+    state
+        .session_store
+        .insert_conversation(&LocalConversation {
+            id: conversation_id.to_string(),
+            project_id: "local-project".to_string(),
+            tenant_id: "local".to_string(),
+            title: "Route parity artifact".to_string(),
+            workspace_id: Some("local-workspace".to_string()),
+            capability_mode: ConversationCapabilityMode::Code,
+            current_mode: ConversationRunMode::Build,
+            created_at: now_iso(),
+            updated_at: now_iso(),
+        })
+        .expect("insert route parity artifact conversation");
+    let artifact_path =
+        root.join(".agistack/artifacts/route-parity/route-parity-version/route-parity.md");
+    std::fs::create_dir_all(artifact_path.parent().expect("artifact parent"))
+        .expect("create route parity artifact parent");
+    std::fs::write(&artifact_path, "route parity").expect("write route parity artifact");
+    state
+        .session_store
+        .record_artifact_version(
+            conversation_id,
+            None,
+            &json!({
+                "artifact_id": "route-parity",
+                "artifact_version_id": "route-parity-version",
+                "filename": "route-parity.md",
+                "path": artifact_path,
+                "relative_path":
+                    ".agistack/artifacts/route-parity/route-parity-version/route-parity.md",
+                "bytes": 12,
+                "mime_type": "text/markdown",
+                "sources": [],
+                "checks": [],
+            }),
+            &now_iso(),
+        )
+        .expect("record route parity artifact");
+    state
+        .mcp_supervisor
+        .seed_route_contract_fixture(&mcp_supervisor::McpScope {
+            tenant_id: "local".to_string(),
+            project_id: "local-project".to_string(),
+        })
+        .expect("seed route parity MCP fixture");
     state
 }
 
 fn authenticated_request(method: &str, uri: &str, credential: &str, body: &Value) -> Request<Body> {
-    Request::builder()
+    let mut builder = Request::builder()
         .method(Method::from_bytes(method.as_bytes()).expect("HTTP method"))
         .uri(uri)
         .header("authorization", format!("Bearer {credential}"))
         .header("x-agistack-launch", credential)
-        .header("content-type", "application/json")
+        .header("content-type", "application/json");
+    if let (Some(expected_revision), Some(idempotency_key)) = (
+        body.get("expected_revision").and_then(Value::as_u64),
+        body.get("idempotency_key").and_then(Value::as_str),
+    ) {
+        builder = builder
+            .header("x-expected-revision", expected_revision)
+            .header("idempotency-key", idempotency_key);
+    }
+    builder
         .body(Body::from(body.to_string()))
         .expect("authenticated route parity request")
 }
@@ -99,10 +164,12 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
 
     for route in contract.routes {
         let source = match route.source.as_str() {
+            "artifact" => ARTIFACT_CLIENT_SOURCE,
             "capability" => CAPABILITY_CLIENT_SOURCE,
             "client" => DESKTOP_CLIENT_SOURCE,
             "search" => SEARCH_CONTRACT_SOURCE,
             "sandbox" => SANDBOX_CLIENT_SOURCE,
+            "sandbox_surface" => SANDBOX_SURFACE_CLIENT_SOURCE,
             other => panic!("unsupported route source {other}"),
         };
         if !source.contains(&route.source_marker) {
@@ -135,6 +202,15 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
             ));
             continue;
         }
+        if let Some(expected_status) = route.expected_status {
+            assert_eq!(
+                response.status().as_u16(),
+                expected_status,
+                "{} {} returned an unexpected status",
+                route.method,
+                route.uri
+            );
+        }
 
         if route.authority == "structured_unavailable" {
             assert_eq!(
@@ -151,6 +227,20 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
                 expected_unavailable_contract(&route);
             assert_eq!(payload["availability"], expected_availability);
             assert_eq!(payload["reason_code"], expected_reason_code);
+        } else if route.authority == "sandbox_capabilities" {
+            assert_eq!(
+                response.status(),
+                StatusCode::OK,
+                "{} {} must expose the explicit local sandbox capability snapshot",
+                route.method,
+                route.uri
+            );
+            let payload = response_json(response).await;
+            assert_eq!(payload["contract_version"], 2);
+            assert_eq!(payload["terminal_interactive"]["availability"], "available");
+            assert_eq!(payload["terminal_resume"]["availability"], "unavailable");
+            assert_eq!(payload["files"]["availability"], "available");
+            assert_eq!(payload["kasm_vnc"]["availability"], "not_applicable");
         } else if route.authority == "native_workspace" {
             assert_eq!(
                 response.status(),
@@ -180,6 +270,33 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
                 assert_eq!(payload["authority"], "native_workspace");
                 assert_eq!(payload["isolation"], "not_applicable");
             }
+        } else if route.authority == "artifact_content_v2" {
+            assert_eq!(
+                response.status(),
+                StatusCode::OK,
+                "{} {} must resolve against the Artifact Content V2 authority",
+                route.method,
+                route.uri
+            );
+            if route.uri.ends_with("/content/bytes") {
+                assert_eq!(
+                    response
+                        .headers()
+                        .get("x-content-type-options")
+                        .and_then(|value| value.to_str().ok()),
+                    Some("nosniff")
+                );
+            } else {
+                let payload = response_json(response).await;
+                assert_eq!(
+                    payload["artifact_id"],
+                    "route-parity-artifact-conversation:route-parity"
+                );
+                assert_eq!(
+                    payload["revision"],
+                    if route.method == "PUT" { 1 } else { 0 }
+                );
+            }
         } else {
             assert_ne!(
                 response.status(),
@@ -188,6 +305,22 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
                 route.method,
                 route.uri
             );
+            if is_managed_resource_mutation(&route) && response.status().is_success() {
+                let payload = response_json(response).await;
+                assert_eq!(
+                    payload["mutation_receipt"]["contract_version"], 2,
+                    "{} {} must return a V2 mutation receipt",
+                    route.method, route.uri
+                );
+                assert!(
+                    payload["mutation_receipt"]["receipt_id"]
+                        .as_str()
+                        .is_some_and(|receipt_id| !receipt_id.is_empty()),
+                    "{} {} must return a stable receipt id",
+                    route.method,
+                    route.uri
+                );
+            }
         }
     }
 
@@ -201,6 +334,11 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
         "Desktop client routes missing from Axum router:\n{}",
         missing_router_routes.join("\n")
     );
+}
+
+fn is_managed_resource_mutation(route: &LocalRouteProbe) -> bool {
+    matches!(route.area.as_str(), "skills" | "agents" | "subagents")
+        && matches!(route.method.as_str(), "POST" | "PUT" | "PATCH" | "DELETE")
 }
 
 #[tokio::test]

@@ -1,4 +1,8 @@
 import type { DesktopRuntimeConfig } from '../../types';
+import {
+  createCloudTerminalSession,
+  resumeCloudTerminalSession,
+} from './terminalSessionV2Client';
 import type { TerminalSessionV2 } from './terminalSessionV2';
 
 export type SandboxRuntimeCapability = {
@@ -149,8 +153,18 @@ type DownloadFileOperation = {
 };
 
 export type SandboxRuntimeClient = {
-  createTerminalSession: SandboxRuntimeAuthority['createTerminalSession'];
-  resumeTerminalSession: SandboxRuntimeAuthority['resumeTerminalSession'];
+  createTerminalSession(
+    projectId: string,
+    runId: string,
+    expectedRunRevision: number,
+    signal?: AbortSignal,
+  ): Promise<SandboxRuntimeResult<TerminalSessionV2>>;
+  resumeTerminalSession(
+    projectId: string,
+    sessionId: string,
+    resumeToken: string,
+    signal?: AbortSignal,
+  ): Promise<SandboxRuntimeResult<TerminalSessionV2>>;
   listFiles: ListFilesOperation;
   readFile: ReadFileOperation;
   downloadFile: DownloadFileOperation;
@@ -253,13 +267,19 @@ function wrapSandboxRuntimeAuthority(authority: SandboxRuntimeAuthority): Sandbo
       runId: string,
       expectedRunRevision: number,
       signal?: AbortSignal,
-    ) => authority.createTerminalSession(projectId, runId, expectedRunRevision, signal),
+    ) =>
+      authority
+        .createTerminalSession(projectId, runId, expectedRunRevision, signal)
+        .then((value) => ({ status: 'ready' as const, value })),
     resumeTerminalSession: (
       projectId: string,
       sessionId: string,
       resumeToken: string,
       signal?: AbortSignal,
-    ) => authority.resumeTerminalSession(projectId, sessionId, resumeToken, signal),
+    ) =>
+      authority
+        .resumeTerminalSession(projectId, sessionId, resumeToken, signal)
+        .then((value) => ({ status: 'ready' as const, value })),
     listFiles: ((projectId: string, path: string, signal?: AbortSignal) =>
       authority.listFiles(projectId, path, signal)) as ListFilesOperation,
     readFile: ((projectId: string, path: string, signal?: AbortSignal) =>
@@ -273,15 +293,52 @@ function createHttpSandboxRuntimeClient(
   config: DesktopRuntimeConfig,
   capabilities: SandboxRuntimeCapabilities,
 ): SandboxRuntimeClient {
-  const unavailableTerminal = async (): Promise<TerminalSessionV2> => {
-    throw new Error(
-      capabilities.terminal_resume.reason_code ?? 'terminal_session_v2_unavailable',
-    );
-  };
+  const terminalAvailable =
+    config.mode === 'cloud' &&
+    capabilities.terminal_interactive.availability === 'available' &&
+    capabilities.terminal_interactive.contract_version === 1 &&
+    capabilities.terminal_resume.availability === 'available' &&
+    capabilities.terminal_resume.contract_version === 2;
+  const unavailableTerminal = async (): Promise<
+    SandboxRuntimeResult<TerminalSessionV2>
+  > => ({
+    status: 'unavailable',
+    reason_code:
+      capabilities.terminal_resume.reason_code ??
+      'terminal_session_v2_client_route_unavailable',
+  });
 
   return Object.freeze({
-    createTerminalSession: unavailableTerminal,
-    resumeTerminalSession: unavailableTerminal,
+    createTerminalSession: async (
+      requestedProjectId: string,
+      runId: string,
+      expectedRunRevision: number,
+      signal?: AbortSignal,
+    ): Promise<SandboxRuntimeResult<TerminalSessionV2>> => {
+      if (!terminalAvailable) return unavailableTerminal();
+      return createCloudTerminalSession(
+        config,
+        requestedProjectId,
+        runId,
+        expectedRunRevision,
+        signal,
+      );
+    },
+    resumeTerminalSession: async (
+      requestedProjectId: string,
+      sessionId: string,
+      resumeToken: string,
+      signal?: AbortSignal,
+    ): Promise<SandboxRuntimeResult<TerminalSessionV2>> => {
+      if (!terminalAvailable) return unavailableTerminal();
+      return resumeCloudTerminalSession(
+        config,
+        requestedProjectId,
+        sessionId,
+        resumeToken,
+        signal,
+      );
+    },
     listFiles: (async (
       request: SandboxFileListRequest,
       signal?: AbortSignal,

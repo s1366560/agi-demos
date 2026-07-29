@@ -114,8 +114,9 @@ export function approvalResponseSubmission(
           ...(normalizedFeedback ? { feedback: normalizedFeedback } : {}),
         };
   const revision =
-    typeof request.run_revision === 'number' && Number.isFinite(request.run_revision)
-      ? request.run_revision
+    typeof request.authority_revision === 'number' &&
+    Number.isFinite(request.authority_revision)
+      ? request.authority_revision
       : undefined;
   return {
     requestId: request.id,

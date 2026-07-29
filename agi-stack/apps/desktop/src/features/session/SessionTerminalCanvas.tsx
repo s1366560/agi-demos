@@ -41,11 +41,26 @@ export function SessionTerminalCanvas({
   onTerminalResize,
 }: SessionTerminalCanvasProps) {
   const { t } = useI18n();
+  const declaredInteractiveCapability =
+    sandboxRuntime?.capabilities?.terminal_interactive ??
+    (sandboxRuntime
+      ? {
+          availability: 'unavailable' as const,
+          contract_version: 1,
+          reason_code: 'terminal_interactive_capability_not_declared',
+        }
+      : interactiveCapability);
+  const terminalCapabilityMessage =
+    declaredInteractiveCapability.reason_code ===
+    'terminal_interactive_canonical_run_authority_unavailable'
+      ? t('session.terminalCanonicalRunAuthorityUnavailable')
+      : t('session.terminalCapabilityUnavailable');
   const canStart =
     !busy &&
     binding !== 'connecting' &&
     currentRun?.status === 'running' &&
-    currentRun.permission_profile === 'full_access';
+    currentRun.permission_profile === 'full_access' &&
+    declaredInteractiveCapability.availability === 'available';
   const statusLabel =
     binding === 'connected'
       ? t('session.terminalConnected')
@@ -67,6 +82,7 @@ export function SessionTerminalCanvas({
           ? 'cyan'
           : 'gray';
   const interactive =
+    declaredInteractiveCapability.availability === 'available' &&
     interactiveCapability.availability === 'available' &&
     binding === 'connected' &&
     Boolean(onTerminalInput && onTerminalResize);
@@ -84,9 +100,11 @@ export function SessionTerminalCanvas({
           variant="surface"
           disabled={!canStart}
           title={
-            currentRun?.permission_profile === 'full_access'
-              ? undefined
-              : t('session.terminalPermissionRequired')
+            currentRun?.permission_profile !== 'full_access'
+              ? t('session.terminalPermissionRequired')
+              : declaredInteractiveCapability.availability !== 'available'
+                ? terminalCapabilityMessage
+                : undefined
           }
           onClick={onStart}
         >
@@ -108,7 +126,7 @@ export function SessionTerminalCanvas({
             ? ` · ${currentRun.environment.workspace_path}`
             : ''}
       </Text>
-      {terminal ? (
+      {terminal && terminal.resumable !== true ? (
         <Text size="1" color="gray">
           {t('session.terminalNonResumable')}
         </Text>
@@ -116,6 +134,11 @@ export function SessionTerminalCanvas({
       {currentRun?.permission_profile !== 'full_access' ? (
         <Text size="1" color="amber">
           {t('session.terminalPermissionRequired')}
+        </Text>
+      ) : null}
+      {declaredInteractiveCapability.availability === 'degraded' ? (
+        <Text size="1" color="amber">
+          {terminalCapabilityMessage}
         </Text>
       ) : null}
       {binding === 'stale' ? (

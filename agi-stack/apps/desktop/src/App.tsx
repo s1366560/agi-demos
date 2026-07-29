@@ -282,6 +282,10 @@ import {
   type SandboxRuntimeCapability,
 } from './features/sandbox/sandboxRuntimeClient';
 import {
+  terminalSessionV2SocketUrl,
+  type TerminalSessionV2,
+} from './features/sandbox/terminalSessionV2';
+import {
   useSandboxRuntimeSurface,
   type SessionSandboxRuntimeSurface,
 } from './features/sandbox/useSandboxRuntimeSurface';
@@ -337,6 +341,11 @@ import { WorkspaceCreateDialog } from './features/workspace/WorkspaceCreateDialo
 import { WorkspaceSettingsDialog } from './features/workspace/WorkspaceSettingsDialog';
 import { createCapabilityWorkspaceCollaborationClient } from './features/workspace/capabilityWorkspaceCollaborationClient';
 import { createHttpWorkspaceCollaborationClient } from './features/workspace/httpWorkspaceCollaborationClient';
+import { workspaceCollaborationAuthorityEvent } from './features/workspace/workspaceCollaborationAuthorityEvent';
+import type {
+  WorkspaceAuthorityInvalidation,
+  WorkspaceAuthorityInvalidationTrigger,
+} from './features/workspace/workspaceCollaborationModel';
 import {
   applyWorkspaceActivityStreamEvent,
   type WorkspaceLiveActivity,
@@ -1760,6 +1769,7 @@ export function App() {
   const [selectedTaskId, setSelectedTaskId] = useState('');
   const [sandboxBusy, setSandboxBusy] = useState(false);
   const [terminal, setTerminal] = useState<TerminalServiceResponse | null>(null);
+  const [terminalV2, setTerminalV2] = useState<TerminalSessionV2 | null>(null);
   const [agentConversationSession, setAgentConversationSession] =
     useState<AgentConversationSession | null>(null);
   const agentConversationSessionRef = useRef(agentConversationSession);
@@ -1777,6 +1787,10 @@ export function App() {
     emptyMCPAppCanvasState(),
   );
   const [agentTaskSignals, setAgentTaskSignals] = useState<AgentTaskSignal[]>([]);
+  const [
+    workspaceCollaborationAuthorityInvalidation,
+    setWorkspaceCollaborationAuthorityInvalidation,
+  ] = useState<WorkspaceAuthorityInvalidation | null>(null);
   const pendingNewTaskAgentTurnsRef = useRef(
     new Map<
       string,
@@ -1811,6 +1825,13 @@ export function App() {
   const workspaceMessageEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const workspaceRosterEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const workspaceTaskEventsHeadRef = useRef<AgentWsEvent | null>(null);
+  const workspaceCollaborationEventsHeadRef = useRef<AgentWsEvent | null>(null);
+  const workspaceCollaborationEventsScopeRef = useRef('');
+  const workspaceCollaborationSocketRef = useRef({
+    connected: false,
+    seenConnected: false,
+    workspaceId: '',
+  });
   const myWorkRequestRef = useRef(0);
   const myWorkAbortRef = useRef<AbortController | null>(null);
   const myWorkRefreshTimerRef = useRef<number | null>(null);
@@ -1943,6 +1964,42 @@ export function App() {
     auth.context?.revision ?? null,
     scopedConversation?.id ?? null,
   );
+  const invalidateWorkspaceCollaborationAuthority = useCallback(
+    (trigger: WorkspaceAuthorityInvalidationTrigger) => {
+      setWorkspaceCollaborationAuthorityInvalidation((current) => ({
+        sequence: (current?.sequence ?? 0) + 1,
+        trigger,
+      }));
+    },
+    [],
+  );
+  useEffect(() => {
+    const workspaceId = config.workspaceId.trim();
+    const previous = workspaceCollaborationSocketRef.current;
+    if (previous.workspaceId !== workspaceId) {
+      workspaceCollaborationSocketRef.current = {
+        connected: socket.connected,
+        seenConnected: socket.connected,
+        workspaceId,
+      };
+      return;
+    }
+    const reconnect =
+      Boolean(workspaceId) &&
+      socket.connected &&
+      previous.seenConnected &&
+      !previous.connected;
+    workspaceCollaborationSocketRef.current = {
+      connected: socket.connected,
+      seenConnected: previous.seenConnected || socket.connected,
+      workspaceId,
+    };
+    if (reconnect) invalidateWorkspaceCollaborationAuthority('reconnect');
+  }, [
+    config.workspaceId,
+    invalidateWorkspaceCollaborationAuthority,
+    socket.connected,
+  ]);
   useEffect(() => {
     const emptyArtifactState = emptyArtifactCanvasState();
     const emptyMCPAppState = emptyMCPAppCanvasState();
@@ -2589,9 +2646,11 @@ export function App() {
         const request = sessionProjection?.pendingHitl.find(
           (candidate) => candidate.id === submission.requestId,
         );
-        const revisionMatches = request?.run_id
-          ? request.run_revision === submission.expectedRevision
-          : submission.expectedRevision === undefined;
+        const revisionMatches =
+          submission.expectedRevision === undefined
+            ? request?.authority_revision === undefined ||
+              request.authority_revision === null
+            : request?.authority_revision === submission.expectedRevision;
         if (
           !request ||
           request.status !== 'pending' ||
@@ -2892,6 +2951,9 @@ export function App() {
     sessionEventsHeadRef.current = socket.events[0] ?? null;
     if (eventWindow.cursorGap) {
       invalidateSessionAuthority();
+      if (config.workspaceId.trim()) {
+        invalidateWorkspaceCollaborationAuthority('cursor_gap');
+      }
       const conversation = agentConversationSessionRef.current?.conversation;
       if (conversation) {
         void loadConversationTimeline(conversation, conversation.project_id);
@@ -2973,6 +3035,7 @@ export function App() {
   }, [
     config.workspaceId,
     invalidateSessionAuthority,
+    invalidateWorkspaceCollaborationAuthority,
     loadConversationTimeline,
     reviewTab,
     scopedConversation,
@@ -2988,6 +3051,32 @@ export function App() {
     },
     [scopedConversationId],
   );
+
+  useEffect(() => {
+    const workspaceId = config.workspaceId.trim();
+    if (workspaceCollaborationEventsScopeRef.current !== workspaceId) {
+      workspaceCollaborationEventsScopeRef.current = workspaceId;
+      workspaceCollaborationEventsHeadRef.current = socket.events[0] ?? null;
+      return;
+    }
+    const events = socketEventsSince(
+      socket.events,
+      workspaceCollaborationEventsHeadRef.current,
+    );
+    workspaceCollaborationEventsHeadRef.current = socket.events[0] ?? null;
+    if (
+      workspaceId &&
+      events.some((event) =>
+        workspaceCollaborationAuthorityEvent(event, workspaceId),
+      )
+    ) {
+      invalidateWorkspaceCollaborationAuthority('delta');
+    }
+  }, [
+    config.workspaceId,
+    invalidateWorkspaceCollaborationAuthority,
+    socket.events,
+  ]);
 
   useEffect(() => {
     const workspaceId = config.workspaceId.trim();
@@ -3210,6 +3299,7 @@ export function App() {
     setReviewTab('overview');
     setReviewPanelOpen(true);
     setTerminal(null);
+    setTerminalV2(null);
     setAgentConversationSession(null);
     setSessionProjectionState(emptySessionProjectionState);
     setSessionDisplayProjection(null);
@@ -6057,16 +6147,68 @@ export function App() {
       }
       const requestGeneration = terminalStartGenerationRef.current + 1;
       terminalStartGenerationRef.current = requestGeneration;
+      if (config.mode === 'cloud') {
+        const runtimeClient = sandboxRuntime.runtimeClient;
+        if (!runtimeClient) {
+          throw new Error(t('session.terminalCapabilityUnavailable'));
+        }
+        const result = await runtimeClient.createTerminalSession(
+          config.projectId,
+          sourceRun.id,
+          sourceRun.revision,
+        );
+        if (result.status === 'unavailable') {
+          throw new Error(
+            t(
+              result.reason_code ===
+                'terminal_session_v2_canonical_run_authority_unavailable'
+                ? 'session.terminalCanonicalRunAuthorityUnavailable'
+                : 'session.terminalCapabilityUnavailable',
+            ),
+          );
+        }
+        if (terminalStartGenerationRef.current !== requestGeneration) return;
+        const session = result.value;
+        const currentRun = currentArtifactRunRef.current;
+        if (
+          !currentRun ||
+          session.project_id !== currentRun.project_id ||
+          session.conversation_id !== currentRun.conversation_id ||
+          session.run_id !== currentRun.id ||
+          session.run_revision !== currentRun.revision ||
+          session.environment_id !== currentRun.environment?.id ||
+          session.cwd !== currentRun.environment?.workspace_path
+        ) {
+          throw new Error(t('session.terminalAuthorityMismatch'));
+        }
+        terminalProxy.clear();
+        setTerminalV2(session);
+        setTerminal({
+          success: true,
+          session_id: session.session_id,
+          run_id: session.run_id,
+          run_revision: session.run_revision,
+          conversation_id: session.conversation_id,
+          project_id: session.project_id,
+          environment_id: session.environment_id,
+          created_at: session.created_at,
+          expires_at: session.expires_at,
+          resumable: true,
+          cwd: session.cwd,
+        });
+        return;
+      }
+      if (config.mode !== 'local') {
+        throw new Error(t('session.terminalCapabilityUnavailable'));
+      }
       await api.seedProxyAuthCookie();
-      const response = await api.startTerminal(
-        sourceRun.id,
-        sourceRun.revision,
-      );
+      const response = await api.startTerminal(sourceRun.id, sourceRun.revision);
       if (terminalStartGenerationRef.current !== requestGeneration) return;
       if (!terminalSessionMatchesRun(response, currentArtifactRunRef.current)) {
         throw new Error(t('session.terminalAuthorityMismatch'));
       }
       terminalProxy.clear();
+      setTerminalV2(null);
       setTerminal(response);
     });
   };
@@ -6172,23 +6314,52 @@ export function App() {
     socket.connected,
   );
   const currentTerminalRunScopeKey = terminalRunScopeKey(currentArtifactRun);
-  if (terminalRunScopeKeyRef.current !== currentTerminalRunScopeKey) {
+  useEffect(() => {
+    if (terminalRunScopeKeyRef.current === currentTerminalRunScopeKey) return;
     terminalRunScopeKeyRef.current = currentTerminalRunScopeKey;
     terminalStartGenerationRef.current += 1;
-  }
+    setTerminal(null);
+    setTerminalV2(null);
+  }, [currentTerminalRunScopeKey]);
   const terminalMatchesCurrentRun = terminalSessionMatchesRun(terminal, currentArtifactRun);
   const terminalUrl = useMemo(() => {
     if (!terminalMatchesCurrentRun || !terminal?.session_id) return null;
     try {
+      if (
+        config.mode === 'cloud' &&
+        terminalV2 &&
+        terminalV2.session_id === terminal.session_id
+      ) {
+        return terminalSessionV2SocketUrl(config.apiBaseUrl, terminalV2);
+      }
       return api.terminalProxyUrl(terminal.session_id, terminal.project_id);
     } catch {
       return null;
     }
-  }, [api, terminal?.project_id, terminal?.session_id, terminalMatchesCurrentRun]);
+  }, [
+    api,
+    config.apiBaseUrl,
+    config.mode,
+    terminal?.project_id,
+    terminal?.session_id,
+    terminalMatchesCurrentRun,
+    terminalV2,
+  ]);
+  const terminalRecovery = useMemo(
+    () =>
+      terminalMatchesCurrentRun && terminalV2
+        ? {
+            session: terminalV2,
+            onRefetchRun: () => invalidateSessionAuthority(),
+          }
+        : undefined,
+    [invalidateSessionAuthority, terminalMatchesCurrentRun, terminalV2],
+  );
   const terminalProxy = useTerminalProxy(
     terminalUrl,
     desktopApiCredential(config),
     desktopLaunchCapability(config),
+    terminalRecovery,
   );
   const terminalBinding = useMemo(
     () => terminalBindingState(terminal, currentArtifactRun, terminalProxy.status),
@@ -7451,6 +7622,7 @@ export function App() {
           <WorkspaceCollaborationCanvas
             workspaceId={config.workspaceId}
             client={workspaceCollaborationClient}
+            authorityInvalidation={workspaceCollaborationAuthorityInvalidation}
           />
         ) : null}
       </>

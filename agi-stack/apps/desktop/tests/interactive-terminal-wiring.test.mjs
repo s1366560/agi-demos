@@ -40,7 +40,15 @@ test('Desktop interactive terminal uses xterm, Fit, and WebLinks', () => {
 });
 
 test('terminal canvas gates xterm and retains the history fallback', () => {
-  assert.match(sessionTerminalSource, /interactiveCapability\.availability === 'available'/);
+  assert.match(
+    sessionTerminalSource,
+    /sandboxRuntime\?\.capabilities\?\.terminal_interactive/
+  );
+  assert.match(sessionTerminalSource, /declaredInteractiveCapability\.availability === 'available'/);
+  assert.match(
+    sessionTerminalSource,
+    /const canStart =[\s\S]*declaredInteractiveCapability\.availability === 'available'/
+  );
   assert.match(sessionTerminalSource, /<InteractiveTerminal/);
   assert.match(sessionTerminalSource, /<pre[\s\S]*className="terminal-preview"/);
   assert.match(appSource, /interactiveCapability=\{terminalInteractiveCapability\}/);
@@ -87,9 +95,41 @@ test('remote desktop iframe is credential-free and reconnectable', () => {
 test('runtime hook consumes capabilities without inference', () => {
   assert.match(sandboxRuntimeHookSource, /client\s*\.loadCapabilities/);
   assert.match(sandboxRuntimeHookSource, /createSandboxRuntimeClient\(config, capabilities\)/);
+  assert.match(sandboxRuntimeHookSource, /runtimeClient/);
   assert.match(sandboxRuntimeHookSource, /capabilityLoadReason/);
   assert.doesNotMatch(
     sandboxRuntimeHookSource,
     /config\.mode\s*===|status\s*===\s*404|message\.includes|error\.message/iu
+  );
+});
+
+test('cloud terminal start uses the narrow runtime client without probing the legacy route', () => {
+  assert.match(
+    appSource,
+    /config\.mode === 'cloud'[\s\S]*runtimeClient\.createTerminalSession/
+  );
+  assert.match(
+    appSource,
+    /terminal_session_v2_canonical_run_authority_unavailable/
+  );
+  assert.match(
+    appSource,
+    /result\.reason_code ===[\s\S]*terminal_session_v2_canonical_run_authority_unavailable/
+  );
+  assert.match(appSource, /session\.terminalCapabilityUnavailable/);
+  assert.match(
+    appSource,
+    /config\.mode !== 'local'[\s\S]*api\.seedProxyAuthCookie\(\)[\s\S]*api\.startTerminal/
+  );
+});
+
+test('terminal authority is cleared at project, auth, and canonical run boundaries', () => {
+  assert.match(
+    appSource,
+    /const resetProjectScopedState = \(\) => \{[\s\S]*setTerminal\(null\);[\s\S]*setTerminalV2\(null\);/
+  );
+  assert.match(
+    appSource,
+    /useEffect\(\(\) => \{[\s\S]*terminalRunScopeKeyRef\.current === currentTerminalRunScopeKey[\s\S]*terminalStartGenerationRef\.current \+= 1;[\s\S]*setTerminal\(null\);[\s\S]*setTerminalV2\(null\);[\s\S]*\}, \[currentTerminalRunScopeKey\]\);/
   );
 });

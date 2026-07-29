@@ -19,7 +19,7 @@ import {
   type WorkspaceHttpScope,
 } from './workspaceCollaborationHttpContract';
 import {
-  buildWorkspaceMutationRequest,
+  buildWorkspaceAuthorityMutationRequest,
   isAllowedWorkspaceMutation,
   requireWorkspaceMutationAuthority,
 } from './workspaceCollaborationHttpMutations';
@@ -31,7 +31,15 @@ type WorkspaceAuthorityResponse = {
   payload: unknown;
   revision: number | null;
   payloadCursor: string | null;
-  etag: string | null;
+};
+
+type CanonicalWorkspaceAuthority = {
+  revision: number;
+  cursor: string;
+};
+
+type WorkspaceMutationReceipt = {
+  revision: number;
 };
 
 type WorkspaceRequestOptions = {
@@ -71,10 +79,19 @@ async function loadWorkspaceSurface(
   workspaceId: string,
   surface: WorkspaceCollaborationSurface,
   signal?: AbortSignal,
+  minimumRevision: number | null = null,
+  retryCount = 0,
 ): Promise<WorkspaceSurfaceState> {
   const scope = requireWorkspaceScope(config, workspaceId);
   const scopedBase = scopedWorkspacePath(scope);
   const workspaceRoot = workspaceRootPath(scope);
+  const authorityBefore = await getCanonicalWorkspaceAuthority(
+    config,
+    scopedBase,
+    scope,
+    signal,
+  );
+  requireMinimumWorkspaceRevision(authorityBefore.revision, minimumRevision);
   let data: Record<string, unknown>;
   let responses: WorkspaceAuthorityResponse[];
   let empty = false;
@@ -207,14 +224,34 @@ async function loadWorkspaceSurface(
       throw workspaceContractError('workspace_surface_contract_invalid');
   }
 
-  const authority = combineAuthority(responses);
+  const authorityAfter = await getCanonicalWorkspaceAuthority(
+    config,
+    scopedBase,
+    scope,
+    signal,
+  );
+  requireMinimumWorkspaceRevision(authorityAfter.revision, minimumRevision);
+  if (authorityBefore.revision !== authorityAfter.revision) {
+    if (retryCount === 0) {
+      return loadWorkspaceSurface(
+        config,
+        workspaceId,
+        surface,
+        signal,
+        minimumRevision,
+        retryCount + 1,
+      );
+    }
+    throw workspaceContractError('workspace_surface_revision_conflict');
+  }
+  requireSurfaceRevisions(responses, authorityAfter.revision);
   return {
     workspace_id: scope.workspaceId,
     surface,
     authority: config.mode === 'local' ? 'local' : 'cloud',
     status: empty ? 'empty' : 'ready',
-    revision: authority.revision,
-    cursor: authority.cursor,
+    revision: authorityAfter.revision,
+    cursor: authorityAfter.cursor,
     data,
     reason_code: null,
   };
@@ -232,14 +269,26 @@ async function mutateWorkspaceSurface(
     return unavailableMutationState(config, scope.workspaceId, surface);
   }
   requireWorkspaceMutationAuthority(mutation);
-  const request = buildWorkspaceMutationRequest(scope, surface, mutation);
-  await requestWorkspaceAuthority(config, request.path, {
+  const request = buildWorkspaceAuthorityMutationRequest(scope, surface, mutation);
+  const response = await requestWorkspaceAuthority(config, request.path, {
     method: request.method,
     body: request.body,
     mutation,
     signal,
   });
-  return loadWorkspaceSurface(config, scope.workspaceId, surface, signal);
+  const receipt = requireWorkspaceMutationReceipt(
+    response.payload,
+    scope,
+    surface,
+    mutation,
+  );
+  return loadWorkspaceSurface(
+    config,
+    scope.workspaceId,
+    surface,
+    signal,
+    receipt.revision,
+  );
 }
 
 async function getScopedCollection(
@@ -340,7 +389,6 @@ async function requestWorkspaceAuthority(
     payload,
     revision: authority.revision,
     payloadCursor: authority.cursor,
-    etag: readEtag(response.headers),
   };
 }
 
@@ -398,33 +446,112 @@ function requireOptionalEnvelopeScope(
   }
 }
 
-function combineAuthority(
+async function getCanonicalWorkspaceAuthority(
+  config: DesktopRuntimeConfig,
+  scopedBase: string,
+  scope: WorkspaceHttpScope,
+  signal?: AbortSignal,
+): Promise<CanonicalWorkspaceAuthority> {
+  const response = await requestWorkspaceAuthority(
+    config,
+    `${scopedBase}/collaboration/authority`,
+    { signal },
+  );
+  const payload = requireWorkspaceRecord(
+    response.payload,
+    'workspace_surface_contract_invalid',
+  );
+  if (
+    !matchesExactKeys(payload, [
+      'contract_version',
+      'tenant_id',
+      'project_id',
+      'workspace_id',
+      'revision',
+      'cursor',
+    ]) ||
+    payload.contract_version !== '2.0.0' ||
+    payload.tenant_id !== scope.tenantId ||
+    payload.project_id !== scope.projectId ||
+    payload.workspace_id !== scope.workspaceId ||
+    response.revision === null ||
+    response.payloadCursor === null
+  ) {
+    throw workspaceContractError('workspace_surface_authority_invalid');
+  }
+  return {
+    revision: response.revision,
+    cursor: response.payloadCursor,
+  };
+}
+
+function requireSurfaceRevisions(
   responses: readonly WorkspaceAuthorityResponse[],
-): { revision: number | null; cursor: string | null } {
+  canonicalRevision: number,
+): void {
   const revisions = responses
     .map(({ revision }) => revision)
     .filter((revision): revision is number => revision !== null);
-  if (new Set(revisions).size > 1) {
+  if (revisions.some((revision) => revision !== canonicalRevision)) {
     throw workspaceContractError('workspace_surface_revision_conflict');
   }
+}
 
-  const payloadCursors = responses
-    .map(({ payloadCursor }) => payloadCursor)
-    .filter((cursor): cursor is string => cursor !== null);
-  if (new Set(payloadCursors).size > 1) {
-    throw workspaceContractError('workspace_surface_cursor_conflict');
+function requireMinimumWorkspaceRevision(
+  revision: number,
+  minimumRevision: number | null,
+): void {
+  if (minimumRevision !== null && revision < minimumRevision) {
+    throw workspaceContractError('workspace_surface_stale_refetch');
   }
-  if (payloadCursors.length > 0) {
-    return { revision: revisions[0] ?? null, cursor: payloadCursors[0] };
-  }
+}
 
-  const etags = responses.map(({ etag }) => etag);
-  const commonEtag =
-    etags.length > 0 &&
-    etags.every((etag): etag is string => etag !== null && etag === etags[0])
-      ? etags[0]
-      : null;
-  return { revision: revisions[0] ?? null, cursor: commonEtag };
+function requireWorkspaceMutationReceipt(
+  payload: unknown,
+  scope: WorkspaceHttpScope,
+  surface: WorkspaceCollaborationSurface,
+  mutation: WorkspaceSurfaceMutation,
+): WorkspaceMutationReceipt {
+  const receipt = requireWorkspaceRecord(
+    payload,
+    'workspace_surface_receipt_invalid',
+  );
+  if (
+    !matchesExactKeys(receipt, [
+      'contract_version',
+      'receipt_id',
+      'workspace_id',
+      'surface',
+      'action',
+      'revision',
+      'duplicate',
+    ]) ||
+    receipt.contract_version !== '2.0.0' ||
+    typeof receipt.receipt_id !== 'string' ||
+    !receipt.receipt_id ||
+    receipt.receipt_id.length > 512 ||
+    receipt.workspace_id !== scope.workspaceId ||
+    receipt.surface !== surface ||
+    receipt.action !== mutation.action ||
+    !Number.isSafeInteger(receipt.revision) ||
+    Number(receipt.revision) <= mutation.expected_revision ||
+    typeof receipt.duplicate !== 'boolean'
+  ) {
+    throw workspaceContractError('workspace_surface_receipt_invalid');
+  }
+  return { revision: Number(receipt.revision) };
+}
+
+function matchesExactKeys(
+  value: Record<string, unknown>,
+  expected: readonly string[],
+): boolean {
+  const actual = Object.keys(value).sort();
+  const sortedExpected = [...expected].sort();
+  return (
+    actual.length === sortedExpected.length &&
+    actual.every((key, index) => key === sortedExpected[index])
+  );
 }
 
 function readPayloadAuthority(payload: unknown): {
@@ -455,15 +582,6 @@ function readPayloadAuthority(payload: unknown): {
     cursor = payload.cursor === null ? null : String(payload.cursor);
   }
   return { revision, cursor };
-}
-
-function readEtag(headers: Headers): string | null {
-  const etag = headers.get('etag')?.trim() ?? '';
-  if (!etag) return null;
-  if (etag.length > 512) {
-    throw workspaceContractError('workspace_surface_contract_invalid');
-  }
-  return etag;
 }
 
 function requireWorkspaceScope(

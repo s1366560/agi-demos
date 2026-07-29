@@ -13,8 +13,9 @@ use super::{
     ConversationSessionQuery, SessionArtifactAuthority, SessionArtifactRecordResponse,
     SessionCapabilityMode, SessionConversationResponse, SessionConversationTaskResponse,
     SessionHitlKind, SessionMutationAuthority, SessionPendingHitlResponse,
-    SessionPermissionRequestResponse, SessionPermissionRiskLevel, SessionToolExecutionAuthority,
-    SessionToolExecutionResponse, SessionWorkspaceAttemptResponse,
+    SessionPermissionProfile, SessionPermissionRequestResponse, SessionPermissionRiskLevel,
+    SessionPlanRunResponse, SessionRunEnvironmentKind, SessionRunEnvironmentResponse,
+    SessionToolExecutionAuthority, SessionToolExecutionResponse, SessionWorkspaceAttemptResponse,
     SessionWorkspacePlanContextResponse, SessionWorkspacePlanNodeResponse,
 };
 
@@ -94,6 +95,7 @@ impl PgConversationSessionProjectionService {
         let conversation = conversation_row.into_response();
         let (
             attempts,
+            runs,
             conversation_tasks,
             workspace_plan_context,
             hitl,
@@ -101,6 +103,7 @@ impl PgConversationSessionProjectionService {
             tool_executions,
         ) = tokio::try_join!(
             self.load_attempts(&conversation),
+            self.load_runs(&conversation),
             self.load_conversation_tasks(&conversation.id),
             self.load_workspace_plan_context(&conversation),
             self.load_pending_hitl(&conversation, user_id),
@@ -110,6 +113,7 @@ impl PgConversationSessionProjectionService {
         build_projection(ConversationSessionAuthoritySnapshot {
             conversation,
             attempts,
+            runs,
             conversation_tasks,
             workspace_plan_context,
             pending_hitl: hitl.items,
@@ -196,6 +200,30 @@ impl PgConversationSessionProjectionService {
         .fetch_all(&self.pool)
         .await?;
         Ok(rows.into_iter().map(AttemptRow::into_response).collect())
+    }
+
+    async fn load_runs(
+        &self,
+        conversation: &SessionConversationResponse,
+    ) -> Result<Vec<SessionPlanRunResponse>, sqlx::Error> {
+        let rows = sqlx::query_as::<_, AgentPlanRunRow>(
+            "SELECT run.id, run.conversation_id, run.project_id, run.plan_version_id, \
+                    run.idempotency_key, run.message_id, run.request_message, run.status, \
+                    run.revision, run.permission_profile, run.authorization_snapshot, \
+                    run.created_at, run.updated_at, run.completed_at, run.error \
+             FROM agent_plan_runs AS run \
+             INNER JOIN agent_plan_versions AS plan \
+               ON plan.id = run.plan_version_id \
+              AND plan.conversation_id = run.conversation_id \
+             WHERE run.conversation_id = $1 \
+               AND run.project_id = $2 \
+             ORDER BY run.created_at DESC, run.id DESC",
+        )
+        .bind(&conversation.id)
+        .bind(&conversation.project_id)
+        .fetch_all(&self.pool)
+        .await?;
+        project_plan_run_rows(rows)
     }
 
     async fn load_conversation_tasks(
@@ -472,6 +500,160 @@ impl AttemptRow {
             updated_at: self.updated_at,
             completed_at: self.completed_at,
         }
+    }
+}
+
+#[derive(FromRow)]
+struct AgentPlanRunRow {
+    id: String,
+    conversation_id: String,
+    project_id: String,
+    plan_version_id: String,
+    idempotency_key: String,
+    message_id: String,
+    request_message: String,
+    status: String,
+    revision: i32,
+    permission_profile: String,
+    authorization_snapshot: Value,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+    completed_at: Option<DateTime<Utc>>,
+    error: Option<String>,
+}
+
+impl AgentPlanRunRow {
+    fn into_response(self) -> Option<SessionPlanRunResponse> {
+        let permission_profile = SessionPermissionProfile::parse(&self.permission_profile)?;
+        let environment = run_environment(&self.authorization_snapshot);
+        let environment_snapshot = environment
+            .as_ref()
+            .map_or(Ok(Value::Null), serde_json::to_value)
+            .ok()?;
+        let authorization_snapshot = Map::from_iter([
+            (
+                "conversation_id".to_string(),
+                Value::String(self.conversation_id.clone()),
+            ),
+            (
+                "project_id".to_string(),
+                Value::String(self.project_id.clone()),
+            ),
+            (
+                "plan_version_id".to_string(),
+                Value::String(self.plan_version_id.clone()),
+            ),
+            (
+                "permission_profile".to_string(),
+                Value::String(permission_profile.as_str().to_string()),
+            ),
+            ("environment".to_string(), environment_snapshot),
+        ]);
+        Some(SessionPlanRunResponse {
+            id: self.id,
+            conversation_id: self.conversation_id,
+            project_id: self.project_id,
+            plan_version_id: self.plan_version_id,
+            idempotency_key: self.idempotency_key,
+            message_id: self.message_id,
+            request_message: self.request_message,
+            status: self.status,
+            revision: self.revision,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+            started_at: None,
+            completed_at: self.completed_at,
+            last_heartbeat_at: None,
+            error: self.error,
+            environment,
+            permission_profile,
+            authorization_snapshot,
+        })
+    }
+}
+
+fn project_plan_run_rows(
+    rows: Vec<AgentPlanRunRow>,
+) -> Result<Vec<SessionPlanRunResponse>, sqlx::Error> {
+    rows.into_iter()
+        .map(AgentPlanRunRow::into_response)
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| {
+            sqlx::Error::Protocol("persisted plan run authority is malformed".to_string())
+        })
+}
+
+fn run_environment(authorization_snapshot: &Value) -> Option<SessionRunEnvironmentResponse> {
+    let environment = authorization_snapshot
+        .as_object()?
+        .get("environment")?
+        .as_object()?;
+    let id = environment.get("id")?.as_str()?.trim();
+    let kind = SessionRunEnvironmentKind::parse(environment.get("kind")?.as_str()?)?;
+    let label = environment.get("label")?.as_str()?.trim();
+    let workspace_path = environment.get("workspace_path")?.as_str()?;
+    let created_at = DateTime::parse_from_rfc3339(environment.get("created_at")?.as_str()?)
+        .ok()?
+        .with_timezone(&Utc);
+    if id.is_empty() || label.is_empty() || workspace_path != "/workspace" {
+        return None;
+    }
+    Some(SessionRunEnvironmentResponse {
+        id: id.to_string(),
+        kind,
+        label: label.to_string(),
+        workspace_path: workspace_path.to_string(),
+        repository_root: optional_string(environment, "repository_root")?,
+        branch: optional_string(environment, "branch")?,
+        base_commit: optional_string(environment, "base_commit")?,
+        source_run_id: optional_string(environment, "source_run_id")?,
+        created_at,
+    })
+}
+
+fn optional_string(source: &Map<String, Value>, key: &str) -> Option<Option<String>> {
+    match source.get(key) {
+        None | Some(Value::Null) => Some(None),
+        Some(Value::String(value)) => Some(Some(value.clone())),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod plan_run_tests {
+    use serde_json::json;
+
+    use super::*;
+
+    fn plan_run_row(id: &str, permission_profile: &str) -> AgentPlanRunRow {
+        let created_at = DateTime::from_timestamp(1, 0).expect("test timestamp must be valid");
+        AgentPlanRunRow {
+            id: id.to_string(),
+            conversation_id: "conversation-1".to_string(),
+            project_id: "project-1".to_string(),
+            plan_version_id: "plan-version-1".to_string(),
+            idempotency_key: format!("approval-{id}"),
+            message_id: format!("message-{id}"),
+            request_message: "Implement the approved plan".to_string(),
+            status: "running".to_string(),
+            revision: 1,
+            permission_profile: permission_profile.to_string(),
+            authorization_snapshot: json!({"environment": null}),
+            created_at,
+            updated_at: created_at,
+            completed_at: None,
+            error: None,
+        }
+    }
+
+    #[test]
+    fn malformed_newest_run_fails_instead_of_promoting_an_older_run() {
+        let rows = vec![
+            plan_run_row("newest", "malformed"),
+            plan_run_row("older", "full_access"),
+        ];
+
+        assert!(project_plan_run_rows(rows).is_err());
     }
 }
 

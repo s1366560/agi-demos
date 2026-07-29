@@ -19,7 +19,7 @@ use super::{
         ApprovePlanOutcome, DesktopArtifactDelivery, DesktopArtifactStatus, DesktopArtifactVersion,
         DesktopAuthorityError, DesktopExecutionEnvironment, DesktopHitlRequest, DesktopHitlStatus,
         DesktopPermissionProfile, DesktopPlanStatus, DesktopPlanVersion, DesktopRun,
-        DesktopRunStatus, WorkspaceToolGrant,
+        DesktopRunStatus, WorkspaceToolGrant, HITL_PENDING_AUTHORITY_REVISION,
     },
     composer_context::ComposerContextItem,
     provider_usage_store::{self, ProviderUsageRecord, ProviderUsageStatistic},
@@ -35,7 +35,7 @@ use super::{
     ConversationCapabilityMode, ConversationRunMode, LocalConversation,
 };
 
-const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 20;
+const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 21;
 const INSTALLATION_ID_METADATA_KEY: &str = "installation_id";
 const LOCAL_TRUSTED_SESSION_METADATA_KEY: &str = "local_trusted_session_v1";
 const MAX_TIMELINE_PAGE_LIMIT: usize = 500;
@@ -65,13 +65,73 @@ pub(super) struct PreparedToolInvocation {
     pub(super) existing: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct DesktopArtifactContentAuthority {
+    pub(super) artifact_id: String,
+    pub(super) artifact_version_id: String,
+    pub(super) revision: u64,
+    pub(super) content_hash: String,
+    pub(super) mime_type: String,
+    pub(super) path: String,
+}
+
+pub(super) struct DesktopArtifactContentSaveInput<'a> {
+    pub(super) expected_revision: u64,
+    pub(super) observed_content_hash: &'a str,
+    pub(super) content_hash: &'a str,
+    pub(super) idempotency_key: &'a str,
+    pub(super) request_hash: &'a str,
+    pub(super) now: &'a str,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct DesktopArtifactContentSaveReceipt {
+    pub(super) artifact_id: String,
+    pub(super) revision: u64,
+    pub(super) content_hash: String,
+    pub(super) duplicate: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum DesktopArtifactContentSaveOutcome {
+    Saved(DesktopArtifactContentSaveReceipt),
+    Conflict {
+        reason_code: &'static str,
+        server_revision: u64,
+        server_content_hash: String,
+    },
+}
+
 pub(super) struct HitlResponseCommit<'a> {
+    pub(super) expected_authority_revision: u64,
     pub(super) response_data: &'a Value,
     pub(super) response_actor: &'a str,
     pub(super) response_revision: Option<u64>,
-    pub(super) idempotency_key: Option<&'a str>,
+    pub(super) idempotency_key: &'a str,
     pub(super) workspace_tool_grant: Option<&'a WorkspaceToolGrant>,
     pub(super) now: &'a str,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum HitlResponseCommitOutcome {
+    Committed(DesktopHitlRequest),
+    Duplicate(DesktopHitlRequest),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum HitlResponseCommitError {
+    NotFound,
+    AuthorityConflict {
+        expected_revision: u64,
+        authority_revision: u64,
+    },
+    IdempotencyConflict {
+        authority_revision: u64,
+    },
+    AlreadyAnswered {
+        authority_revision: u64,
+    },
+    Storage(String),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -298,6 +358,17 @@ impl DesktopSessionStore {
         Self::from_connection(connection)
     }
 
+    pub(super) fn with_local_mcp_connection<T>(
+        &self,
+        operation: impl FnOnce(&mut Connection) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| "desktop session store lock is unavailable".to_string())?;
+        operation(&mut connection)
+    }
+
     fn from_connection(mut connection: Connection) -> Result<Self, String> {
         let stored_schema_version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
@@ -456,6 +527,29 @@ impl DesktopSessionStore {
                    idempotency_key TEXT NOT NULL UNIQUE,
                    created_at TEXT NOT NULL,
                    value_json TEXT NOT NULL
+                 );
+                 CREATE TABLE IF NOT EXISTS desktop_artifact_content_authorities (
+                   artifact_id TEXT PRIMARY KEY,
+                   artifact_version_id TEXT NOT NULL,
+                   revision INTEGER NOT NULL,
+                   content_hash TEXT NOT NULL,
+                   mime_type TEXT NOT NULL,
+                   path TEXT NOT NULL,
+                   updated_at TEXT NOT NULL,
+                   FOREIGN KEY(artifact_id) REFERENCES desktop_artifacts(id)
+                     ON DELETE CASCADE,
+                   FOREIGN KEY(artifact_version_id) REFERENCES desktop_artifact_versions(id)
+                 );
+                 CREATE TABLE IF NOT EXISTS desktop_artifact_content_receipts (
+                   artifact_id TEXT NOT NULL,
+                   idempotency_key TEXT NOT NULL,
+                   request_hash TEXT NOT NULL,
+                   revision INTEGER NOT NULL,
+                   content_hash TEXT NOT NULL,
+                   created_at TEXT NOT NULL,
+                   PRIMARY KEY(artifact_id, idempotency_key),
+                   FOREIGN KEY(artifact_id) REFERENCES desktop_artifacts(id)
+                     ON DELETE CASCADE
                  );
                  CREATE TABLE IF NOT EXISTS desktop_decisions (
                    id TEXT PRIMARY KEY,
@@ -3317,6 +3411,188 @@ impl DesktopSessionStore {
         query_artifact_version(&connection, artifact_version_id)
     }
 
+    pub(super) fn current_artifact_version(
+        &self,
+        artifact_id: &str,
+    ) -> Result<Option<DesktopArtifactVersion>, String> {
+        let connection = self.connection()?;
+        query_current_artifact_version(&connection, artifact_id)
+    }
+
+    pub(super) fn synchronize_artifact_content_authority(
+        &self,
+        version: &DesktopArtifactVersion,
+        observed_content_hash: &str,
+        now: &str,
+    ) -> Result<DesktopArtifactContentAuthority, String> {
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        let current = query_current_artifact_version(&transaction, &version.artifact_id)?
+            .ok_or_else(|| "artifact not found".to_string())?;
+        if current.id != version.id {
+            return Err("artifact content authority changed".to_string());
+        }
+        let existing = query_artifact_content_authority(&transaction, &version.artifact_id)?;
+        let authority = match existing {
+            Some(existing)
+                if existing.artifact_version_id == version.id
+                    && existing.content_hash == observed_content_hash
+                    && existing.mime_type == version.mime_type
+                    && existing.path == version.path =>
+            {
+                existing
+            }
+            Some(existing) => DesktopArtifactContentAuthority {
+                artifact_id: version.artifact_id.clone(),
+                artifact_version_id: version.id.clone(),
+                revision: existing
+                    .revision
+                    .checked_add(1)
+                    .ok_or_else(|| "artifact content revision is exhausted".to_string())?,
+                content_hash: observed_content_hash.to_string(),
+                mime_type: version.mime_type.clone(),
+                path: version.path.clone(),
+            },
+            None => DesktopArtifactContentAuthority {
+                artifact_id: version.artifact_id.clone(),
+                artifact_version_id: version.id.clone(),
+                revision: 0,
+                content_hash: observed_content_hash.to_string(),
+                mime_type: version.mime_type.clone(),
+                path: version.path.clone(),
+            },
+        };
+        transaction
+            .execute(
+                "INSERT INTO desktop_artifact_content_authorities(
+                   artifact_id, artifact_version_id, revision, content_hash,
+                   mime_type, path, updated_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                 ON CONFLICT(artifact_id) DO UPDATE SET
+                   artifact_version_id = excluded.artifact_version_id,
+                   revision = excluded.revision,
+                   content_hash = excluded.content_hash,
+                   mime_type = excluded.mime_type,
+                   path = excluded.path,
+                   updated_at = excluded.updated_at",
+                params![
+                    authority.artifact_id,
+                    authority.artifact_version_id,
+                    authority.revision as i64,
+                    authority.content_hash,
+                    authority.mime_type,
+                    authority.path,
+                    now,
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction.commit().map_err(|error| error.to_string())?;
+        Ok(authority)
+    }
+
+    pub(super) fn save_artifact_content<F>(
+        &self,
+        version: &DesktopArtifactVersion,
+        input: DesktopArtifactContentSaveInput<'_>,
+        write_file: F,
+    ) -> Result<DesktopArtifactContentSaveOutcome, String>
+    where
+        F: FnOnce() -> Result<(), String>,
+    {
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        let current = query_current_artifact_version(&transaction, &version.artifact_id)?
+            .ok_or_else(|| "artifact not found".to_string())?;
+        if current.id != version.id {
+            return Err("artifact content authority changed".to_string());
+        }
+        let authority = query_artifact_content_authority(&transaction, &version.artifact_id)?
+            .ok_or_else(|| "artifact content authority is not initialized".to_string())?;
+        if authority.artifact_version_id != version.id
+            || authority.path != version.path
+            || authority.mime_type != version.mime_type
+        {
+            return Err("artifact content authority changed".to_string());
+        }
+        if let Some((request_hash, revision, content_hash)) = query_artifact_content_receipt(
+            &transaction,
+            &version.artifact_id,
+            input.idempotency_key,
+        )? {
+            if request_hash == input.request_hash {
+                return Ok(DesktopArtifactContentSaveOutcome::Saved(
+                    DesktopArtifactContentSaveReceipt {
+                        artifact_id: version.artifact_id.clone(),
+                        revision,
+                        content_hash,
+                        duplicate: true,
+                    },
+                ));
+            }
+            return Ok(DesktopArtifactContentSaveOutcome::Conflict {
+                reason_code: "artifact_content_idempotency_conflict",
+                server_revision: authority.revision,
+                server_content_hash: authority.content_hash,
+            });
+        }
+        if authority.revision != input.expected_revision
+            || authority.content_hash != input.observed_content_hash
+        {
+            return Ok(DesktopArtifactContentSaveOutcome::Conflict {
+                reason_code: "artifact_content_revision_conflict",
+                server_revision: authority.revision,
+                server_content_hash: authority.content_hash,
+            });
+        }
+        let next_revision = authority
+            .revision
+            .checked_add(1)
+            .ok_or_else(|| "artifact content revision is exhausted".to_string())?;
+        write_file()?;
+        transaction
+            .execute(
+                "UPDATE desktop_artifact_content_authorities
+                 SET revision = ?2, content_hash = ?3, updated_at = ?4
+                 WHERE artifact_id = ?1",
+                params![
+                    version.artifact_id,
+                    next_revision as i64,
+                    input.content_hash,
+                    input.now,
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction
+            .execute(
+                "INSERT INTO desktop_artifact_content_receipts(
+                   artifact_id, idempotency_key, request_hash, revision,
+                   content_hash, created_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    version.artifact_id,
+                    input.idempotency_key,
+                    input.request_hash,
+                    next_revision as i64,
+                    input.content_hash,
+                    input.now,
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction.commit().map_err(|error| error.to_string())?;
+        Ok(DesktopArtifactContentSaveOutcome::Saved(
+            DesktopArtifactContentSaveReceipt {
+                artifact_id: version.artifact_id.clone(),
+                revision: next_revision,
+                content_hash: input.content_hash.to_string(),
+                duplicate: false,
+            },
+        ))
+    }
+
     pub(super) fn list_artifact_versions(
         &self,
         conversation_id: &str,
@@ -3504,7 +3780,11 @@ impl DesktopSessionStore {
             .optional()
             .map_err(|error| error.to_string())?;
         value_json
-            .map(|value| serde_json::from_str(&value).map_err(|error| error.to_string()))
+            .map(|value| {
+                serde_json::from_str(&value)
+                    .map(normalize_hitl_request)
+                    .map_err(|error| error.to_string())
+            })
             .transpose()
     }
 
@@ -3519,18 +3799,24 @@ impl DesktopSessionStore {
                  WHERE conversation_id = ?1 ORDER BY created_at DESC, id DESC",
             )
             .map_err(|error| error.to_string())?;
-        typed_rows(statement.query_map([conversation_id], |row| row.get::<_, String>(0)))
+        typed_rows(statement.query_map([conversation_id], |row| row.get::<_, String>(0))).map(
+            |requests: Vec<DesktopHitlRequest>| {
+                requests.into_iter().map(normalize_hitl_request).collect()
+            },
+        )
     }
 
     pub(super) fn mark_hitl_responded(
         &self,
         request_id: &str,
         response: HitlResponseCommit<'_>,
-    ) -> Result<DesktopHitlRequest, String> {
-        let mut connection = self.connection()?;
+    ) -> Result<HitlResponseCommitOutcome, HitlResponseCommitError> {
+        let mut connection = self
+            .connection()
+            .map_err(HitlResponseCommitError::Storage)?;
         let transaction = connection
             .transaction()
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| HitlResponseCommitError::Storage(error.to_string()))?;
         let value_json = transaction
             .query_row(
                 "SELECT value_json FROM desktop_hitl_requests WHERE id = ?1",
@@ -3538,19 +3824,55 @@ impl DesktopSessionStore {
                 |row| row.get::<_, String>(0),
             )
             .optional()
-            .map_err(|error| error.to_string())?
-            .ok_or_else(|| "HITL request not found".to_string())?;
-        let mut request: DesktopHitlRequest =
-            serde_json::from_str(&value_json).map_err(|error| error.to_string())?;
-        if request.status == DesktopHitlStatus::Responded {
-            return Ok(request);
+            .map_err(|error| HitlResponseCommitError::Storage(error.to_string()))?
+            .ok_or(HitlResponseCommitError::NotFound)?;
+        let mut request: DesktopHitlRequest = serde_json::from_str(&value_json)
+            .map_err(|error| HitlResponseCommitError::Storage(error.to_string()))?;
+        if request.status == DesktopHitlStatus::Responded
+            && request.authority_revision == HITL_PENDING_AUTHORITY_REVISION
+        {
+            request.authority_revision = HITL_PENDING_AUTHORITY_REVISION + 1;
         }
+        if request.status == DesktopHitlStatus::Responded {
+            if response.expected_authority_revision.checked_add(1)
+                != Some(request.authority_revision)
+            {
+                return Err(HitlResponseCommitError::AuthorityConflict {
+                    expected_revision: response.expected_authority_revision,
+                    authority_revision: request.authority_revision,
+                });
+            }
+            if request.idempotency_key.as_deref() == Some(response.idempotency_key) {
+                if request.response_data.as_ref() == Some(response.response_data) {
+                    transaction
+                        .commit()
+                        .map_err(|error| HitlResponseCommitError::Storage(error.to_string()))?;
+                    return Ok(HitlResponseCommitOutcome::Duplicate(request));
+                }
+                return Err(HitlResponseCommitError::IdempotencyConflict {
+                    authority_revision: request.authority_revision,
+                });
+            }
+            return Err(HitlResponseCommitError::AlreadyAnswered {
+                authority_revision: request.authority_revision,
+            });
+        }
+        if response.expected_authority_revision != request.authority_revision {
+            return Err(HitlResponseCommitError::AuthorityConflict {
+                expected_revision: response.expected_authority_revision,
+                authority_revision: request.authority_revision,
+            });
+        }
+        request.authority_revision =
+            request.authority_revision.checked_add(1).ok_or_else(|| {
+                HitlResponseCommitError::Storage("HITL authority revision overflowed".to_string())
+            })?;
         request.status = DesktopHitlStatus::Responded;
         request.responded_at = Some(response.now.to_string());
         request.response_data = Some(response.response_data.clone());
         request.response_actor = Some(response.response_actor.to_string());
         request.response_revision = response.response_revision;
-        request.idempotency_key = response.idempotency_key.map(ToString::to_string);
+        request.idempotency_key = Some(response.idempotency_key.to_string());
         if let Some(grant) = response.workspace_tool_grant {
             let active_grant = transaction
                 .query_row(
@@ -3562,7 +3884,7 @@ impl DesktopSessionStore {
                     |row| row.get::<_, String>(0),
                 )
                 .optional()
-                .map_err(|error| error.to_string())?;
+                .map_err(|error| HitlResponseCommitError::Storage(error.to_string()))?;
             if active_grant.is_none() {
                 transaction
                     .execute(
@@ -3578,13 +3900,15 @@ impl DesktopSessionStore {
                             grant.revision as i64,
                             grant.created_by,
                             grant.created_at,
-                            serde_json::to_string(grant).map_err(|error| error.to_string())?,
+                            serde_json::to_string(grant).map_err(|error| {
+                                HitlResponseCommitError::Storage(error.to_string())
+                            })?,
                         ],
                     )
-                    .map_err(|error| error.to_string())?;
+                    .map_err(|error| HitlResponseCommitError::Storage(error.to_string()))?;
             }
         }
-        transaction
+        let updated = transaction
             .execute(
                 "UPDATE desktop_hitl_requests
                  SET status = 'responded', responded_at = ?2, value_json = ?3
@@ -3592,12 +3916,21 @@ impl DesktopSessionStore {
                 params![
                     request_id,
                     response.now,
-                    serde_json::to_string(&request).map_err(|error| error.to_string())?,
+                    serde_json::to_string(&request)
+                        .map_err(|error| HitlResponseCommitError::Storage(error.to_string()))?,
                 ],
             )
-            .map_err(|error| error.to_string())?;
-        transaction.commit().map_err(|error| error.to_string())?;
-        Ok(request)
+            .map_err(|error| HitlResponseCommitError::Storage(error.to_string()))?;
+        if updated != 1 {
+            return Err(HitlResponseCommitError::AuthorityConflict {
+                expected_revision: response.expected_authority_revision,
+                authority_revision: request.authority_revision,
+            });
+        }
+        transaction
+            .commit()
+            .map_err(|error| HitlResponseCommitError::Storage(error.to_string()))?;
+        Ok(HitlResponseCommitOutcome::Committed(request))
     }
 
     pub(super) fn workspace_tool_grant_active(
@@ -3987,6 +4320,97 @@ fn query_artifact_version(
         .transpose()
 }
 
+fn query_current_artifact_version(
+    connection: &Connection,
+    artifact_id: &str,
+) -> Result<Option<DesktopArtifactVersion>, String> {
+    let value_json = connection
+        .query_row(
+            "SELECT version.value_json
+             FROM desktop_artifacts AS artifact
+             JOIN desktop_artifact_versions AS version
+               ON version.id = artifact.current_version_id
+             WHERE artifact.id = ?1",
+            [artifact_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    value_json
+        .map(|value| serde_json::from_str(&value).map_err(|error| error.to_string()))
+        .transpose()
+}
+
+fn query_artifact_content_authority(
+    connection: &Connection,
+    artifact_id: &str,
+) -> Result<Option<DesktopArtifactContentAuthority>, String> {
+    let row = connection
+        .query_row(
+            "SELECT artifact_id, artifact_version_id, revision, content_hash, mime_type, path
+             FROM desktop_artifact_content_authorities WHERE artifact_id = ?1",
+            [artifact_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    row.map(
+        |(artifact_id, artifact_version_id, revision, content_hash, mime_type, path)| {
+            Ok(DesktopArtifactContentAuthority {
+                artifact_id,
+                artifact_version_id,
+                revision: u64::try_from(revision)
+                    .map_err(|_| "artifact content revision is invalid".to_string())?,
+                content_hash,
+                mime_type,
+                path,
+            })
+        },
+    )
+    .transpose()
+}
+
+fn query_artifact_content_receipt(
+    connection: &Connection,
+    artifact_id: &str,
+    idempotency_key: &str,
+) -> Result<Option<(String, u64, String)>, String> {
+    let row = connection
+        .query_row(
+            "SELECT request_hash, revision, content_hash
+             FROM desktop_artifact_content_receipts
+             WHERE artifact_id = ?1 AND idempotency_key = ?2",
+            params![artifact_id, idempotency_key],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    row.map(|(request_hash, revision, content_hash)| {
+        Ok((
+            request_hash,
+            u64::try_from(revision)
+                .map_err(|_| "artifact content receipt revision is invalid".to_string())?,
+            content_hash,
+        ))
+    })
+    .transpose()
+}
+
 fn query_run_input(
     connection: &Connection,
     input_id: &str,
@@ -4106,6 +4530,15 @@ fn invocation_status_name(status: InvocationStatus) -> &'static str {
         InvocationStatus::Failed => "failed",
         InvocationStatus::UnknownOutcome => "unknown_outcome",
     }
+}
+
+fn normalize_hitl_request(mut request: DesktopHitlRequest) -> DesktopHitlRequest {
+    if request.status == DesktopHitlStatus::Responded
+        && request.authority_revision == HITL_PENDING_AUTHORITY_REVISION
+    {
+        request.authority_revision = HITL_PENDING_AUTHORITY_REVISION + 1;
+    }
+    request
 }
 
 pub(super) fn recover_inflight_tool_invocations(
@@ -5356,6 +5789,91 @@ mod tests {
     }
 
     #[test]
+    fn hitl_response_commit_is_revision_guarded_and_idempotent() {
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        let request = DesktopHitlRequest {
+            id: "hitl-authority".to_string(),
+            conversation_id: "conversation-authority".to_string(),
+            run_id: None,
+            round: 1,
+            kind: agistack_core::agent::types::HitlKind::Clarification,
+            prompt: "Choose an answer".to_string(),
+            decision: None,
+            a2ui_action: None,
+            status: DesktopHitlStatus::Pending,
+            authority_revision: 1,
+            created_at: "2026-07-20T00:00:00Z".to_string(),
+            responded_at: None,
+            response_data: None,
+            response_actor: None,
+            response_revision: None,
+            idempotency_key: None,
+        };
+        store.insert_hitl_request(&request).expect("insert HITL");
+
+        let committed = store
+            .mark_hitl_responded(
+                &request.id,
+                HitlResponseCommit {
+                    expected_authority_revision: 1,
+                    response_data: &json!({ "answer": "approved" }),
+                    response_actor: "owner",
+                    response_revision: None,
+                    idempotency_key: "hitl-authority:1",
+                    workspace_tool_grant: None,
+                    now: "2026-07-20T00:00:01Z",
+                },
+            )
+            .expect("commit response");
+        assert!(matches!(
+            committed,
+            HitlResponseCommitOutcome::Committed(ref request)
+                if request.authority_revision == 2
+        ));
+
+        let duplicate = store
+            .mark_hitl_responded(
+                &request.id,
+                HitlResponseCommit {
+                    expected_authority_revision: 1,
+                    response_data: &json!({ "answer": "approved" }),
+                    response_actor: "owner",
+                    response_revision: None,
+                    idempotency_key: "hitl-authority:1",
+                    workspace_tool_grant: None,
+                    now: "2026-07-20T00:00:02Z",
+                },
+            )
+            .expect("replay response");
+        assert!(matches!(
+            duplicate,
+            HitlResponseCommitOutcome::Duplicate(ref request)
+                if request.authority_revision == 2
+        ));
+
+        let conflict = store
+            .mark_hitl_responded(
+                &request.id,
+                HitlResponseCommit {
+                    expected_authority_revision: 1,
+                    response_data: &json!({ "answer": "denied" }),
+                    response_actor: "owner",
+                    response_revision: None,
+                    idempotency_key: "hitl-authority:1",
+                    workspace_tool_grant: None,
+                    now: "2026-07-20T00:00:03Z",
+                },
+            )
+            .expect_err("changed idempotent payload");
+        assert!(matches!(
+            conflict,
+            HitlResponseCommitError::IdempotencyConflict {
+                authority_revision: 2
+            }
+        ));
+    }
+
+    #[test]
     fn workspace_tool_grant_is_cross_conversation_revocable_and_survives_reopen() {
         let path = std::env::temp_dir().join(format!(
             "agistack-workspace-tool-grant-{}.db",
@@ -5384,7 +5902,9 @@ mod tests {
                 kind: agistack_core::agent::types::HitlKind::Permission,
                 prompt: "Allow write".to_string(),
                 decision: None,
+                a2ui_action: None,
                 status: DesktopHitlStatus::Pending,
+                authority_revision: 1,
                 created_at: "2026-07-20T00:00:00Z".to_string(),
                 responded_at: None,
                 response_data: None,
@@ -5409,6 +5929,7 @@ mod tests {
                 .mark_hitl_responded(
                     &request.id,
                     HitlResponseCommit {
+                        expected_authority_revision: 1,
                         response_data: &json!({
                             "action": "allow_always",
                             "granted": true,
@@ -5416,7 +5937,7 @@ mod tests {
                         }),
                         response_actor: "owner",
                         response_revision: None,
-                        idempotency_key: Some("grant-hitl:1"),
+                        idempotency_key: "grant-hitl:1",
                         workspace_tool_grant: Some(&grant),
                         now: "2026-07-20T00:00:01Z",
                     },

@@ -8,6 +8,7 @@ import {
 } from '@radix-ui/react-icons';
 
 import { DesktopApiClient } from '../../api/client';
+import { ManagedResourcesClient } from '../../api/managedResourcesClient';
 import { useI18n } from '../../i18n';
 import type {
   AuthState,
@@ -35,6 +36,7 @@ import {
   type ManagedResourceListFilter,
 } from './managedResourceModel';
 import { ModelProviderWorkspace } from './ModelProviderWorkspace';
+import { MCPServerSettingsPage } from './MCPServerSettingsPage';
 import { SettingsManagementDialogs } from './SettingsManagementDialogs';
 import { providerManagementAllowed } from './providerManagementModel';
 import {
@@ -60,6 +62,7 @@ import { useSkillManagement } from './useSkillManagement';
 import { useSkillPackageManagement } from './useSkillPackageManagement';
 import { useSubAgentLibraryManagement } from './useSubAgentLibraryManagement';
 import { useSubAgentDefinitionManagement } from './useSubAgentDefinitionManagement';
+import { useMCPServerManagement } from './useMCPServerManagement';
 import './SettingsWindow.css';
 
 export type { SettingsSection } from './settingsNavigationModel';
@@ -123,6 +126,7 @@ export function SettingsWindow({
   resourceContextKeyRef.current = resourceContextKey;
   const [resourceCounts, setResourceCounts] = useState<SettingsResourceCounts>({
     models: null,
+    mcp: null,
     skills: null,
     plugins: null,
     agents: null,
@@ -159,6 +163,7 @@ export function SettingsWindow({
     setSelectedResourceId(null);
     setResourceCounts({
       models: null,
+      mcp: null,
       skills: null,
       plugins: null,
       agents: null,
@@ -170,6 +175,7 @@ export function SettingsWindow({
     if (!open) return;
     setResourceCounts({
       models: null,
+      mcp: null,
       skills: null,
       plugins: null,
       agents: null,
@@ -188,15 +194,15 @@ export function SettingsWindow({
       setResourceLoading(true);
       setResourceError(null);
       try {
-        const client = new DesktopApiClient(config);
+        const managedResources = new ManagedResourcesClient(config);
         const items =
           resourceSection === 'skills'
-            ? await client.listManagedSkills(signal)
+            ? await managedResources.listManagedSkills(signal)
             : resourceSection === 'plugins'
-              ? await client.listManagedPlugins(signal)
+              ? await new DesktopApiClient(config).listManagedPlugins(signal)
               : resourceSection === 'agents'
-                ? await client.listManagedAgents(signal)
-                : await client.listManagedSubAgents(signal);
+                ? await managedResources.listManagedAgents(signal)
+                : await managedResources.listManagedSubAgents(signal);
         if (requestId !== resourceRequestId.current) return;
         setResourceItems(items);
         setLoadedResourceSection(resourceSection);
@@ -244,6 +250,12 @@ export function SettingsWindow({
   });
   const channelManagement = useChannelConnectionManagement({
     active: open,
+    config,
+    contextKey: resourceContextKey,
+    canManage: canManagePluginControlPlane,
+  });
+  const mcpServerManagement = useMCPServerManagement({
+    active: open && section === 'mcp',
     config,
     contextKey: resourceContextKey,
     canManage: canManagePluginControlPlane,
@@ -385,6 +397,7 @@ export function SettingsWindow({
       models: [t(sectionMeta.models.label), t(sectionMeta.models.description)],
       skills: [t(sectionMeta.skills.label), t(sectionMeta.skills.description)],
       plugins: [t(sectionMeta.plugins.label), t(sectionMeta.plugins.description)],
+      mcp: [t(sectionMeta.mcp.label), t(sectionMeta.mcp.description)],
       agents: [t(sectionMeta.agents.label), t(sectionMeta.agents.description)],
       subagents: [t(sectionMeta.subagents.label), t(sectionMeta.subagents.description)],
     }),
@@ -430,13 +443,20 @@ export function SettingsWindow({
     setActionBusyId(item.id);
     setResourceActionError(null);
     try {
-      const client = new DesktopApiClient(config);
+      const managedResources = new ManagedResourcesClient(config);
       if (action.kind === 'set_skill_status') {
         const skill = item as ManagedSkill;
-        await client.setManagedSkillStatus(skill.id, action.nextActive ? 'active' : 'disabled');
+        await managedResources.setManagedSkillStatus(
+          skill.id,
+          action.nextActive ? 'active' : 'disabled',
+          skill.revision,
+        );
       } else if (action.kind === 'set_plugin_enabled') {
         const plugin = item as ManagedPlugin;
-        const response = await client.setManagedPluginEnabled(plugin.id, action.nextActive);
+        const response = await new DesktopApiClient(config).setManagedPluginEnabled(
+          plugin.id,
+          action.nextActive,
+        );
         if (
           activeSectionRef.current === mutationSection &&
           resourceContextKeyRef.current === mutationContextKey
@@ -445,10 +465,18 @@ export function SettingsWindow({
         }
       } else if (action.kind === 'set_subagent_enabled') {
         const subagent = item as ManagedSubAgent;
-        await client.setManagedSubAgentEnabled(subagent.id, action.nextActive);
+        await managedResources.setManagedSubAgentEnabled(
+          subagent.id,
+          action.nextActive,
+          subagent.revision,
+        );
       } else {
         const agent = item as ManagedAgentDefinition;
-        await client.setManagedAgentEnabled(agent.id, action.nextActive);
+        await managedResources.setManagedAgentEnabled(
+          agent.id,
+          action.nextActive,
+          agent.revision,
+        );
       }
       if (
         activeSectionRef.current === mutationSection &&
@@ -600,6 +628,12 @@ export function SettingsWindow({
                   onCountChange={updateModelCount}
                 />
               ) : null}
+              {section === 'mcp' ? (
+                <MCPServerSettingsPage
+                  management={mcpServerManagement}
+                  canManage={canManagePluginControlPlane}
+                />
+              ) : null}
               {isResourceSection ? (
                 <ManagedResourceWorkspace
                   section={section}
@@ -712,6 +746,7 @@ export function SettingsWindow({
           skillPackages={skillPackageManagement}
           plugins={pluginManagement}
           channels={channelManagement}
+          mcpServers={mcpServerManagement}
           subagentDefinitions={subAgentDefinitions}
           subagents={subAgentLibrary}
         />

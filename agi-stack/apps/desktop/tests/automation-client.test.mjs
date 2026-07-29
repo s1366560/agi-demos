@@ -38,6 +38,63 @@ test('App composes the narrow automation API and the page invokes guarded run-no
   assert.match(automationsPageSource, /onClick=\{onRun\}/u);
 });
 
+test('the narrow automation API preserves the versioned capability authority', async () => {
+  const envelope = {
+    service_version: '0.1.0',
+    contract_version: '2.0.0',
+    schema_version: 1,
+    read: true,
+    revision_guarded: true,
+    idempotency_guarded: true,
+    durable_execution: false,
+    supported_read_trigger_kinds: ['manual', 'schedule', 'event'],
+    create: { allowed: true },
+    edit: { allowed: true },
+    toggle: { allowed: true },
+    run_now: {
+      allowed: false,
+      reason_code: 'durable_automation_execution_unavailable',
+    },
+    delete: { allowed: true },
+  };
+  const baseApi = {
+    getAutomationCapabilities: async () => envelope,
+  };
+  const api = createDesktopAutomationApi(baseApi, DEFAULT_CONFIG);
+
+  assert.deepEqual(await api.getAutomationCapabilities(), envelope);
+});
+
+test('local automation creation binds the job to the selected workspace explicitly', async () => {
+  const calls = [];
+  const baseApi = {
+    createAutomation: async (input, projectId) => {
+      calls.push({ input, projectId });
+      return { ...input, id: 'automation-1', project_id: projectId };
+    },
+  };
+  const api = createDesktopAutomationApi(baseApi, {
+    ...DEFAULT_CONFIG,
+    mode: 'local',
+    projectId: 'project-1',
+    workspaceId: 'workspace-1',
+  });
+
+  await api.createAutomation(
+    {
+      idempotency_key: 'create-1',
+      name: 'Scoped automation',
+      schedule: { kind: 'every', config: { interval_seconds: 60 } },
+      payload: { kind: 'agent_turn', config: { message: 'Run it' } },
+    },
+    'project-1',
+  );
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].projectId, 'project-1');
+  assert.equal(calls[0].input.workspace_id, 'workspace-1');
+});
+
 test('automation run-now uses the scoped guarded contract without expanding DesktopApiClient', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
@@ -113,6 +170,7 @@ test('automation run-now uses the scoped guarded contract without expanding Desk
     assert.equal(calls[0]?.init?.headers.get('Authorization'), 'Bearer authenticated-session');
     assert.equal(calls[0]?.init?.headers.get('X-Agistack-Launch'), 'launch-capability');
     assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
+      contract_version: 2,
       expected_revision: 7,
       idempotency_key: 'run-now-1',
       conversation_id: 'conversation-1',

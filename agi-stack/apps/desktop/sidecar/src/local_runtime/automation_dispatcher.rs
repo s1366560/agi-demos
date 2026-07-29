@@ -1,19 +1,29 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
+use rusqlite::{params, OptionalExtension, TransactionBehavior};
 use serde::Serialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use super::session_store::DesktopSessionStore;
+#[cfg(test)]
+use super::automation_dispatcher_schema::recover_connection;
+use super::automation_dispatcher_schema::recover_transaction;
+pub(super) use super::{
+    automation_dispatcher_schema::initialize_schema,
+    automation_schedule_dispatcher::dispatch_due_schedules,
+};
+use super::{
+    automation_ledger_support::{
+        deadline_at, invalid_record, read_job, replay_receipt, required_string, required_u64,
+        storage,
+    },
+    session_store::DesktopSessionStore,
+};
 
 const EXECUTION_UNAVAILABLE_REASON: &str = "local_automation_execution_runtime_unavailable";
-const SCHEDULE_UNAVAILABLE_REASON: &str = "local_automation_schedule_runtime_unavailable";
-const SCHEDULE_DISABLED_REASON: &str = "local_automation_schedule_disabled";
-const RESTART_RECOVERY_REASON: &str = "local_automation_restart_recovered";
 
-pub(super) trait AutomationClock {
+pub(super) trait AutomationClock: Send + Sync {
     fn now(&self) -> DateTime<Utc>;
 }
 
@@ -86,9 +96,34 @@ pub(super) struct AutomationRunReceipt {
 pub(super) struct AutomationOperationClaim {
     pub(super) operation_id: String,
     pub(super) run_id: String,
+    pub(super) tenant_id: String,
+    pub(super) project_id: String,
+    pub(super) job_id: String,
+    pub(super) actor_user_id: String,
+    pub(super) runtime_execution_id: String,
+    pub(super) conversation_id: Option<String>,
+    pub(super) job_snapshot: Value,
+    pub(super) attempts: u64,
+    pub(super) max_retries: u64,
+    pub(super) deadline_at: DateTime<Utc>,
     pub(super) worker_id: String,
     pub(super) lease_token: String,
     pub(super) fence_token: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct AutomationExecutionRecord {
+    pub(super) error_code: Option<String>,
+    pub(super) result_summary: Option<Value>,
+    pub(super) event_count: u64,
+    pub(super) execution_time_ms: u64,
+    pub(super) conversation_id: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct AutomationScheduleDispatchSummary {
+    pub(super) due: usize,
+    pub(super) enqueued: usize,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -109,145 +144,6 @@ pub(super) enum AutomationLedgerError {
     LeaseLost,
     InvalidRecord(String),
     Storage(String),
-}
-
-pub(super) fn initialize_schema(connection: &Connection) -> Result<(), String> {
-    connection
-        .execute_batch(
-            "CREATE TABLE IF NOT EXISTS desktop_automation_schedule_state (
-               job_id TEXT PRIMARY KEY,
-               project_id TEXT NOT NULL,
-               schedule_revision INTEGER NOT NULL,
-               enabled INTEGER NOT NULL,
-               next_fire_at TEXT,
-               last_occurrence_key TEXT,
-               availability TEXT NOT NULL,
-               reason_code TEXT,
-               updated_at TEXT NOT NULL
-             );
-             CREATE TABLE IF NOT EXISTS desktop_automation_runs (
-               id TEXT PRIMARY KEY,
-               receipt_id TEXT NOT NULL UNIQUE,
-               project_id TEXT NOT NULL,
-               job_id TEXT NOT NULL,
-               job_revision INTEGER NOT NULL,
-               schedule_revision INTEGER,
-               trigger_type TEXT NOT NULL,
-               status TEXT NOT NULL,
-               conversation_id TEXT,
-               scheduled_for TEXT,
-               runtime_execution_id TEXT,
-               error_code TEXT,
-               accepted_at TEXT NOT NULL,
-               started_at TEXT,
-               finished_at TEXT,
-               updated_at TEXT NOT NULL
-             );
-             CREATE TABLE IF NOT EXISTS desktop_automation_operations (
-               id TEXT PRIMARY KEY,
-               project_id TEXT NOT NULL,
-               job_id TEXT NOT NULL,
-               run_id TEXT NOT NULL UNIQUE,
-               operation_kind TEXT NOT NULL,
-               occurrence_key TEXT NOT NULL,
-               status TEXT NOT NULL,
-               available_at_ms INTEGER NOT NULL,
-               lease_owner TEXT,
-               lease_token TEXT,
-               lease_expires_at_ms INTEGER,
-               fence_token INTEGER NOT NULL DEFAULT 0,
-               attempts INTEGER NOT NULL DEFAULT 0,
-               last_error_code TEXT,
-               created_at TEXT NOT NULL,
-               updated_at TEXT NOT NULL,
-               UNIQUE(job_id, operation_kind, occurrence_key)
-             );
-             CREATE TABLE IF NOT EXISTS desktop_automation_run_receipts (
-               user_id TEXT NOT NULL,
-               project_id TEXT NOT NULL,
-               job_id TEXT NOT NULL,
-               idempotency_key TEXT NOT NULL,
-               request_hash TEXT NOT NULL,
-               receipt_id TEXT NOT NULL,
-               run_id TEXT NOT NULL,
-               status TEXT NOT NULL,
-               created_at TEXT NOT NULL,
-               PRIMARY KEY(user_id, project_id, job_id, idempotency_key)
-             );
-             CREATE INDEX IF NOT EXISTS idx_desktop_automation_runs_job
-               ON desktop_automation_runs(project_id, job_id, accepted_at DESC);
-             CREATE INDEX IF NOT EXISTS idx_desktop_automation_operations_claim
-               ON desktop_automation_operations(status, available_at_ms, created_at);
-             CREATE INDEX IF NOT EXISTS idx_desktop_automation_receipts_scope
-               ON desktop_automation_run_receipts(user_id, project_id, job_id, created_at);
-             CREATE TRIGGER IF NOT EXISTS desktop_automation_schedule_after_insert
-             AFTER INSERT ON desktop_automation_jobs
-             BEGIN
-               INSERT INTO desktop_automation_schedule_state (
-                 job_id, project_id, schedule_revision, enabled, next_fire_at,
-                 last_occurrence_key, availability, reason_code, updated_at
-               ) VALUES (
-                 NEW.id,
-                 NEW.project_id,
-                 COALESCE(CAST(json_extract(NEW.value_json, '$.schedule_revision') AS INTEGER), 1),
-                 NEW.enabled,
-                 NULL,
-                 NULL,
-                 CASE WHEN NEW.enabled = 1 THEN 'degraded' ELSE 'not_applicable' END,
-                 CASE
-                   WHEN NEW.enabled = 1
-                     THEN 'local_automation_schedule_runtime_unavailable'
-                   ELSE 'local_automation_schedule_disabled'
-                 END,
-                 COALESCE(json_extract(NEW.value_json, '$.updated_at'), NEW.created_at)
-               )
-               ON CONFLICT(job_id) DO UPDATE SET
-                 project_id = excluded.project_id,
-                 schedule_revision = excluded.schedule_revision,
-                 enabled = excluded.enabled,
-                 availability = excluded.availability,
-                 reason_code = excluded.reason_code,
-                 updated_at = excluded.updated_at;
-             END;
-             CREATE TRIGGER IF NOT EXISTS desktop_automation_schedule_after_update
-             AFTER UPDATE OF enabled, value_json ON desktop_automation_jobs
-             BEGIN
-               INSERT INTO desktop_automation_schedule_state (
-                 job_id, project_id, schedule_revision, enabled, next_fire_at,
-                 last_occurrence_key, availability, reason_code, updated_at
-               ) VALUES (
-                 NEW.id,
-                 NEW.project_id,
-                 COALESCE(CAST(json_extract(NEW.value_json, '$.schedule_revision') AS INTEGER), 1),
-                 NEW.enabled,
-                 NULL,
-                 NULL,
-                 CASE WHEN NEW.enabled = 1 THEN 'degraded' ELSE 'not_applicable' END,
-                 CASE
-                   WHEN NEW.enabled = 1
-                     THEN 'local_automation_schedule_runtime_unavailable'
-                   ELSE 'local_automation_schedule_disabled'
-                 END,
-                 COALESCE(json_extract(NEW.value_json, '$.updated_at'), NEW.created_at)
-               )
-               ON CONFLICT(job_id) DO UPDATE SET
-                 project_id = excluded.project_id,
-                 schedule_revision = excluded.schedule_revision,
-                 enabled = excluded.enabled,
-                 availability = excluded.availability,
-                 reason_code = excluded.reason_code,
-                 updated_at = excluded.updated_at;
-             END;
-             CREATE TRIGGER IF NOT EXISTS desktop_automation_schedule_after_delete
-             AFTER DELETE ON desktop_automation_jobs
-             BEGIN
-               DELETE FROM desktop_automation_schedule_state WHERE job_id = OLD.id;
-             END;",
-        )
-        .map_err(|error| error.to_string())?;
-    recover_connection(connection, &SystemAutomationClock)
-        .map(|_| ())
-        .map_err(|error| format!("{error:?}"))
 }
 
 pub(super) fn enqueue_manual_run(
@@ -272,19 +168,36 @@ pub(super) fn enqueue_manual_run(
         });
     }
     let schedule_revision = job.get("schedule_revision").and_then(Value::as_u64);
+    let tenant_id = required_string(&job, "tenant_id")?;
+    let actor_user_id = command.user_id;
+    let timeout_seconds = job
+        .get("timeout_seconds")
+        .and_then(Value::as_u64)
+        .unwrap_or(300);
+    let max_retries = job
+        .get("max_retries")
+        .and_then(Value::as_u64)
+        .unwrap_or_default();
+    let job_snapshot = serde_json::to_string(&job).map_err(invalid_record)?;
     let now = clock.now();
     let now_text = now.to_rfc3339();
     let receipt_id = Uuid::new_v4().to_string();
     let run_id = Uuid::new_v4().to_string();
+    let runtime_execution_id = format!("local-automation-execution-{run_id}");
     let operation_id = Uuid::new_v4().to_string();
     let occurrence_key = format!("manual:{}", command.idempotency_key);
+    let deadline_at_ms = deadline_at(now, timeout_seconds)?.timestamp_millis();
     transaction
         .execute(
             "INSERT INTO desktop_automation_runs (
                id, receipt_id, project_id, job_id, job_revision, schedule_revision,
-               trigger_type, status, conversation_id, scheduled_for,
-               accepted_at, updated_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'manual', 'queued', ?7, ?8, ?8, ?8)",
+               trigger_type, status, tenant_id, actor_user_id, conversation_id, scheduled_for,
+               runtime_execution_id, job_snapshot_json, timeout_seconds, max_retries,
+               deadline_at_ms, accepted_at, updated_at
+             ) VALUES (
+               ?1, ?2, ?3, ?4, ?5, ?6, 'manual', 'queued', ?7, ?8, ?9, ?10,
+               ?11, ?12, ?13, ?14, ?15, ?16, ?16
+             )",
             params![
                 run_id,
                 receipt_id,
@@ -292,7 +205,15 @@ pub(super) fn enqueue_manual_run(
                 command.job_id,
                 actual_revision,
                 schedule_revision,
+                tenant_id,
+                actor_user_id,
                 command.conversation_id,
+                now_text,
+                runtime_execution_id,
+                job_snapshot,
+                timeout_seconds,
+                max_retries,
+                deadline_at_ms,
                 now_text,
             ],
         )
@@ -342,6 +263,17 @@ pub(super) fn enqueue_manual_run(
     })
 }
 
+pub(super) fn lookup_manual_run_receipt(
+    store: &DesktopSessionStore,
+    command: ManualRunCommand<'_>,
+) -> Result<Option<AutomationRunReceipt>, AutomationLedgerError> {
+    let connection = store.connection().map_err(AutomationLedgerError::Storage)?;
+    let transaction = connection.unchecked_transaction().map_err(storage)?;
+    let receipt = replay_receipt(&transaction, command)?;
+    transaction.commit().map_err(storage)?;
+    Ok(receipt)
+}
+
 pub(super) fn list_runs(
     store: &DesktopSessionStore,
     project_id: &str,
@@ -361,7 +293,8 @@ pub(super) fn list_runs(
     let mut statement = connection
         .prepare(
             "SELECT id, status, trigger_type, accepted_at, started_at, finished_at,
-                    error_code, conversation_id
+                    error_code, conversation_id, result_summary_json, event_count,
+                    execution_time_ms
              FROM desktop_automation_runs
              WHERE project_id = ?1 AND job_id = ?2
              ORDER BY accepted_at DESC, id ASC LIMIT ?3 OFFSET ?4",
@@ -369,6 +302,17 @@ pub(super) fn list_runs(
         .map_err(storage)?;
     let rows = statement
         .query_map(params![project_id, job_id, limit, offset], |row| {
+            let encoded_summary = row.get::<_, Option<String>>(8)?;
+            let result_summary = encoded_summary
+                .as_deref()
+                .and_then(|value| serde_json::from_str::<Value>(value).ok())
+                .unwrap_or_else(|| {
+                    json!({
+                        "authority": "local_durable_ledger",
+                        "execution_availability": "degraded",
+                        "reason_code": EXECUTION_UNAVAILABLE_REASON,
+                    })
+                });
             Ok(json!({
                 "id": row.get::<_, String>(0)?,
                 "job_id": job_id,
@@ -378,13 +322,10 @@ pub(super) fn list_runs(
                 "started_at": row.get::<_, Option<String>>(4)?
                     .unwrap_or(row.get::<_, String>(3)?),
                 "finished_at": row.get::<_, Option<String>>(5)?,
-                "duration_ms": Value::Null,
+                "duration_ms": row.get::<_, Option<u64>>(10)?,
                 "error_message": row.get::<_, Option<String>>(6)?,
-                "result_summary": {
-                    "authority": "local_durable_ledger",
-                    "execution_availability": "degraded",
-                    "reason_code": EXECUTION_UNAVAILABLE_REASON,
-                },
+                "result_summary": result_summary,
+                "event_count": row.get::<_, Option<u64>>(9)?,
                 "conversation_id": row.get::<_, Option<String>>(7)?,
             }))
         })
@@ -425,25 +366,62 @@ pub(super) fn claim_next_operation(
     recover_transaction(&transaction, now)?;
     let candidate = transaction
         .query_row(
-            "SELECT id, run_id, fence_token
-             FROM desktop_automation_operations
-             WHERE status = 'queued' AND available_at_ms <= ?1
-             ORDER BY available_at_ms ASC, created_at ASC, id ASC LIMIT 1",
+            "SELECT operation.id, operation.run_id, operation.fence_token,
+                    run.tenant_id, operation.project_id, operation.job_id,
+                    run.actor_user_id, run.runtime_execution_id, run.conversation_id,
+                    run.job_snapshot_json, operation.attempts, run.max_retries,
+                    run.deadline_at_ms
+             FROM desktop_automation_operations AS operation
+             INNER JOIN desktop_automation_runs AS run ON run.id = operation.run_id
+             WHERE operation.status = 'queued' AND operation.available_at_ms <= ?1
+               AND run.status = 'queued'
+             ORDER BY operation.available_at_ms ASC, operation.created_at ASC,
+                      operation.id ASC
+             LIMIT 1",
             [now.timestamp_millis()],
             |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, u64>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, Option<String>>(8)?,
+                    row.get::<_, String>(9)?,
+                    row.get::<_, u64>(10)?,
+                    row.get::<_, u64>(11)?,
+                    row.get::<_, i64>(12)?,
                 ))
             },
         )
         .optional()
         .map_err(storage)?;
-    let Some((operation_id, run_id, prior_fence)) = candidate else {
+    let Some((
+        operation_id,
+        run_id,
+        prior_fence,
+        tenant_id,
+        project_id,
+        job_id,
+        actor_user_id,
+        runtime_execution_id,
+        conversation_id,
+        job_snapshot_json,
+        prior_attempts,
+        max_retries,
+        deadline_at_ms,
+    )) = candidate
+    else {
         transaction.commit().map_err(storage)?;
         return Ok(None);
     };
+    let job_snapshot = serde_json::from_str(&job_snapshot_json).map_err(invalid_record)?;
+    let deadline_at = DateTime::from_timestamp_millis(deadline_at_ms).ok_or_else(|| {
+        AutomationLedgerError::InvalidRecord("automation run deadline is invalid".into())
+    })?;
     let fence_token = prior_fence.saturating_add(1);
     let lease_token = Uuid::new_v4().to_string();
     let lease_millis = i64::try_from(lease_duration.as_millis())
@@ -487,10 +465,61 @@ pub(super) fn claim_next_operation(
     Ok(Some(AutomationOperationClaim {
         operation_id,
         run_id,
+        tenant_id,
+        project_id,
+        job_id,
+        actor_user_id,
+        runtime_execution_id,
+        conversation_id,
+        job_snapshot,
+        attempts: prior_attempts.saturating_add(1),
+        max_retries,
+        deadline_at,
         worker_id: worker_id.to_string(),
         lease_token,
         fence_token,
     }))
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+pub(super) fn renew_operation_lease(
+    store: &DesktopSessionStore,
+    claim: &AutomationOperationClaim,
+    lease_duration: Duration,
+    clock: &dyn AutomationClock,
+) -> Result<bool, AutomationLedgerError> {
+    if lease_duration.is_zero() {
+        return Err(AutomationLedgerError::InvalidRecord(
+            "lease duration is required".into(),
+        ));
+    }
+    let lease_millis = i64::try_from(lease_duration.as_millis())
+        .map_err(|_| AutomationLedgerError::InvalidRecord("lease duration is too large".into()))?;
+    let now = clock.now();
+    let lease_expires_at_ms = now
+        .timestamp_millis()
+        .checked_add(lease_millis)
+        .ok_or_else(|| AutomationLedgerError::InvalidRecord("lease expiry overflow".into()))?;
+    store
+        .connection()
+        .map_err(AutomationLedgerError::Storage)?
+        .execute(
+            "UPDATE desktop_automation_operations
+             SET lease_expires_at_ms = ?1, updated_at = ?2
+             WHERE id = ?3 AND run_id = ?4 AND status = 'running'
+               AND lease_owner = ?5 AND lease_token = ?6 AND fence_token = ?7",
+            params![
+                lease_expires_at_ms,
+                now.to_rfc3339(),
+                claim.operation_id,
+                claim.run_id,
+                claim.worker_id,
+                claim.lease_token,
+                claim.fence_token,
+            ],
+        )
+        .map(|updated| updated == 1)
+        .map_err(storage)
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -499,6 +528,28 @@ pub(super) fn settle_operation(
     claim: &AutomationOperationClaim,
     status: AutomationRunStatus,
     error_code: Option<&str>,
+    clock: &dyn AutomationClock,
+) -> Result<(), AutomationLedgerError> {
+    settle_operation_with_result(
+        store,
+        claim,
+        status,
+        AutomationExecutionRecord {
+            error_code: error_code.map(ToString::to_string),
+            result_summary: None,
+            event_count: 0,
+            execution_time_ms: 0,
+            conversation_id: claim.conversation_id.clone(),
+        },
+        clock,
+    )
+}
+
+pub(super) fn settle_operation_with_result(
+    store: &DesktopSessionStore,
+    claim: &AutomationOperationClaim,
+    status: AutomationRunStatus,
+    execution: AutomationExecutionRecord,
     clock: &dyn AutomationClock,
 ) -> Result<(), AutomationLedgerError> {
     if matches!(
@@ -514,6 +565,12 @@ pub(super) fn settle_operation(
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(storage)?;
     let now_text = clock.now().to_rfc3339();
+    let result_summary_json = execution
+        .result_summary
+        .as_ref()
+        .map(serde_json::to_string)
+        .transpose()
+        .map_err(invalid_record)?;
     let settled = transaction
         .execute(
             "UPDATE desktop_automation_operations
@@ -523,7 +580,7 @@ pub(super) fn settle_operation(
                AND lease_owner = ?6 AND lease_token = ?7 AND fence_token = ?8",
             params![
                 status.as_str(),
-                error_code,
+                execution.error_code,
                 now_text,
                 claim.operation_id,
                 claim.run_id,
@@ -540,201 +597,99 @@ pub(super) fn settle_operation(
     transaction
         .execute(
             "UPDATE desktop_automation_runs
-             SET status = ?1, error_code = ?2, finished_at = ?3, updated_at = ?4
-             WHERE id = ?5",
+             SET status = ?1, error_code = ?2, finished_at = ?3,
+                 result_summary_json = ?4, event_count = ?5, execution_time_ms = ?6,
+                 conversation_id = COALESCE(?7, conversation_id), updated_at = ?8
+             WHERE id = ?9",
             params![
                 status.as_str(),
-                error_code,
+                execution.error_code,
                 finished_at,
+                result_summary_json,
+                execution.event_count,
+                execution.execution_time_ms,
+                execution.conversation_id,
                 now_text,
                 claim.run_id,
             ],
         )
         .map_err(storage)?;
+    transaction
+        .execute(
+            "UPDATE desktop_automation_run_receipts SET status = ?1 WHERE run_id = ?2",
+            params![status.as_str(), claim.run_id],
+        )
+        .map_err(storage)?;
     transaction.commit().map_err(storage)
 }
 
-fn recover_connection(
-    connection: &Connection,
+pub(super) fn retry_operation(
+    store: &DesktopSessionStore,
+    claim: &AutomationOperationClaim,
+    error_code: &str,
+    retry_delay: Duration,
     clock: &dyn AutomationClock,
-) -> Result<AutomationStartupRecovery, AutomationLedgerError> {
-    let transaction = connection.unchecked_transaction().map_err(storage)?;
-    reconcile_schedule_state(&transaction, clock.now())?;
-    let recovered = recover_transaction(&transaction, clock.now())?;
-    transaction.commit().map_err(storage)?;
-    Ok(recovered)
-}
-
-fn recover_transaction(
-    transaction: &Transaction<'_>,
-    now: DateTime<Utc>,
-) -> Result<AutomationStartupRecovery, AutomationLedgerError> {
-    let now_text = now.to_rfc3339();
-    let now_ms = now.timestamp_millis();
-    let requeued_runs = transaction
-        .execute(
-            "UPDATE desktop_automation_runs
-             SET status = 'queued', error_code = ?1, finished_at = NULL, updated_at = ?2
-             WHERE status = 'running' AND id IN (
-               SELECT run_id FROM desktop_automation_operations
-               WHERE status = 'running'
-                 AND (lease_expires_at_ms IS NULL OR lease_expires_at_ms <= ?3)
-             )",
-            params![RESTART_RECOVERY_REASON, now_text, now_ms],
-        )
+) -> Result<bool, AutomationLedgerError> {
+    if error_code.trim().is_empty() {
+        return Err(AutomationLedgerError::InvalidRecord(
+            "retry error code is required".into(),
+        ));
+    }
+    if claim.attempts > claim.max_retries {
+        return Ok(false);
+    }
+    let delay_millis = i64::try_from(retry_delay.as_millis())
+        .map_err(|_| AutomationLedgerError::InvalidRecord("retry delay is too large".into()))?;
+    let now = clock.now();
+    let available_at_ms = now
+        .timestamp_millis()
+        .checked_add(delay_millis)
+        .ok_or_else(|| AutomationLedgerError::InvalidRecord("retry time overflow".into()))?;
+    if available_at_ms >= claim.deadline_at.timestamp_millis() {
+        return Ok(false);
+    }
+    let mut connection = store.connection().map_err(AutomationLedgerError::Storage)?;
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(storage)?;
-    let expired_operations = transaction
+    let now_text = now.to_rfc3339();
+    let requeued = transaction
         .execute(
             "UPDATE desktop_automation_operations
              SET status = 'queued', available_at_ms = ?1,
                  lease_owner = NULL, lease_token = NULL, lease_expires_at_ms = NULL,
-                 fence_token = fence_token + 1, last_error_code = ?2, updated_at = ?3
-             WHERE status = 'running'
-               AND (lease_expires_at_ms IS NULL OR lease_expires_at_ms <= ?1)",
-            params![now_ms, RESTART_RECOVERY_REASON, now_text],
+                 last_error_code = ?2, updated_at = ?3
+             WHERE id = ?4 AND run_id = ?5 AND status = 'running'
+               AND lease_owner = ?6 AND lease_token = ?7 AND fence_token = ?8",
+            params![
+                available_at_ms,
+                error_code,
+                now_text,
+                claim.operation_id,
+                claim.run_id,
+                claim.worker_id,
+                claim.lease_token,
+                claim.fence_token,
+            ],
         )
         .map_err(storage)?;
-    Ok(AutomationStartupRecovery {
-        expired_operations,
-        requeued_runs,
-    })
-}
-
-fn reconcile_schedule_state(
-    transaction: &Transaction<'_>,
-    now: DateTime<Utc>,
-) -> Result<(), AutomationLedgerError> {
+    if requeued != 1 {
+        return Err(AutomationLedgerError::LeaseLost);
+    }
     transaction
         .execute(
-            "INSERT INTO desktop_automation_schedule_state (
-               job_id, project_id, schedule_revision, enabled, next_fire_at,
-               last_occurrence_key, availability, reason_code, updated_at
-             )
-             SELECT
-               id,
-               project_id,
-               COALESCE(CAST(json_extract(value_json, '$.schedule_revision') AS INTEGER), 1),
-               enabled,
-               NULL,
-               NULL,
-               CASE WHEN enabled = 1 THEN 'degraded' ELSE 'not_applicable' END,
-               CASE WHEN enabled = 1 THEN ?1 ELSE ?2 END,
-               ?3
-             FROM desktop_automation_jobs WHERE true
-             ON CONFLICT(job_id) DO UPDATE SET
-               project_id = excluded.project_id,
-               schedule_revision = excluded.schedule_revision,
-               enabled = excluded.enabled,
-               availability = excluded.availability,
-               reason_code = excluded.reason_code,
-               updated_at = excluded.updated_at",
-            params![
-                SCHEDULE_UNAVAILABLE_REASON,
-                SCHEDULE_DISABLED_REASON,
-                now.to_rfc3339(),
-            ],
+            "UPDATE desktop_automation_runs
+             SET status = 'queued', error_code = ?1, finished_at = NULL, updated_at = ?2
+             WHERE id = ?3 AND status = 'running'",
+            params![error_code, now_text, claim.run_id],
         )
         .map_err(storage)?;
     transaction
         .execute(
-            "DELETE FROM desktop_automation_schedule_state
-             WHERE NOT EXISTS (
-               SELECT 1 FROM desktop_automation_jobs
-               WHERE desktop_automation_jobs.id = desktop_automation_schedule_state.job_id
-             )",
-            [],
+            "UPDATE desktop_automation_run_receipts SET status = 'queued' WHERE run_id = ?1",
+            [&claim.run_id],
         )
         .map_err(storage)?;
-    Ok(())
-}
-
-fn replay_receipt(
-    transaction: &Transaction<'_>,
-    command: ManualRunCommand<'_>,
-) -> Result<Option<AutomationRunReceipt>, AutomationLedgerError> {
-    let receipt = transaction
-        .query_row(
-            "SELECT request_hash, receipt_id, run_id, status
-             FROM desktop_automation_run_receipts
-             WHERE user_id = ?1 AND project_id = ?2 AND job_id = ?3
-               AND idempotency_key = ?4",
-            params![
-                command.user_id,
-                command.project_id,
-                command.job_id,
-                command.idempotency_key,
-            ],
-            |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                ))
-            },
-        )
-        .optional()
-        .map_err(storage)?;
-    match receipt {
-        Some((stored_hash, _, _, _)) if stored_hash != command.request_hash => {
-            Err(AutomationLedgerError::IdempotencyConflict)
-        }
-        Some((_, receipt_id, run_id, status)) => Ok(Some(AutomationRunReceipt {
-            receipt_id,
-            run_id,
-            job_id: command.job_id.to_string(),
-            status: parse_status(&status)?,
-            duplicate: true,
-        })),
-        None => Ok(None),
-    }
-}
-
-fn read_job(
-    transaction: &Transaction<'_>,
-    project_id: &str,
-    job_id: &str,
-) -> Result<Option<Value>, AutomationLedgerError> {
-    let encoded = transaction
-        .query_row(
-            "SELECT value_json FROM desktop_automation_jobs
-             WHERE project_id = ?1 AND id = ?2",
-            params![project_id, job_id],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()
-        .map_err(storage)?;
-    encoded
-        .map(|value| serde_json::from_str(&value).map_err(invalid_record))
-        .transpose()
-}
-
-fn required_u64(value: &Value, field: &str) -> Result<u64, AutomationLedgerError> {
-    value
-        .get(field)
-        .and_then(Value::as_u64)
-        .ok_or_else(|| AutomationLedgerError::InvalidRecord(format!("{field} must be an integer")))
-}
-
-fn parse_status(value: &str) -> Result<AutomationRunStatus, AutomationLedgerError> {
-    match value {
-        "queued" => Ok(AutomationRunStatus::Queued),
-        "running" => Ok(AutomationRunStatus::Running),
-        "waiting_human" => Ok(AutomationRunStatus::WaitingHuman),
-        "success" => Ok(AutomationRunStatus::Success),
-        "failed" => Ok(AutomationRunStatus::Failed),
-        "timeout" => Ok(AutomationRunStatus::Timeout),
-        "cancelled" => Ok(AutomationRunStatus::Cancelled),
-        _ => Err(AutomationLedgerError::InvalidRecord(
-            "automation run status is invalid".into(),
-        )),
-    }
-}
-
-fn storage(error: rusqlite::Error) -> AutomationLedgerError {
-    AutomationLedgerError::Storage(error.to_string())
-}
-
-fn invalid_record(error: serde_json::Error) -> AutomationLedgerError {
-    AutomationLedgerError::InvalidRecord(error.to_string())
+    transaction.commit().map_err(storage)?;
+    Ok(true)
 }

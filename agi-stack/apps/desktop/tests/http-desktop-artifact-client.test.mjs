@@ -157,24 +157,33 @@ test('downloads authenticated bytes without exposing a storage URL', async () =>
   }
 });
 
-test('local mode stays structurally unavailable without probing cloud paths', async () => {
+test('local mode uses the same authenticated Artifact Content V2 authority path', async () => {
   const originalFetch = globalThis.fetch;
-  let calls = 0;
-  globalThis.fetch = async () => {
-    calls += 1;
-    throw new Error('must not fetch');
+  let captured;
+  globalThis.fetch = async (input, init) => {
+    captured = { url: String(input), init };
+    return json({
+      contract_version: 2,
+      artifact_id: 'conversation-1:artifact-1',
+      revision: 0,
+      content_hash: SERVER_HASH,
+      mime_type: 'text/markdown',
+      content: '# Local authority',
+    });
   };
   try {
-    await assert.rejects(
-      createHttpDesktopArtifactClient({ ...config(), mode: 'local' }).download(
-        'artifact-1',
-      ),
-      (error) => {
-        assert.equal(error.reasonCode, 'local_artifact_authority_unavailable');
-        return true;
-      },
+    const authority = await createHttpDesktopArtifactClient({
+      ...config(),
+      mode: 'local',
+    }).loadContent(
+      'conversation-1:artifact-1',
     );
-    assert.equal(calls, 0);
+    assert.equal(authority.revision, 0);
+    assert.equal(
+      captured.url,
+      'https://api.memstack.test/api/v1/artifacts/conversation-1%3Aartifact-1/content',
+    );
+    assert.equal(captured.init.headers.get('Authorization'), 'Bearer artifact-session');
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -8,6 +8,16 @@ import type {
   WorkspaceSurfaceState,
 } from './workspaceCollaborationClient';
 
+export class WorkspaceCollaborationCapabilityError extends Error {
+  readonly reasonCode: string;
+
+  constructor(reasonCode: string) {
+    super('Workspace collaboration mutation is unavailable');
+    this.name = 'WorkspaceCollaborationCapabilityError';
+    this.reasonCode = reasonCode;
+  }
+}
+
 export function createCapabilityWorkspaceCollaborationClient(
   authority: WorkspaceCollaborationClient,
   capability: DesktopCapabilityView,
@@ -32,7 +42,11 @@ export function createCapabilityWorkspaceCollaborationClient(
     return Object.freeze({
       getSurface: async (workspaceId, surface) => unavailable(workspaceId, surface),
       refetchAuthority: async (workspaceId, surface) => unavailable(workspaceId, surface),
-      mutateSurface: async (workspaceId, surface) => unavailable(workspaceId, surface),
+      mutateSurface: async () => {
+        throw new WorkspaceCollaborationCapabilityError(
+          capability.reason_code ?? 'workspace_collaboration_unavailable',
+        );
+      },
     });
   }
 
@@ -42,12 +56,11 @@ export function createCapabilityWorkspaceCollaborationClient(
         authority.getSurface(workspaceId, surface, cursor, signal),
       refetchAuthority: (workspaceId, surface, signal) =>
         authority.refetchAuthority(workspaceId, surface, signal),
-      mutateSurface: async (workspaceId, surface) =>
-        unavailable(
-          workspaceId,
-          surface,
+      mutateSurface: async () => {
+        throw new WorkspaceCollaborationCapabilityError(
           capability.reason_code ?? 'workspace_collaboration_mutation_unavailable',
-        ),
+        );
+      },
     });
   }
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { DesktopApiClient } from '../../api/client';
+import { ManagedResourcesClient } from '../../api/managedResourcesClient';
 import type {
   DesktopRuntimeConfig,
   ManagedAgentDefinition,
@@ -50,7 +50,7 @@ export function useAgentDefinitionManagement({
     const controller = new AbortController();
     setExternalAcpAgentsLoading(true);
     setExternalAcpAgentsError(null);
-    void new DesktopApiClient(config)
+    void new ManagedResourcesClient(config)
       .listManagedExternalAcpAgents(controller.signal)
       .then((agents) => {
         if (contextKeyRef.current === requestContextKey) setExternalAcpAgents(agents);
@@ -90,9 +90,13 @@ export function useAgentDefinitionManagement({
       setBusy(true);
       setError(null);
       try {
-        const client = new DesktopApiClient(config);
+        const client = new ManagedResourcesClient(config);
         const saved = definition
-          ? await client.updateManagedAgentDefinition(definition.id, input)
+          ? await client.updateManagedAgentDefinition(
+              definition.id,
+              input,
+              definition.revision,
+            )
           : await client.createManagedAgentDefinition(input);
         if (contextKeyRef.current !== requestContextKey) return;
         setDefinition(undefined);
@@ -113,7 +117,10 @@ export function useAgentDefinitionManagement({
     setBusy(true);
     setError(null);
     try {
-      await new DesktopApiClient(config).deleteManagedAgentDefinition(definition.id);
+      await new ManagedResourcesClient(config).deleteManagedAgentDefinition(
+        definition.id,
+        definition.revision,
+      );
       if (contextKeyRef.current !== requestContextKey) return;
       setDefinition(undefined);
       onDeleted();

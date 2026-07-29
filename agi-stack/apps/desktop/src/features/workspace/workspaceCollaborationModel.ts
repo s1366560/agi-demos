@@ -23,7 +23,13 @@ export const WORKSPACE_COLLABORATION_TABS: ReadonlyArray<{
 export type WorkspaceAuthorityInvalidationTrigger =
   | 'reconnect'
   | 'cursor_gap'
+  | 'delta'
   | 'mutation_ack';
+
+export type WorkspaceAuthorityInvalidation = {
+  sequence: number;
+  trigger: WorkspaceAuthorityInvalidationTrigger;
+};
 
 export type WorkspaceCollaborationCanvasState = {
   workspaceId: string;

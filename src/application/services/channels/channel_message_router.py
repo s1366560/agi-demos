@@ -204,7 +204,6 @@ class ChannelMessageRouter:
     async def _do_media_import(self, message: Message, conversation_id: str) -> None:
         """Execute media import into sandbox workspace."""
         try:
-            from src.application.services.artifact_service import ArtifactService
             from src.infrastructure.adapters.primary.web.startup.container import (
                 get_app_container,
             )
@@ -217,11 +216,7 @@ class ChannelMessageRouter:
                 mcp_adapter = app_container.sandbox_adapter()
                 await mcp_adapter.sync_from_docker()
 
-                storage = app_container.storage_service()
-                artifact_service = ArtifactService(
-                    storage_service=storage,
-                    event_publisher=None,
-                )
+                artifact_service = app_container.artifact_service()
 
                 logger.info(
                     "[MessageRouter] Importing media message to workspace: "

@@ -1,5 +1,6 @@
 use super::super::*;
 use super::*;
+use crate::sandbox_api::terminal_v2::terminal_v2_instance_affinity_ready;
 
 #[test]
 fn profile_validation_matches_python_enum_values() {
@@ -25,6 +26,215 @@ fn profile_validation_matches_python_enum_values() {
 #[test]
 fn sandbox_router_builds_with_http_service_proxy_routes() {
     let _ = router();
+}
+
+#[test]
+fn sandbox_runtime_capabilities_do_not_claim_canonical_run_authority() {
+    let actual = serde_json::to_value(
+        SandboxRuntimeCapabilitiesResponse::canonical_run_authority_unavailable(),
+    )
+    .unwrap();
+    assert_eq!(
+        actual,
+        serde_json::json!({
+            "service_version": "0.1.0",
+            "contract_version": 2,
+            "terminal_interactive": {
+                "availability": "degraded",
+                "contract_version": 1,
+                "reason_code": "terminal_interactive_canonical_run_authority_unavailable"
+            },
+            "terminal_resume": {
+                "availability": "unavailable",
+                "contract_version": 2,
+                "reason_code": "terminal_session_v2_canonical_run_authority_unavailable"
+            },
+            "files": {
+                "availability": "unavailable",
+                "contract_version": 1,
+                "reason_code": "sandbox_file_api_unavailable"
+            },
+            "kasm_vnc": {
+                "availability": "available",
+                "contract_version": 1,
+                "reason_code": null
+            }
+        })
+    );
+}
+
+#[test]
+fn sandbox_runtime_capabilities_publish_terminal_v2_only_when_authority_is_ready() {
+    let actual =
+        serde_json::to_value(SandboxRuntimeCapabilitiesResponse::terminal_v2_available()).unwrap();
+    assert_eq!(
+        actual,
+        serde_json::json!({
+            "service_version": "0.1.0",
+            "contract_version": 2,
+            "terminal_interactive": {
+                "availability": "available",
+                "contract_version": 1,
+                "reason_code": null
+            },
+            "terminal_resume": {
+                "availability": "available",
+                "contract_version": 2,
+                "reason_code": null
+            },
+            "files": {
+                "availability": "unavailable",
+                "contract_version": 1,
+                "reason_code": "sandbox_file_api_unavailable"
+            },
+            "kasm_vnc": {
+                "availability": "available",
+                "contract_version": 1,
+                "reason_code": null
+            }
+        })
+    );
+}
+
+#[test]
+fn sandbox_runtime_capabilities_publish_files_only_when_authority_is_ready() {
+    let unavailable = serde_json::to_value(
+        SandboxRuntimeCapabilitiesResponse::canonical_run_authority_unavailable()
+            .with_files_available(false),
+    )
+    .unwrap();
+    let available = serde_json::to_value(
+        SandboxRuntimeCapabilitiesResponse::canonical_run_authority_unavailable()
+            .with_files_available(true),
+    )
+    .unwrap();
+
+    assert_eq!(unavailable["files"]["availability"], "unavailable");
+    assert_eq!(
+        unavailable["files"]["reason_code"],
+        "sandbox_file_api_unavailable"
+    );
+    assert_eq!(available["files"]["availability"], "available");
+    assert_eq!(available["files"]["contract_version"], 1);
+    assert_eq!(available["files"]["reason_code"], Value::Null);
+}
+
+#[test]
+fn sandbox_runtime_capabilities_publish_stable_terminal_v2_unavailable_reasons() {
+    for (state, availability, reason_code) in [
+        (
+            TerminalV2CapabilityState::SandboxUnavailable,
+            "unavailable",
+            "terminal_session_v2_sandbox_unavailable",
+        ),
+        (
+            TerminalV2CapabilityState::SandboxNotRunning,
+            "unavailable",
+            "terminal_session_v2_sandbox_not_running",
+        ),
+        (
+            TerminalV2CapabilityState::TerminalUrlUnavailable,
+            "unavailable",
+            "terminal_session_v2_terminal_url_unavailable",
+        ),
+        (
+            TerminalV2CapabilityState::RegistryUnavailable,
+            "unavailable",
+            "terminal_session_v2_registry_unavailable",
+        ),
+        (
+            TerminalV2CapabilityState::AuthorityUnavailable,
+            "unavailable",
+            "terminal_session_v2_authority_unavailable",
+        ),
+        (
+            TerminalV2CapabilityState::InstanceAffinityUnavailable,
+            "unavailable",
+            "terminal_session_v2_instance_affinity_unavailable",
+        ),
+        (
+            TerminalV2CapabilityState::NotApplicable,
+            "not_applicable",
+            "terminal_session_v2_not_applicable",
+        ),
+    ] {
+        let actual = SandboxRuntimeCapabilitiesResponse::from_terminal_v2_state(state);
+        assert_eq!(actual.terminal_resume.availability, availability);
+        assert_eq!(actual.terminal_resume.reason_code, Some(reason_code));
+    }
+}
+
+#[test]
+fn terminal_v2_capability_requires_all_authorities_and_safe_instance_routing() {
+    let mut info = sample_info();
+    info.terminal_url = Some("http://127.0.0.1:7681".to_string());
+    info.runtime_auth_token = Some(SandboxRuntimeToken::from_exposed("private-capability"));
+    assert_eq!(
+        terminal_v2_capability_state(Some(&info), true, true, true, true),
+        TerminalV2CapabilityState::Available
+    );
+
+    info.profile = SandboxProfile::Lite;
+    assert_eq!(
+        terminal_v2_capability_state(Some(&info), true, true, true, true),
+        TerminalV2CapabilityState::NotApplicable
+    );
+    info.profile = SandboxProfile::Standard;
+    info.sandbox_type = "local".to_string();
+    assert_eq!(
+        terminal_v2_capability_state(Some(&info), true, true, true, true),
+        TerminalV2CapabilityState::NotApplicable
+    );
+    info.sandbox_type = "cloud".to_string();
+    info.state = ContainerState::Exited;
+    assert_eq!(
+        terminal_v2_capability_state(Some(&info), true, true, true, true),
+        TerminalV2CapabilityState::SandboxNotRunning
+    );
+    info.state = ContainerState::Running;
+    info.terminal_url = None;
+    assert_eq!(
+        terminal_v2_capability_state(Some(&info), true, true, true, true),
+        TerminalV2CapabilityState::TerminalUrlUnavailable
+    );
+    assert_eq!(
+        terminal_v2_capability_state(None, true, true, true, true),
+        TerminalV2CapabilityState::SandboxUnavailable
+    );
+    assert_eq!(
+        terminal_v2_capability_state(Some(&info), false, true, true, true),
+        TerminalV2CapabilityState::CanonicalAuthorityUnavailable
+    );
+    info.terminal_url = Some("http://127.0.0.1:7681".to_string());
+    assert_eq!(
+        terminal_v2_capability_state(Some(&info), true, false, true, true),
+        TerminalV2CapabilityState::RegistryUnavailable
+    );
+    assert_eq!(
+        terminal_v2_capability_state(Some(&info), true, true, false, true),
+        TerminalV2CapabilityState::AuthorityUnavailable
+    );
+    assert_eq!(
+        terminal_v2_capability_state(Some(&info), true, true, true, false),
+        TerminalV2CapabilityState::InstanceAffinityUnavailable
+    );
+}
+
+#[test]
+fn terminal_v2_instance_affinity_fails_closed_for_multi_replica_deployments() {
+    assert!(terminal_v2_instance_affinity_ready(None, None));
+    assert!(terminal_v2_instance_affinity_ready(Some("1"), None));
+    assert!(terminal_v2_instance_affinity_ready(Some("2"), Some("true")));
+    assert!(terminal_v2_instance_affinity_ready(Some("2"), Some("1")));
+    assert!(!terminal_v2_instance_affinity_ready(Some("2"), None));
+    assert!(!terminal_v2_instance_affinity_ready(
+        Some("2"),
+        Some("false")
+    ));
+    assert!(!terminal_v2_instance_affinity_ready(
+        Some("invalid"),
+        Some("true")
+    ));
 }
 
 #[test]

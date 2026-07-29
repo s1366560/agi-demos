@@ -506,6 +506,38 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
         method: "GET",
         path: "/api/v1/projects",
         match_kind: MethodMatchKind::SingleChildWithTailExcept {
+            tail: &["sandbox", "capabilities"],
+            excluded: &["sandboxes"],
+        },
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/projects",
+        match_kind: MethodMatchKind::SingleChildWithTailExcept {
+            tail: &["sandbox", "terminal", "sessions"],
+            excluded: &["sandboxes"],
+        },
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/projects",
+        match_kind: MethodMatchKind::SingleChildWithTailExcept {
+            tail: &["sandbox", "terminal", "sessions", "*", "resume"],
+            excluded: &["sandboxes"],
+        },
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/projects",
+        match_kind: MethodMatchKind::SingleChildWithTailExcept {
+            tail: &["sandbox", "terminal", "sessions", "*", "ws"],
+            excluded: &["sandboxes"],
+        },
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/projects",
+        match_kind: MethodMatchKind::SingleChildWithTailExcept {
             tail: &["sandbox", "http-services"],
             excluded: &["sandboxes"],
         },

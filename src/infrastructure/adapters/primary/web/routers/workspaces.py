@@ -969,3 +969,10 @@ async def delete_workspace_agent(
         workspace_id=workspace_id,
         background_tasks=background_tasks,
     )
+
+
+from src.infrastructure.adapters.primary.web.routers.workspace_collaboration_mutations import (  # noqa: E402
+    router as workspace_collaboration_mutation_router,
+)
+
+router.include_router(workspace_collaboration_mutation_router)

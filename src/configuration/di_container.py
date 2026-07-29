@@ -236,6 +236,7 @@ class DIContainer:
             db=db,
             graph_service=graph_service,
             redis_client=redis_client,
+            session_factory=session_factory,
             settings=self._settings,
             neo4j_client_factory=lambda: self.neo4j_client,
             storage_service_factory=self._infra.storage_service,

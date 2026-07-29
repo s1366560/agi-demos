@@ -257,6 +257,61 @@ class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestR
 
         return None
 
+    async def claim_response_v2(
+        self,
+        *,
+        request_id: str,
+        response: str,
+        response_metadata: dict[str, Any] | None,
+        expected_revision: int,
+        idempotency_key: str,
+        payload_digest: str,
+    ) -> HITLRequest | None:
+        """Atomically claim a pending request and persist its replay receipt."""
+        from src.application.services.hitl_response_contract import (
+            HITL_PENDING_AUTHORITY_REVISION,
+            merge_hitl_response_contract_metadata,
+        )
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            HITLRequest as HITLRequestRecord,
+        )
+
+        if expected_revision != HITL_PENDING_AUTHORITY_REVISION:
+            return None
+
+        now = datetime.now(UTC)
+        persisted_metadata = merge_hitl_response_contract_metadata(
+            response_metadata,
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            payload_digest=payload_digest,
+        )
+        result = await self._session.execute(
+            refresh_select_statement(
+                self._refresh_statement(
+                    update(HITLRequestRecord)
+                    .where(
+                        HITLRequestRecord.id == request_id,
+                        HITLRequestRecord.status == HITLRequestStatus.PENDING.value,
+                        (HITLRequestRecord.expires_at.is_(None))
+                        | (HITLRequestRecord.expires_at > now),
+                    )
+                    .values(
+                        status=HITLRequestStatus.ANSWERED.value,
+                        response=response,
+                        response_metadata=persisted_metadata,
+                        answered_at=now,
+                    )
+                    .returning(HITLRequestRecord)
+                )
+            )
+        )
+        db_record = result.scalar_one_or_none()
+        if db_record is None:
+            return None
+        logger.info("Claimed revisioned HITL response: %s", request_id)
+        return self._to_domain(db_record)
+
     async def reopen_pending(self, request_id: str) -> HITLRequest | None:
         """Reopen an answered HITL request after delivery failure."""
         from src.infrastructure.adapters.secondary.persistence.models import (

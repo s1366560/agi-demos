@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0.0",
+  "case_id": "artifact-revision-safe-save",
+  "kind": "artifact_content",
+  "source_contract": "ArtifactContentContractV2",
+  "input": {
+    "artifact": {
+      "artifact_id": "artifact-parity-1",
+      "mime_type": "text/markdown",
+      "revision": 3,
+      "content_hash": "sha256:27eb5e51506c911f6fc4bb345c0d9db6f60415fceab7c18e1e9b862637415777",
+      "editable": true,
+      "expected_revision": 3,
+      "idempotency_key": "artifact-save-parity-1"
+    }
+  },
+  "web_expected_view_model": {
+    "artifact_id": "artifact-parity-1",
+    "mime_type": "text/markdown",
+    "revision": 3,
+    "content_hash": "sha256:27eb5e51506c911f6fc4bb345c0d9db6f60415fceab7c18e1e9b862637415777",
+    "editable": true,
+    "conflict_safe": true,
+    "has_idempotency_key": true
+  },
+  "desktop_expected_view_model": {
+    "artifact_id": "artifact-parity-1",
+    "mime_type": "text/markdown",
+    "revision": 3,
+    "content_hash": "sha256:27eb5e51506c911f6fc4bb345c0d9db6f60415fceab7c18e1e9b862637415777",
+    "editable": true,
+    "conflict_safe": true,
+    "has_idempotency_key": true
+  }
+}

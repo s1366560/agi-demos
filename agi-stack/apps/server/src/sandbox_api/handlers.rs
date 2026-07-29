@@ -260,6 +260,82 @@ pub(super) async fn stop_project_desktop(
     Ok(Json(SandboxServiceStopResponse { success: true }))
 }
 
+pub(super) async fn get_project_sandbox_runtime_capabilities(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path(project_id): Path<String>,
+) -> SandboxApiResult<Json<SandboxRuntimeCapabilitiesResponse>> {
+    ensure_project_access(&app, &identity, &project_id).await?;
+    let info = app.sandboxes.get(&project_id).await?;
+    let authority_ready = app.sandboxes.terminal_v2.is_some();
+    let (registry_healthy, authority_healthy, instance_affinity_ready) =
+        match app.sandboxes.terminal_v2.as_ref() {
+            Some(service) => {
+                let (registry_healthy, authority_healthy) = tokio::join!(
+                    service.registry_is_healthy(),
+                    service.authority_is_healthy()
+                );
+                (
+                    registry_healthy,
+                    authority_healthy,
+                    service.instance_affinity_is_ready(),
+                )
+            }
+            None => (false, false, false),
+        };
+    let capabilities =
+        SandboxRuntimeCapabilitiesResponse::from_terminal_v2_state(terminal_v2_capability_state(
+            info.as_ref(),
+            authority_ready,
+            registry_healthy,
+            authority_healthy,
+            instance_affinity_ready,
+        ))
+        .with_files_available(app.sandboxes.file_authority_available());
+    Ok(Json(capabilities))
+}
+
+pub(super) fn terminal_v2_capability_state(
+    info: Option<&ProjectSandboxInfo>,
+    authority_ready: bool,
+    registry_healthy: bool,
+    authority_healthy: bool,
+    instance_affinity_ready: bool,
+) -> TerminalV2CapabilityState {
+    if !authority_ready {
+        return TerminalV2CapabilityState::CanonicalAuthorityUnavailable;
+    }
+    let Some(info) = info else {
+        return TerminalV2CapabilityState::SandboxUnavailable;
+    };
+    if info.profile == SandboxProfile::Lite || !info.sandbox_type.eq_ignore_ascii_case("cloud") {
+        return TerminalV2CapabilityState::NotApplicable;
+    }
+    if info.state != ContainerState::Running {
+        return TerminalV2CapabilityState::SandboxNotRunning;
+    }
+    if info
+        .terminal_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|url| !url.is_empty())
+        .is_none()
+        || info.runtime_auth_token.is_none()
+    {
+        return TerminalV2CapabilityState::TerminalUrlUnavailable;
+    }
+    if !registry_healthy {
+        return TerminalV2CapabilityState::RegistryUnavailable;
+    }
+    if !authority_healthy {
+        return TerminalV2CapabilityState::AuthorityUnavailable;
+    }
+    if !instance_affinity_ready {
+        return TerminalV2CapabilityState::InstanceAffinityUnavailable;
+    }
+    TerminalV2CapabilityState::Available
+}
+
 pub(super) async fn start_project_terminal(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,

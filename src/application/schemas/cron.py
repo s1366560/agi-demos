@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, Literal, cast
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.domain.model.cron.cron_job import CronJob
 from src.domain.model.cron.cron_job_run import CronJobRun
@@ -136,10 +136,23 @@ class CronJobUpdate(BaseModel):
 class ManualRunRequest(BaseModel):
     """Request body for manually triggering a cron job."""
 
+    model_config = ConfigDict(extra="forbid")
+
     conversation_id: str | None = Field(
         default=None,
         description="Override conversation ID for this run",
     )
+
+
+class AutomationRunCommandV2(BaseModel):
+    """Revision-guarded, replay-safe manual run command."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    contract_version: Literal[2]
+    expected_revision: int = Field(..., ge=1)
+    idempotency_key: str = Field(..., min_length=1, max_length=255, pattern=r"^[!-~]+$")
+    conversation_id: str | None = Field(default=None, min_length=1)
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +170,8 @@ class CronActionCapability(BaseModel):
 class CronJobCapabilitiesResponse(BaseModel):
     """Versioned capability contract for the scoped automation runtime."""
 
+    service_version: str = "0.1.0"
+    contract_version: str = "2.0.0"
     schema_version: int = 1
     read: bool
     revision_guarded: bool
@@ -168,6 +183,20 @@ class CronJobCapabilitiesResponse(BaseModel):
     toggle: CronActionCapability
     run_now: CronActionCapability
     delete: CronActionCapability
+
+
+class AutomationRunReceiptResponse(BaseModel):
+    """Stable receipt for an accepted or replayed V2 run command."""
+
+    contract_version: Literal[2] = 2
+    receipt_id: str
+    operation_id: str
+    run_id: str
+    runtime_execution_id: str
+    job_id: str
+    job_revision: int = Field(..., ge=1)
+    status: str
+    duplicate: bool
 
 
 class CronJobResponse(BaseModel):

@@ -32,7 +32,7 @@ import './SettingsCorePages.css';
 
 type ResourceSection = Extract<
   SettingsSection,
-  'models' | 'skills' | 'plugins' | 'agents' | 'subagents'
+  'models' | 'mcp' | 'skills' | 'plugins' | 'agents' | 'subagents'
 >;
 export type SettingsResourceCounts = Record<ResourceSection, number | null>;
 
@@ -504,6 +504,7 @@ export function GeneralSettingsPage({
   }, [locale]);
   const resources = [
     ['models', CubeIcon],
+    ['mcp', ComponentInstanceIcon],
     ['skills', MagicWandIcon],
     ['plugins', ComponentInstanceIcon],
     ['agents', PersonIcon],

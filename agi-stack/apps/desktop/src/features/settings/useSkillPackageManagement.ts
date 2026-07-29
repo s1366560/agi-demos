@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { DesktopApiClient } from '../../api/client';
+import { ManagedResourcesClient } from '../../api/managedResourcesClient';
 import type {
   DesktopRuntimeConfig,
   ManagedSkill,
@@ -93,7 +93,7 @@ export function useSkillPackageManagement({
       setImportBusy(true);
       setImportError(null);
       try {
-        const client = new DesktopApiClient(config);
+        const client = new ManagedResourcesClient(config);
         const { archive, package: packageInput } = submission;
         const result = archive
           ? await client.importManagedSkillZip(archive, zipImportInput(packageInput))
@@ -114,7 +114,7 @@ export function useSkillPackageManagement({
   const loadVersions = useCallback(
     async (skill: ManagedSkill, key: string, requestContextKey: string) => {
       try {
-        const result = await new DesktopApiClient(config).listManagedSkillVersions(skill.id);
+        const result = await new ManagedResourcesClient(config).listManagedSkillVersions(skill.id);
         if (contextKeyRef.current !== requestContextKey) return;
         setVersionsDialog((current) =>
           current?.key === key
@@ -167,8 +167,12 @@ export function useSkillPackageManagement({
         current?.key === key ? { ...current, rollbackVersion: versionNumber } : current
       );
       try {
-        const client = new DesktopApiClient(config);
-        const updated = await client.rollbackManagedSkill(versionsDialog.skill.id, versionNumber);
+        const client = new ManagedResourcesClient(config);
+        const updated = await client.rollbackManagedSkill(
+          versionsDialog.skill.id,
+          versionNumber,
+          versionsDialog.skill.revision,
+        );
         if (contextKeyRef.current !== requestContextKey) return;
         const [versionResult] = await Promise.all([
           client.listManagedSkillVersions(updated.id),
@@ -207,7 +211,7 @@ export function useSkillPackageManagement({
         current?.key === key ? { ...current, preview: null, previewLoading: true } : current
       );
       try {
-        const preview = await new DesktopApiClient(config).getManagedSkillVersion(
+        const preview = await new ManagedResourcesClient(config).getManagedSkillVersion(
           versionsDialog.skill.id,
           versionNumber
         );
@@ -238,7 +242,7 @@ export function useSkillPackageManagement({
       setPackageActionError(null);
       try {
         const exportId = skill.source === 'filesystem' ? skill.name : skill.id;
-        const exported = await new DesktopApiClient(config).exportManagedSkillPackage(exportId);
+        const exported = await new ManagedResourcesClient(config).exportManagedSkillPackage(exportId);
         if (contextKeyRef.current !== requestContextKey) return;
         downloadSkillPackage(skill.name, exported);
       } catch (error) {
@@ -255,7 +259,7 @@ export function useSkillPackageManagement({
   const loadEvolution = useCallback(
     async (skill: ManagedSkill, key: string, requestContextKey: string) => {
       try {
-        const detail = await new DesktopApiClient(config).getManagedSkillEvolution(skill.id);
+        const detail = await new ManagedResourcesClient(config).getManagedSkillEvolution(skill.id);
         if (contextKeyRef.current !== requestContextKey) return;
         setEvolutionDialog((current) =>
           current?.key === key ? { ...current, detail, loading: false } : current
@@ -304,7 +308,7 @@ export function useSkillPackageManagement({
       current?.key === key ? { ...current, running: true } : current
     );
     try {
-      const client = new DesktopApiClient(config);
+      const client = new ManagedResourcesClient(config);
       await client.runManagedSkillEvolution(evolutionDialog.skill.id);
       const detail = await client.getManagedSkillEvolution(evolutionDialog.skill.id);
       if (contextKeyRef.current !== requestContextKey) return;
@@ -330,7 +334,7 @@ export function useSkillPackageManagement({
         current?.key === key ? { ...current, processingJobId: jobId } : current
       );
       try {
-        const client = new DesktopApiClient(config);
+        const client = new ManagedResourcesClient(config);
         if (action === 'apply') await client.applyManagedSkillEvolutionJob(jobId);
         else await client.rejectManagedSkillEvolutionJob(jobId);
         const reload = action === 'apply' ? onReload() : Promise.resolve();

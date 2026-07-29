@@ -105,6 +105,37 @@ async def test_call_mcp_tool_sanitizes_client_errors(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_call_mcp_tool_fails_closed_for_idempotency_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository as repo_module
+
+    monkeypatch.setattr(
+        repo_module,
+        "SqlMCPServerRepository",
+        lambda _db: EnabledServerRepository(),
+    )
+    monkeypatch.setattr(tools_router, "ensure_project_access", _allow_project_access)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await tools_router.call_mcp_tool(
+            request_data=MCPToolCallRequest(
+                server_id="server-1",
+                tool_name="tool-1",
+                arguments={},
+                idempotency_key="desktop-mcp-tool-call:server-id-1",
+            ),
+            db=SimpleNamespace(),
+            tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["reason_code"] == "cloud_mcp_tool_idempotency_unavailable"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("repo", "expected_status", "expected_detail"),
     [

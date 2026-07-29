@@ -189,6 +189,8 @@ function validCloudProjection() {
       focused_agent_id: 'agent-worker',
     },
     execution: {
+      current_run: null,
+      run_history: [],
       current_attempt: attempt,
       attempt_history: [attempt],
     },
@@ -241,6 +243,7 @@ function validCloudProjection() {
         context: { surface: 'session' },
         metadata: { hitl_type: 'decision' },
         status: 'pending',
+        authority_revision: 1,
         created_at: '2026-07-14T00:00:45Z',
         expires_at: '2026-07-14T01:00:45Z',
       },
@@ -317,6 +320,7 @@ function pendingHitlRequest(overrides = {}) {
     prompt: 'Approve the reviewed mutation',
     decision: validDecisionContext(),
     status: 'pending',
+    authority_revision: 1,
     created_at: '2026-07-14T00:00:40Z',
     responded_at: null,
     ...overrides,
@@ -393,10 +397,99 @@ test('session projection decoder accepts a scoped cloud workspace authority with
   assert.equal(projection?.tasks[0]?.id, 'cloud-task-1');
   assert.equal(projection?.pendingHitl[0]?.kind, 'decision');
   assert.equal(projection?.pendingHitl[0]?.prompt, 'Continue with the scoped change?');
+  assert.equal(projection?.pendingHitl[0]?.authority_revision, 1);
   assert.equal(projection?.evidenceSummary.artifactVersionCount, null);
   assert.equal(projection?.capabilities.canSendMessage, false);
   assert.equal(projection?.toolInvocations.length, 0);
   assert.equal(projection?.activityAuthority.kind, 'cloud_tool_records');
+});
+
+test('cloud session projection decodes the persisted current run and exact environment', () => {
+  const payload = validCloudProjection();
+  const run = {
+    id: 'run-cloud-1',
+    conversation_id: 'conversation-1',
+    project_id: 'project-1',
+    plan_version_id: 'plan-version-1',
+    idempotency_key: 'approval-1',
+    message_id: 'message-1',
+    request_message: 'Implement the approved plan',
+    status: 'running',
+    revision: 4,
+    created_at: '2026-07-14T00:00:00Z',
+    updated_at: '2026-07-14T00:01:00Z',
+    started_at: null,
+    completed_at: null,
+    last_heartbeat_at: null,
+    error: null,
+    environment: {
+      id: 'sandbox-cloud-1',
+      kind: 'worktree',
+      label: 'sandbox-cloud-1',
+      workspace_path: '/workspace',
+      repository_root: null,
+      branch: null,
+      base_commit: null,
+      source_run_id: null,
+      created_at: '2026-07-14T00:00:00Z',
+    },
+    permission_profile: 'full_access',
+    authorization_snapshot: {
+      conversation_id: 'conversation-1',
+      project_id: 'project-1',
+      plan_version_id: 'plan-version-1',
+      permission_profile: 'full_access',
+      environment: {
+        id: 'sandbox-cloud-1',
+        kind: 'worktree',
+        label: 'sandbox-cloud-1',
+        workspace_path: '/workspace',
+        repository_root: null,
+        branch: null,
+        base_commit: null,
+        source_run_id: null,
+        created_at: '2026-07-14T00:00:00Z',
+      },
+    },
+  };
+  payload.execution.current_run = run;
+  payload.execution.run_history = [run];
+
+  const projection = decodeConversationSessionProjection(payload, {
+    conversationId: 'conversation-1',
+    projectId: 'project-1',
+    tenantId: 'tenant-1',
+    workspaceId: 'workspace-1',
+  });
+
+  assert.equal(projection?.currentRun?.id, 'run-cloud-1');
+  assert.equal(projection?.currentRun?.revision, 4);
+  assert.equal(projection?.currentRun?.environment?.id, 'sandbox-cloud-1');
+  assert.equal(projection?.currentRun?.environment?.workspace_path, '/workspace');
+  assert.equal(projection?.executionAuthority.currentRun?.id, 'run-cloud-1');
+  assert.deepEqual(projection?.runHistory, [projection?.currentRun]);
+
+  payload.execution.current_run.revision = 0;
+  assert.equal(
+    decodeConversationSessionProjection(payload, {
+      conversationId: 'conversation-1',
+      projectId: 'project-1',
+      tenantId: 'tenant-1',
+      workspaceId: 'workspace-1',
+    }),
+    null,
+  );
+  payload.execution.current_run.revision = 4;
+  payload.execution.current_run.environment.workspace_path = '/workspace/project-1';
+  assert.equal(
+    decodeConversationSessionProjection(payload, {
+      conversationId: 'conversation-1',
+      projectId: 'project-1',
+      tenantId: 'tenant-1',
+      workspaceId: 'workspace-1',
+    }),
+    null,
+  );
 });
 
 test('cloud session projection preserves the explicit explore runtime mode', () => {
@@ -426,6 +519,21 @@ test('cloud session projection preserves a pending HITL request without an expir
 
   assert.equal(projection?.pendingHitl[0]?.expires_at, null);
   assert.equal(projection?.capabilities.canRespondToHitl, true);
+});
+
+test('cloud session projection fails closed without the HITL authority revision', () => {
+  const payload = validCloudProjection();
+  delete payload.pending_hitl[0].authority_revision;
+
+  assert.equal(
+    decodeConversationSessionProjection(payload, {
+      conversationId: 'conversation-1',
+      projectId: 'project-1',
+      tenantId: 'tenant-1',
+      workspaceId: 'workspace-1',
+    }),
+    null,
+  );
 });
 
 test('cloud session projection preserves only the structured permission review contract', () => {
@@ -618,6 +726,16 @@ test('session projection decoder rejects non-pending HITL and extra allowed run 
 test('session projection decoder structurally validates pending HITL authority', () => {
   const validPending = withPendingHitl(validProjection(), pendingHitlRequest());
   assert.equal(decodeSignedProjection(validPending)?.pendingHitl[0]?.id, 'hitl-1');
+  assert.equal(
+    decodeSignedProjection(validPending)?.pendingHitl[0]?.authority_revision,
+    1,
+  );
+
+  const missingAuthorityRevision = withPendingHitl(
+    validProjection(),
+    pendingHitlRequest({ authority_revision: undefined }),
+  );
+  assert.equal(decodeSignedProjection(missingAuthorityRevision), null);
 
   const malformedDecision = withPendingHitl(
     validProjection(),
@@ -636,6 +754,41 @@ test('session projection decoder structurally validates pending HITL authority',
     pendingHitlRequest({ response_data: { granted: true } }),
   );
   assert.equal(decodeSignedProjection(leakedResponseState), null);
+});
+
+test('session projection decoder preserves local A2UI response authority', () => {
+  const request = pendingHitlRequest({
+    kind: 'a2ui_action',
+    prompt: 'Choose the release action',
+    a2ui_action: {
+      surface_id: 'release-surface',
+      block_id: 'release-artifact',
+      title: 'Release approval',
+      timeout_seconds: 300,
+      allowed_actions: [
+        {
+          source_component_id: 'approve-button',
+          action_name: 'approve',
+        },
+      ],
+    },
+  });
+  delete request.decision;
+  const projection = withPendingHitl(
+    validProjection(),
+    request,
+  );
+
+  const decoded = decodeSignedProjection(projection);
+
+  assert.equal(decoded?.pendingHitl[0]?.kind, 'a2ui_action');
+  assert.deepEqual(decoded?.pendingHitl[0]?.a2ui_action?.allowed_actions, [
+    {
+      source_component_id: 'approve-button',
+      action_name: 'approve',
+    },
+  ]);
+  assert.equal(decoded?.capabilities.canRespondToHitl, true);
 });
 
 test('session projection decoder enforces invocation binding and evidence summary integrity', () => {

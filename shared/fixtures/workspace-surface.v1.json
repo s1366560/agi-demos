@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0.0",
+  "case_id": "workspace-discussion-stale-refetch",
+  "kind": "workspace_surface",
+  "source_contract": "WorkspaceSurfaceState",
+  "input": {
+    "surface": {
+      "workspace_id": "workspace-parity-1",
+      "surface": "discussion",
+      "authority": "cloud",
+      "status": "stale",
+      "revision": 12,
+      "cursor": "discussion:12",
+      "items": [
+        {
+          "id": "post-1"
+        },
+        {
+          "id": "post-2"
+        }
+      ]
+    }
+  },
+  "web_expected_view_model": {
+    "workspace_id": "workspace-parity-1",
+    "surface": "discussion",
+    "authority": "cloud",
+    "status": "stale",
+    "revision": 12,
+    "cursor": "discussion:12",
+    "item_count": 2,
+    "requires_canonical_refetch": true
+  },
+  "desktop_expected_view_model": {
+    "workspace_id": "workspace-parity-1",
+    "surface": "discussion",
+    "authority": "cloud",
+    "status": "stale",
+    "revision": 12,
+    "cursor": "discussion:12",
+    "item_count": 2,
+    "requires_canonical_refetch": true
+  }
+}

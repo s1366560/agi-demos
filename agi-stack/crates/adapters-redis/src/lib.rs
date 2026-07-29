@@ -42,6 +42,7 @@ const DEVICE_USER_CODE_KEY_PREFIX: &str = "memstack:device_user_code:";
 const SANDBOX_HTTP_SERVICE_KEY_PREFIX: &str = "agistack:sandbox:http_services:";
 const SANDBOX_PREVIEW_SESSION_KEY_PREFIX: &str = "agistack:sandbox:preview_session:";
 const SANDBOX_TERMINAL_SESSION_KEY_PREFIX: &str = "agistack:sandbox:terminal_session:";
+const SANDBOX_TERMINAL_SESSION_V2_KEY_PREFIX: &str = "agistack:sandbox:terminal_session_v2:";
 const SANDBOX_MCP_UPSTREAM_TOKEN_KEY_PREFIX: &str = "agistack:sandbox:mcp_token:";
 const WORKER_LAUNCH_COOLDOWN_KEY_PREFIX: &str = "workspace:worker_launch:cooldown:";
 const WORKSPACE_AUTONOMY_COOLDOWN_KEY_PREFIX: &str = "workspace:autonomy:last_trigger:";
@@ -397,6 +398,29 @@ pub struct SandboxTerminalSessionRecord {
     pub expires_at_ms: i64,
 }
 
+/// Durable TerminalSessionV2 authority metadata.
+///
+/// Only the SHA-256 digest of the bearer-like resume token is persisted. The
+/// plaintext token is returned once to the renderer and otherwise remains
+/// process-local.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SandboxTerminalSessionV2Record {
+    pub contract_version: u8,
+    pub session_id: String,
+    pub resume_token_hash: String,
+    pub tenant_id: String,
+    pub project_id: String,
+    pub conversation_id: String,
+    pub run_id: String,
+    pub run_revision: i32,
+    pub environment_id: String,
+    pub cwd: String,
+    pub environment_source: String,
+    pub cwd_source: String,
+    pub created_at_ms: i64,
+    pub expires_at_ms: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SandboxMcpUpstreamTokenRecord {
     pub token: String,
@@ -424,6 +448,21 @@ impl RedisSandboxHttpRegistry {
             .await
             .map_err(gerr)?;
         Ok(Self { conn })
+    }
+
+    pub async fn health_check(&self) -> CoreResult<()> {
+        let mut conn = self.conn.clone();
+        let response: String = redis::cmd("PING")
+            .query_async(&mut conn)
+            .await
+            .map_err(gerr)?;
+        if response == "PONG" {
+            Ok(())
+        } else {
+            Err(CoreError::Event(
+                "Redis registry returned an invalid PING response".to_string(),
+            ))
+        }
     }
 
     pub async fn upsert_http_service(
@@ -564,6 +603,55 @@ impl RedisSandboxHttpRegistry {
         let mut conn = self.conn.clone();
         let removed: i64 = redis::cmd("DEL")
             .arg(sandbox_terminal_session_key(project_id, session_id))
+            .query_async(&mut conn)
+            .await
+            .map_err(gerr)?;
+        Ok(removed > 0)
+    }
+
+    pub async fn upsert_terminal_session_v2(
+        &self,
+        session: &SandboxTerminalSessionV2Record,
+        ttl_seconds: u64,
+    ) -> CoreResult<()> {
+        let mut conn = self.conn.clone();
+        let payload = serde_json::to_string(session).map_err(gerr)?;
+        let _: () = redis::cmd("SETEX")
+            .arg(sandbox_terminal_session_v2_key(
+                &session.project_id,
+                &session.session_id,
+            ))
+            .arg(ttl_seconds.max(1))
+            .arg(payload)
+            .query_async(&mut conn)
+            .await
+            .map_err(gerr)?;
+        Ok(())
+    }
+
+    pub async fn get_terminal_session_v2(
+        &self,
+        project_id: &str,
+        session_id: &str,
+    ) -> CoreResult<Option<SandboxTerminalSessionV2Record>> {
+        let mut conn = self.conn.clone();
+        let raw: Option<String> = redis::cmd("GET")
+            .arg(sandbox_terminal_session_v2_key(project_id, session_id))
+            .query_async(&mut conn)
+            .await
+            .map_err(gerr)?;
+        raw.map(|payload| serde_json::from_str(&payload).map_err(gerr))
+            .transpose()
+    }
+
+    pub async fn remove_terminal_session_v2(
+        &self,
+        project_id: &str,
+        session_id: &str,
+    ) -> CoreResult<bool> {
+        let mut conn = self.conn.clone();
+        let removed: i64 = redis::cmd("DEL")
+            .arg(sandbox_terminal_session_v2_key(project_id, session_id))
             .query_async(&mut conn)
             .await
             .map_err(gerr)?;
@@ -1436,6 +1524,10 @@ pub fn sandbox_preview_session_key(token: &str) -> String {
 
 pub fn sandbox_terminal_session_key(project_id: &str, session_id: &str) -> String {
     format!("{SANDBOX_TERMINAL_SESSION_KEY_PREFIX}{project_id}:{session_id}")
+}
+
+pub fn sandbox_terminal_session_v2_key(project_id: &str, session_id: &str) -> String {
+    format!("{SANDBOX_TERMINAL_SESSION_V2_KEY_PREFIX}{project_id}:{session_id}")
 }
 
 pub fn sandbox_mcp_upstream_token_key(token: &str) -> String {

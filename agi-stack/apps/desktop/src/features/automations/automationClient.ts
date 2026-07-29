@@ -6,6 +6,7 @@ import {
 } from '../../api/client';
 import type { DesktopApiClient } from '../../api/client';
 import type {
+  AutomationCapabilities,
   AutomationCreateInput,
   AutomationDeleteInput,
   AutomationJob,
@@ -13,7 +14,7 @@ import type {
   AutomationUpdateInput,
   DesktopRuntimeConfig,
 } from '../../types';
-import { normalizeAutomationCapabilities } from './automationModel';
+import { normalizeAutomationCapabilityEnvelope } from './automationModel';
 
 export type AutomationRunInput = {
   expected_revision: number;
@@ -84,16 +85,21 @@ export function settleAutomationRunAttempt(
   attempts.delete(scope);
 }
 
-export type DesktopAutomationApi = Pick<
+type DesktopAutomationMutationApi = Pick<
   DesktopApiClient,
   | 'createAutomation'
   | 'deleteAutomation'
-  | 'getAutomationCapabilities'
   | 'listAutomations'
   | 'listAutomationRuns'
   | 'toggleAutomation'
   | 'updateAutomation'
-> & {
+>;
+
+export type DesktopAutomationApi = DesktopAutomationMutationApi & {
+  getAutomationCapabilities(
+    projectId?: string,
+    signal?: AbortSignal,
+  ): Promise<AutomationCapabilities>;
   runAutomation(
     automationId: string,
     input: AutomationRunInput,
@@ -117,14 +123,19 @@ export function createDesktopAutomationApi(
   config: DesktopRuntimeConfig,
 ): DesktopAutomationApi {
   return {
-    createAutomation: (...args: Parameters<BaseAutomationApi['createAutomation']>) =>
-      baseApi.createAutomation(...args),
+    createAutomation: (input, projectId) =>
+      baseApi.createAutomation(
+        config.mode === 'local' && config.workspaceId.trim()
+          ? { ...input, workspace_id: input.workspace_id ?? config.workspaceId.trim() }
+          : input,
+        projectId,
+      ),
     deleteAutomation: (...args: Parameters<BaseAutomationApi['deleteAutomation']>) =>
       baseApi.deleteAutomation(...args),
     getAutomationCapabilities: async (
       ...args: Parameters<BaseAutomationApi['getAutomationCapabilities']>
     ) => {
-      const capabilities = normalizeAutomationCapabilities(
+      const capabilities = normalizeAutomationCapabilityEnvelope(
         await baseApi.getAutomationCapabilities(...args),
       );
       if (!capabilities) throw new Error('automation capability contract is invalid');
@@ -178,7 +189,7 @@ async function runAutomation(
       {
         method: 'POST',
         headers,
-        body: JSON.stringify(input),
+        body: JSON.stringify({ ...input, contract_version: 2 }),
       },
     );
   } catch {

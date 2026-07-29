@@ -18,11 +18,12 @@ use agistack_adapters_redis::{
     agent_finished_key, agent_running_key, connect, device_code_key, device_user_code_key,
     dlq_error_type_index_key, dlq_event_type_index_key, dlq_message_key, dlq_pending_index_key,
     dlq_stats_key, sandbox_http_services_key, sandbox_mcp_upstream_token_key,
-    sandbox_preview_session_key, sandbox_terminal_session_key, worker_launch_cooldown_key,
-    workspace_autonomy_cooldown_key, DeviceGrant, DlqListQuery, RedisDeviceGrantStore,
-    RedisDlqRepository, RedisEventStream, RedisSandboxHttpRegistry, RedisWorkerLaunchStateStore,
-    RedisWorkspaceAutonomyCooldownStore, SandboxHttpServiceRecord, SandboxMcpUpstreamTokenRecord,
-    SandboxPreviewSessionRecord, SandboxTerminalSessionRecord,
+    sandbox_preview_session_key, sandbox_terminal_session_key, sandbox_terminal_session_v2_key,
+    worker_launch_cooldown_key, workspace_autonomy_cooldown_key, DeviceGrant, DlqListQuery,
+    RedisDeviceGrantStore, RedisDlqRepository, RedisEventStream, RedisSandboxHttpRegistry,
+    RedisWorkerLaunchStateStore, RedisWorkspaceAutonomyCooldownStore, SandboxHttpServiceRecord,
+    SandboxMcpUpstreamTokenRecord, SandboxPreviewSessionRecord, SandboxTerminalSessionRecord,
+    SandboxTerminalSessionV2Record,
 };
 use agistack_core::ports::EventStream;
 use redis::streams::StreamRangeReply;
@@ -561,6 +562,53 @@ async fn redis_sandbox_terminal_sessions_are_ttl_persisted() {
         .unwrap()
         .is_none());
 
+    del_keys(&[key]).await;
+}
+
+#[tokio::test]
+async fn redis_terminal_session_v2_persists_only_resume_token_hash() {
+    let Some(store) = redis_sandbox_http_registry_or_skip().await else {
+        return;
+    };
+    let suffix = unique_topic("terminal-session-v2").replace(':', "-");
+    let project_id = format!("project-{suffix}");
+    let session_id = "term-session-v2";
+    let key = sandbox_terminal_session_v2_key(&project_id, session_id);
+    del_keys(std::slice::from_ref(&key)).await;
+
+    let session = SandboxTerminalSessionV2Record {
+        contract_version: 2,
+        session_id: session_id.to_string(),
+        resume_token_hash: "0".repeat(64),
+        tenant_id: "tenant-1".to_string(),
+        project_id: project_id.clone(),
+        conversation_id: "conversation-1".to_string(),
+        run_id: "run-1".to_string(),
+        run_revision: 3,
+        environment_id: "environment-1".to_string(),
+        cwd: "/workspace/run-1".to_string(),
+        environment_source: "project_sandbox_info.sandbox_id".to_string(),
+        cwd_source: "sandbox_protocol.project_workspace".to_string(),
+        created_at_ms: 1_700_000_000_000,
+        expires_at_ms: 1_700_000_300_000,
+    };
+    store
+        .upsert_terminal_session_v2(&session, 60)
+        .await
+        .unwrap();
+    assert_eq!(
+        store
+            .get_terminal_session_v2(&project_id, session_id)
+            .await
+            .unwrap(),
+        Some(session)
+    );
+    let session_ttl = ttl(&key).await.unwrap();
+    assert!((1..=60).contains(&session_ttl));
+    assert!(store
+        .remove_terminal_session_v2(&project_id, session_id)
+        .await
+        .unwrap());
     del_keys(&[key]).await;
 }
 

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { expect, test } from '@playwright/test';
 
+import { isExpectedBrowserQaSecurityDiagnostic } from './diagnostics.mjs';
 import { buildBrowserQaMatrix, browserQaManifest } from './matrix.mjs';
 
 const LOCALE_STORAGE_KEY = 'agistack.desktop.locale';
@@ -12,6 +13,7 @@ const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../
 const STATIC_ASSET_ROOTS = [
   resolve(REPOSITORY_ROOT, 'artifacts'),
   resolve(REPOSITORY_ROOT, 'design-prototype'),
+  resolve(REPOSITORY_ROOT, 'docs'),
 ];
 const BARE_I18N_KEY =
   /\b(?:artifact|automation|common|hitl|login|myWork|navigation|search|session|settings|workspace)\.[A-Za-z][\w.-]*\b/u;
@@ -21,11 +23,30 @@ test.describe.configure({ mode: 'parallel' });
 for (const variant of buildBrowserQaMatrix()) {
   test(variant.id, async ({ page }) => {
     const runtimeErrors = [];
-    page.on('pageerror', (error) => runtimeErrors.push(`page: ${error.message}`));
-    page.on('console', (message) => {
-      if (message.type() === 'error') runtimeErrors.push(`console: ${message.text()}`);
+    page.on('pageerror', (error) => {
+      if (
+        !isExpectedBrowserQaSecurityDiagnostic(
+          variant.scenario.id,
+          'page',
+          error.message,
+        )
+      ) {
+        runtimeErrors.push(`page: ${error.message}`);
+      }
     });
-    await page.route(/\/(?:artifacts|design-prototype)\//u, async (route) => {
+    page.on('console', (message) => {
+      if (
+        message.type() === 'error' &&
+        !isExpectedBrowserQaSecurityDiagnostic(
+          variant.scenario.id,
+          'console',
+          message.text(),
+        )
+      ) {
+        runtimeErrors.push(`console: ${message.text()}`);
+      }
+    });
+    await page.route(/\/(?:artifacts|design-prototype|docs)\//u, async (route) => {
       const pathname = decodeURIComponent(new URL(route.request().url()).pathname);
       const candidate = resolve(REPOSITORY_ROOT, `.${pathname}`);
       const allowed = STATIC_ASSET_ROOTS.some(
@@ -88,6 +109,9 @@ for (const variant of buildBrowserQaMatrix()) {
       qaLocale: variant.locale.id,
       qaTheme: variant.theme,
     });
+    for (const [name, value] of Object.entries(variant.scenario.query)) {
+      parameters.set(name, value);
+    }
     if (variant.scenario.id === 'mission-control-compare') {
       parameters.set('layout', 'vertical');
       parameters.set('width', String(variant.viewport.width));
@@ -211,6 +235,46 @@ for (const variant of buildBrowserQaMatrix()) {
       expect(firstFocus.tag).not.toBe('BODY');
     }
 
+    if (variant.scenario.id === 'artifact-preview') {
+      const formatButtons = page.locator(
+        '.parity-runtime-qa__preview-nav button[data-qa-format]',
+      );
+      await expect(formatButtons).toHaveCount(9);
+      for (let index = 0; index < 9; index += 1) {
+        const button = formatButtons.nth(index);
+        const format = await button.getAttribute('data-qa-format');
+        expect(format).toBeTruthy();
+        await button.click();
+        await expect(page.locator(`header[data-qa-format="${format}"]`)).toBeVisible();
+        await expect(
+          page.locator('.artifact-preview-state[role="status"]'),
+        ).toHaveCount(0);
+        await expect(page.locator('.artifact-preview-state[role="alert"]')).toHaveCount(0);
+      }
+    }
+    if (variant.scenario.id === 'workspace-collaboration') {
+      const tabs = page.locator('.workspace-collaboration-tabs > [role="tab"]');
+      await expect(tabs).toHaveCount(10);
+      for (let index = 0; index < 10; index += 1) {
+        const tab = tabs.nth(index);
+        await tab.click();
+        await expect(tab).toHaveAttribute('aria-selected', 'true');
+        await expect(page.locator('.app-fatal-error')).toHaveCount(0);
+      }
+    }
+    if (
+      variant.scenario.id === 'sandbox-runtime' &&
+      ['ready', 'stale', 'error'].includes(variant.scenario.variantId)
+    ) {
+      const tabs = page.locator('.session-sandbox-tools [role="tablist"] [role="tab"]');
+      await expect(tabs).toHaveCount(2);
+      for (let index = 0; index < 2; index += 1) {
+        const tab = tabs.nth(index);
+        await tab.click();
+        await expect(tab).toHaveAttribute('aria-selected', 'true');
+      }
+    }
+
     const visiblePopup = page
       .locator(
         '[role="menu"]:visible, [role="dialog"]:visible, [role="alertdialog"]:visible, [role="listbox"]:visible',
@@ -224,6 +288,7 @@ for (const variant of buildBrowserQaMatrix()) {
     if ((await visiblePopup.count()) > 0 && (await openPopupTrigger.count()) > 0) {
       const openPopupTriggerElement = await openPopupTrigger.elementHandle();
       expect(openPopupTriggerElement, 'open popup must retain its trigger element').not.toBeNull();
+      const popupRole = await visiblePopup.getAttribute('role');
       await page.keyboard.press('Escape');
       await expect(visiblePopup).toBeHidden();
       await expect
@@ -231,6 +296,17 @@ for (const variant of buildBrowserQaMatrix()) {
           openPopupTriggerElement?.evaluate((element) => document.activeElement === element),
         )
         .toBe(true);
+      if (popupRole === 'menu' || popupRole === 'listbox') {
+        await openPopupTriggerElement?.click();
+        const reopenedPopup = page
+          .locator(
+            '[role="menu"]:visible, [role="listbox"]:visible',
+          )
+          .first();
+        await expect(reopenedPopup).toBeVisible();
+        await page.mouse.click(1, 1);
+        await expect(reopenedPopup).toBeHidden();
+      }
     } else if ((await visiblePopup.count()) === 0) {
       const closedPopupTrigger = page
         .locator(
@@ -238,6 +314,11 @@ for (const variant of buildBrowserQaMatrix()) {
         )
         .first();
       if ((await closedPopupTrigger.count()) > 0) {
+        const closedPopupTriggerElement = await closedPopupTrigger.elementHandle();
+        expect(
+          closedPopupTriggerElement,
+          'closed popup must retain its trigger element',
+        ).not.toBeNull();
         await closedPopupTrigger.click();
         const openedPopup = page
           .locator(
@@ -245,9 +326,21 @@ for (const variant of buildBrowserQaMatrix()) {
           )
           .first();
         if ((await openedPopup.count()) > 0) {
+          const popupRole = await openedPopup.getAttribute('role');
           await page.keyboard.press('Escape');
           await expect(openedPopup).toBeHidden();
           await expect(closedPopupTrigger).toBeFocused();
+          if (popupRole === 'menu' || popupRole === 'listbox') {
+            await closedPopupTriggerElement?.click();
+            const reopenedPopup = page
+              .locator(
+                '[role="menu"]:visible, [role="listbox"]:visible',
+              )
+              .first();
+            await expect(reopenedPopup).toBeVisible();
+            await page.mouse.click(1, 1);
+            await expect(reopenedPopup).toBeHidden();
+          }
         }
       }
     }
@@ -263,7 +356,13 @@ test('matrix contract covers every top-level QA fixture', () => {
     browserQaManifest.viewports.length *
     browserQaManifest.themes.length;
   const scenarioCount = new Set(variants.map((variant) => variant.scenario.id)).size;
+  const statefulScenarioCount = new Set(
+    variants.map(
+      (variant) => `${variant.scenario.id}:${variant.scenario.variantId}`,
+    ),
+  ).size;
   expect(scenarioCount).toBeGreaterThanOrEqual(36);
-  expect(variants).toHaveLength(scenarioCount * dimensionCount);
+  expect(statefulScenarioCount).toBeGreaterThan(scenarioCount);
+  expect(variants).toHaveLength(statefulScenarioCount * dimensionCount);
   expect(variants.length).toBeGreaterThanOrEqual(288);
 });

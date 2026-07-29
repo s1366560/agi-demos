@@ -1,6 +1,7 @@
 """Storage Service Port - Abstract interface for file storage operations."""
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -29,6 +30,29 @@ class PartUploadResult:
 
     part_number: int
     etag: str
+
+
+@dataclass(frozen=True)
+class StorageObjectMetadata:
+    """Bounded-read authority returned by object storage."""
+
+    size_bytes: int
+    content_type: str
+    etag: str | None = None
+    metadata: dict[str, str] | None = None
+
+
+class StorageObjectTooLargeError(Exception):
+    """Raised before a storage read can exceed its caller-owned byte budget."""
+
+    def __init__(self, *, actual_bytes: int, max_bytes: int) -> None:
+        super().__init__("storage_object_size_limit")
+        self.actual_bytes = actual_bytes
+        self.max_bytes = max_bytes
+
+
+class StorageObjectIntegrityError(Exception):
+    """Raised when storage metadata and streamed bytes disagree."""
 
 
 class StorageServicePort(ABC):
@@ -113,6 +137,24 @@ class StorageServicePort(ABC):
         Returns:
             File content as bytes, or None if not found
         """
+
+    @abstractmethod
+    async def get_file_metadata(self, object_key: str) -> StorageObjectMetadata | None:
+        """Return object metadata without reading the body."""
+
+    @abstractmethod
+    async def get_file_bounded(self, object_key: str, *, max_bytes: int) -> bytes | None:
+        """Read no more than ``max_bytes`` and fail before materializing larger objects."""
+
+    @abstractmethod
+    def stream_file(
+        self,
+        object_key: str,
+        *,
+        max_bytes: int,
+        chunk_size: int = 64 * 1024,
+    ) -> AsyncIterator[bytes]:
+        """Yield bounded chunks without materializing the complete object."""
 
     @abstractmethod
     async def list_files(

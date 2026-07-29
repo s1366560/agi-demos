@@ -61,15 +61,32 @@ mod authority_store;
 mod authorized_tool_host;
 mod automation;
 mod automation_dispatcher;
+mod automation_dispatcher_schema;
 #[cfg(test)]
 mod automation_dispatcher_tests;
+mod automation_executor;
+mod automation_hitl;
+mod automation_hitl_reservation;
+#[cfg(test)]
+mod automation_hitl_tests;
+mod automation_ledger_support;
+mod automation_schedule;
+mod automation_schedule_dispatcher;
 mod automation_store;
+mod automation_worker;
+#[cfg(test)]
+mod automation_worker_tests;
 mod changes;
 mod composer_context;
 #[cfg(test)]
 mod local_route_parity_tests;
 #[cfg(test)]
 mod managed_resource_tests;
+#[cfg(test)]
+mod mcp_remote_transport_tests;
+mod mcp_supervisor;
+#[cfg(test)]
+mod mcp_supervisor_tests;
 mod parity_routes;
 mod provider_credentials;
 mod provider_probe;
@@ -104,10 +121,12 @@ use authority_store::{
     DesktopArtifactStatus, DesktopArtifactVersion, DesktopAuthorityError,
     DesktopExecutionEnvironment, DesktopExecutionEnvironmentKind, DesktopHitlRequest,
     DesktopHitlStatus, DesktopPermissionProfile, DesktopRun, DesktopRunStatus, WorkspaceToolGrant,
+    HITL_PENDING_AUTHORITY_REVISION,
 };
 use authorized_tool_host::AuthorizedRunToolHost;
 use changes::{ChangeLineKind, ChangeSnapshot, ChangeSnapshotStatus, GitChangesInspector};
 use composer_context::{validate_composer_context_items, ComposerContextItem, ComposerContextKind};
+use mcp_supervisor::{McpSupervisor, SupervisorLimits};
 #[cfg(test)]
 use provider_credentials::ProviderCredentialStore;
 use provider_credentials::{
@@ -118,7 +137,7 @@ use provider_usage_store::ProviderUsageRecord;
 use resource_registry::{ManagedResourceKind, ResourceRegistryError, WorkspaceAgentPolicyMutation};
 use session_store::{
     DesktopClientTurnClaimError, DesktopSessionStore, DesktopTimelineCursor, DesktopTimelinePage,
-    HitlResponseCommit,
+    HitlResponseCommit, HitlResponseCommitError, HitlResponseCommitOutcome,
 };
 use steering::{ChangeReferenceSide, RunInputDelivery, RunInputReference, RunInputStatus};
 use task_session::{
@@ -149,6 +168,7 @@ impl LocalRuntimeService {
         let tool_host = LocalToolHost::new(&workspace_root).map_err(|error| error.to_string())?;
         let api_token = generate_capability_token();
         let session_store = DesktopSessionStore::open(&session_store_path)?;
+        let mcp_credential_vault = credential_vault.clone();
         let provider_credentials =
             ProviderCredentialBroker::native(credential_vault, session_store.installation_id())
                 .map_err(|error| error.to_string())?;
@@ -160,24 +180,42 @@ impl LocalRuntimeService {
             session_store,
             provider_credentials,
         )?);
+        state
+            .mcp_supervisor
+            .install_credential_vault(mcp_credential_vault)
+            .map_err(|error| error.to_string())?;
+        state
+            .mcp_supervisor
+            .prepare_startup_recovery()
+            .map_err(|error| error.to_string())?;
         state.reconcile_recovered_runs_from_checkpoints().await?;
-
+        state.start_automation_worker_with_config(
+            automation_worker::AutomationWorkerConfig::local_default(),
+        )?;
         let app = local_router(Arc::clone(&state));
         let listener = TcpListener::bind(("127.0.0.1", 0))
             .await
             .map_err(|error| error.to_string())?;
         let addr = listener.local_addr().map_err(|error| error.to_string())?;
         let api_base_url = format!("http://{addr}");
+        state
+            .mcp_supervisor
+            .recover_all_enabled()
+            .await
+            .map_err(|error| error.to_string())?;
         tokio::spawn(async move {
             if let Err(error) = axum::serve(listener, app).await {
                 eprintln!("agistack local runtime stopped: {error}");
             }
         });
-
         Ok(Self {
             state,
             api_base_url,
         })
+    }
+
+    pub(crate) async fn shutdown(&self) {
+        self.state.stop_automation_worker().await;
     }
 
     pub(crate) fn save_local_trusted_session(&self, value: &str) -> Result<(), String> {
@@ -824,9 +862,11 @@ struct LocalRuntimeState {
     provider_credentials: ProviderCredentialBroker,
     provider_probe: ProviderProbeService,
     session_store: DesktopSessionStore,
+    mcp_supervisor: Arc<McpSupervisor>,
     event_counter: AtomicU64,
     terminal_sessions: Mutex<HashMap<String, TerminalSessionLease>>,
     agent_runs: Mutex<HashMap<String, ActiveAgentRun>>,
+    automation_worker: Mutex<Option<automation_worker::AutomationWorkerHandle>>,
     #[cfg(test)]
     agent_run_claim_attempts: AtomicU64,
     #[cfg(test)]
@@ -1121,6 +1161,12 @@ impl LocalRuntimeState {
                 }
             }
         }
+        let mcp_supervisor = Arc::new(McpSupervisor::new(
+            session_store.clone(),
+            workspace_root.clone(),
+            None,
+            SupervisorLimits::default(),
+        )?);
         Ok(Self {
             api_token,
             workspace_root: Mutex::new(workspace_root),
@@ -1138,9 +1184,11 @@ impl LocalRuntimeState {
             provider_credentials,
             provider_probe: ProviderProbeService::default(),
             session_store,
+            mcp_supervisor,
             event_counter: AtomicU64::new(1),
             terminal_sessions: Mutex::new(HashMap::new()),
             agent_runs: Mutex::new(HashMap::new()),
+            automation_worker: Mutex::new(None),
             #[cfg(test)]
             agent_run_claim_attempts: AtomicU64::new(0),
             #[cfg(test)]
@@ -1150,6 +1198,133 @@ impl LocalRuntimeState {
             #[cfg(test)]
             mock_llm_enabled: AtomicU8::new(0),
             events,
+        })
+    }
+
+    fn start_automation_worker_with_config(
+        self: &Arc<Self>,
+        config: automation_worker::AutomationWorkerConfig,
+    ) -> Result<(), String> {
+        let mut slot = self
+            .automation_worker
+            .lock()
+            .expect("local automation worker");
+        if slot
+            .as_ref()
+            .is_some_and(automation_worker::AutomationWorkerHandle::is_running)
+        {
+            return Ok(());
+        }
+        let executor = Arc::new(automation_executor::LocalAutomationAgentExecutor::new(
+            Arc::downgrade(self),
+        ));
+        let worker = automation_worker::AutomationWorker::new(
+            self.session_store.clone(),
+            executor,
+            Arc::new(automation_dispatcher::SystemAutomationClock),
+            config,
+        )
+        .map_err(|error| error.to_string())?;
+        *slot = Some(automation_worker::AutomationWorkerHandle::spawn(worker));
+        Ok(())
+    }
+
+    async fn stop_automation_worker(&self) {
+        let handle = self
+            .automation_worker
+            .lock()
+            .expect("local automation worker")
+            .take();
+        if let Some(handle) = handle {
+            handle.shutdown().await;
+        }
+    }
+
+    fn automation_worker_running(&self) -> bool {
+        self.automation_worker
+            .lock()
+            .expect("local automation worker")
+            .as_ref()
+            .is_some_and(automation_worker::AutomationWorkerHandle::is_running)
+    }
+
+    fn automation_runtime_available_for_workspace(
+        &self,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+    ) -> bool {
+        self.automation_worker_running()
+            && automation_executor::validate_workspace_scope(
+                self,
+                tenant_id,
+                project_id,
+                workspace_id,
+            )
+            .is_ok()
+            && self.automation_agent_authority_for_workspace(tenant_id, project_id, workspace_id)
+    }
+
+    fn validate_automation_execution_authority(
+        &self,
+        tenant_id: &str,
+        project_id: &str,
+        job_snapshot: &Value,
+        command_conversation_id: Option<&str>,
+    ) -> Result<(), &'static str> {
+        if !self.automation_worker_running() {
+            return Err("durable_automation_execution_unavailable");
+        }
+        let workspace_id = automation_executor::execution_workspace_id(
+            self,
+            tenant_id,
+            project_id,
+            job_snapshot,
+            command_conversation_id,
+        )?;
+        if !self.automation_agent_authority_for_workspace(tenant_id, project_id, &workspace_id) {
+            return Err("local_automation_provider_unavailable");
+        }
+        Ok(())
+    }
+
+    fn automation_agent_authority_for_workspace(
+        &self,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+    ) -> bool {
+        #[cfg(test)]
+        if self.mock_llm_enabled.load(Ordering::Acquire) != 0 {
+            return true;
+        }
+        let policy = match self.session_store.workspace_llm_routing_policy(
+            tenant_id,
+            project_id,
+            workspace_id,
+            Utc::now().timestamp_millis(),
+        ) {
+            Ok(policy) => policy,
+            Err(_) => return false,
+        };
+        let targets = match routing_targets_for_role(&policy, LlmWorkloadRole::Default) {
+            Ok(targets) => targets,
+            Err(_) => return false,
+        };
+        let runtime = self
+            .provider_runtime
+            .lock()
+            .expect("provider runtime state");
+        targets.into_iter().any(|target| {
+            let key = ProviderRuntimeKey {
+                tenant_id: tenant_id.to_string(),
+                provider_id: target.provider_id,
+            };
+            let Some(mut binding) = runtime.bindings.get(&key).cloned() else {
+                return false;
+            };
+            binding.model = target.model_id;
+            llm_from_runtime_binding(binding, runtime.credentials.get(&key).cloned()).is_some()
         })
     }
 
@@ -1964,6 +2139,7 @@ impl LocalRuntimeState {
         let Some(pending) = state.pending_hitl.as_ref() else {
             return Err("session is awaiting input without a pending HITL request".to_string());
         };
+        validate_pending_hitl_authority(pending)?;
         let request = DesktopHitlRequest {
             id: pending.id.clone(),
             conversation_id: conversation_id.to_string(),
@@ -1972,7 +2148,9 @@ impl LocalRuntimeState {
             kind: pending.kind,
             prompt: pending.prompt.clone(),
             decision: pending.decision.as_deref().cloned(),
+            a2ui_action: pending.a2ui_action.as_deref().cloned(),
             status: DesktopHitlStatus::Pending,
+            authority_revision: HITL_PENDING_AUTHORITY_REVISION,
             created_at: now_iso(),
             responded_at: None,
             response_data: None,
@@ -1986,28 +2164,42 @@ impl LocalRuntimeState {
                 && existing.kind == request.kind
                 && existing.prompt == request.prompt
                 && existing.decision == request.decision
+                && existing.a2ui_action == request.a2ui_action
             {
                 return Ok(Some(existing));
             }
             return Err(format!("HITL request id collision: {}", request.id));
         }
         self.session_store.insert_hitl_request(&request)?;
+        let mut payload = json!({
+            "request_id": request.id,
+            "requestId": request.id,
+            "hitl_type": hitl_kind_name(request.kind),
+            "question": request.prompt,
+            "answered": false,
+            "round": request.round,
+            "run_id": request.run_id,
+            "decision": request.decision,
+            "authority_revision": request.authority_revision,
+        });
+        if let Some(authority) = request.a2ui_action.as_ref() {
+            payload["surface_id"] = json!(authority.surface_id);
+            payload["block_id"] = json!(authority.block_id);
+            payload["title"] = json!(authority.title);
+            payload["timeout_seconds"] = json!(authority.timeout_seconds);
+            payload["allowed_actions"] = json!(authority.allowed_actions);
+            payload["surface_data"] = json!({
+                "surface_id": authority.surface_id,
+                "allowed_actions": authority.allowed_actions,
+            });
+        }
         let mut item = self.timeline_item(
             hitl_timeline_type(request.kind),
             conversation_id.to_string(),
             None,
             None,
             Some(request.prompt.clone()),
-            json!({
-                "request_id": request.id,
-                "requestId": request.id,
-                "hitl_type": hitl_kind_name(request.kind),
-                "question": request.prompt,
-                "answered": false,
-                "round": request.round,
-                "run_id": request.run_id,
-                "decision": request.decision,
-            }),
+            payload,
         );
         item["requestId"] = json!(request.id);
         item["question"] = json!(request.prompt);
@@ -2355,6 +2547,7 @@ fn hitl_kind_name(kind: HitlKind) -> &'static str {
         HitlKind::Decision => "decision",
         HitlKind::EnvVar => "env_var",
         HitlKind::Permission => "permission",
+        HitlKind::A2uiAction => "a2ui_action",
     }
 }
 
@@ -2364,7 +2557,31 @@ fn hitl_timeline_type(kind: HitlKind) -> &'static str {
         HitlKind::Decision => "decision_asked",
         HitlKind::EnvVar => "env_var_requested",
         HitlKind::Permission => "permission_asked",
+        HitlKind::A2uiAction => "a2ui_action_asked",
     }
+}
+
+fn validate_pending_hitl_authority(
+    request: &agistack_core::agent::types::HitlRequest,
+) -> Result<(), String> {
+    let Some(authority) = request.a2ui_action.as_deref() else {
+        return if request.kind == HitlKind::A2uiAction {
+            Err("A2UI HITL request is missing persisted action authority".to_string())
+        } else {
+            Ok(())
+        };
+    };
+    if request.kind != HitlKind::A2uiAction {
+        return Err("non-A2UI HITL request contains A2UI action authority".to_string());
+    }
+    if !authority.is_structurally_valid() {
+        return Err("A2UI HITL request has invalid action authority".to_string());
+    }
+    Ok(())
+}
+
+fn bounded_identifier(value: &str) -> bool {
+    !value.is_empty() && value == value.trim() && value.len() <= 512
 }
 
 fn local_router(state: Arc<LocalRuntimeState>) -> Router {
@@ -2427,14 +2644,6 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
             get(get_llm_provider_usage),
         )
         .route(
-            "/api/v1/skills/",
-            get(list_managed_skills).post(parity_routes::managed_mutation_unavailable),
-        )
-        .route(
-            "/api/v1/skills/:skill_id/status",
-            patch(set_managed_skill_status),
-        )
-        .route(
             "/api/v1/channels/tenants/:tenant_id/plugins",
             get(list_managed_plugins),
         )
@@ -2445,14 +2654,6 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         .route(
             "/api/v1/channels/tenants/:tenant_id/plugins/:plugin_id/disable",
             post(disable_managed_plugin),
-        )
-        .route(
-            "/api/v1/agent/definitions",
-            get(list_managed_agents).post(parity_routes::managed_mutation_unavailable),
-        )
-        .route(
-            "/api/v1/agent/definitions/:definition_id/enabled",
-            patch(set_managed_agent_enabled),
         )
         .route(
             "/api/v1/projects/:project_id/my-work",
@@ -2826,6 +3027,20 @@ fn resource_registry_error(error: ResourceRegistryError) -> (StatusCode, Json<Va
         ResourceRegistryError::NotFound => {
             (StatusCode::NOT_FOUND, Json(json!({ "detail": detail })))
         }
+        ResourceRegistryError::AlreadyExists => (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "code": "managed_resource_already_exists",
+                "detail": detail,
+            })),
+        ),
+        ResourceRegistryError::IdempotencyConflict => (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "code": "managed_resource_idempotency_conflict",
+                "detail": detail,
+            })),
+        ),
         ResourceRegistryError::Immutable { .. } => (
             StatusCode::CONFLICT,
             Json(json!({
@@ -2839,6 +3054,13 @@ fn resource_registry_error(error: ResourceRegistryError) -> (StatusCode, Json<Va
         ResourceRegistryError::InvalidRoutingPolicy(_) => (
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(json!({ "detail": detail })),
+        ),
+        ResourceRegistryError::InvalidMutation(_) => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({
+                "code": "invalid_managed_resource_mutation",
+                "detail": detail,
+            })),
         ),
         ResourceRegistryError::Storage(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -3171,17 +3393,6 @@ async fn switch_workspace_context(
 struct ManagedResourceListQuery {
     tenant_id: Option<String>,
     project_id: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ManagedSkillStatusQuery {
-    status: String,
-    tenant_id: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ManagedAgentEnabledBody {
-    enabled: bool,
 }
 
 #[derive(Deserialize)]
@@ -4670,7 +4881,8 @@ async fn list_managed_skills(
     Query(query): Query<ManagedResourceListQuery>,
 ) -> LocalJsonResult {
     ensure_tenant_scope(&authenticated, query.tenant_id.as_deref())?;
-    let items = state
+    ensure_project_scope(&authenticated, query.project_id.as_deref())?;
+    let mut items = state
         .session_store
         .list_managed_resources(
             ManagedResourceKind::Skill,
@@ -4678,51 +4890,17 @@ async fn list_managed_skills(
             &authenticated.workspace.tenant_id,
         )
         .map_err(local_store_error)?;
+    items.extend(
+        state
+            .session_store
+            .list_managed_resources(
+                ManagedResourceKind::Skill,
+                "project",
+                &authenticated.workspace.project_id,
+            )
+            .map_err(local_store_error)?,
+    );
     Ok(Json(json!({ "items": items })))
-}
-
-async fn set_managed_skill_status(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(skill_id): Path<String>,
-    Query(query): Query<ManagedSkillStatusQuery>,
-) -> LocalJsonResult {
-    ensure_tenant_scope(&authenticated, query.tenant_id.as_deref())?;
-    ensure_managed_resource_manager(&authenticated)?;
-    if !matches!(query.status.as_str(), "active" | "disabled" | "deprecated") {
-        return Err((
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({ "detail": "unsupported skill status" })),
-        ));
-    }
-    let mut skill = state
-        .session_store
-        .managed_resource(
-            ManagedResourceKind::Skill,
-            "tenant",
-            &authenticated.workspace.tenant_id,
-            &skill_id,
-        )
-        .map_err(local_store_error)?
-        .ok_or_else(|| resource_registry_error(ResourceRegistryError::NotFound))?;
-    let revision = skill.get("revision").and_then(Value::as_u64).unwrap_or(0);
-    if let Some(object) = skill.as_object_mut() {
-        object.insert("status".to_string(), json!(query.status));
-    }
-    state
-        .session_store
-        .put_managed_resource(
-            ManagedResourceKind::Skill,
-            "tenant",
-            &authenticated.workspace.tenant_id,
-            &skill_id,
-            &query.status,
-            Some(revision),
-            skill,
-            Utc::now().timestamp_millis(),
-        )
-        .map(Json)
-        .map_err(resource_registry_error)
 }
 
 async fn list_managed_plugins(
@@ -4793,30 +4971,6 @@ async fn list_managed_agents(
         )
         .map_err(local_store_error)?;
     Ok(Json(json!({ "items": items })))
-}
-
-async fn set_managed_agent_enabled(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(definition_id): Path<String>,
-    Query(query): Query<ManagedResourceListQuery>,
-    Json(request): Json<ManagedAgentEnabledBody>,
-) -> LocalJsonResult {
-    ensure_tenant_scope(&authenticated, query.tenant_id.as_deref())?;
-    ensure_project_scope(&authenticated, query.project_id.as_deref())?;
-    ensure_managed_resource_manager(&authenticated)?;
-    state
-        .session_store
-        .set_managed_resource_enabled(
-            ManagedResourceKind::Agent,
-            "project",
-            &authenticated.workspace.project_id,
-            &definition_id,
-            request.enabled,
-            Utc::now().timestamp_millis(),
-        )
-        .map(Json)
-        .map_err(resource_registry_error)
 }
 
 fn ensure_tenant_scope(
@@ -7305,6 +7459,7 @@ fn append_review_decision(
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct HitlResponseBody {
     request_id: String,
     hitl_type: String,
@@ -7319,6 +7474,32 @@ async fn respond_to_hitl(
     Extension(authenticated): Extension<AuthenticatedContext>,
     Json(body): Json<HitlResponseBody>,
 ) -> LocalJsonResult {
+    let expected_authority_revision = body
+        .expected_revision
+        .filter(|revision| *revision > 0)
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "detail": "expected_revision must be a positive HITL authority revision",
+                    "reason_code": "hitl_authority_revision_required",
+                })),
+            )
+        })?;
+    let idempotency_key = body
+        .idempotency_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|key| (8..=255).contains(&key.len()))
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "detail": "idempotency_key must contain 8 to 255 characters",
+                    "reason_code": "hitl_idempotency_key_required",
+                })),
+            )
+        })?;
     let request = state
         .session_store
         .hitl_request(&body.request_id)
@@ -7340,7 +7521,8 @@ async fn respond_to_hitl(
         return Err((
             StatusCode::NOT_IMPLEMENTED,
             Json(json!({
-                "detail": "Secure environment-variable responses are not available in the local runtime"
+                "detail": "Secure environment-variable responses are not available in the local runtime",
+                "reason_code": "local_secure_env_response_unavailable",
             })),
         ));
     }
@@ -7350,24 +7532,41 @@ async fn respond_to_hitl(
             Json(json!({ "detail": "invalid permission response" })),
         ));
     }
+    if request.kind == HitlKind::A2uiAction {
+        validate_a2ui_action_response(&request, &body.response_data)?;
+    }
+    let is_automation_request =
+        match automation_hitl::authority_for_request(&state.session_store, &request.id) {
+            Ok(authority) => authority.is_some(),
+            Err(_) => {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "detail": "automation HITL authority is unavailable",
+                        "reason_code": "local_automation_hitl_authority_unavailable",
+                    })),
+                ))
+            }
+        };
     if request.status == DesktopHitlStatus::Responded {
-        let same_payload = request.response_data.as_ref() == Some(&body.response_data);
-        let same_key = body.idempotency_key.as_deref().is_none()
-            || request.idempotency_key.as_deref() == body.idempotency_key.as_deref();
-        if same_payload && same_key {
-            return Ok(Json(json!({
-                "success": true,
-                "status": "responded",
-                "request_id": request.id,
-                "conversation_id": request.conversation_id,
-                "run_id": request.run_id,
-                "revision": request.response_revision,
-            })));
+        if request.response_actor.as_deref() == Some("local_automation_expiry") {
+            return Err((
+                StatusCode::GONE,
+                Json(json!({
+                    "detail": "automation HITL request expired",
+                    "reason_code": automation_hitl::AUTOMATION_HITL_EXPIRED_REASON,
+                    "request_id": request.id,
+                })),
+            ));
         }
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "HITL request was already answered with a different payload" })),
-        ));
+        if !is_automation_request {
+            return answered_hitl_outcome(
+                &request,
+                &body.response_data,
+                expected_authority_revision,
+                idempotency_key,
+            );
+        }
     }
     let answer = hitl_response_answer(request.kind, &body.response_data).ok_or_else(|| {
         (
@@ -7388,9 +7587,19 @@ async fn respond_to_hitl(
             })),
         ));
     }
-    if let (Some(run_id), Some(expected_revision)) =
-        (request.run_id.as_deref(), body.expected_revision)
-    {
+    if expected_authority_revision != request.authority_revision {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(json!({
+                "detail": "HITL authority revision conflict",
+                "reason_code": "hitl_authority_revision_conflict",
+                "expected_revision": expected_authority_revision,
+                "authority_revision": request.authority_revision,
+                "authority_status": "pending",
+            })),
+        ));
+    }
+    if let Some(run_id) = request.run_id.as_deref() {
         let run = state
             .session_store
             .run(run_id)
@@ -7401,13 +7610,15 @@ async fn respond_to_hitl(
                     Json(json!({ "detail": "run not found" })),
                 )
             })?;
-        if run.revision != expected_revision {
+        if !matches!(
+            run.status,
+            DesktopRunStatus::NeedsInput | DesktopRunStatus::NeedsApproval
+        ) {
             return Err((
                 StatusCode::CONFLICT,
                 Json(json!({
-                    "detail": "run revision conflict",
-                    "expected_revision": expected_revision,
-                    "actual_revision": run.revision,
+                    "detail": "run is not awaiting human input",
+                    "reason_code": "hitl_run_not_waiting",
                 })),
             ));
         }
@@ -7422,6 +7633,110 @@ async fn respond_to_hitl(
                 Json(json!({ "detail": "conversation not found" })),
             )
         })?;
+    match automation_hitl::respond_to_request(
+        &state,
+        &request.id,
+        &answer,
+        &body.response_data,
+        Some(idempotency_key),
+        Utc::now(),
+    )
+    .await
+    {
+        Ok(automation_hitl::AutomationHitlResponse::NotAutomation) => {}
+        Ok(automation_hitl::AutomationHitlResponse::Expired { run_id }) => {
+            return Err((
+                StatusCode::GONE,
+                Json(json!({
+                    "detail": "automation HITL request expired",
+                    "reason_code": automation_hitl::AUTOMATION_HITL_EXPIRED_REASON,
+                    "request_id": request.id,
+                    "automation_run_id": run_id,
+                })),
+            ));
+        }
+        Ok(automation_hitl::AutomationHitlResponse::Queued {
+            authority,
+            duplicate,
+        }) => {
+            let response_authority_revision = state
+                .session_store
+                .hitl_request(&request.id)
+                .map_err(local_store_error)?
+                .ok_or_else(|| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({
+                            "detail": "automation HITL response authority is missing",
+                            "reason_code": "local_automation_hitl_authority_unavailable",
+                        })),
+                    )
+                })?
+                .authority_revision;
+            if !duplicate {
+                let mut item = state.timeline_item(
+                    "hitl_responded",
+                    conversation.id.clone(),
+                    None,
+                    Some("user"),
+                    None,
+                    json!({
+                        "request_id": request.id,
+                        "requestId": request.id,
+                        "hitl_type": hitl_kind_name(request.kind),
+                        "answered": true,
+                        "run_id": null,
+                        "automation_run_id": authority.run_id,
+                        "decision": request.decision,
+                        "response_actor": "local_user",
+                    }),
+                );
+                item["requestId"] = json!(request.id);
+                item["answered"] = json!(true);
+                state.append_timeline(&conversation.id, item);
+            }
+            return Ok(Json(json!({
+                "success": true,
+                "status": if duplicate { "responded" } else { "queued" },
+                "request_id": request.id,
+                "conversation_id": conversation.id,
+                "run_id": null,
+                "automation_run_id": authority.run_id,
+                "revision": null,
+                "authority_revision": response_authority_revision,
+                "authority_status": "answered",
+                "duplicate": duplicate,
+            })));
+        }
+        Err(automation_hitl::AutomationHitlResponseError::Checkpoint(reason_code)) => {
+            return Err((
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "detail": "automation HITL checkpoint rejected",
+                    "reason_code": reason_code,
+                })),
+            ));
+        }
+        Err(automation_hitl::AutomationHitlResponseError::Ledger(
+            automation_dispatcher::AutomationLedgerError::IdempotencyConflict,
+        )) => {
+            return Err((
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "detail": "HITL request was already answered with a different payload"
+                })),
+            ));
+        }
+        Err(automation_hitl::AutomationHitlResponseError::Ledger(_)) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "detail": "automation HITL authority is unavailable",
+                    "reason_code": "local_automation_hitl_authority_unavailable",
+                })),
+            ));
+        }
+    }
     let engine_run = if let Some(run_id) = request.run_id.as_deref() {
         Some(
             state
@@ -7449,10 +7764,14 @@ async fn respond_to_hitl(
         .map_err(execution_environment_error)?;
 
     let Some(control) = state.claim_agent_run(&conversation.id, request.run_id.as_deref()) else {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "conversation already running" })),
-        ));
+        return wait_for_competing_hitl_response(
+            &state,
+            &request.id,
+            &body.response_data,
+            expected_authority_revision,
+            idempotency_key,
+        )
+        .await;
     };
     if let Some(run) = engine_run.as_ref() {
         if let Err(error) = ensure_checkpoint_control_authority(&state, run).await {
@@ -7460,6 +7779,71 @@ async fn respond_to_hitl(
             return Err(error);
         }
     }
+
+    let response_commit = state.session_store.mark_hitl_responded(
+        &request.id,
+        HitlResponseCommit {
+            expected_authority_revision,
+            response_data: &body.response_data,
+            response_actor: "local_user",
+            response_revision: None,
+            idempotency_key,
+            workspace_tool_grant: workspace_tool_grant.as_ref(),
+            now: &now_iso(),
+        },
+    );
+    let committed_request = match response_commit {
+        Ok(HitlResponseCommitOutcome::Committed(request)) => request,
+        Ok(HitlResponseCommitOutcome::Duplicate(request)) => {
+            state.release_agent_run(&conversation.id);
+            return Ok(Json(json!({
+                "success": true,
+                "status": "responded",
+                "duplicate": true,
+                "request_id": request.id,
+                "conversation_id": request.conversation_id,
+                "run_id": request.run_id,
+                "revision": request.response_revision,
+                "authority_revision": request.authority_revision,
+                "authority_status": "answered",
+            })));
+        }
+        Err(error) => {
+            state.release_agent_run(&conversation.id);
+            return Err(hitl_response_commit_error(error));
+        }
+    };
+    let answered_timeline_type = if request.kind == HitlKind::A2uiAction {
+        "a2ui_action_answered"
+    } else {
+        "hitl_responded"
+    };
+    let mut answered_payload = json!({
+        "request_id": request.id,
+        "requestId": request.id,
+        "hitl_type": hitl_kind_name(request.kind),
+        "answered": true,
+        "run_id": request.run_id,
+        "decision": request.decision,
+        "response_actor": "local_user",
+        "authority_revision": committed_request.authority_revision,
+    });
+    if request.kind == HitlKind::A2uiAction {
+        answered_payload["action_name"] = body.response_data["action_name"].clone();
+        answered_payload["source_component_id"] = body.response_data["source_component_id"].clone();
+        answered_payload["surface_id"] = body.response_data["surface_id"].clone();
+    }
+    let mut item = state.timeline_item(
+        answered_timeline_type,
+        conversation.id.clone(),
+        None,
+        Some("user"),
+        None,
+        answered_payload,
+    );
+    item["requestId"] = json!(request.id);
+    item["answered"] = json!(true);
+    state.append_timeline(&conversation.id, item);
 
     let accepted = match engine
         .accept_human_response(&conversation.id, &request.id, &answer)
@@ -7470,7 +7854,12 @@ async fn respond_to_hitl(
             state.release_agent_run(&conversation.id);
             return Err((
                 StatusCode::CONFLICT,
-                Json(json!({ "detail": error.to_string() })),
+                Json(json!({
+                    "detail": error.to_string(),
+                    "reason_code": "hitl_answered_resume_failed",
+                    "authority_revision": committed_request.authority_revision,
+                    "authority_status": "answered",
+                })),
             ));
         }
     };
@@ -7521,41 +7910,6 @@ async fn respond_to_hitl(
         None
     };
 
-    if let Err(error) = state.session_store.mark_hitl_responded(
-        &request.id,
-        HitlResponseCommit {
-            response_data: &body.response_data,
-            response_actor: "local_user",
-            response_revision: authoritative_run.as_ref().map(|run| run.revision),
-            idempotency_key: body.idempotency_key.as_deref(),
-            workspace_tool_grant: workspace_tool_grant.as_ref(),
-            now: &now_iso(),
-        },
-    ) {
-        state.release_agent_run(&conversation.id);
-        return Err(local_store_error(error));
-    }
-    let mut item = state.timeline_item(
-        "hitl_responded",
-        conversation.id.clone(),
-        None,
-        Some("user"),
-        None,
-        json!({
-            "request_id": request.id,
-            "requestId": request.id,
-            "hitl_type": hitl_kind_name(request.kind),
-            "answered": true,
-            "run_id": request.run_id,
-            "decision": request.decision,
-            "response_actor": "local_user",
-            "response_revision": authoritative_run.as_ref().map(|run| run.revision),
-        }),
-    );
-    item["requestId"] = json!(request.id);
-    item["answered"] = json!(true);
-    state.append_timeline(&conversation.id, item);
-
     let response = json!({
         "success": true,
         "status": "running",
@@ -7563,6 +7917,9 @@ async fn respond_to_hitl(
         "conversation_id": conversation.id,
         "run_id": authoritative_run.as_ref().map(|run| run.id.clone()),
         "revision": authoritative_run.as_ref().map(|run| run.revision),
+        "authority_revision": committed_request.authority_revision,
+        "authority_status": "answered",
+        "duplicate": false,
     });
     let goal = accepted.goal;
     let run_state = Arc::clone(&state);
@@ -7572,6 +7929,140 @@ async fn respond_to_hitl(
             .await;
     });
     Ok(Json(response))
+}
+
+async fn wait_for_competing_hitl_response(
+    state: &LocalRuntimeState,
+    request_id: &str,
+    response_data: &Value,
+    expected_authority_revision: u64,
+    idempotency_key: &str,
+) -> LocalJsonResult {
+    for _ in 0..50 {
+        let request = state
+            .session_store
+            .hitl_request(request_id)
+            .map_err(local_store_error)?
+            .ok_or_else(|| {
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(json!({
+                        "detail": "HITL request not found",
+                        "reason_code": "hitl_request_not_found",
+                    })),
+                )
+            })?;
+        if request.status == DesktopHitlStatus::Responded {
+            return answered_hitl_outcome(
+                &request,
+                response_data,
+                expected_authority_revision,
+                idempotency_key,
+            );
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+    Err((
+        StatusCode::CONFLICT,
+        Json(json!({
+            "detail": "HITL response authority is being claimed",
+            "reason_code": "hitl_response_in_progress",
+            "authority_revision": expected_authority_revision,
+            "authority_status": "pending",
+        })),
+    ))
+}
+
+fn answered_hitl_outcome(
+    request: &DesktopHitlRequest,
+    response_data: &Value,
+    expected_authority_revision: u64,
+    idempotency_key: &str,
+) -> LocalJsonResult {
+    if expected_authority_revision.checked_add(1) != Some(request.authority_revision) {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(json!({
+                "detail": "HITL authority revision conflict",
+                "reason_code": "hitl_authority_revision_conflict",
+                "expected_revision": expected_authority_revision,
+                "authority_revision": request.authority_revision,
+                "authority_status": "answered",
+            })),
+        ));
+    }
+    let same_payload = request.response_data.as_ref() == Some(response_data);
+    let same_key = request.idempotency_key.as_deref() == Some(idempotency_key);
+    if same_payload && same_key {
+        return Ok(Json(json!({
+            "success": true,
+            "status": "responded",
+            "duplicate": true,
+            "request_id": request.id,
+            "conversation_id": request.conversation_id,
+            "run_id": request.run_id,
+            "revision": request.response_revision,
+            "authority_revision": request.authority_revision,
+            "authority_status": "answered",
+        })));
+    }
+    let reason_code = if same_key {
+        "hitl_idempotency_conflict"
+    } else {
+        "hitl_already_answered"
+    };
+    Err((
+        StatusCode::CONFLICT,
+        Json(json!({
+            "detail": "HITL request was already answered",
+            "reason_code": reason_code,
+            "authority_revision": request.authority_revision,
+            "authority_status": "answered",
+        })),
+    ))
+}
+
+fn hitl_response_commit_error(error: HitlResponseCommitError) -> (StatusCode, Json<Value>) {
+    match error {
+        HitlResponseCommitError::NotFound => (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "detail": "HITL request not found",
+                "reason_code": "hitl_request_not_found",
+            })),
+        ),
+        HitlResponseCommitError::AuthorityConflict {
+            expected_revision,
+            authority_revision,
+        } => (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "detail": "HITL authority revision conflict",
+                "reason_code": "hitl_authority_revision_conflict",
+                "expected_revision": expected_revision,
+                "authority_revision": authority_revision,
+            })),
+        ),
+        HitlResponseCommitError::IdempotencyConflict { authority_revision } => (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "detail": "HITL idempotency key is already bound to a different response",
+                "reason_code": "hitl_idempotency_conflict",
+                "authority_revision": authority_revision,
+                "authority_status": "answered",
+            })),
+        ),
+        HitlResponseCommitError::AlreadyAnswered { authority_revision } => (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "detail": "HITL request was already answered",
+                "reason_code": "hitl_already_answered",
+                "authority_revision": authority_revision,
+                "authority_status": "answered",
+            })),
+        ),
+        HitlResponseCommitError::Storage(error) => local_store_error(error),
+    }
 }
 
 fn valid_permission_response(response_data: &Value) -> bool {
@@ -7597,6 +8088,145 @@ fn valid_permission_response(response_data: &Value) -> bool {
             | ("allow_always", true, Some("workspace_tool"))
             | ("deny", false, Some("once"))
     )
+}
+
+fn validate_a2ui_action_response(
+    request: &DesktopHitlRequest,
+    response_data: &Value,
+) -> Result<(), (StatusCode, Json<Value>)> {
+    let response = response_data.as_object().ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "detail": "A2UI action response must be an object",
+                "reason_code": "a2ui_action_response_invalid",
+            })),
+        )
+    })?;
+    if response.keys().any(|key| {
+        !matches!(
+            key.as_str(),
+            "surface_id" | "source_component_id" | "action_name" | "context"
+        )
+    }) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "detail": "A2UI action response contains unsupported fields",
+                "reason_code": "a2ui_action_response_invalid",
+            })),
+        ));
+    }
+    let surface_id = response
+        .get("surface_id")
+        .and_then(Value::as_str)
+        .filter(|value| bounded_identifier(value))
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "detail": "A2UI action response has no valid surface",
+                    "reason_code": "a2ui_action_response_invalid",
+                })),
+            )
+        })?;
+    let source_component_id = response
+        .get("source_component_id")
+        .and_then(Value::as_str)
+        .filter(|value| bounded_identifier(value))
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "detail": "A2UI action response has no valid source component",
+                    "reason_code": "a2ui_action_response_invalid",
+                })),
+            )
+        })?;
+    let action_name = response
+        .get("action_name")
+        .and_then(Value::as_str)
+        .filter(|value| bounded_identifier(value))
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "detail": "A2UI action response has no valid action",
+                    "reason_code": "a2ui_action_response_invalid",
+                })),
+            )
+        })?;
+    let authority = request.a2ui_action.as_ref().ok_or_else(|| {
+        (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "detail": "A2UI action authority is unavailable",
+                "reason_code": "a2ui_action_authority_unavailable",
+            })),
+        )
+    })?;
+    if authority.surface_id != surface_id {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(json!({
+                "detail": "A2UI surface does not match persisted authority",
+                "reason_code": "a2ui_surface_authority_mismatch",
+            })),
+        ));
+    }
+    if !authority.allowed_actions.iter().any(|allowed| {
+        allowed.source_component_id == source_component_id && allowed.action_name == action_name
+    }) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "detail": "A2UI action is not allowed",
+                "reason_code": "a2ui_action_not_allowed",
+            })),
+        ));
+    }
+    if let Some(context) = response.get("context") {
+        let context = context.as_object().ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "detail": "A2UI action context must be a primitive object",
+                    "reason_code": "a2ui_action_context_invalid",
+                })),
+            )
+        })?;
+        let serialized = serde_json::to_vec(context).map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "detail": "A2UI action context is invalid",
+                    "reason_code": "a2ui_action_context_invalid",
+                })),
+            )
+        })?;
+        let valid = context.len() <= 32
+            && serialized.len() <= 16 * 1_024
+            && context.iter().all(|(key, value)| {
+                !key.trim().is_empty()
+                    && key.len() <= 128
+                    && !matches!(key.as_str(), "__proto__" | "prototype" | "constructor")
+                    && match value {
+                        Value::Bool(_) | Value::Number(_) => true,
+                        Value::String(text) => text.len() <= 4 * 1_024,
+                        _ => false,
+                    }
+            });
+        if !valid {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "detail": "A2UI action context must contain bounded primitive values",
+                    "reason_code": "a2ui_action_context_invalid",
+                })),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn workspace_tool_grant_from_hitl(
@@ -7673,6 +8303,7 @@ fn hitl_response_answer(kind: HitlKind, response_data: &Value) -> Option<String>
             .and_then(Value::as_bool)
             .map(|granted| if granted { "approved" } else { "denied" }.to_string()),
         HitlKind::EnvVar => None,
+        HitlKind::A2uiAction => serde_json::to_string(response_data).ok(),
     }
 }
 
@@ -7682,7 +8313,7 @@ fn hitl_response_approves(kind: HitlKind, response_data: &Value) -> bool {
         HitlKind::Decision => {
             response_data.get("decision").and_then(Value::as_str) == Some("approved")
         }
-        HitlKind::Clarification | HitlKind::EnvVar => false,
+        HitlKind::Clarification | HitlKind::EnvVar | HitlKind::A2uiAction => false,
     }
 }
 
@@ -9025,6 +9656,18 @@ mod tests {
         );
         state.mock_llm_enabled.store(1, Ordering::Release);
         state
+    }
+
+    fn test_automation_worker_config() -> automation_worker::AutomationWorkerConfig {
+        automation_worker::AutomationWorkerConfig {
+            worker_id: format!("test-automation-worker-{}", Uuid::new_v4()),
+            batch_size: 2,
+            lease_duration: std::time::Duration::from_secs(2),
+            heartbeat_interval: std::time::Duration::from_millis(250),
+            poll_interval: std::time::Duration::from_millis(10),
+            retry_backoff: std::time::Duration::ZERO,
+            shutdown_grace: std::time::Duration::from_millis(100),
+        }
     }
 
     fn test_state_with_counting_checkpoints(
@@ -12287,7 +12930,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("migrated schema version");
-        assert_eq!(version, 20);
+        assert_eq!(version, 21);
         let selection_table: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
@@ -12376,13 +13019,13 @@ mod tests {
             let connection =
                 rusqlite::Connection::open(&future_path).expect("open future database");
             connection
-                .execute_batch("PRAGMA user_version = 21;")
+                .execute_batch("PRAGMA user_version = 22;")
                 .expect("mark future schema version");
         }
         let error = DesktopSessionStore::open(&future_path)
             .err()
             .expect("future schema must be rejected");
-        assert!(error.contains("newer than supported schema version 20"));
+        assert!(error.contains("newer than supported schema version 21"));
 
         std::fs::remove_dir_all(root).expect("remove schema test root");
     }
@@ -13171,7 +13814,7 @@ mod tests {
         let schema_version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("schema version");
-        assert_eq!(schema_version, 20);
+        assert_eq!(schema_version, 21);
         drop(connection);
         std::fs::remove_dir_all(root).expect("remove test root");
     }
@@ -15452,6 +16095,40 @@ mod tests {
         assert_eq!(replay.status(), StatusCode::OK);
         assert_eq!(response_json(replay).await["id"], automation_id);
 
+        let unsupported_delivery = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/projects/local-project/cron-jobs",
+                "automation-read-secret",
+                json!({
+                    "idempotency_key": "create-webhook-job",
+                    "name": "Webhook job",
+                    "schedule": {
+                        "kind": "every",
+                        "config": { "interval_seconds": 60 }
+                    },
+                    "payload": {
+                        "kind": "agent_turn",
+                        "config": { "message": "Deliver by webhook" }
+                    },
+                    "delivery": {
+                        "kind": "webhook",
+                        "config": { "url": "https://example.invalid/hook" }
+                    }
+                }),
+            ))
+            .await
+            .expect("unsupported local webhook delivery");
+        assert_eq!(
+            unsupported_delivery.status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+        assert_eq!(
+            response_json(unsupported_delivery).await["code"],
+            "local_automation_webhook_delivery_unavailable"
+        );
+
         let jobs = app
             .clone()
             .oneshot(authenticated_json_request(
@@ -15472,7 +16149,7 @@ mod tests {
             .clone()
             .oneshot(authenticated_json_request(
                 "GET",
-                "/api/v1/projects/local-project/cron-jobs/capabilities",
+                "/api/v1/projects/local-project/cron-jobs/capabilities?workspace_id=local-workspace",
                 "automation-read-secret",
                 json!({}),
             ))
@@ -15482,7 +16159,9 @@ mod tests {
         assert_eq!(
             response_json(capabilities).await,
             json!({
-                "schema_version": 1,
+                "service_version": "0.1.0",
+                "contract_version": "2.0.0",
+                "schema_version": 2,
                 "read": true,
                 "revision_guarded": true,
                 "idempotency_guarded": true,
@@ -15620,7 +16299,25 @@ mod tests {
     #[tokio::test]
     async fn local_automation_run_v2_returns_one_durable_receipt_and_history_record() {
         let state = test_state("automation-run-v2-secret");
-        let app = local_router(state);
+        state
+            .start_automation_worker_with_config(test_automation_worker_config())
+            .expect("start automation worker");
+        let app = local_router(Arc::clone(&state));
+        let capabilities = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/projects/local-project/cron-jobs/capabilities?workspace_id=local-workspace",
+                "automation-run-v2-secret",
+                json!({}),
+            ))
+            .await
+            .expect("available automation capabilities");
+        assert_eq!(capabilities.status(), StatusCode::OK);
+        let capabilities = response_json(capabilities).await;
+        assert_eq!(capabilities["durable_execution"], true);
+        assert_eq!(capabilities["run_now"]["allowed"], true);
+        assert!(capabilities["run_now"]["reason_code"].is_null());
         let created = app
             .clone()
             .oneshot(authenticated_json_request(
@@ -15638,7 +16335,8 @@ mod tests {
                     "payload": {
                         "kind": "agent_turn",
                         "config": { "message": "Execute the V2 job" }
-                    }
+                    },
+                    "workspace_id": "local-workspace"
                 }),
             ))
             .await
@@ -15650,8 +16348,7 @@ mod tests {
         let run_request = json!({
             "contract_version": 2,
             "expected_revision": 1,
-            "idempotency_key": "run-v2-idempotency",
-            "conversation_id": "conversation-run-v2"
+            "idempotency_key": "run-v2-idempotency"
         });
 
         let accepted = app
@@ -15727,26 +16424,199 @@ mod tests {
             "automation_contract_version_unsupported"
         );
 
+        let history_path = format!(
+            "/api/v1/projects/local-project/cron-jobs/{automation_id}/runs?limit=50&offset=0"
+        );
+        let history = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            loop {
+                let history = app
+                    .clone()
+                    .oneshot(authenticated_json_request(
+                        "GET",
+                        &history_path,
+                        "automation-run-v2-secret",
+                        json!({}),
+                    ))
+                    .await
+                    .expect("list durable automation runs");
+                assert_eq!(history.status(), StatusCode::OK);
+                let history = response_json(history).await;
+                if history["items"][0]["status"] == "success" {
+                    break history;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("automation run reaches terminal history");
+        assert_eq!(history["total"], 1);
+        assert_eq!(history["items"][0]["id"], accepted["run_id"]);
+        assert_eq!(history["items"][0]["status"], "success");
+        assert_eq!(
+            history["items"][0]["result_summary"]["authority"],
+            "local_scoped_agent"
+        );
+        state.stop_automation_worker().await;
+        let replay_after_shutdown = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                &run_path,
+                "automation-run-v2-secret",
+                run_request,
+            ))
+            .await
+            .expect("replay completed run after worker shutdown");
+        assert_eq!(replay_after_shutdown.status(), StatusCode::ACCEPTED);
+        let replay_after_shutdown = response_json(replay_after_shutdown).await;
+        assert_eq!(replay_after_shutdown["receipt_id"], accepted["receipt_id"]);
+        assert_eq!(replay_after_shutdown["run_id"], accepted["run_id"]);
+        assert_eq!(replay_after_shutdown["duplicate"], true);
+    }
+
+    #[tokio::test]
+    async fn local_automation_run_fails_closed_without_a_live_worker_and_does_not_enqueue() {
+        let state = test_state("automation-run-unavailable-secret");
+        let app = local_router(Arc::clone(&state));
+        let created = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/projects/local-project/cron-jobs",
+                "automation-run-unavailable-secret",
+                json!({
+                    "idempotency_key": "create-unavailable-job",
+                    "name": "Unavailable run job",
+                    "enabled": true,
+                    "schedule": {
+                        "kind": "every",
+                        "config": { "interval_seconds": 60 }
+                    },
+                    "payload": {
+                        "kind": "agent_turn",
+                        "config": { "message": "Do not leave this queued" }
+                    }
+                }),
+            ))
+            .await
+            .expect("create unavailable automation");
+        assert_eq!(created.status(), StatusCode::CREATED);
+        let created = response_json(created).await;
+        let automation_id = created["id"].as_str().expect("automation id");
+        let response = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                &format!("/api/v1/projects/local-project/cron-jobs/{automation_id}/run"),
+                "automation-run-unavailable-secret",
+                json!({
+                    "contract_version": 2,
+                    "expected_revision": 1,
+                    "idempotency_key": "run-unavailable"
+                }),
+            ))
+            .await
+            .expect("unavailable run response");
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            response_json(response).await["code"],
+            "durable_automation_execution_unavailable"
+        );
+
         let history = app
             .oneshot(authenticated_json_request(
                 "GET",
                 &format!(
                     "/api/v1/projects/local-project/cron-jobs/{automation_id}/runs?limit=50&offset=0"
                 ),
-                "automation-run-v2-secret",
+                "automation-run-unavailable-secret",
                 json!({}),
             ))
             .await
-            .expect("list durable automation runs");
+            .expect("unavailable run history");
         assert_eq!(history.status(), StatusCode::OK);
-        let history = response_json(history).await;
-        assert_eq!(history["total"], 1);
-        assert_eq!(history["items"][0]["id"], accepted["run_id"]);
-        assert_eq!(history["items"][0]["status"], "queued");
+        assert_eq!(response_json(history).await["total"], 0);
+    }
+
+    #[tokio::test]
+    async fn local_automation_never_selects_the_first_workspace_for_an_unscoped_job() {
+        let state = test_state("automation-unscoped-secret");
+        state
+            .session_store
+            .insert_workspace(&json!({
+                "id": "workspace-that-must-not-be-selected",
+                "tenant_id": "local",
+                "project_id": "local-project",
+                "name": "Must not be selected",
+                "description": null,
+                "status": "active",
+                "created_at": now_iso(),
+                "updated_at": now_iso(),
+            }))
+            .expect("insert alternative workspace");
+        state
+            .start_automation_worker_with_config(test_automation_worker_config())
+            .expect("start automation worker");
+        let app = local_router(Arc::clone(&state));
+        let created = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/projects/local-project/cron-jobs",
+                "automation-unscoped-secret",
+                json!({
+                    "idempotency_key": "create-unscoped-job",
+                    "name": "Unscoped job",
+                    "enabled": true,
+                    "schedule": {
+                        "kind": "every",
+                        "config": { "interval_seconds": 60 }
+                    },
+                    "payload": {
+                        "kind": "agent_turn",
+                        "config": { "message": "Must not choose a workspace implicitly" }
+                    }
+                }),
+            ))
+            .await
+            .expect("create unscoped automation");
+        assert_eq!(created.status(), StatusCode::CREATED);
+        let created = response_json(created).await;
+        let automation_id = created["id"].as_str().expect("automation id");
+
+        let response = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                &format!("/api/v1/projects/local-project/cron-jobs/{automation_id}/run"),
+                "automation-unscoped-secret",
+                json!({
+                    "contract_version": 2,
+                    "expected_revision": 1,
+                    "idempotency_key": "run-unscoped"
+                }),
+            ))
+            .await
+            .expect("unscoped run response");
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(
-            history["items"][0]["result_summary"]["reason_code"],
-            "local_automation_execution_runtime_unavailable"
+            response_json(response).await["code"],
+            "local_automation_workspace_required"
         );
+
+        let history = app
+            .oneshot(authenticated_json_request(
+                "GET",
+                &format!(
+                    "/api/v1/projects/local-project/cron-jobs/{automation_id}/runs?limit=50&offset=0"
+                ),
+                "automation-unscoped-secret",
+                json!({}),
+            ))
+            .await
+            .expect("unscoped run history");
+        assert_eq!(history.status(), StatusCode::OK);
+        assert_eq!(response_json(history).await["total"], 0);
+        state.stop_automation_worker().await;
     }
 
     #[tokio::test]
@@ -17394,11 +18264,15 @@ mod tests {
             needs_approval.revision
         );
         assert_eq!(
+            messages_payload["approval_requests"][0]["authority_revision"],
+            HITL_PENDING_AUTHORITY_REVISION
+        );
+        assert_eq!(
             messages_payload["approval_requests"][0]["decision"]["risk"]["level"],
             "medium"
         );
 
-        let response = local_router(Arc::clone(&state))
+        let stale = local_router(Arc::clone(&state))
             .oneshot(
                 Request::builder()
                     .method("POST")
@@ -17410,16 +18284,93 @@ mod tests {
                             "request_id": "permission-hitl",
                             "hitl_type": "permission",
                             "response_data": { "granted": true },
-                            "expected_revision": needs_approval.revision,
-                            "idempotency_key": "permission-hitl:approve",
+                            "expected_revision": 2,
+                            "idempotency_key": "permission-hitl:stale",
                         })
                         .to_string(),
                     ))
                     .expect("request"),
             )
             .await
-            .expect("response");
-        assert_eq!(response.status(), StatusCode::OK);
+            .expect("stale response");
+        assert_eq!(stale.status(), StatusCode::CONFLICT);
+        let stale_body = axum::body::to_bytes(stale.into_body(), usize::MAX)
+            .await
+            .expect("stale response body");
+        let stale_payload: Value =
+            serde_json::from_slice(&stale_body).expect("stale response json");
+        assert_eq!(
+            stale_payload["reason_code"],
+            "hitl_authority_revision_conflict"
+        );
+        assert_eq!(
+            state
+                .session_store
+                .hitl_request("permission-hitl")
+                .expect("load pending request")
+                .expect("pending request")
+                .status,
+            DesktopHitlStatus::Pending
+        );
+
+        let response_command = json!({
+            "request_id": "permission-hitl",
+            "hitl_type": "permission",
+            "response_data": { "granted": true },
+            "expected_revision": HITL_PENDING_AUTHORITY_REVISION,
+            "idempotency_key": "permission-hitl:approve",
+        })
+        .to_string();
+        let first_request = Request::builder()
+            .method("POST")
+            .uri("/api/v1/agent/hitl/respond")
+            .header("authorization", "Bearer launch-secret")
+            .header("content-type", "application/json")
+            .body(Body::from(response_command.clone()))
+            .expect("first request");
+        let second_request = Request::builder()
+            .method("POST")
+            .uri("/api/v1/agent/hitl/respond")
+            .header("authorization", "Bearer launch-secret")
+            .header("content-type", "application/json")
+            .body(Body::from(response_command))
+            .expect("second request");
+        let (first_response, second_response) = tokio::join!(
+            local_router(Arc::clone(&state)).oneshot(first_request),
+            local_router(Arc::clone(&state)).oneshot(second_request),
+        );
+        let mut response_payloads = Vec::new();
+        for response in [
+            first_response.expect("first response"),
+            second_response.expect("second response"),
+        ] {
+            assert_eq!(response.status(), StatusCode::OK);
+            let response_body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .expect("HITL response body");
+            response_payloads
+                .push(serde_json::from_slice::<Value>(&response_body).expect("HITL response json"));
+        }
+        assert!(response_payloads
+            .iter()
+            .all(|payload| payload["authority_revision"] == 2));
+        assert!(response_payloads
+            .iter()
+            .all(|payload| payload["authority_status"] == "answered"));
+        assert_eq!(
+            response_payloads
+                .iter()
+                .filter(|payload| payload["duplicate"] == true)
+                .count(),
+            1
+        );
+        assert_eq!(
+            response_payloads
+                .iter()
+                .filter(|payload| payload["duplicate"] == false)
+                .count(),
+            1
+        );
 
         let mut final_run = None;
         for _ in 0..100 {
@@ -17450,9 +18401,10 @@ mod tests {
             .expect("load HITL")
             .expect("HITL");
         assert_eq!(request.status, DesktopHitlStatus::Responded);
+        assert_eq!(request.authority_revision, 2);
         assert_eq!(request.response_data, Some(json!({ "granted": true })));
         assert_eq!(request.response_actor.as_deref(), Some("local_user"));
-        assert_eq!(request.response_revision, Some(needs_approval.revision + 1));
+        assert_eq!(request.response_revision, None);
         assert_eq!(
             request.idempotency_key.as_deref(),
             Some("permission-hitl:approve")
@@ -17470,7 +18422,7 @@ mod tests {
                             "request_id": "permission-hitl",
                             "hitl_type": "permission",
                             "response_data": { "granted": true },
-                            "expected_revision": needs_approval.revision,
+                            "expected_revision": HITL_PENDING_AUTHORITY_REVISION,
                             "idempotency_key": "permission-hitl:approve",
                         })
                         .to_string(),
@@ -17480,6 +18432,12 @@ mod tests {
             .await
             .expect("response");
         assert_eq!(replay.status(), StatusCode::OK);
+        let replay_body = axum::body::to_bytes(replay.into_body(), usize::MAX)
+            .await
+            .expect("HITL replay body");
+        let replay_payload: Value = serde_json::from_slice(&replay_body).expect("HITL replay json");
+        assert_eq!(replay_payload["authority_revision"], 2);
+        assert_eq!(replay_payload["duplicate"], true);
 
         let conflicting_replay = local_router(Arc::clone(&state))
             .oneshot(
@@ -17493,6 +18451,7 @@ mod tests {
                             "request_id": "permission-hitl",
                             "hitl_type": "permission",
                             "response_data": { "granted": false },
+                            "expected_revision": HITL_PENDING_AUTHORITY_REVISION,
                             "idempotency_key": "permission-hitl:deny",
                         })
                         .to_string(),
@@ -17550,7 +18509,7 @@ mod tests {
                     .header("authorization", "Bearer launch-secret")
                     .header("content-type", "application/json")
                     .body(Body::from(
-                        r#"{"request_id":"env-hitl","hitl_type":"env_var","response_data":{"value":"must-not-persist"}}"#,
+                        r#"{"request_id":"env-hitl","hitl_type":"env_var","response_data":{"value":"must-not-persist"},"expected_revision":1,"idempotency_key":"env-hitl:respond"}"#,
                     ))
                     .expect("request"),
             )
@@ -17573,6 +18532,180 @@ mod tests {
         assert!(!serde_json::to_string(&request)
             .expect("serialize request")
             .contains("must-not-persist"));
+    }
+
+    #[tokio::test]
+    async fn a2ui_hitl_enforces_persisted_surface_action_authority_and_redacts_history() {
+        use agistack_core::agent::types::{A2uiActionAuthority, A2uiAllowedAction, HitlRequest};
+
+        let state = test_state("launch-secret");
+        let conversation = LocalConversation {
+            id: "conversation-a2ui-hitl".to_string(),
+            project_id: "local-project".to_string(),
+            tenant_id: "local".to_string(),
+            title: "A2UI approval".to_string(),
+            workspace_id: Some("local-workspace".to_string()),
+            capability_mode: ConversationCapabilityMode::Work,
+            current_mode: ConversationRunMode::Plan,
+            created_at: now_iso(),
+            updated_at: now_iso(),
+        };
+        state
+            .session_store
+            .insert_conversation(&conversation)
+            .expect("insert conversation");
+        let mut suspended = SessionState::new(
+            conversation.id.clone(),
+            "Choose the release action",
+            Some("local-project"),
+        );
+        suspended.status = SessionStatus::AwaitingInput;
+        suspended.pending_hitl = Some(
+            HitlRequest::new(
+                "a2ui-release-hitl",
+                HitlKind::A2uiAction,
+                "Choose the release action",
+            )
+            .with_a2ui_action(A2uiActionAuthority {
+                surface_id: "release-surface".to_string(),
+                block_id: "release-artifact".to_string(),
+                title: Some("Release approval".to_string()),
+                timeout_seconds: Some(300),
+                allowed_actions: vec![A2uiAllowedAction {
+                    source_component_id: "approve-button".to_string(),
+                    action_name: "approve".to_string(),
+                }],
+            }),
+        );
+        state
+            .checkpoints
+            .save(&suspended)
+            .await
+            .expect("save checkpoint");
+        state
+            .persist_pending_hitl(&conversation.id, None, &suspended)
+            .expect("persist pending A2UI HITL");
+
+        let asked = state
+            .session_store
+            .timeline(&conversation.id, 20)
+            .expect("load timeline")
+            .into_iter()
+            .find(|item| item["type"] == "a2ui_action_asked")
+            .expect("A2UI request timeline item");
+        assert_eq!(asked["payload"]["surface_id"], "release-surface");
+        assert_eq!(asked["payload"]["block_id"], "release-artifact");
+        assert_eq!(
+            asked["payload"]["allowed_actions"],
+            json!([{
+                "source_component_id": "approve-button",
+                "action_name": "approve",
+            }])
+        );
+        assert_eq!(
+            asked["payload"]["authority_revision"],
+            HITL_PENDING_AUTHORITY_REVISION
+        );
+
+        let app = local_router(Arc::clone(&state));
+        let forbidden = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/agent/hitl/respond",
+                "launch-secret",
+                json!({
+                    "request_id": "a2ui-release-hitl",
+                    "hitl_type": "a2ui_action",
+                    "response_data": {
+                        "surface_id": "release-surface",
+                        "source_component_id": "approve-button",
+                        "action_name": "delete",
+                        "context": {},
+                    },
+                    "expected_revision": HITL_PENDING_AUTHORITY_REVISION,
+                    "idempotency_key": "a2ui-release:delete",
+                }),
+            ))
+            .await
+            .expect("forbidden response");
+        assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+
+        let unsafe_context = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/agent/hitl/respond",
+                "launch-secret",
+                json!({
+                    "request_id": "a2ui-release-hitl",
+                    "hitl_type": "a2ui_action",
+                    "response_data": {
+                        "surface_id": "release-surface",
+                        "source_component_id": "approve-button",
+                        "action_name": "approve",
+                        "context": {"nested": {"secret": "must-not-persist"}},
+                    },
+                    "expected_revision": HITL_PENDING_AUTHORITY_REVISION,
+                    "idempotency_key": "a2ui-release:unsafe",
+                }),
+            ))
+            .await
+            .expect("unsafe context response");
+        assert_eq!(unsafe_context.status(), StatusCode::BAD_REQUEST);
+
+        let response_body = json!({
+            "request_id": "a2ui-release-hitl",
+            "hitl_type": "a2ui_action",
+            "response_data": {
+                "surface_id": "release-surface",
+                "source_component_id": "approve-button",
+                "action_name": "approve",
+                "context": {"release": "2026.07", "approved": true},
+            },
+            "expected_revision": HITL_PENDING_AUTHORITY_REVISION,
+            "idempotency_key": "a2ui-release:approve",
+        });
+        let accepted = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/agent/hitl/respond",
+                "launch-secret",
+                response_body.clone(),
+            ))
+            .await
+            .expect("accepted response");
+        assert_eq!(accepted.status(), StatusCode::OK);
+        let accepted_payload = response_json(accepted).await;
+        assert_eq!(accepted_payload["authority_status"], "answered");
+        assert_eq!(accepted_payload["duplicate"], false);
+
+        let replay = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/agent/hitl/respond",
+                "launch-secret",
+                response_body,
+            ))
+            .await
+            .expect("idempotent replay");
+        assert_eq!(replay.status(), StatusCode::OK);
+        assert_eq!(response_json(replay).await["duplicate"], true);
+
+        let timeline = state
+            .session_store
+            .timeline(&conversation.id, 50)
+            .expect("load answered timeline");
+        let answered = timeline
+            .iter()
+            .find(|item| item["type"] == "a2ui_action_answered")
+            .expect("A2UI answered timeline item");
+        assert_eq!(answered["payload"]["action_name"], "approve");
+        assert_eq!(answered["payload"]["source_component_id"], "approve-button");
+        let history = serde_json::to_string(&timeline).expect("serialize timeline");
+        assert!(!history.contains("2026.07"));
+        assert!(!history.contains("must-not-persist"));
     }
 
     fn seed_controlled_run(

@@ -7,6 +7,12 @@ use agistack_core::agent::types::{DecisionContext, HitlKind};
 
 use super::{session_store::required_string, LocalConversation};
 
+pub(super) const HITL_PENDING_AUTHORITY_REVISION: u64 = 1;
+
+const fn default_hitl_authority_revision() -> u64 {
+    HITL_PENDING_AUTHORITY_REVISION
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum DesktopPlanStatus {
@@ -198,7 +204,11 @@ pub(super) struct DesktopHitlRequest {
     pub prompt: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decision: Option<DecisionContext>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub a2ui_action: Option<agistack_core::agent::types::A2uiActionAuthority>,
     pub status: DesktopHitlStatus,
+    #[serde(default = "default_hitl_authority_revision")]
+    pub authority_revision: u64,
     pub created_at: String,
     pub responded_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

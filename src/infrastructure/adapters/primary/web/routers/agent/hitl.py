@@ -24,6 +24,7 @@ from src.application.services.hitl_authority import (
     HitlAuthorityConflict,
     classify_hitl_authority_conflict,
 )
+from src.application.services.hitl_response_contract import hitl_authority_revision
 from src.domain.model.agent.hitl_request import HITLRequest
 from src.domain.model.auth.user import User
 from src.infrastructure.adapters.primary.web.dependencies import (
@@ -40,6 +41,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_reposito
 )
 from src.infrastructure.i18n import gettext as _
 
+from .hitl_response_v2 import respond_to_hitl_v2
 from .schemas import (
     HITLCancelRequest,
     HITLRequestResponse,
@@ -510,6 +512,7 @@ async def get_pending_hitl_requests(
                 context=r.context,
                 metadata=r.metadata,
                 status=r.status.value,
+                authority_revision=hitl_authority_revision(r.status),
                 created_at=r.created_at.isoformat() if r.created_at else "",
                 expires_at=r.expires_at.isoformat() if r.expires_at else "",
             )
@@ -574,6 +577,7 @@ async def get_project_pending_hitl_requests(
                 context=r.context,
                 metadata=r.metadata,
                 status=r.status.value,
+                authority_revision=hitl_authority_revision(r.status),
                 created_at=r.created_at.isoformat() if r.created_at else "",
                 expires_at=r.expires_at.isoformat() if r.expires_at else "",
             )
@@ -647,6 +651,18 @@ async def respond_to_hitl(
             tenant_id=tenant_id,
             request_id=request.request_id,
         )
+        if request.expected_revision is not None:
+            return await respond_to_hitl_v2(
+                request=request,
+                hitl_request=hitl_request,
+                repo=repo,
+                current_user=current_user,
+                tenant_id=tenant_id,
+                db=db,
+                validate_response=_validate_and_summarize_hitl_response,
+                persist_permission_grant=_persist_workspace_tool_grant_if_requested,
+                publish_response=_publish_hitl_response_to_redis,
+            )
         from src.domain.model.agent.hitl_request import HITLRequestStatus
 
         if hitl_request.status != HITLRequestStatus.PENDING or hitl_request.is_expired:

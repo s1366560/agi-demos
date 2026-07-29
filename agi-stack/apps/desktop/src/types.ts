@@ -277,6 +277,7 @@ export type PromptTemplateVariable = {
 
 export type PromptTemplateRecord = {
   id: string;
+  revision?: number;
   tenant_id: string;
   project_id: string | null;
   created_by: string;
@@ -944,6 +945,7 @@ export type LlmProviderValidationOutcome = {
 
 export type ManagedSkill = {
   id: string;
+  revision?: number;
   tenant_id?: string;
   project_id?: string | null;
   name: string;
@@ -1342,6 +1344,7 @@ export type ManagedExternalAcpAgent = {
 
 export type ManagedAgentDefinition = {
   id: string;
+  revision?: number;
   name: string;
   display_name?: string | null;
   system_prompt?: string | null;
@@ -1393,6 +1396,7 @@ export type ManagedAgentDefinitionMutation = {
 
 export type ManagedSubAgent = {
   id: string;
+  revision?: number;
   tenant_id: string;
   project_id?: string | null;
   name: string;
@@ -1572,11 +1576,22 @@ export type DesktopApprovalRequest = {
   message_id?: string | null;
   run_id?: string | null;
   run_revision?: number | null;
+  authority_revision?: number | null;
   round?: number;
   kind: HitlType;
   prompt: string;
   decision?: DecisionContext | null;
   permission?: PermissionRequestContext | null;
+  a2ui_action?: {
+    surface_id: string;
+    block_id: string;
+    title?: string | null;
+    timeout_seconds?: number | null;
+    allowed_actions: Array<{
+      source_component_id: string;
+      action_name: string;
+    }>;
+  } | null;
   status: 'pending' | 'responded';
   created_at: string;
   expires_at?: string | null;
@@ -1790,6 +1805,11 @@ export type AutomationCapabilities = {
   delete: AutomationActionCapability;
 };
 
+export type AutomationCapabilityEnvelope = AutomationCapabilities & {
+  service_version: string;
+  contract_version: string;
+};
+
 export type AutomationJob = {
   id: string;
   project_id: string;
@@ -1805,6 +1825,7 @@ export type AutomationJob = {
   payload: AutomationConfig;
   delivery: AutomationConfig;
   conversation_mode: string;
+  workspace_id?: string | null;
   conversation_id?: string | null;
   timezone: string;
   stagger_seconds: number;
@@ -1831,6 +1852,7 @@ export type AutomationCreateInput = {
   payload: AutomationConfig;
   delivery?: AutomationConfig;
   conversation_mode?: 'reuse' | 'fresh';
+  workspace_id?: string | null;
   conversation_id?: string | null;
   timezone?: string;
   stagger_seconds?: number;

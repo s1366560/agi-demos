@@ -33,6 +33,7 @@ export type SessionSandboxRuntimeSurface = {
   capabilities: SandboxRuntimeCapabilitySnapshot | null;
   filesCapability: SandboxRuntimeCapability;
   remoteDesktopCapability: SandboxRuntimeCapability;
+  runtimeClient: SandboxRuntimeClient | null;
   fileClient: SandboxRuntimeClient | null;
   remoteDesktopSession: RemoteDesktopSession | null;
   remoteDesktopRevision: number;
@@ -111,7 +112,7 @@ export function useSandboxRuntimeSurface(
     return () => controller.abort();
   }, [capabilityAttempt, client, enabled]);
 
-  const fileClient = useMemo(
+  const runtimeClient = useMemo(
     () => (capabilities ? createSandboxRuntimeClient(config, capabilities) : null),
     [capabilities, config],
   );
@@ -169,7 +170,8 @@ export function useSandboxRuntimeSurface(
       capabilities?.files ?? SANDBOX_RUNTIME_CAPABILITIES_UNAVAILABLE.files,
     remoteDesktopCapability:
       capabilities?.kasm_vnc ?? SANDBOX_RUNTIME_CAPABILITIES_UNAVAILABLE.kasm_vnc,
-    fileClient,
+    runtimeClient,
+    fileClient: runtimeClient,
     remoteDesktopSession,
     remoteDesktopRevision,
     remoteDesktopStatus,

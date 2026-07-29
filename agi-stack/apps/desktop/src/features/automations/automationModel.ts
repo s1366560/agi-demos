@@ -1,5 +1,6 @@
 import type {
   AutomationActionCapability,
+  AutomationCapabilityEnvelope,
   AutomationCapabilities,
   AutomationJob,
   AutomationRun,
@@ -168,6 +169,46 @@ export function normalizeAutomationCapabilities(
     toggle,
     run_now: runNow,
     delete: deleteCapability,
+  };
+}
+
+export function normalizeAutomationCapabilityEnvelope(
+  input: unknown,
+): AutomationCapabilityEnvelope | null {
+  if (
+    !isExactRecord(input, [
+      'service_version',
+      'contract_version',
+      'schema_version',
+      'read',
+      'revision_guarded',
+      'idempotency_guarded',
+      'durable_execution',
+      'supported_read_trigger_kinds',
+      'create',
+      'edit',
+      'toggle',
+      'run_now',
+      'delete',
+    ]) ||
+    typeof input.service_version !== 'string' ||
+    !input.service_version.trim() ||
+    typeof input.contract_version !== 'string' ||
+    !input.contract_version.trim()
+  ) {
+    return null;
+  }
+  const {
+    service_version: serviceVersion,
+    contract_version: contractVersion,
+    ...capabilityPayload
+  } = input;
+  const capabilities = normalizeAutomationCapabilities(capabilityPayload);
+  if (!capabilities) return null;
+  return {
+    service_version: serviceVersion,
+    contract_version: contractVersion,
+    ...capabilities,
   };
 }
 

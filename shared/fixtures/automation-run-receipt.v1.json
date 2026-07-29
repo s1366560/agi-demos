@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0.0",
+  "case_id": "automation-run-replay",
+  "kind": "automation_run_receipt",
+  "source_contract": "AutomationRunCommandV2 and AutomationRunReceipt",
+  "input": {
+    "receipt": {
+      "contract_version": 2,
+      "receipt_id": "receipt-parity-1",
+      "run_id": "run-parity-1",
+      "job_id": "job-parity-1",
+      "status": "queued",
+      "duplicate": true,
+      "expected_revision": 4,
+      "idempotency_key": "automation-run-parity-1"
+    }
+  },
+  "web_expected_view_model": {
+    "contract_version": 2,
+    "receipt_id": "receipt-parity-1",
+    "run_id": "run-parity-1",
+    "job_id": "job-parity-1",
+    "status": "queued",
+    "duplicate": true,
+    "expected_revision": 4,
+    "replay_safe": true
+  },
+  "desktop_expected_view_model": {
+    "contract_version": 2,
+    "receipt_id": "receipt-parity-1",
+    "run_id": "run-parity-1",
+    "job_id": "job-parity-1",
+    "status": "queued",
+    "duplicate": true,
+    "expected_revision": 4,
+    "replay_safe": true
+  }
+}

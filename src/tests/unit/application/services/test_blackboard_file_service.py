@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -200,6 +202,76 @@ class TestBlackboardFileServiceSecurity:
 
         file_repo.save.assert_not_awaited()
         assert list(tmp_path.rglob("*")) == []
+
+    async def test_upload_staged_file_moves_one_bounded_copy_into_workspace_storage(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(service_module, "STORAGE_ROOT", tmp_path)
+        staged_path = service_module.create_upload_staging_path()
+        content = b"bounded-workspace-upload"
+        staged_path.write_bytes(content)
+
+        file_repo = AsyncMock()
+        file_repo.list_by_workspace.return_value = []
+        file_repo.save.side_effect = lambda uploaded: uploaded
+        service = _editor_service(file_repo)
+
+        uploaded = await service.upload_staged_file(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            actor_user_id="user-1",
+            actor_user_name="User One",
+            parent_path="/",
+            filename="report.txt",
+            staged_path=staged_path,
+            size_bytes=len(content),
+            checksum_sha256=hashlib.sha256(content).hexdigest(),
+        )
+
+        assert staged_path.exists() is False
+        assert uploaded.file_size == len(content)
+        assert uploaded.checksum_sha256 == hashlib.sha256(content).hexdigest()
+        destination = tmp_path / "workspace-1" / uploaded.id / "report.txt"
+        assert destination.read_bytes() == content
+
+    @pytest.mark.parametrize(
+        "save_error",
+        [RuntimeError("save failed"), asyncio.CancelledError()],
+    )
+    async def test_upload_staged_file_cleans_destination_when_save_does_not_complete(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        save_error: BaseException,
+    ) -> None:
+        monkeypatch.setattr(service_module, "STORAGE_ROOT", tmp_path)
+        staged_path = service_module.create_upload_staging_path()
+        content = b"bounded-workspace-upload"
+        staged_path.write_bytes(content)
+
+        file_repo = AsyncMock()
+        file_repo.list_by_workspace.return_value = []
+        file_repo.save.side_effect = save_error
+        service = _editor_service(file_repo)
+
+        with pytest.raises(type(save_error)):
+            await service.upload_staged_file(
+                tenant_id="tenant-1",
+                project_id="project-1",
+                workspace_id="workspace-1",
+                actor_user_id="user-1",
+                actor_user_name="User One",
+                parent_path="/",
+                filename="report.txt",
+                staged_path=staged_path,
+                size_bytes=len(content),
+                checksum_sha256=hashlib.sha256(content).hexdigest(),
+            )
+
+        assert list((tmp_path / "workspace-1").rglob("report.txt")) == []
 
     async def test_delete_directory_rejects_non_empty_directory(self) -> None:
         file_repo = AsyncMock()

@@ -17,6 +17,8 @@ from src.application.schemas.conversation_session_projection import (
     SessionEvidenceSummaryResponse,
     SessionExecutionResponse,
     SessionPendingHITLResponse,
+    SessionPlanRunResponse,
+    SessionRunEnvironmentResponse,
     SessionToolExecutionPageResponse,
     SessionToolExecutionResponse,
     SessionWorkspaceAttemptResponse,
@@ -26,6 +28,7 @@ from src.application.schemas.conversation_session_projection import (
 
 HITLKind = Literal["clarification", "decision", "env_var", "permission", "a2ui_action"]
 CapabilityMode = Literal["work", "code"]
+PermissionProfile = Literal["read_only", "workspace_write", "full_access"]
 
 
 class ConversationSessionNotFoundError(Exception):
@@ -74,6 +77,25 @@ class WorkspaceAttemptAuthority:
     created_at: datetime
     updated_at: datetime | None
     completed_at: datetime | None
+
+
+@dataclass(frozen=True, kw_only=True)
+class AgentPlanRunAuthority:
+    id: str
+    conversation_id: str
+    project_id: str
+    plan_version_id: str
+    idempotency_key: str
+    message_id: str
+    request_message: str
+    status: str
+    revision: int
+    permission_profile: PermissionProfile
+    environment: dict[str, Any] | None
+    created_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None
+    error: str | None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -127,6 +149,7 @@ class PendingHITLAuthority:
     options: tuple[dict[str, Any], ...]
     context: dict[str, Any]
     metadata: dict[str, Any]
+    authority_revision: int
     created_at: datetime
     expires_at: datetime
 
@@ -169,6 +192,7 @@ class ConversationSessionAuthoritySnapshot:
     has_blocking_hitl: bool
     artifact_records: tuple[ArtifactRecordAuthority, ...]
     tool_executions: ToolExecutionPageAuthority
+    runs: tuple[AgentPlanRunAuthority, ...] = ()
 
 
 class ConversationSessionProjectionReader(Protocol):
@@ -218,6 +242,8 @@ class ConversationSessionProjectionService:
 
         attempts = [self._attempt(item) for item in snapshot.attempts]
         current_attempt = attempts[0] if attempts else None
+        runs = [self._run(item) for item in snapshot.runs]
+        current_run = runs[0] if runs else None
         can_send_message = not snapshot.has_blocking_hitl
         allowed_actions: list[Literal["send_message", "respond_to_hitl"]] = []
         if can_send_message:
@@ -230,6 +256,8 @@ class ConversationSessionProjectionService:
             authority_id=current_attempt.id if current_attempt else snapshot.conversation.id,
             conversation=self._conversation(snapshot.conversation),
             execution=SessionExecutionResponse(
+                current_run=current_run,
+                run_history=runs,
                 current_attempt=current_attempt,
                 attempt_history=attempts,
             ),
@@ -319,6 +347,41 @@ class ConversationSessionProjectionService:
         )
 
     @staticmethod
+    def _run(source: AgentPlanRunAuthority) -> SessionPlanRunResponse:
+        environment = (
+            SessionRunEnvironmentResponse.model_validate(source.environment)
+            if source.environment is not None
+            else None
+        )
+        environment_snapshot = environment.model_dump(mode="json") if environment else None
+        return SessionPlanRunResponse(
+            id=source.id,
+            conversation_id=source.conversation_id,
+            project_id=source.project_id,
+            plan_version_id=source.plan_version_id,
+            idempotency_key=source.idempotency_key,
+            message_id=source.message_id,
+            request_message=source.request_message,
+            status=source.status,
+            revision=source.revision,
+            created_at=source.created_at,
+            updated_at=source.updated_at,
+            started_at=None,
+            completed_at=source.completed_at,
+            last_heartbeat_at=None,
+            error=source.error,
+            environment=environment,
+            permission_profile=source.permission_profile,
+            authorization_snapshot={
+                "conversation_id": source.conversation_id,
+                "project_id": source.project_id,
+                "plan_version_id": source.plan_version_id,
+                "permission_profile": source.permission_profile,
+                "environment": environment_snapshot,
+            },
+        )
+
+    @staticmethod
     def _task(source: ConversationTaskAuthority) -> SessionConversationTaskResponse:
         return SessionConversationTaskResponse(
             id=source.id,
@@ -378,6 +441,7 @@ class ConversationSessionProjectionService:
             context=source.context,
             metadata=source.metadata,
             status="pending",
+            authority_revision=source.authority_revision,
             created_at=source.created_at,
             expires_at=source.expires_at,
         )
@@ -402,6 +466,7 @@ class ConversationSessionProjectionService:
     def _updated_at(cls, snapshot: ConversationSessionAuthoritySnapshot) -> datetime:
         conversation = snapshot.conversation
         candidates = [conversation.updated_at or conversation.created_at]
+        candidates.extend(run.completed_at or run.updated_at for run in snapshot.runs)
         for attempt in snapshot.attempts:
             candidates.append(attempt.completed_at or attempt.updated_at or attempt.created_at)
         for task in snapshot.conversation_tasks:
@@ -423,6 +488,7 @@ class ConversationSessionProjectionService:
 
 
 __all__ = [
+    "AgentPlanRunAuthority",
     "ArtifactRecordAuthority",
     "ConversationAuthority",
     "ConversationSessionAuthoritySnapshot",

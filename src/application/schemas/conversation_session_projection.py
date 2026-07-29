@@ -61,7 +61,42 @@ class SessionWorkspaceAttemptResponse(_ProjectionModel):
     completed_at: datetime | None
 
 
+class SessionRunEnvironmentResponse(_ProjectionModel):
+    id: str
+    kind: Literal["local", "worktree"]
+    label: str
+    workspace_path: str
+    repository_root: str | None
+    branch: str | None
+    base_commit: str | None
+    source_run_id: str | None
+    created_at: datetime
+
+
+class SessionPlanRunResponse(_ProjectionModel):
+    id: str
+    conversation_id: str
+    project_id: str
+    plan_version_id: str
+    idempotency_key: str
+    message_id: str
+    request_message: str
+    status: str
+    revision: int
+    created_at: datetime
+    updated_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+    last_heartbeat_at: datetime | None
+    error: str | None
+    environment: SessionRunEnvironmentResponse | None
+    permission_profile: Literal["read_only", "workspace_write", "full_access"]
+    authorization_snapshot: dict[str, Any]
+
+
 class SessionExecutionResponse(_ProjectionModel):
+    current_run: SessionPlanRunResponse | None
+    run_history: list[SessionPlanRunResponse]
     current_attempt: SessionWorkspaceAttemptResponse | None
     attempt_history: list[SessionWorkspaceAttemptResponse]
 
@@ -114,6 +149,7 @@ class SessionPendingHITLResponse(_ProjectionModel):
     context: dict[str, Any]
     metadata: dict[str, Any]
     status: Literal["pending"]
+    authority_revision: int = Field(ge=1)
     created_at: datetime
     expires_at: datetime
 

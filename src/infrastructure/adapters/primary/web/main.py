@@ -105,6 +105,7 @@ from src.infrastructure.adapters.primary.web.routers.agent import (
     router as agent_router,
 )
 from src.infrastructure.adapters.primary.web.startup import (
+    initialize_artifact_content_orphan_gc_worker,
     initialize_attempt_recovery,
     initialize_autonomy_idle_waker,
     initialize_blackboard_outbox_dispatcher,
@@ -121,6 +122,7 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_websocket_manager,
     initialize_workflow_engine,
     initialize_workspace_plan_outbox_worker,
+    shutdown_artifact_content_orphan_gc_worker,
     shutdown_attempt_recovery,
     shutdown_autonomy_idle_waker,
     shutdown_blackboard_outbox_dispatcher,
@@ -276,6 +278,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     # recovered/queued plan jobs keep draining even if a sweep performs slow
     # runtime reconciliation.
     await initialize_workspace_plan_outbox_worker(redis_client=cast(Redis | None, redis_client))
+
+    # Resume bounded cleanup of provisional Artifact objects after process restarts.
+    await initialize_artifact_content_orphan_gc_worker(
+        storage_service=container.storage_service(),
+    )
 
     # Start attempt recovery service (restart-safe orphaned-attempt watchdog)
     await initialize_attempt_recovery()
@@ -463,6 +470,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     # Stop Workspace Plan V2 durable outbox worker
     await shutdown_workspace_plan_outbox_worker()
+
+    # Stop Artifact content orphan GC after current bounded work.
+    await shutdown_artifact_content_orphan_gc_worker()
 
     # Stop Blackboard transactional outbox dispatcher
     await shutdown_blackboard_outbox_dispatcher()

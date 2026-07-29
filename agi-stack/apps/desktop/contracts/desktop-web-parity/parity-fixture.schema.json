@@ -17,7 +17,16 @@
     "schema_version": { "const": "1.0.0" },
     "case_id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
     "kind": {
-      "enum": ["live_events", "history_replay", "capability_snapshot"]
+      "enum": [
+        "live_events",
+        "history_replay",
+        "capability_snapshot",
+        "hitl_authority",
+        "workspace_surface",
+        "artifact_content",
+        "sandbox_runtime",
+        "automation_run_receipt"
+      ]
     },
     "source_contract": { "type": "string", "minLength": 1 },
     "input": { "type": "object" },
@@ -153,6 +162,242 @@
           }
         }
       }
+    },
+    {
+      "type": "object",
+      "required": ["kind", "input"],
+      "properties": {
+        "kind": { "const": "hitl_authority" },
+        "input": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["request"],
+          "properties": {
+            "request": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "request_id",
+                "request_type",
+                "status",
+                "authority_revision",
+                "answered_at",
+                "expired_at"
+              ],
+              "properties": {
+                "request_id": { "type": "string", "minLength": 1 },
+                "request_type": {
+                  "enum": [
+                    "clarification",
+                    "decision",
+                    "env_var",
+                    "permission",
+                    "a2ui_action",
+                    "elicitation"
+                  ]
+                },
+                "status": { "enum": ["pending", "answered", "expired"] },
+                "authority_revision": { "type": "number", "minimum": 1 },
+                "answered_at": { "type": ["string", "null"] },
+                "expired_at": { "type": ["string", "null"] }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["kind", "input"],
+      "properties": {
+        "kind": { "const": "workspace_surface" },
+        "input": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["surface"],
+          "properties": {
+            "surface": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "workspace_id",
+                "surface",
+                "authority",
+                "status",
+                "revision",
+                "cursor",
+                "items"
+              ],
+              "properties": {
+                "workspace_id": { "type": "string", "minLength": 1 },
+                "surface": {
+                  "enum": [
+                    "goals_tasks",
+                    "discussion",
+                    "status",
+                    "collaboration",
+                    "members",
+                    "genes",
+                    "files",
+                    "notes",
+                    "topology",
+                    "settings"
+                  ]
+                },
+                "authority": { "enum": ["cloud", "local", "native"] },
+                "status": {
+                  "enum": [
+                    "loading",
+                    "ready",
+                    "empty",
+                    "stale",
+                    "error",
+                    "unavailable"
+                  ]
+                },
+                "revision": { "type": "number", "minimum": 0 },
+                "cursor": { "type": ["string", "null"] },
+                "items": { "type": "array" }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["kind", "input"],
+      "properties": {
+        "kind": { "const": "artifact_content" },
+        "input": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["artifact"],
+          "properties": {
+            "artifact": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "artifact_id",
+                "mime_type",
+                "revision",
+                "content_hash",
+                "editable",
+                "expected_revision",
+                "idempotency_key"
+              ],
+              "properties": {
+                "artifact_id": { "type": "string", "minLength": 1 },
+                "mime_type": { "type": "string", "minLength": 1 },
+                "revision": { "type": "number", "minimum": 0 },
+                "content_hash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "editable": { "type": "boolean" },
+                "expected_revision": { "type": "number", "minimum": 0 },
+                "idempotency_key": { "type": "string", "minLength": 8 }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["kind", "input"],
+      "properties": {
+        "kind": { "const": "sandbox_runtime" },
+        "input": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["runtime"],
+          "properties": {
+            "runtime": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "service_version",
+                "contract_version",
+                "terminal_interactive",
+                "terminal_resume",
+                "files",
+                "kasm_vnc"
+              ],
+              "properties": {
+                "service_version": { "type": "string", "minLength": 1 },
+                "contract_version": { "type": "number", "minimum": 1 },
+                "terminal_interactive": { "$ref": "#/$defs/runtime_capability" },
+                "terminal_resume": { "$ref": "#/$defs/runtime_capability" },
+                "files": { "$ref": "#/$defs/runtime_capability" },
+                "kasm_vnc": { "$ref": "#/$defs/runtime_capability" }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["kind", "input"],
+      "properties": {
+        "kind": { "const": "automation_run_receipt" },
+        "input": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["receipt"],
+          "properties": {
+            "receipt": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "contract_version",
+                "receipt_id",
+                "run_id",
+                "job_id",
+                "status",
+                "duplicate",
+                "expected_revision",
+                "idempotency_key"
+              ],
+              "properties": {
+                "contract_version": { "const": 2 },
+                "receipt_id": { "type": "string", "minLength": 1 },
+                "run_id": { "type": "string", "minLength": 1 },
+                "job_id": { "type": "string", "minLength": 1 },
+                "status": {
+                  "enum": [
+                    "queued",
+                    "running",
+                    "waiting_human",
+                    "success",
+                    "failed",
+                    "timeout",
+                    "cancelled"
+                  ]
+                },
+                "duplicate": { "type": "boolean" },
+                "expected_revision": { "type": "number", "minimum": 0 },
+                "idempotency_key": { "type": "string", "minLength": 8 }
+              }
+            }
+          }
+        }
+      }
     }
-  ]
+  ],
+  "$defs": {
+    "runtime_capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["availability", "contract_version", "reason_code"],
+      "properties": {
+        "availability": {
+          "enum": ["available", "degraded", "unavailable", "not_applicable"]
+        },
+        "contract_version": { "type": "number", "minimum": 1 },
+        "reason_code": { "type": ["string", "null"] }
+      }
+    }
+  }
 }

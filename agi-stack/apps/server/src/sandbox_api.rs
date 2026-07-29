@@ -53,11 +53,13 @@ mod http_proxy;
 mod http_registry;
 mod proxy_helpers;
 mod runtime_auth;
+mod sandbox_files;
 mod service_helpers;
 mod service_http;
 mod service_lifecycle;
 mod service_state;
 mod terminal_protocol;
+mod terminal_v2;
 mod views;
 mod ws_handlers;
 mod ws_proxy;
@@ -94,14 +96,20 @@ use terminal_protocol::{
     terminal_error_message, try_new_terminal_session_id, TerminalSessionRecord,
     TerminalSessionRecorder, TerminalSize,
 };
+use terminal_v2::{
+    create_terminal_session_v2, resume_terminal_session_v2, terminal_session_v2_websocket,
+};
+use terminal_v2::{TerminalSessionV2Record, TerminalV2Service};
 pub(crate) use views::ExecuteToolResponse;
 use views::{
-    DesktopServiceResponse, EnsureSandboxRequest, ExecuteToolRequest, HealthCheckResponse,
-    HttpServiceActionResponse, HttpServicePreviewSessionResponse, HttpServiceResponse,
-    ListHttpServicesResponse, ListProjectSandboxesQuery, ListProjectSandboxesResponse,
-    ProjectSandboxResponse, SandboxActionResponse, SandboxProxyAuthCookieResponse,
-    SandboxServiceStopResponse, SandboxStatsResponse, StartDesktopQuery, TerminalServiceResponse,
-    TerminalWsQuery,
+    CreateTerminalSessionV2Request, DesktopServiceResponse, EnsureSandboxRequest,
+    ExecuteToolRequest, HealthCheckResponse, HttpServiceActionResponse,
+    HttpServicePreviewSessionResponse, HttpServiceResponse, ListHttpServicesResponse,
+    ListProjectSandboxesQuery, ListProjectSandboxesResponse, ProjectSandboxResponse,
+    ResumeTerminalSessionV2Request, SandboxActionResponse, SandboxProxyAuthCookieResponse,
+    SandboxRuntimeCapabilitiesResponse, SandboxServiceStopResponse, SandboxStatsResponse,
+    StartDesktopQuery, TerminalServiceResponse, TerminalSessionV2Response,
+    TerminalSessionV2WsQuery, TerminalV2CapabilityState, TerminalWsQuery,
 };
 use ws_handlers::*;
 use ws_proxy::{
@@ -248,6 +256,7 @@ pub(crate) struct ProjectSandboxService {
     http_registry: SharedHttpServiceRegistry,
     config_source: Option<Arc<dyn ProjectSandboxConfigSource>>,
     runtime_auth: Option<SandboxRuntimeAuth>,
+    terminal_v2: Option<Arc<TerminalV2Service>>,
 }
 
 pub(crate) type SharedProjectSandboxes = Arc<ProjectSandboxService>;
@@ -607,6 +616,10 @@ pub(crate) fn router() -> Router<AppState> {
             post(execute_project_sandbox_tool),
         )
         .route(
+            "/api/v1/projects/:project_id/sandbox/capabilities",
+            get(get_project_sandbox_runtime_capabilities),
+        )
+        .route(
             "/api/v1/projects/:project_id/sandbox/proxy-auth-cookie",
             post(seed_project_sandbox_proxy_auth_cookie),
         )
@@ -633,6 +646,18 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/api/v1/projects/:project_id/sandbox/terminal/proxy/ws",
             get(proxy_project_terminal_websocket),
+        )
+        .route(
+            "/api/v1/projects/:project_id/sandbox/terminal/sessions",
+            post(create_terminal_session_v2),
+        )
+        .route(
+            "/api/v1/projects/:project_id/sandbox/terminal/sessions/:session_id/resume",
+            post(resume_terminal_session_v2),
+        )
+        .route(
+            "/api/v1/projects/:project_id/sandbox/terminal/sessions/:session_id/ws",
+            get(terminal_session_v2_websocket),
         )
         .route(
             "/api/v1/projects/:project_id/sandbox/mcp/proxy",
@@ -674,6 +699,7 @@ pub(crate) fn router() -> Router<AppState> {
             "/api/v1/projects/:project_id/sandbox/sync",
             get(sync_project_sandbox_status),
         )
+        .merge(sandbox_files::router())
 }
 
 #[derive(Debug, Clone, Serialize)]

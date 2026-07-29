@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { DesktopApiClient } from '../../api/client';
+import { ManagedResourcesClient } from '../../api/managedResourcesClient';
 import type { DesktopRuntimeConfig, ManagedSubAgent, ManagedSubAgentMutation } from '../../types';
 
 export function useSubAgentDefinitionManagement({
@@ -52,9 +52,13 @@ export function useSubAgentDefinitionManagement({
       setBusy(true);
       setError(null);
       try {
-        const client = new DesktopApiClient(config);
+        const client = new ManagedResourcesClient(config);
         const saved = definition
-          ? await client.updateManagedSubAgent(definition.id, input)
+          ? await client.updateManagedSubAgent(
+              definition.id,
+              input,
+              definition.revision,
+            )
           : await client.createManagedSubAgent(input);
         if (contextKeyRef.current !== requestContextKey) return;
         setDefinition(undefined);
@@ -74,7 +78,10 @@ export function useSubAgentDefinitionManagement({
     setBusy(true);
     setError(null);
     try {
-      await new DesktopApiClient(config).deleteManagedSubAgent(definition.id);
+      await new ManagedResourcesClient(config).deleteManagedSubAgent(
+        definition.id,
+        definition.revision,
+      );
       if (contextKeyRef.current !== requestContextKey) return;
       setDefinition(undefined);
       onDeleted();

@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, cast
 
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.conversation_session_projection_service import (
+    AgentPlanRunAuthority,
     ArtifactRecordAuthority,
     CapabilityMode,
     ConversationAuthority,
@@ -17,15 +18,19 @@ from src.application.services.conversation_session_projection_service import (
     ConversationTaskAuthority,
     HITLKind,
     PendingHITLAuthority,
+    PermissionProfile,
     ToolExecutionAuthority,
     ToolExecutionPageAuthority,
     WorkspaceAttemptAuthority,
     WorkspacePlanContextAuthority,
     WorkspacePlanNodeAuthority,
 )
+from src.application.services.hitl_response_contract import HITL_PENDING_AUTHORITY_REVISION
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.artifact_model import ArtifactModel
 from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentPlanRunModel,
+    AgentPlanVersionModel,
     AgentTaskModel,
     Conversation,
     HITLRequest,
@@ -79,6 +84,7 @@ class SqlConversationSessionProjectionReader:
         )
         if conversation is None:
             return None
+        runs = await self._load_runs(conversation)
         attempts = await self._load_attempts(conversation)
         tasks = await self._load_conversation_tasks(conversation.id)
         plan = await self._load_workspace_plan_context(conversation)
@@ -101,6 +107,7 @@ class SqlConversationSessionProjectionReader:
             has_blocking_hitl=has_blocking_hitl,
             artifact_records=artifact_records,
             tool_executions=tool_executions,
+            runs=runs,
         )
 
     async def _load_conversation(
@@ -254,6 +261,51 @@ class SqlConversationSessionProjectionReader:
             for item in result.scalars().all()
         )
 
+    async def _load_runs(
+        self, conversation: ConversationAuthority
+    ) -> tuple[AgentPlanRunAuthority, ...]:
+        result = await self._db.execute(
+            refresh_select_statement(
+                select(AgentPlanRunModel)
+                .where(
+                    AgentPlanRunModel.conversation_id == conversation.id,
+                    AgentPlanRunModel.project_id == conversation.project_id,
+                    exists(
+                        select(AgentPlanVersionModel.id).where(
+                            AgentPlanVersionModel.id == AgentPlanRunModel.plan_version_id,
+                            AgentPlanVersionModel.conversation_id == conversation.id,
+                        )
+                    ),
+                )
+                .order_by(
+                    AgentPlanRunModel.created_at.desc(),
+                    AgentPlanRunModel.id.desc(),
+                )
+            )
+        )
+        runs: list[AgentPlanRunAuthority] = []
+        for item in result.scalars().all():
+            runs.append(
+                AgentPlanRunAuthority(
+                    id=item.id,
+                    conversation_id=item.conversation_id,
+                    project_id=item.project_id,
+                    plan_version_id=item.plan_version_id,
+                    idempotency_key=item.idempotency_key,
+                    message_id=item.message_id,
+                    request_message=item.request_message,
+                    status=item.status,
+                    revision=item.revision,
+                    permission_profile=self._run_permission_profile(item.permission_profile),
+                    environment=self._run_environment(item.authorization_snapshot),
+                    created_at=item.created_at,
+                    updated_at=item.updated_at,
+                    completed_at=item.completed_at,
+                    error=item.error,
+                )
+            )
+        return tuple(runs)
+
     async def _load_conversation_tasks(
         self, conversation_id: str
     ) -> tuple[ConversationTaskAuthority, ...]:
@@ -386,6 +438,7 @@ class SqlConversationSessionProjectionReader:
                     options=self._safe_options(record.options),
                     context=context,
                     metadata={"hitl_type": kind},
+                    authority_revision=HITL_PENDING_AUTHORITY_REVISION,
                     created_at=record.created_at,
                     expires_at=record.expires_at,
                 )
@@ -522,6 +575,62 @@ class SqlConversationSessionProjectionReader:
         mapping = cast(Mapping[object, object], value)
         candidate = mapping.get("capability_mode")
         return cast(CapabilityMode, candidate) if candidate in {"work", "code"} else None
+
+    @staticmethod
+    def _run_environment(value: object) -> dict[str, Any] | None:
+        if not isinstance(value, Mapping):
+            return None
+        snapshot = cast(Mapping[object, object], value)
+        raw_environment = snapshot.get("environment")
+        if not isinstance(raw_environment, Mapping):
+            return None
+        environment = cast(Mapping[object, object], raw_environment)
+        environment_id = environment.get("id")
+        kind = environment.get("kind")
+        label = environment.get("label")
+        created_at = environment.get("created_at")
+        if (
+            not isinstance(environment_id, str)
+            or not environment_id.strip()
+            or kind not in {"local", "worktree"}
+            or not isinstance(label, str)
+            or not label.strip()
+            or environment.get("workspace_path") != "/workspace"
+            or not isinstance(created_at, str)
+            or not created_at.strip()
+        ):
+            return None
+        optional_fields = {
+            key: environment.get(key)
+            for key in ("repository_root", "branch", "base_commit", "source_run_id")
+        }
+        if any(
+            value is not None and not isinstance(value, str) for value in optional_fields.values()
+        ):
+            return None
+        try:
+            parsed_created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        parsed_created_at = (
+            parsed_created_at.replace(tzinfo=UTC)
+            if parsed_created_at.tzinfo is None
+            else parsed_created_at.astimezone(UTC)
+        )
+        return {
+            "id": environment_id,
+            "kind": kind,
+            "label": label,
+            "workspace_path": "/workspace",
+            **optional_fields,
+            "created_at": parsed_created_at,
+        }
+
+    @staticmethod
+    def _run_permission_profile(value: str) -> PermissionProfile:
+        if value not in {"read_only", "workspace_write", "full_access"}:
+            raise ValueError("Persisted plan run has an unsupported permission profile")
+        return cast(PermissionProfile, value)
 
     @staticmethod
     def _string_tuple(value: object) -> tuple[str, ...]:

@@ -78,6 +78,7 @@ const lines = [
 
 function SessionTerminalQa() {
   const [binding, setBinding] = useState<TerminalBindingState>('connected');
+  const [lastInteraction, setLastInteraction] = useState('waiting for xterm input');
   return (
     <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
       <div className="session-steering-qa-shell">
@@ -133,7 +134,20 @@ function SessionTerminalQa() {
                 busy={false}
                 currentRun={run}
                 onStart={() => setBinding('connecting')}
+                interactiveCapability={{
+                  availability: 'available',
+                  contract_version: 1,
+                  reason_code: null,
+                }}
+                onTerminalInput={(data) => {
+                  setLastInteraction(`input:${data.length}`);
+                  return true;
+                }}
+                onTerminalResize={(cols, rows) =>
+                  setLastInteraction(`resize:${cols}x${rows}`)
+                }
               />
+              <output aria-live="polite">{lastInteraction}</output>
             </main>
           </div>
         </main>

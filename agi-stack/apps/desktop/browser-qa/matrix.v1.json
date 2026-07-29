@@ -29,6 +29,33 @@
     "light",
     "dark"
   ],
+  "scenarioVariants": {
+    "session-steering": [
+      { "id": "default", "query": {} },
+      { "id": "a2ui-ready", "query": { "a2ui-canvas-events": "1" } },
+      {
+        "id": "a2ui-incremental",
+        "query": { "a2ui-canvas-incremental": "1" }
+      },
+      { "id": "a2ui-deleted", "query": { "a2ui-canvas-deleted": "1" } },
+      { "id": "hitl-answered", "query": { "hitl-response-events": "1" } },
+      { "id": "elicitation", "query": { "elicitation-events": "1" } }
+    ],
+    "workspace-collaboration": [
+      { "id": "ready", "query": { "state": "ready" } },
+      { "id": "loading", "query": { "state": "loading" } },
+      { "id": "empty", "query": { "state": "empty" } },
+      { "id": "stale", "query": { "state": "stale" } },
+      { "id": "error", "query": { "state": "error" } }
+    ],
+    "sandbox-runtime": [
+      { "id": "ready", "query": { "state": "ready" } },
+      { "id": "loading", "query": { "state": "loading" } },
+      { "id": "unavailable", "query": { "state": "unavailable" } },
+      { "id": "stale", "query": { "state": "stale" } },
+      { "id": "error", "query": { "state": "error" } }
+    ]
+  },
   "checks": [
     "page-error",
     "console-error",

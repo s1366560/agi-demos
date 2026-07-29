@@ -76,6 +76,58 @@ async fn response_json(response: Response) -> Value {
 }
 
 #[tokio::test]
+async fn native_runtime_capabilities_declare_only_supported_sandbox_authorities() {
+    let credential = "sandbox-capabilities-secret";
+    let workspace = test_workspace(credential);
+    let app = local_router(Arc::clone(&workspace.state));
+
+    let response = app
+        .oneshot(request(
+            Method::GET,
+            "/api/v1/projects/local-project/sandbox/capabilities",
+            credential,
+        ))
+        .await
+        .expect("sandbox capability response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload = response_json(response).await;
+    assert_eq!(payload["contract_version"], 2);
+    assert_eq!(payload["service_version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(
+        payload["terminal_interactive"],
+        serde_json::json!({
+            "availability": "available",
+            "contract_version": 1,
+            "reason_code": null,
+        })
+    );
+    assert_eq!(
+        payload["terminal_resume"],
+        serde_json::json!({
+            "availability": "unavailable",
+            "contract_version": 2,
+            "reason_code": "local_terminal_resume_unavailable",
+        })
+    );
+    assert_eq!(
+        payload["files"],
+        serde_json::json!({
+            "availability": "available",
+            "contract_version": 1,
+            "reason_code": null,
+        })
+    );
+    assert_eq!(
+        payload["kasm_vnc"],
+        serde_json::json!({
+            "availability": "not_applicable",
+            "contract_version": 1,
+            "reason_code": "local_kasm_vnc_not_applicable",
+        })
+    );
+}
+
+#[tokio::test]
 async fn native_workspace_files_list_read_and_download_use_structured_authority() {
     let credential = "sandbox-files-happy-secret";
     let workspace = test_workspace(credential);
