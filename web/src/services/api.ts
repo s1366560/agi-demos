@@ -464,7 +464,7 @@ export const taskAPI = {
   getStats: async (): Promise<TaskStats> => {
     return await api.get('/tasks/stats');
   },
-  getQueueDepth: async (): Promise<QueueDepth> => {
+  getQueueDepth: async (): Promise<QueueDepth[]> => {
     return await api.get('/tasks/queue-depth');
   },
   getRecentTasks: async (

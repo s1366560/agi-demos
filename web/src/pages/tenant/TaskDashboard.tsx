@@ -13,6 +13,10 @@ import { TaskList } from '../../components/tasks/TaskList';
 import { taskAPI } from '../../services/api';
 import { useTenantStore } from '../../stores/tenant';
 
+import { projectQueueDepth } from './taskDashboardQueueDepth';
+
+import type { QueueDepth } from '@/types/memory';
+
 import type { ChartData, ChartOptions, ScriptableContext } from 'chart.js';
 
 // Loading fallback for charts
@@ -69,13 +73,6 @@ interface TaskStats {
   failed: number;
   throughput_per_minute?: number | undefined;
   error_rate?: number | undefined;
-}
-
-interface QueueDepth {
-  queues?: Record<string, number> | undefined;
-  total?: number | undefined;
-  depth?: number | undefined;
-  timestamp?: string | undefined;
 }
 
 type LineChartComponent = React.ComponentType<{
@@ -137,26 +134,13 @@ const TaskDashboardInner: React.FC<{
         taskAPI.getStats(),
         taskAPI.getQueueDepth(),
       ]);
+      const queueProjection = projectQueueDepth(queueData);
 
       setStats(statsData);
-      setQueueDepth(queueData);
+      setQueueDepth(queueProjection.current);
+      setQueueHistory(queueProjection.history);
       setLoadError(null);
       setLastUpdatedAt(new Date());
-
-      // Update queue history for chart
-      setQueueHistory((prev: { time: string; count: number }[]) => {
-        const now = new Date();
-        const total = (queueData as { total?: number | undefined }).total;
-        const depth = (queueData as { depth?: number | undefined }).depth;
-        const count = total ?? depth ?? 0;
-        const newPoint = {
-          time: formatTimeOnly(now),
-          count,
-        };
-        const newHistory = [...prev, newPoint];
-        if (newHistory.length > 20) newHistory.shift(); // Keep last 20 points
-        return newHistory;
-      });
 
       setLoading(false);
       setRefreshing(false);
@@ -490,7 +474,7 @@ const TaskDashboardInner: React.FC<{
             </div>
             <div className="text-right">
               <p className="text-slate-900 dark:text-white text-2xl font-bold">
-                {t('tenant.tasks.charts.current')}: {queueDepth?.total ?? queueDepth?.depth ?? 0}
+                {t('tenant.tasks.charts.current')}: {queueDepth?.depth ?? 0}
               </p>
             </div>
           </div>
