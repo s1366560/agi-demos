@@ -35,6 +35,15 @@ export type WorkspaceConversationSelection = {
   conversationId: string;
 };
 
+export type ConversationRecencyGroup = 'today' | 'yesterday' | 'week' | 'older';
+
+const RECENCY_GROUP_ORDER: readonly ConversationRecencyGroup[] = [
+  'today',
+  'yesterday',
+  'week',
+  'older',
+];
+
 export type WorkspaceTreeStatusTone =
   | 'active'
   | 'idle'
@@ -281,6 +290,52 @@ export function shouldClearConversationSelectionAfterRefresh(
 
 export function conversationTreeStatusValue(conversation: AgentConversation): string {
   return conversationTreeRunStatusValue(conversation) ?? conversation.status.trim().toLowerCase();
+}
+
+/**
+ * Bucket a conversation timestamp into Codex-style recency groups using local
+ * day boundaries. Date arithmetic goes through the Date constructor so DST
+ * transitions cannot shift a boundary by an hour. Future timestamps clamp to
+ * 'today'; missing or invalid timestamps fall back to 'older'.
+ */
+export function conversationRecencyGroup(
+  value: string | null | undefined,
+  now: Date,
+): ConversationRecencyGroup {
+  const parsed = value ? Date.parse(value) : Number.NaN;
+  if (!Number.isFinite(parsed)) return 'older';
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).getTime();
+  const startWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6).getTime();
+  if (parsed >= startToday) return 'today';
+  if (parsed >= startYesterday) return 'yesterday';
+  if (parsed >= startWeek) return 'week';
+  return 'older';
+}
+
+export function groupConversationsByRecency(
+  conversations: readonly AgentConversation[],
+  now: Date,
+): Array<{ id: ConversationRecencyGroup; conversations: AgentConversation[] }> {
+  const sorted = [...conversations].sort(
+    (left, right) =>
+      timestamp(right.updated_at ?? right.created_at) -
+      timestamp(left.updated_at ?? left.created_at),
+  );
+  const buckets = new Map<ConversationRecencyGroup, AgentConversation[]>();
+  for (const conversation of sorted) {
+    const group = conversationRecencyGroup(
+      conversation.updated_at ?? conversation.created_at,
+      now,
+    );
+    const bucket = buckets.get(group) ?? [];
+    bucket.push(conversation);
+    buckets.set(group, bucket);
+  }
+  return RECENCY_GROUP_ORDER.filter((id) => buckets.has(id)).map((id) => ({
+    id,
+    conversations: buckets.get(id) ?? [],
+  }));
 }
 
 export function conversationTreeMetadataSummary(

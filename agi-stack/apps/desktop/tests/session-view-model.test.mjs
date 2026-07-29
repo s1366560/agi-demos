@@ -347,6 +347,12 @@ test('session view model fails closed instead of reading authority from conversa
   assert.deepEqual(view.runActions, []);
 });
 
+test('session view model keeps a blank title blank so the shell can localize the fallback', () => {
+  const view = build({ conversation: conversation({ title: '   ' }) });
+
+  assert.equal(view.title, '');
+});
+
 test('authoritative run socket events update run metadata without changing conversation lifecycle', () => {
   const event = {
     type: 'run_status',

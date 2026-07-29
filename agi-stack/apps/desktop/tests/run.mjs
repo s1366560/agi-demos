@@ -76,6 +76,10 @@ copyFileSync(
   join(desktopRoot, 'src', 'components', 'Skeleton.css'),
   join(compiledComponentsDirectory, 'Skeleton.css'),
 );
+copyFileSync(
+  join(desktopRoot, 'src', 'components', 'ResizeHandle.css'),
+  join(compiledComponentsDirectory, 'ResizeHandle.css'),
+);
 
 const compiledWorkspaceDirectory = join(compiledRoot, 'src', 'features', 'workspace');
 mkdirSync(compiledWorkspaceDirectory, { recursive: true });

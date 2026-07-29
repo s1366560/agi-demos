@@ -66,16 +66,12 @@
 
 .workspace-tree-workspace-action {
   display: grid;
-  grid-template-columns: 17px minmax(0, 1fr) 8px;
+  grid-template-columns: minmax(0, 1fr) 8px;
   align-items: center;
   gap: 7px;
   min-width: 0;
-  padding: 7px 8px 7px 2px;
+  padding: 7px 8px 7px 6px;
   text-align: left;
-}
-
-.workspace-tree-workspace-action > svg {
-  color: var(--desktop-cyan);
 }
 
 .workspace-tree-workspace-action > span,
@@ -85,8 +81,7 @@
   gap: 3px;
 }
 
-.workspace-tree-workspace-action strong,
-.workspace-tree-session-row strong {
+.workspace-tree-workspace-action strong {
   overflow: hidden;
   color: var(--desktop-text);
   font-size: 10px;
@@ -95,8 +90,7 @@
   white-space: nowrap;
 }
 
-.workspace-tree-workspace-action small,
-.workspace-tree-session-row small {
+.workspace-tree-workspace-action small {
   overflow: hidden;
   color: var(--desktop-faint);
   font-size: 8px;
@@ -141,74 +135,105 @@
 .workspace-tree-session-children {
   display: grid;
   gap: 2px;
-  margin-left: 25px;
-  padding-left: 8px;
-  border-left: 1px solid var(--desktop-border-soft);
+}
+
+.workspace-tree-session-group {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.workspace-tree-session-group > h3 {
+  margin: 8px 8px 0;
+  color: var(--desktop-faint);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.workspace-tree-session-group:first-child > h3 {
+  margin-top: 2px;
 }
 
 .workspace-tree-session-row-shell {
   position: relative;
   min-width: 0;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
 .workspace-tree-session-row {
   display: grid;
-  grid-template-columns: 14px minmax(0, 1fr) 12px;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   width: 100%;
   min-width: 0;
-  padding: 7px 28px 7px 6px;
-  border-radius: 6px;
+  padding: 6px 26px 6px 8px;
+  border-radius: 8px;
   text-align: left;
 }
 
 .workspace-tree-session-row:hover,
-.workspace-tree-session-row.selected,
 .workspace-tree-session-row-shell:focus-within {
   background: rgba(var(--desktop-slate-rgb), 0.07);
 }
 
 .workspace-tree-session-row.selected {
-  outline: 1px solid rgba(var(--desktop-cyan-rgb), 0.24);
-  color: var(--desktop-cyan);
+  background: rgba(var(--desktop-slate-rgb), 0.12);
 }
 
-.workspace-tree-session-row > svg:first-child {
-  width: 12px;
-  height: 12px;
+.workspace-tree-session-row strong {
+  overflow: hidden;
+  color: var(--desktop-text);
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-tree-session-row small {
+  overflow: hidden;
   color: var(--desktop-faint);
+  font-size: 10px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.workspace-tree-session-row > svg:last-child {
-  width: 10px;
-  height: 10px;
+.workspace-tree-session-row > time {
   color: var(--desktop-faint);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.workspace-tree-session-row > svg:last-child[data-status='active'],
-.workspace-tree-session-row > svg:last-child[data-status='queued'] {
-  color: var(--desktop-cyan);
+.workspace-tree-session-status {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--desktop-faint);
+  justify-self: center;
 }
 
-.workspace-tree-session-row > svg:last-child[data-status='attention'] {
-  color: var(--desktop-amber);
+.workspace-tree-session-status[data-status='active'],
+.workspace-tree-session-status[data-status='queued'] {
+  background: var(--desktop-cyan);
+  box-shadow: 0 0 8px rgba(var(--desktop-cyan-rgb), 0.45);
 }
 
-.workspace-tree-session-row > svg:last-child[data-status='ready'],
-.workspace-tree-session-row > svg:last-child[data-status='completed'] {
-  color: var(--desktop-green-vivid-2);
+.workspace-tree-session-status[data-status='attention'] {
+  background: var(--desktop-amber);
+  box-shadow: 0 0 8px rgba(var(--desktop-amber-soft-rgb), 0.42);
 }
 
-.workspace-tree-session-row > svg:last-child[data-status='danger'] {
-  color: var(--desktop-red);
+.workspace-tree-session-status[data-status='ready'],
+.workspace-tree-session-status[data-status='completed'] {
+  background: var(--desktop-green-vivid-2);
 }
 
-.workspace-tree-session-row > svg:last-child[data-status='paused'],
-.workspace-tree-session-row > svg:last-child[data-status='offline'],
-.workspace-tree-session-row > svg:last-child[data-status='unknown'] {
-  color: var(--desktop-faint);
+.workspace-tree-session-status[data-status='danger'] {
+  background: var(--desktop-red);
+  box-shadow: 0 0 8px rgba(var(--desktop-red-rgb), 0.42);
 }
 
 .workspace-tree-session-actions {

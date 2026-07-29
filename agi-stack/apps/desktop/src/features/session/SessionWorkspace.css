@@ -449,11 +449,12 @@
 }
 
 .session-workspace-body {
+  --session-context-rail-width: var(--session-context-rail-preferred-width, 248px);
   display: grid;
   height: 100%;
   min-width: 0;
   min-height: 0;
-  grid-template-columns: minmax(0, 1fr) 248px;
+  grid-template-columns: minmax(0, 1fr) var(--session-context-rail-width, 248px);
   overflow: hidden;
 }
 
@@ -480,6 +481,7 @@
 }
 
 .session-context-rail {
+  position: relative;
   min-width: 0;
   min-height: 0;
   overflow-x: hidden;
@@ -669,17 +671,29 @@
 .session-workspace-canvas .review-panel { height: 100%; border-left: 0; }
 
 @media (max-width: 1280px) {
+  .session-workspace-body {
+    --session-context-rail-width: min(
+      var(--session-context-rail-preferred-width, 248px),
+      224px
+    );
+  }
   .session-workspace-header { grid-template-columns: minmax(260px, 1fr) auto; }
   .session-workspace-stages { display: none; }
   .session-workspace-header-runtime { display: none; }
-  .session-workspace-body { grid-template-columns: minmax(0, 1fr) 224px; }
+  .session-workspace-body { grid-template-columns: minmax(0, 1fr) var(--session-context-rail-width, 224px); }
   .session-workspace-body.surface-split {
     grid-template-columns: minmax(400px, 0.88fr) minmax(460px, 1.12fr);
   }
 }
 
 @media (max-width: 1100px) {
-  .session-workspace-body { grid-template-columns: minmax(0, 1fr) 208px; }
+  .session-workspace-body {
+    --session-context-rail-width: min(
+      var(--session-context-rail-preferred-width, 248px),
+      208px
+    );
+  }
+  .session-workspace-body { grid-template-columns: minmax(0, 1fr) var(--session-context-rail-width, 208px); }
   .session-workspace-body.surface-split {
     grid-template-columns: minmax(380px, 0.9fr) minmax(420px, 1.1fr);
   }

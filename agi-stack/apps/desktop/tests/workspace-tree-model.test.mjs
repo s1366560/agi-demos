@@ -18,7 +18,9 @@ const {
   conversationTreeMetadataSummary,
   conversationTreeStatusPresentation,
   conversationTreeStatusValue,
+  conversationRecencyGroup,
   filterUnboundConversations,
+  groupConversationsByRecency,
   isWorkspaceConversationSelected,
   isCurrentWorkspaceConversationRequest,
   isWorkspaceOverviewSelected,
@@ -228,6 +230,91 @@ test('workspace dock exposes accessible persisted lifecycle actions for every co
   assert.equal((markup.match(/>Delete conversation</g) ?? []).length, 2);
   assert.match(markup, /aria-label="Actions for Unbound task session"/);
   assert.match(markup, /aria-label="Actions for Bound workspace session"/);
+});
+
+test('conversation recency groups bucket by local day boundaries', () => {
+  const now = new Date(2026, 6, 15, 12, 0, 0);
+  const iso = (date) => date.toISOString();
+
+  assert.equal(conversationRecencyGroup(iso(new Date(2026, 6, 15, 9, 0)), now), 'today');
+  assert.equal(conversationRecencyGroup(iso(new Date(2026, 6, 15, 0, 0)), now), 'today');
+  assert.equal(conversationRecencyGroup(iso(new Date(2026, 6, 16, 9, 0)), now), 'today');
+  assert.equal(conversationRecencyGroup(iso(new Date(2026, 6, 14, 23, 59)), now), 'yesterday');
+  assert.equal(conversationRecencyGroup(iso(new Date(2026, 6, 14, 0, 0)), now), 'yesterday');
+  assert.equal(conversationRecencyGroup(iso(new Date(2026, 6, 13, 8, 0)), now), 'week');
+  assert.equal(conversationRecencyGroup(iso(new Date(2026, 6, 9, 0, 0)), now), 'week');
+  assert.equal(conversationRecencyGroup(iso(new Date(2026, 6, 8, 23, 59)), now), 'older');
+  assert.equal(conversationRecencyGroup(null, now), 'older');
+  assert.equal(conversationRecencyGroup('not-a-date', now), 'older');
+});
+
+test('recency grouping sorts newest first within a fixed group order', () => {
+  const now = new Date(2026, 6, 15, 12, 0, 0);
+  const groups = groupConversationsByRecency(
+    [
+      conversation('older-1', 'Older task', new Date(2026, 5, 1, 10, 0).toISOString()),
+      conversation('today-early', 'Earlier today task', new Date(2026, 6, 15, 8, 0).toISOString()),
+      conversation('yesterday-1', 'Yesterday task', new Date(2026, 6, 14, 9, 0).toISOString()),
+      conversation('today-late', 'Later today task', new Date(2026, 6, 15, 11, 0).toISOString()),
+    ],
+    now,
+  );
+
+  assert.deepEqual(
+    groups.map((group) => group.id),
+    ['today', 'yesterday', 'older'],
+  );
+  assert.deepEqual(
+    groups[0].conversations.map((item) => item.id),
+    ['today-late', 'today-early'],
+  );
+});
+
+test('workspace dock groups unbound sessions under recency headers with codex-style rows', () => {
+  const markup = renderWorkspaceDock(
+    {
+      projects: { 'project-1': { loading: false, error: null } },
+      workspaces: {
+        [UNBOUND_CONVERSATIONS_KEY]: { loading: false, error: null },
+        'workspace-a': { loading: false, error: null },
+      },
+    },
+    {
+      [UNBOUND_CONVERSATIONS_KEY]: [
+        conversation('conversation-fresh', 'Fresh task session', new Date().toISOString()),
+        conversation('conversation-ancient', 'Ancient task session', '2020-01-01T00:00:00Z'),
+      ],
+      'workspace-a': [],
+    },
+  );
+
+  assert.match(markup, /workspace-tree-session-group/);
+  assert.match(markup, />Today</);
+  assert.match(markup, />Older</);
+  assert.ok(markup.indexOf('Fresh task session') < markup.indexOf('Ancient task session'));
+  assert.match(markup, /workspace-tree-session-status/);
+  assert.match(markup, /<time/);
+});
+
+test('workspace dock omits recency headers when every session shares one group', () => {
+  const markup = renderWorkspaceDock(
+    {
+      projects: { 'project-1': { loading: false, error: null } },
+      workspaces: {
+        [UNBOUND_CONVERSATIONS_KEY]: { loading: false, error: null },
+        'workspace-a': { loading: false, error: null },
+      },
+    },
+    {
+      [UNBOUND_CONVERSATIONS_KEY]: [
+        conversation('conversation-only', 'Only task session', new Date().toISOString()),
+      ],
+      'workspace-a': [],
+    },
+  );
+
+  assert.doesNotMatch(markup, />Today</);
+  assert.match(markup, /Only task session/);
 });
 
 test('conversation lifecycle menus dismiss outside and restore focus on Escape', () => {

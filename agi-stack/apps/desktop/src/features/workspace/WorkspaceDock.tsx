@@ -2,15 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ScrollArea } from '@radix-ui/themes';
 import {
-  ActivityLogIcon,
-  CheckCircledIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  CodeIcon,
-  CubeIcon,
   DashboardIcon,
   DotsHorizontalIcon,
-  ExclamationTriangleIcon,
   Pencil1Icon,
   TrashIcon,
 } from '@radix-ui/react-icons';
@@ -25,16 +20,18 @@ import type {
 } from '../../types';
 import {
   buildWorkspaceTree,
+  conversationRecencyGroup,
   conversationTreeMetadataSummary,
   conversationTreeStatusPresentation,
   conversationTreeStatusValue,
+  groupConversationsByRecency,
   isWorkspaceConversationSelected,
   isWorkspaceOverviewSelected,
   UNBOUND_CONVERSATIONS_KEY,
   workspaceTreeAvailability,
   workspaceTreeRootStatusPresentation,
   workspaceTreeSessionAvailability,
-  type WorkspaceTreeStatusTone,
+  type ConversationRecencyGroup,
   type WorkspaceTreeSelectionMode,
 } from './workspaceTreeModel';
 import {
@@ -124,6 +121,47 @@ export function WorkspaceDock({
   const unboundAvailability = workspaceTreeSessionAvailability(
     unboundState,
     unboundConversations.length,
+  );
+  const now = new Date();
+  const unboundGroups = groupConversationsByRecency(unboundConversations, now);
+  const renderConversationRow = (conversation: AgentConversation, workspaceId: string) => (
+    <ConversationTreeRow
+      key={conversation.id}
+      conversation={conversation}
+      now={now}
+      selected={isWorkspaceConversationSelected(
+        currentConversationId,
+        conversation.id,
+        selectionMode,
+      )}
+      onSelect={() => onSelectConversation(currentProjectId, workspaceId, conversation)}
+      actionRef={(element) => {
+        if (element) conversationActionRefs.current.set(conversation.id, element);
+        else conversationActionRefs.current.delete(conversation.id);
+      }}
+      onRename={
+        onRenameConversation
+          ? () =>
+              setLifecycleRequest({
+                mode: 'rename',
+                projectId: currentProjectId,
+                workspaceId,
+                conversation,
+              })
+          : undefined
+      }
+      onDelete={
+        onDeleteConversation
+          ? () =>
+              setLifecycleRequest({
+                mode: 'delete',
+                projectId: currentProjectId,
+                workspaceId,
+                conversation,
+              })
+          : undefined
+      }
+    />
   );
   const closeLifecycleDialog = () => {
     const conversationId = lifecycleRequest?.conversation.id ?? null;
@@ -264,45 +302,15 @@ export function WorkspaceDock({
                       detail={t('workspaceTree.noTasksDescription')}
                     />
                   ) : (
-                    unboundConversations.map((conversation) => (
-                      <ConversationTreeRow
-                        key={conversation.id}
-                        conversation={conversation}
-                        selected={isWorkspaceConversationSelected(
-                          currentConversationId,
-                          conversation.id,
-                          selectionMode,
+                    unboundGroups.map((group) => (
+                      <div className="workspace-tree-session-group" key={group.id}>
+                        {unboundGroups.length > 1 ? (
+                          <h3>{t(recencyGroupLabels[group.id])}</h3>
+                        ) : null}
+                        {group.conversations.map((conversation) =>
+                          renderConversationRow(conversation, ''),
                         )}
-                        onSelect={() =>
-                          onSelectConversation(currentProjectId, '', conversation)
-                        }
-                        actionRef={(element) => {
-                          if (element) conversationActionRefs.current.set(conversation.id, element);
-                          else conversationActionRefs.current.delete(conversation.id);
-                        }}
-                        onRename={
-                          onRenameConversation
-                            ? () =>
-                                setLifecycleRequest({
-                                  mode: 'rename',
-                                  projectId: currentProjectId,
-                                  workspaceId: '',
-                                  conversation,
-                                })
-                            : undefined
-                        }
-                        onDelete={
-                          onDeleteConversation
-                            ? () =>
-                                setLifecycleRequest({
-                                  mode: 'delete',
-                                  projectId: currentProjectId,
-                                  workspaceId: '',
-                                  conversation,
-                                })
-                            : undefined
-                        }
-                      />
+                      </div>
                     ))
                   )}
                 </div>
@@ -416,7 +424,6 @@ export function WorkspaceDock({
                       aria-current={workspaceSelected ? 'page' : undefined}
                       onClick={() => onSelectWorkspace(currentProjectId, workspace.id)}
                     >
-                      <CubeIcon />
                       <span>
                         <strong>{workspaceLabel(workspace)}</strong>
                         <small>{sessionSummary}</small>
@@ -474,49 +481,9 @@ export function WorkspaceDock({
                           detail={t('workspaceTree.noSessionsDescription')}
                         />
                       ) : (
-                        conversations.map((conversation) => (
-                          <ConversationTreeRow
-                            key={conversation.id}
-                            conversation={conversation}
-                            selected={isWorkspaceConversationSelected(
-                              currentConversationId,
-                              conversation.id,
-                              selectionMode,
-                            )}
-                            onSelect={() =>
-                              onSelectConversation(currentProjectId, workspace.id, conversation)
-                            }
-                            actionRef={(element) => {
-                              if (element) {
-                                conversationActionRefs.current.set(conversation.id, element);
-                              } else {
-                                conversationActionRefs.current.delete(conversation.id);
-                              }
-                            }}
-                            onRename={
-                              onRenameConversation
-                                ? () =>
-                                    setLifecycleRequest({
-                                      mode: 'rename',
-                                      projectId: currentProjectId,
-                                      workspaceId: workspace.id,
-                                      conversation,
-                                    })
-                                : undefined
-                            }
-                            onDelete={
-                              onDeleteConversation
-                                ? () =>
-                                    setLifecycleRequest({
-                                      mode: 'delete',
-                                      projectId: currentProjectId,
-                                      workspaceId: workspace.id,
-                                      conversation,
-                                    })
-                                : undefined
-                            }
-                          />
-                        ))
+                        conversations.map((conversation) =>
+                          renderConversationRow(conversation, workspace.id),
+                        )
                       )}
                     </div>
                   ) : null}
@@ -560,8 +527,16 @@ export function WorkspaceDock({
   );
 }
 
+const recencyGroupLabels: Record<ConversationRecencyGroup, string> = {
+  today: 'workspaceTree.group.today',
+  yesterday: 'workspaceTree.group.yesterday',
+  week: 'workspaceTree.group.week',
+  older: 'workspaceTree.group.older',
+};
+
 function ConversationTreeRow({
   conversation,
+  now,
   selected,
   onSelect,
   actionRef,
@@ -569,19 +544,21 @@ function ConversationTreeRow({
   onDelete,
 }: {
   conversation: AgentConversation;
+  now: Date;
   selected: boolean;
   onSelect: () => void;
   actionRef: (element: HTMLElement | null) => void;
   onRename?: () => void;
   onDelete?: () => void;
 }) {
-  const { t } = useI18n();
-  const CapabilityIcon = conversationIcon(conversation);
+  const { t, locale } = useI18n();
   const status = conversationTreeStatusValue(conversation);
   const statusPresentation = conversationTreeStatusPresentation(status);
   const statusLabel = t(statusPresentation.labelKey);
-  const sessionSummary = conversationTreeMetadataSummary(conversation) ?? statusLabel;
-  const StatusIcon = conversationStatusIcon(statusPresentation.tone);
+  const sessionSummary = conversationTreeMetadataSummary(conversation);
+  const activityAt = conversation.updated_at ?? conversation.created_at;
+  const recencyGroup = conversationRecencyGroup(activityAt, now);
+  const timeLabel = recencyTimeLabel(recencyGroup, activityAt, locale, t);
 
   const title = conversation.title || conversation.id;
   const hasLifecycleActions = Boolean(onRename || onDelete);
@@ -594,12 +571,18 @@ function ConversationTreeRow({
         aria-current={selected ? 'page' : undefined}
         onClick={onSelect}
       >
-        <CapabilityIcon />
+        <i
+          className="workspace-tree-session-status"
+          data-status={statusPresentation.tone}
+          role="img"
+          aria-label={statusLabel}
+          title={statusLabel}
+        />
         <span>
           <strong>{title}</strong>
-          <small>{sessionSummary}</small>
+          {sessionSummary ? <small>{sessionSummary}</small> : null}
         </span>
-        <StatusIcon data-status={statusPresentation.tone} aria-label={statusLabel} />
+        {timeLabel ? <time dateTime={activityAt}>{timeLabel}</time> : null}
       </button>
       {hasLifecycleActions ? (
         <details className="workspace-tree-session-actions">
@@ -645,6 +628,28 @@ function ConversationTreeRow({
       ) : null}
     </div>
   );
+}
+
+function recencyTimeLabel(
+  group: ConversationRecencyGroup,
+  value: string | null | undefined,
+  locale: string,
+  t: (key: string) => string,
+): string | null {
+  const parsed = value ? Date.parse(value) : Number.NaN;
+  if (!Number.isFinite(parsed)) return null;
+  const date = new Date(parsed);
+  if (group === 'today') {
+    return new Intl.DateTimeFormat(locale, {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  }
+  if (group === 'yesterday') return t('workspaceTree.group.yesterday');
+  if (group === 'week') {
+    return new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(date);
+  }
+  return new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }).format(date);
 }
 
 function WorkspaceTreeSkeleton({ label, rows = 3 }: { label: string; rows?: number }) {
@@ -693,14 +698,4 @@ function WorkspaceTreeState({
 
 function workspaceLabel(workspace: WorkspaceSummary) {
   return workspace.name ?? workspace.title ?? workspace.id;
-}
-
-function conversationIcon(conversation: AgentConversation) {
-  return conversation.agent_config?.capability_mode === 'code' ? CodeIcon : ActivityLogIcon;
-}
-
-function conversationStatusIcon(tone: WorkspaceTreeStatusTone) {
-  if (tone === 'attention' || tone === 'danger') return ExclamationTriangleIcon;
-  if (tone === 'ready' || tone === 'completed') return CheckCircledIcon;
-  return ActivityLogIcon;
 }

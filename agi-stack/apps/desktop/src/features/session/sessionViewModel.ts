@@ -230,7 +230,7 @@ export function buildSessionDetailViewModel({
 
   return {
     id: authorityConversation.id,
-    title: authorityConversation.title || 'Untitled session',
+    title: authorityConversation.title.trim(),
     summary: projection ? stringValue(authorityConversation.summary) : null,
     workspaceLabel:
       (projection ? stringValue(authorityConversation.workspace_name) : null) ??

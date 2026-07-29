@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import {
   BellIcon,
@@ -69,6 +69,7 @@ type DesktopSidebarProps = {
   onOpenAccountSettings: () => void;
   onSwitchWorkspace: () => void;
   onSignOut: () => void;
+  resizeHandle?: ReactNode;
 };
 
 const primaryItems = [
@@ -106,6 +107,7 @@ export function DesktopSidebar({
   onOpenAccountSettings,
   onSwitchWorkspace,
   onSignOut,
+  resizeHandle,
 }: DesktopSidebarProps) {
   const { t } = useI18n();
   const [profileOpen, setProfileOpen] = useState(false);
@@ -294,6 +296,7 @@ export function DesktopSidebar({
           </button>
         </div>
       </div>
+      {resizeHandle}
     </aside>
   );
 }

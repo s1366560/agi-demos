@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type RefObject,
@@ -63,6 +64,7 @@ import {
   saveNativeTrustedSession,
   type NativeTrustedSession,
 } from './api/trustedSession';
+import { ResizeHandle, useResizablePanelWidth } from './components/ResizeHandle';
 import {
   findWorkspaceProject,
   isCurrentContextRevision,
@@ -1681,6 +1683,9 @@ class WorkspaceSsoFlowError extends Error {
   }
 }
 
+const SIDEBAR_WIDTH_STORAGE_KEY = 'agistack.desktop.sidebarWidth';
+const SIDEBAR_WIDTH_CONSTRAINTS = { min: 180, max: 420, default: 220 } as const;
+
 export function App() {
   const runsInNativeDesktop = detectNativeDesktopShell();
   const { t } = useI18n();
@@ -1714,6 +1719,10 @@ export function App() {
   const appShellRef = useRef<HTMLDivElement>(null);
   const loginRestoreTargetRef = useRef<HTMLElement | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const sidebarPanelWidth = useResizablePanelWidth(
+    SIDEBAR_WIDTH_STORAGE_KEY,
+    SIDEBAR_WIDTH_CONSTRAINTS,
+  );
   const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
   const [runActionsMenuOpen, setRunActionsMenuOpen] = useState(false);
   const runActionsButtonRef = useRef<HTMLButtonElement>(null);
@@ -6815,6 +6824,8 @@ export function App() {
     runtimeProvider?.provider_type.trim() || t('providers.notAvailable');
   const localRuntimeModelLabel =
     runtimeProvider?.model.trim() || t('providers.notAvailable');
+  const chatRuntimeModelLabel =
+    runtimeProvider?.model.trim() || t('chat.modelNotConfigured');
   const conversationModelEvent = useMemo(
     () =>
       conversationTimeline.conversationId === scopedConversationId
@@ -6835,7 +6846,7 @@ export function App() {
     scopedConversation?.agent_config,
     runtimeModelOptions,
     selectedRuntimeModelValue,
-    localRuntimeModelLabel,
+    chatRuntimeModelLabel,
     currentConversationModelMutation
       ? currentConversationModelMutation.overrideModel
       : conversationModelEvent?.overrideModel,
@@ -8013,6 +8024,11 @@ export function App() {
         } ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${
           activeSection === 'board' ? 'my-work-mode' : ''
         }`}
+        style={
+          {
+            '--desktop-sidebar-preferred-width': `${Math.round(sidebarPanelWidth.width)}px`,
+          } as CSSProperties
+        }
       >
 
         <section className="desktop-body">
@@ -8073,6 +8089,18 @@ export function App() {
             onOpenAccountSettings={openSidebarSettings}
             onSwitchWorkspace={openProfileWorkspaceSettings}
             onSignOut={() => void logout()}
+            resizeHandle={
+              sidebarCollapsed ? undefined : (
+                <ResizeHandle
+                  side="trailing"
+                  width={sidebarPanelWidth.width}
+                  constraints={SIDEBAR_WIDTH_CONSTRAINTS}
+                  label={t('layout.resizeSidebar')}
+                  onResize={sidebarPanelWidth.resize}
+                  onReset={sidebarPanelWidth.reset}
+                />
+              )
+            }
           />
 
           <main ref={workbenchRef} className="workbench" tabIndex={-1}>

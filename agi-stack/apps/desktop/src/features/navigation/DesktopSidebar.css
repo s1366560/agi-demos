@@ -1,4 +1,5 @@
 .desktop-design-sidebar {
+  position: relative;
   display: grid;
   grid-column: 1;
   grid-row: 1;
@@ -379,8 +380,11 @@
 }
 
 @media (max-width: 1180px) {
-  html:root {
-    --desktop-sidebar-width: 200px;
+  .app-shell {
+    --desktop-sidebar-width: min(
+      var(--desktop-sidebar-preferred-width, 220px),
+      200px
+    );
   }
 
   .desktop-design-sidebar {

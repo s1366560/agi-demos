@@ -407,9 +407,13 @@ test('workspace tree keeps status out of subtitles while preserving an accessibl
     workspaceDockSource,
     /data-status=\{rootStatus\.tone\}[\s\S]*role="img"[\s\S]*aria-label=\{rootStatusLabel\}[\s\S]*title=\{rootStatusLabel\}/
   );
-  assert.match(
+  assert.doesNotMatch(
     workspaceDockSource,
     /conversationTreeMetadataSummary\(conversation\) \?\? statusLabel/
+  );
+  assert.match(
+    workspaceDockSource,
+    /className="workspace-tree-session-status"[\s\S]*data-status=\{statusPresentation\.tone\}[\s\S]*role="img"[\s\S]*aria-label=\{statusLabel\}[\s\S]*title=\{statusLabel\}/
   );
 });
 
@@ -528,7 +532,7 @@ test('conversation detail restores the mission-control context rail without dupl
   assert.match(sessionWorkspaceSource, /session\.runSnapshot/);
   assert.match(sessionWorkspaceSource, /session\.workSurfaces/);
   assert.match(sessionWorkspaceSource, /session\.latestEvidence/);
-  assert.match(sessionStyles, /grid-template-columns:\s*minmax\(0, 1fr\) 248px/);
+  assert.match(sessionStyles, /grid-template-columns:\s*minmax\(0, 1fr\) var\(--session-context-rail-width, 248px\)/);
   assert.match(sessionWorkspaceSource, /surface !== 'conversation'/);
 });
 
@@ -696,4 +700,58 @@ test('project scope reset clears state refs before replacement hydration can beg
     reset,
     /expandedWorkspaceIdsRef\.current = clearedExpandedWorkspaceIds[\s\S]*setExpandedWorkspaceIds\(clearedExpandedWorkspaceIds\)/,
   );
+});
+
+test('session chrome never renders raw placeholder or mislabeled copy', () => {
+  // The breadcrumb omits a missing workspace label instead of rendering 暂无.
+  assert.doesNotMatch(
+    sessionWorkspaceSource,
+    /viewModel\.workspaceLabel \?\? t\('session\.notAvailable'\)/,
+  );
+  // The run snapshot labels the execution-mode row as a mode, not as the stage.
+  assert.match(sessionWorkspaceSource, /<dt>\{t\('session\.runMode'\)\}<\/dt>/);
+  assert.doesNotMatch(sessionWorkspaceSource, /<dt>\{t\('session\.currentStage'\)\}<\/dt>/);
+  // An untitled session falls back to localized copy instead of a hardcoded English literal.
+  assert.match(sessionWorkspaceSource, /viewModel\.title \|\| t\('session\.untitled'\)/);
+  for (const key of ['session.runMode', 'session.untitled', 'chat.modelNotConfigured']) {
+    assert.equal(
+      i18nSource.match(new RegExp(`'${key.replace('.', '\\.')}'`, 'g'))?.length,
+      2,
+      `${key} must exist in both locales`,
+    );
+  }
+});
+
+test('composer model switcher explains an unconfigured model instead of a bare unavailable', () => {
+  assert.match(appSource, /t\('chat\.modelNotConfigured'\)/);
+  assert.doesNotMatch(
+    appSource,
+    /conversationRuntimeModelSelection\([\s\S]{0,200}localRuntimeModelLabel,/,
+  );
+});
+
+test('sidebar and context rail widths are user resizable', () => {
+  assert.match(appSource, /useResizablePanelWidth\(/);
+  assert.match(appSource, /--desktop-sidebar-preferred-width/);
+  assert.match(
+    globalStyles,
+    /--desktop-sidebar-width:\s*var\(--desktop-sidebar-preferred-width,\s*220px\)/,
+  );
+  assert.match(
+    sidebarStyles,
+    /--desktop-sidebar-width:\s*min\(\s*var\(--desktop-sidebar-preferred-width,\s*220px\),\s*200px\s*\)/,
+  );
+  assert.match(appSource, /<ResizeHandle/);
+  assert.match(sessionWorkspaceSource, /useResizablePanelWidth\(/);
+  assert.match(sessionWorkspaceSource, /--session-context-rail-preferred-width/);
+  assert.match(
+    sessionStyles,
+    /--session-context-rail-width:\s*min\(\s*var\(--session-context-rail-preferred-width,\s*248px\),\s*208px\s*\)/,
+  );
+  assert.match(sessionWorkspaceSource, /<ResizeHandle/);
+});
+
+test('workspace rows no longer render a decorative capability icon', () => {
+  assert.doesNotMatch(workspaceDockSource, /<CubeIcon \/>/);
+  assert.match(workspaceDockSource, /className="workspace-tree-workspace-action"/);
 });

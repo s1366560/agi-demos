@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { AlertDialog, Badge, Button } from '@radix-ui/themes';
 import {
   ActivityLogIcon,
@@ -24,6 +24,7 @@ import {
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
+import { ResizeHandle, useResizablePanelWidth } from '../../components/ResizeHandle';
 import {
   ConversationLifecycleDialogs,
   type ConversationLifecycleMode,
@@ -72,6 +73,9 @@ const stageLabels: Array<{ id: Exclude<SessionStage, 'unavailable'>; label: stri
   { id: 'review', label: 'session.stageReview' },
 ];
 
+const CONTEXT_RAIL_WIDTH_STORAGE_KEY = 'agistack.desktop.contextRailWidth';
+const CONTEXT_RAIL_WIDTH_CONSTRAINTS = { min: 200, max: 480, default: 248 } as const;
+
 export function SessionWorkspace({
   viewModel,
   thread,
@@ -88,6 +92,10 @@ export function SessionWorkspace({
   onDeleteConversation,
 }: SessionWorkspaceProps) {
   const { t } = useI18n();
+  const contextRailWidth = useResizablePanelWidth(
+    CONTEXT_RAIL_WIDTH_STORAGE_KEY,
+    CONTEXT_RAIL_WIDTH_CONSTRAINTS,
+  );
   const hasCanvas = Boolean(canvas);
   const [surfaceState, setSurfaceState] = useState<SessionSurfaceState>(() => ({
     sessionId: viewModel.id,
@@ -217,11 +225,15 @@ export function SessionWorkspace({
       <header className="session-workspace-header">
         <div className="session-workspace-identity">
           <span>
-            {viewModel.workspaceLabel ?? t('session.notAvailable')} <ChevronRightIcon />{' '}
+            {viewModel.workspaceLabel ? (
+              <>
+                {viewModel.workspaceLabel} <ChevronRightIcon />{' '}
+              </>
+            ) : null}
             {t('session.session')}
           </span>
           <div>
-            <h1>{viewModel.title}</h1>
+            <h1>{viewModel.title || t('session.untitled')}</h1>
             <Badge color={statusColor(viewModel.status)} variant="soft">
               {statusLabel(viewModel.status, t)}
             </Badge>
@@ -541,7 +553,14 @@ export function SessionWorkspace({
         </div>
       ) : null}
 
-      <div className={`session-workspace-body surface-${surface}`}>
+      <div
+        className={`session-workspace-body surface-${surface}`}
+        style={
+          {
+            '--session-context-rail-preferred-width': `${Math.round(contextRailWidth.width)}px`,
+          } as CSSProperties
+        }
+      >
         {panes.thread ? (
           <section className="session-workspace-thread" aria-label={t('session.thread')}>
             <div className="session-pane-label">
@@ -579,6 +598,14 @@ export function SessionWorkspace({
         ) : null}
         {panes.contextRail ? (
           <aside className="session-context-rail" aria-label={t('session.runContext')}>
+            <ResizeHandle
+              side="leading"
+              width={contextRailWidth.width}
+              constraints={CONTEXT_RAIL_WIDTH_CONSTRAINTS}
+              label={t('layout.resizeContextRail')}
+              onResize={contextRailWidth.resize}
+              onReset={contextRailWidth.reset}
+            />
             {statusPresentation ? (
               <section className={`session-context-attention tone-${statusPresentation.tone}`}>
                 <header>
@@ -681,7 +708,7 @@ export function SessionWorkspace({
                   </dd>
                 </div>
                 <div>
-                  <dt>{t('session.currentStage')}</dt>
+                  <dt>{t('session.runMode')}</dt>
                   <dd>
                     {viewModel.executionMode === 'unavailable'
                       ? t('session.notAvailable')

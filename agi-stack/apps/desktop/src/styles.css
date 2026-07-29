@@ -14,6 +14,7 @@
   --desktop-green: #35d399;
   --desktop-amber: #f0b35a;
   --desktop-red: #ff6978;
+  --desktop-sidebar-preferred-width: 220px;
   --desktop-sidebar-width: 220px;
   /* Surface ladder (dark to light by luminance) */
   --desktop-surface-1: #060a11;
@@ -396,6 +397,7 @@
   --desktop-green: #0d7f57;
   --desktop-amber: #b4741c;
   --desktop-red: #d63a4b;
+  --desktop-sidebar-preferred-width: 220px;
   --desktop-sidebar-width: 220px;
   /* Surface ladder (light to dark by luminance) */
   --desktop-surface-1: #e9edf3;
@@ -821,6 +823,7 @@ select {
 }
 
 .app-shell {
+  --desktop-sidebar-width: var(--desktop-sidebar-preferred-width, 220px);
   display: grid;
   width: 100vw;
   height: 100vh;

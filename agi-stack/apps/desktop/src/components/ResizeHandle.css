@@ -1,0 +1,39 @@
+.panel-resize-handle {
+  position: absolute;
+  z-index: 40;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.panel-resize-handle::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 1px;
+  background: transparent;
+  content: '';
+  transition: background 120ms ease;
+}
+
+.panel-resize-handle:hover::after,
+.panel-resize-handle:active::after,
+.panel-resize-handle.dragging::after,
+.panel-resize-handle:focus-visible::after {
+  background: rgba(var(--desktop-cyan-rgb), 0.55);
+}
+
+.panel-resize-handle:focus-visible {
+  outline: none;
+}
+
+.panel-resize-handle-leading {
+  left: 0;
+}
+
+.panel-resize-handle-trailing {
+  right: 0;
+}
