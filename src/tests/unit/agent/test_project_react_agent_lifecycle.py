@@ -215,13 +215,13 @@ class TestProjectReActAgentLifecycleNotifications:
         """
         agent = ProjectReActAgent(agent_config)
 
-        # Patch tenant graph-service resolver to return no service
+        # Patch tenant graph-service resolver to raise, forcing init failure
         # Inject the mock notifier
         with (
             patch(
                 f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
                 new_callable=AsyncMock,
-                return_value=None,
+                side_effect=RuntimeError("graph service init failed"),
             ),
             patch(
                 "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
@@ -240,6 +240,82 @@ class TestProjectReActAgentLifecycleNotifications:
         ]
         assert len(error_calls) >= 1
         assert "error_message" in error_calls[0]["message"]["data"]
+
+    @pytest.mark.asyncio
+    async def test_initialize_degrades_when_graph_service_unavailable(
+        self,
+        agent_config,
+        mock_notifier,
+        mock_redis_client,
+        mock_llm_client,
+        mock_provider_config,
+        mock_session_context,
+    ):
+        """
+        Test that a missing graph service degrades instead of failing init.
+
+        Expected behavior:
+        1. When no graph service can be resolved (e.g. no embedding provider),
+           initialize() still succeeds with knowledge-graph features disabled
+        """
+        agent = ProjectReActAgent(agent_config)
+
+        mock_tools = {"tool1": lambda x: x}
+        mock_skills = [MagicMock(name="skill1")]
+        mock_subagents = []
+
+        with (
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_redis_client",
+                return_value=mock_redis_client,
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_provider_config",
+                new_callable=AsyncMock,
+                return_value=mock_provider_config,
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_llm_client",
+                new_callable=AsyncMock,
+                return_value=mock_llm_client,
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_tools",
+                new_callable=AsyncMock,
+                return_value=mock_tools,
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_skills",
+                new_callable=AsyncMock,
+                return_value=mock_skills,
+            ),
+            patch.object(
+                agent,
+                "_load_subagents",
+                new_callable=AsyncMock,
+                return_value=mock_subagents,
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_agent_session",
+                new_callable=AsyncMock,
+                return_value=mock_session_context,
+            ),
+            patch(
+                "src.infrastructure.agent.core.react_agent.ReActAgent",
+            ),
+            patch(
+                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+                return_value=mock_notifier,
+            ),
+        ):
+            result = await agent.initialize()
+
+        assert result is True
 
     @pytest.mark.asyncio
     async def test_initialize_wires_subagent_lifecycle_hook_to_notifier(
@@ -715,7 +791,7 @@ class TestProjectReActAgentNotificationContent:
             patch(
                 f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
                 new_callable=AsyncMock,
-                return_value=None,
+                side_effect=RuntimeError("graph service init failed"),
             ),
             # Inject the mock notifier
             patch(

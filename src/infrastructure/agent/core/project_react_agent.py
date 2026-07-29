@@ -357,7 +357,10 @@ class ProjectReActAgent:
 
         graph_service = await get_or_create_agent_graph_service(tenant_id=self.config.tenant_id)
         if not graph_service:
-            raise RuntimeError("Graph service not available")
+            logger.warning(
+                f"ProjectReActAgent[{self.project_key}]: Graph service not available; "
+                "knowledge-graph features are disabled for this agent"
+            )
 
         redis_client = await get_redis_client()
 

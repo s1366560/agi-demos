@@ -195,7 +195,22 @@ async def get_or_create_agent_graph_service(tenant_id: str | None = None) -> Any
 
         from src.configuration.factories import create_native_graph_adapter
 
-        graph_service = await create_native_graph_adapter(tenant_id=tenant_id)
+        try:
+            graph_service = await create_native_graph_adapter(tenant_id=tenant_id)
+        except Exception as exc:
+            # Mirror the API-startup degradation path: when the knowledge-graph
+            # stack cannot initialize (for example, no embedding provider is
+            # configured for the tenant), chat must stay available with
+            # graph-backed features disabled instead of failing outright.
+            # The failure is intentionally not cached so that configuring a
+            # provider later heals the graph service without a restart.
+            logger.warning(
+                "Agent Worker: Graph service unavailable for tenant key '%s' (%s); "
+                "continuing with knowledge-graph features disabled",
+                cache_key,
+                exc,
+            )
+            return None
         _tenant_graph_services[cache_key] = graph_service
 
         # Keep backward compatibility for callers that still use global getter
