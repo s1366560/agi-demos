@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
 from typing import TypedDict
 
 from fastapi import BackgroundTasks, Request
@@ -24,6 +25,10 @@ from src.infrastructure.adapters.primary.web.routers.workspace_collaboration_pay
     require_workspace_payload_keys,
     workspace_payload_id,
     workspace_payload_model,
+)
+from src.infrastructure.adapters.primary.web.routers.workspace_collaboration_transaction import (
+    WorkspaceFileMutationJournal,
+    journal_workspace_file_mutation,
 )
 from src.infrastructure.adapters.secondary.persistence.models import User
 
@@ -267,14 +272,22 @@ async def _dispatch_file(
         if not isinstance(recursive, bool):
             raise ValueError("recursive must be a boolean")
         require_workspace_payload_keys(payload, {"file_id", "recursive"})
+        await _journal_blackboard_file_delete(
+            request=request,
+            workspace_id=actor.workspace_id,
+            file_id=file_id,
+            recursive=recursive,
+            db=db,
+        )
         await blackboard.delete_file(
             file_id=file_id,
             recursive=recursive,
             **common,
         )
     elif action == "copy_file":
+        copy_id = workspace_payload_id(payload, "file_id")
         await blackboard.copy_file(
-            file_id=workspace_payload_id(payload, "file_id"),
+            file_id=copy_id,
             payload=workspace_payload_model(
                 blackboard.CopyFileRequest,
                 payload,
@@ -284,6 +297,62 @@ async def _dispatch_file(
         )
     else:
         raise ValueError("file action is unavailable")
+
+
+async def _journal_blackboard_file_delete(
+    *,
+    request: Request,
+    workspace_id: str,
+    file_id: str,
+    recursive: bool,
+    db: AsyncSession,
+) -> None:
+    from src.application.services import blackboard_file_service as file_service_module
+    from src.infrastructure.adapters.primary.web.routers.blackboard import (
+        _file_service_from_request,
+    )
+
+    service = _file_service_from_request(request, db)
+    bb_file = None
+    descendants = []
+    try:
+        bb_file = await service._file_repo.find_by_id(file_id)
+        if bb_file is not None and bb_file.workspace_id == workspace_id and (
+            bb_file.is_directory and recursive
+        ):
+            child_path = file_service_module._join_child_path(
+                bb_file.parent_path,
+                bb_file.name,
+            )
+            descendants = await service._file_repo.find_descendants(
+                workspace_id,
+                child_path,
+            )
+    except Exception:
+        bb_file = None
+        descendants = []
+
+    if bb_file is None:
+        return
+    storage_root = file_service_module.STORAGE_ROOT.resolve()
+    workspace_root = (storage_root / workspace_id).resolve()
+    files = [
+        item
+        for item in (bb_file, *descendants)
+        if not item.is_directory and item.storage_key
+    ]
+    for item in files:
+        storage_path = (storage_root / workspace_id / item.storage_key).resolve()
+
+        def stage_deleted_file(
+            journal: WorkspaceFileMutationJournal,
+            *,
+            path: Path = storage_path,
+            root: Path = workspace_root,
+        ) -> None:
+            journal.stage_delete(path, storage_root=root)
+
+        journal_workspace_file_mutation(stage_deleted_file)
 
 
 async def _dispatch_topology(

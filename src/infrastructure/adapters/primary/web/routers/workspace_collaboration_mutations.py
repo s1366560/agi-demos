@@ -58,6 +58,9 @@ from src.infrastructure.adapters.primary.web.routers.workspace_collaboration_pay
 from src.infrastructure.adapters.primary.web.routers.workspace_collaboration_secondary_dispatch import (
     dispatch_secondary_workspace_mutation,
 )
+from src.infrastructure.adapters.primary.web.routers.workspace_collaboration_transaction import (
+    WorkspaceCollaborationUnitOfWork,
+)
 from src.infrastructure.adapters.primary.web.routers.workspace_collaboration_upload import (
     require_bounded_upload_content_length,
     stage_workspace_upload_request,
@@ -243,7 +246,9 @@ async def upload_workspace_collaboration_file(
     ),
 ) -> WorkspaceCollaborationMutationReceiptResponse:
     """Upload with content-bound idempotency while keeping file bytes out of JSON."""
+    unit_of_work = WorkspaceCollaborationUnitOfWork(db, background_tasks=None)
     require_bounded_upload_content_length(request)
+    await unit_of_work.prepare()
     await require_workspace_access(
         db,
         current_user,
@@ -287,23 +292,23 @@ async def upload_workspace_collaboration_file(
                 size_bytes=staged.size_bytes,
                 checksum_sha256=staged.checksum_sha256,
                 current_user=current_user,
-                current_actor=current_actor,
-                db=db,
-            )
+            current_actor=current_actor,
+            db=unit_of_work.session,
+        )
         finalized = await service.finalize(
             actor=actor,
             command=command,
             duplicate=reserved.duplicate,
         )
-        await db.commit()
+        await unit_of_work.commit()
     except HTTPException:
-        await db.rollback()
+        await unit_of_work.rollback()
         raise
     except (ValueError, ValidationError) as exc:
-        await db.rollback()
+        await unit_of_work.rollback()
         raise _invalid_command("workspace_collaboration_payload_invalid") from exc
     except WorkspaceCollaborationMutationError as exc:
-        await db.rollback()
+        await unit_of_work.rollback()
         raise _authority_http_error(exc) from exc
     finally:
         staged.path.unlink(missing_ok=True)
@@ -320,31 +325,33 @@ async def _execute_command(
     db: AsyncSession,
     service: WorkspaceCollaborationMutationService,
 ) -> WorkspaceCollaborationMutationReceiptResponse:
+    unit_of_work = WorkspaceCollaborationUnitOfWork(db, background_tasks)
     try:
+        await unit_of_work.prepare()
         reserved = await service.reserve(actor=actor, command=command)
         if reserved.dispatch_required:
             await _dispatch_mutation(
                 actor=actor,
                 command=command,
                 request=request,
-                background_tasks=background_tasks,
+                background_tasks=unit_of_work.background_tasks,
                 current_user=current_user,
-                db=db,
+                db=unit_of_work.session,
             )
         finalized = await service.finalize(
             actor=actor,
             command=command,
             duplicate=reserved.duplicate,
         )
-        await db.commit()
+        await unit_of_work.commit()
     except HTTPException:
-        await db.rollback()
+        await unit_of_work.rollback()
         raise
     except (ValueError, ValidationError) as exc:
-        await db.rollback()
+        await unit_of_work.rollback()
         raise _invalid_command("workspace_collaboration_payload_invalid") from exc
     except WorkspaceCollaborationMutationError as exc:
-        await db.rollback()
+        await unit_of_work.rollback()
         raise _authority_http_error(exc) from exc
     return _receipt_response(finalized)
 

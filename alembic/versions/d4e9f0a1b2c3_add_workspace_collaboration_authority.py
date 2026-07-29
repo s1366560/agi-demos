@@ -214,6 +214,12 @@ def upgrade() -> None:
             LANGUAGE plpgsql
             AS $$
             BEGIN
+                IF current_setting(
+                    'memstack.workspace_collaboration_authority_mode',
+                    true
+                ) = 'canonical' THEN
+                    RETURN;
+                END IF;
                 IF target_workspace_id IS NULL THEN
                     RETURN;
                 END IF;

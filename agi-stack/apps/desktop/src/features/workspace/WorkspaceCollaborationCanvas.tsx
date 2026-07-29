@@ -72,6 +72,7 @@ export function WorkspaceCollaborationCanvas({
     Partial<Record<WorkspaceCollaborationSurface, AbortController>>
   >({});
   const mutationCounterRef = useRef(0);
+  const mutationKeyLedgerRef = useRef(new Map<string, string>());
   const lastAuthorityInvalidationRef = useRef(authorityInvalidation?.sequence ?? 0);
   const tabRefs = useRef<Partial<Record<WorkspaceCollaborationSurface, HTMLButtonElement>>>({});
   const [pendingMutation, setPendingMutation] = useState<string | null>(null);
@@ -197,27 +198,40 @@ export function WorkspaceCollaborationCanvas({
   const mutate: MutationHandler = useCallback(
     async (action, payload) => {
       const surface = stateRef.current.activeSurface;
-      mutationCounterRef.current += 1;
-      const idempotencyKey =
-        createIdempotencyKey?.(surface, action) ??
-        [
-          workspaceId,
-          surface,
-          action,
-          Date.now().toString(36),
-          mutationCounterRef.current,
-        ].join(':');
       const built = buildWorkspaceSurfaceMutation(
         stateRef.current,
         surface,
         action,
-        idempotencyKey,
+        'workspace-mutation-placeholder',
         payload,
       );
       if (!built.ok) {
         setMutationFailed(true);
         return false;
       }
+
+      const ledgerKey = stableWorkspaceMutationLedgerKey({
+        workspaceId,
+        surface,
+        action,
+        expectedRevision: built.mutation.expected_revision,
+        payload: built.mutation.payload,
+      });
+      let idempotencyKey = mutationKeyLedgerRef.current.get(ledgerKey);
+      if (!idempotencyKey) {
+        mutationCounterRef.current += 1;
+        idempotencyKey =
+          createIdempotencyKey?.(surface, action) ??
+          [
+            workspaceId,
+            surface,
+            action,
+            Date.now().toString(36),
+            mutationCounterRef.current,
+          ].join(':');
+        mutationKeyLedgerRef.current.set(ledgerKey, idempotencyKey);
+      }
+      built.mutation.idempotency_key = idempotencyKey;
 
       abortSurface(surface);
       const controller = new AbortController();
@@ -250,6 +264,7 @@ export function WorkspaceCollaborationCanvas({
         commit((current) =>
           resolveWorkspaceSurfaceLoad(current, surface, generation, canonical),
         );
+        mutationKeyLedgerRef.current.delete(ledgerKey);
         return true;
       } catch (error: unknown) {
         if (controller.signal.aborted || isAbortError(error)) return false;
@@ -660,7 +675,7 @@ function CollaborationSurface({ data, t }: ReadonlySurfaceProps) {
 function MembersSurface({ data, busy, onMutate, t }: SurfaceProps) {
   const members = rows(data, 'members');
   const [userId, setUserId] = useState('');
-  const [role, setRole] = useState('member');
+  const [role, setRole] = useState('viewer');
   return (
     <div className="workspace-collaboration-surface">
       <SurfaceHeading title={t('workspaceCollaboration.members.title')} />
@@ -700,7 +715,7 @@ function MembersSurface({ data, busy, onMutate, t }: SurfaceProps) {
           required
         />
         <select value={role} onChange={(event) => setRole(event.target.value)}>
-          {['owner', 'admin', 'member', 'viewer'].map((value) => (
+          {['owner', 'editor', 'viewer'].map((value) => (
             <option key={value} value={value}>
               {t(`workspaceCollaboration.members.roles.${value}`)}
             </option>
@@ -807,4 +822,35 @@ function initialCanvasState(
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
+}
+
+function stableWorkspaceMutationLedgerKey(input: {
+  workspaceId: string;
+  surface: WorkspaceCollaborationSurface;
+  action: string;
+  expectedRevision: number;
+  payload: Record<string, unknown>;
+}): string {
+  return JSON.stringify({
+    workspace_id: input.workspaceId,
+    surface: input.surface,
+    action: input.action,
+    expected_revision: input.expectedRevision,
+    payload: stableMutationValue(input.payload),
+  });
+}
+
+function stableMutationValue(value: unknown): unknown {
+  if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
+    return value;
+  }
+  if (Array.isArray(value)) return value.map((item) => stableMutationValue(item));
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+        .map(([key, item]) => [key, stableMutationValue(item)]),
+    );
+  }
+  return null;
 }

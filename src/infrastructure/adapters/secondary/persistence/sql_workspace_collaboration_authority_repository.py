@@ -114,6 +114,11 @@ class SqlWorkspaceCollaborationAuthorityRepository:
                 "Workspace Collaboration authority regressed below the reserved revision"
             )
         if receipt.committed_revision is None:
+            if current_revision != command.expected_revision:
+                raise WorkspaceCollaborationRevisionConflictError(
+                    expected_revision=command.expected_revision,
+                    current_revision=current_revision,
+                )
             if current_revision == command.expected_revision:
                 current_revision += 1
                 authority.revision = current_revision

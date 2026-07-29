@@ -304,20 +304,23 @@ export function normalizeWorkspaceCollaborationCapabilityContract(
       'canonical_read',
       'read_surfaces',
       'mutations',
+      'allowed_actions',
     ];
   if (
     input.status === 'available' &&
-    isExactRecord(input, [...capabilityKeys, 'mutation_actions']) &&
+    isExactRecord(input, capabilityKeys) &&
     input.reason_code === null &&
     isExactRecord(input.mutations, [
       'allowed',
       'revision_guarded',
       'idempotency_guarded',
+      'actions',
     ]) &&
     input.mutations.allowed === true &&
     input.mutations.revision_guarded === true &&
     input.mutations.idempotency_guarded === true &&
-    matchesWorkspaceMutationActions(input.mutation_actions)
+    matchesWorkspaceMutationActions(input.mutations.actions) &&
+    JSON.stringify(input.allowed_actions) === JSON.stringify(input.mutations.actions)
   ) {
     return available(negotiation);
   }

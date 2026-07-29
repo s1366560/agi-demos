@@ -1,6 +1,6 @@
 """Versioned Workspace Collaboration capability contract."""
 
-from typing import Final, Literal
+from typing import Final, Literal, cast
 
 from pydantic import BaseModel, ConfigDict
 
@@ -46,6 +46,7 @@ class WorkspaceCollaborationMutationCapability(BaseModel):
     allowed: Literal[True] = True
     revision_guarded: Literal[True] = True
     idempotency_guarded: Literal[True] = True
+    actions: dict[WorkspaceCollaborationSurface, list[str]]
 
 
 class WorkspaceCollaborationCapabilitiesResponse(BaseModel):
@@ -64,7 +65,7 @@ class WorkspaceCollaborationCapabilitiesResponse(BaseModel):
     canonical_read: Literal[True] = True
     read_surfaces: list[WorkspaceCollaborationSurface]
     mutations: WorkspaceCollaborationMutationCapability
-    mutation_actions: dict[WorkspaceCollaborationSurface, list[str]]
+    allowed_actions: dict[WorkspaceCollaborationSurface, list[str]]
 
 
 def build_workspace_collaboration_capabilities(
@@ -72,16 +73,23 @@ def build_workspace_collaboration_capabilities(
     tenant_id: str,
     project_id: str,
     workspace_id: str,
+    mutation_actions: dict[WorkspaceCollaborationSurface, list[str]] | None = None,
 ) -> WorkspaceCollaborationCapabilitiesResponse:
     """Build the immutable read and mutation authority declaration for one scope."""
+    actions = cast(
+        dict[WorkspaceCollaborationSurface, list[str]],
+        {
+            surface: list(WORKSPACE_COLLABORATION_MUTATION_ACTIONS[surface])
+            for surface in WORKSPACE_COLLABORATION_READ_SURFACES
+        }
+        if mutation_actions is None
+        else mutation_actions
+    )
     return WorkspaceCollaborationCapabilitiesResponse(
         tenant_id=tenant_id,
         project_id=project_id,
         workspace_id=workspace_id,
         read_surfaces=list(WORKSPACE_COLLABORATION_READ_SURFACES),
-        mutations=WorkspaceCollaborationMutationCapability(),
-        mutation_actions={
-            surface: list(WORKSPACE_COLLABORATION_MUTATION_ACTIONS[surface])
-            for surface in WORKSPACE_COLLABORATION_READ_SURFACES
-        },
+        mutations=WorkspaceCollaborationMutationCapability(actions=actions),
+        allowed_actions=actions,
     )

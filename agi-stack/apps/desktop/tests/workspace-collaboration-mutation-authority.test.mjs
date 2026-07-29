@@ -89,8 +89,9 @@ test('available Workspace capability requires exact revision and idempotency act
         allowed: true,
         revision_guarded: true,
         idempotency_guarded: true,
+        actions: mutationActions,
       },
-      mutation_actions: mutationActions,
+      allowed_actions: mutationActions,
     },
     scope
   );
@@ -102,6 +103,41 @@ test('available Workspace capability requires exact revision and idempotency act
     contract_version: '2.0.0',
     minimum_contract_version: '2.0.0',
   });
+});
+
+test('Workspace capability rejects top-level actions that diverge from mutation guards', () => {
+  const divergentActions = {
+    ...mutationActions,
+    notes: ['delete_workspace'],
+  };
+  const normalized = normalizeWorkspaceCollaborationCapabilityContract(
+    {
+      service_version: '0.2.0',
+      contract_version: '2.0.0',
+      authority: 'cloud',
+      tenant_id: scope.tenantId,
+      project_id: scope.projectId,
+      workspace_id: scope.workspaceId,
+      status: 'available',
+      reason_code: null,
+      canonical_read: true,
+      read_surfaces: Object.keys(mutationActions),
+      mutations: {
+        allowed: true,
+        revision_guarded: true,
+        idempotency_guarded: true,
+        actions: mutationActions,
+      },
+      allowed_actions: divergentActions,
+    },
+    scope
+  );
+
+  assert.equal(normalized.status, 'unavailable');
+  assert.equal(
+    normalized.reason_code,
+    'workspace_collaboration_capability_contract_invalid'
+  );
 });
 
 test('authority command uses one scoped endpoint and strips spoofed scope fields', () => {
