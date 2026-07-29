@@ -93,6 +93,24 @@
           "authority": "web_service"
         },
         {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/mcp/apps",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/mcp/apps/{app_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/mcp/apps/{app_id}/refresh",
+          "authority": "web_service"
+        },
+        {
           "surface": "desktop_cloud",
           "method": "GET",
           "path": "/api/v1/mcp",
@@ -143,7 +161,12 @@
         "call-tool",
         "view-prompts",
         "set-log-level",
-        "view-logs"
+        "view-logs",
+        "list-apps",
+        "search-apps",
+        "delete-app",
+        "refresh-app",
+        "open-app-in-canvas"
       ],
       "web_actions": [
         "view",
@@ -160,7 +183,12 @@
         "call-tool",
         "view-prompts",
         "set-log-level",
-        "view-logs"
+        "view-logs",
+        "list-apps",
+        "search-apps",
+        "delete-app",
+        "refresh-app",
+        "open-app-in-canvas"
       ],
       "cloud_actions": [
         "view",
@@ -181,7 +209,10 @@
             "get",
             "list-tools",
             "view-prompts",
-            "view-logs"
+            "view-logs",
+            "list-apps",
+            "search-apps",
+            "open-app-in-canvas"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -201,7 +232,9 @@
             "reconcile",
             "set-enabled",
             "call-tool",
-            "set-log-level"
+            "set-log-level",
+            "delete-app",
+            "refresh-app"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -261,6 +294,8 @@
           "feature_gate": null
         }
       ],
+      "web_status": "partial",
+      "web_reason_code": "web_mcp_app_canvas_context_incomplete",
       "cloud_status": "partial",
       "cloud_entries": [
         "agi-stack/apps/desktop/src/features/settings/MCPServerSettingsPage.tsx"
@@ -272,7 +307,7 @@
         "agi-stack/apps/desktop/src/features/settings/MCPServerSettingsPage.tsx",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/mcp_apps.rs"
       ],
-      "judgment_rationale": "Web owns the complete MCP server lifecycle plus tool, prompt, and log authority. MCPServerSettingsPage and useMCPServerManagement expose refresh/list and create in both Desktop modes. Additional client and sidecar detail, sync, test, reconcile, discovery, and tool-call endpoints are not counted as native surface actions until a production UI binds them; elicitation, client requests, and the complete routed state matrix also remain incomplete."
+      "judgment_rationale": "Web owns the complete MCP server lifecycle plus tool, prompt, and log authority. McpAppsTabV2 directly binds MCP Apps list, search, delete, refresh, and open-in-Canvas interactions, while the Canvas resource and tool-call context remains incomplete and therefore Web stays partial without claiming unbound proxy APIs. MCPServerSettingsPage and useMCPServerManagement expose refresh/list and create in both Desktop modes. Additional client and sidecar detail, sync, test, reconcile, discovery, and tool-call endpoints are not counted as native surface actions until a production UI binds them; elicitation, client requests, and the complete routed state matrix also remain incomplete."
     },
     {
       "id": "tenant-tenant-acp",

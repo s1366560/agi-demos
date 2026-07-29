@@ -73,6 +73,10 @@ test('inventory binds audited source hashes to its declared revision and current
     ],
     [
       'web/src/pages/DefaultPage.tsx',
+      "export { default } from './DefaultPageImpl';\n",
+    ],
+    [
+      'web/src/pages/DefaultPageImpl.tsx',
       'export default function DefaultPage() { return <main>Default</main>; }\n',
     ],
   ]);
@@ -108,6 +112,54 @@ test('inventory binds audited source hashes to its declared revision and current
     );
     execFileSync('git', ['add', '.'], { cwd: isolatedRepository });
     execFileSync('git', ['commit', '-qm', 'test: add route inventory'], {
+      cwd: isolatedRepository,
+    });
+    assert.deepEqual(checkWebRouteInventory({ repositoryRoot: isolatedRepository }).errors, []);
+
+    const dependencyPath = resolve(
+      isolatedRepository,
+      'web/src/pages/DefaultPageImpl.tsx'
+    );
+    const dependencySource = sources.get('web/src/pages/DefaultPageImpl.tsx');
+    const changedDependency = dependencySource.replace('>Default<', '>Changed dependency<');
+    writeFileSync(dependencyPath, changedDependency);
+    const dirtyDependencyErrors = checkWebRouteInventory({
+      repositoryRoot: isolatedRepository,
+    }).errors;
+    assert.equal(
+      dirtyDependencyErrors.some(
+        (error) =>
+          error.includes('web/src/pages/DefaultPageImpl.tsx') &&
+          error.includes('declared Git revision')
+      ),
+      true
+    );
+    writeFileSync(dependencyPath, dependencySource);
+    assert.deepEqual(checkWebRouteInventory({ repositoryRoot: isolatedRepository }).errors, []);
+
+    writeFileSync(dependencyPath, changedDependency);
+    execFileSync('git', ['add', 'web/src/pages/DefaultPageImpl.tsx'], {
+      cwd: isolatedRepository,
+    });
+    execFileSync('git', ['commit', '-qm', 'test: change routed production dependency'], {
+      cwd: isolatedRepository,
+    });
+    const committedDependencyErrors = checkWebRouteInventory({
+      repositoryRoot: isolatedRepository,
+    }).errors;
+    assert.equal(
+      committedDependencyErrors.some(
+        (error) =>
+          error.includes('web/src/pages/DefaultPageImpl.tsx') &&
+          error.includes('declared Git revision')
+      ),
+      true
+    );
+    writeFileSync(dependencyPath, dependencySource);
+    execFileSync('git', ['add', 'web/src/pages/DefaultPageImpl.tsx'], {
+      cwd: isolatedRepository,
+    });
+    execFileSync('git', ['commit', '-qm', 'test: restore routed production dependency'], {
       cwd: isolatedRepository,
     });
     assert.deepEqual(checkWebRouteInventory({ repositoryRoot: isolatedRepository }).errors, []);

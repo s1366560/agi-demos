@@ -400,3 +400,25 @@ test("Project Settings records only the routed page sandbox operations and autho
     );
   }
 });
+
+test("User Profile reads the authenticated identity from auth-me", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.23-identity-profile.v2.json",
+    "user-profile",
+  );
+
+  assert.deepEqual(contractKeys(capability, "web"), [
+    "GET /api/v1/auth/me",
+    "PUT /api/v1/users/me",
+    "POST /api/v1/auth/force-change-password",
+  ]);
+  assert.equal(
+    contractKeys(capability, "web").includes("GET /api/v1/users/me"),
+    false,
+  );
+  assert.match(capability.judgment_rationale, /UserProfile/u);
+  assert.match(capability.judgment_rationale, /useAuthStore/u);
+  assert.match(capability.judgment_rationale, /authAPI\.(?:login|verifyToken)/u);
+  assert.match(capability.judgment_rationale, /\/auth\/me/u);
+  assert.match(capability.judgment_rationale, /\/users\/me/u);
+});

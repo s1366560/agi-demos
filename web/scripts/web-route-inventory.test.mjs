@@ -83,6 +83,8 @@ test('extracts canonical targets, route registrations, and routed source entries
     canonical_navigation_targets: 1,
     eager_route_entries: 1,
     lazy_page_entries: 2,
+    production_dependency_edges: 0,
+    production_dependency_sources: 0,
     production_routes: 3,
     route_registration_sources: 1,
   });
@@ -284,10 +286,12 @@ test('checked-in inventory matches the current production Web router and navigat
 
   assert.deepEqual(result.errors, []);
   assert.equal(result.inventory.schema_version, '2.0.0');
-  assert.equal(result.inventory.counts.audited_sources, 95);
+  assert.equal(result.inventory.counts.audited_sources, 634);
   assert.equal(result.inventory.counts.canonical_navigation_targets, 51);
   assert.equal(result.inventory.counts.eager_route_entries, 4);
   assert.equal(result.inventory.counts.lazy_page_entries, 89);
+  assert.equal(result.inventory.counts.production_dependency_edges, 1613);
+  assert.equal(result.inventory.counts.production_dependency_sources, 540);
   assert.equal(result.inventory.counts.production_routes, 174);
   assert.equal(result.inventory.counts.route_registration_sources, 1);
   assert.equal(
@@ -454,6 +458,162 @@ export function ProjectRoutes() {
   } finally {
     rmSync(sandbox, { recursive: true, force: true });
   }
+});
+
+test('inventory revision-binds transitive runtime dependencies of routed source wrappers', () => {
+  const sandbox = mkdtempSync(resolve(tmpdir(), 'memstack-route-runtime-dependencies-'));
+  const isolatedRepository = resolve(sandbox, 'repository');
+  const isolatedRouterSource = `
+import { lazy } from 'react';
+import { Route, Routes } from 'react-router-dom';
+
+const CommunitiesList = lazy(() =>
+  import('./pages/project/CommunitiesList').then((module) => ({
+    default: module.CommunitiesList,
+  }))
+);
+
+export function App() {
+  return (
+    <Routes>
+      <Route path="/communities" element={<CommunitiesList />} />
+    </Routes>
+  );
+}
+`;
+  const wrapperSource = "export { CommunitiesList } from './communities';\n";
+  const implementationSource = `
+import type { Community } from './types';
+import './communities.css';
+import { TaskList } from '../../components/TaskList';
+import { runtimeValue } from '@scope/runtime';
+
+export function CommunitiesList() {
+  const community = {} as Community;
+  return <TaskList entityId={community.id} runtimeValue={runtimeValue} />;
+}
+`;
+  const taskListSource =
+    'export function TaskList({ entityId }) { return <div>{entityId}</div>; }\n';
+  const typeSource = 'export interface Community { id: string }\n';
+  const sources = new Map([
+    ['web/src/App.tsx', isolatedRouterSource],
+    ['web/src/config/navigation.ts', navigationSource],
+    ['web/src/pages/project/CommunitiesList.tsx', wrapperSource],
+    ['web/src/pages/project/communities/index.tsx', implementationSource],
+    ['web/src/pages/project/communities/types.ts', typeSource],
+    ['web/src/pages/components/TaskList.tsx', taskListSource],
+  ]);
+  for (const [sourceEntry, source] of sources) {
+    const absolutePath = resolve(isolatedRepository, sourceEntry);
+    mkdirSync(resolve(absolutePath, '..'), { recursive: true });
+    writeFileSync(absolutePath, source);
+  }
+
+  try {
+    const inventory = buildWebRouteInventoryFromSources({
+      navigationSource,
+      routerSource: isolatedRouterSource,
+      repositoryRoot: isolatedRepository,
+    });
+
+    assert.deepEqual(inventory.production_dependency_edges, [
+      {
+        from_source_entry: 'web/src/pages/project/CommunitiesList.tsx',
+        relationship: 're_export',
+        to_source_entry: 'web/src/pages/project/communities/index.tsx',
+      },
+      {
+        from_source_entry: 'web/src/pages/project/communities/index.tsx',
+        relationship: 'static_import',
+        to_source_entry: 'web/src/pages/components/TaskList.tsx',
+      },
+    ]);
+    assert.equal(
+      inventory.production_dependency_edges.some(
+        (edge) => edge.to_source_entry === 'web/src/pages/project/communities/types.ts'
+      ),
+      false,
+      'type-only imports are not runtime production dependencies'
+    );
+    assert.equal(
+      inventory.production_dependency_edges.some(
+        (edge) =>
+          edge.to_source_entry.includes('node_modules') ||
+          edge.to_source_entry.endsWith('.css')
+      ),
+      false,
+      'package and CSS imports are not local runtime source dependencies'
+    );
+    for (const [sourceEntry, source] of [
+      ['web/src/pages/project/communities/index.tsx', implementationSource],
+      ['web/src/pages/components/TaskList.tsx', taskListSource],
+    ]) {
+      assert.deepEqual(
+        inventory.audited_sources.find((candidate) => candidate.source_entry === sourceEntry),
+        {
+          roles: ['production_dependency'],
+          sha256: `sha256:${createHash('sha256').update(source).digest('hex')}`,
+          source_entry: sourceEntry,
+        }
+      );
+    }
+    assert.equal(inventory.counts.production_dependency_edges, 2);
+    assert.equal(inventory.counts.production_dependency_sources, 2);
+
+    writeFileSync(
+      resolve(isolatedRepository, 'web/src/pages/components/TaskList.tsx'),
+      taskListSource.replace('entityId', 'taskId')
+    );
+    assert.throws(
+      () =>
+        assertWebRouteInventoryMatchesSources({
+          inventory,
+          navigationSource,
+          routerSource: isolatedRouterSource,
+          repositoryRoot: isolatedRepository,
+        }),
+      /Web route inventory is stale/
+    );
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test('full production dependency inventory regenerates deterministically', (t) => {
+  const inventoryPath = resolve(
+    repositoryRoot,
+    'agi-stack/apps/desktop/contracts/desktop-web-parity/web-route-inventory.v2.json'
+  );
+  const checkedInInventory = JSON.parse(readFileSync(inventoryPath, 'utf8'));
+  const productionNavigationSource = readFileSync(
+    resolve(repositoryRoot, 'web/src/config/navigation.ts'),
+    'utf8'
+  );
+  const productionRouterSource = readFileSync(
+    resolve(repositoryRoot, 'web/src/App.tsx'),
+    'utf8'
+  );
+  const startedAt = process.hrtime.bigint();
+  const first = buildWebRouteInventoryFromSources({
+    navigationSource: productionNavigationSource,
+    repositoryRoot,
+    routerSource: productionRouterSource,
+    sourceRevision: checkedInInventory.source_revision,
+  });
+  const second = buildWebRouteInventoryFromSources({
+    navigationSource: productionNavigationSource,
+    repositoryRoot,
+    routerSource: productionRouterSource,
+    sourceRevision: checkedInInventory.source_revision,
+  });
+  const elapsedMilliseconds = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+
+  assert.deepEqual(first, second);
+  assert.deepEqual(first, checkedInInventory);
+  t.diagnostic(
+    `two full dependency inventory projections completed in ${elapsedMilliseconds.toFixed(1)}ms`
+  );
 });
 
 test('propagates the complete parent mount through two imported route registration modules', () => {

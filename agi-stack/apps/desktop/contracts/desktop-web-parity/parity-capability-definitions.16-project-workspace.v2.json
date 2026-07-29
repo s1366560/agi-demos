@@ -97,12 +97,14 @@
       "actions": [
         "view",
         "list",
+        "inspect-summary",
         "create",
         "open-blackboard"
       ],
       "web_actions": [
         "view",
         "list",
+        "inspect-summary",
         "create",
         "open-blackboard"
       ],
@@ -130,6 +132,24 @@
           "surface": "web",
           "method": "POST",
           "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/objectives",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/workspaces/{workspace_id}/plan?outbox_limit=0&event_limit=0&include_details=false&recover_stale_attempts=false",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/workspaces/{workspace_id}/tasks",
           "authority": "web_service"
         },
         {
@@ -214,7 +234,7 @@
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": ["view", "list", "open-blackboard"],
+          "actions": ["view", "list", "inspect-summary", "open-blackboard"],
           "authentication": "authenticated",
           "authorization": ["workspace_member"],
           "enforcement": "enforced",
@@ -293,7 +313,7 @@
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceDock.tsx",
         "agi-stack/apps/desktop/src/features/workspace/capabilityWorkspaceCollaborationClient.ts"
       ],
-      "judgment_rationale": "The two audited Web project-workspace pages expose list, create and navigation into Blackboard only; settings, membership and Agent-assignment controls belong to the separate Blackboard route tree and are not attributed to these pages. Cloud Desktop wires WorkspaceSettingsDialog through App for update, member add/role update/removal, and Agent bind/unbind calls. Workspace update and Agent binding require editor-or-owner authority, while member add, role update, and removal remain owner-only. Each mutation captures tenant/project/workspace scope epoch and context revision, forwards an AbortSignal to the nested Cloud API, and rejects a result after a scope change before updating the projection. Cloud delete is not exposed. The Local sidecar implements nested list/create only, so Local remains partial."
+      "judgment_rationale": "The two audited Web project-workspace pages expose list, create, navigation into Blackboard, and a per-workspace progress summary loaded from objectives, a plan snapshot, and tasks as the fallback. Settings, membership and Agent-assignment controls belong to the separate Blackboard route tree and are not attributed to these pages. Cloud Desktop wires WorkspaceSettingsDialog through App for update, member add/role update/removal, and Agent bind/unbind calls. Workspace update and Agent binding require editor-or-owner authority, while member add, role update, and removal remain owner-only. Each mutation captures tenant/project/workspace scope epoch and context revision, forwards an AbortSignal to the nested Cloud API, and rejects a result after a scope change before updating the projection. Cloud delete is not exposed. The Local sidecar implements nested list/create only, so Local remains partial."
     },
     {
       "id": "project-blackboard-dynamic-project-blackboard",
@@ -326,11 +346,14 @@
         "update-reply",
         "delete-reply",
         "retry-outbox",
-        "recover-stale",
         "replan",
         "reopen",
         "pause",
-        "resume"
+        "resume",
+        "accept-review",
+        "trigger-next-iteration",
+        "request-pipeline-run",
+        "regenerate-delivery-contract"
       ],
       "web_actions": [
         "view",
@@ -348,11 +371,14 @@
         "update-reply",
         "delete-reply",
         "retry-outbox",
-        "recover-stale",
         "replan",
         "reopen",
         "pause",
-        "resume"
+        "resume",
+        "accept-review",
+        "trigger-next-iteration",
+        "request-pipeline-run",
+        "regenerate-delivery-contract"
       ],
       "cloud_actions": [
         "view",
@@ -361,7 +387,6 @@
         "list-tasks",
         "inspect-execution-diagnostics",
         "list-posts",
-        "list-replies",
         "list-agents",
         "list-members",
         "list-genes",
@@ -462,12 +487,6 @@
         {
           "surface": "web",
           "method": "POST",
-          "path": "/api/v1/workspaces/{workspace_id}/plan/recover-stale-attempts",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
           "path": "/api/v1/workspaces/{workspace_id}/plan/outbox/{outbox_id}/retry",
           "authority": "web_service"
         },
@@ -499,6 +518,24 @@
           "surface": "web",
           "method": "POST",
           "path": "/api/v1/workspaces/{workspace_id}/plan/nodes/{node_id}/accept-review",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/workspaces/{workspace_id}/plan/iteration/trigger-next",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/workspaces/{workspace_id}/plan/delivery/run-pipeline",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/workspaces/{workspace_id}/plan/delivery/regenerate-contract",
           "authority": "web_service"
         },
         {
@@ -620,11 +657,14 @@
             "update-reply",
             "delete-reply",
             "retry-outbox",
-            "recover-stale",
             "replan",
             "reopen",
             "pause",
-            "resume"
+            "resume",
+            "accept-review",
+            "trigger-next-iteration",
+            "request-pipeline-run",
+            "regenerate-delivery-contract"
           ],
           "authentication": "authenticated",
           "authorization": ["workspace_editor"],
@@ -640,7 +680,6 @@
             "list-tasks",
             "inspect-execution-diagnostics",
             "list-posts",
-            "list-replies",
             "list-agents",
             "list-members",
             "list-genes",
@@ -709,7 +748,7 @@
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceCollaborationCanvas.tsx",
         "agi-stack/apps/desktop/src/features/workspace/capabilityWorkspaceCollaborationClient.ts"
       ],
-      "judgment_rationale": "Blackboard and the workspace-to-Blackboard redirect form one audited project capability. Web provides execution diagnostics plus list/create/update/delete for discussion posts and replies and post pin/unpin under tenant/project/workspace scope; workspace members read and workspace editors mutate. Cloud Desktop's single production WorkspaceCollaborationCanvas exposes Goals, Discussion, Status, Collaboration, Members, Genes, Files, Notes, Topology and Settings. Its HTTP client reads objectives, tasks, diagnostics, posts and replies, Agent and member rosters, Genes, files, workspace notes/settings and topology through the canonical collaboration authority, while visible controls create objectives/tasks/posts/replies, pin posts, add/remove members, update Genes, create/delete topology nodes and edges, and update the workspace through the versioned collaboration mutation endpoint. Reads require workspace membership, ordinary mutations require editor authority and member changes require owner authority. Protocol mutations without a production control remain excluded. The Local sidecar implements the plan snapshot only, so Local remains read-only partial."
+      "judgment_rationale": "Blackboard and the workspace-to-Blackboard redirect form one audited project capability. Web provides execution diagnostics, discussion post and reply operations, outbox retry, replan, reopen, iteration pause/resume/trigger-next, human-review acceptance, pipeline requests, and delivery-contract regeneration. Production snapshot reads explicitly set recover_stale_attempts=false and do not call the recover-stale mutation. Cloud Desktop's single production WorkspaceCollaborationCanvas exposes Goals, Discussion, Status, Collaboration, Members, Genes, Files, Notes, Topology and Settings. Its HTTP client reads objectives, tasks, diagnostics, posts, Agent and member rosters, Genes, files, workspace notes/settings and topology, but it has no replies GET or nested reply data, so list-replies is not Cloud authority. Visible Cloud controls still create replies and other collaboration mutations through the versioned mutation endpoint. Reads require workspace membership, ordinary mutations require editor authority and member changes require owner authority. The Local sidecar implements the plan snapshot only, so Local remains read-only partial."
     }
   ],
   "source_ownership": {

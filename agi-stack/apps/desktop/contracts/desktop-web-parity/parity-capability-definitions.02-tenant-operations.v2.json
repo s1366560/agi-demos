@@ -343,7 +343,8 @@
         "authenticated",
         "project_access",
         "workspace_access",
-        "workspace_manager_for_mutations"
+        "workspace_editor_for_update_and_agent_bindings",
+        "workspace_owner_for_member_management"
       ],
       "actions": [
         "view",
@@ -404,9 +405,17 @@
         },
         {
           "surface": "desktop_cloud",
-          "actions": ["update", "manage-members", "bind-agent", "unbind-agent"],
+          "actions": ["update", "bind-agent", "unbind-agent"],
           "authentication": "authenticated",
-          "authorization": ["workspace_manager"],
+          "authorization": ["workspace_editor"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": ["manage-members"],
+          "authentication": "authenticated",
+          "authorization": ["workspace_owner"],
           "enforcement": "enforced",
           "feature_gate": null
         },
@@ -433,7 +442,11 @@
         "agi-stack/apps/desktop/src/api/client.ts",
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceDock.tsx",
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceCreateDialog.tsx",
-        "agi-stack/apps/desktop/src/features/workspace/WorkspaceSettingsDialog.tsx"
+        "agi-stack/apps/desktop/src/features/workspace/WorkspaceSettingsDialog.tsx",
+        "agi-stack/apps/desktop/src/features/workspace/WorkspaceMembersPanel.tsx",
+        "agi-stack/apps/desktop/src/features/workspace/workspaceMembersModel.ts",
+        "agi-stack/apps/desktop/src/features/workspace/WorkspaceAgentBindingsPanel.tsx",
+        "agi-stack/apps/desktop/src/features/workspace/workspaceAgentBindingsModel.ts"
       ],
       "local_status": "partial",
       "local_policy": "native_equivalent",
@@ -444,7 +457,7 @@
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceCreateDialog.tsx",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
       ],
-      "judgment_rationale": "Tenant Workspace list and creation share one Web source pair and one scheduling model; settings, member management, and Agent binding are owned by their separately audited production capability rather than inferred from service methods. Cloud Desktop wires list and create through the dock and create dialog, and wires update, member, and Agent-binding mutations through App, the API client, and WorkspaceSettingsDialog; delete and the complete routed lifecycle remain absent. Local Desktop supports authenticated native list and create while the remaining lifecycle and collaboration mutations are unavailable."
+      "judgment_rationale": "Tenant Workspace list and creation share one Web source pair and one scheduling model; settings, member management, and Agent binding are owned by their separately audited production capability rather than inferred from service methods. Cloud Desktop wires list and create through the dock and create dialog, update and Agent binding through the workspace editor role, and member management through the workspace owner role using App, the API client, WorkspaceSettingsDialog, WorkspaceMembersPanel, workspaceMembersModel, WorkspaceAgentBindingsPanel, and workspaceAgentBindingsModel. The authority has no workspace manager role; delete and the complete routed lifecycle remain absent. Local Desktop supports authenticated native list and create while the remaining lifecycle and collaboration mutations are unavailable."
     },
     {
       "id": "tenant-tenant-tasks",

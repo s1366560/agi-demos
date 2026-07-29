@@ -293,6 +293,7 @@
           "items": {
             "enum": [
               "canonical_navigation_registry",
+              "production_dependency",
               "production_router",
               "routed_page"
             ]
@@ -302,6 +303,40 @@
           "type": "string",
           "pattern": "^sha256:[0-9a-f]{64}$"
         }
+      }
+    },
+    "productionDependencyEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from_source_entry",
+        "relationship",
+        "to_source_entry"
+      ],
+      "properties": {
+        "from_source_entry": { "$ref": "#/$defs/nonEmptyString" },
+        "relationship": {
+          "enum": ["dynamic_import", "re_export", "static_import"]
+        },
+        "to_source_entry": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "webProductionDependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dependency_path",
+        "routed_source_entry",
+        "source_entry"
+      ],
+      "properties": {
+        "dependency_path": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/productionDependencyEdge" }
+        },
+        "routed_source_entry": { "$ref": "#/$defs/nonEmptyString" },
+        "source_entry": { "$ref": "#/$defs/nonEmptyString" }
       }
     },
     "judgment": {
@@ -407,6 +442,7 @@
         "source_revision",
         "web_route_ids",
         "web_route_registration_ids",
+        "web_production_dependencies",
         "audited_web_sources",
         "production_entries",
         "api_contracts",
@@ -438,6 +474,10 @@
         "web_route_registration_ids": {
           "type": "array",
           "items": { "$ref": "#/$defs/identifier" }
+        },
+        "web_production_dependencies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/webProductionDependency" }
         },
         "audited_web_sources": {
           "type": "array",

@@ -20,6 +20,9 @@ import {
   bindProductionEntrySurfaces,
   validateProductionEntryIntegrity,
 } from "./production-entry-integrity.mjs";
+import {
+  projectReviewedProductionDependencies,
+} from "./web-production-dependency-projection.mjs";
 import { resolveCapabilityWebEntries } from "./web-production-entry-projection.mjs";
 
 const contractRoot = dirname(fileURLToPath(import.meta.url));
@@ -212,7 +215,7 @@ const capabilities = normalizedDefinitions.map((definition) => {
   const ownedRoutes = (registrationsByCapability.get(definition.id) ?? []).map(
     (routeKey) => productionRouteByKey.get(routeKey),
   );
-  const resolvedWebEntries = resolveCapabilityWebEntries({
+  const resolvedRoutedWebEntries = resolveCapabilityWebEntries({
     capabilityId: definition.id,
     kind: definition.kind,
     ownedRoutes,
@@ -222,6 +225,17 @@ const capabilities = normalizedDefinitions.map((definition) => {
     sourceOwnerByEntry: sourceOwner,
     knownCapabilityIds: capabilityById,
     webMissing: definition.web_missing,
+  });
+  const {
+    productionSourceEntries: resolvedWebEntries,
+    reviewedDependencies: webProductionDependencies,
+  } = projectReviewedProductionDependencies({
+    auditedSourceByEntry,
+    capabilityId: definition.id,
+    declarations: definition.reviewed_production_dependencies ?? [],
+    dependencyEdges: inventory.production_dependency_edges,
+    kind: definition.kind,
+    routedSourceEntries: resolvedRoutedWebEntries,
   });
   const productionEntries = {
     web: resolvedWebEntries,
@@ -269,10 +283,15 @@ const capabilities = normalizedDefinitions.map((definition) => {
     web_route_ids: definition.web_route_ids,
     web_route_registration_ids:
       registrationsByCapability.get(definition.id) ?? [],
-    routed_source_entries: resolvedWebEntries,
+    routed_source_entries: resolvedRoutedWebEntries,
     ...(reviewedAdditionalWebEntries.length > 0
       ? {
           reviewed_additional_web_entries: reviewedAdditionalWebEntries,
+        }
+      : {}),
+    ...(webProductionDependencies.length > 0
+      ? {
+          web_production_dependencies: webProductionDependencies,
         }
       : {}),
     audited_web_sources: auditedWebSources,
@@ -312,6 +331,7 @@ const capabilities = normalizedDefinitions.map((definition) => {
     web_route_ids: definition.web_route_ids,
     web_route_registration_ids:
       registrationsByCapability.get(definition.id) ?? [],
+    web_production_dependencies: webProductionDependencies,
     audited_web_sources: auditedWebSources,
     production_entries: productionEntries,
     api_contracts: definition.api_contracts,
@@ -375,13 +395,11 @@ console.log(
 function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
-
 function assertCount(items, expected, label) {
   if (items.length !== expected) {
     throw new Error(`Expected ${expected} ${label}; received ${items.length}.`);
   }
 }
-
 function assertExactKeys(actualMap, expectedKeys, label) {
   const actual = [...actualMap.keys()].sort();
   const expected = [...expectedKeys].sort();
@@ -392,13 +410,11 @@ function assertExactKeys(actualMap, expectedKeys, label) {
     throw new Error(`${label} does not exactly cover the audited inventory.`);
   }
 }
-
 function requireCapability(capabilityId) {
   if (!capabilityById.has(capabilityId)) {
     throw new Error(`Unknown capability owner ${capabilityId}.`);
   }
 }
-
 function groupOwnedKeys(ownership) {
   const grouped = new Map();
   for (const [key, owner] of ownership) {
@@ -407,7 +423,6 @@ function groupOwnedKeys(ownership) {
   for (const keys of grouped.values()) keys.sort();
   return grouped;
 }
-
 function normalizeDefinition(definition) {
   const permissionRequirements = requirePermissionRequirements(definition);
   if (definition.kind === "native_only") {
@@ -593,7 +608,6 @@ function normalizeDefinition(definition) {
     ],
   };
 }
-
 function cloudSurface(definition) {
   const status = definition.cloud_status;
   if (status === "implemented") {
@@ -637,7 +651,6 @@ function cloudSurface(definition) {
     [],
   );
 }
-
 function localSurface(definition) {
   const status = definition.local_status;
   if (status === "implemented") {
@@ -696,7 +709,6 @@ function localSurface(definition) {
     definition.local_deviation,
   );
 }
-
 function webSurface(definition) {
   if (definition.web_missing) {
     return surface(
@@ -737,7 +749,6 @@ function webSurface(definition) {
     definition.web_actions ?? definition.actions,
   );
 }
-
 function surface(
   disposition,
   implementationStatus,

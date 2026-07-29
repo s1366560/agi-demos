@@ -377,12 +377,6 @@
         },
         {
           "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/admin/dlq/messages/{message_id}",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
           "method": "POST",
           "path": "/api/v1/admin/dlq/messages/{message_id}/retry",
           "authority": "web_service"
@@ -528,7 +522,7 @@
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_message_bus_dlq_not_applicable",
       "local_deviation": "The Cloud message-bus DLQ has no Local equivalent. Local retry and recovery remain owned by their specific sidecar outbox contracts rather than a fabricated global queue.",
-      "judgment_rationale": "DeadLetterQueue is an administrative Web surface with retry, discard, cleanup, and aggregate statistics authority. Desktop lacks the route, and Local does not run the Cloud message bus represented by this queue."
+      "judgment_rationale": "DeadLetterQueue is an administrative Web surface with retry, discard, cleanup, and aggregate statistics authority. Its detail drawer uses the selected list row and does not call the single-message GET service method. Desktop lacks the route, and Local does not run the Cloud message bus represented by this queue."
     }
   ],
   "source_ownership": {

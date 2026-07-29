@@ -130,12 +130,6 @@
         },
         {
           "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/tenants/{tenant_id}/trust/decision-records/{record_id}",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
           "method": "POST",
           "path": "/api/v1/tenants/{tenant_id}/trust/approval-requests/{record_id}/resolve",
           "authority": "web_service"
@@ -216,7 +210,7 @@
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_decision_ledger_not_applicable",
       "local_deviation": "Local HITL responses and sealed replay metadata remain scoped runtime records; they must not be promoted into the Cloud tenant decision ledger without its authority.",
-      "judgment_rationale": "DecisionRecords reads persisted tenant trust decisions and approval outcomes and resolves pending approvals as allow-once, allow-always, or deny. Desktop HITL UI does not provide this searchable governance ledger, and Local mode must distinguish runtime decisions from Cloud tenant records."
+      "judgment_rationale": "DecisionRecords lists persisted tenant trust decisions and approval outcomes, inspects the selected list record without a detail GET, and resolves pending approvals as allow-once, allow-always, or deny. Desktop HITL UI does not provide this searchable governance ledger, and Local mode must distinguish runtime decisions from Cloud tenant records."
     },
     {
       "id": "tenant-tenant-billing",
@@ -236,12 +230,6 @@
           "surface": "web",
           "method": "GET",
           "path": "/api/v1/tenants/{tenant_id}/billing",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/tenants/{tenant_id}/invoices",
           "authority": "web_service"
         },
         {
@@ -326,7 +314,7 @@
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_billing_authority_not_applicable",
       "local_deviation": "Billing, invoices, payment methods, and plan upgrades are held by the Cloud service authority. Local Desktop never caches or emulates payment data.",
-      "judgment_rationale": "Billing is a canonical commercial route with tenant usage, invoice, and upgrade authority. Desktop has no native page; Local billing has no single-machine equivalent and must present a stable not-applicable state."
+      "judgment_rationale": "Billing is a canonical commercial route with tenant usage, invoice, and upgrade authority. The billing response embeds the invoice rows and invoice_url used by the page, so the unused standalone invoice-list service method is not production authority. Desktop has no native page; Local billing has no single-machine equivalent and must present a stable not-applicable state."
     }
   ],
   "source_ownership": {

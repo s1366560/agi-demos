@@ -12,6 +12,16 @@
       "web_route_ids": [
         "project-project-communities"
       ],
+      "reviewed_production_dependencies": [
+        {
+          "routed_source_entry": "web/src/pages/project/CommunitiesList.tsx",
+          "source_entry": "web/src/pages/project/communities/index.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/project/CommunitiesList.tsx",
+          "source_entry": "web/src/components/tasks/TaskList.tsx"
+        }
+      ],
       "api_method": "GET",
       "api_path": "/api/v1/graph/communities/",
       "permissions": [
@@ -176,7 +186,7 @@
       "local_status": "planned",
       "local_policy": "native_equivalent",
       "local_reason_code": "local_community_projection_authority_planned",
-      "judgment_rationale": "The auditable routed module CommunitiesList.tsx is a pure re-export to communities/index.tsx, whose production implementation lists Communities, loads members, starts rebuilds, streams and cancels the active rebuild task, and embeds TaskList.tsx for recent-task listing, retry and stop controls. These imported implementation sources establish the action and API inventory; the routed source-content hash alone is not execution evidence. Desktop has no native communities management route, and Local needs a real community projection rather than a textual search approximation."
+      "judgment_rationale": "The auditable routed module CommunitiesList.tsx is a pure re-export to communities/index.tsx, whose production implementation lists Communities, loads members, starts rebuilds, streams and cancels the active rebuild task, and embeds TaskList.tsx for recent-task listing, retry and stop controls. The structured runtime dependency graph proves both implementation files are reachable from the routed wrapper, and the inventory binds every reviewed path node to the audited revision with SHA-256; source-content integrity remains distinct from execution evidence. Desktop has no native communities management route, and Local needs a real community projection rather than a textual search approximation."
     },
     {
       "id": "project-project-graph",
@@ -287,7 +297,8 @@
         "temporal-search",
         "graph-traversal",
         "community-search",
-        "export"
+        "export",
+        "copy-result-id"
       ],
       "web_actions": [
         "view",
@@ -298,7 +309,8 @@
         "temporal-search",
         "graph-traversal",
         "community-search",
-        "export"
+        "export",
+        "copy-result-id"
       ],
       "cloud_actions": [
         "view",
@@ -308,14 +320,16 @@
         "faceted-search",
         "temporal-search",
         "graph-traversal",
-        "community-search"
+        "community-search",
+        "copy-result-id"
       ],
       "local_actions": [
         "view",
         "search",
         "filter",
         "faceted-search",
-        "temporal-search"
+        "temporal-search",
+        "copy-result-id"
       ],
       "api_contracts": [
         {
@@ -433,7 +447,8 @@
             "temporal-search",
             "graph-traversal",
             "community-search",
-            "export"
+            "export",
+            "copy-result-id"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -452,7 +467,8 @@
             "faceted-search",
             "temporal-search",
             "graph-traversal",
-            "community-search"
+            "community-search",
+            "copy-result-id"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -468,7 +484,8 @@
             "search",
             "filter",
             "faceted-search",
-            "temporal-search"
+            "temporal-search",
+            "copy-result-id"
           ],
           "authentication": "authenticated",
           "authorization": [],
@@ -490,7 +507,7 @@
         "agi-stack/apps/desktop/src/features/search/localSearchClient.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/search.rs"
       ],
-      "judgment_rationale": "DesktopSearch is a real native surface in both modes and Cloud wires all EnhancedSearch strategies, but it lacks Web result export and the canonical route/deep-link contract. The Local sidecar explicitly supports advanced keyword-degraded, temporal and faceted search while declaring graph traversal and community search unavailable, so per-surface actions are recorded separately."
+      "judgment_rationale": "EnhancedSearch and DesktopSearch both expose copy-result-id through navigator.clipboard without a server API. DesktopSearch is a real native surface in both modes and Cloud wires all EnhancedSearch strategies, but it lacks Web result export and the canonical route/deep-link contract. The Local sidecar explicitly supports advanced keyword-degraded, temporal and faceted search while declaring graph traversal and community search unavailable, so per-surface actions are recorded separately."
     }
   ],
   "source_ownership": {

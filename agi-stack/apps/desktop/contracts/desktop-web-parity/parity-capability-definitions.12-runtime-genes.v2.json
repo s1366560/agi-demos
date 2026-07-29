@@ -177,7 +177,8 @@
         "list-reviews",
         "create-review",
         "delete-own-review",
-        "inspect-genome"
+        "inspect-genome",
+        "inspect-evolution"
       ],
       "permission_requirements": [
         {
@@ -186,6 +187,7 @@
             "view",
             "list",
             "inspect-genome",
+            "inspect-evolution",
             "list-reviews"
           ],
           "authentication": "authenticated",
@@ -244,7 +246,7 @@
       "local_policy": "native_equivalent",
       "local_reason_code": "local_gene_market_authority_planned",
       "local_deviation": "Local Desktop may manage and import local Gene and Genome packages, but organization publication, global market visibility, and remote ratings require a declared Cloud authority.",
-      "judgment_rationale": "GeneMarket, GeneDetail, and GenomeDetail directly implement the canonical Gene capability, including package installation from both detail views. Desktop has neither a native market route nor an audited local Gene or Genome package authority, so both native surfaces remain explicitly planned with Local market deviations."
+      "judgment_rationale": "GeneMarket, GeneDetail, and GenomeDetail directly implement the canonical Gene capability, including package installation from both detail views. GeneDetail also calls listGeneEvolutionEvents and renders the returned evolution history for tenant members. Desktop has neither a native market route nor an audited local Gene or Genome package authority, so both native surfaces remain explicitly planned with Local market deviations."
     }
   ],
   "source_ownership": {

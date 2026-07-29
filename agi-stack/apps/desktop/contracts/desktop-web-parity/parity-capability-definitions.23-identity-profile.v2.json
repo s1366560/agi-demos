@@ -235,7 +235,7 @@
         {
           "surface": "web",
           "method": "GET",
-          "path": "/api/v1/users/me",
+          "path": "/api/v1/auth/me",
           "authority": "web_service"
         },
         {
@@ -314,7 +314,7 @@
         "retry"
       ],
       "expected_observable_result": "Cloud Desktop renders and updates the authenticated global user profile through Cloud authority. Local Desktop renders the same native read-only identity projection through sidecar auth-me and returns a stable unavailable state for mutation; neither mode caches secret credentials or falls back to Web UI.",
-      "judgment_rationale": "UserProfile owns two tenant-nested production route registrations, but its authority is the global authenticated user. Desktop Account Settings currently projects identity details but lacks the routed profile edit lifecycle. Local mode also implements the read projection through auth-me while profile mutation remains unavailable."
+      "judgment_rationale": "UserProfile owns two tenant-nested production route registrations, but its authority is the global authenticated user. The page reads useAuthStore.user; authAPI.login and authAPI.verifyToken hydrate that store through GET /auth/me, while profile and language mutations use PUT /users/me and password change uses POST /auth/force-change-password. Desktop Account Settings currently projects identity details but lacks the routed profile edit lifecycle. Local mode also implements the read projection through auth-me while profile mutation remains unavailable."
     }
   ],
   "source_ownership": {

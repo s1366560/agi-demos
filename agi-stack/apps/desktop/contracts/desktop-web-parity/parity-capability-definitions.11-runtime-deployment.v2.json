@@ -204,12 +204,6 @@
         {
           "surface": "web",
           "method": "GET",
-          "path": "/api/v1/deploys/instances/{instance_id}/latest",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "GET",
           "path": "/api/v1/deploys/{deploy_id}/progress",
           "authority": "web_service"
         },
@@ -303,6 +297,12 @@
         "mark-success",
         "mark-failed"
       ],
+      "web_actions": [
+        "view",
+        "create",
+        "inspect-progress",
+        "stream-progress"
+      ],
       "permission_requirements": [
         {
           "surface": "web",
@@ -322,12 +322,14 @@
           "feature_gate": null
         }
       ],
+      "web_status": "partial",
+      "web_reason_code": "web_deploy_contract_mismatch",
       "cloud_status": "planned",
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_deployment_authority_not_applicable",
       "local_deviation": "Local Desktop may run supervised local work but does not expose the Cloud deployment authority. It must render a stable cloud-only state instead of launching an external control plane.",
-      "judgment_rationale": "DeployProgress is shared by tenant deployment routes and nested instance deployment routes, so one audited Deployments capability owns the source. Web tenant members can create a deployment as well as inspect and mutate its progress. Native Desktop lacks the route and production progress stream; Local deployment is intentionally cloud-only."
+      "judgment_rationale": "DeployProgress is shared by tenant deployment routes and nested instance deployment routes, so one audited Deployments capability owns the source. The routed page calls list, create, detail, progress, success, failed, and cancel, but not getLatestForInstance. Web is degraded because the backend list field deploys is read as deployments, finished_at and message are rendered as completed_at and error_message, success sends no required body, failed supplies no required non-empty message, and the running status is tested as in_progress for cancellation. Native Desktop lacks the route and production progress stream; Local deployment is intentionally cloud-only."
     },
     {
       "id": "tenant-tenant-instance-templates",
@@ -359,12 +361,6 @@
         },
         {
           "surface": "web",
-          "method": "PUT",
-          "path": "/api/v1/instance-templates/{template_id}",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
           "method": "DELETE",
           "path": "/api/v1/instance-templates/{template_id}",
           "authority": "web_service"
@@ -378,12 +374,6 @@
         {
           "surface": "web",
           "method": "POST",
-          "path": "/api/v1/instance-templates/{template_id}/unpublish",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
           "path": "/api/v1/instance-templates/{template_id}/clone",
           "authority": "web_service"
         },
@@ -391,18 +381,6 @@
           "surface": "web",
           "method": "GET",
           "path": "/api/v1/instance-templates/{template_id}/items",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "POST",
-          "path": "/api/v1/instance-templates/{template_id}/items",
-          "authority": "web_service"
-        },
-        {
-          "surface": "web",
-          "method": "DELETE",
-          "path": "/api/v1/instance-templates/{template_id}/items/{item_id}",
           "authority": "web_service"
         },
         {
@@ -488,6 +466,7 @@
       "actions": [
         "view",
         "list",
+        "list-items",
         "create",
         "delete",
         "publish",
@@ -497,7 +476,7 @@
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": ["view", "list"],
+          "actions": ["view", "list", "list-items"],
           "authentication": "authenticated",
           "authorization": ["tenant_member"],
           "enforcement": "enforced",
@@ -523,7 +502,7 @@
       "local_policy": "native_equivalent",
       "local_reason_code": "local_instance_template_authority_planned",
       "local_deviation": "Local templates must describe only sidecar-supported resources and keep imported files within the workspace root and declared size and MIME limits.",
-      "judgment_rationale": "InstanceTemplateList and TemplateDetail form a dedicated canonical lifecycle distinct from the general template marketplace. The production page supports create, delete, publish, clone, and deploy-from-template but does not expose update or item management. No routed native editor or Local sidecar contract currently proves parity, although a bounded single-machine equivalent is meaningful."
+      "judgment_rationale": "InstanceTemplateList and TemplateDetail form a dedicated canonical lifecycle distinct from the general template marketplace. The production pages support list, create, detail, list-items, delete, publish, clone, and deploy-from-template. They do not call update, unpublish, add-item, or remove-item APIs. No routed native editor or Local sidecar contract currently proves parity, although a bounded single-machine equivalent is meaningful."
     }
   ],
   "source_ownership": {

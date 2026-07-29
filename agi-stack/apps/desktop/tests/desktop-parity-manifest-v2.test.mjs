@@ -68,6 +68,11 @@ test("every capability declares all product surfaces and auditable authority met
       true,
       capability.id,
     );
+    assert.equal(
+      Array.isArray(capability.web_production_dependencies),
+      true,
+      capability.id,
+    );
     assert.equal(capability.data_states.length > 0, true, capability.id);
     assert.equal(capability.interaction_states.length > 0, true, capability.id);
     assert.equal(
@@ -194,6 +199,11 @@ test("capability judgments bind the audited hashes of routed pages and route reg
       capability.audited_web_sources,
       capability.id,
     );
+    assert.deepEqual(
+      capability.judgment.input.web_production_dependencies ?? [],
+      capability.web_production_dependencies,
+      capability.id,
+    );
     const capabilitySources = new Map(
       capability.audited_web_sources.map((source) => [
         source.source_entry,
@@ -232,6 +242,77 @@ test("capability judgments bind the audited hashes of routed pages and route reg
       );
     }
   }
+});
+
+test("reviewed Web production dependencies bind reachable paths and audited SHA-256 sources", () => {
+  const manifest = readJson("parity-manifest.v2.json");
+  const inventory = readJson("web-route-inventory.v2.json");
+  const inventoryEdges = new Set(
+    inventory.production_dependency_edges.map((edge) => JSON.stringify(edge)),
+  );
+  const communities = manifest.capabilities.find(
+    (capability) => capability.id === "project-project-communities",
+  );
+
+  assert.ok(communities);
+  assert.deepEqual(
+    communities.web_production_dependencies.map(
+      ({ routed_source_entry, source_entry }) => ({
+        routed_source_entry,
+        source_entry,
+      }),
+    ),
+    [
+      {
+        routed_source_entry:
+          "web/src/pages/project/CommunitiesList.tsx",
+        source_entry: "web/src/pages/project/communities/index.tsx",
+      },
+      {
+        routed_source_entry:
+          "web/src/pages/project/CommunitiesList.tsx",
+        source_entry: "web/src/components/tasks/TaskList.tsx",
+      },
+    ],
+  );
+
+  const auditedByEntry = new Map(
+    communities.audited_web_sources.map((source) => [
+      source.source_entry,
+      source,
+    ]),
+  );
+  for (const dependency of communities.web_production_dependencies) {
+    assert.equal(dependency.dependency_path.length > 0, true);
+    assert.equal(
+      dependency.dependency_path[0].from_source_entry,
+      dependency.routed_source_entry,
+    );
+    assert.equal(
+      dependency.dependency_path.at(-1).to_source_entry,
+      dependency.source_entry,
+    );
+    for (const edge of dependency.dependency_path) {
+      assert.equal(inventoryEdges.has(JSON.stringify(edge)), true);
+    }
+    assert.equal(
+      communities.production_entries.web.includes(dependency.source_entry),
+      true,
+    );
+    const auditedSource = auditedByEntry.get(dependency.source_entry);
+    assert.ok(auditedSource);
+    assert.equal(
+      auditedSource.roles.includes("production_dependency"),
+      true,
+    );
+    assert.match(auditedSource.sha256, /^sha256:[0-9a-f]{64}$/u);
+  }
+
+  const nativeOnlyCapability = manifest.capabilities.find(
+    (capability) => capability.id === "application-encrypted-vault",
+  );
+  assert.ok(nativeOnlyCapability);
+  assert.deepEqual(nativeOnlyCapability.web_production_dependencies, []);
 });
 
 test("manifest source entries and pinned revisions resolve in the audited repository", () => {

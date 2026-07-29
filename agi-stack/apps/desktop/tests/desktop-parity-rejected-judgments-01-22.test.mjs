@@ -30,6 +30,24 @@ function permissionActions(capability, surface) {
     .flatMap((requirement) => requirement.actions);
 }
 
+function permissionActionsForAuthorization(capability, surface, authorization) {
+  return capability.permission_requirements
+    .filter(
+      (requirement) =>
+        requirement.surface === surface &&
+        requirement.authorization.includes(authorization),
+    )
+    .flatMap((requirement) => requirement.actions);
+}
+
+function permissionRequirementsForAction(capability, surface, action) {
+  return capability.permission_requirements.filter(
+    (requirement) =>
+      requirement.surface === surface &&
+      requirement.actions.includes(action),
+  );
+}
+
 function assertPermissionCoverage(capability, surface, actions) {
   const covered = permissionActions(capability, surface);
   for (const action of actions) {
@@ -101,6 +119,10 @@ test("Tenant Workspaces binds native settings entries, contracts, and permission
     "agi-stack/apps/desktop/src/App.tsx",
     "agi-stack/apps/desktop/src/api/client.ts",
     "agi-stack/apps/desktop/src/features/workspace/WorkspaceSettingsDialog.tsx",
+    "agi-stack/apps/desktop/src/features/workspace/WorkspaceMembersPanel.tsx",
+    "agi-stack/apps/desktop/src/features/workspace/workspaceMembersModel.ts",
+    "agi-stack/apps/desktop/src/features/workspace/WorkspaceAgentBindingsPanel.tsx",
+    "agi-stack/apps/desktop/src/features/workspace/workspaceAgentBindingsModel.ts",
   ]) {
     assert.ok(capability.cloud_entries.includes(entry), `missing ${entry}`);
   }
@@ -137,6 +159,32 @@ test("Tenant Workspaces binds native settings entries, contracts, and permission
     capability,
     "desktop_local",
     capability.local_actions,
+  );
+  assert.deepEqual(
+    permissionActionsForAuthorization(
+      capability,
+      "desktop_cloud",
+      "workspace_editor",
+    ).sort(),
+    ["bind-agent", "unbind-agent", "update"],
+  );
+  assert.deepEqual(
+    permissionActionsForAuthorization(
+      capability,
+      "desktop_cloud",
+      "workspace_owner",
+    ),
+    ["manage-members"],
+  );
+  assert.equal(
+    capability.permission_requirements.some((requirement) =>
+      requirement.authorization.includes("workspace_manager"),
+    ),
+    false,
+  );
+  assert.equal(
+    capability.permissions.includes("workspace_manager_for_mutations"),
+    false,
   );
 });
 
@@ -184,6 +232,48 @@ test("Workflow Patterns excludes unbound detail and reset authorities", () => {
   ]);
 });
 
+test("Skills records the evolution read bound by SkillDetail", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.04-agent-skills.v2.json",
+    "tenant-tenant-skills",
+  );
+  const evolutionContract =
+    "GET /api/v1/skills/{skill_id}/evolution";
+
+  assert.ok(contractKeys(capability, "web").includes(evolutionContract));
+  assert.equal(capability.actions.includes("view-evolution"), true);
+  assert.equal(capability.web_actions.includes("view-evolution"), true);
+  assert.equal(capability.cloud_actions.includes("view-evolution"), false);
+  assert.equal(capability.local_actions.includes("view-evolution"), false);
+  assert.deepEqual(
+    permissionRequirementsForAction(
+      capability,
+      "web",
+      "view-evolution",
+    ),
+    [
+      {
+        surface: "web",
+        actions: [
+          "view",
+          "list",
+          "get",
+          "view-evolution",
+          "export",
+          "list-versions",
+          "get-version",
+        ],
+        authentication: "authenticated",
+        authorization: ["tenant_member", "project_member"],
+        enforcement: "enforced",
+        feature_gate: null,
+      },
+    ],
+  );
+  assert.match(capability.judgment_rationale, /SkillDetail/u);
+  assert.match(capability.judgment_rationale, /getEvolution/u);
+});
+
 test("Desktop MCP actions match the list and create settings UI", () => {
   const capability = readCapability(
     "parity-capability-definitions.07-extension-protocols.v2.json",
@@ -198,6 +288,67 @@ test("Desktop MCP actions match the list and create settings UI", () => {
   assert.deepEqual(contractKeys(capability, "desktop_local"), expectedContracts);
   assertPermissionCoverage(capability, "desktop_cloud", expectedActions);
   assertPermissionCoverage(capability, "desktop_local", expectedActions);
+});
+
+test("Web MCP Servers records the directly rendered MCP Apps tab without proxy overclaim", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.07-extension-protocols.v2.json",
+    "tenant-tenant-mcp-servers",
+  );
+  const appActions = [
+    "list-apps",
+    "search-apps",
+    "delete-app",
+    "refresh-app",
+    "open-app-in-canvas",
+  ];
+  const webContracts = contractKeys(capability, "web");
+
+  for (const contract of [
+    "GET /api/v1/mcp/apps",
+    "DELETE /api/v1/mcp/apps/{app_id}",
+    "POST /api/v1/mcp/apps/{app_id}/refresh",
+  ]) {
+    assert.ok(webContracts.includes(contract), `web missing ${contract}`);
+  }
+  for (const contract of [
+    "GET /api/v1/mcp/apps/{app_id}/resource",
+    "POST /api/v1/mcp/apps/{app_id}/tool-call",
+    "POST /api/v1/mcp/apps/proxy/tool-call",
+    "POST /api/v1/mcp/apps/resources/read",
+    "POST /api/v1/mcp/apps/resources/list",
+  ]) {
+    assert.equal(webContracts.includes(contract), false, contract);
+  }
+  for (const action of appActions) {
+    assert.equal(capability.actions.includes(action), true, action);
+    assert.equal(capability.web_actions.includes(action), true, action);
+    assert.equal(capability.cloud_actions.includes(action), false, action);
+    assert.equal(capability.local_actions.includes(action), false, action);
+  }
+  assert.deepEqual(
+    permissionActionsForAuthorization(
+      capability,
+      "web",
+      "project_member",
+    ).filter((action) => appActions.includes(action)),
+    ["list-apps", "search-apps", "open-app-in-canvas"],
+  );
+  assert.deepEqual(
+    permissionActionsForAuthorization(
+      capability,
+      "web",
+      "project_contributor",
+    ).filter((action) => appActions.includes(action)),
+    ["delete-app", "refresh-app"],
+  );
+  assert.equal(capability.web_status, "partial");
+  assert.equal(
+    capability.web_reason_code,
+    "web_mcp_app_canvas_context_incomplete",
+  );
+  assert.match(capability.judgment_rationale, /McpAppsTabV2/u);
+  assert.match(capability.judgment_rationale, /Canvas/u);
 });
 
 test("ACP records only controls bound by AcpDashboard", () => {
@@ -255,28 +406,90 @@ test("Cloud Providers excludes Local-only routing mutation and discovery", () =>
   );
 });
 
-test("Web Providers excludes service methods without routed production callers", () => {
+test("Provider types are bound by ProviderConfigModal across all three product surfaces", () => {
   const capability = readCapability(
     "parity-capability-definitions.08-provider-webhooks.v2.json",
     "tenant-tenant-providers",
   );
   const webContracts = contractKeys(capability, "web");
-  const webPermissions = permissionActions(capability, "web");
+  const providerTypesContract = "GET /api/v1/llm-providers/types";
 
   for (const contract of [
     "GET /api/v1/llm-providers/{provider_id}",
-    "GET /api/v1/llm-providers/types",
     "GET /api/v1/llm-providers/tenants/{tenant_id}/provider",
     "GET /api/v1/llm-providers/models/catalog/search",
   ]) {
     assert.equal(webContracts.includes(contract), false, contract);
   }
+  for (const surface of ["web", "desktop_cloud", "desktop_local"]) {
+    assert.equal(
+      contractKeys(capability, surface).includes(providerTypesContract),
+      true,
+      `${surface} provider types contract`,
+    );
+    assert.equal(
+      capability[
+        surface === "web"
+          ? "web_actions"
+          : surface === "desktop_cloud"
+            ? "cloud_actions"
+            : "local_actions"
+      ].includes("list-provider-types"),
+      true,
+      `${surface} provider types action`,
+    );
+    assert.deepEqual(
+      permissionRequirementsForAction(
+        capability,
+        surface,
+        "list-provider-types",
+      ),
+      [
+        {
+          surface,
+          actions:
+            surface === "web"
+              ? [
+                  "view",
+                  "list",
+                  "list-provider-types",
+                  "view-usage",
+                  "list-models",
+                  "search-models",
+                ]
+              : surface === "desktop_cloud"
+                ? [
+                    "view",
+                    "list",
+                    "list-provider-types",
+                    "view-usage",
+                    "list-models",
+                  ]
+                : [
+                    "view",
+                    "list",
+                    "list-provider-types",
+                    "health-check",
+                    "test-connection",
+                    "view-usage",
+                    "list-models",
+                    "discover-models",
+                  ],
+          authentication: "authenticated",
+          authorization: [],
+          enforcement: "enforced",
+          feature_gate: null,
+        },
+      ],
+    );
+  }
+  assert.equal(capability.actions.includes("list-provider-types"), true);
   assert.equal(capability.actions.includes("get"), false);
   assert.equal(capability.web_actions.includes("get"), false);
-  assert.equal(webPermissions.includes("get"), false);
   assert.equal(capability.web_actions.includes("search-models"), true);
-  assert.equal(webPermissions.includes("search-models"), true);
   assert.ok(webContracts.includes("GET /api/v1/llm-providers/models/catalog"));
+  assert.match(capability.judgment_rationale, /ProviderConfigModal/u);
+  assert.match(capability.judgment_rationale, /listTypes/u);
 });
 
 test("Runtime Instances excludes the unbound general config contract", () => {
@@ -340,6 +553,7 @@ test("Project Search binds every Cloud action to project membership", () => {
     "temporal-search",
     "graph-traversal",
     "community-search",
+    "copy-result-id",
   ];
   const cloudRequirements = capability.permission_requirements.filter(
     (requirement) => requirement.surface === "desktop_cloud",

@@ -9,8 +9,10 @@ const contractRoot = new URL(
 const registry = JSON.parse(
   readFileSync(new URL("parity-capability-fragments.v2.json", contractRoot)),
 );
-const capabilities = registry.fragments.flatMap((fileName) =>
-  JSON.parse(readFileSync(new URL(fileName, contractRoot), "utf8")).capabilities,
+const capabilities = registry.fragments.flatMap(
+  (fileName) =>
+    JSON.parse(readFileSync(new URL(fileName, contractRoot), "utf8"))
+      .capabilities,
 );
 const genes = capabilities.find(
   (capability) => capability.id === "tenant-tenant-genes",
@@ -146,11 +148,18 @@ test("Gene Market actions preserve tenant and review ownership enforcement", () 
     "create-review",
     "delete-own-review",
     "inspect-genome",
+    "inspect-evolution",
   ]);
   assert.deepEqual(genes.permission_requirements, [
     {
       surface: "web",
-      actions: ["view", "list", "inspect-genome", "list-reviews"],
+      actions: [
+        "view",
+        "list",
+        "inspect-genome",
+        "inspect-evolution",
+        "list-reviews",
+      ],
       authentication: "authenticated",
       authorization: ["tenant_member"],
       enforcement: "enforced",

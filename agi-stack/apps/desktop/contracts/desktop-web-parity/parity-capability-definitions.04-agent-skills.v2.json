@@ -94,6 +94,12 @@
         },
         {
           "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/skills/{skill_id}/evolution",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
           "method": "POST",
           "path": "/api/v1/skills/{skill_id}/rollback",
           "authority": "web_service"
@@ -277,6 +283,7 @@
         "view",
         "list",
         "get",
+        "view-evolution",
         "create",
         "update",
         "delete",
@@ -293,6 +300,7 @@
         "view",
         "list",
         "get",
+        "view-evolution",
         "create",
         "update",
         "delete",
@@ -343,6 +351,7 @@
             "view",
             "list",
             "get",
+            "view-evolution",
             "export",
             "list-versions",
             "get-version"
@@ -462,7 +471,7 @@
         "agi-stack/apps/desktop/src/features/settings/ManagedResourceViews.tsx",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/managed_resources.rs"
       ],
-      "judgment_rationale": "Desktop has native revision-aware skill CRUD, content, package, export, version, and rollback flows backed by Cloud or Local authority. The canonical route and complete Web state matrix remain partial, and Local ZIP import is explicitly outside the current safe sidecar subset."
+      "judgment_rationale": "Web SkillDetail binds getEvolution to the skill evolution read contract in addition to revision-aware CRUD, content, package, export, version, and rollback flows. Desktop has native Cloud or Local authority for the existing resource flows but does not yet expose view-evolution. The canonical route and complete Web state matrix remain partial, and Local ZIP import is explicitly outside the current safe sidecar subset."
     }
   ],
   "source_ownership": {

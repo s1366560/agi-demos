@@ -12,6 +12,7 @@ import {
   extractLazyPageEntries,
   extractProductionRoutes,
 } from './web-route-extractors.mjs';
+import { discoverRoutedProductionDependencies } from './web-production-dependency-graph.mjs';
 import { resolveRouteRegistrationMounts } from './web-route-mounts.mjs';
 import { discoverReachableWebRouteSources } from './web-route-source-graph.mjs';
 import { ROUTER_RELATIVE_PATH } from './web-route-source-resolver.mjs';
@@ -33,6 +34,8 @@ const INVENTORY_SOURCES = Object.freeze({
   eager_route_entries:
     'reachable route registration modules#relative imports used by JSX or object routes',
   lazy_page_entries: 'reachable route registration modules#lazy(import())',
+  production_dependency_entries:
+    'routed source modules#transitive local runtime imports, re-exports, and static import()',
   production_router:
     'reachable modules registering JSX Route or static react-router-dom route objects',
 });
@@ -178,13 +181,17 @@ function compareSourceEntries(left, right) {
 
 function buildAuditedSources({
   navigationSource,
+  productionDependencySources,
   reachableSources,
   routeRegistrationSources,
   routedSourceEntries,
   repositoryRoot,
 }) {
   const sourceByEntry = new Map(
-    reachableSources.map((source) => [source.source_entry, source.source])
+    [...reachableSources, ...productionDependencySources].map((source) => [
+      source.source_entry,
+      source.source,
+    ])
   );
   sourceByEntry.set(NAVIGATION_RELATIVE_PATH, navigationSource);
   const rolesBySource = new Map();
@@ -201,6 +208,9 @@ function buildAuditedSources({
   }
   for (const entry of routedSourceEntries) {
     addRole(entry.source_entry, 'routed_page');
+  }
+  for (const source of productionDependencySources) {
+    addRole(source.source_entry, 'production_dependency');
   }
 
   return [...rolesBySource]
@@ -266,12 +276,18 @@ export function buildWebRouteInventoryFromSources({
   }
   lazyPageEntries.sort(compareSourceEntries);
   eagerRouteEntries.sort(compareSourceEntries);
+  const routedSourceEntries = [...lazyPageEntries, ...eagerRouteEntries];
+  const productionDependencies = discoverRoutedProductionDependencies({
+    repositoryRoot,
+    routedSourceEntries,
+  });
   const productionRoutes = addProductionRouteKeys(unkeyedProductionRoutes);
   const auditedSources = buildAuditedSources({
     navigationSource,
+    productionDependencySources: productionDependencies.dependency_sources,
     reachableSources: sourceGraph.reachable_sources,
     routeRegistrationSources: sourceGraph.route_registration_sources,
-    routedSourceEntries: [...lazyPageEntries, ...eagerRouteEntries],
+    routedSourceEntries,
     repositoryRoot,
   });
   const routeRegistrationSources = sourceGraph.route_registration_sources.map(
@@ -288,6 +304,8 @@ export function buildWebRouteInventoryFromSources({
       canonical_navigation_targets: canonicalNavigationTargets.length,
       eager_route_entries: eagerRouteEntries.length,
       lazy_page_entries: lazyPageEntries.length,
+      production_dependency_edges: productionDependencies.dependency_edges.length,
+      production_dependency_sources: productionDependencies.dependency_sources.length,
       production_routes: productionRoutes.length,
       route_registration_sources: routeRegistrationSources.length,
     },
@@ -296,6 +314,7 @@ export function buildWebRouteInventoryFromSources({
     production_routes: productionRoutes,
     eager_route_entries: eagerRouteEntries,
     lazy_page_entries: lazyPageEntries,
+    production_dependency_edges: productionDependencies.dependency_edges,
     route_registration_sources: routeRegistrationSources,
   };
 }
