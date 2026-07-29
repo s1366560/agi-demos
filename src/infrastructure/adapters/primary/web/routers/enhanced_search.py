@@ -553,6 +553,8 @@ async def get_search_capabilities(current_user: User = Depends(get_current_user)
     Returns information about available search types and their parameters.
     """
     return {
+        "service_version": "0.1.0",
+        "contract_version": "2.0.0",
         "search_types": {
             "semantic": {
                 "description": "Semantic search using embeddings and hybrid retrieval",

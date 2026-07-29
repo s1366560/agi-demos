@@ -619,6 +619,8 @@ async fn community_search_fanout_uses_identity_project_membership() {
 #[tokio::test]
 async fn capabilities_and_error_envelopes_are_fastapi_compatible() {
     let Json(capabilities) = search_capabilities().await;
+    assert_eq!(capabilities["service_version"], "0.1.0");
+    assert_eq!(capabilities["contract_version"], "2.0.0");
     assert_eq!(
         capabilities["search_types"]["faceted"]["endpoint"],
         "/api/v1/search-enhanced/faceted"

@@ -78,6 +78,8 @@ class TestEnhancedSearchRouter:
     ) -> None:
         capabilities = await get_search_capabilities(current_user=test_user)
 
+        assert capabilities["service_version"] == "0.1.0"
+        assert capabilities["contract_version"] == "2.0.0"
         assert capabilities["search_types"]["semantic"]["endpoint"] == "/api/v1/memory/search"
         assert (
             capabilities["search_types"]["advanced"]["endpoint"]

@@ -562,6 +562,8 @@ async fn search_faceted(
 
 async fn search_capabilities() -> Json<Value> {
     Json(json!({
+        "service_version": env!("CARGO_PKG_VERSION"),
+        "contract_version": "2.0.0",
         "search_types": {
             "semantic": {
                 "description": "Semantic search using embeddings and hybrid retrieval",
