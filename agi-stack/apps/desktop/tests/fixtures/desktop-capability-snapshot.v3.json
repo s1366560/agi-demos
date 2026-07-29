@@ -1,0 +1,62 @@
+{
+  "version": "3.0.0",
+  "mode": "cloud",
+  "capabilities": {
+    "automation_run": {
+      "availability": "available",
+      "reason_code": null,
+      "service_version": "0.1.0",
+      "contract_version": "2.0.0",
+      "allowed_actions": ["run_now"],
+      "scope": {
+        "tenant_id": "tenant-1",
+        "project_id": "project-1",
+        "workspace_id": null,
+        "instance_id": null
+      },
+      "authority_revision": 12
+    },
+    "search": {
+      "availability": "degraded",
+      "reason_code": "local_embeddings_unavailable",
+      "service_version": "0.1.0",
+      "contract_version": "2.0.0",
+      "allowed_actions": ["advanced", "temporal", "faceted"],
+      "scope": {
+        "tenant_id": "tenant-1",
+        "project_id": "project-1",
+        "workspace_id": null,
+        "instance_id": null
+      },
+      "authority_revision": 18
+    },
+    "workspace_collaboration": {
+      "availability": "unavailable",
+      "reason_code": "workspace_collaboration_capability_contract_unavailable",
+      "service_version": null,
+      "contract_version": null,
+      "allowed_actions": [],
+      "scope": {
+        "tenant_id": "tenant-1",
+        "project_id": "project-1",
+        "workspace_id": "workspace-1",
+        "instance_id": null
+      },
+      "authority_revision": null
+    },
+    "sandbox_isolation": {
+      "availability": "not_applicable",
+      "reason_code": "local_isolation_not_applicable",
+      "service_version": null,
+      "contract_version": null,
+      "allowed_actions": [],
+      "scope": {
+        "tenant_id": "tenant-1",
+        "project_id": "project-1",
+        "workspace_id": "workspace-1",
+        "instance_id": null
+      },
+      "authority_revision": null
+    }
+  }
+}

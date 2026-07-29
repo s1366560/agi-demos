@@ -18,39 +18,63 @@ const fixture = JSON.parse(
   ),
 );
 
-test('DesktopCapabilitySnapshot v2 normalizes the shared versioned fixture', () => {
+const nullScope = {
+  tenant_id: null,
+  project_id: null,
+  workspace_id: null,
+  instance_id: null,
+};
+
+test('DesktopCapabilitySnapshot v2 normalizes read-only input into v3', () => {
   const snapshot = parseDesktopCapabilitySnapshot(fixture.input.snapshot);
-  assert.deepEqual(snapshot, fixture.input.snapshot);
+  assert.equal(snapshot?.version, '3.0.0');
   assert.deepEqual(desktopCapability(snapshot, 'sandbox_isolation'), {
-    status: 'not_applicable',
-    available: false,
+    availability: 'not_applicable',
     reason_code: 'local_isolation_not_applicable',
     service_version: null,
     contract_version: null,
-    minimum_contract_version: '2.0.0',
+    allowed_actions: [],
+    scope: nullScope,
+    authority_revision: null,
+    status: 'not_applicable',
+    available: false,
   });
   assert.deepEqual(desktopCapability(snapshot, 'search'), {
-    status: 'degraded',
-    available: true,
+    availability: 'degraded',
     reason_code: 'local_search_keyword_only',
     service_version: '0.1.0',
     contract_version: '2.0.0',
-    minimum_contract_version: '2.0.0',
+    allowed_actions: [],
+    scope: nullScope,
+    authority_revision: null,
+    status: 'degraded',
+    available: true,
   });
   assert.deepEqual(desktopCapability(snapshot, 'workspace_collaboration'), {
-    status: 'unavailable',
-    available: false,
+    availability: 'unavailable',
     reason_code: 'local_workspace_collaboration_unavailable',
     service_version: null,
     contract_version: null,
-    minimum_contract_version: '2.0.0',
+    allowed_actions: [],
+    scope: nullScope,
+    authority_revision: null,
+    status: 'unavailable',
+    available: false,
   });
 });
 
-test('DesktopCapabilitySnapshot fails closed on missing, extra, or inconsistent fields', () => {
+test('DesktopCapabilitySnapshot closes missing capabilities and rejects unsafe fields', () => {
   const missing = structuredClone(fixture.input.snapshot);
   delete missing.capabilities.search;
-  assert.equal(parseDesktopCapabilitySnapshot(missing), null);
+  assert.deepEqual(parseDesktopCapabilitySnapshot(missing)?.capabilities.search, {
+    availability: 'unavailable',
+    reason_code: 'capability_not_declared',
+    service_version: null,
+    contract_version: null,
+    allowed_actions: [],
+    scope: nullScope,
+    authority_revision: null,
+  });
 
   const extra = structuredClone(fixture.input.snapshot);
   extra.capabilities.search.hint = 'guess from a 404';
@@ -61,11 +85,14 @@ test('DesktopCapabilitySnapshot fails closed on missing, extra, or inconsistent 
   assert.equal(parseDesktopCapabilitySnapshot(inconsistent), null);
 
   assert.deepEqual(desktopCapability(null, 'search'), {
-    status: 'unavailable',
-    available: false,
+    availability: 'unavailable',
     reason_code: 'capability_snapshot_unavailable',
     service_version: null,
     contract_version: null,
-    minimum_contract_version: '2.0.0',
+    allowed_actions: [],
+    scope: nullScope,
+    authority_revision: null,
+    status: 'unavailable',
+    available: false,
   });
 });

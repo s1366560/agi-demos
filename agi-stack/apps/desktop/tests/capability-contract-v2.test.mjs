@@ -16,12 +16,18 @@ const {
   negotiateCapabilityContract,
 } = require('/tmp/agistack-desktop-test-dist/src/features/runtime/capabilityVersion.js');
 const contractRoot = new URL('../contracts/desktop-web-parity/', import.meta.url);
+const nullScope = {
+  tenant_id: null,
+  project_id: null,
+  workspace_id: null,
+  instance_id: null,
+};
 
 function readJson(relativePath) {
   return JSON.parse(readFileSync(new URL(relativePath, contractRoot), 'utf8'));
 }
 
-test('DesktopCapabilitySnapshot v2 validates and projects all four explicit states', () => {
+test('DesktopCapabilitySnapshot v2 remains a validated read-only input contract', () => {
   const fixture = readJson('fixtures/capability-snapshot.v2.json');
   const fixtureSchema = readJson('parity-fixture.v2.schema.json');
   const schema = readJson('desktop-capability-snapshot.v2.schema.json');
@@ -29,22 +35,28 @@ test('DesktopCapabilitySnapshot v2 validates and projects all four explicit stat
   assert.deepEqual(validateJsonSchema(fixtureSchema, fixture), []);
   assert.deepEqual(validateJsonSchema(schema, fixture.input.snapshot), []);
   const snapshot = parseDesktopCapabilitySnapshot(fixture.input.snapshot);
-  assert.deepEqual(snapshot, fixture.input.snapshot);
+  assert.equal(snapshot?.version, '3.0.0');
   assert.deepEqual(desktopCapability(snapshot, 'search'), {
-    status: 'degraded',
-    available: true,
+    availability: 'degraded',
     reason_code: 'local_search_keyword_only',
     service_version: '0.1.0',
     contract_version: '2.0.0',
-    minimum_contract_version: '2.0.0',
+    allowed_actions: [],
+    scope: nullScope,
+    authority_revision: null,
+    status: 'degraded',
+    available: true,
   });
   assert.deepEqual(desktopCapability(snapshot, 'sandbox_isolation'), {
-    status: 'not_applicable',
-    available: false,
+    availability: 'not_applicable',
     reason_code: 'local_isolation_not_applicable',
     service_version: null,
     contract_version: null,
-    minimum_contract_version: '2.0.0',
+    allowed_actions: [],
+    scope: nullScope,
+    authority_revision: null,
+    status: 'not_applicable',
+    available: false,
   });
 
   const input = { kind: fixture.kind, input: fixture.input };

@@ -110,22 +110,68 @@ const workspaceCollaborationContract = {
   allowed_actions: {},
 };
 
-const availableCapability = {
-  status: 'available',
-  reason_code: null,
-  service_version: '0.1.0',
-  contract_version: '2.0.0',
-  minimum_contract_version: '2.0.0',
+const emptyScope = {
+  tenant_id: null,
+  project_id: null,
+  workspace_id: null,
+  instance_id: null,
 };
 
-function unavailableCapability(reasonCode, versioned = false) {
+function availableCapability(allowedActions = []) {
   return {
-    status: 'unavailable',
-    reason_code: reasonCode,
-    service_version: versioned ? '0.1.0' : null,
-    contract_version: versioned ? '2.0.0' : null,
-    minimum_contract_version: '2.0.0',
+    availability: 'available',
+    reason_code: null,
+    service_version: '0.1.0',
+    contract_version: '2.0.0',
+    allowed_actions: allowedActions,
+    scope: emptyScope,
+    authority_revision: null,
   };
+}
+
+function degradedCapability(reasonCode, allowedActions = [], authorityRevision = null) {
+  return {
+    availability: 'degraded',
+    reason_code: reasonCode,
+    service_version: '0.1.0',
+    contract_version: '2.0.0',
+    allowed_actions: allowedActions,
+    scope: emptyScope,
+    authority_revision: authorityRevision,
+  };
+}
+
+function unavailableCapability(
+  reasonCode,
+  versioned = false,
+  serviceVersion = versioned ? '0.1.0' : null,
+  contractVersion = versioned ? '2.0.0' : null,
+) {
+  return {
+    availability: 'unavailable',
+    reason_code: reasonCode,
+    service_version: serviceVersion,
+    contract_version: contractVersion,
+    allowed_actions: [],
+    scope: emptyScope,
+    authority_revision: null,
+  };
+}
+
+function notApplicableCapability(reasonCode) {
+  return {
+    availability: 'not_applicable',
+    reason_code: reasonCode,
+    service_version: null,
+    contract_version: null,
+    allowed_actions: [],
+    scope: emptyScope,
+    authority_revision: null,
+  };
+}
+
+function withScope(capability, scope) {
+  return { ...capability, scope };
 }
 
 test('cloud client validates structured Search and Automation authorities', async () => {
@@ -154,8 +200,30 @@ test('cloud client validates structured Search and Automation authorities', asyn
     );
     const snapshot = await client.loadSnapshot();
 
-    assert.deepEqual(snapshot.capabilities.search, availableCapability);
-    assert.deepEqual(snapshot.capabilities.automation_run, availableCapability);
+    const scope = {
+      tenant_id: 'default',
+      project_id: 'project/1',
+      workspace_id: null,
+      instance_id: null,
+    };
+    assert.deepEqual(
+      snapshot.capabilities.search,
+      withScope(
+        availableCapability([
+          'semantic',
+          'advanced',
+          'graph_traversal',
+          'community',
+          'temporal',
+          'faceted',
+        ]),
+        scope,
+      ),
+    );
+    assert.deepEqual(
+      snapshot.capabilities.automation_run,
+      withScope(availableCapability(['run_now']), scope),
+    );
     assert.equal(
       calls[0]?.input,
       'https://api.memstack.test/api/v1/search-enhanced/capabilities',
@@ -217,13 +285,19 @@ test('local workbench capability client consumes the scoped degraded Search cont
 
     assert.deepEqual(
       snapshot.capabilities.search,
-      {
-        status: 'degraded',
-        reason_code: 'local_embeddings_unavailable',
-        service_version: '0.1.0',
-        contract_version: '2.0.0',
-        minimum_contract_version: '2.0.0',
-      },
+      withScope(
+        degradedCapability(
+          'local_embeddings_unavailable',
+          ['advanced', 'temporal', 'faceted'],
+          7,
+        ),
+        {
+          tenant_id: 'local',
+          project_id: 'local-project',
+          workspace_id: null,
+          instance_id: null,
+        },
+      ),
     );
     assert.equal(calls.length, 1);
     assert.equal(
@@ -234,15 +308,25 @@ test('local workbench capability client consumes the scoped degraded Search cont
     assert.equal(calls[0]?.init?.headers.get('X-Agistack-Launch'), 'launch-capability');
     assert.deepEqual(
       snapshot.capabilities.automation_run,
-      unavailableCapability('durable_automation_execution_unavailable', true),
+      withScope(
+        unavailableCapability('durable_automation_execution_unavailable', true),
+        {
+          tenant_id: 'local',
+          project_id: 'local-project',
+          workspace_id: null,
+          instance_id: null,
+        },
+      ),
     );
-    assert.deepEqual(snapshot.capabilities.sandbox_isolation, {
-      status: 'not_applicable',
-      reason_code: 'local_isolation_not_applicable',
-      service_version: null,
-      contract_version: null,
-      minimum_contract_version: '2.0.0',
-    });
+    assert.deepEqual(
+      snapshot.capabilities.sandbox_isolation,
+      withScope(notApplicableCapability('local_isolation_not_applicable'), {
+        tenant_id: 'local',
+        project_id: 'local-project',
+        workspace_id: null,
+        instance_id: null,
+      }),
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -266,13 +350,11 @@ test('local Search capability rejects scope drift and cursor/reason mismatches',
       tenantId: 'tenant-1',
       projectId: 'project-1',
     }),
-    {
-      status: 'degraded',
-      reason_code: 'local_search_backfill_in_progress',
-      service_version: '0.1.0',
-      contract_version: '2.0.0',
-      minimum_contract_version: '2.0.0',
-    },
+    degradedCapability(
+      'local_search_backfill_in_progress',
+      ['advanced', 'temporal', 'faceted'],
+      256,
+    ),
   );
   assert.equal(
     normalizeLocalSearchCapabilityContract(
@@ -326,13 +408,25 @@ test('legacy capability authorities fail closed before payload inference', async
       },
     );
     const snapshot = await client.loadSnapshot();
+    const scope = {
+      tenant_id: 'default',
+      project_id: 'project-1',
+      workspace_id: null,
+      instance_id: null,
+    };
     assert.deepEqual(
       snapshot.capabilities.search,
-      unavailableCapability('search_capability_contract_unavailable'),
+      withScope(
+        unavailableCapability('search_capability_contract_unavailable'),
+        scope,
+      ),
     );
     assert.deepEqual(
       snapshot.capabilities.automation_run,
-      unavailableCapability('automation_capability_contract_unavailable'),
+      withScope(
+        unavailableCapability('automation_capability_contract_unavailable'),
+        scope,
+      ),
     );
   } finally {
     globalThis.fetch = originalFetch;
@@ -355,7 +449,7 @@ test('capability normalizers reject endpoint and guard drift', () => {
   );
   assert.deepEqual(
     normalizeAutomationCapabilityContract(automationContract),
-    availableCapability,
+    availableCapability(['run_now']),
   );
   const missingAdvanced = structuredClone(searchContract);
   delete missingAdvanced.search_types.advanced;
@@ -411,13 +505,20 @@ test('cloud client loads the scoped degraded Workspace Collaboration authority',
       },
     );
     const snapshot = await client.loadSnapshot();
-    assert.deepEqual(snapshot.capabilities.workspace_collaboration, {
-      status: 'degraded',
-      reason_code: 'workspace_collaboration_mutation_guards_unavailable',
-      service_version: '0.1.0',
-      contract_version: '2.0.0',
-      minimum_contract_version: '2.0.0',
-    });
+    assert.deepEqual(
+      snapshot.capabilities.workspace_collaboration,
+      withScope(
+        degradedCapability(
+          'workspace_collaboration_mutation_guards_unavailable',
+        ),
+        {
+          tenant_id: 'tenant / 1',
+          project_id: 'project / 1',
+          workspace_id: 'workspace / 1',
+          instance_id: null,
+        },
+      ),
+    );
 
     const authorityCall = calls.find(({ input }) =>
       input.endsWith('/collaboration/capabilities'),
@@ -448,13 +549,7 @@ test('Workspace Collaboration capability normalization fails closed on contract 
       workspaceCollaborationContract,
       scope,
     ),
-    {
-      status: 'degraded',
-      reason_code: 'workspace_collaboration_mutation_guards_unavailable',
-      service_version: '0.1.0',
-      contract_version: '2.0.0',
-      minimum_contract_version: '2.0.0',
-    },
+    degradedCapability('workspace_collaboration_mutation_guards_unavailable'),
   );
 
   const missingSurface = structuredClone(workspaceCollaborationContract);
@@ -482,13 +577,12 @@ test('Workspace Collaboration capability normalization fails closed on contract 
   delete legacy.contract_version;
   assert.deepEqual(
     normalizeWorkspaceCollaborationCapabilityContract(legacy, scope),
-    {
-      status: 'unavailable',
-      reason_code: 'capability_contract_version_missing',
-      service_version: '0.1.0',
-      contract_version: null,
-      minimum_contract_version: '2.0.0',
-    },
+    unavailableCapability(
+      'capability_contract_version_missing',
+      false,
+      '0.1.0',
+      null,
+    ),
   );
 });
 
@@ -524,7 +618,17 @@ test('Workspace Collaboration 404 and local mode remain structured unavailable',
     const cloud = await cloudClient.loadSnapshot();
     assert.deepEqual(
       cloud.capabilities.workspace_collaboration,
-      unavailableCapability('workspace_collaboration_capability_contract_unavailable'),
+      withScope(
+        unavailableCapability(
+          'workspace_collaboration_capability_contract_unavailable',
+        ),
+        {
+          tenant_id: 'tenant-1',
+          project_id: 'project-1',
+          workspace_id: 'workspace-1',
+          instance_id: null,
+        },
+      ),
     );
     assert.equal(capabilityFetchCalls, 1);
 
@@ -541,7 +645,15 @@ test('Workspace Collaboration 404 and local mode remain structured unavailable',
     const local = await localClient.loadSnapshot();
     assert.deepEqual(
       local.capabilities.workspace_collaboration,
-      unavailableCapability('local_workspace_collaboration_unavailable'),
+      withScope(
+        unavailableCapability('local_workspace_collaboration_unavailable'),
+        {
+          tenant_id: 'local',
+          project_id: 'local-project',
+          workspace_id: 'local-workspace',
+          instance_id: null,
+        },
+      ),
     );
     assert.equal(capabilityFetchCalls, 1);
   } finally {

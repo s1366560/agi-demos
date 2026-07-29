@@ -12,6 +12,7 @@ import {
   DESKTOP_MINIMUM_CONTRACT_VERSION,
   parseDesktopCapabilitySnapshot,
   type DesktopCapabilityAvailability,
+  type DesktopCapabilityScope,
   type DesktopCapabilitySnapshot,
 } from './capabilitySnapshot';
 import {
@@ -89,17 +90,28 @@ export function createDesktopWorkbenchCapabilityClient(
         loadAutomationCapability(automationApi, config.projectId, signal),
         loadWorkspaceCollaborationCapability(config, signal),
       ]);
+      const projectScope = projectCapabilityScope(config);
+      const workspaceScope = workspaceCapabilityScope(config);
       const rawSnapshot = {
         version: DESKTOP_CAPABILITY_SNAPSHOT_VERSION,
         mode: config.mode,
         capabilities: {
-          automation_run: automationRun,
-          search,
-          workspace_collaboration: workspaceCollaboration,
+          automation_run: withCapabilityScope(automationRun, projectScope),
+          search: withCapabilityScope(search, projectScope),
+          workspace_collaboration: withCapabilityScope(
+            workspaceCollaboration,
+            workspaceScope,
+          ),
           sandbox_isolation:
             config.mode === 'local'
-              ? notApplicable('local_isolation_not_applicable')
-              : unavailable('sandbox_isolation_capability_not_declared'),
+              ? withCapabilityScope(
+                  notApplicable('local_isolation_not_applicable'),
+                  workspaceScope,
+                )
+              : withCapabilityScope(
+                  unavailable('sandbox_isolation_capability_not_declared'),
+                  workspaceScope,
+                ),
         },
       };
       const snapshot = parseDesktopCapabilitySnapshot(rawSnapshot);
@@ -150,7 +162,9 @@ export function normalizeSearchCapabilityContract(
       return unavailable('search_capability_contract_invalid', negotiation);
     }
   }
-  return available(negotiation);
+  return available(negotiation, {
+    allowedActions: Object.keys(SEARCH_CONTRACT),
+  });
 }
 
 export function normalizeLocalSearchCapabilityContract(
@@ -208,7 +222,10 @@ export function normalizeLocalSearchCapabilityContract(
   ) {
     return unavailable('local_search_capability_contract_invalid', negotiation);
   }
-  return degraded(input.reason_code, negotiation);
+  return degraded(input.reason_code, negotiation, {
+    allowedActions: LOCAL_SEARCH_SUPPORTED_TYPES,
+    authorityRevision: input.projection_revision,
+  });
 }
 
 export function normalizeAutomationCapabilityContract(
@@ -249,7 +266,7 @@ export function normalizeAutomationCapabilityContract(
   ) {
     return unavailable('automation_capability_contract_invalid', negotiation);
   }
-  return available(negotiation);
+  return available(negotiation, { allowedActions: ['run_now'] });
 }
 
 export function normalizeWorkspaceCollaborationCapabilityContract(
@@ -322,7 +339,9 @@ export function normalizeWorkspaceCollaborationCapabilityContract(
     matchesWorkspaceMutationActions(input.mutations.actions) &&
     JSON.stringify(input.allowed_actions) === JSON.stringify(input.mutations.actions)
   ) {
-    return available(negotiation);
+    return available(negotiation, {
+      allowedActions: flattenWorkspaceMutationActions(input.mutations.actions),
+    });
   }
   if (
     !isExactRecord(input, capabilityKeys) ||
@@ -355,6 +374,13 @@ function matchesWorkspaceMutationActions(input: unknown): boolean {
         surface as keyof typeof WORKSPACE_HTTP_MUTATION_ACTIONS
       ],
     ),
+  );
+}
+
+function flattenWorkspaceMutationActions(input: unknown): string[] {
+  if (!isRecord(input) || !matchesWorkspaceMutationActions(input)) return [];
+  return Object.keys(WORKSPACE_HTTP_MUTATION_ACTIONS).flatMap((surface) =>
+    (input[surface] as string[]).map((action) => `${surface}:${action}`),
   );
 }
 
@@ -451,26 +477,32 @@ async function loadWorkspaceCollaborationCapability(
 
 function available(
   negotiation: CapabilityContractNegotiation,
+  metadata: CapabilityAuthorityMetadata = {},
 ): DesktopCapabilityAvailability {
   return {
-    status: 'available',
+    availability: 'available',
     reason_code: null,
     service_version: negotiation.service_version,
     contract_version: negotiation.contract_version,
-    minimum_contract_version: DESKTOP_MINIMUM_CONTRACT_VERSION,
+    allowed_actions: [...(metadata.allowedActions ?? [])],
+    scope: emptyCapabilityScope(),
+    authority_revision: metadata.authorityRevision ?? null,
   };
 }
 
 function degraded(
   reasonCode: string,
   negotiation: CapabilityContractNegotiation,
+  metadata: CapabilityAuthorityMetadata = {},
 ): DesktopCapabilityAvailability {
   return {
-    status: 'degraded',
+    availability: 'degraded',
     reason_code: reasonCode,
     service_version: negotiation.service_version,
     contract_version: negotiation.contract_version,
-    minimum_contract_version: DESKTOP_MINIMUM_CONTRACT_VERSION,
+    allowed_actions: [...(metadata.allowedActions ?? [])],
+    scope: emptyCapabilityScope(),
+    authority_revision: metadata.authorityRevision ?? null,
   };
 }
 
@@ -479,22 +511,74 @@ function unavailable(
   negotiation?: CapabilityContractNegotiation,
 ): DesktopCapabilityAvailability {
   return {
-    status: 'unavailable',
+    availability: 'unavailable',
     reason_code: reasonCode,
     service_version: negotiation?.service_version ?? null,
     contract_version: negotiation?.contract_version ?? null,
-    minimum_contract_version: DESKTOP_MINIMUM_CONTRACT_VERSION,
+    allowed_actions: [],
+    scope: emptyCapabilityScope(),
+    authority_revision: null,
   };
 }
 
 function notApplicable(reasonCode: string): DesktopCapabilityAvailability {
   return {
-    status: 'not_applicable',
+    availability: 'not_applicable',
     reason_code: reasonCode,
     service_version: null,
     contract_version: null,
-    minimum_contract_version: DESKTOP_MINIMUM_CONTRACT_VERSION,
+    allowed_actions: [],
+    scope: emptyCapabilityScope(),
+    authority_revision: null,
   };
+}
+
+type CapabilityAuthorityMetadata = {
+  allowedActions?: readonly string[];
+  authorityRevision?: number | null;
+};
+
+function withCapabilityScope(
+  capability: DesktopCapabilityAvailability,
+  scope: DesktopCapabilityScope,
+): DesktopCapabilityAvailability {
+  return {
+    ...capability,
+    scope: { ...scope },
+  };
+}
+
+function projectCapabilityScope(
+  config: DesktopRuntimeConfig,
+): DesktopCapabilityScope {
+  return {
+    tenant_id: scopeIdentifier(config.tenantId),
+    project_id: scopeIdentifier(config.projectId),
+    workspace_id: null,
+    instance_id: null,
+  };
+}
+
+function workspaceCapabilityScope(
+  config: DesktopRuntimeConfig,
+): DesktopCapabilityScope {
+  return {
+    ...projectCapabilityScope(config),
+    workspace_id: scopeIdentifier(config.workspaceId),
+  };
+}
+
+function emptyCapabilityScope(): DesktopCapabilityScope {
+  return {
+    tenant_id: null,
+    project_id: null,
+    workspace_id: null,
+    instance_id: null,
+  };
+}
+
+function scopeIdentifier(input: string): string | null {
+  return input.length > 0 && input === input.trim() ? input : null;
 }
 
 function isRecord(input: unknown): input is Record<string, unknown> {
