@@ -82,6 +82,12 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
+// Dev-only CDP endpoint for native renderer QA. Enabled explicitly via env so
+// packaged builds never expose a debugging surface.
+if (!app.isPackaged && process.env.AGISTACK_DESKTOP_DEBUG_PORT) {
+  app.commandLine.appendSwitch('remote-debugging-port', process.env.AGISTACK_DESKTOP_DEBUG_PORT);
+}
+
 function isLoopbackHost(hostname: string): boolean {
   const normalized = hostname.toLowerCase();
   return (

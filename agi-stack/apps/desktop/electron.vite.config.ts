@@ -5,10 +5,24 @@ import { fileURLToPath } from 'node:url';
 
 const desktopRoot = dirname(fileURLToPath(import.meta.url));
 
-export default defineConfig({
+// Generated output directories must not trigger renderer page reloads or
+// main/preload rebuilds while the dev app is running (QA traces, release
+// packaging, and legacy bundles are written next to the sources).
+const generatedOutputWatchIgnores = [
+  '**/browser-qa/results/**',
+  '**/browser-qa/report/**',
+  '**/release/**',
+  '**/dist/**',
+  '**/out/**',
+];
+
+export default defineConfig(({ command }) => ({
   main: {
     build: {
       outDir: resolve(desktopRoot, 'out/main'),
+      // `build.watch` is dev-only input for electron-vite; enabling it in a
+      // production build would leave Rollup in watch mode forever.
+      ...(command === 'serve' ? { watch: { exclude: generatedOutputWatchIgnores } } : {}),
       rollupOptions: {
         input: resolve(desktopRoot, 'electron/main/index.ts'),
         output: {
@@ -21,6 +35,7 @@ export default defineConfig({
   preload: {
     build: {
       outDir: resolve(desktopRoot, 'out/preload'),
+      ...(command === 'serve' ? { watch: { exclude: generatedOutputWatchIgnores } } : {}),
       rollupOptions: {
         input: resolve(desktopRoot, 'electron/preload/index.ts'),
         output: {
@@ -34,6 +49,11 @@ export default defineConfig({
     root: desktopRoot,
     base: './',
     plugins: [react()],
+    server: {
+      watch: {
+        ignored: generatedOutputWatchIgnores,
+      },
+    },
     build: {
       outDir: resolve(desktopRoot, 'out/renderer'),
       emptyOutDir: true,
@@ -42,4 +62,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
