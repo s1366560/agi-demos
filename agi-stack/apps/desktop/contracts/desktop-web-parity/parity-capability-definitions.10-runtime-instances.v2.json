@@ -84,7 +84,7 @@
         {
           "surface": "web",
           "method": "PUT",
-          "path": "/api/v1/instances/{instance_id}/members/{user_id}",
+          "path": "/api/v1/instances/{instance_id}/members/{member_id}",
           "authority": "web_service"
         },
         {
@@ -196,6 +196,42 @@
           "authority": "web_service"
         },
         {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/clusters/",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/instance-templates/{template_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/genes/",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/models/{provider_type}",
+          "authority": "web_service"
+        },
+        {
           "surface": "desktop_cloud",
           "method": "GET",
           "path": "/api/v1/instances/",
@@ -264,7 +300,7 @@
         {
           "surface": "desktop_cloud",
           "method": "PUT",
-          "path": "/api/v1/instances/{instance_id}/members/{user_id}",
+          "path": "/api/v1/instances/{instance_id}/members/{member_id}",
           "authority": "cloud_service"
         },
         {
@@ -390,7 +426,8 @@
       ],
       "permissions": [
         "authenticated",
-        "tenant_member"
+        "tenant_member",
+        "tenant_admin_for_mutations"
       ],
       "actions": [
         "view",
@@ -402,7 +439,10 @@
         "restart",
         "manage-files",
         "manage-channels",
-        "manage-members",
+        "list-members",
+        "search-users",
+        "add-member",
+        "remove-member",
         "manage-genes",
         "configure"
       ],
@@ -411,7 +451,9 @@
           "surface": "web",
           "actions": [
             "view",
-            "list"
+            "list",
+            "list-members",
+            "search-users"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -442,7 +484,8 @@
             "scale",
             "restart",
             "manage-files",
-            "manage-members",
+            "add-member",
+            "remove-member",
             "configure"
           ],
           "authentication": "authenticated",
@@ -454,13 +497,13 @@
         }
       ],
       "web_status": "partial",
-      "web_reason_code": "runtime_instance_mutation_authorization_not_enforced",
+      "web_reason_code": "runtime_instance_contract_and_authorization_incomplete",
       "cloud_status": "planned",
       "local_status": "planned",
       "local_policy": "native_equivalent",
       "local_reason_code": "local_instance_lifecycle_planned",
       "local_deviation": "Local instance lifecycle must be projected from supervised sidecar processes and workspace-scoped storage; it must not expose arbitrary host paths or pretend to support Cloud replicas.",
-      "judgment_rationale": "The Instances capability owns list, create, nested overview, files, channels, members, installed genes, settings, and evolution pages. Reads require current-tenant membership, while channel and Gene mutations enforce tenant administration. Core instance lifecycle, file, member, and LLM configuration mutations currently enforce only membership despite requiring administration, so the Web surface is degraded; unbound general config service methods are not surface authority. Desktop runtime diagnostics are not a substitute for this lifecycle surface; both a Cloud native route and a bounded Local sidecar equivalent remain planned."
+      "judgment_rationale": "The Instances capability owns list, create, nested overview, files, channels, members, installed genes, settings, and evolution pages. Its production contract includes the Cluster, Workspace, Instance Template, Gene Market, and Provider reads called directly by the create and settings pages; unbound general config service methods remain outside surface authority. Reads require current-tenant membership, while channel and Gene mutations enforce tenant administration. Core instance lifecycle, file, member, and LLM configuration mutations currently enforce only membership despite requiring administration. Member role update is not an allowed action because the page passes a user identifier to the backend member-identifier route, and the selected tenant is overridden by the default tenant chosen from the earliest membership. These contract and authorization defects keep the Web surface degraded. Desktop runtime diagnostics are not a substitute for this lifecycle surface; both a Cloud native route and a bounded Local sidecar equivalent remain planned."
     }
   ],
   "source_ownership": {

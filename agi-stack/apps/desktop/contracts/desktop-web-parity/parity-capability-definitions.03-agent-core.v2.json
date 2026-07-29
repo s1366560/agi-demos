@@ -110,7 +110,6 @@
           "surface": "web",
           "actions": [
             "view-config",
-            "view-hook-catalog",
             "list-runs",
             "filter-runs",
             "inspect-run",
@@ -127,7 +126,8 @@
         {
           "surface": "web",
           "actions": [
-            "update-config"
+            "update-config",
+            "view-hook-catalog"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -153,7 +153,7 @@
       "cloud_status": "planned",
       "local_status": "planned",
       "local_policy": "native_equivalent",
-      "judgment_rationale": "Agent Dashboard combines tenant configuration, runtime hook catalog, modification authority, run summaries, and trace inspection. Desktop Settings does not implement this contract or a canonical route in either mode, so both native surfaces remain planned."
+      "judgment_rationale": "Agent Dashboard combines tenant configuration, runtime hook catalog, modification authority, run summaries, and trace inspection. Tenant members may read the redacted configuration and run summaries, while the runtime hook catalog and configuration mutation require tenant admin authority. Desktop Settings does not implement this contract or a canonical route in either mode, so both native surfaces remain planned."
     },
     {
       "id": "tenant-tenant-agent-definitions",
@@ -440,8 +440,7 @@
       "title": "Agent Bindings",
       "domain": "agent-ecosystem",
       "scope": [
-        "tenant",
-        "workspace"
+        "tenant"
       ],
       "web_route_ids": [
         "tenant-tenant-agent-bindings"
@@ -501,8 +500,7 @@
       "permissions": [
         "authenticated",
         "tenant_member_for_read",
-        "tenant_admin_for_mutations",
-        "project_access_when_scoped"
+        "tenant_admin_for_mutations"
       ],
       "actions": [
         "view",
@@ -527,12 +525,12 @@
           "surface": "web",
           "actions": [
             "view",
-            "list"
+            "list",
+            "test"
           ],
           "authentication": "authenticated",
           "authorization": [
-            "tenant_member",
-            "project_member"
+            "tenant_member"
           ],
           "enforcement": "enforced",
           "feature_gate": null
@@ -542,13 +540,11 @@
           "actions": [
             "create",
             "delete",
-            "set-enabled",
-            "test"
+            "set-enabled"
           ],
           "authentication": "authenticated",
           "authorization": [
-            "tenant_admin",
-            "project_member"
+            "tenant_admin"
           ],
           "enforcement": "enforced",
           "feature_gate": null
@@ -557,7 +553,7 @@
       "cloud_status": "planned",
       "local_status": "planned",
       "local_policy": "native_equivalent",
-      "judgment_rationale": "The Workspace Agent binding panel uses a different workspace-member contract and is not an implementation of the tenant Agent Bindings API. Neither Desktop mode currently has the canonical route, so both remain planned."
+      "judgment_rationale": "Agent Bindings is a tenant-level contract: tenant members may list bindings and test resolution, while create, delete, and enablement mutations require tenant admin authority. The Workspace Agent binding panel uses a different workspace-member contract and is not an implementation of this API. Neither Desktop mode currently has the canonical route, so both remain planned."
     }
   ],
   "source_ownership": {

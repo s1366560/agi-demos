@@ -381,6 +381,63 @@ test("ACP records only controls bound by AcpDashboard", () => {
   assertPermissionCoverage(capability, "web", expectedActions);
 });
 
+test("Agent Dashboard records the admin-only runtime hook catalog", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.03-agent-core.v2.json",
+    "tenant-tenant-agent-configuration",
+  );
+
+  assert.equal(
+    permissionActionsForAuthorization(
+      capability,
+      "web",
+      "tenant_member",
+    ).includes("view-hook-catalog"),
+    false,
+  );
+  assert.deepEqual(
+    permissionActionsForAuthorization(
+      capability,
+      "web",
+      "tenant_admin",
+    ).sort(),
+    ["update-config", "view-hook-catalog"],
+  );
+  assert.match(capability.judgment_rationale, /hook catalog.*tenant admin/iu);
+});
+
+test("Agent Bindings records tenant-only scope and member-readable testing", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.03-agent-core.v2.json",
+    "tenant-tenant-agent-bindings",
+  );
+
+  assert.deepEqual(capability.scope, ["tenant"]);
+  assert.equal(capability.permissions.includes("project_access_when_scoped"), false);
+  for (const requirement of capability.permission_requirements.filter(
+    ({ surface }) => surface === "web",
+  )) {
+    assert.equal(requirement.authorization.includes("project_member"), false);
+  }
+  assert.deepEqual(
+    permissionActionsForAuthorization(
+      capability,
+      "web",
+      "tenant_member",
+    ).sort(),
+    ["list", "test", "view"],
+  );
+  assert.deepEqual(
+    permissionActionsForAuthorization(
+      capability,
+      "web",
+      "tenant_admin",
+    ).sort(),
+    ["create", "delete", "set-enabled"],
+  );
+  assert.match(capability.judgment_rationale, /tenant-level/iu);
+});
+
 test("Cloud Providers excludes Local-only routing mutation and discovery", () => {
   const capability = readCapability(
     "parity-capability-definitions.08-provider-webhooks.v2.json",
@@ -453,7 +510,6 @@ test("Provider types are bound by ProviderConfigModal across all three product s
                   "view",
                   "list",
                   "list-provider-types",
-                  "view-usage",
                   "list-models",
                   "search-models",
                 ]
@@ -462,7 +518,6 @@ test("Provider types are bound by ProviderConfigModal across all three product s
                     "view",
                     "list",
                     "list-provider-types",
-                    "view-usage",
                     "list-models",
                   ]
                 : [
@@ -492,6 +547,46 @@ test("Provider types are bound by ProviderConfigModal across all three product s
   assert.match(capability.judgment_rationale, /listTypes/u);
 });
 
+test("Cloud Provider usage requires tenant membership unless the user is a global admin", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.08-provider-webhooks.v2.json",
+    "tenant-tenant-providers",
+  );
+
+  for (const surface of ["web", "desktop_cloud"]) {
+    assert.deepEqual(
+      permissionRequirementsForAction(capability, surface, "view-usage"),
+      [
+        {
+          surface,
+          actions: ["view-usage"],
+          authentication: "authenticated",
+          authorization: ["tenant_member"],
+          enforcement: "enforced",
+          feature_gate: null,
+        },
+        {
+          surface,
+          actions: ["view-usage"],
+          authentication: "authenticated",
+          authorization: ["global_admin"],
+          enforcement: "enforced",
+          feature_gate: null,
+        },
+      ],
+    );
+  }
+  assert.ok(
+    capability.permissions.includes(
+      "tenant_member_or_global_admin_for_usage",
+    ),
+  );
+  assert.match(
+    capability.judgment_rationale,
+    /usage.*tenant membership.*global admin/iu,
+  );
+});
+
 test("Runtime Instances excludes the unbound general config contract", () => {
   const capability = readCapability(
     "parity-capability-definitions.10-runtime-instances.v2.json",
@@ -514,6 +609,55 @@ test("Runtime Instances excludes the unbound general config contract", () => {
   assert.ok(webContracts.includes("PUT /api/v1/instances/{instance_id}/llm-config"));
   assert.ok(capability.actions.includes("configure"));
   assert.ok(permissionActions(capability, "web").includes("configure"));
+});
+
+test("Runtime Instances records direct dependencies and current member and scope defects", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.10-runtime-instances.v2.json",
+    "tenant-tenant-instances",
+  );
+  const webContracts = contractKeys(capability, "web");
+
+  for (const contract of [
+    "GET /api/v1/clusters/",
+    "GET /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
+    "GET /api/v1/instance-templates/{template_id}",
+    "GET /api/v1/genes/",
+    "GET /api/v1/llm-providers/",
+    "GET /api/v1/llm-providers/models/{provider_type}",
+  ]) {
+    assert.ok(webContracts.includes(contract), contract);
+  }
+  assert.ok(
+    webContracts.includes(
+      "PUT /api/v1/instances/{instance_id}/members/{member_id}",
+    ),
+  );
+  assert.equal(
+    webContracts.includes(
+      "PUT /api/v1/instances/{instance_id}/members/{user_id}",
+    ),
+    false,
+  );
+  for (const action of [
+    "list-members",
+    "search-users",
+    "add-member",
+    "remove-member",
+  ]) {
+    assert.ok(capability.actions.includes(action), action);
+  }
+  assert.equal(capability.actions.includes("manage-members"), false);
+  assert.equal(capability.actions.includes("update-member-role"), false);
+  assert.equal(
+    capability.web_reason_code,
+    "runtime_instance_contract_and_authorization_incomplete",
+  );
+  assert.match(capability.judgment_rationale, /member.*identifier/iu);
+  assert.match(
+    capability.judgment_rationale,
+    /selected tenant.*default tenant/iu,
+  );
 });
 
 test("Clusters excludes the unbound runner-pool update contract", () => {
