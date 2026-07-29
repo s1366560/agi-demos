@@ -602,6 +602,126 @@ class WorkspaceModel(Base):
     )
 
 
+class WorkspaceCollaborationAuthorityModel(Base):
+    """Monotonic authority revision shared by all Workspace Collaboration surfaces."""
+
+    __tablename__ = "workspace_collaboration_authorities"
+
+    workspace_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    tenant_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    project_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    revision: Mapped[int] = mapped_column(
+        BigInteger,
+        default=0,
+        server_default=text("0"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "revision >= 0",
+            name="ck_workspace_collaboration_authority_revision",
+        ),
+        Index(
+            "ix_workspace_collaboration_authorities_scope",
+            "tenant_id",
+            "project_id",
+        ),
+    )
+
+
+class WorkspaceCollaborationMutationReceiptModel(Base):
+    """Durable request receipt for one user-scoped Workspace surface intent."""
+
+    __tablename__ = "workspace_collaboration_mutation_receipts"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    project_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    actor_user_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    contract_version: Mapped[str] = mapped_column(String(20), nullable=False)
+    surface: Mapped[str] = mapped_column(String(32), nullable=False)
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(256), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expected_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    committed_revision: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    committed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "expected_revision >= 0",
+            name="ck_workspace_collaboration_receipt_expected_revision",
+        ),
+        CheckConstraint(
+            "committed_revision IS NULL OR committed_revision >= expected_revision",
+            name="ck_workspace_collaboration_receipt_committed_revision",
+        ),
+        Index(
+            "uq_workspace_collaboration_receipt_intent",
+            "workspace_id",
+            "actor_user_id",
+            "idempotency_key",
+            unique=True,
+        ),
+        Index(
+            "ix_workspace_collaboration_receipts_scope_revision",
+            "tenant_id",
+            "project_id",
+            "workspace_id",
+            "committed_revision",
+        ),
+    )
+
+
 class WorkspaceMemberModel(Base):
     __tablename__ = "workspace_members"
 

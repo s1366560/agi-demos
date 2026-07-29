@@ -107,6 +107,7 @@ const workspaceCollaborationContract = {
     revision_guarded: false,
     idempotency_guarded: false,
   },
+  allowed_actions: {},
 };
 
 const availableCapability = {
