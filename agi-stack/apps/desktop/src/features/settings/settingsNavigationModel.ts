@@ -7,6 +7,7 @@ export type NavigableSettingsSection =
   | 'appearance'
   | 'notifications'
   | 'models'
+  | 'mcp'
   | 'skills'
   | 'plugins'
   | 'agents'
@@ -24,7 +25,7 @@ export type SettingsGroupDefinition = {
 export const SETTINGS_GROUPS: SettingsGroupDefinition[] = [
   { id: 'account_context', sections: ['account', 'workspace'] },
   { id: 'preferences', sections: ['general', 'appearance', 'notifications'] },
-  { id: 'ai_resources', sections: ['models', 'skills', 'plugins', 'agents', 'subagents'] },
+  { id: 'ai_resources', sections: ['models', 'mcp', 'skills', 'plugins', 'agents', 'subagents'] },
 ];
 
 export type SettingsSearchCopy = Record<NavigableSettingsSection, readonly [string, string]>;

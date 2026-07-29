@@ -332,6 +332,7 @@ test('Desktop MCP App API methods preserve cloud auth and selected project in ev
       projectId: 'project-selected',
     });
     await client.listMCPApps('project-selected');
+    await client.listMCPServers('project-selected');
     const provisioned = await client.provisionMCPServerCredential({
       project_id: 'project-selected',
       server_name: 'release-tools',
@@ -392,6 +393,12 @@ test('Desktop MCP App API methods preserve cloud auth and selected project in ev
       [
         {
           path: '/api/v1/mcp/apps?project_id=project-selected',
+          method: 'GET',
+          auth: 'Bearer cloud-session',
+          body: undefined,
+        },
+        {
+          path: '/api/v1/mcp?project_id=project-selected',
           method: 'GET',
           auth: 'Bearer cloud-session',
           body: undefined,

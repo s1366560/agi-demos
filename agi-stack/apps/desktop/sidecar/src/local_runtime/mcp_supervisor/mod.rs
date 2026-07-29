@@ -423,7 +423,7 @@ impl McpSupervisor {
     pub(super) async fn recover_all_enabled(&self) -> McpResult<()> {
         let servers = self.store.enabled_servers()?;
         let supervisor = self.clone();
-        tokio::spawn(async move {
+        let _task = tokio::spawn(async move {
             stream::iter(servers)
                 .for_each_concurrent(4, move |server| {
                     let supervisor = supervisor.clone();

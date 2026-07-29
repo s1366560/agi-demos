@@ -72,9 +72,6 @@ impl SseDecoder {
         max_frame_bytes: usize,
         max_aggregate_bytes: usize,
     ) -> McpResult<Vec<SseEvent>> {
-        if chunk.len() > max_frame_bytes {
-            return Err(response_too_large());
-        }
         let mut events = Vec::new();
         let mut emitted_bytes = 0_usize;
         for byte in chunk.iter().copied() {
@@ -416,7 +413,7 @@ pub(super) fn is_content_type(headers: &HeaderMap, expected: &str) -> bool {
         .get(header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.split(';').next())
-        .is_some_and(|value| value.trim() == expected)
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case(expected))
 }
 
 pub(super) fn retry_delay(failures: u32, limits: SupervisorLimits) -> Duration {

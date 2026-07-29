@@ -1895,6 +1895,18 @@ export class DesktopApiClient {
     return this.request<DesktopMCPAppSummary[]>(`/api/v1/mcp/apps?${params.toString()}`);
   }
 
+  async listMCPServers(
+    projectId: string,
+    signal?: AbortSignal,
+  ): Promise<DesktopMCPServerSummary[]> {
+    const scopedProjectId = requireValue(projectId, 'project id');
+    const params = new URLSearchParams({ project_id: scopedProjectId });
+    return this.request<DesktopMCPServerSummary[]>(
+      `/api/v1/mcp?${params.toString()}`,
+      { signal },
+    );
+  }
+
   async provisionMCPServerCredential(
     input: DesktopMCPCredentialProvisionInput,
   ): Promise<DesktopMCPCredentialProvisionResponse> {

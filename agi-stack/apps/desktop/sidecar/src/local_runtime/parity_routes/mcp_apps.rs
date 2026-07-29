@@ -502,13 +502,7 @@ async fn call_app_tool(
                 "MCP App was not found",
             )
         })?;
-    if body.tool_name != app.tool_name {
-        return Err(mcp_error_tuple(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "local_mcp_app_tool_not_allowed",
-            "MCP App tool does not match its persisted visibility definition",
-        ));
-    }
+    ensure_mcp_app_tool_visibility(&state, &scope, Some(&app), None, &body.tool_name)?;
     tool_call_response(
         &state,
         &scope,
@@ -538,6 +532,8 @@ async fn call_direct_tool(
                 "MCP server was not found",
             )
         })?;
+    ensure_mcp_app_tool_visibility(&state, &scope, None, Some(&server), &body.tool_name)
+        .map_err(mcp_visibility_or_indeterminate)?;
     tool_call_response(
         &state,
         &scope,
@@ -569,6 +565,102 @@ async fn tool_call_response(
         "error_code": null,
         "duplicate": outcome.duplicate,
     })))
+}
+
+fn ensure_mcp_app_tool_visibility(
+    state: &LocalRuntimeState,
+    scope: &McpScope,
+    app: Option<&McpAppDefinition>,
+    server: Option<&McpServerDefinition>,
+    tool_name: &str,
+) -> Result<(), (StatusCode, Json<Value>)> {
+    let server = if let Some(server) = server {
+        server.clone()
+    } else if let Some(app) = app {
+        state
+            .mcp_supervisor
+            .server(scope, &app.server_id)
+            .map_err(mcp_error_tuple_for)?
+            .ok_or_else(|| {
+                mcp_error_tuple(
+                    StatusCode::NOT_FOUND,
+                    "local_mcp_server_not_found",
+                    "MCP server was not found",
+                )
+            })?
+    } else {
+        return Err(mcp_error_tuple(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "local_mcp_visibility_scope_missing",
+            "MCP tool visibility requires a server or App scope",
+        ));
+    };
+    let visible = mcp_tool_is_app_visible(&server, tool_name);
+    if !visible {
+        return Err(mcp_error_tuple(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "local_mcp_tool_not_app_visible",
+            "MCP tool is not visible to App surfaces",
+        ));
+    }
+    if let Some(app) = app {
+        let tools = mcp_app_visible_tool_names(&server, app);
+        if !tools.iter().any(|candidate| candidate == tool_name) {
+            return Err(mcp_error_tuple(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "local_mcp_tool_not_app_visible",
+                "MCP tool is outside the persisted App visibility contract",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn mcp_tool_is_app_visible(server: &McpServerDefinition, tool_name: &str) -> bool {
+    server.discovered_tools.iter().any(|tool| {
+        tool.get("name").and_then(Value::as_str) == Some(tool_name)
+            && tool
+                .get("_meta")
+                .and_then(Value::as_object)
+                .is_some_and(|metadata| {
+                    let visibility = metadata
+                        .get("visibility")
+                        .or_else(|| metadata.get("mcp/visibility"));
+                    if let Some(value) = visibility {
+                        value.as_array().is_some_and(|items| {
+                            items.iter().any(|item| item.as_str() == Some("app"))
+                        }) || value.as_str() == Some("app")
+                    } else {
+                        metadata
+                            .get("ui/resourceUri")
+                            .or_else(|| metadata.get("mcp/ui/resourceUri"))
+                            .is_some()
+                    }
+                })
+    })
+}
+
+fn mcp_app_visible_tool_names(server: &McpServerDefinition, app: &McpAppDefinition) -> Vec<String> {
+    server
+        .discovered_tools
+        .iter()
+        .filter_map(|tool| {
+            let name = tool.get("name").and_then(Value::as_str)?;
+            if !mcp_tool_is_app_visible(server, name) {
+                return None;
+            }
+            let metadata = tool.get("_meta").and_then(Value::as_object)?;
+            let resource_uri = metadata
+                .get("ui/resourceUri")
+                .or_else(|| metadata.get("mcp/ui/resourceUri"))
+                .and_then(Value::as_str)?;
+            if Some(resource_uri) == app.resource_uri.as_deref() || name == app.tool_name {
+                Some(name.to_string())
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 async fn list_resources(
@@ -891,6 +983,18 @@ fn mcp_error(error: McpSupervisorError) -> LocalJsonResult {
     Err(mcp_error_tuple_for(error))
 }
 
+fn mcp_visibility_or_indeterminate(error: (StatusCode, Json<Value>)) -> (StatusCode, Json<Value>) {
+    let reason_code = error.1.get("reason_code").and_then(Value::as_str);
+    if reason_code == Some("local_mcp_tool_not_app_visible") {
+        mcp_error_tuple_for(McpSupervisorError::new(
+            "local_mcp_tool_call_indeterminate",
+            "MCP tool call dispatch completed without a verifiable local receipt",
+        ))
+    } else {
+        error
+    }
+}
+
 pub(super) fn mcp_error_tuple_for(error: McpSupervisorError) -> (StatusCode, Json<Value>) {
     let status = match error.reason_code() {
         "local_mcp_server_not_found" | "local_mcp_app_not_found" => StatusCode::NOT_FOUND,
@@ -966,4 +1070,80 @@ fn default_enabled() -> bool {
 
 fn empty_object() -> Value {
     json!({})
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn server(tools: Vec<Value>) -> McpServerDefinition {
+        McpServerDefinition {
+            id: "server-1".to_string(),
+            tenant_id: "tenant-1".to_string(),
+            project_id: "project-1".to_string(),
+            name: "example".to_string(),
+            description: None,
+            transport: McpTransport::Stdio,
+            command: vec!["example".to_string()],
+            cwd: None,
+            vault_env_refs: BTreeMap::new(),
+            enabled: true,
+            revision: 1,
+            runtime_status: "healthy".to_string(),
+            reason_code: None,
+            discovered_tools: tools,
+            server_info: None,
+            created_at: "now".to_string(),
+            updated_at: "now".to_string(),
+        }
+    }
+
+    fn app(resource_uri: &str) -> McpAppDefinition {
+        McpAppDefinition {
+            id: "app-1".to_string(),
+            tenant_id: "tenant-1".to_string(),
+            project_id: "project-1".to_string(),
+            server_id: "server-1".to_string(),
+            server_name: "example".to_string(),
+            tool_name: "primary".to_string(),
+            resource_uri: Some(resource_uri.to_string()),
+            ui_metadata: json!({}),
+            status: "healthy".to_string(),
+            revision: 1,
+        }
+    }
+
+    #[test]
+    fn app_visibility_allows_secondary_app_tool_and_rejects_hidden_tool() {
+        let server = server(vec![
+            json!({
+                "name": "primary",
+                "_meta": {
+                    "ui/resourceUri": "ui://example/app.html",
+                    "visibility": ["app"]
+                }
+            }),
+            json!({
+                "name": "secondary",
+                "_meta": {
+                    "ui/resourceUri": "ui://example/app.html",
+                    "visibility": ["app"]
+                }
+            }),
+            json!({
+                "name": "hidden",
+                "_meta": {
+                    "ui/resourceUri": "ui://example/app.html",
+                    "visibility": ["agent"]
+                }
+            }),
+        ]);
+        let app = app("ui://example/app.html");
+        assert!(mcp_tool_is_app_visible(&server, "secondary"));
+        let allowed = mcp_app_visible_tool_names(&server, &app);
+        assert!(allowed.contains(&"secondary".to_string()));
+        assert!(!allowed.contains(&"hidden".to_string()));
+        assert!(!mcp_tool_is_app_visible(&server, "hidden"));
+    }
 }

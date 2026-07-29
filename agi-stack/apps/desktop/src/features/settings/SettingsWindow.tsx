@@ -36,6 +36,7 @@ import {
   type ManagedResourceListFilter,
 } from './managedResourceModel';
 import { ModelProviderWorkspace } from './ModelProviderWorkspace';
+import { MCPServerSettingsPage } from './MCPServerSettingsPage';
 import { SettingsManagementDialogs } from './SettingsManagementDialogs';
 import { providerManagementAllowed } from './providerManagementModel';
 import {
@@ -61,6 +62,7 @@ import { useSkillManagement } from './useSkillManagement';
 import { useSkillPackageManagement } from './useSkillPackageManagement';
 import { useSubAgentLibraryManagement } from './useSubAgentLibraryManagement';
 import { useSubAgentDefinitionManagement } from './useSubAgentDefinitionManagement';
+import { useMCPServerManagement } from './useMCPServerManagement';
 import './SettingsWindow.css';
 
 export type { SettingsSection } from './settingsNavigationModel';
@@ -124,6 +126,7 @@ export function SettingsWindow({
   resourceContextKeyRef.current = resourceContextKey;
   const [resourceCounts, setResourceCounts] = useState<SettingsResourceCounts>({
     models: null,
+    mcp: null,
     skills: null,
     plugins: null,
     agents: null,
@@ -160,6 +163,7 @@ export function SettingsWindow({
     setSelectedResourceId(null);
     setResourceCounts({
       models: null,
+      mcp: null,
       skills: null,
       plugins: null,
       agents: null,
@@ -171,6 +175,7 @@ export function SettingsWindow({
     if (!open) return;
     setResourceCounts({
       models: null,
+      mcp: null,
       skills: null,
       plugins: null,
       agents: null,
@@ -245,6 +250,12 @@ export function SettingsWindow({
   });
   const channelManagement = useChannelConnectionManagement({
     active: open,
+    config,
+    contextKey: resourceContextKey,
+    canManage: canManagePluginControlPlane,
+  });
+  const mcpServerManagement = useMCPServerManagement({
+    active: open && section === 'mcp',
     config,
     contextKey: resourceContextKey,
     canManage: canManagePluginControlPlane,
@@ -386,6 +397,7 @@ export function SettingsWindow({
       models: [t(sectionMeta.models.label), t(sectionMeta.models.description)],
       skills: [t(sectionMeta.skills.label), t(sectionMeta.skills.description)],
       plugins: [t(sectionMeta.plugins.label), t(sectionMeta.plugins.description)],
+      mcp: [t(sectionMeta.mcp.label), t(sectionMeta.mcp.description)],
       agents: [t(sectionMeta.agents.label), t(sectionMeta.agents.description)],
       subagents: [t(sectionMeta.subagents.label), t(sectionMeta.subagents.description)],
     }),
@@ -616,6 +628,12 @@ export function SettingsWindow({
                   onCountChange={updateModelCount}
                 />
               ) : null}
+              {section === 'mcp' ? (
+                <MCPServerSettingsPage
+                  management={mcpServerManagement}
+                  canManage={canManagePluginControlPlane}
+                />
+              ) : null}
               {isResourceSection ? (
                 <ManagedResourceWorkspace
                   section={section}
@@ -728,6 +746,7 @@ export function SettingsWindow({
           skillPackages={skillPackageManagement}
           plugins={pluginManagement}
           channels={channelManagement}
+          mcpServers={mcpServerManagement}
           subagentDefinitions={subAgentDefinitions}
           subagents={subAgentLibrary}
         />

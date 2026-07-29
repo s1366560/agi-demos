@@ -327,7 +327,7 @@ async fn authenticated_routes_drive_real_stdio_tools_resources_and_receipts() {
     assert_eq!(disallowed.status(), StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(
         response_json(disallowed).await["reason_code"],
-        "local_mcp_app_tool_not_allowed"
+        "local_mcp_tool_not_app_visible"
     );
 
     let resources = app
@@ -468,6 +468,95 @@ async fn every_tool_call_route_rejects_a_missing_idempotency_key_before_dispatch
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY, "{uri}");
     }
     fs::remove_dir_all(root).expect("remove idempotency route root");
+}
+
+#[tokio::test]
+async fn direct_mcp_app_tool_calls_use_the_persisted_visibility_authority() {
+    let root = test_root();
+    fs::create_dir_all(&root).expect("create direct visibility route root");
+    let credential = "direct-visibility-secret";
+    let script = write_mock_server(&root);
+    let app = local_router(test_state(&root, credential));
+    let create = app
+        .clone()
+        .oneshot(request(
+            Method::POST,
+            "/api/v1/mcp",
+            credential,
+            json!({
+                "name": "route-mock",
+                "server_type": "stdio",
+                "transport_config": {
+                    "command": python_executable(),
+                    "args": [script, "normal"],
+                    "cwd": ".",
+                    "credential_env_names": [],
+                },
+                "enabled": true,
+                "project_id": "local-project",
+                "idempotency_key": "create-route-mock-visibility",
+            }),
+        ))
+        .await
+        .expect("create direct visibility MCP response");
+    assert_eq!(create.status(), StatusCode::OK);
+    let server = response_json(create).await;
+    let server_id = server["id"].as_str().expect("server id");
+    let sync = app
+        .clone()
+        .oneshot(request(
+            Method::POST,
+            &format!("/api/v1/mcp/{server_id}/sync"),
+            credential,
+            json!({}),
+        ))
+        .await
+        .expect("sync direct visibility MCP response");
+    assert_eq!(sync.status(), StatusCode::OK);
+
+    let visible = app
+        .clone()
+        .oneshot(request(
+            Method::POST,
+            "/api/v1/mcp/apps/proxy/tool-call",
+            credential,
+            json!({
+                "project_id": "local-project",
+                "server_name": "route-mock",
+                "tool_name": "echo",
+                "arguments": {"value": 2},
+                "idempotency_key": "direct-visible-tool-call",
+            }),
+        ))
+        .await
+        .expect("visible direct MCP tool response");
+    assert_eq!(visible.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(visible).await["content"][0]["text"],
+        "route-ok"
+    );
+
+    let hidden = app
+        .oneshot(request(
+            Method::POST,
+            "/api/v1/mcp/apps/proxy/tool-call",
+            credential,
+            json!({
+                "project_id": "local-project",
+                "server_name": "route-mock",
+                "tool_name": "hidden-tool",
+                "arguments": {},
+                "idempotency_key": "direct-hidden-tool-call",
+            }),
+        ))
+        .await
+        .expect("hidden direct MCP tool response");
+    assert_eq!(hidden.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        response_json(hidden).await["reason_code"],
+        "local_mcp_tool_call_indeterminate"
+    );
+    fs::remove_dir_all(root).expect("remove direct visibility route root");
 }
 
 #[tokio::test]
