@@ -154,3 +154,4 @@ agi-stack/apps/run-os-prototype/.npm-cache/
 # Keep tracked plugin/persona assets under .memstack/, but do not track
 # root-level <project-id>/.memstack/workspace-manifest.json files.
 /*/.memstack/workspace-manifest.json
+.pnpm-store/
