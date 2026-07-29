@@ -1,0 +1,29 @@
+{
+  "fragments": [
+    "parity-capability-definitions.01-conversation.v2.json",
+    "parity-capability-definitions.02-tenant-operations.v2.json",
+    "parity-capability-definitions.03-agent-core.v2.json",
+    "parity-capability-definitions.04-agent-skills.v2.json",
+    "parity-capability-definitions.05-agent-evolution.v2.json",
+    "parity-capability-definitions.06-plugins.v2.json",
+    "parity-capability-definitions.07-extension-protocols.v2.json",
+    "parity-capability-definitions.08-provider-webhooks.v2.json",
+    "parity-capability-definitions.09-runtime-pool.v2.json",
+    "parity-capability-definitions.10-runtime-instances.v2.json",
+    "parity-capability-definitions.11-runtime-deployment.v2.json",
+    "parity-capability-definitions.12-runtime-genes.v2.json",
+    "parity-capability-definitions.13-tenant-governance-operations.v2.json",
+    "parity-capability-definitions.14-tenant-governance-policy.v2.json",
+    "parity-capability-definitions.15-organization-governance.v2.json",
+    "parity-capability-definitions.16-project-workspace.v2.json",
+    "parity-capability-definitions.17-project-knowledge-core.v2.json",
+    "parity-capability-definitions.18-project-knowledge-graph.v2.json",
+    "parity-capability-definitions.19-project-knowledge-configuration.v2.json",
+    "parity-capability-definitions.20-project-automation-settings.v2.json",
+    "parity-capability-definitions.21-project-agent-routes.v2.json",
+    "parity-capability-definitions.22-identity-entry.v2.json",
+    "parity-capability-definitions.23-identity-profile.v2.json",
+    "parity-capability-definitions.24-native-product-auxiliary.v2.json",
+    "parity-capability-definitions.25-native-boundaries.v2.json"
+  ]
+}

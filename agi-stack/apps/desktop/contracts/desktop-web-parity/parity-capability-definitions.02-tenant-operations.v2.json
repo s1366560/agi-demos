@@ -1,0 +1,686 @@
+{
+  "capabilities": [
+    {
+      "id": "tenant-tenant-overview",
+      "kind": "canonical",
+      "title": "Tenant Overview",
+      "domain": "tenant-operations",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-overview"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/tenants/{tenant_id}/stats",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/stats",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/stats",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:local_native_authority_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-overview",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_member"
+      ],
+      "actions": [
+        "view",
+        "navigate"
+      ],
+      "web_actions": [
+        "view",
+        "navigate"
+      ],
+      "cloud_actions": [],
+      "local_actions": [],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "navigate"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "planned",
+      "local_policy": "native_equivalent",
+      "judgment_rationale": "Tenant Overview owns the canonical tenant landing destination and TenantLayout routed source. Neither Desktop mode currently exposes a complete native overview route, so both remain explicitly planned."
+    },
+    {
+      "id": "tenant-tenant-projects",
+      "kind": "canonical",
+      "title": "Projects",
+      "domain": "tenant-operations",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-projects"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/projects/",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/projects/",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/projects/",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/projects/{project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/projects/",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/projects/",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/projects/{project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:local_native_authority_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-projects",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "project_membership_for_list",
+        "tenant_admin_or_owner_for_create",
+        "project_admin_or_owner_for_update",
+        "project_owner_for_delete"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "create",
+        "update",
+        "delete"
+      ],
+      "web_actions": [
+        "view",
+        "list",
+        "create",
+        "update",
+        "delete"
+      ],
+      "cloud_actions": [],
+      "local_actions": [],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "create"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "update"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "delete"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_owner"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "planned",
+      "local_policy": "native_equivalent",
+      "judgment_rationale": "Project list, create, and edit pages form the canonical tenant Projects capability. Desktop has project context selection but not the full native lifecycle route or its complete state matrix."
+    },
+    {
+      "id": "tenant-tenant-workspaces",
+      "kind": "canonical",
+      "title": "Tenant Workspaces",
+      "domain": "tenant-operations",
+      "scope": [
+        "tenant",
+        "workspace"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-workspaces"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-workspaces",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "project_access",
+        "workspace_access",
+        "workspace_manager_for_mutations"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "create",
+        "update",
+        "delete",
+        "manage-members",
+        "bind-agent",
+        "unbind-agent"
+      ],
+      "web_actions": [
+        "view",
+        "list",
+        "create",
+        "update",
+        "delete",
+        "manage-members",
+        "bind-agent",
+        "unbind-agent"
+      ],
+      "cloud_actions": [
+        "view",
+        "list",
+        "create",
+        "update",
+        "manage-members",
+        "bind-agent",
+        "unbind-agent"
+      ],
+      "local_actions": [
+        "view",
+        "list",
+        "create"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "workspace_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "create"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "update",
+            "delete",
+            "manage-members",
+            "bind-agent",
+            "unbind-agent"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "workspace_manager"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "partial",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/features/workspace/WorkspaceDock.tsx",
+        "agi-stack/apps/desktop/src/features/workspace/WorkspaceCreateDialog.tsx"
+      ],
+      "local_status": "partial",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_workspace_lifecycle_partial",
+      "local_deviation": "The sidecar supports native workspace list and create authority. Workspace update, delete, member management, and Agent binding operations remain unavailable until the revisioned Local workspace contract is completed.",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/features/workspace/WorkspaceDock.tsx",
+        "agi-stack/apps/desktop/src/features/workspace/WorkspaceCreateDialog.tsx",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
+      ],
+      "judgment_rationale": "Tenant Workspace list and creation share one Web source pair and one scheduling model. Cloud Desktop exposes list, create, update, member, and Agent-binding fragments but not the complete routed lifecycle. Local Desktop supports native list and create while the remaining lifecycle and collaboration mutations are unavailable."
+    },
+    {
+      "id": "tenant-tenant-tasks",
+      "kind": "canonical",
+      "title": "Task Dashboard",
+      "domain": "tenant-operations",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-tasks"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/tasks/stats",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tasks/stats",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tasks/queue-depth",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tasks/recent",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tasks/{task_id}/retry",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tasks/{task_id}/stop",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tasks/retry-pending",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/my-work",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/my-work",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-tasks",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "accessible_project_scope",
+        "task_access"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "search",
+        "filter",
+        "paginate",
+        "refresh",
+        "retry-task",
+        "stop-task",
+        "retry-pending",
+        "navigate-dead-letter-queue"
+      ],
+      "web_actions": [
+        "view",
+        "list",
+        "search",
+        "filter",
+        "paginate",
+        "refresh",
+        "retry-task",
+        "stop-task",
+        "retry-pending",
+        "navigate-dead-letter-queue"
+      ],
+      "cloud_actions": [
+        "view",
+        "list",
+        "open-workspace"
+      ],
+      "local_actions": [
+        "view",
+        "list",
+        "open-workspace"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "search",
+            "filter",
+            "paginate",
+            "refresh",
+            "retry-task",
+            "stop-task",
+            "retry-pending",
+            "navigate-dead-letter-queue"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "partial",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/features/my-work/MyWorkQueue.tsx"
+      ],
+      "local_status": "partial",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_task_dashboard_partial",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/features/my-work/MyWorkQueue.tsx",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
+      ],
+      "judgment_rationale": "Desktop My Work covers a task queue projection, but it is not yet a complete native equivalent of the Web tenant Task Dashboard across all states and task actions."
+    },
+    {
+      "id": "tenant-tenant-analytics",
+      "kind": "canonical",
+      "title": "Tenant Analytics",
+      "domain": "tenant-operations",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-analytics"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/tenants/{tenant_id}/analytics",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/analytics",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/analytics",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:local_native_authority_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-analytics",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_member"
+      ],
+      "actions": [
+        "view",
+        "retry"
+      ],
+      "web_actions": [
+        "view",
+        "retry"
+      ],
+      "cloud_actions": [],
+      "local_actions": [],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "retry"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "planned",
+      "local_policy": "native_equivalent",
+      "judgment_rationale": "Tenant Analytics is a distinct canonical Web capability. No audited native Desktop analytics route exists; Local analytics remains meaningful only after a sidecar aggregate contract is defined."
+    }
+  ],
+  "source_ownership": {
+    "tenant-tenant-overview": [
+      "TenantOverview",
+      "TenantLayout"
+    ],
+    "tenant-tenant-projects": [
+      "ProjectList",
+      "NewProject",
+      "EditProject"
+    ],
+    "tenant-tenant-workspaces": [
+      "WorkspaceList",
+      "WorkspaceCreate"
+    ],
+    "tenant-tenant-tasks": [
+      "TaskDashboard"
+    ],
+    "tenant-tenant-analytics": [
+      "Analytics"
+    ]
+  },
+  "route_owner_overrides": {
+    "tenant-tenant-overview": [
+      "production-route-path-tenant",
+      "production-route-path-tenant-segment"
+    ]
+  }
+}

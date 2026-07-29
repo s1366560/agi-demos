@@ -15,8 +15,96 @@ env:
   AGISTACK_RELEASE_VERSION: '0.1.0'
 
 jobs:
+  authorize:
+    name: Authorize protected desktop release tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Authorize immutable release identity
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DESKTOP_RELEASE_ALLOWED_ACTORS: ${{ vars.DESKTOP_RELEASE_ALLOWED_ACTORS }}
+          GITHUB_REF_PROTECTED: ${{ github.ref_protected }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF_TYPE" != "tag" ]]; then
+            echo "Desktop releases require a tag ref" >&2
+            exit 1
+          fi
+          if [[ "$GITHUB_REF_PROTECTED" != "true" ]]; then
+            echo "Desktop release tag must be protected" >&2
+            exit 1
+          fi
+          node <<'NODE'
+          const raw = process.env.DESKTOP_RELEASE_ALLOWED_ACTORS ?? '';
+          const actors = raw
+            .split(/[,\n]/)
+            .map((actor) => actor.trim())
+            .filter(Boolean);
+          if (
+            actors.length === 0 ||
+            new Set(actors).size !== actors.length ||
+            actors.some(
+              (actor) =>
+                !/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(actor),
+            )
+          ) {
+            throw new Error(
+              'DESKTOP_RELEASE_ALLOWED_ACTORS must be a unique comma/newline-delimited actor set',
+            );
+          }
+          if (!actors.includes(process.env.GITHUB_ACTOR)) {
+            throw new Error('release actor is not in DESKTOP_RELEASE_ALLOWED_ACTORS');
+          }
+          NODE
+
+          expected_tag="v${AGISTACK_RELEASE_VERSION}"
+          if [[ "$GITHUB_REF_NAME" != "$expected_tag" ]]; then
+            echo "Release tag must exactly match $expected_tag" >&2
+            exit 1
+          fi
+          resolved_tag_commit="$(
+            gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_REF_NAME}" --jq '.sha'
+          )"
+          if [[ "$resolved_tag_commit" != "$GITHUB_SHA" ]]; then
+            echo "Tag does not resolve to the workflow commit" >&2
+            exit 1
+          fi
+          comparison_status="$(
+            gh api "repos/${GITHUB_REPOSITORY}/compare/${GITHUB_SHA}...main" --jq '.status'
+          )"
+          if [[ "$comparison_status" != "ahead" && "$comparison_status" != "identical" ]]; then
+            echo "Tag commit must be an ancestor of origin/main" >&2
+            exit 1
+          fi
+
+          authorized_package="$RUNNER_TEMP/authorized-desktop-package.json"
+          gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${GITHUB_REPOSITORY}/contents/agi-stack/apps/desktop/package.json?ref=${GITHUB_SHA}" \
+            --jq '.content' | tr -d '\n' | base64 --decode > "$authorized_package"
+          AUTHORIZED_PACKAGE="$authorized_package" node <<'NODE'
+          const { readFileSync } = require('node:fs');
+          const packageJson = JSON.parse(
+            readFileSync(process.env.AUTHORIZED_PACKAGE, 'utf8'),
+          );
+          const expectedVersion = process.env.AGISTACK_RELEASE_VERSION;
+          if (packageJson.version !== expectedVersion) {
+            throw new Error(
+              `authorized desktop package version must be ${expectedVersion}; ` +
+                `found ${packageJson.version}`,
+            );
+          }
+          if (process.env.GITHUB_REF_NAME !== `v${packageJson.version}`) {
+            throw new Error('release tag must exactly match the authorized package version');
+          }
+          NODE
+
   parity-preflight:
     name: Desktop parity preflight
+    needs: authorize
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -32,7 +120,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
-          version: 10.24.0
+          version: 11.15.1
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -59,19 +147,29 @@ jobs:
 
       - name: Install desktop dependencies
         working-directory: agi-stack/apps/desktop
-        run: pnpm install --frozen-lockfile
+        run: corepack pnpm install --frozen-lockfile
 
       - name: Install parity browser
         working-directory: agi-stack/apps/desktop
-        run: pnpm exec playwright install --with-deps chromium
+        run: corepack pnpm exec playwright install --with-deps chromium
 
       - name: Run desktop parity preflight
         run: make -C agi-stack desktop-parity-check
 
+      - name: Upload paired renderer evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-paired-renderer-evidence
+          path: agi-stack/apps/desktop/browser-qa/paired-results
+          if-no-files-found: error
+          retention-days: 90
+
   build:
     name: Build ${{ matrix.platform }}
-    needs: parity-preflight
+    needs: [authorize, parity-preflight]
     runs-on: ${{ matrix.os }}
+    environment: desktop-release-signing
     permissions:
       contents: read
     strategy:
@@ -92,41 +190,6 @@ jobs:
         working-directory: agi-stack/apps/desktop
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-        with:
-          version: 10.24.0
-
-      - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: '22'
-          cache: pnpm
-          cache-dependency-path: agi-stack/apps/desktop/pnpm-lock.yaml
-
-      - name: Validate release tag
-        shell: node {0}
-        run: |
-          const packageJson = require('./package.json');
-          const expectedVersion = process.env.AGISTACK_RELEASE_VERSION;
-          if (packageJson.version !== expectedVersion) {
-            throw new Error(
-              `desktop package version must remain ${expectedVersion}; found ${packageJson.version}`,
-            );
-          }
-          const expectedTag = `v${expectedVersion}`;
-          if (process.env.GITHUB_REF_NAME !== expectedTag) {
-            throw new Error(`release tag must exactly match ${expectedTag}`);
-          }
-
       - name: Validate macOS signing and notarization credentials
         if: runner.os == 'macOS'
         shell: node {0}
@@ -168,11 +231,46 @@ jobs:
             throw new Error('WIN_CSC_SHA1 must be a 40-character certificate thumbprint');
           }
 
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+        with:
+          version: 11.15.1
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: agi-stack/apps/desktop/pnpm-lock.yaml
+
+      - name: Validate release tag
+        shell: node {0}
+        run: |
+          const packageJson = require('./package.json');
+          const expectedVersion = process.env.AGISTACK_RELEASE_VERSION;
+          if (packageJson.version !== expectedVersion) {
+            throw new Error(
+              `desktop package version must remain ${expectedVersion}; found ${packageJson.version}`,
+            );
+          }
+          const expectedTag = `v${expectedVersion}`;
+          if (process.env.GITHUB_REF_NAME !== expectedTag) {
+            throw new Error(`release tag must exactly match ${expectedTag}`);
+          }
+
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: corepack pnpm install --frozen-lockfile
 
       - name: Build Electron application
-        run: pnpm run build:electron
+        run: corepack pnpm run build:electron
 
       - name: Build native Rust sidecar
         if: runner.os != 'macOS'
@@ -202,7 +300,7 @@ jobs:
           chmod 755 ../../target/release/agistack-desktop-sidecar
 
       - name: Stage native sidecar
-        run: pnpm run stage:sidecar
+        run: corepack pnpm run stage:sidecar
 
       - name: Materialize App Store Connect API key
         if: runner.os == 'macOS'
@@ -229,7 +327,7 @@ jobs:
 
       - name: Build macOS release artifacts
         if: runner.os == 'macOS'
-        run: pnpm exec electron-builder ${{ matrix.builder-args }} --publish never
+        run: corepack pnpm exec electron-builder ${{ matrix.builder-args }} --publish never
         env:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
@@ -260,16 +358,16 @@ jobs:
 
       - name: Build Windows release artifacts
         if: runner.os == 'Windows'
-        run: pnpm exec electron-builder ${{ matrix.builder-args }} --publish never
+        run: corepack pnpm exec electron-builder ${{ matrix.builder-args }} --publish never
         env:
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
 
       - name: Build Linux release artifacts
         if: runner.os == 'Linux'
-        run: pnpm exec electron-builder ${{ matrix.builder-args }} --publish never
+        run: corepack pnpm exec electron-builder ${{ matrix.builder-args }} --publish never
 
-      - name: Verify packaged signatures, update metadata, and sidecar integrity
+      - name: Verify package identity, installer digests, and blockmap_structure_and_coverage_only
         run: node scripts/verify-release-artifacts.mjs
         env:
           AGISTACK_EXPECTED_VERSION: ${{ env.AGISTACK_RELEASE_VERSION }}
@@ -312,14 +410,23 @@ jobs:
             agi-stack/apps/desktop/release/release-evidence-*.json
           if-no-files-found: error
 
-  publish:
-    name: Publish verified desktop release
+  stage-draft:
+    name: Stage verified desktop release draft
     needs: build
     runs-on: ubuntu-latest
+    concurrency:
+      group: desktop-release-draft-${{ github.ref }}
+      cancel-in-progress: false
     permissions:
       actions: read
       contents: write
     steps:
+      - name: Checkout immutable draft validator
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
       - name: Download verified macOS artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -339,255 +446,42 @@ jobs:
           path: verified/linux
 
       - name: Validate the combined release asset set
-        shell: node {0}
-        run: |
-          const { createHash } = require('node:crypto');
-          const { readFileSync, readdirSync, statSync, writeFileSync } = require('node:fs');
-          const { basename, join } = require('node:path');
-          const policies = {
-            macos: {
-              evidence: 'release-evidence-macos.json',
-              required: [/\.dmg$/, /\.zip$/, /\.zip\.blockmap$/, /^latest-mac\.yml$/],
-            },
-            windows: {
-              evidence: 'release-evidence-windows.json',
-              required: [/\.exe$/, /\.exe\.blockmap$/, /^latest\.yml$/],
-            },
-            linux: {
-              evidence: 'release-evidence-linux.json',
-              required: [/\.AppImage$/, /\.deb$/, /^latest-linux\.yml$/],
-            },
-          };
-          const allowed = [
-            /\.dmg$/,
-            /\.zip$/,
-            /\.exe$/,
-            /\.AppImage$/,
-            /\.deb$/,
-            /\.blockmap$/,
-            /^latest(?:-mac|-linux)?\.yml$/,
-            /^release-evidence-(?:macos|windows|linux)\.json$/,
-          ];
-          const isRecord = (value) =>
-            value !== null && typeof value === 'object' && !Array.isArray(value);
-          const sha512 = (path) =>
-            createHash('sha512').update(readFileSync(path)).digest('base64');
-          const assertTrueFields = (value, fields, platform) => {
-            for (const field of fields) {
-              if (value[field] !== true) {
-                throw new Error(`${platform} native evidence ${field} must be true`);
-              }
-            }
-          };
-          const assertSidecarDigest = (value, platform) => {
-            if (!/^[a-f0-9]{64}$/.test(value.sidecar_sha256 ?? '')) {
-              throw new Error(`${platform} sidecar SHA-256 evidence is invalid`);
-            }
-          };
-          const validateNativeEvidence = (platform, native) => {
-            if (!isRecord(native)) {
-              throw new Error(`${platform} native verification evidence is invalid`);
-            }
-            assertSidecarDigest(native, platform);
-            if (platform === 'macos') {
-              const expectedArchitectures = JSON.stringify(['arm64', 'x86_64']);
-              if (
-                native.architecture !== 'universal' ||
-                JSON.stringify(native.app_architectures) !== expectedArchitectures ||
-                JSON.stringify(native.sidecar_architectures) !== expectedArchitectures
-              ) {
-                throw new Error('macOS app and sidecar must both be universal');
-              }
-              if (
-                !/^[A-Z0-9]{10}$/.test(process.env.APPLE_TEAM_ID ?? '') ||
-                native.team_identifier !== process.env.APPLE_TEAM_ID ||
-                !/^[a-f0-9]{64}$/.test(native.signing_certificate_sha256 ?? '') ||
-                !/^Developer ID Application:\s+\S/.test(
-                  native.developer_id_authority ?? '',
-                )
-              ) {
-                throw new Error('macOS release identity evidence does not match');
-              }
-              assertTrueFields(
-                native,
-                [
-                  'same_signature_identity',
-                  'app_signature_valid',
-                  'sidecar_signature_valid',
-                  'notarization_verified',
-                  'app_stapler_valid',
-                  'dmg_stapler_valid',
-                  'app_spctl_valid',
-                  'dmg_spctl_valid',
-                ],
-                platform,
-              );
-              return;
-            }
-            if (platform === 'windows') {
-              const expectedThumbprint = (process.env.WIN_CSC_SHA1 ?? '')
-                .replace(/\s/g, '')
-                .toUpperCase();
-              if (
-                !/^[A-F0-9]{40}$/.test(expectedThumbprint) ||
-                native.signer_thumbprint !== expectedThumbprint ||
-                !['x64', 'arm64'].includes(native.architecture)
-              ) {
-                throw new Error('Windows Authenticode identity evidence does not match');
-              }
-              assertTrueFields(
-                native,
-                ['installer_authenticode_valid', 'sidecar_authenticode_valid'],
-                platform,
-              );
-              return;
-            }
-            if (
-              !['x64', 'arm64'].includes(native.architecture) ||
-              (native.architecture === 'x64'
-                ? native.deb_architecture !== 'amd64'
-                : native.deb_architecture !== 'arm64')
-            ) {
-              throw new Error('Linux package architecture evidence does not match');
-            }
-            assertTrueFields(
-              native,
-              [
-                'sidecar_executable',
-                'package_sidecars_identical',
-                'appimage_executable',
-                'appimage_extract_smoke',
-                'deb_extract_smoke',
-              ],
-              platform,
-            );
-            for (const field of ['appimage_desktop_entry', 'deb_desktop_entry']) {
-              const name = native[field];
-              if (
-                typeof name !== 'string' ||
-                basename(name) !== name ||
-                !name.endsWith('.desktop')
-              ) {
-                throw new Error(`Linux ${field} evidence is invalid`);
-              }
-            }
-          };
-          const assets = [];
-          const owners = new Map();
-          for (const [platform, policy] of Object.entries(policies)) {
-            const directory = join('verified', platform);
-            const names = readdirSync(directory)
-              .filter((name) => statSync(join(directory, name)).isFile())
-              .sort();
-            if (names.length === 0) throw new Error(`no verified ${platform} assets`);
-            for (const name of names) {
-              if (basename(name) !== name || !allowed.some((pattern) => pattern.test(name))) {
-                throw new Error(`unexpected ${platform} release asset: ${name}`);
-              }
-              const priorOwner = owners.get(name);
-              if (priorOwner) {
-                throw new Error(
-                  `release asset basename collision: ${name} (${priorOwner}, ${platform})`,
-                );
-              }
-              owners.set(name, platform);
-              assets.push(join(directory, name));
-            }
-            for (const pattern of policy.required) {
-              const matches = names.filter((name) => pattern.test(name));
-              if (matches.length !== 1) {
-                throw new Error(
-                  `${platform} must provide exactly one ${pattern}; found ${matches.length}`,
-                );
-              }
-            }
-            const evidenceNames = names.filter((name) =>
-              /^release-evidence-(?:macos|windows|linux)\.json$/.test(name),
-            );
-            if (
-              evidenceNames.length !== 1 ||
-              evidenceNames[0] !== policy.evidence
-            ) {
-              throw new Error(
-                `${platform} must provide only ${policy.evidence} as release evidence`,
-              );
-            }
-            let evidence;
-            try {
-              evidence = JSON.parse(
-                readFileSync(join(directory, policy.evidence), 'utf8'),
-              );
-            } catch {
-              throw new Error(`${platform} release evidence is invalid JSON`);
-            }
-            const expectedTag = `v${process.env.AGISTACK_RELEASE_VERSION}`;
-            const expectedRunUrl =
-              `https://github.com/${process.env.GITHUB_REPOSITORY}` +
-              `/actions/runs/${process.env.GITHUB_RUN_ID}`;
-            if (
-              !isRecord(evidence) ||
-              evidence.contract_version !== 'desktop-release-evidence-v1' ||
-              evidence.verification_status !== 'verified_by_tag_ci' ||
-              evidence.platform !== platform ||
-              evidence.version !== process.env.AGISTACK_RELEASE_VERSION ||
-              evidence.tag !== expectedTag ||
-              evidence.tag !== process.env.GITHUB_REF_NAME ||
-              evidence.commit_sha !== process.env.GITHUB_SHA ||
-              !isRecord(evidence.workflow_run) ||
-              evidence.workflow_run.id !== process.env.GITHUB_RUN_ID ||
-              evidence.workflow_run.attempt !== process.env.GITHUB_RUN_ATTEMPT ||
-              evidence.workflow_run.url !== expectedRunUrl
-            ) {
-              throw new Error(`${platform} release evidence CI identity does not match`);
-            }
-            if (!Array.isArray(evidence.assets)) {
-              throw new Error(`${platform} release evidence assets must be an array`);
-            }
-            const publishableNames = names.filter((name) => name !== policy.evidence);
-            const claimedAssets = new Map();
-            for (const asset of evidence.assets) {
-              if (
-                !isRecord(asset) ||
-                typeof asset.name !== 'string' ||
-                basename(asset.name) !== asset.name ||
-                !Number.isSafeInteger(asset.size) ||
-                asset.size <= 0 ||
-                !/^[A-Za-z0-9+/]{86}==$/.test(asset.sha512 ?? '') ||
-                claimedAssets.has(asset.name)
-              ) {
-                throw new Error(`${platform} release evidence asset is invalid`);
-              }
-              claimedAssets.set(asset.name, asset);
-            }
-            if (
-              claimedAssets.size !== publishableNames.length ||
-              publishableNames.some((name) => !claimedAssets.has(name))
-            ) {
-              throw new Error(`${platform} release evidence asset set does not match`);
-            }
-            for (const name of publishableNames) {
-              const path = join(directory, name);
-              const claimed = claimedAssets.get(name);
-              if (
-                statSync(path).size !== claimed.size ||
-                sha512(path) !== claimed.sha512
-              ) {
-                throw new Error(`${platform} release evidence digest mismatch: ${name}`);
-              }
-            }
-            validateNativeEvidence(platform, evidence.native_verification);
-          }
-          const expectedNames = [...owners.keys()].sort();
-          writeFileSync('verified-assets.txt', `${expectedNames.join('\n')}\n`);
-          writeFileSync('verified-asset-paths.txt', `${assets.sort().join('\n')}\n`);
-        env:
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          WIN_CSC_SHA1: ${{ secrets.WIN_CSC_SHA1 }}
+        run: node agi-stack/apps/desktop/scripts/release-draft-validation.mjs validate-combined
 
       - name: Create or recover the verified draft release
         shell: bash
         run: |
           set -euo pipefail
+          assert_exact_draft() {
+            local release_json is_draft release_tag
+            release_json="$(
+              gh release view "$GITHUB_REF_NAME" \
+                --repo "$GITHUB_REPOSITORY" \
+                --json isDraft,tagName
+            )"
+            is_draft="$(jq -r '.isDraft' <<<"$release_json")"
+            release_tag="$(jq -r '.tagName' <<<"$release_json")"
+            if [[ "$is_draft" != "true" || "$release_tag" != "$GITHUB_REF_NAME" ]]; then
+              echo "Release must remain a draft for the exact tag" >&2
+              exit 1
+            fi
+          }
+          release_exists_fail_closed() {
+            local response_path error_path
+            response_path="$RUNNER_TEMP/release-before-create.json"
+            error_path="$RUNNER_TEMP/release-before-create.error"
+            if gh api \
+              "repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" \
+              >"$response_path" 2>"$error_path"; then
+              return 0
+            fi
+            if grep -Fq '(HTTP 404)' "$error_path"; then
+              return 1
+            fi
+            cat "$error_path" >&2
+            echo "Unable to determine whether the release already exists" >&2
+            exit 1
+          }
           resolved_tag_commit="$(
             gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_REF_NAME}" --jq '.sha'
           )"
@@ -596,72 +490,130 @@ jobs:
             exit 1
           fi
 
-          if release_json="$(
-            gh release view "$GITHUB_REF_NAME" \
-              --repo "$GITHUB_REPOSITORY" \
-              --json isDraft,tagName 2>/dev/null
-          )"; then
-            is_draft="$(jq -r '.isDraft' <<<"$release_json")"
-            release_tag="$(jq -r '.tagName' <<<"$release_json")"
-            if [[ "$is_draft" != "true" || "$release_tag" != "$GITHUB_REF_NAME" ]]; then
-              echo "Existing release must remain a draft for the exact tag" >&2
+          if release_exists_fail_closed; then
+            assert_exact_draft
+          else
+            if release_exists_fail_closed; then
+              echo "Release appeared before draft creation; refusing to mutate" >&2
               exit 1
             fi
-          else
+            resolved_tag_commit="$(
+              gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_REF_NAME}" --jq '.sha'
+            )"
+            if [[ "$resolved_tag_commit" != "$GITHUB_SHA" ]]; then
+              echo "Tag changed before draft creation" >&2
+              exit 1
+            fi
             gh release create "$GITHUB_REF_NAME" \
               --repo "$GITHUB_REPOSITORY" \
               --draft \
               --verify-tag \
               --generate-notes \
               --title "agi-stack Desktop $GITHUB_REF_NAME"
+            assert_exact_draft
           fi
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Restore the verified draft assets
+      - name: Verify and reuse exact draft assets before upload
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t expected_assets < verified-assets.txt
-          mapfile -t asset_paths < verified-asset-paths.txt
-          mapfile -t existing_assets < <(
+          assert_exact_draft() {
+            local release_json is_draft release_tag
+            release_json="$(
+              gh release view "$GITHUB_REF_NAME" \
+                --repo "$GITHUB_REPOSITORY" \
+                --json isDraft,tagName
+            )"
+            is_draft="$(jq -r '.isDraft' <<<"$release_json")"
+            release_tag="$(jq -r '.tagName' <<<"$release_json")"
+            if [[ "$is_draft" != "true" || "$release_tag" != "$GITHUB_REF_NAME" ]]; then
+              echo "Release must remain a draft for the exact tag" >&2
+              exit 1
+            fi
+          }
+          verify_downloaded_assets() {
+            node agi-stack/apps/desktop/scripts/release-draft-validation.mjs \
+              verify-remote "$1" "$2"
+          }
+
+          assert_exact_draft
+          existing_dir="$(mktemp -d "$RUNNER_TEMP/desktop-release-existing.XXXXXX")"
+          trap 'rm -rf -- "$existing_dir"' EXIT
+          existing_count="$(
             gh release view "$GITHUB_REF_NAME" \
               --repo "$GITHUB_REPOSITORY" \
               --json assets \
-              --jq '.assets[].name' | sort
-          )
+              --jq '.assets | length'
+          )"
+          if [[ "$existing_count" != "0" ]]; then
+            gh release download "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --dir "$existing_dir"
+          fi
+          assert_exact_draft
+          verify_downloaded_assets subset "$existing_dir"
 
-          for existing in "${existing_assets[@]}"; do
-            if ! printf '%s\n' "${expected_assets[@]}" | grep -Fqx -- "$existing"; then
-              echo "Refusing to overwrite draft with unexpected existing asset: $existing" >&2
-              exit 1
-            fi
+          mapfile -t missing_paths < <(
+            node agi-stack/apps/desktop/scripts/release-draft-validation.mjs \
+              list-missing "$existing_dir"
+          )
+          for asset_path in "${missing_paths[@]}"; do
+            assert_exact_draft
+            gh release upload "$GITHUB_REF_NAME" "$asset_path" \
+              --repo "$GITHUB_REPOSITORY"
+            assert_exact_draft
           done
-          gh release upload "$GITHUB_REF_NAME" "${asset_paths[@]}" \
-            --repo "$GITHUB_REPOSITORY" \
-            --clobber
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Verify the exact remote asset set
+      - name: Download and verify the exact remote asset bytes
         shell: bash
         run: |
           set -euo pipefail
-          gh release view "$GITHUB_REF_NAME" \
+          assert_exact_draft() {
+            local release_json is_draft release_tag
+            release_json="$(
+              gh release view "$GITHUB_REF_NAME" \
+                --repo "$GITHUB_REPOSITORY" \
+                --json isDraft,tagName
+            )"
+            is_draft="$(jq -r '.isDraft' <<<"$release_json")"
+            release_tag="$(jq -r '.tagName' <<<"$release_json")"
+            if [[ "$is_draft" != "true" || "$release_tag" != "$GITHUB_REF_NAME" ]]; then
+              echo "Release must remain a draft for the exact tag" >&2
+              exit 1
+            fi
+          }
+
+          assert_exact_draft
+          remote_dir="$(mktemp -d "$RUNNER_TEMP/desktop-release-remote.XXXXXX")"
+          trap 'rm -rf -- "$remote_dir"' EXIT
+          gh release download "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
-            --json assets \
-            --jq '.assets[].name' | sort > remote-assets.txt
-          if [[ "$(wc -l < remote-assets.txt | tr -d ' ')" != \
-                "$(wc -l < verified-assets.txt | tr -d ' ')" ]] || \
-             ! cmp -s verified-assets.txt remote-assets.txt; then
-            echo "Remote release assets do not exactly match the verified local set" >&2
-            diff -u verified-assets.txt remote-assets.txt || true
-            exit 1
-          fi
+            --dir "$remote_dir"
+          assert_exact_draft
+          node agi-stack/apps/desktop/scripts/release-draft-validation.mjs \
+            verify-remote exact "$remote_dir"
+          assert_exact_draft
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Promote the verified draft release
-        run: gh release edit "$GITHUB_REF_NAME" --draft=false --repo "$GITHUB_REPOSITORY"
+      - name: Assert the release remains a draft
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_json="$(
+            gh release view "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json isDraft,tagName
+          )"
+          is_draft="$(jq -r '.isDraft' <<<"$release_json")"
+          release_tag="$(jq -r '.tagName' <<<"$release_json")"
+          if [[ "$is_draft" != "true" || "$release_tag" != "$GITHUB_REF_NAME" ]]; then
+            echo "Release must remain a draft for the exact tag" >&2
+            exit 1
+          fi
         env:
           GH_TOKEN: ${{ github.token }}

@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0.0",
+  "contract_kind": "paired-production-renderer-evidence",
+  "scenarios": [
+    {
+      "id": "signed-out-entry",
+      "capability_id": "authentication-and-account-entry",
+      "coverage_disposition": "smoke",
+      "execution_boundary": "browser_renderer_only",
+      "web_path": "/login",
+      "desktop_path": "/",
+      "web_ready": {
+        "role": "heading",
+        "name": "Welcome Back"
+      },
+      "web_focus": {
+        "target_id": "email_entry",
+        "role": "textbox",
+        "name": "Email"
+      },
+      "web_probe": {
+        "root_selector": "[data-parity-surface=\"signed-out-entry\"]",
+        "state_attributes": {
+          "authentication_state": "data-parity-authentication-state",
+          "account_state": "data-parity-account-state",
+          "permission_state": "data-parity-permission-state",
+          "data_state": "data-parity-data-state"
+        },
+        "focus_target_attribute": "data-parity-target-id",
+        "document_theme": {
+          "attribute": "class",
+          "dark_token": "dark",
+          "light_when_token_absent": true
+        }
+      },
+      "desktop_ready": {
+        "role": "heading",
+        "name": "Sign in to MemStack"
+      },
+      "desktop_focus": {
+        "target_id": "email_entry",
+        "role": "textbox",
+        "name": "Work email"
+      },
+      "desktop_probe": {
+        "root_selector": "[data-parity-surface=\"signed-out-entry\"]",
+        "state_attributes": {
+          "authentication_state": "data-parity-authentication-state",
+          "account_state": "data-parity-account-state",
+          "permission_state": "data-parity-permission-state",
+          "data_state": "data-parity-data-state"
+        },
+        "focus_target_attribute": "data-parity-target-id",
+        "document_theme": {
+          "attribute": "data-theme",
+          "dark_token": "dark",
+          "light_token": "light"
+        }
+      },
+      "matched_state": {
+        "locale": "en-US",
+        "theme": "light",
+        "viewport": {
+          "width": 1440,
+          "height": 1024
+        },
+        "device_scale_factor": 1,
+        "authentication_state": "signed_out",
+        "account_state": "none",
+        "permission_state": "public_entry_only",
+        "data_state": "empty",
+        "interaction_state": "focused:email_entry"
+      },
+      "expected_observable_result": "Both production renderers show their respective signed-out entry without a framework overlay or renderer runtime error."
+    }
+  ]
+}

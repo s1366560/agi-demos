@@ -46,7 +46,7 @@ endif
 NDK_TC := $(NDK)/toolchains/llvm/prebuilt/$(NDK_HOST_TAG)/bin
 
 .DEFAULT_GOAL := help
-.PHONY: help test ci strangler-gate all ensure-wasm-target wasm-core server wasm-web desktop desktop-check desktop-browser-qa desktop-parity-check desktop-deps desktop-frontend desktop-electron-frontend desktop-icons run-desktop run-desktop-electron desktop-bundle desktop-bundle-smoke android ios bench scorecard clean fmt-check
+.PHONY: help test ci strangler-gate all ensure-wasm-target wasm-core server wasm-web desktop desktop-check desktop-browser-qa desktop-web-deps desktop-route-inventory desktop-parity-contract desktop-paired-browser-qa desktop-parity-check desktop-deps desktop-frontend desktop-electron-frontend desktop-icons run-desktop run-desktop-electron desktop-bundle desktop-bundle-smoke android ios bench scorecard clean fmt-check
 
 help: ## 列出全部 target
 	@echo "agi-stack 构建矩阵 — target:"
@@ -102,8 +102,22 @@ desktop-check: desktop-deps ## 桌面:Rust sidecar 与 Electron/renderer 测试
 desktop-browser-qa: desktop-deps ## 桌面:执行双语、多视口、明暗主题 Browser QA 矩阵
 	cd $(DESKTOP_APP_DIR) && CI=true $(PNPM) run qa:browser
 
-desktop-parity-check: desktop-check desktop-browser-qa ## 桌面:聚合本地、Electron 与 Browser parity 门禁
-	@echo "==> Desktop parity 契约与 Browser QA 验证通过"
+desktop-web-deps: ## 桌面 parity:安装/校验 Web 路由与 production build 依赖
+	cd ../web && CI=true corepack pnpm install --frozen-lockfile
+
+desktop-route-inventory: desktop-web-deps ## 桌面:验证 Web 生产路由与 parity 清单同步
+	cd ../web && node --test scripts/web-route-inventory.test.mjs
+	cd ../web && node scripts/web-route-inventory.mjs
+
+desktop-parity-contract: desktop-deps ## 桌面:验证 capability definitions、Agent judgments 与 manifest v2 无漂移
+	cd $(DESKTOP_APP_DIR) && node contracts/desktop-web-parity/generate-parity-manifest-v2.mjs --check
+
+desktop-paired-browser-qa: desktop-deps desktop-web-deps ## 桌面:成对验证 Web 与 Desktop production renderer 并保留成功证据
+	cd $(DESKTOP_APP_DIR) && AGISTACK_PAIRED_SOURCE_REVISION=$$(git rev-parse HEAD) $(PNPM) run qa:paired-production
+	@echo "==> Paired production renderer smoke passed; native Electron and release evidence remain separate"
+
+desktop-parity-check: desktop-route-inventory desktop-parity-contract desktop-check desktop-browser-qa desktop-paired-browser-qa ## 桌面:聚合本地、Electron 与 Browser parity 门禁
+	@echo "==> Desktop route, contract, build, and Browser gates completed; review each evidence channel separately"
 
 desktop-deps: ## 桌面:安装/校验前端依赖
 	cd $(DESKTOP_APP_DIR) && CI=true $(PNPM) install $(PNPM_INSTALL_ARGS)

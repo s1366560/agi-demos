@@ -1,0 +1,553 @@
+{
+  "capabilities": [
+    {
+      "id": "tenant-tenant-users",
+      "kind": "canonical",
+      "title": "Users and Invitations",
+      "domain": "tenant-governance",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-users"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/tenants/{tenant_id}/members",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/members",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/{tenant_id}/members/{user_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/tenants/{tenant_id}/members/{user_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/invitations",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/invitations",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/members",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/{tenant_id}/members/{user_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/tenants/{tenant_id}/members/{user_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/invitations",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/invitations",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:cloud_tenant_membership_not_applicable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-users",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_member"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "invite",
+        "inspect-pending-invitation-count",
+        "change-role",
+        "remove-member"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "invite",
+            "inspect-pending-invitation-count"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "change-role",
+            "remove-member"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_owner"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "cloud_tenant_membership_not_applicable",
+      "local_deviation": "A Local Desktop runtime has one application user and does not create a parallel offline tenant membership or invitation authority.",
+      "judgment_rationale": "UserList owns tenant members and pending invitations. Invitation acceptance remains a separate route-only capability. Desktop has no native tenant roster route, and Local must not invent multi-user governance."
+    },
+    {
+      "id": "tenant-tenant-audit-logs",
+      "kind": "canonical",
+      "title": "Audit Logs",
+      "domain": "tenant-governance",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-audit-logs"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/tenants/{tenant_id}/audit-logs",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/audit-logs",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/audit-logs/filter",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/audit-logs/runtime-hooks",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/audit-logs/runtime-hooks/summary",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/audit-logs/export",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/audit-logs",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/audit-logs/filter",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/audit-logs/runtime-hooks",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/audit-logs/runtime-hooks/summary",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/audit-logs/export",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:cloud_tenant_audit_authority_not_applicable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-audit-logs",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_access"
+      ],
+      "actions": [
+        "view",
+        "filter",
+        "inspect-runtime-hooks",
+        "export"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "filter",
+            "inspect-runtime-hooks",
+            "export"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "cloud_tenant_audit_authority_not_applicable",
+      "local_deviation": "Local security and lifecycle diagnostics remain native-only evidence and do not masquerade as the Cloud tenant audit ledger or export authority.",
+      "judgment_rationale": "AuditLogs owns the canonical tenant audit route and the legacy global redirect. The organization audit card is retained under Org Settings because it is a compatibility path to this ledger. Desktop lacks the native filtered and export surface; Local tenant audit governance is not applicable."
+    },
+    {
+      "id": "tenant-tenant-events",
+      "kind": "canonical",
+      "title": "Tenant Events",
+      "domain": "tenant-governance",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-events"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/events",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/events",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/events/types",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/events",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/events/types",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:local_event_ledger_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-events",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_access"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "filter",
+        "paginate",
+        "retry-load"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "filter",
+            "paginate",
+            "retry-load"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": "events"
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "planned",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_event_ledger_planned",
+      "local_deviation": "A Local event ledger should contain only sidecar-owned lifecycle events with stable provenance; it must not merge renderer logs or infer Cloud tenant events.",
+      "judgment_rationale": "Events is a direct tenant route backed by the service event log. Desktop consumes several event streams inside workbenches but has no authoritative routed event ledger; a sidecar-owned Local ledger remains useful and is planned."
+    },
+    {
+      "id": "tenant-tenant-dead-letter-queue",
+      "kind": "canonical",
+      "title": "Dead Letter Queue",
+      "domain": "tenant-governance",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-dead-letter-queue"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/admin/dlq/messages",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/admin/dlq/messages",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/admin/dlq/messages/{message_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/admin/dlq/messages/{message_id}/retry",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/admin/dlq/messages/retry",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/admin/dlq/messages/{message_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/admin/dlq/messages/discard",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/admin/dlq/stats",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/admin/dlq/cleanup/expired",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/admin/dlq/cleanup/resolved",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/admin/dlq/messages",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/admin/dlq/messages/{message_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/admin/dlq/messages/{message_id}/retry",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/admin/dlq/messages/retry",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/admin/dlq/messages/{message_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/admin/dlq/messages/discard",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/admin/dlq/stats",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/admin/dlq/cleanup/expired",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/admin/dlq/cleanup/resolved",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:cloud_message_bus_dlq_not_applicable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-dead-letter-queue",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "global_admin"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "inspect-stats",
+        "retry-message",
+        "retry-batch",
+        "discard",
+        "cleanup"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "inspect-stats",
+            "retry-message",
+            "retry-batch",
+            "discard",
+            "cleanup"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "global_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "cloud_message_bus_dlq_not_applicable",
+      "local_deviation": "The Cloud message-bus DLQ has no Local equivalent. Local retry and recovery remain owned by their specific sidecar outbox contracts rather than a fabricated global queue.",
+      "judgment_rationale": "DeadLetterQueue is an administrative Web surface with retry, discard, cleanup, and aggregate statistics authority. Desktop lacks the route, and Local does not run the Cloud message bus represented by this queue."
+    }
+  ],
+  "source_ownership": {
+    "tenant-tenant-users": [
+      "UserList"
+    ],
+    "tenant-tenant-audit-logs": [
+      "AuditLogs"
+    ],
+    "tenant-tenant-events": [
+      "Events"
+    ],
+    "tenant-tenant-dead-letter-queue": [
+      "DeadLetterQueue"
+    ]
+  },
+  "route_owner_overrides": {
+    "tenant-tenant-audit-logs": [
+      "production-route-path-audit-logs"
+    ]
+  }
+}

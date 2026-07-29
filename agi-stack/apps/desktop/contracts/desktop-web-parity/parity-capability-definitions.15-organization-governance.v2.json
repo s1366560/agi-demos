@@ -1,0 +1,425 @@
+{
+  "capabilities": [
+    {
+      "id": "tenant-tenant-org-settings",
+      "kind": "canonical",
+      "title": "Organization Settings",
+      "domain": "organization-governance",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-org-settings"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/tenants/{tenant_id}",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/stats",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/registries",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/registries",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/tenants/{tenant_id}/registries/{registry_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/tenants/{tenant_id}/registries/{registry_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/registries/{registry_id}/test",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/smtp-config",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/tenants/{tenant_id}/smtp-config",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/tenants/{tenant_id}/smtp-config",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/smtp-config/test",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/gene-policies",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/tenants/{tenant_id}/gene-policies/{policy_key}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/tenants/{tenant_id}/gene-policies/{policy_key}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/stats",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/registries",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/registries",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/tenants/{tenant_id}/registries/{registry_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/tenants/{tenant_id}/registries/{registry_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/registries/{registry_id}/test",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/smtp-config",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/tenants/{tenant_id}/smtp-config",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/tenants/{tenant_id}/smtp-config",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/smtp-config/test",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/gene-policies",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/tenants/{tenant_id}/gene-policies/{policy_key}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/tenants/{tenant_id}/gene-policies/{policy_key}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:cloud_organization_governance_not_applicable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-org-settings",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_access"
+      ],
+      "actions": [
+        "view",
+        "inspect-stats",
+        "navigate-tenant-settings",
+        "navigate-members",
+        "navigate-clusters",
+        "navigate-audit",
+        "manage-registries",
+        "inspect-smtp",
+        "update-smtp",
+        "delete-smtp",
+        "test-smtp",
+        "manage-gene-policies"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "inspect-stats",
+            "navigate-tenant-settings",
+            "navigate-members",
+            "navigate-clusters",
+            "navigate-audit"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "inspect-smtp"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "update-smtp",
+            "delete-smtp",
+            "test-smtp"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "manage-registries",
+            "manage-gene-policies"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "missing",
+          "feature_gate": null
+        }
+      ],
+      "web_status": "partial",
+      "web_reason_code": "organization_registry_gene_policy_tenant_authorization_missing",
+      "cloud_status": "planned",
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "cloud_organization_governance_not_applicable",
+      "local_deviation": "Organization membership, registries, SMTP credentials, clusters, audit, and Gene policies require Cloud tenant authority. Local renderer state never stores registry or SMTP secrets.",
+      "judgment_rationale": "OrgSettingsLayout and its information, member, cluster, audit, registry, SMTP, and Gene-policy children form one canonical organization settings area. Organization Info is read-only and links to Tenant Settings. Registry and Gene-policy endpoints currently lack tenant membership and administration enforcement, so the Web surface is degraded even though SMTP reads require membership and SMTP mutations require administration. Desktop has no native routed implementation, and the multi-user organization authority is not replicated locally."
+    },
+    {
+      "id": "tenant-tenant-settings",
+      "kind": "canonical",
+      "title": "Tenant Settings",
+      "domain": "tenant-governance",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-settings"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/tenants/{tenant_id}",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/tenants/{tenant_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/tenants/{tenant_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/stats",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/tenants/{tenant_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/tenants/{tenant_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/stats",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:cloud_tenant_settings_not_applicable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-settings",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_member"
+      ],
+      "actions": [
+        "view",
+        "update",
+        "delete",
+        "inspect-usage"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "inspect-usage"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "update",
+            "delete"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_owner"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "cloud_tenant_settings_not_applicable",
+      "local_deviation": "Desktop application, runtime, and vault preferences remain separate native settings. Local mode does not present them as Cloud tenant metadata, quota, or deletion authority.",
+      "judgment_rationale": "TenantSettings owns tenant metadata, usage, and deletion. Reads and usage require tenant membership while update and deletion require the tenant owner; no tenant:read permission exists. The existing Desktop Settings window manages application and runtime concerns, not this canonical tenant contract; Cloud is planned and Local tenant governance is not applicable."
+    }
+  ],
+  "source_ownership": {
+    "tenant-tenant-org-settings": [
+      "OrgSettingsLayout",
+      "OrgInfo",
+      "OrgMembers",
+      "OrgClusters",
+      "OrgAudit",
+      "OrgRegistry",
+      "OrgSmtp",
+      "OrgGenes",
+      "OrgSetupGuard"
+    ],
+    "tenant-tenant-settings": [
+      "TenantSettings"
+    ]
+  },
+  "route_owner_overrides": {
+    "tenant-tenant-org-settings": [
+      "production-route-index-tenant-tenantid-org-settings"
+    ]
+  }
+}

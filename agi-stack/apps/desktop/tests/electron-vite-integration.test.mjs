@@ -22,6 +22,10 @@ const {
 const packageJson = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
 );
+const pnpmWorkspace = readFileSync(
+  new URL('../pnpm-workspace.yaml', import.meta.url),
+  'utf8',
+);
 const configSource = readFileSync(
   new URL('../electron.vite.config.ts', import.meta.url),
   'utf8',
@@ -63,7 +67,10 @@ test('electron-vite is the canonical desktop build and launch surface', () => {
   assert.ok(packageJson.devDependencies.electron);
   assert.ok(packageJson.dependencies['electron-updater']);
   assert.ok(packageJson.devDependencies['electron-builder']);
-  assert.deepEqual(packageJson.pnpm.onlyBuiltDependencies, ['electron', 'esbuild']);
+  assert.equal(packageJson.pnpm, undefined);
+  assert.match(pnpmWorkspace, /allowBuilds:/u);
+  assert.match(pnpmWorkspace, /electron:\s*true/u);
+  assert.match(pnpmWorkspace, /esbuild:\s*true/u);
   assert.match(makefileSource, /run-desktop:[\s\S]*install-electron --no/);
   assert.match(makefileSource, /\$\(CARGO\) build -p agistack-desktop-sidecar/);
   assert.doesNotMatch(makefileSource, /@tauri-apps|TAURI_CLI/u);

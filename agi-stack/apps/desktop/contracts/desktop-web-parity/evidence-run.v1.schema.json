@@ -1,0 +1,559 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MemStack Desktop Parity Evidence Run",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "record_kind",
+    "run_id",
+    "run_scope",
+    "artifact_location_base",
+    "schema_artifact_id",
+    "desired_contract",
+    "source_revisions",
+    "source_state",
+    "started_at",
+    "completed_at",
+    "environment",
+    "matched_state",
+    "capability_results",
+    "artifacts",
+    "evidence"
+  ],
+  "properties": {
+    "$schema": { "const": "./evidence-run.v1.schema.json" },
+    "schema_version": { "const": "1.0.0" },
+    "record_kind": { "enum": ["template", "run"] },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._:-]{7,127}$"
+    },
+    "run_scope": {
+      "enum": ["capability_slice", "full_manifest"]
+    },
+    "evidence_profile": {
+      "enum": ["paired_production_renderer"]
+    },
+    "artifact_location_base": {
+      "const": "evidence_run_directory"
+    },
+    "schema_artifact_id": {
+      "$ref": "#/$defs/artifactId"
+    },
+    "desired_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "path_base",
+        "artifact_id",
+        "schema_version",
+        "revision",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)*$"
+        },
+        "path_base": { "const": "repository_root" },
+        "artifact_id": { "$ref": "#/$defs/artifactId" },
+        "schema_version": { "type": "string", "minLength": 1 },
+        "revision": { "$ref": "#/$defs/revision" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "source_revisions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository_revision",
+        "web_revision",
+        "desktop_revision",
+        "prototype_revision"
+      ],
+      "properties": {
+        "repository_revision": { "$ref": "#/$defs/revision" },
+        "web_revision": { "$ref": "#/$defs/revision" },
+        "desktop_revision": { "$ref": "#/$defs/revision" },
+        "prototype_revision": { "$ref": "#/$defs/revision" }
+      }
+    },
+    "source_state": { "$ref": "#/$defs/sourceState" },
+    "started_at": { "$ref": "#/$defs/timestamp" },
+    "completed_at": { "$ref": "#/$defs/timestamp" },
+    "environment": { "$ref": "#/$defs/environment" },
+    "matched_state": { "$ref": "#/$defs/matchedState" },
+    "capability_results": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/capabilityResult" }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/artifact" }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["build", "browser", "native"],
+      "properties": {
+        "build": { "$ref": "#/$defs/evidenceChannel" },
+        "browser": { "$ref": "#/$defs/evidenceChannel" },
+        "native": { "$ref": "#/$defs/evidenceChannel" }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["record_kind"],
+      "properties": {
+        "record_kind": { "const": "template" }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["record_kind", "artifacts"],
+      "properties": {
+        "record_kind": { "const": "run" },
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["sha256", "produced_at"],
+            "properties": {
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "produced_at": { "$ref": "#/$defs/timestamp" }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "revision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$"
+    },
+    "artifactId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "result": {
+      "enum": ["passed", "failed", "blocked", "not_run"]
+    },
+    "evidenceRole": {
+      "enum": [
+        "contract",
+        "paired_renderer_build",
+        "renderer_build_receipt",
+        "web_renderer",
+        "desktop_renderer",
+        "web_full_screenshot",
+        "desktop_full_screenshot",
+        "visual_diff",
+        "observation_metadata",
+        "native_electron",
+        "sidecar_authority",
+        "desktop_bundle",
+        "release_pipeline"
+      ]
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "host_os",
+        "host_os_version",
+        "architecture",
+        "execution_context",
+        "sandboxed",
+        "locale",
+        "timezone",
+        "dependency_versions"
+      ],
+      "properties": {
+        "host_os": { "type": "string", "minLength": 1 },
+        "host_os_version": { "type": "string", "minLength": 1 },
+        "architecture": { "type": "string", "minLength": 1 },
+        "execution_context": { "enum": ["local", "ci"] },
+        "sandboxed": { "type": "boolean" },
+        "locale": { "type": "string", "minLength": 1 },
+        "timezone": { "type": "string", "minLength": 1 },
+        "dependency_versions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["node", "pnpm", "rustc", "electron"],
+          "properties": {
+            "node": { "type": "string", "minLength": 1 },
+            "pnpm": { "type": "string", "minLength": 1 },
+            "rustc": { "type": "string", "minLength": 1 },
+            "electron": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "matchedState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "locale",
+        "theme",
+        "viewport",
+        "device_scale_factor",
+        "authentication_state",
+        "account_state",
+        "permission_state",
+        "data_state",
+        "interaction_state"
+      ],
+      "properties": {
+        "locale": { "type": "string", "minLength": 1 },
+        "theme": { "enum": ["light", "dark", "system", "not_applicable"] },
+        "viewport": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["width", "height"],
+          "properties": {
+            "width": { "type": "number", "minimum": 1 },
+            "height": { "type": "number", "minimum": 1 }
+          }
+        },
+        "device_scale_factor": { "type": "number", "minimum": 1 },
+        "authentication_state": { "type": "string", "minLength": 1 },
+        "account_state": { "type": "string", "minLength": 1 },
+        "permission_state": { "type": "string", "minLength": 1 },
+        "data_state": { "type": "string", "minLength": 1 },
+        "interaction_state": { "type": "string", "minLength": 1 }
+      }
+    },
+    "sourceState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["head_revision", "worktree_state"],
+      "properties": {
+        "head_revision": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "worktree_state": {
+          "enum": ["clean", "dirty", "unknown"]
+        }
+      }
+    },
+    "evidenceChannel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "command",
+        "started_at",
+        "completed_at",
+        "summary",
+        "artifact_ids"
+      ],
+      "properties": {
+        "status": { "$ref": "#/$defs/result" },
+        "command": { "type": "string", "minLength": 1 },
+        "started_at": {
+          "type": ["string", "null"],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$"
+        },
+        "completed_at": {
+          "type": ["string", "null"],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$"
+        },
+        "summary": { "type": "string", "minLength": 1 },
+        "artifact_ids": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/artifactId" }
+        }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": { "enum": ["passed", "failed", "blocked"] },
+            "started_at": { "$ref": "#/$defs/timestamp" },
+            "completed_at": { "$ref": "#/$defs/timestamp" },
+            "artifact_ids": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/artifactId" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": { "const": "not_run" },
+            "started_at": { "type": "null" },
+            "completed_at": { "type": "null" },
+            "artifact_ids": {
+              "type": "array",
+              "maxItems": 0,
+              "items": { "$ref": "#/$defs/artifactId" }
+            }
+          }
+        }
+      ]
+    },
+    "judgmentAudit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agent_id",
+        "tool_name",
+        "input",
+        "output",
+        "rationale",
+        "latency_ms",
+        "recorded_at"
+      ],
+      "properties": {
+        "agent_id": { "type": "string", "minLength": 1 },
+        "tool_name": { "type": "string", "minLength": 1 },
+        "input": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "contract_reference",
+            "evidence_digest",
+            "observation_summary"
+          ],
+          "properties": {
+            "contract_reference": { "type": "string", "minLength": 1 },
+            "evidence_digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "observation_summary": { "type": "string", "minLength": 1 }
+          }
+        },
+        "output": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["verdict", "summary"],
+          "properties": {
+            "verdict": { "enum": ["accepted", "rejected", "pending_review"] },
+            "summary": { "type": "string", "minLength": 1 }
+          }
+        },
+        "rationale": { "type": "string", "minLength": 1 },
+        "latency_ms": { "type": "number", "exclusiveMinimum": 0 },
+        "recorded_at": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "intentionalDeviation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["disposition", "statement", "judgment_audit"],
+          "properties": {
+            "disposition": { "const": "none" },
+            "statement": { "type": "null" },
+            "judgment_audit": { "type": "null" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["disposition", "statement", "judgment_audit"],
+          "properties": {
+            "disposition": {
+              "enum": ["accepted", "rejected", "pending_review"]
+            },
+            "statement": { "type": "string", "minLength": 1 },
+            "judgment_audit": { "$ref": "#/$defs/judgmentAudit" }
+          }
+        }
+      ]
+    },
+    "parityJudgment": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["disposition", "statement", "judgment_audit"],
+          "properties": {
+            "disposition": { "const": "pending_review" },
+            "statement": { "type": "string", "minLength": 1 },
+            "judgment_audit": { "type": "null" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["disposition", "statement", "judgment_audit"],
+          "properties": {
+            "disposition": { "enum": ["accepted", "rejected"] },
+            "statement": { "type": "string", "minLength": 1 },
+            "judgment_audit": { "$ref": "#/$defs/judgmentAudit" }
+          }
+        }
+      ]
+    },
+    "capabilityResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability_id",
+        "contract_reference",
+        "result",
+        "summary",
+        "evidence",
+        "artifact_ids",
+        "parity_judgment",
+        "intentional_deviation"
+      ],
+      "properties": {
+        "capability_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "contract_reference": { "type": "string", "minLength": 1 },
+        "result": { "$ref": "#/$defs/result" },
+        "summary": { "type": "string", "minLength": 1 },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["build", "browser", "native"],
+          "properties": {
+            "build": { "$ref": "#/$defs/result" },
+            "browser": { "$ref": "#/$defs/result" },
+            "native": { "$ref": "#/$defs/result" }
+          }
+        },
+        "artifact_ids": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/artifactId" }
+        },
+        "parity_judgment": { "$ref": "#/$defs/parityJudgment" },
+        "intentional_deviation": { "$ref": "#/$defs/intentionalDeviation" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "kind",
+        "channel",
+        "evidence_roles",
+        "location",
+        "sha256",
+        "produced_at"
+      ],
+      "properties": {
+        "artifact_id": { "$ref": "#/$defs/artifactId" },
+        "kind": {
+          "enum": [
+            "screenshot",
+            "trace",
+            "log",
+            "report",
+            "bundle",
+            "video",
+            "accessibility_snapshot",
+            "other"
+          ]
+        },
+        "channel": { "enum": ["build", "browser", "native", "shared"] },
+        "evidence_roles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/evidenceRole" }
+        },
+        "location": { "type": "string", "minLength": 1 },
+        "media_type": { "type": "string", "minLength": 1 },
+        "sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "produced_at": {
+          "type": ["string", "null"],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$"
+        }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "channel": { "const": "build" },
+            "evidence_roles": {
+              "items": {
+                "enum": [
+                  "contract",
+                  "paired_renderer_build",
+                  "renderer_build_receipt",
+                  "desktop_bundle",
+                  "release_pipeline"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "channel": { "const": "browser" },
+            "evidence_roles": {
+              "items": {
+                "enum": [
+                  "web_renderer",
+                  "desktop_renderer",
+                  "web_full_screenshot",
+                  "desktop_full_screenshot",
+                  "visual_diff",
+                  "observation_metadata"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "channel": { "const": "native" },
+            "evidence_roles": {
+              "items": {
+                "enum": [
+                  "native_electron",
+                  "sidecar_authority",
+                  "desktop_bundle",
+                  "release_pipeline"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "channel": { "const": "shared" },
+            "evidence_roles": {
+              "items": { "const": "contract" }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

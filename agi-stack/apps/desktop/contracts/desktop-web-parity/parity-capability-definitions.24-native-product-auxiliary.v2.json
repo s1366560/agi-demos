@@ -1,0 +1,502 @@
+{
+  "capabilities": [
+    {
+      "id": "backend-stores",
+      "kind": "route_only",
+      "title": "Backend Stores",
+      "domain": "runtime-infrastructure",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [],
+      "api_method": "GET",
+      "api_path": "/api/v1/graph-stores",
+      "permissions": [
+        "authenticated",
+        "tenant_member",
+        "tenant_admin"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "create",
+        "update",
+        "delete",
+        "test"
+      ],
+      "web_actions": [
+        "view",
+        "list",
+        "create",
+        "update",
+        "delete",
+        "test"
+      ],
+      "cloud_status": "planned",
+      "local_status": "planned",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_backend_store_authority_planned",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/graph-stores/types",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/graph-stores?tenant_id={tenant_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/graph-stores?tenant_id={tenant_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/graph-stores/{store_id}?tenant_id={tenant_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/graph-stores/{store_id}?tenant_id={tenant_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/graph-stores/test?tenant_id={tenant_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/graph-stores/{store_id}/test?tenant_id={tenant_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/retrieval-stores/types",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/retrieval-stores?tenant_id={tenant_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/retrieval-stores?tenant_id={tenant_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/retrieval-stores/{store_id}?tenant_id={tenant_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/retrieval-stores/{store_id}?tenant_id={tenant_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/retrieval-stores/test?tenant_id={tenant_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/retrieval-stores/{store_id}/test?tenant_id={tenant_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "NONE",
+          "path": "unavailable:desktop_native_route_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "unavailable:local_backend_store_authority_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/backend-stores",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "create",
+            "update",
+            "delete",
+            "test"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "interaction_states": [
+        "navigate",
+        "plane-switch",
+        "create",
+        "edit",
+        "test",
+        "delete",
+        "scope-switch",
+        "retry"
+      ],
+      "expected_observable_result": "Cloud Desktop natively manages graph and retrieval stores with the same scoped authority, secret-once behavior, test results, and errors as Web. Local Desktop uses a sidecar-owned store contract or returns its stable unavailable reason without exposing credentials.",
+      "judgment_rationale": "BackendStores owns legacy and tenant-ID production routes but is absent from the canonical navigation inventory. No native Desktop route currently covers the graph and retrieval store lifecycle in either mode."
+    },
+    {
+      "id": "project-support",
+      "kind": "route_only",
+      "title": "Project Support",
+      "domain": "project-operations",
+      "scope": [
+        "tenant",
+        "project"
+      ],
+      "web_route_ids": [],
+      "api_method": "GET",
+      "api_path": "/api/v1/support/tickets",
+      "permissions": [
+        "authenticated",
+        "tenant_member",
+        "resource_owner"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "create",
+        "close",
+        "retry"
+      ],
+      "web_actions": [
+        "view",
+        "list",
+        "create",
+        "close",
+        "retry"
+      ],
+      "cloud_status": "planned",
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "local_support_service_not_applicable",
+      "local_deviation": "Support tickets require the hosted support service and organization identity; Local mode retains the native page shell with a structured not-applicable state.",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/support/tickets?tenant_id={tenant_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/support/tickets",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/support/tickets/{ticket_id}/close",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "NONE",
+          "path": "unavailable:desktop_native_route_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:local_support_service_not_applicable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/project-support",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "create",
+            "retry"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "close"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "resource_owner"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "interaction_states": [
+        "navigate",
+        "list",
+        "create",
+        "close",
+        "scope-switch",
+        "retry"
+      ],
+      "expected_observable_result": "Cloud Desktop natively lists, creates, and closes the caller's tenant-scoped support tickets from the project route with scoped errors and retry behavior. Local Desktop keeps the native route and returns a stable not-applicable result.",
+      "judgment_rationale": "Support is a project production route without a canonical navigation target, but its current authority is tenant membership plus caller-owned tickets rather than a project permission. It has no audited native Desktop page, and the hosted support-ticket service is intentionally not duplicated for Local mode."
+    },
+    {
+      "id": "project-playbooks",
+      "kind": "route_only",
+      "title": "Project Playbooks",
+      "domain": "agent-ecosystem",
+      "scope": [
+        "tenant",
+        "project"
+      ],
+      "web_route_ids": [],
+      "api_method": "GET",
+      "api_path": "/api/v1/projects/{project_id}/playbooks",
+      "permissions": [
+        "authenticated",
+        "project_member"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "refresh",
+        "review-verdicts"
+      ],
+      "web_actions": [
+        "view",
+        "list",
+        "refresh",
+        "review-verdicts"
+      ],
+      "cloud_status": "planned",
+      "local_status": "planned",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_playbook_authority_planned",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/playbooks?limit={limit}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/reflection-verdicts?limit={limit}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "WS",
+          "path": "/api/v1/agent/ws",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "NONE",
+          "path": "unavailable:desktop_native_route_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "unavailable:local_playbook_authority_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/project-playbooks",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "refresh",
+            "review-verdicts"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "interaction_states": [
+        "navigate",
+        "refresh",
+        "review-verdict",
+        "scope-switch",
+        "retry"
+      ],
+      "expected_observable_result": "Cloud Desktop natively presents project playbooks and reflection verdicts from Cloud authority with the same project scope and states as Web. Local Desktop uses an explicit sidecar playbook authority or returns its stable unavailable reason.",
+      "judgment_rationale": "PlaybookLibrary is a read-only project production route absent from the canonical navigation inventory. It loads playbooks and reflection verdicts under project membership and refreshes after reflection_complete events; Desktop prompt templates are a different model and cannot be counted as parity, so both Cloud and Local routes remain planned."
+    },
+    {
+      "id": "not-found",
+      "kind": "route_only",
+      "title": "Not Found and Safe Route Recovery",
+      "domain": "navigation",
+      "scope": [
+        "global"
+      ],
+      "web_route_ids": [],
+      "api_method": "NONE",
+      "api_path": "not_applicable:routing/not-found",
+      "permissions": [
+        "anonymous"
+      ],
+      "actions": [
+        "view",
+        "return-home",
+        "restore-safe-route"
+      ],
+      "web_actions": [
+        "view",
+        "return-home"
+      ],
+      "cloud_status": "planned",
+      "local_status": "planned",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_native_not_found_route_planned",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "NONE",
+          "path": "not_applicable:routing/not-found",
+          "authority": "none"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "NONE",
+          "path": "unavailable:desktop_native_route_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "unavailable:local_native_not_found_route_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/not-found",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "return-home"
+          ],
+          "authentication": "anonymous",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "interaction_states": [
+        "unknown-route",
+        "invalid-deep-link",
+        "return-home",
+        "trusted-route-restore"
+      ],
+      "expected_observable_result": "Both Desktop modes render a native safe not-found surface for unknown or rejected deep links, preserve no untrusted route state, and return to the correct mode-aware home without loading Web content.",
+      "judgment_rationale": "NotFound owns the wildcard production route and has no canonical navigation target. Desktop currently lacks the production HashRouter fallback required to prove safe native deep-link recovery."
+    }
+  ],
+  "source_ownership": {
+    "backend-stores": [
+      "BackendStores"
+    ],
+    "project-support": [
+      "Support"
+    ],
+    "project-playbooks": [
+      "PlaybookLibrary"
+    ],
+    "not-found": [
+      "NotFound"
+    ]
+  },
+  "route_owner_overrides": {
+    "backend-stores": [
+      "production-route-path-tenant-backend-stores",
+      "production-route-path-tenant-tenantid-backend-stores"
+    ],
+    "project-support": [
+      "production-route-path-tenant-tenantid-project-projectid-support"
+    ],
+    "project-playbooks": [
+      "production-route-path-tenant-tenantid-project-projectid-playbooks"
+    ],
+    "not-found": [
+      "production-route-path-root-191e558e7b0f"
+    ]
+  }
+}

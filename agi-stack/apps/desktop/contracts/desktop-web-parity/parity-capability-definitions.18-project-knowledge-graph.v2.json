@@ -1,0 +1,434 @@
+{
+  "capabilities": [
+    {
+      "id": "project-project-communities",
+      "kind": "canonical",
+      "title": "Project Communities",
+      "domain": "knowledge",
+      "scope": [
+        "tenant",
+        "project"
+      ],
+      "web_route_ids": [
+        "project-project-communities"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/graph/communities/",
+      "permissions": [
+        "authenticated",
+        "project_member"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "inspect-members",
+        "rebuild"
+      ],
+      "web_actions": [
+        "view",
+        "list",
+        "inspect-members",
+        "rebuild"
+      ],
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/graph/communities/?project_id={project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/graph/communities/{community_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/graph/communities/{community_id}/members",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/graph/communities/rebuild?project_id={project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/graph/communities/?project_id={project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/graph/communities/{community_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/graph/communities/{community_id}/members",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/graph/communities/rebuild?project_id={project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "unavailable:local_community_projection_authority_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/project-project-communities",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "inspect-members",
+            "rebuild"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "planned",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_community_projection_authority_planned",
+      "judgment_rationale": "Project Communities has a dedicated Web source and graph-service authority. Desktop has no native communities management route, and Local needs a real community projection rather than a textual search approximation."
+    },
+    {
+      "id": "project-project-graph",
+      "kind": "canonical",
+      "title": "Project Knowledge Graph",
+      "domain": "knowledge",
+      "scope": [
+        "tenant",
+        "project"
+      ],
+      "web_route_ids": [
+        "project-project-graph"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/graph/memory/graph",
+      "permissions": [
+        "authenticated",
+        "project_member"
+      ],
+      "actions": [
+        "view",
+        "navigate-graph",
+        "inspect-node",
+        "inspect-edge"
+      ],
+      "web_actions": [
+        "view",
+        "navigate-graph",
+        "inspect-node",
+        "inspect-edge"
+      ],
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/graph/memory/graph?project_id={project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/graph/memory/graph?project_id={project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "unavailable:local_graph_projection_authority_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/project-project-graph",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "navigate-graph",
+            "inspect-node",
+            "inspect-edge"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "planned",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_graph_projection_authority_planned",
+      "judgment_rationale": "The Web MemoryGraph source provides a project knowledge-graph explorer. Session execution graphs in Desktop have a different authority and data model, so they are not evidence of this capability; Cloud and Local native equivalents remain planned."
+    },
+    {
+      "id": "project-project-search",
+      "kind": "canonical",
+      "title": "Project Advanced Search",
+      "domain": "knowledge",
+      "scope": [
+        "tenant",
+        "project"
+      ],
+      "web_route_ids": [
+        "project-project-search"
+      ],
+      "api_method": "POST",
+      "api_path": "/api/v1/search-enhanced/advanced",
+      "permissions": [
+        "authenticated",
+        "project_member"
+      ],
+      "actions": [
+        "view",
+        "search",
+        "filter",
+        "semantic-search",
+        "faceted-search",
+        "temporal-search",
+        "graph-traversal",
+        "community-search",
+        "export"
+      ],
+      "web_actions": [
+        "view",
+        "search",
+        "filter",
+        "semantic-search",
+        "faceted-search",
+        "temporal-search",
+        "graph-traversal",
+        "community-search",
+        "export"
+      ],
+      "cloud_actions": [
+        "view",
+        "search",
+        "filter",
+        "semantic-search",
+        "faceted-search",
+        "temporal-search",
+        "graph-traversal",
+        "community-search"
+      ],
+      "local_actions": [
+        "view",
+        "search",
+        "filter",
+        "faceted-search",
+        "temporal-search"
+      ],
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/search-enhanced/capabilities",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/search-enhanced/advanced",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/search-enhanced/graph-traversal",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/search-enhanced/temporal",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/search-enhanced/faceted",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/search-enhanced/community",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/search-enhanced/capabilities",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/search-enhanced/advanced",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/search-enhanced/graph-traversal",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/search-enhanced/temporal",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/search-enhanced/faceted",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/search-enhanced/community",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/search-enhanced/capabilities",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/search-enhanced/advanced",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/search-enhanced/temporal",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/search-enhanced/faceted",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/project-project-search",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "search",
+            "filter",
+            "semantic-search",
+            "faceted-search",
+            "temporal-search",
+            "graph-traversal",
+            "community-search",
+            "export"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": [
+            "view",
+            "search",
+            "filter",
+            "faceted-search",
+            "temporal-search"
+          ],
+          "authentication": "authenticated",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": "local_search_capabilities"
+        }
+      ],
+      "cloud_status": "partial",
+      "cloud_reason_code": "desktop_advanced_search_partial",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/features/search/DesktopSearch.tsx"
+      ],
+      "local_status": "partial",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_search_projection_partial",
+      "local_deviation": "Local Desktop provides a keyword-degraded advanced projection plus temporal and faceted search. Embedding-backed semantic search, graph traversal and community search remain unavailable under the sidecar capability contract.",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/features/search/DesktopSearch.tsx",
+        "agi-stack/apps/desktop/src/features/search/localSearchClient.ts",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/search.rs"
+      ],
+      "judgment_rationale": "DesktopSearch is a real native surface in both modes and Cloud wires all EnhancedSearch strategies, but it lacks Web result export and the canonical route/deep-link contract. The Local sidecar explicitly supports advanced keyword-degraded, temporal and faceted search while declaring graph traversal and community search unavailable, so per-surface actions are recorded separately."
+    }
+  ],
+  "source_ownership": {
+    "project-project-communities": [
+      "CommunitiesList"
+    ],
+    "project-project-graph": [
+      "MemoryGraph"
+    ],
+    "project-project-search": [
+      "EnhancedSearch"
+    ]
+  },
+  "route_owner_overrides": {
+    "project-project-communities": [
+      "production-route-path-tenant-tenantid-project-projectid-communities"
+    ],
+    "project-project-graph": [
+      "production-route-path-tenant-tenantid-project-projectid-graph"
+    ],
+    "project-project-search": [
+      "production-route-path-tenant-tenantid-project-projectid-advanced-search",
+      "production-route-path-tenant-tenantid-project-projectid-search"
+    ]
+  }
+}

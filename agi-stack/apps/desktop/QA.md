@@ -2,8 +2,10 @@
 
 ## Desktop/Web parity completion audit: 2026-07-29
 
-- The implementation baseline is parity merge `1fb5636ae76eaebbccca9b3c236dfc403ed7d154`;
-  current validation ran from `main@7503434b42bf6e62c110ba9603466c66985fb625`.
+- This historical audit used parity merge `1fb5636ae76eaebbccca9b3c236dfc403ed7d154`
+  as its implementation baseline and ran from
+  `main@7503434b475312e7068987617dd0ed484054e21a`. The results in this section are bound
+  to that audit commit and do not claim validation for the current checkout or any later revision.
 - Wave A is implemented: xterm input/resize/output, scoped Terminal Session V2 resume, canonical
   session-lost handling, credential-free KasmVNC framing with reconnect/fullscreen/Escape, and
   bounded project-scoped sandbox file list/read/download.
@@ -20,33 +22,78 @@
 - Wave D is implemented: cloud and local Artifact content use revision/hash/idempotency authority;
   the canvas preserves drafts on conflicts and supports authenticated HTML, PDF, image, audio,
   video, sanitized SVG, DOCX, and XLSX previews with legacy/unsupported download fallback.
-- `make -C agi-stack desktop-check` passed at the current HEAD: Rust sidecar 319/319, Desktop
-  1359/1359 with real-sidecar coverage and no skips, and Electron main/preload/renderer type-check
-  plus production build.
-- `make -C agi-stack desktop-browser-qa` passed 417/417 Playwright checks: 416 matrix variants
+- `make -C agi-stack desktop-check` passed at the historical audit commit: Rust sidecar 319/319,
+  Desktop 1359/1359 with real-sidecar coverage and no skips, and Electron
+  main/preload/renderer type-check plus production build.
+- At the historical audit commit, `make -C agi-stack desktop-browser-qa` passed 417/417 Playwright
+  checks: 416 matrix variants
   generated from 39 QA fixtures across `en-US`/`zh-CN`, `1440x1024`/`1100x800`, and light/dark,
   plus the matrix inventory guard. Stateful A2UI, HITL, Workspace Collaboration, Sandbox, and
   Artifact preview variants are included where applicable.
-- Native Electron launched only through `make -C agi-stack run-desktop`; Computer Use verified the
+- For that historical audit, native Electron launched only through
+  `make -C agi-stack run-desktop`; Computer Use verified the
   restored trusted cloud session, My Work, Automations, Search, Settings, the allow-listed resource
   sections, and structured fail-closed capability states without changing vault contents. This run
   exposed missing cloud Search capability version fields in both Python and Rust authorities;
   `7503434b4` adds the required `service_version` and `contract_version` with focused tests. The
   already-running non-reloading API continued serving the old contract, so the positive native
   Search state must be rechecked after the next supported backend restart.
-- The tag release implementation is complete and fail-closed: parity preflight, macOS universal
+- The tag workflow's package-artifact pipeline is fail-closed, but it is not complete
+  production-release verification. It runs parity preflight and verifies macOS universal
   signing/notarization/stapler/`spctl`, Windows installer and sidecar Authenticode, Linux
-  AppImage/deb extraction checks, exact updater metadata validation, and immutable per-platform
-  release evidence. Production release verification remains pending a real authorized `v0.1.0`
-  tag CI run; no local build can satisfy that evidence row.
-- The worktree also contains pre-existing concurrent Sidebar/Session/Workspace/ResizeHandle edits.
-  They are not parity-completion evidence and are intentionally excluded from this audit commit.
+  AppImage/deb extraction, exact installer metadata and digests, and immutable per-platform
+  `desktop-release-evidence-v2` scoped to `package_artifacts_only`. Blockmap validation is recorded
+  as `blockmap_structure_and_coverage_only`; it does not recompute chunk checksums or execute an
+  updater.
+- The workflow only creates or restores the exact-tag GitHub draft, uploads the verified asset set,
+  and asserts that the release remains a draft. It does not install or launch the packages, apply a
+  real update, or prove failed-update rollback. Those native release gates and any promotion remain
+  Wave 8 work; the current tag CI cannot satisfy them.
+- The worktree at the time also contained pre-existing concurrent
+  Sidebar/Session/Workspace/ResizeHandle edits. They were not parity-completion evidence and were
+  intentionally excluded from that audit commit.
 
-## Desktop/Web parity contract baseline: 2026-07-28
+## Desktop/Web parity desired contract v2: 2026-07-29
+
+- The desired capability ledger is
+  `contracts/desktop-web-parity/parity-manifest.v2.json`. It is pinned to the audited clean
+  baseline `main@1171e778797bfc370ea7339cb89b02b891f5274c`; it describes the target contract and
+  is not evidence that the current checkout has implemented or verified every capability.
+- The generated source inventory at
+  `contracts/desktop-web-parity/web-route-inventory.v2.json` contains 51 canonical navigation
+  targets, 174 production route registrations, 89 lazy production pages, and 95 hashed audited
+  sources. Route registration modules are followed through reachable production component imports.
+  Ordinary Web CI regenerates the inventory and fails when a route, registration module, or routed
+  source changes without an updated checked-in ledger and a fresh structured Agent judgment.
+- Desired capability contracts and executed evidence are intentionally separate. Runs use
+  `contracts/desktop-web-parity/evidence-run.v1.schema.json` and bind the repository, Web renderer,
+  Desktop renderer, and prototype revisions plus matched account, permission, locale, theme,
+  viewport, DPR, data, and interaction state. Backend, sidecar, bundle, and release claims require
+  their own executed evidence channels and retained artifacts.
+- The paired production-renderer harness builds and previews both Web and Desktop, retains the
+  Web screenshot, Desktop screenshot, pixel-difference observation, and metadata even on success,
+  and never promotes arithmetic pixel differences to a semantic parity verdict. This is a
+  Chromium renderer-only observation: it does not launch Electron or prove main/preload IPC,
+  sidecar, vault, OS integration, packaging, signing, or updater behavior.
+- Tag CI release evidence is separately scoped to static package artifacts. Its v2 contract records
+  `package_artifacts_only`, `draft_only`, and the missing native checks; it cannot authorize
+  publication without Wave 8 installation, launch, updater-application, and rollback evidence.
+- Desktop package, ordinary CI, and release CI use pnpm `11.15.1`. pnpm 11 intentionally records
+  package-manager integrity in a separate YAML document at the start of `pnpm-lock.yaml`; repeated
+  frozen offline resolution must leave that multi-document lock byte-for-byte stable.
+- `parity-manifest.v1.json` remains read-only compatibility input for one contract version. Its
+  historical 11-case fixtures continue to run, but they do not cover the v2 route inventory and
+  cannot establish current full-product parity.
+
+## Historical Desktop/Web parity contract baseline: 2026-07-28
 
 - The machine-readable contract lives in
   `contracts/desktop-web-parity/parity-manifest.v1.json`, with JSON schemas and shared live-event,
   history-replay, and capability-snapshot fixtures beside it.
+- Desired parity cases and executed evidence remain separate. Evidence runs use
+  `contracts/desktop-web-parity/evidence-run.v1.schema.json`; the adjacent
+  `evidence-run.v1.template.json` is explicitly a non-evidence template and must be populated
+  with the executed revisions, matched state, results, and artifact references for each run.
 - Reference revisions are pinned to prototype `61454b2ead1cedda584e95afee9f471aac7851fb`,
   audited Desktop baseline `fe425f5ce75f8722249033bf5571c7e7466d05e1`, and the Web/Desktop
   contract and audit source snapshot `9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47`.
@@ -56,9 +103,10 @@
 - `tests/run.mjs` discovers every `tests/*.test.mjs` module in stable order and fails closed if its
   inventory omits or duplicates a test. This replaces the hand-maintained list that skipped
   `agent-definition-events.test.mjs` and `sandbox-upload-client.test.mjs`.
-- The supported complete validation entry remains `make -C agi-stack desktop-check`, which uses
-  the Desktop package's Corepack-pinned pnpm `10.24.0`, exercises the real sidecar integration, and
-  builds the Electron renderer/main/preload bundle.
+- At this historical baseline, the supported complete validation entry was
+  `make -C agi-stack desktop-check`, using the then-pinned pnpm `10.24.0`, real-sidecar
+  integration, and the Electron renderer/main/preload build. Current validation uses the v2
+  parity gate and pnpm `11.15.1` described above.
 - Desktop JS/TS verification can be run from `agi-stack/apps/desktop` with
   `corepack pnpm test`; it does not replace `make -C agi-stack run-desktop` for native behavior.
 
@@ -99,9 +147,11 @@
 
 - `make run-desktop` launches the Electron shell through `electron-vite` and starts the independent
   Rust local-runtime sidecar.
-- Production packages sign the Electron application and nested sidecar. Local macOS bundles use an
-  explicitly ad-hoc signed development package; the tag release workflow requires Developer ID,
-  notarization, and Windows Authenticode credentials before it can publish.
+- Production packages are configured to sign the Electron application and nested sidecar. Local
+  macOS bundles use an explicitly ad-hoc signed development package; the tag workflow requires
+  Developer ID, notarization, and Windows Authenticode credentials to verify and stage production
+  package artifacts in a GitHub draft. Those credentials do not authorize promotion, which remains
+  blocked pending Wave 8 native release evidence.
 - Desktop credentials never use Keychain; cloud sessions and Provider API keys persist through the
   Rust sidecar's application-managed encrypted vault.
 - The encrypted vault stores only AES-256-GCM ciphertext in SQLite and keeps its random installation
@@ -217,13 +267,13 @@
   message the Agent and start a task instead of first seeing a dashboard.
 - Replaced the signed-in Sessions sidebar's flat workspace list with a
   Copilot-like hierarchy: `Chats`, the selected project root, `New session in
-  <project>`, and project-scoped session children.
+<project>`, and project-scoped session children.
 - Changed successful workspace/session creation to land directly in Chat so a
   newly created session is immediately ready for Agent messages instead of
   detouring through the Workspace overview.
 - Updated the signed-in Sessions root label to follow the grouping mode:
   project grouping shows the project root, while `Recent first` shows `Recent
-  sessions` with the selected project context.
+sessions` with the selected project context.
 - Ensured the Tauri main window is also created during setup, leaving
   `RunEvent::Ready` and macOS reopen handling as fallback window restoration
   paths.
@@ -385,7 +435,7 @@
 - Aligned prototype custom event filter semantics. Local `decision` and
   `selection` interaction events now count under the Background agents
   `Messages` filter, matching the web prototype's default `addEvent(...,
-  type = "Messages")` behavior instead of falling through to `System`.
+type = "Messages")` behavior instead of falling through to `System`.
 - Added prototype-parity Operator message events for Board command submissions.
   Submitted Board run commands now append a local `message` event from
   `Operator` before continuing through the existing workspace/Agent send path,
@@ -417,17 +467,17 @@
 - `pnpm run build`
 - Playwright edge suite on `http://127.0.0.1:5173`:
   `signed-out -> sign in -> Use MemStack :8000 -> Login -> Chats -> empty send
-  disabled -> Send workspace message -> Agent task card accepted -> clear
-  Project ID -> Chat disabled with project-specific reason -> restore project
-  -> mobile viewport`.
+disabled -> Send workspace message -> Agent task card accepted -> clear
+Project ID -> Chat disabled with project-specific reason -> restore project
+-> mobile viewport`.
 - Final Playwright edge suite result: no failures, no console logs, no 404
   responses. Screenshots: `/tmp/agi-desktop-agent-card.png`,
   `/tmp/agi-desktop-missing-project.png`, `/tmp/agi-desktop-mobile.png`.
 - Latest Playwright edge suite result: no failures, no actionable console
   warnings/errors, and no 404 responses for
   `signed-out workflow pills -> sign in -> Chats -> Background/Artifacts review
-  tab switching -> send Agent task -> mobile task-card layout -> missing Project
-  ID disabled state -> restore project`. Screenshots:
+tab switching -> send Agent task -> mobile task-card layout -> missing Project
+ID disabled state -> restore project`. Screenshots:
   `/tmp/agi-desktop-signed-out-pills.png`, `/tmp/agi-desktop-agent-card.png`,
   `/tmp/agi-desktop-mobile-agent-card.png`, and
   `/tmp/agi-desktop-missing-project.png`.
@@ -555,7 +605,7 @@
   row by default, moves selection to the second row with exactly one
   `aria-pressed=true` row, keeps raw event details available, shows the latency
   slot and chevron, and updates the footer to `78 events / Tools / artifact /
-  Selected sandbox_event` after filter/search. Console output only contains
+Selected sandbox_event` after filter/search. Console output only contains
   Vite/React dev info and `agent-browser errors --json` reports no page errors.
   Screenshot: `/tmp/agi-desktop-background-select-footer.png`.
 - agent-browser Background event selection mobile smoke at `390x844` verifies
@@ -586,7 +636,7 @@
   `signed-out -> five workflow chips fit -> sign in -> Use MemStack :8000 -> Login -> Chats -> Background chip -> Send workspace task`
 - Browser plugin evidence after sending a task shows the latest right-panel
   events include `user_message`, `message`, and `ack` with `action:
-  "send_message"` plus a real `conversation_id`.
+"send_message"` plus a real `conversation_id`.
 - Browser plugin signed-in command-palette script timed out in this environment
   after login, resetting the Browser session. The same signed-in command
   palette flow was then verified with independent Playwright.
@@ -664,7 +714,7 @@
   `Agent task Accepted` card.
 - Computer Use comparison of GitHub Copilot.app confirms the authenticated
   message input placeholder says `Describe a task to run autonomously. Type /
-  for commands, @ for files, or # for issues...`; this follow-up applies the
+for commands, @ for files, or # for issues...`; this follow-up applies the
   same task-oriented empty-state copy to the signed-in Chat composer.
 - Rebuilt release `.app` verification confirms login reaches Chat, the signed-in
   empty input announces the task-oriented Copilot placeholder, and sending
@@ -680,7 +730,7 @@
   area now starts visually blank with only the composer visible; comparison with
   GitHub Copilot.app found the next composer parity gap in control names, so
   this follow-up aligns the Chat footer labels to `Mode: Autopilot, Command +
-  Shift + M`, `Select model`, `Reasoning effort: Medium`, and
+Shift + M`, `Select model`, `Reasoning effort: Medium`, and
   `AI credits quota: 100% used`.
 - Computer Use comparison of the Copilot `+` menu shows `Add files...` and
   `Add folder...` under `Add files or folders`; this follow-up applies the same
@@ -894,7 +944,7 @@
   `Messages`, `System`, `Errors`), and selecting `Tools events, 0 available`
   makes only that filter selected while enabling Clear. With no socket events
   loaded, the event-mix summary stays hidden and the existing `No background
-  agents` empty state remains intact. Desktop checks show no Vite overlay, no
+agents` empty state remains intact. Desktop checks show no Vite overlay, no
   page errors, and clean console output aside from dev-server info logs. Mobile
   `390x844` checks confirm the Review panel remains hidden at the narrow
   breakpoint and the settings pane has no error overlay. Screenshots:
@@ -912,7 +962,7 @@
   review packet, while the local scope checkbox and Snooze remain usable. QA
   clicks Snooze with the default run scope, clears the checkbox, clicks Snooze
   again, and verifies decision history records both `this run` and `workspace
-  packet` details while the main status stays Pending. Desktop checks show no
+packet` details while the main status stays Pending. Desktop checks show no
   Vite overlay, no page errors, and clean console output aside from dev-server
   info logs. Mobile `390x844` checks confirm the Review panel remains hidden at
   the narrow breakpoint and the settings pane has no error overlay. Screenshots:
@@ -982,7 +1032,7 @@
   `agent-browser`. In the same local QA workspace
   `Desktop board timeline QA 1783615297497`, Runs > Board initially selects
   `Publish verification report` and shows `QA seed for Publish verification
-  report` in the Human decision panel. Clicking the `Apply runner patch`
+report` in the Human decision panel. Clicking the `Apply runner patch`
   timeline pill changes the selected pill to `Apply runner patchin_progress`,
   updates the Human decision heading to `Apply runner patch`, and changes the
   summary to `QA seed for Apply runner patch`. Desktop checks report no Vite
@@ -1073,7 +1123,7 @@
   locator/evaluate checks. After local login, Runs > Board shows the selected
   data-backed run in the Memory scope first option, for example
   `Desktop workspace 2026-07-09 16:11:06: desktop stream QA second 1783588579777
-  (isolated)`, and the Board state line echoes the same scope. Clicking
+(isolated)`, and the Board state line echoes the same scope. Clicking
   `Create new run` selects `Run #1`, changes the titlebar run state to
   `Planning`, leaves the local queue event visible, and updates the Memory
   scope option plus state line to `Run #1 (isolated)`. Desktop and `390x844`
@@ -1379,7 +1429,7 @@
   `Use API key` -> titlebar Runtime select. Desktop checks find exactly one
   `select[aria-label="Runtime"]`, zero titlebar `Runtime target` selects,
   options `Local Rust Core` and `Staging Runtime`, and selecting `Staging
-  Runtime` changes the select value to `staging`. At `390x844`, compact layout
+Runtime` changes the select value to `staging`. At `390x844`, compact layout
   hides the topbar select visually but keeps the DOM label as `Runtime`, with no
   old `Runtime target` select, no page-level horizontal overflow, and no
   framework overlay. Screenshots: `/tmp/agi-desktop-runtime-label-browser.png`
@@ -1406,7 +1456,7 @@
   desktop workspace Artifacts panel now exposes the same region label. QA used
   the manual-runtime path: `Use API key` -> `Artifacts section`. Desktop checks
   find exactly one `section[aria-label="Artifacts"]`, `Artifact sort`, `Search
-  artifacts`, and `Grid view` inside it; clicking `Grid view` changes
+artifacts`, and `Grid view` inside it; clicking `Grid view` changes
   `aria-pressed` from `false` to `true`. At `390x844`, compact layout hides the
   workspace review panel visually but keeps the DOM label as `Artifacts`, with
   no page-level horizontal overflow and no framework overlay. Screenshots:
@@ -1537,7 +1587,7 @@
   Browser locator/evaluate checks. Source comparison found the web prototype's
   Human decision action area labels the section `Choose an action`, the approve
   action `Approve patch`, the approve helper `Apply changes and continue the
-  run`, and the request helper `Provide feedback to the agent`, while desktop
+run`, and the request helper `Provide feedback to the agent`, while desktop
   still used generalized review wording. Desktop now uses the prototype action
   copy without changing the existing run-scope checkbox, `Snooze` button, or
   disabled action guards. QA used the manual-runtime path: `Use API key` ->
@@ -1565,7 +1615,7 @@
   `Approve patch`. Pending checks find exactly one
   `.review-decision[aria-label="Human decision"]`, badge text `Low impact`, no
   `Pending` label, and an enabled approve action. After clicking `Approve
-  patch`, desktop checks find heading `Decision recorded`, badge `Resolved`, no
+patch`, desktop checks find heading `Decision recorded`, badge `Resolved`, no
   `Approved` badge label, and a decision history row labelled `Approved`. At
   `390x844`, the same resolved badge remains in DOM while the Workspace panel
   follows the mobile hidden-panel rule, with no page-level horizontal overflow
@@ -1602,7 +1652,7 @@
   `.review-decision[aria-label="Human decision"]`, heading `Approve patch`,
   source `Request from Executor`, badge `Low impact`, no old dynamic heading
   `Review background activity`, and body copy `New run #1 queued with local
-  runtime.`. After clicking `Approve patch`, desktop checks find heading
+runtime.`. After clicking `Approve patch`, desktop checks find heading
   `Decision recorded`, badge `Resolved`, and an `Approved` history row. At
   `390x844`, the resolved heading remains in DOM while the Workspace panel
   follows the mobile hidden-panel rule, with no page-level horizontal overflow
@@ -1616,17 +1666,17 @@
   rendered QA used Browser locator/evaluate checks. Source comparison found the
   web prototype separates the status explanation from a `Summary` section:
   pending copy reads `The agent wants to apply the following patch to the
-  repository.`, approved copy reads `The run can continue with the retry patch
-  applied to the local workspace.`, and contextual patch details sit under
+repository.`, approved copy reads `The run can continue with the retry patch
+applied to the local workspace.`, and contextual patch details sit under
   `Summary`. Desktop now uses the same status-copy layer while preserving the
   data-derived review summary in a separate `Summary` section. QA used the
   manual-runtime path: `Use API key` -> `Create new run` -> Workspace `Changes`
   -> `Approve patch`. Pending checks find heading `Approve patch`, badge
   `Low impact`, decision copy `The agent wants to apply the following patch to
-  the repository.`, and `Summary` text `New run #1 queued with local runtime.`.
+the repository.`, and `Summary` text `New run #1 queued with local runtime.`.
   After clicking `Approve patch`, desktop checks find heading
   `Decision recorded`, badge `Resolved`, decision copy `The run can continue
-  with the retry patch applied to the local workspace.`, `Summary` text
+with the retry patch applied to the local workspace.`, `Summary` text
   `Patch approved. Executor can continue the run.`, and an `Approved` history
   row. At `390x844`, the same resolved copy and summary remain in DOM while the
   Workspace panel follows the mobile hidden-panel rule, with no page-level
@@ -1676,7 +1726,7 @@
   web prototype's Human decision action area renders only the visible
   `Choose an action` heading above the action buttons, while desktop still
   showed an extra state-dependent helper line (`Updates review and selected
-  run`, `Updates workspace packet only`, or `Waiting for workspace context`).
+run`, `Updates workspace packet only`, or `Waiting for workspace context`).
   Desktop now removes that extra helper line while preserving `Approve patch`,
   `Request changes`, `Apply to this run only`, `Snooze`, and decision history.
   QA used the manual-runtime path: `Use API key` -> `Create new run` ->
@@ -1866,7 +1916,7 @@
   errors; the React duplicate-key error captured during reproduction did not
   recur. `pnpm --dir agi-stack/apps/desktop test` passed 884 tests
   (882 passed, 2 skipped), and `pnpm --dir agi-stack/apps/desktop
-  build:electron` passed. The canonical native command
+build:electron` passed. The canonical native command
   `make -C agi-stack run-desktop` rebuilt the sidecar, started the Electron
   renderer, and reached `starting electron app...`; Computer Use could not
   inspect the native window because macOS was locked, so native visual

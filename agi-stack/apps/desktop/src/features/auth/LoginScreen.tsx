@@ -145,7 +145,14 @@ export function LoginScreen({
   const visibleError = interactionError ?? auth.error;
 
   return (
-    <main className="desktop-login-screen">
+    <main
+      className="desktop-login-screen"
+      data-parity-surface="signed-out-entry"
+      data-parity-authentication-state="signed_out"
+      data-parity-account-state="none"
+      data-parity-permission-state="public_entry_only"
+      data-parity-data-state="empty"
+    >
       <section
         className="desktop-login-story"
         inert={workspaceSso ? true : undefined}
@@ -271,6 +278,7 @@ export function LoginScreen({
                     onEmailChange(event.target.value);
                   }}
                   autoComplete="username"
+                  data-parity-target-id="email_entry"
                 />
               </label>
               <label>

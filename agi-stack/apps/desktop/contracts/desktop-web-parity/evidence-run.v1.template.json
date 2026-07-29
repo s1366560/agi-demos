@@ -1,0 +1,109 @@
+{
+  "$schema": "./evidence-run.v1.schema.json",
+  "schema_version": "1.0.0",
+  "record_kind": "template",
+  "run_id": "desktop-parity-template-0001",
+  "run_scope": "capability_slice",
+  "artifact_location_base": "evidence_run_directory",
+  "schema_artifact_id": "replace-with-schema-artifact-id",
+  "desired_contract": {
+    "path": "replace-with-repository-relative-parity-manifest-path",
+    "path_base": "repository_root",
+    "artifact_id": "replace-with-contract-artifact-id",
+    "schema_version": "replace-with-contract-version",
+    "revision": "0000000000000000000000000000000000000000",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "source_revisions": {
+    "repository_revision": "0000000000000000000000000000000000000000",
+    "web_revision": "0000000000000000000000000000000000000000",
+    "desktop_revision": "0000000000000000000000000000000000000000",
+    "prototype_revision": "0000000000000000000000000000000000000000"
+  },
+  "source_state": {
+    "head_revision": null,
+    "worktree_state": "unknown"
+  },
+  "started_at": "1970-01-01T00:00:00Z",
+  "completed_at": "1970-01-01T00:00:00Z",
+  "environment": {
+    "host_os": "replace-me",
+    "host_os_version": "replace-me",
+    "architecture": "replace-me",
+    "execution_context": "local",
+    "sandboxed": false,
+    "locale": "replace-me",
+    "timezone": "replace-me",
+    "dependency_versions": {
+      "node": "replace-me",
+      "pnpm": "replace-me",
+      "rustc": "replace-me",
+      "electron": "replace-me"
+    }
+  },
+  "matched_state": {
+    "locale": "replace-me",
+    "theme": "not_applicable",
+    "viewport": {
+      "width": 1440,
+      "height": 1024
+    },
+    "device_scale_factor": 1,
+    "authentication_state": "replace-me",
+    "account_state": "replace-me",
+    "permission_state": "replace-me",
+    "data_state": "replace-me",
+    "interaction_state": "replace-me"
+  },
+  "capability_results": [
+    {
+      "capability_id": "replace-me",
+      "contract_reference": "replace-with-capability-contract-reference",
+      "result": "not_run",
+      "summary": "Replace with capability evidence whose artifacts declare requirement-specific evidence_roles.",
+      "evidence": {
+        "build": "not_run",
+        "browser": "not_run",
+        "native": "not_run"
+      },
+      "artifact_ids": [],
+      "parity_judgment": {
+        "disposition": "pending_review",
+        "statement": "Replace with a structured Agent parity judgment after reviewing the evidence.",
+        "judgment_audit": null
+      },
+      "intentional_deviation": {
+        "disposition": "none",
+        "statement": null,
+        "judgment_audit": null
+      }
+    }
+  ],
+  "artifacts": [],
+  "evidence": {
+    "build": {
+      "status": "not_run",
+      "command": "make -C agi-stack desktop-check",
+      "started_at": null,
+      "completed_at": null,
+      "summary": "Replace with the build result for this evidence run.",
+      "artifact_ids": []
+    },
+    "browser": {
+      "status": "not_run",
+      "command": "make -C agi-stack desktop-browser-qa",
+      "started_at": null,
+      "completed_at": null,
+      "summary": "Replace with matched-state Browser evidence for this run.",
+      "artifact_ids": []
+    },
+    "native": {
+      "status": "not_run",
+      "command": "make -C agi-stack run-desktop",
+      "started_at": null,
+      "completed_at": null,
+      "summary": "Replace with native Electron and Computer Use evidence for this run.",
+      "artifact_ids": []
+    }
+  }
+}

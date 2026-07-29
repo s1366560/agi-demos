@@ -1,0 +1,344 @@
+{
+  "capabilities": [
+    {
+      "id": "tenant-tenant-trust-policies",
+      "kind": "canonical",
+      "title": "Trust Policies",
+      "domain": "tenant-governance",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-trust-policies"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/tenants/{tenant_id}/trust/policies",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/trust/policies",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/trust/policies",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/tenants/{tenant_id}/trust/policies/{policy_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/trust/policies",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/trust/policies",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/tenants/{tenant_id}/trust/policies/{policy_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:cloud_tenant_trust_governance_not_applicable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-trust-policies",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_workspace_access"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "create",
+        "revoke"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "create",
+            "revoke"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "cloud_tenant_trust_governance_not_applicable",
+      "local_deviation": "Local execution permissions remain governed by explicit sidecar and Electron capability contracts; they do not create an offline copy of tenant trust policy authority.",
+      "judgment_rationale": "TrustPolicies is the canonical tenant policy administration surface. Existing Desktop permission gates are enforcement consumers, not a policy management implementation; the Cloud route is planned and Local tenant governance is intentionally not applicable."
+    },
+    {
+      "id": "tenant-tenant-decision-records",
+      "kind": "canonical",
+      "title": "Decision Records",
+      "domain": "tenant-governance",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-decision-records"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/tenants/{tenant_id}/trust/decision-records",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/trust/decision-records",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/trust/decision-records/{record_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/trust/approval-requests/{record_id}/resolve",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/trust/decision-records",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/trust/decision-records/{record_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/trust/approval-requests/{record_id}/resolve",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:cloud_tenant_decision_ledger_not_applicable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-decision-records",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_workspace_access"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "filter",
+        "inspect",
+        "resolve-approval"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "filter",
+            "inspect"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "resolve-approval"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "cloud_tenant_decision_ledger_not_applicable",
+      "local_deviation": "Local HITL responses and sealed replay metadata remain scoped runtime records; they must not be promoted into the Cloud tenant decision ledger without its authority.",
+      "judgment_rationale": "DecisionRecords reads persisted tenant trust decisions and approval outcomes and resolves pending approvals as allow-once, allow-always, or deny. Desktop HITL UI does not provide this searchable governance ledger, and Local mode must distinguish runtime decisions from Cloud tenant records."
+    },
+    {
+      "id": "tenant-tenant-billing",
+      "kind": "canonical",
+      "title": "Billing",
+      "domain": "commercial",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-billing"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/tenants/{tenant_id}/billing",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/billing",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/invoices",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/upgrade",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/billing",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/invoices",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/upgrade",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:cloud_billing_authority_not_applicable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-billing",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_admin_or_owner"
+      ],
+      "actions": [
+        "view",
+        "inspect-usage",
+        "list-invoices",
+        "download-invoice",
+        "upgrade-plan"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "inspect-usage",
+            "list-invoices",
+            "download-invoice"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "upgrade-plan"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_owner"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "cloud_billing_authority_not_applicable",
+      "local_deviation": "Billing, invoices, payment methods, and plan upgrades are held by the Cloud service authority. Local Desktop never caches or emulates payment data.",
+      "judgment_rationale": "Billing is a canonical commercial route with tenant usage, invoice, and upgrade authority. Desktop has no native page; Local billing has no single-machine equivalent and must present a stable not-applicable state."
+    }
+  ],
+  "source_ownership": {
+    "tenant-tenant-trust-policies": [
+      "TrustPolicies"
+    ],
+    "tenant-tenant-decision-records": [
+      "DecisionRecords"
+    ],
+    "tenant-tenant-billing": [
+      "Billing"
+    ]
+  },
+  "route_owner_overrides": {}
+}

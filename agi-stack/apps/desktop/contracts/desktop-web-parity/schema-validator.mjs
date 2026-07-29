@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 function valueType(value) {
   if (value === null) return 'null';
   if (Array.isArray(value)) return 'array';
@@ -43,10 +45,31 @@ export function validateJsonSchema(schema, value, path = '$', rootSchema = schem
   if (typeof value === 'number' && schema.minimum !== undefined && value < schema.minimum) {
     errors.push(`${path} must be at least ${schema.minimum}`);
   }
+  if (
+    typeof value === 'number' &&
+    schema.exclusiveMinimum !== undefined &&
+    value <= schema.exclusiveMinimum
+  ) {
+    errors.push(`${path} must be greater than ${schema.exclusiveMinimum}`);
+  }
 
   if (Array.isArray(value)) {
     if (schema.minItems !== undefined && value.length < schema.minItems) {
       errors.push(`${path} must contain at least ${schema.minItems} items`);
+    }
+    if (schema.maxItems !== undefined && value.length > schema.maxItems) {
+      errors.push(`${path} must contain at most ${schema.maxItems} items`);
+    }
+    if (schema.uniqueItems === true) {
+      for (let left = 0; left < value.length; left += 1) {
+        for (let right = left + 1; right < value.length; right += 1) {
+          if (isDeepStrictEqual(value[left], value[right])) {
+            errors.push(
+              `${path} must contain unique items; duplicate indexes ${left} and ${right}`,
+            );
+          }
+        }
+      }
     }
     if (schema.items) {
       value.forEach((item, index) => {
@@ -58,6 +81,14 @@ export function validateJsonSchema(schema, value, path = '$', rootSchema = schem
   }
 
   if (value && typeof value === 'object' && !Array.isArray(value)) {
+    if (
+      schema.minProperties !== undefined &&
+      Object.keys(value).length < schema.minProperties
+    ) {
+      errors.push(
+        `${path} must contain at least ${schema.minProperties} properties`,
+      );
+    }
     for (const required of schema.required ?? []) {
       if (!Object.hasOwn(value, required)) {
         errors.push(`${path}.${required} is required`);
@@ -86,6 +117,13 @@ export function validateJsonSchema(schema, value, path = '$', rootSchema = schem
         errors.push(...alternatives.flat());
       }
     }
+  }
+
+  if (
+    schema.not &&
+    validateJsonSchema(schema.not, value, path, rootSchema).length === 0
+  ) {
+    errors.push(`${path} must not satisfy the excluded schema`);
   }
 
   return errors;

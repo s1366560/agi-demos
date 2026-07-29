@@ -1,22 +1,13 @@
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import {
-  access,
-  chmod,
-  readFile,
-  readdir,
-  stat,
-  writeFile,
-} from 'node:fs/promises';
+import { access, chmod, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, resolve } from 'node:path';
 import { gunzipSync, inflateRawSync } from 'node:zlib';
 import { parseDocument } from 'yaml';
 
-const RELEASE_EVIDENCE_CONTRACT = 'desktop-release-evidence-v1';
-const DIAGNOSTIC_ROOT_FILES = new Set([
-  'builder-debug.yml',
-  'builder-effective-config.yaml',
-]);
+const RELEASE_EVIDENCE_CONTRACT = 'desktop-release-evidence-v2';
+const BLOCKMAP_VERIFICATION_SCOPE = 'blockmap_structure_and_coverage_only';
+const DIAGNOSTIC_ROOT_FILES = new Set(['builder-debug.yml', 'builder-effective-config.yaml']);
 const PLATFORM_POLICIES = Object.freeze({
   darwin: Object.freeze({
     metadata: 'latest-mac.yml',
@@ -118,7 +109,9 @@ function canonicalSha512(value, label) {
 }
 
 async function fileSha512(path) {
-  return createHash('sha512').update(await readFile(path)).digest('base64');
+  return createHash('sha512')
+    .update(await readFile(path))
+    .digest('base64');
 }
 
 function assertSafeRootFilename(value, label) {
@@ -139,8 +132,7 @@ function assertSafeRootFilename(value, label) {
 function parseBlockMap(buffer, label, compression) {
   let decompressed;
   try {
-    decompressed =
-      compression === 'gzip' ? gunzipSync(buffer) : inflateRawSync(buffer);
+    decompressed = compression === 'gzip' ? gunzipSync(buffer) : inflateRawSync(buffer);
   } catch {
     throw new Error(`${label} blockmap compression is invalid`);
   }
@@ -180,8 +172,7 @@ function parseBlockMap(buffer, label, compression) {
     for (let index = 0; index < file.sizes.length; index += 1) {
       const size = file.sizes[index];
       const checksum = file.checksums[index];
-      const checksumBytes =
-        typeof checksum === 'string' ? Buffer.from(checksum, 'base64') : null;
+      const checksumBytes = typeof checksum === 'string' ? Buffer.from(checksum, 'base64') : null;
       if (
         !Number.isSafeInteger(size) ||
         size <= 0 ||
@@ -212,6 +203,7 @@ async function verifyExternalBlockmap(installerPath, blockmapPath, label) {
   }
   return {
     kind: 'external',
+    verification_scope: BLOCKMAP_VERIFICATION_SCOPE,
     name: basename(blockmapPath),
     size: blockmap.byteLength,
     sha512: createHash('sha512').update(blockmap).digest('base64'),
@@ -243,6 +235,7 @@ async function verifyEmbeddedBlockmap(installerPath, declaredSize, label) {
   }
   return {
     kind: 'embedded',
+    verification_scope: BLOCKMAP_VERIFICATION_SCOPE,
     size: declaredSize,
   };
 }
@@ -265,10 +258,7 @@ async function verifyMetadataEntry(
   if (!Number.isSafeInteger(entry.size) || entry.size <= 0) {
     throw new Error(`${metadataName} files[${url}].size must be a positive integer`);
   }
-  const expectedSha512 = canonicalSha512(
-    entry.sha512,
-    `${metadataName} files[${url}].sha512`,
-  );
+  const expectedSha512 = canonicalSha512(entry.sha512, `${metadataName} files[${url}].sha512`);
   const path = resolve(releaseRoot, url);
   if (dirname(path) !== releaseRoot) {
     throw new Error(`${metadataName} update target escapes the release root: ${url}`);
@@ -312,11 +302,7 @@ async function verifyMetadataEntry(
       `${metadataName} ${url}`,
     );
   } else if (requiresEmbeddedBlockmap) {
-    blockmap = await verifyEmbeddedBlockmap(
-      path,
-      entry.blockMapSize,
-      `${metadataName} ${url}`,
-    );
+    blockmap = await verifyEmbeddedBlockmap(path, entry.blockMapSize, `${metadataName} ${url}`);
   } else if (entry.blockMapSize !== undefined) {
     throw new Error(`${metadataName} contains unexpected blockMapSize for ${url}`);
   }
@@ -344,9 +330,7 @@ export async function verifyReleaseRootMetadata({
     throw new Error(`release tag must exactly match v${version}`);
   }
   if (expectedVersion !== undefined && version !== expectedVersion) {
-    throw new Error(
-      `desktop package version must remain ${expectedVersion}; found ${version}`,
-    );
+    throw new Error(`desktop package version must remain ${expectedVersion}; found ${version}`);
   }
 
   const entries = await readdir(root, { withFileTypes: true });
@@ -362,12 +346,7 @@ export async function verifyReleaseRootMetadata({
 
   const installers = [];
   for (const suffix of policy.installerSuffixes) {
-    const pattern = artifactPattern(
-      version,
-      policy.os,
-      suffix,
-      policy.architectures,
-    );
+    const pattern = artifactPattern(version, policy.os, suffix, policy.architectures);
     const matches = rootFiles.filter((name) => pattern.test(name));
     if (matches.length !== 1) {
       throw new Error(
@@ -379,12 +358,7 @@ export async function verifyReleaseRootMetadata({
     installers.push(matches[0]);
   }
   const installerArchitectures = installers.map((name, index) =>
-    artifactArchitecture(
-      name,
-      version,
-      policy.os,
-      policy.installerSuffixes[index],
-    ),
+    artifactArchitecture(name, version, policy.os, policy.installerSuffixes[index]),
   );
   if (
     installerArchitectures.some((architecture) => !architecture) ||
@@ -402,27 +376,21 @@ export async function verifyReleaseRootMetadata({
   for (const suffix of policy.externalBlockmapSuffixes) {
     const installer = installers.find((name) => name.endsWith(suffix));
     if (!installer || !rootFiles.includes(`${installer}.blockmap`)) {
-      throw new Error(
-        `release root is missing required ${installer ?? `*${suffix}`}.blockmap`,
-      );
+      throw new Error(`release root is missing required ${installer ?? `*${suffix}`}.blockmap`);
     }
   }
   const allowedRootFiles = new Set([
     ...DIAGNOSTIC_ROOT_FILES,
     ...installers,
     ...installers
-      .filter((name) =>
-        policy.externalBlockmapSuffixes.some((suffix) => name.endsWith(suffix)),
-      )
+      .filter((name) => policy.externalBlockmapSuffixes.some((suffix) => name.endsWith(suffix)))
       .map((name) => `${name}.blockmap`),
     policy.metadata,
   ]);
   const unknownRootFiles = rootFiles.filter((name) => !allowedRootFiles.has(name));
   if (unknownRootFiles.length > 0) {
     throw new Error(
-      `release root contains files outside the publish allow-list: ${unknownRootFiles.join(
-        ', ',
-      )}`,
+      `release root contains files outside the publish allow-list: ${unknownRootFiles.join(', ')}`,
     );
   }
   for (const blockmap of rootFiles.filter((name) => name.endsWith('.blockmap'))) {
@@ -445,9 +413,7 @@ export async function verifyReleaseRootMetadata({
     throw new Error(`${policy.metadata} files must be an array`);
   }
   if (metadata.files.length !== installers.length) {
-    throw new Error(
-      `${policy.metadata} must contain exactly ${installers.length} update targets`,
-    );
+    throw new Error(`${policy.metadata} must contain exactly ${installers.length} update targets`);
   }
 
   const verifiedEntries = [];
@@ -479,16 +445,14 @@ export async function verifyReleaseRootMetadata({
   if (!legacyEntry) {
     throw new Error(`${policy.metadata} legacy path must match a files[] update target`);
   }
-  const legacySha512 = canonicalSha512(
-    metadata.sha512,
-    `${policy.metadata} legacy sha512`,
-  );
+  const legacySha512 = canonicalSha512(metadata.sha512, `${policy.metadata} legacy sha512`);
   if (legacySha512 !== legacyEntry.sha512) {
     throw new Error(`${policy.metadata} legacy path/sha512 must match the same files[] entry`);
   }
 
   return {
     architecture,
+    blockmapVerificationScope: BLOCKMAP_VERIFICATION_SCOPE,
     metadataPath,
     installers: installers.map((name) => resolve(root, name)),
     publishableArtifacts: rootFiles
@@ -515,15 +479,13 @@ export function buildReleaseEvidence({
   runAttempt,
   runUrl,
   assets,
-  nativeVerification,
+  packageVerification,
 }) {
   if (!['macos', 'windows', 'linux'].includes(platform)) {
     throw new Error('release evidence platform is invalid');
   }
   if (version !== expectedVersion) {
-    throw new Error(
-      `desktop package version must remain ${expectedVersion}; found ${version}`,
-    );
+    throw new Error(`desktop package version must remain ${expectedVersion}; found ${version}`);
   }
   if (tag !== `v${version}`) {
     throw new Error(`release evidence tag must exactly match v${version}`);
@@ -547,9 +509,7 @@ export function buildReleaseEvidence({
     parsedRunUrl.search !== '' ||
     parsedRunUrl.hash !== '' ||
     runUrlSegments.length !== 5 ||
-    !runUrlSegments
-      .slice(0, 2)
-      .every((segment) => /^[A-Za-z0-9_.-]+$/u.test(segment)) ||
+    !runUrlSegments.slice(0, 2).every((segment) => /^[A-Za-z0-9_.-]+$/u.test(segment)) ||
     runUrlSegments[2] !== 'actions' ||
     runUrlSegments[3] !== 'runs' ||
     runUrlSegments[4] !== runId
@@ -571,10 +531,7 @@ export function buildReleaseEvidence({
       return {
         name,
         size: asset.size,
-        sha512: canonicalSha512(
-          asset.sha512,
-          `release evidence asset SHA-512 for ${name}`,
-        ),
+        sha512: canonicalSha512(asset.sha512, `release evidence asset SHA-512 for ${name}`),
       };
     })
     .sort((left, right) => left.name.localeCompare(right.name));
@@ -582,17 +539,22 @@ export function buildReleaseEvidence({
     throw new Error('release evidence assets contain duplicate names');
   }
   if (
-    !nativeVerification ||
-    typeof nativeVerification !== 'object' ||
-    Array.isArray(nativeVerification) ||
-    Object.keys(nativeVerification).length === 0
+    !packageVerification ||
+    typeof packageVerification !== 'object' ||
+    Array.isArray(packageVerification) ||
+    Object.keys(packageVerification).length === 0
   ) {
-    throw new Error('release evidence native verification is invalid');
+    throw new Error('release evidence package verification is invalid');
   }
 
   return {
     contract_version: RELEASE_EVIDENCE_CONTRACT,
-    verification_status: 'verified_by_tag_ci',
+    evidence_scope: 'package_artifacts_only',
+    blockmap_verification_scope: BLOCKMAP_VERIFICATION_SCOPE,
+    artifact_verification_status: 'verified_by_tag_ci',
+    release_disposition: 'draft_only',
+    release_blocker_reason_code: 'native_release_evidence_required',
+    required_native_checks: ['install', 'launch', 'updater_apply', 'updater_failure_rollback'],
     platform,
     version,
     tag,
@@ -602,7 +564,7 @@ export function buildReleaseEvidence({
       attempt: runAttempt,
       url: parsedRunUrl.toString(),
     },
-    native_verification: nativeVerification,
+    package_verification: packageVerification,
     assets: normalizedAssets,
   };
 }
@@ -634,7 +596,7 @@ export async function writeReleaseEvidence({
   runAttempt,
   runUrl,
   artifactPaths,
-  nativeVerification,
+  packageVerification,
 }) {
   const evidence = buildReleaseEvidence({
     platform: policy.evidencePlatform,
@@ -646,12 +608,9 @@ export async function writeReleaseEvidence({
     runAttempt,
     runUrl,
     assets: await releaseAssetEvidence(artifactPaths),
-    nativeVerification,
+    packageVerification,
   });
-  const evidencePath = resolve(
-    releaseRoot,
-    `release-evidence-${policy.evidencePlatform}.json`,
-  );
+  const evidencePath = resolve(releaseRoot, `release-evidence-${policy.evidencePlatform}.json`);
   await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, {
     encoding: 'utf8',
     flag: 'wx',

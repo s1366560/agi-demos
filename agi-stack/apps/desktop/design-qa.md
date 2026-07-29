@@ -5,7 +5,40 @@
 
 ## Desktop/Web parity evidence contract
 
-Date: 2026-07-28
+Current desired contract: 2026-07-29
+
+- Audited clean Web/Desktop source baseline:
+  `1171e778797bfc370ea7339cb89b02b891f5274c`.
+- Desired capability manifest:
+  `contracts/desktop-web-parity/parity-manifest.v2.json`.
+- Executed evidence schema:
+  `contracts/desktop-web-parity/evidence-run.v1.schema.json`.
+- The v2 source inventory covers all canonical Web navigation targets, reachable route
+  registration modules, and routed production pages. Each audited source is SHA-256 bound into its
+  owning capability judgment. It records target dispositions for Web, Cloud Desktop, Local
+  Desktop, and native-only surfaces; a disposition is not runtime evidence.
+- The paired production-renderer run must match account, permissions, locale, theme, viewport,
+  device scale factor, data state, and interaction state, and retain both screenshots plus the
+  pixel-difference observation. Visual equivalence remains a structured Agent judgment. This
+  renderer-only run does not launch Electron or prove main/preload IPC, sidecar, vault, OS
+  integration, packaging, signing, or updater behavior.
+- Its build attestation records `web_pnpm` from the Web project directory and `desktop_pnpm` from
+  the Desktop project directory. The two independently pinned Corepack versions must not be
+  collapsed into one runner-level pnpm value.
+- Tag CI emits immutable `desktop-release-evidence-v2` with
+  `evidence_scope: package_artifacts_only`,
+  `blockmap_verification_scope: blockmap_structure_and_coverage_only`, and
+  `release_disposition: draft_only`. It verifies package signatures, notarization/stapling status,
+  exact installer metadata and digests, packaged sidecar integrity, and supported extraction
+  checks. It checks blockmap structure and declared size coverage without recomputing chunk
+  checksums or executing an updater, then stages the exact assets in a GitHub draft and asserts
+  that the release remains a draft.
+- Package-artifact evidence is not native release evidence. The current workflow does not install
+  or launch each package, apply a real update, or exercise failed-update rollback; Wave 8 must add
+  those cross-platform gates before any release promotion.
+- `parity-manifest.v1.json` is retained as read-only compatibility input for one version.
+
+Historical v1 contract: 2026-07-28
 
 - Overall prototype reference:
   `61454b2ead1cedda584e95afee9f471aac7851fb`.
@@ -13,7 +46,7 @@ Date: 2026-07-28
   `fe425f5ce75f8722249033bf5571c7e7466d05e1`.
 - Web/Desktop source snapshot represented by the v1 contract:
   `9af2afe9d6ad2dacc7f6261a74c8936bc99e5a47`.
-- Versioned manifest:
+- Historical versioned manifest:
   `contracts/desktop-web-parity/parity-manifest.v1.json`.
 - Shared semantic states cover live WebSocket completion, durable history replay, and structured
   capability availability. Web and Desktop expected view models must remain byte-for-byte

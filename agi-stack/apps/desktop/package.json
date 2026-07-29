@@ -6,11 +6,11 @@
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
-  "packageManager": "pnpm@10.24.0",
+  "packageManager": "pnpm@11.15.1",
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
-      "version": "10.24.0",
+      "version": "11.15.1",
       "onFail": "warn"
     }
   },
@@ -23,8 +23,9 @@
     "build": "tsc --noEmit && vite build",
     "build:electron": "tsc --noEmit && tsc --noEmit -p tsconfig.electron.json && electron-vite build",
     "qa:browser": "playwright test --config browser-qa/playwright.config.mjs",
-    "package:electron": "corepack pnpm run build:electron && corepack pnpm run build:sidecar && corepack pnpm run stage:sidecar && electron-builder --config electron-builder.local.yml --publish never",
-    "release:electron": "pnpm run build:electron && pnpm run build:sidecar && pnpm run stage:sidecar && electron-builder --publish never",
+    "qa:paired-production": "node browser-qa/run-paired-production.mjs",
+    "package:electron": "corepack pnpm run build:electron && corepack pnpm run build:sidecar && corepack pnpm run stage:sidecar && corepack pnpm exec electron-builder --config electron-builder.local.yml --publish never",
+    "release:electron": "corepack pnpm run build:electron && corepack pnpm run build:sidecar && corepack pnpm run stage:sidecar && corepack pnpm exec electron-builder --publish never",
     "preview": "vite preview --host 127.0.0.1",
     "preview:electron": "electron-vite preview"
   },
@@ -63,11 +64,5 @@
     "electron-vite": "5.0.0",
     "typescript": "^6.0.3",
     "vite": "^7.3.1"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "electron",
-      "esbuild"
-    ]
   }
 }

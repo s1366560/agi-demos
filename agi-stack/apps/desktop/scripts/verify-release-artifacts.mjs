@@ -7,14 +7,7 @@ import {
   readdirSync,
   rmSync,
 } from 'node:fs';
-import {
-  access,
-  mkdtemp,
-  readdir,
-  readFile,
-  rm,
-  stat,
-} from 'node:fs/promises';
+import { access, mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +18,11 @@ import {
   verifyReleaseRootMetadata,
   writeReleaseEvidence,
 } from './release-artifact-contract.mjs';
+import {
+  inspectPortableExecutableArchitecture,
+  verifyMacPackageArtifacts,
+  verifyWindowsInstallerArtifact,
+} from './release-package-verification.mjs';
 
 export { buildReleaseEvidence, verifyReleaseRootMetadata };
 
@@ -58,20 +56,11 @@ async function collectEntries(root) {
 
 function requireUniquePath(paths, label) {
   if (paths.length !== 1) {
-    throw new Error(`${label} must have exactly one match; found ${paths.length}`);
+    throw new Error(
+      `${label} must have exactly one match; found ${paths.length}`,
+    );
   }
   return paths[0];
-}
-
-function requireRootArtifact(files, releaseRoot, suffix) {
-  return requireUniquePath(
-    files.filter(
-      (path) =>
-        !relative(releaseRoot, path).includes(sep) &&
-        basename(path).endsWith(suffix),
-    ),
-    `release artifact *${suffix}`,
-  );
 }
 
 function requireFile(files, expectedName) {
@@ -93,7 +82,8 @@ async function verifySidecarDigest(sidecarPath, sidecarName) {
   }
   if (process.platform !== 'win32') {
     const mode = (await stat(sidecarPath)).mode;
-    if ((mode & 0o111) === 0) throw new Error('packaged sidecar is not executable');
+    if ((mode & 0o111) === 0)
+      throw new Error('packaged sidecar is not executable');
   }
   return expectedDigest;
 }
@@ -160,7 +150,9 @@ export function assertMacAudioInputEntitlement(path, entitlements) {
     'u',
   );
   if (!enabledAudioInputPattern.test(entitlements)) {
-    throw new Error(`microphone audio-input entitlement is missing for ${path}`);
+    throw new Error(
+      `microphone audio-input entitlement is missing for ${path}`,
+    );
   }
 }
 
@@ -172,7 +164,9 @@ function inspectMacAudioInputEntitlement(path) {
   );
   if (result.error) throw result.error;
   if (result.status !== 0) {
-    throw new Error(`codesign entitlement inspection failed for ${path}: ${result.stderr}`);
+    throw new Error(
+      `codesign entitlement inspection failed for ${path}: ${result.stderr}`,
+    );
   }
   assertMacAudioInputEntitlement(path, `${result.stdout}\n${result.stderr}`);
 }
@@ -221,16 +215,24 @@ function requireMacMainExecutable(appPath) {
 }
 
 function verifyMacSignatures(appPath, sidecarPath, dmgPath) {
-  execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', appPath], {
-    stdio: 'inherit',
-  });
+  execFileSync(
+    '/usr/bin/codesign',
+    ['--verify', '--deep', '--strict', appPath],
+    {
+      stdio: 'inherit',
+    },
+  );
   execFileSync('/usr/bin/codesign', ['--verify', '--strict', sidecarPath], {
     stdio: 'inherit',
   });
   const appSignature = inspectMacSignature(appPath);
   const sidecarSignature = inspectMacSignature(sidecarPath);
-  if (appSignature.developerIdAuthority !== sidecarSignature.developerIdAuthority) {
-    throw new Error('app and sidecar Developer ID Authority values do not match');
+  if (
+    appSignature.developerIdAuthority !== sidecarSignature.developerIdAuthority
+  ) {
+    throw new Error(
+      'app and sidecar Developer ID Authority values do not match',
+    );
   }
   if (appSignature.teamIdentifier !== sidecarSignature.teamIdentifier) {
     throw new Error('app and sidecar TeamIdentifier values do not match');
@@ -239,7 +241,9 @@ function verifyMacSignatures(appPath, sidecarPath, dmgPath) {
     appSignature.signingCertificateSha256 !==
     sidecarSignature.signingCertificateSha256
   ) {
-    throw new Error('app and sidecar signing certificate fingerprints do not match');
+    throw new Error(
+      'app and sidecar signing certificate fingerprints do not match',
+    );
   }
   const expectedTeamIdentifier = expectedMacTeamIdentifier();
   if (
@@ -307,7 +311,9 @@ function normalizedWindowsThumbprint() {
     .replace(/\s/gu, '')
     .toUpperCase();
   if (!/^[A-F0-9]{40}$/u.test(normalized)) {
-    throw new Error('WIN_CSC_SHA1 must be a 40-character certificate thumbprint');
+    throw new Error(
+      'WIN_CSC_SHA1 must be a 40-character certificate thumbprint',
+    );
   }
   return normalized;
 }
@@ -468,7 +474,9 @@ async function verifyLinuxPackages({
       sidecarName,
     );
     if (appImageSidecarSha256 !== expectedSidecarSha256) {
-      throw new Error('AppImage sidecar does not match the verified unpacked sidecar');
+      throw new Error(
+        'AppImage sidecar does not match the verified unpacked sidecar',
+      );
     }
     verifyLinuxBinaryArchitecture(
       appImageSidecar,
@@ -483,9 +491,8 @@ async function verifyLinuxPackages({
     const debDesktopEntry = requireUniquePath(
       debEntries.files.filter(
         (path) =>
-          path.includes(
-            `${sep}usr${sep}share${sep}applications${sep}`,
-          ) && path.endsWith('.desktop'),
+          path.includes(`${sep}usr${sep}share${sep}applications${sep}`) &&
+          path.endsWith('.desktop'),
       ),
       'deb desktop entry',
     );
@@ -497,7 +504,9 @@ async function verifyLinuxPackages({
     );
     const debSidecarSha256 = await verifySidecarDigest(debSidecar, sidecarName);
     if (debSidecarSha256 !== expectedSidecarSha256) {
-      throw new Error('deb sidecar does not match the verified unpacked sidecar');
+      throw new Error(
+        'deb sidecar does not match the verified unpacked sidecar',
+      );
     }
     verifyLinuxBinaryArchitecture(debSidecar, architecture, 'deb sidecar');
 
@@ -545,46 +554,77 @@ async function main() {
     expectedVersion,
   });
 
-  const { files, directories } = await collectEntries(releaseRoot);
+  const { files } = await collectEntries(releaseRoot);
   let sidecarPath;
-  let nativeVerification;
+  let verifiedSidecarSource;
+  let packageVerification;
   if (platform === 'darwin') {
-    const appPath = requireUniquePath(
-      directories.filter((path) => {
-        const relativePath = relative(releaseRoot, path);
-        return relativePath.split(sep).length === 2 && path.endsWith('.app');
-      }),
-      'packaged macOS application',
+    const zipPath = requireUniquePath(
+      metadataResult.installers.filter((path) => path.endsWith('.zip')),
+      'uploaded macOS zip',
     );
-    sidecarPath = join(appPath, 'Contents', 'Resources', 'sidecar', sidecarName);
-    const sidecarSha256 = await verifySidecarDigest(sidecarPath, sidecarName);
     const dmgPath = requireUniquePath(
       metadataResult.installers.filter((path) => path.endsWith('.dmg')),
-      'packaged macOS dmg',
+      'uploaded macOS dmg',
     );
-    nativeVerification = {
-      ...verifyMacSignatures(appPath, sidecarPath, dmgPath),
-      sidecar_sha256: sidecarSha256,
-    };
+    packageVerification = await verifyMacPackageArtifacts({
+      zipPath,
+      dmgPath,
+      inspectAppBundle: async (appPath) => {
+        const packagedSidecarPath = join(
+          appPath,
+          'Contents',
+          'Resources',
+          'sidecar',
+          sidecarName,
+        );
+        const sidecarSha256 = await verifySidecarDigest(
+          packagedSidecarPath,
+          sidecarName,
+        );
+        return {
+          ...verifyMacSignatures(appPath, packagedSidecarPath, dmgPath),
+          sidecar_sha256: sidecarSha256,
+        };
+      },
+    });
+    verifiedSidecarSource = 'uploaded-macos-zip-and-dmg';
   } else if (platform === 'win32') {
-    const installerPath = requireRootArtifact(files, releaseRoot, '.exe');
-    sidecarPath = requireFile(
-      files.filter((path) => path.includes(`win-unpacked${sep}`)),
-      sidecarName,
+    const installerPath = requireUniquePath(
+      metadataResult.installers.filter((path) => path.endsWith('.exe')),
+      'uploaded Windows NSIS installer',
     );
-    const sidecarSha256 = await verifySidecarDigest(sidecarPath, sidecarName);
-    nativeVerification = {
+    packageVerification = await verifyWindowsInstallerArtifact({
+      installerPath,
+      expectedArchitecture: metadataResult.architecture,
+      sidecarName,
+      inspectInstallerPayload: async ({ packagedSidecarPath }) => {
+        const sidecarSha256 = await verifySidecarDigest(
+          packagedSidecarPath,
+          sidecarName,
+        );
+        const sidecarArchitecture = inspectPortableExecutableArchitecture(
+          await readFile(packagedSidecarPath),
+        );
+        return {
+          ...verifyWindowsSignatures(installerPath, packagedSidecarPath),
+          sidecar_sha256: sidecarSha256,
+          sidecar_architecture: sidecarArchitecture,
+        };
+      },
+    });
+    packageVerification = {
       architecture: metadataResult.architecture,
-      ...verifyWindowsSignatures(installerPath, sidecarPath),
-      sidecar_sha256: sidecarSha256,
+      ...packageVerification,
     };
+    verifiedSidecarSource = 'uploaded-windows-nsis-installer';
   } else if (platform === 'linux') {
     sidecarPath = requireFile(
       files.filter((path) => path.includes(`linux-unpacked${sep}`)),
       sidecarName,
     );
     const sidecarSha256 = await verifySidecarDigest(sidecarPath, sidecarName);
-    nativeVerification = {
+    packageVerification = {
       ...(await verifyLinuxPackages({
         metadataResult,
         sidecarPath,
@@ -593,6 +633,7 @@ async function main() {
       })),
       sidecar_sha256: sidecarSha256,
     };
+    verifiedSidecarSource = relative(releaseRoot, sidecarPath);
   } else {
     throw new Error(`unsupported release verification platform: ${platform}`);
   }
@@ -608,13 +649,11 @@ async function main() {
     runAttempt: process.env.AGISTACK_RELEASE_RUN_ATTEMPT,
     runUrl: process.env.AGISTACK_RELEASE_RUN_URL,
     artifactPaths: metadataResult.publishableArtifacts,
-    nativeVerification,
+    packageVerification,
   });
   process.stdout.write(
-    `DESKTOP_RELEASE_VERIFIED platform=${platform} sidecar=${relative(
-      releaseRoot,
-      sidecarPath,
-    )} evidence=${basename(evidencePath)}\n`,
+    `DESKTOP_RELEASE_ARTIFACTS_VERIFIED platform=${platform} ` +
+      `sidecar=${verifiedSidecarSource} evidence=${basename(evidencePath)}\n`,
   );
 }
 

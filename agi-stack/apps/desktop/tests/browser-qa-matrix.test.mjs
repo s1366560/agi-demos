@@ -13,6 +13,10 @@ const packageJson = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
 );
 const makefile = readFileSync(new URL('../../../Makefile', import.meta.url), 'utf8');
+const pairedProductionConfigSource = readFileSync(
+  new URL('../browser-qa/paired-production.playwright.config.mjs', import.meta.url),
+  'utf8',
+);
 const terminalQaSource = readFileSync(
   new URL('../src/qa/SessionTerminalQa.tsx', import.meta.url),
   'utf8',
@@ -112,5 +116,9 @@ test('Desktop exposes pinned Playwright and aggregate parity commands', () => {
     'playwright test --config browser-qa/playwright.config.mjs',
   );
   assert.match(makefile, /^desktop-browser-qa:\s*desktop-deps/mu);
-  assert.match(makefile, /^desktop-parity-check:\s*desktop-check desktop-browser-qa/mu);
+  assert.match(
+    makefile,
+    /^desktop-parity-check:\s*desktop-route-inventory desktop-parity-contract desktop-check desktop-browser-qa desktop-paired-browser-qa/mu,
+  );
+  assert.match(pairedProductionConfigSource, /retries:\s*0/u);
 });

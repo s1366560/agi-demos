@@ -1,0 +1,120 @@
+{
+  "capabilities": [
+    {
+      "id": "project-agent-dashboard",
+      "kind": "canonical",
+      "title": "Project Agent Dashboard",
+      "domain": "agent-ecosystem",
+      "scope": [
+        "tenant",
+        "project"
+      ],
+      "web_route_ids": [
+        "project-agent-dashboard"
+      ],
+      "web_missing": true,
+      "api_method": "NONE",
+      "api_path": "not_applicable:web-route-not-registered/project-agent-dashboard",
+      "permissions": [
+        "authenticated"
+      ],
+      "actions": [
+        "view"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [],
+          "authentication": "authenticated",
+          "authorization": [],
+          "enforcement": "not_applicable",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "blocked",
+      "local_status": "blocked",
+      "local_policy": "blocked_by_web_contract",
+      "local_reason_code": "web_route_not_registered",
+      "local_deviation": "The canonical navigation contract names this destination, but no production Web route establishes its behavior or authority; Desktop must not invent parity from the label alone.",
+      "judgment_rationale": "Project Agent Dashboard exists only as a canonical navigation target. The audited production route inventory has no corresponding registration or routed source, so Web, Cloud Desktop, and Local Desktop are all recorded unavailable with web_route_not_registered."
+    },
+    {
+      "id": "project-agent-logs",
+      "kind": "canonical",
+      "title": "Project Agent Activity Logs",
+      "domain": "agent-ecosystem",
+      "scope": [
+        "tenant",
+        "project"
+      ],
+      "web_route_ids": [
+        "project-agent-logs"
+      ],
+      "web_missing": true,
+      "api_method": "NONE",
+      "api_path": "not_applicable:web-route-not-registered/project-agent-logs",
+      "permissions": [
+        "authenticated"
+      ],
+      "actions": [
+        "view"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [],
+          "authentication": "authenticated",
+          "authorization": [],
+          "enforcement": "not_applicable",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "blocked",
+      "local_status": "blocked",
+      "local_policy": "blocked_by_web_contract",
+      "local_reason_code": "web_route_not_registered",
+      "local_deviation": "The canonical navigation contract names this destination, but no production Web route establishes its behavior or authority; Desktop must not infer an activity-log contract from unrelated session history.",
+      "judgment_rationale": "Project Agent Activity Logs exists only as a canonical navigation target. No production Web registration or routed source owns it, so all product surfaces remain explicitly unavailable with web_route_not_registered."
+    },
+    {
+      "id": "project-agent-patterns",
+      "kind": "canonical",
+      "title": "Project Agent Patterns",
+      "domain": "agent-ecosystem",
+      "scope": [
+        "tenant",
+        "project"
+      ],
+      "web_route_ids": [
+        "project-agent-patterns"
+      ],
+      "web_missing": true,
+      "api_method": "NONE",
+      "api_path": "not_applicable:web-route-not-registered/project-agent-patterns",
+      "permissions": [
+        "authenticated"
+      ],
+      "actions": [
+        "view"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [],
+          "authentication": "authenticated",
+          "authorization": [],
+          "enforcement": "not_applicable",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "blocked",
+      "local_status": "blocked",
+      "local_policy": "blocked_by_web_contract",
+      "local_reason_code": "web_route_not_registered",
+      "local_deviation": "The canonical navigation contract names this destination, but no production Web route establishes its behavior or authority; the separate Playbook Library route must not be relabeled as Project Agent Patterns.",
+      "judgment_rationale": "Project Agent Patterns exists only as a canonical navigation target. Playbook Library is a separate route-only source and cannot be used to fabricate production coverage, so all surfaces remain unavailable with web_route_not_registered."
+    }
+  ],
+  "source_ownership": {},
+  "route_owner_overrides": {}
+}

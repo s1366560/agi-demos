@@ -1,0 +1,258 @@
+{
+  "capabilities": [
+    {
+      "id": "tenant-tenant-genes",
+      "kind": "canonical",
+      "title": "Gene Market",
+      "domain": "runtime-infrastructure",
+      "scope": [
+        "tenant",
+        "instance"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-genes"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/genes/",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/genes/",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/genes/",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/genes/{gene_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/genes/{gene_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/genes/{gene_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/genes/{gene_id}/publish",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/genes/{gene_id}/unpublish",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/genes/genomes",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/genes/genomes",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/genes/genomes/{genome_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/genes/genomes/{genome_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/genes/genomes/{genome_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/genes/genomes/{genome_id}/publish",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/genes/genomes/{genome_id}/unpublish",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/genes/instances/{instance_id}/install",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/genes/instances/{instance_id}/genomes/{genome_id}/install",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/genes/genomes/{genome_id}/ratings",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/genes/evolution",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/genes/{gene_id}/reviews",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/genes/{gene_id}/reviews",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/genes/{gene_id}/reviews/{review_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "NONE",
+          "path": "not_applicable:desktop_native_route_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:local_gene_market_authority_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-genes",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_scope"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "create",
+        "update",
+        "delete",
+        "publish",
+        "unpublish",
+        "install",
+        "rate",
+        "list-reviews",
+        "create-review",
+        "delete-own-review",
+        "inspect-genome"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "inspect-genome",
+            "list-reviews"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "create",
+            "update",
+            "delete",
+            "publish",
+            "unpublish",
+            "install"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "rate",
+            "create-review"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "delete-own-review"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member",
+            "resource_owner"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "planned",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_gene_market_authority_planned",
+      "local_deviation": "Local Desktop may manage and import local Gene and Genome packages, but organization publication, global market visibility, and remote ratings require a declared Cloud authority.",
+      "judgment_rationale": "GeneMarket, GeneDetail, and GenomeDetail directly implement the canonical Gene capability, including package installation from both detail views. Desktop has neither a native market route nor an audited local Gene or Genome package authority, so both native surfaces remain explicitly planned with Local market deviations."
+    }
+  ],
+  "source_ownership": {
+    "tenant-tenant-genes": [
+      "GeneMarket",
+      "GeneDetail",
+      "GenomeDetail"
+    ]
+  },
+  "route_owner_overrides": {}
+}

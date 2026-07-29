@@ -1,0 +1,529 @@
+{
+  "capabilities": [
+    {
+      "id": "project-project-team",
+      "kind": "canonical",
+      "title": "Project Team",
+      "domain": "project-governance",
+      "scope": [
+        "tenant",
+        "project"
+      ],
+      "web_route_ids": [
+        "project-project-team"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/projects/{project_id}/members",
+      "permissions": [
+        "authenticated",
+        "project_member",
+        "project_admin"
+      ],
+      "actions": [
+        "view",
+        "list-members",
+        "invite",
+        "update-role",
+        "remove",
+        "list-agent-teammates",
+        "start-agent-chat"
+      ],
+      "web_actions": [
+        "view",
+        "list-members",
+        "invite",
+        "update-role",
+        "remove",
+        "list-agent-teammates",
+        "start-agent-chat"
+      ],
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/members",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/members",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PATCH",
+          "path": "/api/v1/projects/{project_id}/members/{user_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}/members/{user_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/agent/definitions?project_id={project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/agent/conversations",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/members",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/members",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PATCH",
+          "path": "/api/v1/projects/{project_id}/members/{user_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}/members/{user_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/agent/definitions?project_id={project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/agent/conversations",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "unavailable:local_project_team_authority_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/project-project-team",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list-members",
+            "list-agent-teammates",
+            "start-agent-chat"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "invite",
+            "update-role",
+            "remove"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "planned",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_project_team_authority_planned",
+      "local_deviation": "A Local implementation may manage local agent teammates; human invitation and organization membership actions must remain structurally unavailable when no cloud membership authority exists.",
+      "judgment_rationale": "The Web Team page combines project human membership with project-scoped agent teammates. Desktop has workspace member projections but no audited project Team route or equivalent project membership authority, so neither mode is marked implemented."
+    },
+    {
+      "id": "project-project-memories",
+      "kind": "canonical",
+      "title": "Project Memories",
+      "domain": "knowledge",
+      "scope": [
+        "tenant",
+        "project"
+      ],
+      "web_route_ids": [
+        "project-project-memories"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/memories/",
+      "permissions": [
+        "authenticated",
+        "project_member",
+        "memory_editor",
+        "memory_admin",
+        "resource_owner"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "create",
+        "update",
+        "delete",
+        "export",
+        "share",
+        "reprocess"
+      ],
+      "web_actions": [
+        "view",
+        "list",
+        "create",
+        "update",
+        "delete",
+        "export",
+        "share",
+        "reprocess"
+      ],
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/memories/?project_id={project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/memories/",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/memories/{memory_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PATCH",
+          "path": "/api/v1/memories/{memory_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/memories/{memory_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/memories/{memory_id}/reprocess",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/memories/{memory_id}/shares",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/memories/{memory_id}/shares",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/memories/{memory_id}/shares/{share_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/memories/?project_id={project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/memories/",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/memories/{memory_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PATCH",
+          "path": "/api/v1/memories/{memory_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/memories/{memory_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/memories/{memory_id}/reprocess",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/memories/{memory_id}/shares",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/memories/{memory_id}/shares",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/memories/{memory_id}/shares/{share_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "unavailable:local_memory_management_authority_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/project-project-memories",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "create",
+            "export"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "update",
+            "reprocess"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "memory_editor"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "delete"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "memory_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "share"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "resource_owner"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "planned",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_memory_management_authority_planned",
+      "judgment_rationale": "Memory list, creation, detail, client-side JSON export, sharing and reprocessing are one canonical project knowledge capability. The production Web page has no memory-import action. Desktop memory timeline cards are conversation projections rather than this management surface, so they do not establish route parity."
+    },
+    {
+      "id": "project-project-entities",
+      "kind": "canonical",
+      "title": "Project Entities",
+      "domain": "knowledge",
+      "scope": [
+        "tenant",
+        "project"
+      ],
+      "web_route_ids": [
+        "project-project-entities"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/graph/entities/",
+      "permissions": [
+        "authenticated",
+        "project_member"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "filter",
+        "inspect-relationships"
+      ],
+      "web_actions": [
+        "view",
+        "list",
+        "filter",
+        "inspect-relationships"
+      ],
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/graph/entities/?project_id={project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/graph/entities/types?project_id={project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/graph/entities/{entity_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/graph/entities/{entity_id}/relationships",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/graph/entities/?project_id={project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/graph/entities/types?project_id={project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/graph/entities/{entity_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/graph/entities/{entity_id}/relationships",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "unavailable:local_entity_projection_authority_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/project-project-entities",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "filter",
+            "inspect-relationships"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "planned",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_entity_projection_authority_planned",
+      "judgment_rationale": "The Web Entities page is a distinct project-scoped graph projection. No audited Desktop native entity-management route exists; a Local equivalent remains planned behind a sidecar graph authority."
+    }
+  ],
+  "source_ownership": {
+    "project-project-team": [
+      "Team"
+    ],
+    "project-project-memories": [
+      "MemoryList",
+      "NewMemory",
+      "MemoryDetail"
+    ],
+    "project-project-entities": [
+      "EntitiesList"
+    ]
+  },
+  "route_owner_overrides": {
+    "project-project-team": [
+      "production-route-path-tenant-tenantid-project-projectid-team"
+    ],
+    "project-project-memories": [
+      "production-route-path-tenant-tenantid-project-projectid-memories",
+      "production-route-path-tenant-tenantid-project-projectid-memories-new",
+      "production-route-path-tenant-tenantid-project-projectid-memory-memoryid"
+    ],
+    "project-project-entities": [
+      "production-route-path-tenant-tenantid-project-projectid-entities"
+    ]
+  }
+}

@@ -44,18 +44,24 @@ Local `package:electron` bundles deliberately clear the publish provider, do not
 `app-update.yml`, and cannot contact the production update feed. Tag-release bundles retain the
 structured GitHub provider metadata; the main process validates that metadata before starting
 `electron-updater`. This distinction is controlled by the signed package contents, not a runtime
-environment variable.
+environment variable. The metadata contract alone does not prove that a packaged client fetched,
+applied, or rolled back a real update.
 
 ## Production releases
 
 Pushing a tag that exactly matches the desktop package version (`v0.1.0`, for example) runs
 `.github/workflows/desktop-release.yml` on macOS, Windows, and Linux. Each runner builds its native
-Rust sidecar and Electron artifacts without publishing them. No GitHub release is created until all
-three jobs verify the packaged sidecar digest and update metadata; macOS additionally verifies that
-the app and sidecar share a Developer ID authority and team identifier plus a stapled notarization
-  ticket, while Windows verifies Authenticode on both the installer and sidecar. The verifier parses
-  every `latest*.yml` file, requires its version to match `package.json` and the tag, and checks every
-  declared file's root-relative name, exact size, and base64 SHA-512 digest.
+Rust sidecar and Electron artifacts without publishing them. No GitHub release draft is created
+until all three jobs verify the packaged sidecar digest and update metadata; macOS additionally
+verifies that the app and sidecar share a Developer ID authority and team identifier plus a stapled
+notarization ticket, while Windows verifies Authenticode on both the installer and sidecar. The
+verifier parses every `latest*.yml` file, requires its version to match `package.json` and the tag,
+and checks every declared installer's root-relative name, exact size, and base64 SHA-512 digest.
+Blockmaps are limited to `blockmap_structure_and_coverage_only`: the verifier checks the compressed
+JSON contract, canonical checksum encoding, and declared chunk-size coverage, but does not
+recompute chunk checksums or execute an updater. The resulting `desktop-release-evidence-v2`
+records that scope, is explicitly limited to `package_artifacts_only`, and marks the release
+`draft_only`.
 
 The release workflow fails closed unless these repository secrets are configured:
 
@@ -67,11 +73,18 @@ The release workflow fails closed unless these repository secrets are configured
 `AuthKey_<key-id>.p8` private key. The macOS runner decodes it into a mode-`0600` temporary file and
 exposes only that file path to the notarization process after dependencies, application code, and
 the sidecar have already been built and staged. The file is removed in an `always()` cleanup step
-after native verification. `WIN_CSC_SHA1` is the expected Authenticode signing-certificate
-thumbprint; whitespace and case are normalized before the installer and sidecar are compared.
+after package-artifact verification. `WIN_CSC_SHA1` is the expected Authenticode
+signing-certificate thumbprint; whitespace and case are normalized before the installer and sidecar
+are compared.
 
-Only the final workflow job creates the single draft, uploads the verified release-root assets, and
-promotes it. A failed workflow can safely rerun against the same draft only when the tag still
-resolves to the workflow commit and every existing asset belongs to the exact verified local set.
-Unexpected assets or an already-published release fail closed. Published releases include
-`latest-mac.yml`, `latest.yml`, and `latest-linux.yml` for `electron-updater`.
+The final workflow job creates or recovers the single exact-tag draft, uploads the verified
+release-root assets, verifies the remote asset set, and then asserts that the release is still a
+draft. A failed workflow can safely rerun against that draft only when the tag still resolves to the
+workflow commit and every existing asset belongs to the exact verified local set. Unexpected
+assets, an already-published release, or any non-draft final state fail closed. The workflow does
+not promote the draft.
+
+The draft includes `latest-mac.yml`, `latest.yml`, and `latest-linux.yml`, but their presence proves
+only the package/update-metadata contract. Current tag CI does not install or launch the packages,
+apply a real `electron-updater` update, or verify failed-update rollback. Wave 8 must add those
+cross-platform native checks and a separate promotion gate; until then the release remains a draft.

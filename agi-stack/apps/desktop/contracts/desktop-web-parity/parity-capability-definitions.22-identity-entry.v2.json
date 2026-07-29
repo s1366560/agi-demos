@@ -1,0 +1,508 @@
+{
+  "capabilities": [
+    {
+      "id": "authentication-and-account-entry",
+      "kind": "route_only",
+      "title": "Authentication and Account Entry",
+      "domain": "identity",
+      "scope": [
+        "global"
+      ],
+      "web_route_ids": [],
+      "api_method": "POST",
+      "api_path": "/api/v1/auth/token",
+      "permissions": [
+        "anonymous",
+        "authenticated"
+      ],
+      "actions": [
+        "sign-in",
+        "start-device-authorization",
+        "restore-trusted-session",
+        "start-local-session",
+        "resume-local-session"
+      ],
+      "web_actions": [
+        "sign-in"
+      ],
+      "cloud_actions": [
+        "sign-in",
+        "start-device-authorization",
+        "restore-trusted-session"
+      ],
+      "local_actions": [
+        "start-local-session",
+        "resume-local-session"
+      ],
+      "cloud_status": "implemented",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/features/auth/LoginScreen.tsx",
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/api/client.ts",
+        "agi-stack/apps/desktop/src/api/trustedSession.ts"
+      ],
+      "local_status": "implemented",
+      "local_policy": "native_equivalent",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/features/auth/LoginScreen.tsx",
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
+      ],
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/auth/token",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/auth/me",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/auth/token",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/auth/me",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/auth/device/code",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/auth/device/token",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/auth/device/cancel",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/auth/local-session",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/auth/local-session/resume",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/auth/me",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/authentication-and-account-entry",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "sign-in"
+          ],
+          "authentication": "anonymous",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "sign-in",
+            "start-device-authorization"
+          ],
+          "authentication": "anonymous",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "restore-trusted-session"
+          ],
+          "authentication": "authenticated",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": "application_encrypted_vault"
+        },
+        {
+          "surface": "desktop_local",
+          "actions": [
+            "start-local-session",
+            "resume-local-session"
+          ],
+          "authentication": "anonymous",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": "local_runtime_session_authority"
+        }
+      ],
+      "interaction_states": [
+        "credential-entry",
+        "submit",
+        "device-authorization",
+        "trusted-session-restore",
+        "retry"
+      ],
+      "expected_observable_result": "Cloud Desktop presents native account entry, restores only an application-vault trusted session, and reports authentication errors without a WebView. Local Desktop creates or resumes its sidecar-owned local session through the same native entry shell.",
+      "judgment_rationale": "Login is an eager production Web route without a canonical navigation target. Cloud Desktop has a native login and trusted-session flow. Local mode has distinct local-session, resume, and auth-me authorities and therefore is a native equivalent rather than not-applicable."
+    },
+    {
+      "id": "oauth-callback",
+      "kind": "route_only",
+      "title": "OAuth Callback",
+      "domain": "identity",
+      "scope": [
+        "global"
+      ],
+      "web_route_ids": [],
+      "api_method": "POST",
+      "api_path": "/api/v1/auth/oauth/{provider}/callback",
+      "permissions": [
+        "anonymous"
+      ],
+      "actions": [
+        "read-redirect-target",
+        "show-unavailable",
+        "validate-state",
+        "exchange-code",
+        "complete-sign-in",
+        "retry"
+      ],
+      "web_status": "unavailable",
+      "web_reason_code": "oauth_callback_authority_not_configured",
+      "web_actions": [
+        "read-redirect-target",
+        "show-unavailable",
+        "retry"
+      ],
+      "cloud_status": "planned",
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "local_oauth_callback_not_applicable",
+      "local_deviation": "Local mode has no Cloud identity-provider callback authority; any future provider OAuth flow must return through a separately audited native deep link.",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/auth/oauth/{provider}/callback",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "NONE",
+          "path": "unavailable:desktop_native_route_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:local_oauth_callback_not_applicable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/oauth-callback",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "read-redirect-target",
+            "show-unavailable",
+            "retry"
+          ],
+          "authentication": "anonymous",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "interaction_states": [
+        "deep-link-restore",
+        "exchange-pending",
+        "exchange-success",
+        "exchange-failure",
+        "retry"
+      ],
+      "expected_observable_result": "Cloud Desktop consumes an allowlisted native OAuth callback, validates provider and state, exchanges the code through Cloud authority, and resumes the intended native route without rendering Web UI. Local Desktop returns a stable not-applicable result.",
+      "judgment_rationale": "OAuthCallback is a production-only Web route, but its server authority currently returns HTTP 501 and its page only decodes redirect state rather than validating a persisted CSRF nonce. Desktop has no audited native callback route, so Cloud is planned and Local Cloud-identity callback semantics are not applicable."
+    },
+    {
+      "id": "invitation-acceptance",
+      "kind": "route_only",
+      "title": "Invitation Acceptance",
+      "domain": "identity",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [],
+      "api_method": "POST",
+      "api_path": "/api/v1/invitations/accept/{token}",
+      "permissions": [
+        "anonymous",
+        "authenticated",
+        "valid_invitation_token",
+        "tenant_member"
+      ],
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/invitations/verify/{token}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/invitations/accept/{token}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "NONE",
+          "path": "unavailable:desktop_native_route_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:local_tenant_invitation_not_applicable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/invitation-acceptance",
+          "authority": "none"
+        }
+      ],
+      "actions": [
+        "verify",
+        "sign-in",
+        "accept",
+        "open-tenant",
+        "retry"
+      ],
+      "web_actions": [
+        "verify",
+        "sign-in",
+        "accept",
+        "open-tenant",
+        "retry"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "verify",
+            "sign-in"
+          ],
+          "authentication": "anonymous",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "accept"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "valid_invitation_token"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "open-tenant"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "retry"
+          ],
+          "authentication": "mixed",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "local_tenant_invitation_not_applicable",
+      "local_deviation": "A single-user Local workspace has no organization invitation authority.",
+      "interaction_states": [
+        "deep-link-restore",
+        "verification-loading",
+        "authentication-required",
+        "acceptance",
+        "expired",
+        "retry"
+      ],
+      "expected_observable_result": "Cloud Desktop verifies and accepts the invitation through Cloud authority, preserves the native deep link across sign-in, and opens the invited tenant with structured expired, forbidden, and conflict states. Local Desktop returns a stable not-applicable result.",
+      "judgment_rationale": "InviteAccept is a production-only Web route with verify and accept operations. No native Desktop invitation route is registered, and Local mode does not reproduce organization membership governance."
+    },
+    {
+      "id": "device-approval",
+      "kind": "route_only",
+      "title": "Device Approval",
+      "domain": "identity",
+      "scope": [
+        "global"
+      ],
+      "web_route_ids": [],
+      "api_method": "POST",
+      "api_path": "/api/v1/auth/device/approve",
+      "permissions": [
+        "authenticated",
+        "pending_device_code"
+      ],
+      "actions": [
+        "enter-code",
+        "approve",
+        "navigate-back",
+        "retry"
+      ],
+      "web_actions": [
+        "enter-code",
+        "approve",
+        "navigate-back",
+        "retry"
+      ],
+      "cloud_status": "planned",
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "local_cloud_device_approval_not_applicable",
+      "local_deviation": "Local mode does not mint Cloud API credentials for another device.",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/auth/device/approve",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "NONE",
+          "path": "unavailable:desktop_native_route_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:local_cloud_device_approval_not_applicable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/device-approval",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "enter-code",
+            "navigate-back",
+            "retry"
+          ],
+          "authentication": "authenticated",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "approve"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "pending_device_code"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "interaction_states": [
+        "deep-link-restore",
+        "code-entry",
+        "approval-pending",
+        "approved",
+        "invalid-or-expired",
+        "retry"
+      ],
+      "expected_observable_result": "Cloud Desktop renders a native device approval route, validates the one-time code, requires an authenticated Cloud identity, and returns structured approval or expiry state without loading the Web page. Local Desktop returns a stable not-applicable result.",
+      "judgment_rationale": "DeviceApprove is a production-only Web route for approving another client's device code. Electron can initiate its own device flow but does not implement this approval page, and the operation has no Local authority."
+    }
+  ],
+  "source_ownership": {
+    "authentication-and-account-entry": [
+      "Login"
+    ],
+    "oauth-callback": [
+      "OAuthCallback"
+    ],
+    "invitation-acceptance": [
+      "InviteAccept"
+    ],
+    "device-approval": [
+      "DeviceApprove"
+    ]
+  },
+  "route_owner_overrides": {
+    "authentication-and-account-entry": [
+      "production-route-path-root-facde85906d8",
+      "production-route-path-login"
+    ],
+    "oauth-callback": [
+      "production-route-path-login-callback-provider"
+    ],
+    "invitation-acceptance": [
+      "production-route-path-invite-token"
+    ],
+    "device-approval": [
+      "production-route-path-device"
+    ]
+  }
+}

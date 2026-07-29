@@ -1,0 +1,659 @@
+{
+  "capabilities": [
+    {
+      "id": "project-project-schema",
+      "kind": "canonical",
+      "title": "Project Schema",
+      "domain": "knowledge-configuration",
+      "scope": [
+        "tenant",
+        "project"
+      ],
+      "web_route_ids": [
+        "project-project-schema"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/projects/{project_id}/schema/entities",
+      "permissions": [
+        "authenticated",
+        "project_member",
+        "project_contributor"
+      ],
+      "actions": [
+        "view",
+        "list-entity-types",
+        "create-entity-type",
+        "update-entity-type",
+        "delete-entity-type",
+        "list-edge-types",
+        "create-edge-type",
+        "update-edge-type",
+        "delete-edge-type",
+        "manage-edge-mappings"
+      ],
+      "web_actions": [
+        "view",
+        "list-entity-types",
+        "create-entity-type",
+        "update-entity-type",
+        "delete-entity-type",
+        "list-edge-types",
+        "create-edge-type",
+        "update-edge-type",
+        "delete-edge-type",
+        "manage-edge-mappings"
+      ],
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/schema/entities",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/schema/entities",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/projects/{project_id}/schema/entities/{entity_type_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}/schema/entities/{entity_type_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/schema/edges",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/schema/edges",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/projects/{project_id}/schema/edges/{edge_type_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}/schema/edges/{edge_type_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/schema/mappings",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/schema/mappings",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}/schema/mappings/{mapping_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/schema/entities",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/schema/entities",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/projects/{project_id}/schema/entities/{entity_type_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}/schema/entities/{entity_type_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/schema/edges",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/schema/edges",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/projects/{project_id}/schema/edges/{edge_type_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}/schema/edges/{edge_type_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/schema/mappings",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/schema/mappings",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}/schema/mappings/{mapping_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "unavailable:local_schema_authority_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/project-project-schema",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list-entity-types",
+            "list-edge-types"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "create-entity-type",
+            "update-entity-type",
+            "delete-entity-type",
+            "create-edge-type",
+            "update-edge-type",
+            "delete-edge-type",
+            "manage-edge-mappings"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_contributor"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "planned",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_schema_authority_planned",
+      "judgment_rationale": "SchemaLayout and its overview, entity, edge, and mapping children are one canonical project capability. Desktop has no audited native schema route or mutation authority in either mode."
+    },
+    {
+      "id": "project-project-channels",
+      "kind": "canonical",
+      "title": "Project Channels",
+      "domain": "extensions",
+      "scope": [
+        "tenant",
+        "project"
+      ],
+      "web_route_ids": [
+        "project-project-channels"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/channels/projects/{project_id}/configs",
+      "permissions": [
+        "authenticated",
+        "project_member",
+        "project_admin"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "create",
+        "update",
+        "delete",
+        "test",
+        "inspect-status",
+        "manage-plugin"
+      ],
+      "web_actions": [
+        "view",
+        "list",
+        "create",
+        "update",
+        "delete",
+        "test",
+        "inspect-status",
+        "manage-plugin"
+      ],
+      "cloud_actions": [
+        "view",
+        "list",
+        "create",
+        "update",
+        "delete",
+        "test"
+      ],
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/channels/projects/{project_id}/configs",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/channels/projects/{project_id}/configs",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/channels/configs/{config_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/channels/configs/{config_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/channels/configs/{config_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/channels/configs/{config_id}/test",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/channels/configs/{config_id}/status",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/channels/projects/{project_id}/observability/summary",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/channels/projects/{project_id}/configs",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/channels/projects/{project_id}/configs",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/channels/configs/{config_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/channels/configs/{config_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/channels/configs/{config_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/channels/configs/{config_id}/test",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/channels/configs/{config_id}/status",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/channels/projects/{project_id}/observability/summary",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:local_channel_runtime_not_applicable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/project-project-channels",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "test",
+            "inspect-status"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "create",
+            "update",
+            "delete",
+            "manage-plugin"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "partial",
+      "cloud_reason_code": "desktop_project_channels_partial",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/features/settings/ChannelConnectionsDialog.tsx"
+      ],
+      "local_status": "not_applicable",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_channel_runtime_not_applicable",
+      "local_deviation": "The Local sidecar currently returns the stable local_channel_runtime_not_applicable reason for channel runtime routes; the native dialog must not fall back to a WebView or external browser.",
+      "judgment_rationale": "The canonical Web project Channels route redirects into the plugin surface with project context, while Desktop has a native channel connection dialog. Cloud lacks the complete routed catalog and observability flow, and Local parity routes deliberately report channel runtime as not applicable."
+    },
+    {
+      "id": "project-project-maintenance",
+      "kind": "canonical",
+      "title": "Project Maintenance",
+      "domain": "knowledge-configuration",
+      "scope": [
+        "tenant",
+        "project"
+      ],
+      "web_route_ids": [
+        "project-project-maintenance"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/maintenance/status",
+      "permissions": [
+        "authenticated",
+        "project_member"
+      ],
+      "actions": [
+        "view",
+        "refresh-status",
+        "inspect-stats",
+        "inspect-embedding-status",
+        "incremental-refresh",
+        "check-duplicates",
+        "deduplicate",
+        "check-stale-edges",
+        "invalidate-stale-edges",
+        "rebuild-communities",
+        "export",
+        "rebuild-embeddings"
+      ],
+      "web_actions": [
+        "view",
+        "refresh-status",
+        "inspect-stats",
+        "inspect-embedding-status",
+        "incremental-refresh",
+        "check-duplicates",
+        "deduplicate",
+        "check-stale-edges",
+        "invalidate-stale-edges",
+        "rebuild-communities",
+        "export",
+        "rebuild-embeddings"
+      ],
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/maintenance/status?project_id={project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/data/stats?project_id={project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/maintenance/embeddings/status?project_id={project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/maintenance/refresh/incremental",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/maintenance/deduplicate",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/maintenance/invalidate-edges",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/graph/communities/rebuild?project_id={project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/data/export",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/maintenance/embeddings/rebuild?project_id={project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/maintenance/status?project_id={project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/data/stats?project_id={project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/maintenance/embeddings/status?project_id={project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/maintenance/refresh/incremental",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/maintenance/deduplicate",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/maintenance/invalidate-edges",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/graph/communities/rebuild?project_id={project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/data/export",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/maintenance/embeddings/rebuild?project_id={project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "unavailable:local_knowledge_maintenance_authority_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/project-project-maintenance",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "refresh-status",
+            "inspect-stats",
+            "inspect-embedding-status",
+            "incremental-refresh",
+            "check-duplicates",
+            "deduplicate",
+            "check-stale-edges",
+            "invalidate-stale-edges",
+            "rebuild-communities",
+            "export",
+            "rebuild-embeddings"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "planned",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_knowledge_maintenance_authority_planned",
+      "judgment_rationale": "Project Maintenance reads maintenance, graph and embedding status and exposes incremental refresh, duplicate dry-run/merge, stale-edge dry-run/delete, community rebuild, data export and embedding rebuild. The page does not invoke the generic optimize-graph endpoint. Desktop has no audited native route or Local graph-maintenance authority, so both remain planned."
+    }
+  ],
+  "source_ownership": {
+    "project-project-schema": [
+      "SchemaLayout",
+      "SchemaOverview",
+      "EntityTypeList",
+      "EdgeTypeList",
+      "EdgeMapList"
+    ],
+    "project-project-maintenance": [
+      "Maintenance"
+    ]
+  },
+  "route_owner_overrides": {
+    "project-project-schema": [
+      "production-route-path-tenant-tenantid-project-projectid-schema",
+      "production-route-index-tenant-tenantid-project-projectid-schema",
+      "production-route-path-tenant-tenantid-project-projectid-schema-entities",
+      "production-route-path-tenant-tenantid-project-projectid-schema-edges",
+      "production-route-path-tenant-tenantid-project-projectid-schema-mapping"
+    ],
+    "project-project-channels": [
+      "production-route-path-tenant-tenantid-project-projectid-channels"
+    ],
+    "project-project-maintenance": [
+      "production-route-path-tenant-tenantid-project-projectid-maintenance"
+    ]
+  }
+}

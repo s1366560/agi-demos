@@ -1,0 +1,592 @@
+{
+  "capabilities": [
+    {
+      "id": "tenant-tenant-clusters",
+      "kind": "canonical",
+      "title": "Clusters",
+      "domain": "runtime-infrastructure",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-clusters"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/clusters/",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/clusters/",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/clusters/",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/clusters/{cluster_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/clusters/{cluster_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/clusters/{cluster_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/clusters/{cluster_id}/health",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/clusters/{cluster_id}/acp-runner-pools",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/clusters/{cluster_id}/acp-runner-pools",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/clusters/{cluster_id}/acp-runner-pools/{pool_key}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/clusters/{cluster_id}/acp-runner-pools/{pool_key}/registration-token",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/clusters/",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/clusters/",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/clusters/{cluster_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/clusters/{cluster_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/clusters/{cluster_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/clusters/{cluster_id}/health",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/clusters/{cluster_id}/acp-runner-pools",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/clusters/{cluster_id}/acp-runner-pools",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/clusters/{cluster_id}/acp-runner-pools/{pool_key}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/clusters/{cluster_id}/acp-runner-pools/{pool_key}/registration-token",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:cloud_cluster_control_not_applicable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-clusters",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_member"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "create",
+        "update",
+        "delete",
+        "inspect-health",
+        "manage-acp-runner-pools",
+        "create-registration-token"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "inspect-health"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "create",
+            "update",
+            "delete",
+            "manage-acp-runner-pools",
+            "create-registration-token"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "cloud_cluster_control_not_applicable",
+      "local_deviation": "Cluster and ACP runner-pool administration remain visible as a native route contract in Local mode but require Cloud authority; registration tokens are never synthesized or cached by the renderer.",
+      "judgment_rationale": "Cluster list and detail pages are direct sources for the canonical cluster control plane. Reads require tenant membership while create, update, delete, ACP pool mutation, and registration-token actions require tenant administration; no cluster:read permission exists. Desktop has no audited native implementation, and a single-machine Local runtime cannot honestly claim cluster authority."
+    },
+    {
+      "id": "tenant-tenant-deploy",
+      "kind": "canonical",
+      "title": "Deployments",
+      "domain": "runtime-infrastructure",
+      "scope": [
+        "tenant",
+        "instance"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-deploy"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/deploys/",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/deploys/",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/deploys/",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/deploys/{deploy_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/deploys/instances/{instance_id}/latest",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/deploys/{deploy_id}/progress",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/deploys/{deploy_id}/success",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/deploys/{deploy_id}/failed",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/deploys/{deploy_id}/cancel",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/deploys/",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/deploys/",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/deploys/{deploy_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/deploys/instances/{instance_id}/latest",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/deploys/{deploy_id}/progress",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/deploys/{deploy_id}/success",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/deploys/{deploy_id}/failed",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/deploys/{deploy_id}/cancel",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:cloud_deployment_authority_not_applicable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-deploy",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_access"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "inspect-progress",
+        "stream-progress",
+        "cancel",
+        "mark-success",
+        "mark-failed"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "inspect-progress",
+            "stream-progress",
+            "cancel",
+            "mark-success",
+            "mark-failed"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "cloud_deployment_authority_not_applicable",
+      "local_deviation": "Local Desktop may run supervised local work but does not expose the Cloud deployment authority. It must render a stable cloud-only state instead of launching an external control plane.",
+      "judgment_rationale": "DeployProgress is shared by tenant deployment routes and nested instance deployment routes, so one audited Deployments capability owns the source. Native Desktop lacks the route and production progress stream; Local deployment is intentionally cloud-only."
+    },
+    {
+      "id": "tenant-tenant-instance-templates",
+      "kind": "canonical",
+      "title": "Instance Templates",
+      "domain": "runtime-infrastructure",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-instance-templates"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/instance-templates/",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/instance-templates/",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/instance-templates/",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/instance-templates/{template_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/instance-templates/{template_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/instance-templates/{template_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/instance-templates/{template_id}/publish",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/instance-templates/{template_id}/unpublish",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/instance-templates/{template_id}/clone",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/instance-templates/{template_id}/items",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/instance-templates/{template_id}/items",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/instance-templates/{template_id}/items/{item_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/instance-templates/",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/instance-templates/",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/instance-templates/{template_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/instance-templates/{template_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/instance-templates/{template_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/instance-templates/{template_id}/publish",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/instance-templates/{template_id}/unpublish",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/instance-templates/{template_id}/clone",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/instance-templates/{template_id}/items",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/instance-templates/{template_id}/items",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/instance-templates/{template_id}/items/{item_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:local_instance_template_authority_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-instance-templates",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_member"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "create",
+        "delete",
+        "publish",
+        "clone",
+        "deploy-from-template"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "create",
+            "delete",
+            "publish",
+            "clone",
+            "deploy-from-template"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "planned",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_instance_template_authority_planned",
+      "local_deviation": "Local templates must describe only sidecar-supported resources and keep imported files within the workspace root and declared size and MIME limits.",
+      "judgment_rationale": "InstanceTemplateList and TemplateDetail form a dedicated canonical lifecycle distinct from the general template marketplace. The production page supports create, delete, publish, clone, and deploy-from-template but does not expose update or item management. No routed native editor or Local sidecar contract currently proves parity, although a bounded single-machine equivalent is meaningful."
+    }
+  ],
+  "source_ownership": {
+    "tenant-tenant-clusters": [
+      "ClusterList",
+      "ClusterDetail"
+    ],
+    "tenant-tenant-deploy": [
+      "DeployProgress"
+    ],
+    "tenant-tenant-instance-templates": [
+      "InstanceTemplateList",
+      "TemplateDetail"
+    ]
+  },
+  "route_owner_overrides": {}
+}

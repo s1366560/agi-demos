@@ -1,0 +1,666 @@
+{
+  "capabilities": [
+    {
+      "id": "tenant-tenant-providers",
+      "kind": "canonical",
+      "title": "Model Providers",
+      "domain": "extensions",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-providers"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/llm-providers/",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/{provider_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/types",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/llm-providers/",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/llm-providers/{provider_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/llm-providers/{provider_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/llm-providers/{provider_id}/health-check",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/llm-providers/test-connection",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/{provider_id}/usage",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/tenants/{tenant_id}/assignments",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/llm-providers/tenants/{tenant_id}/providers/{provider_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/llm-providers/tenants/{tenant_id}/providers/{provider_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/tenants/{tenant_id}/provider",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/system/status",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/llm-providers/system/reset-circuit-breaker/{provider_type}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/models/{provider_type}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/models/catalog",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/models/catalog/search",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/env-detection",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/types",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/llm-providers/",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/llm-providers/{provider_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/llm-providers/{provider_id}/health-check",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/llm-providers/test-connection",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/{provider_id}/usage",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/routing-policy",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/llm-providers/routing-policy",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/models/{provider_type}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/llm-providers/{provider_id}/models/discover",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/types",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/llm-providers/",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "PUT",
+          "path": "/api/v1/llm-providers/{provider_id}",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/llm-providers/{provider_id}/health-check",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/llm-providers/test-connection",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/{provider_id}/usage",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/routing-policy",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "PUT",
+          "path": "/api/v1/llm-providers/routing-policy",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/llm-providers/models/{provider_type}",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/llm-providers/{provider_id}/models/discover",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-providers",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_assignment_access",
+        "global_admin_for_provider_mutations",
+        "global_admin_for_system_actions",
+        "project_workspace_access_for_routing"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete",
+        "health-check",
+        "test-connection",
+        "view-usage",
+        "view-tenant-assignment",
+        "manage-tenant-assignment",
+        "view-system-status",
+        "reset-circuit-breaker",
+        "list-models",
+        "search-models",
+        "detect-environment",
+        "view-routing",
+        "update-routing",
+        "discover-models"
+      ],
+      "web_actions": [
+        "view",
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete",
+        "health-check",
+        "test-connection",
+        "view-usage",
+        "view-tenant-assignment",
+        "manage-tenant-assignment",
+        "view-system-status",
+        "reset-circuit-breaker",
+        "list-models",
+        "search-models",
+        "detect-environment"
+      ],
+      "cloud_actions": [
+        "view",
+        "list",
+        "create",
+        "update",
+        "health-check",
+        "test-connection",
+        "view-usage",
+        "view-routing",
+        "update-routing",
+        "list-models",
+        "discover-models"
+      ],
+      "local_actions": [
+        "view",
+        "list",
+        "create",
+        "update",
+        "health-check",
+        "test-connection",
+        "view-usage",
+        "view-routing",
+        "update-routing",
+        "list-models",
+        "discover-models"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "get",
+            "view-usage",
+            "list-models",
+            "search-models"
+          ],
+          "authentication": "authenticated",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "view-tenant-assignment"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "manage-tenant-assignment"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "global_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "create",
+            "update",
+            "delete",
+            "health-check",
+            "test-connection",
+            "view-system-status",
+            "detect-environment"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "global_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "reset-circuit-breaker"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "global_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list",
+            "view-usage",
+            "list-models",
+            "discover-models"
+          ],
+          "authentication": "authenticated",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "create",
+            "update",
+            "health-check",
+            "test-connection"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "global_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view-routing"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "workspace_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "update-routing"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "workspace_manager"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": [
+            "view",
+            "list",
+            "health-check",
+            "test-connection",
+            "view-usage",
+            "list-models",
+            "discover-models"
+          ],
+          "authentication": "authenticated",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": [
+            "create",
+            "update"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": [
+            "view-routing"
+          ],
+          "authentication": "authenticated",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": [
+            "update-routing"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "workspace_manager"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "partial",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/features/settings/ModelProviderWorkspace.tsx"
+      ],
+      "local_status": "partial",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_provider_authority_partial",
+      "local_deviation": "Local provider secrets remain exclusively in the application-managed vault and must never be cached or echoed by the renderer.",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/features/settings/ModelProviderWorkspace.tsx",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/provider_credentials.rs"
+      ],
+      "judgment_rationale": "Web owns provider CRUD, assignments, system resilience, model catalog, and environment detection. Tenant members may read their tenant assignment while assignment mutations, provider mutations, health checks, test connections, system status, and environment detection require global administration. Desktop has native vault-safe provider editing, health, usage, model discovery, and revision-aware routing in both modes, but not delete, tenant assignment, or system authority. OAuth is not declared because no callback or redirect authority exists."
+    },
+    {
+      "id": "tenant-tenant-webhooks",
+      "kind": "canonical",
+      "title": "Webhooks",
+      "domain": "extensions",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-webhooks"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/tenant-webhooks/{tenant_id}",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenant-webhooks/{tenant_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tenant-webhooks/{tenant_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/tenant-webhooks/{webhook_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/tenant-webhooks/{webhook_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/events/types",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenant-webhooks/{tenant_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tenant-webhooks/{tenant_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/tenant-webhooks/{webhook_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/tenant-webhooks/{webhook_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/events/types",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:cloud_tenant_webhook_authority_required",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-webhooks",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_admin"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "create",
+        "update",
+        "delete",
+        "copy-secret"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "create",
+            "update",
+            "delete",
+            "copy-secret"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "cloud_tenant_webhook_authority_required",
+      "local_deviation": "Tenant webhook registration and secret rotation require an addressable Cloud service authority. Local Desktop keeps the native route contract but does not create an unaudited host callback service.",
+      "judgment_rationale": "Webhooks is a registered canonical tenant route backed by the tenant webhook service. Desktop has no audited native management surface; Local automation also declares webhook delivery unavailable, so Local is explicitly cloud-only rather than an external-browser fallback."
+    }
+  ],
+  "source_ownership": {
+    "tenant-tenant-providers": [
+      "ProviderList"
+    ],
+    "tenant-tenant-webhooks": [
+      "Webhooks"
+    ]
+  },
+  "route_owner_overrides": {}
+}

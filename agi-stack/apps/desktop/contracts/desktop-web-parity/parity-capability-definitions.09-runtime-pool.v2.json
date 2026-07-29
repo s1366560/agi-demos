@@ -1,0 +1,293 @@
+{
+  "capabilities": [
+    {
+      "id": "tenant-tenant-runtimes",
+      "kind": "canonical",
+      "title": "Unified Runtimes",
+      "domain": "runtime-infrastructure",
+      "scope": [
+        "tenant",
+        "global"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-runtimes"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/admin/pool/status",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/admin/pool/status",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/admin/pool/instances",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/projects/sandboxes",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/sandbox/stats",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/admin/pool/status",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/admin/pool/instances",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/projects/sandboxes",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/sandbox/stats",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:local_unified_runtime_inventory_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-runtimes",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "global_admin",
+        "tenant_member"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "refresh",
+        "inspect-pool",
+        "inspect-sandbox"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "refresh",
+            "inspect-pool"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "global_admin"
+          ],
+          "enforcement": "missing",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "inspect-sandbox"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "web_status": "partial",
+      "web_reason_code": "runtime_pool_authentication_admin_and_tenant_scope_not_enforced",
+      "cloud_status": "planned",
+      "local_status": "planned",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_unified_runtime_inventory_planned",
+      "local_deviation": "Local Desktop should project the supervised sidecar and local sandboxes instead of inventing Cloud pool resources.",
+      "judgment_rationale": "Unified Runtimes combines global Cloud pool status and instances with tenant-scoped project sandboxes in one tenant route. The pool requests ignore the route tenant, expose records for multiple tenants, and the pool router enforces neither authentication nor global administration; only the sandbox half has tenant membership authority. Desktop currently exposes connection settings and runtime telemetry fragments, not this routed inventory; a single-machine sidecar projection remains meaningful and is planned."
+    },
+    {
+      "id": "tenant-tenant-pool",
+      "kind": "canonical",
+      "title": "Runtime Pool",
+      "domain": "runtime-infrastructure",
+      "scope": [
+        "tenant",
+        "global"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-pool"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/admin/pool/status",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/admin/pool/status",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/admin/pool/instances",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/admin/pool/instances/{instance_key}/pause",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/admin/pool/instances/{instance_key}/resume",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/admin/pool/instances/{instance_key}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/admin/pool/metrics",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/admin/pool/status",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/admin/pool/instances",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/admin/pool/instances/{instance_key}/pause",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/admin/pool/instances/{instance_key}/resume",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/admin/pool/instances/{instance_key}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/admin/pool/metrics",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:cloud_runtime_pool_not_applicable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-pool",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "global_admin"
+      ],
+      "actions": [
+        "view",
+        "refresh",
+        "toggle-auto-refresh",
+        "list-instances",
+        "search-current-page",
+        "filter-by-tier",
+        "paginate-instances",
+        "pause-instance",
+        "resume-instance",
+        "terminate-instance",
+        "retry-list-instances",
+        "inspect-pool-status",
+        "inspect-resource-usage"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "refresh",
+            "toggle-auto-refresh",
+            "list-instances",
+            "search-current-page",
+            "filter-by-tier",
+            "paginate-instances",
+            "pause-instance",
+            "resume-instance",
+            "terminate-instance",
+            "retry-list-instances",
+            "inspect-pool-status",
+            "inspect-resource-usage"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "global_admin"
+          ],
+          "enforcement": "missing",
+          "feature_gate": null
+        }
+      ],
+      "web_status": "partial",
+      "web_reason_code": "runtime_pool_authentication_admin_and_tenant_scope_not_enforced",
+      "cloud_status": "planned",
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "cloud_runtime_pool_not_applicable",
+      "local_deviation": "A single supervised Local sidecar is not a multi-tenant resource pool. The native page must return this stable cloud-only disposition without emulating capacity or billing controls.",
+      "judgment_rationale": "PoolDashboard calls global pool status, instance list, pause, resume, terminate, and JSON metrics endpoints. It renders status/resource summaries and current-page filters, while the JSON metrics response is not consumed and detail, project-tier, and Prometheus service methods are not bound to the page. The router enforces neither authentication nor global administration and does not tenant-scope list or lifecycle operations, so the tenant route is degraded. No native Desktop route exists, and reproducing a Cloud resource pool in Local mode would create false authority."
+    }
+  ],
+  "source_ownership": {
+    "tenant-tenant-runtimes": [
+      "UnifiedRuntimes"
+    ],
+    "tenant-tenant-pool": [
+      "PoolDashboard"
+    ]
+  },
+  "route_owner_overrides": {}
+}

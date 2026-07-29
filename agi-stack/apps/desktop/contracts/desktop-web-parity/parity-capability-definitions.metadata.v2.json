@@ -1,0 +1,19 @@
+{
+  "expected_counts": {
+    "canonical_navigation_targets": 51,
+    "production_routes": 174,
+    "lazy_page_entries": 89,
+    "eager_route_entries": 4
+  },
+  "production_entry_integrity": {
+    "hash_algorithm": "sha256",
+    "verification_scope": "source_content_integrity_only",
+    "execution_evidence": false
+  },
+  "references": {
+    "audit_revision": "1171e778797bfc370ea7339cb89b02b891f5274c",
+    "prototype_revision": "61454b2ead1cedda584e95afee9f471aac7851fb",
+    "web_revision": "1171e778797bfc370ea7339cb89b02b891f5274c",
+    "desktop_revision": "1171e778797bfc370ea7339cb89b02b891f5274c"
+  }
+}

@@ -1,0 +1,475 @@
+{
+  "capabilities": [
+    {
+      "id": "tenant-tenant-skills",
+      "kind": "canonical",
+      "title": "Skills",
+      "domain": "agent-ecosystem",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-skills"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/skills/",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/skills/",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/skills/{skill_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/skills/",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/skills/{skill_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/skills/{skill_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PATCH",
+          "path": "/api/v1/skills/{skill_id}/status",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/skills/{skill_id}/content",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/skills/{skill_id}/content",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/skills/import",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/skills/import/zip",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/skills/{skill_id}/export",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/skills/{skill_id}/versions",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/skills/{skill_id}/versions/{version_number}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/skills/{skill_id}/rollback",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/skills/",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/skills/{skill_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/skills/",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/skills/{skill_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/skills/{skill_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PATCH",
+          "path": "/api/v1/skills/{skill_id}/status",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/skills/{skill_id}/content",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/skills/{skill_id}/content",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/skills/import",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/skills/import/zip",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/skills/{skill_id}/export",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/skills/{skill_id}/versions",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/skills/{skill_id}/versions/{version_number}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/skills/{skill_id}/rollback",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/skills/",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/skills/{skill_id}",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/skills/",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "PUT",
+          "path": "/api/v1/skills/{skill_id}",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "DELETE",
+          "path": "/api/v1/skills/{skill_id}",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "PATCH",
+          "path": "/api/v1/skills/{skill_id}/status",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/skills/{skill_id}/content",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "PUT",
+          "path": "/api/v1/skills/{skill_id}/content",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/skills/import",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/skills/{skill_id}/export",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/skills/{skill_id}/versions",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/skills/{skill_id}/versions/{version_number}",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/skills/{skill_id}/rollback",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-skills",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_access",
+        "tenant_admin_for_tenant_mutations",
+        "project_access_for_project_scope"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete",
+        "set-status",
+        "update-content",
+        "import-package",
+        "import-zip",
+        "export",
+        "list-versions",
+        "get-version",
+        "rollback"
+      ],
+      "web_actions": [
+        "view",
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete",
+        "set-status",
+        "update-content",
+        "import-package",
+        "import-zip",
+        "export",
+        "list-versions",
+        "get-version",
+        "rollback"
+      ],
+      "cloud_actions": [
+        "view",
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete",
+        "set-status",
+        "update-content",
+        "import-package",
+        "import-zip",
+        "export",
+        "list-versions",
+        "get-version",
+        "rollback"
+      ],
+      "local_actions": [
+        "view",
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete",
+        "set-status",
+        "update-content",
+        "import-package",
+        "export",
+        "list-versions",
+        "get-version",
+        "rollback"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "get",
+            "export",
+            "list-versions",
+            "get-version"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member",
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "create",
+            "update",
+            "delete",
+            "set-status",
+            "update-content",
+            "import-package",
+            "import-zip",
+            "rollback"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin",
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list",
+            "get",
+            "export",
+            "list-versions",
+            "get-version"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member",
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "create",
+            "update",
+            "delete",
+            "set-status",
+            "update-content",
+            "import-package",
+            "import-zip",
+            "rollback"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin",
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": [
+            "view",
+            "list",
+            "get",
+            "export",
+            "list-versions",
+            "get-version"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member",
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": [
+            "create",
+            "update",
+            "delete",
+            "set-status",
+            "update-content",
+            "import-package",
+            "rollback"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin",
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "partial",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/features/settings/ManagedResourceViews.tsx"
+      ],
+      "local_status": "partial",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_skill_authority_partial",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/features/settings/ManagedResourceViews.tsx",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/managed_resources.rs"
+      ],
+      "judgment_rationale": "Desktop has native revision-aware skill CRUD, content, package, export, version, and rollback flows backed by Cloud or Local authority. The canonical route and complete Web state matrix remain partial, and Local ZIP import is explicitly outside the current safe sidecar subset."
+    }
+  ],
+  "source_ownership": {
+    "tenant-tenant-skills": [
+      "SkillList",
+      "SkillDetail"
+    ]
+  },
+  "route_owner_overrides": {}
+}

@@ -1,0 +1,669 @@
+{
+  "capabilities": [
+    {
+      "id": "tenant-tenant-mcp-servers",
+      "kind": "canonical",
+      "title": "MCP Servers",
+      "domain": "extensions",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-mcp-servers"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/mcp",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/mcp",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/mcp/{server_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/mcp",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/mcp/{server_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/mcp/{server_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/mcp/{server_id}/sync",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/mcp/{server_id}/test",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/mcp/reconcile/{project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/mcp/tools/all",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/mcp/tools/call",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/mcp/{server_id}/prompts",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/mcp/{server_id}/log-level",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/mcp/{server_id}/logs",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/mcp",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/mcp",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/mcp/tools/call",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/mcp",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/mcp/{server_id}",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/mcp",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/mcp/{server_id}/sync",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/mcp/{server_id}/test",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/mcp/reconcile/{project_id}",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/mcp/tools/all",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/mcp/tools/call",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-mcp-servers",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "project_member_for_read",
+        "project_owner_admin_or_member_for_mutations"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete",
+        "sync",
+        "test",
+        "reconcile",
+        "set-enabled",
+        "list-tools",
+        "call-tool",
+        "view-prompts",
+        "set-log-level",
+        "view-logs"
+      ],
+      "web_actions": [
+        "view",
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete",
+        "sync",
+        "test",
+        "reconcile",
+        "set-enabled",
+        "list-tools",
+        "call-tool",
+        "view-prompts",
+        "set-log-level",
+        "view-logs"
+      ],
+      "cloud_actions": [
+        "view",
+        "list",
+        "create",
+        "call-tool"
+      ],
+      "local_actions": [
+        "view",
+        "list",
+        "get",
+        "create",
+        "sync",
+        "test",
+        "reconcile",
+        "list-tools",
+        "call-tool"
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "get",
+            "list-tools",
+            "view-prompts",
+            "view-logs"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "create",
+            "update",
+            "delete",
+            "sync",
+            "test",
+            "reconcile",
+            "set-enabled",
+            "call-tool",
+            "set-log-level"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_contributor"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "create",
+            "call-tool"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_contributor"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": [
+            "view",
+            "list",
+            "get",
+            "list-tools"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": [
+            "create",
+            "sync",
+            "test",
+            "reconcile",
+            "call-tool"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_contributor"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "partial",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/features/settings/MCPServerSettingsPage.tsx"
+      ],
+      "local_status": "partial",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_mcp_host_partial",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/features/settings/MCPServerSettingsPage.tsx",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/mcp_apps.rs"
+      ],
+      "judgment_rationale": "Web owns complete MCP server lifecycle, tool, prompt, and log authority. Cloud Desktop currently exposes list, create, and tool call fragments. Local sidecar reliably adds detail, sync, test, reconcile, and tool discovery, while elicitation, client requests, and the complete routed state matrix remain incomplete."
+    },
+    {
+      "id": "tenant-tenant-acp",
+      "kind": "canonical",
+      "title": "Agent Client Protocol",
+      "domain": "extensions",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-acp"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/acp/tenants/{tenant_id}/status",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/acp/tenants/{tenant_id}/status",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/acp/tenants/{tenant_id}/runner-pools",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/acp/tenants/{tenant_id}/runner-instances",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/acp/tenants/{tenant_id}/external-agents",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/acp/tenants/{tenant_id}/external-agents",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/acp/tenants/{tenant_id}/external-agents/{agent_key}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/acp/tenants/{tenant_id}/external-agents/{agent_key}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/acp/tenants/{tenant_id}/external-agents/{agent_key}/test",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/acp/tenants/{tenant_id}/sessions",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/acp/tenants/{tenant_id}/external-agents/{agent_key}/sessions",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/acp/tenants/{tenant_id}/external-agents/{agent_key}/sessions/{session_id}/prompt",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/acp/tenants/{tenant_id}/external-agents/{agent_key}/sessions/{session_id}/cancel",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/acp/tenants/{tenant_id}/external-agents/{agent_key}/sessions/{session_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "NONE",
+          "path": "not_applicable:desktop_native_route_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:local_external_acp_not_applicable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-acp",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_member_for_read",
+        "tenant_admin_for_acp_mutations"
+      ],
+      "actions": [
+        "view",
+        "view-status",
+        "list-runner-pools",
+        "list-runner-instances",
+        "list-agents",
+        "create-agent",
+        "update-agent",
+        "delete-agent",
+        "test-agent",
+        "list-sessions",
+        "create-session",
+        "prompt-session",
+        "cancel-session",
+        "close-session"
+      ],
+      "web_actions": [
+        "view",
+        "view-status",
+        "list-runner-pools",
+        "list-runner-instances",
+        "list-agents",
+        "create-agent",
+        "update-agent",
+        "delete-agent",
+        "test-agent",
+        "list-sessions",
+        "create-session",
+        "prompt-session",
+        "cancel-session",
+        "close-session"
+      ],
+      "cloud_actions": [],
+      "local_actions": [],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "view-status",
+            "list-runner-pools",
+            "list-runner-instances",
+            "list-agents",
+            "list-sessions"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "create-agent",
+            "update-agent",
+            "delete-agent",
+            "test-agent",
+            "create-session",
+            "prompt-session",
+            "cancel-session",
+            "close-session"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "local_external_acp_not_applicable",
+      "local_deviation": "External ACP runner pools, agents, and sessions require Cloud connection and governance authority; Local Desktop returns the stable cloud-only reason instead of fabricating an offline service.",
+      "judgment_rationale": "ACP has a complete Web dashboard but no audited native Cloud route. Its external runner and session authority is intentionally cloud-only, so Local Desktop is not applicable."
+    },
+    {
+      "id": "tenant-tenant-templates",
+      "kind": "canonical",
+      "title": "Template Marketplace",
+      "domain": "extensions",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-templates"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/subagents/templates/list",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/subagents/templates/list",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/subagents/templates/categories",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/subagents/templates/{template_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/subagents/templates/{template_id}/install",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/subagents/templates/seed",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "NONE",
+          "path": "not_applicable:desktop_native_route_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/subagents/templates/list",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/subagents/templates/{template_id}/install",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-templates",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_member"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "search",
+        "filter",
+        "view-detail",
+        "install",
+        "seed",
+        "retry"
+      ],
+      "web_actions": [
+        "view",
+        "list",
+        "search",
+        "filter",
+        "view-detail",
+        "install",
+        "seed",
+        "retry"
+      ],
+      "cloud_actions": [],
+      "local_actions": [],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "search",
+            "filter",
+            "view-detail",
+            "install",
+            "seed",
+            "retry"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "web_status": "partial",
+      "web_reason_code": "web_template_seed_response_contract_mismatch",
+      "cloud_status": "planned",
+      "local_status": "unavailable",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_subagent_registry_unavailable",
+      "local_deviation": "The Local sidecar owns explicit list and install endpoints, but both return local_subagent_registry_unavailable until a safe local template registry exists.",
+      "local_entries": [
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs"
+      ],
+      "judgment_rationale": "The Template Marketplace uses SubAgent template list, category, detail, install, and seed contracts. The current Web seed flow is degraded because its client reads a seeded count while the authority returns created; seed is tenant-member authorized rather than tenant-admin-only. Cloud Desktop has no audited native marketplace; Local exposes structured unavailable authority rather than a fabricated registry."
+    }
+  ],
+  "source_ownership": {
+    "tenant-tenant-mcp-servers": [
+      "McpServerList"
+    ],
+    "tenant-tenant-acp": [
+      "AcpDashboard"
+    ],
+    "tenant-tenant-templates": [
+      "TemplateMarketplace"
+    ]
+  },
+  "route_owner_overrides": {}
+}

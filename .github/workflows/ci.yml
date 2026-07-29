@@ -205,6 +205,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Test desktop parity route inventory
+        run: node --test scripts/web-route-inventory.test.mjs
+
+      - name: Verify desktop parity route inventory
+        run: node scripts/web-route-inventory.mjs
+
       - name: Typecheck
         run: pnpm run type-check
 
@@ -366,7 +372,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
-          version: 10.24.0
+          version: 11.15.1
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -375,8 +381,24 @@ jobs:
           cache: pnpm
           cache-dependency-path: agi-stack/apps/desktop/pnpm-lock.yaml
 
-      - name: Verify desktop source
-        run: make desktop-check
+      - name: Install desktop dependencies
+        run: make desktop-deps
+
+      - name: Install desktop parity browser
+        working-directory: agi-stack/apps/desktop
+        run: corepack pnpm exec playwright install chromium
+
+      - name: Verify desktop parity
+        run: make desktop-parity-check
+
+      - name: Upload paired renderer evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-paired-renderer-evidence
+          path: agi-stack/apps/desktop/browser-qa/paired-results
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Build desktop bundle
         run: make desktop-bundle

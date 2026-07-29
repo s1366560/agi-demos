@@ -1,0 +1,327 @@
+{
+  "capabilities": [
+    {
+      "id": "tenant-tenant-evolution",
+      "kind": "canonical",
+      "title": "Skill Evolution",
+      "domain": "agent-ecosystem",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-evolution"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/skills/evolution/overview",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/skills/evolution/overview",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/skills/evolution/config",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/skills/evolution/config",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/skills/evolution/run",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/skills/evolution/jobs/{job_id}/apply",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/skills/evolution/jobs/{job_id}/reject",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/skills/{skill_id}/evolution",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/skills/{skill_id}/evolution/run",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/skills/evolution/jobs/{job_id}/apply",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/skills/evolution/jobs/{job_id}/reject",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/skills/{skill_id}/evolution",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/skills/{skill_id}/evolution/run",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/skills/evolution/jobs/{job_id}/apply",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/skills/evolution/jobs/{job_id}/reject",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-evolution",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_access",
+        "tenant_admin_for_evolution_mutations"
+      ],
+      "actions": [
+        "view",
+        "configure",
+        "run",
+        "apply-job",
+        "reject-job"
+      ],
+      "web_actions": [
+        "view",
+        "configure",
+        "run",
+        "apply-job",
+        "reject-job"
+      ],
+      "cloud_actions": [
+        "view",
+        "run",
+        "apply-job",
+        "reject-job"
+      ],
+      "local_actions": [],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "configure",
+            "run",
+            "apply-job",
+            "reject-job"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "run",
+            "apply-job",
+            "reject-job"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "partial",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/features/settings/SkillEvolutionDialog.tsx"
+      ],
+      "local_status": "unavailable",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_skill_evolution_not_applicable",
+      "local_deviation": "The existing Local sidecar stub still reports not_applicable. This is a legacy contract mismatch, not a cloud-only product decision; it must migrate to unavailable while authority is incomplete and to available when native evolution ships.",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/features/settings/SkillEvolutionDialog.tsx",
+        "agi-stack/apps/desktop/src/features/settings/useSkillPackageManagement.ts",
+        "agi-stack/apps/desktop/src/api/managedResourcesClient.ts",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs"
+      ],
+      "judgment_rationale": "Cloud Desktop exposes a per-skill evolution dialog with run and review actions but lacks the canonical tenant overview, configuration, and complete routed state matrix. Local Desktop already has a native dialog, client calls, and sidecar route stubs, but the stubs still return the legacy not_applicable state instead of the native-equivalent unavailable or available contract required by this plan."
+    },
+    {
+      "id": "tenant-tenant-patterns",
+      "kind": "canonical",
+      "title": "Workflow Patterns",
+      "domain": "agent-ecosystem",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [
+        "tenant-tenant-patterns"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/agent/workflows/patterns",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/agent/workflows/patterns",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/agent/workflows/patterns/{pattern_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/agent/workflows/patterns/{pattern_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/agent/workflows/patterns/reset",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "NONE",
+          "path": "not_applicable:desktop_native_route_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:local_native_authority_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-tenant-patterns",
+          "authority": "none"
+        }
+      ],
+      "permissions": [
+        "authenticated",
+        "tenant_member_for_read",
+        "tenant_admin_for_delete_and_reset"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "get",
+        "delete",
+        "reset"
+      ],
+      "web_actions": [
+        "view",
+        "list",
+        "get",
+        "delete",
+        "reset"
+      ],
+      "cloud_actions": [],
+      "local_actions": [],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "get"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "delete",
+            "reset"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "planned",
+      "local_policy": "native_equivalent",
+      "judgment_rationale": "Tenant Workflow Patterns exposes read, delete, and reset authority; it has no create or update contract. No audited native Desktop route currently owns it, so both Desktop modes remain planned."
+    }
+  ],
+  "source_ownership": {
+    "tenant-tenant-evolution": [
+      "SkillEvolution"
+    ],
+    "tenant-tenant-patterns": [
+      "WorkflowPatterns"
+    ]
+  },
+  "route_owner_overrides": {}
+}

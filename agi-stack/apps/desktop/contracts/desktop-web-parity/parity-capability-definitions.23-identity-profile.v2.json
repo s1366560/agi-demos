@@ -1,0 +1,343 @@
+{
+  "capabilities": [
+    {
+      "id": "forced-password-change",
+      "kind": "route_only",
+      "title": "Forced Password Change",
+      "domain": "identity",
+      "scope": [
+        "global"
+      ],
+      "web_route_ids": [],
+      "api_method": "POST",
+      "api_path": "/api/v1/auth/force-change-password",
+      "permissions": [
+        "authenticated"
+      ],
+      "actions": [
+        "change-password",
+        "sign-out"
+      ],
+      "web_actions": [
+        "change-password",
+        "sign-out"
+      ],
+      "cloud_actions": [
+        "change-password",
+        "sign-out"
+      ],
+      "cloud_status": "implemented",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/features/auth/ForcePasswordChangeScreen.tsx",
+        "agi-stack/apps/desktop/src/features/auth/forcePasswordChangeModel.ts",
+        "agi-stack/apps/desktop/src/App.tsx"
+      ],
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "local_password_authority_not_applicable",
+      "local_deviation": "Local trusted sessions do not expose a Cloud password credential or password-change authority.",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/auth/force-change-password",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/auth/force-change-password",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/auth/signout",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:local_password_authority_not_applicable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/forced-password-change",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "change-password",
+            "sign-out"
+          ],
+          "authentication": "authenticated",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "change-password",
+            "sign-out"
+          ],
+          "authentication": "authenticated",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "interaction_states": [
+        "password-change-required",
+        "submit",
+        "validation-error",
+        "session-refresh",
+        "sign-out",
+        "retry"
+      ],
+      "expected_observable_result": "Cloud Desktop blocks workspace access while a password change is required, changes the password through the authenticated Cloud session, refreshes identity state, and never persists either password. Local Desktop returns a stable not-applicable result.",
+      "judgment_rationale": "ForceChangePassword is a production-only Web route. Desktop already has a native blocking password-change gate, model, and API integration; the endpoint uses the ordinary authenticated bearer and the client refreshes state with the existing token rather than reauthenticating. Local mode has no Cloud password authority."
+    },
+    {
+      "id": "tenant-creation",
+      "kind": "route_only",
+      "title": "Tenant Creation",
+      "domain": "tenant-operations",
+      "scope": [
+        "tenant"
+      ],
+      "web_route_ids": [],
+      "api_method": "POST",
+      "api_path": "/api/v1/tenants/",
+      "permissions": [
+        "authenticated"
+      ],
+      "actions": [
+        "create",
+        "cancel",
+        "return-to-tenant-list",
+        "retry"
+      ],
+      "web_actions": [
+        "create",
+        "cancel",
+        "return-to-tenant-list",
+        "retry"
+      ],
+      "cloud_status": "planned",
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "local_tenant_creation_not_applicable",
+      "local_deviation": "Local mode provisions its fixed application tenant and does not reproduce organization lifecycle governance.",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tenants/",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "NONE",
+          "path": "unavailable:desktop_native_route_planned",
+          "authority": "none"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "not_applicable:local_tenant_creation_not_applicable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/tenant-creation",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "create",
+            "cancel",
+            "return-to-tenant-list",
+            "retry"
+          ],
+          "authentication": "authenticated",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "interaction_states": [
+        "form-entry",
+        "submit",
+        "conflict",
+        "cancel",
+        "retry"
+      ],
+      "expected_observable_result": "Cloud Desktop applies the same authenticated tenant-creation authority as Web, renders creation natively, and returns to the tenant selection flow while preserving server validation errors. Local Desktop returns a stable not-applicable result.",
+      "judgment_rationale": "NewTenant is a production-only Web page. It returns to the tenant list after creation rather than opening the new tenant, and the server does not publish a dedicated conflict response for generated slug collisions. Desktop has no complete native tenant-creation route; Local mode intentionally keeps a fixed application tenant."
+    },
+    {
+      "id": "user-profile",
+      "kind": "route_only",
+      "title": "User Profile",
+      "domain": "identity",
+      "scope": [
+        "global"
+      ],
+      "web_route_ids": [],
+      "api_method": "PUT",
+      "api_path": "/api/v1/users/me",
+      "permissions": [
+        "authenticated"
+      ],
+      "actions": [
+        "view",
+        "update",
+        "change-language",
+        "change-password"
+      ],
+      "web_actions": [
+        "view",
+        "update",
+        "change-language",
+        "change-password"
+      ],
+      "cloud_actions": [
+        "view"
+      ],
+      "cloud_status": "partial",
+      "cloud_reason_code": "desktop_profile_update_route_partial",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/features/settings/SettingsCorePages.tsx",
+        "agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx"
+      ],
+      "local_status": "partial",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_profile_mutation_authority_unavailable",
+      "local_actions": [
+        "view"
+      ],
+      "local_entries": [
+        "agi-stack/apps/desktop/src/features/settings/SettingsCorePages.tsx",
+        "agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
+      ],
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/users/me",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/users/me",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/auth/force-change-password",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/auth/me",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/auth/me",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/user-profile",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "update",
+            "change-language",
+            "change-password"
+          ],
+          "authentication": "authenticated",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view"
+          ],
+          "authentication": "authenticated",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": [
+            "view"
+          ],
+          "authentication": "authenticated",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": "local_runtime_session_authority"
+        }
+      ],
+      "interaction_states": [
+        "navigate",
+        "deep-link-restore",
+        "edit",
+        "save",
+        "validation-error",
+        "scope-switch",
+        "retry"
+      ],
+      "expected_observable_result": "Cloud Desktop renders and updates the authenticated global user profile through Cloud authority. Local Desktop renders the same native read-only identity projection through sidecar auth-me and returns a stable unavailable state for mutation; neither mode caches secret credentials or falls back to Web UI.",
+      "judgment_rationale": "UserProfile owns two tenant-nested production route registrations, but its authority is the global authenticated user. Desktop Account Settings currently projects identity details but lacks the routed profile edit lifecycle. Local mode also implements the read projection through auth-me while profile mutation remains unavailable."
+    }
+  ],
+  "source_ownership": {
+    "forced-password-change": [
+      "ForceChangePassword"
+    ],
+    "tenant-creation": [
+      "NewTenant"
+    ],
+    "user-profile": [
+      "UserProfile"
+    ]
+  },
+  "route_owner_overrides": {
+    "forced-password-change": [
+      "production-route-path-force-change-password"
+    ],
+    "tenant-creation": [
+      "production-route-path-tenants-new"
+    ],
+    "user-profile": [
+      "production-route-path-tenant-profile",
+      "production-route-path-tenant-tenantid-profile"
+    ]
+  }
+}

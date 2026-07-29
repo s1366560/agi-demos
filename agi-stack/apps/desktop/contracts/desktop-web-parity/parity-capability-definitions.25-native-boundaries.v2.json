@@ -1,0 +1,405 @@
+{
+  "capabilities": [
+    {
+      "id": "electron-security-boundary",
+      "kind": "native_only",
+      "title": "Electron Security Boundary",
+      "domain": "native-security",
+      "scope": [
+        "global"
+      ],
+      "web_route_ids": [],
+      "native_authority": "electron",
+      "native_entries": [
+        "agi-stack/apps/desktop/electron/main/index.ts",
+        "agi-stack/apps/desktop/electron/preload/index.ts",
+        "agi-stack/apps/desktop/electron/main/rendererProtocol.ts",
+        "agi-stack/apps/desktop/electron/main/mediaPermissionPolicy.ts"
+      ],
+      "api_method": "IPC",
+      "api_path": "agistack:desktop-command",
+      "permissions": [
+        "native-shell",
+        "trusted-renderer-origin",
+        "allowlisted-preload-bridge"
+      ],
+      "actions": [
+        "load-trusted-renderer",
+        "invoke-allowlisted-command",
+        "enforce-navigation-policy",
+        "enforce-media-permission-policy"
+      ],
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "NONE",
+          "path": "not_applicable:native-only/electron-security-boundary",
+          "authority": "none"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "IPC",
+          "path": "agistack:desktop-command",
+          "authority": "electron"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "IPC",
+          "path": "agistack:desktop-command",
+          "authority": "electron"
+        },
+        {
+          "surface": "native_only",
+          "method": "IPC",
+          "path": "agistack:desktop-command",
+          "authority": "electron"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "native_only",
+          "actions": [
+            "load-trusted-renderer",
+            "enforce-navigation-policy",
+            "enforce-media-permission-policy"
+          ],
+          "authentication": "native_shell",
+          "authorization": [
+            "trusted-renderer-origin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "native_only",
+          "actions": [
+            "invoke-allowlisted-command"
+          ],
+          "authentication": "native_shell",
+          "authorization": [
+            "allowlisted-preload-bridge"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "interaction_states": [
+        "application-start",
+        "renderer-bootstrap",
+        "command-invocation",
+        "navigation-attempt",
+        "permission-request"
+      ],
+      "expected_observable_result": "The packaged Electron window runs with context isolation, renderer sandboxing, no Node integration, a minimal allowlisted preload bridge, trusted renderer protocol handling, and fail-closed navigation and permission policies.",
+      "evidence_requirements": [
+        "contract",
+        "native_electron",
+        "desktop_bundle",
+        "release_pipeline"
+      ],
+      "judgment_rationale": "This is an implemented native-only security capability with no Web analogue. Parity requires preserving it while adding routes; renderer convenience must not weaken Electron isolation or expand IPC authority."
+    },
+    {
+      "id": "private-sidecar-control-pipe",
+      "kind": "native_only",
+      "title": "Private Sidecar Control Pipe",
+      "domain": "native-runtime",
+      "scope": [
+        "global"
+      ],
+      "web_route_ids": [],
+      "native_authority": "electron",
+      "native_entries": [
+        "agi-stack/apps/desktop/electron/main/index.ts",
+        "agi-stack/apps/desktop/electron/main/sidecarSupervisor.ts",
+        "agi-stack/apps/desktop/sidecar/src/control.rs",
+        "agi-stack/apps/desktop/electron/preload/index.ts"
+      ],
+      "api_method": "IPC",
+      "api_path": "ipc:private-inherited-stdio-jsonl-control-v1",
+      "permissions": [
+        "native-shell",
+        "sidecar-control"
+      ],
+      "actions": [
+        "start",
+        "handshake",
+        "invoke",
+        "restart",
+        "stop"
+      ],
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "NONE",
+          "path": "not_applicable:native-only/private-sidecar-control-pipe",
+          "authority": "none"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "IPC",
+          "path": "ipc:private-inherited-stdio-jsonl-control-v1",
+          "authority": "electron"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "IPC",
+          "path": "ipc:private-inherited-stdio-jsonl-control-v1",
+          "authority": "electron"
+        },
+        {
+          "surface": "native_only",
+          "method": "IPC",
+          "path": "ipc:private-inherited-stdio-jsonl-control-v1",
+          "authority": "electron"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "native_only",
+          "actions": [
+            "start",
+            "handshake",
+            "invoke",
+            "restart",
+            "stop"
+          ],
+          "authentication": "native_shell",
+          "authorization": [
+            "sidecar-control"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "interaction_states": [
+        "launch",
+        "authenticated-handshake",
+        "request-response",
+        "unexpected-exit",
+        "restart",
+        "shutdown"
+      ],
+      "expected_observable_result": "Electron starts the independently built sidecar over inherited private pipes, authenticates the versioned handshake, bounds requests, rejects invalid control messages, restarts after unexpected exit, and never exposes the control secret or pipe to renderer code.",
+      "evidence_requirements": [
+        "contract",
+        "native_electron",
+        "sidecar_authority",
+        "desktop_bundle"
+      ],
+      "judgment_rationale": "The authenticated stdio supervisor and Rust control protocol form an implemented native-only authority boundary. Web has no equivalent, and Desktop route work must continue to reach the sidecar only through the allowlisted Electron bridge."
+    },
+    {
+      "id": "application-encrypted-vault",
+      "kind": "native_only",
+      "title": "Application-Managed Encrypted Vault",
+      "domain": "native-security",
+      "scope": [
+        "global"
+      ],
+      "web_route_ids": [],
+      "native_authority": "sidecar",
+      "native_entries": [
+        "agi-stack/apps/desktop/sidecar/src/application_vault.rs",
+        "agi-stack/apps/desktop/sidecar/src/trusted_session.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/provider_credentials.rs",
+        "agi-stack/apps/desktop/sidecar/src/data_migration.rs",
+        "agi-stack/apps/desktop/sidecar/src/control.rs"
+      ],
+      "api_method": "IPC",
+      "api_path": "ipc:application-encrypted-vault",
+      "permissions": [
+        "native-shell",
+        "vault:use"
+      ],
+      "actions": [
+        "seal",
+        "load",
+        "replace",
+        "clear",
+        "migrate"
+      ],
+      "native_status": "partial",
+      "native_reason_code": "vault_filesystem_permissions_not_enforced_on_windows",
+      "current_actions": [
+        "seal",
+        "load",
+        "replace",
+        "clear",
+        "migrate"
+      ],
+      "native_deviation": "Secret payloads remain vault-owned, while a non-secret trusted-session reference is persisted in SQLite metadata and Windows filesystem permission hardening is not yet enforced.",
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "NONE",
+          "path": "not_applicable:native-only/application-encrypted-vault",
+          "authority": "none"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "IPC",
+          "path": "ipc:application-encrypted-vault",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "IPC",
+          "path": "ipc:application-encrypted-vault",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "native_only",
+          "method": "IPC",
+          "path": "ipc:application-encrypted-vault",
+          "authority": "sidecar"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "native_only",
+          "actions": [
+            "seal",
+            "load",
+            "replace",
+            "clear",
+            "migrate"
+          ],
+          "authentication": "native_shell",
+          "authorization": [
+            "vault:use"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": "application_encrypted_vault"
+        }
+      ],
+      "interaction_states": [
+        "vault-open",
+        "seal",
+        "load",
+        "replace",
+        "clear",
+        "corrupt-or-unavailable"
+      ],
+      "expected_observable_result": "The sidecar stores trusted-session secret material and provider credentials in the application-managed encrypted vault, uses atomic replacement, fails closed on corrupt records, and never returns secret material to persistent renderer state or logs. Platform-private filesystem permission enforcement remains explicit and testable per OS.",
+      "evidence_requirements": [
+        "contract",
+        "native_electron",
+        "sidecar_authority",
+        "desktop_bundle"
+      ],
+      "judgment_rationale": "The Rust vault, trusted-session broker, provider credential store, migration path, and control wiring form the native authority. The current implementation is degraded rather than fully available because Windows permission hardening is a no-op and the non-secret trusted-session reference remains SQLite metadata."
+    },
+    {
+      "id": "signed-update-and-release-boundary",
+      "kind": "native_only",
+      "title": "Signed Update and Release Boundary",
+      "domain": "native-release",
+      "scope": [
+        "global"
+      ],
+      "web_route_ids": [],
+      "native_authority": "electron",
+      "native_entries": [
+        "agi-stack/apps/desktop/electron/main/updater.ts",
+        "agi-stack/apps/desktop/electron/main/updatePolicy.ts",
+        "agi-stack/apps/desktop/electron/main/automaticUpdateLoop.ts",
+        "agi-stack/apps/desktop/scripts/verify-release-artifacts.mjs",
+        "agi-stack/apps/desktop/scripts/release-artifact-contract.mjs",
+        "agi-stack/apps/desktop/scripts/release-package-verification.mjs",
+        "agi-stack/apps/desktop/scripts/stage-sidecar.mjs",
+        "agi-stack/apps/desktop/scripts/sign-local-macos.mjs",
+        "agi-stack/apps/desktop/package.json",
+        "agi-stack/apps/desktop/pnpm-lock.yaml",
+        "agi-stack/Cargo.toml",
+        "agi-stack/Cargo.lock",
+        "agi-stack/apps/desktop/sidecar/Cargo.toml",
+        "agi-stack/apps/desktop/electron-builder.yml",
+        "agi-stack/apps/desktop/electron-builder.local.yml",
+        "agi-stack/apps/desktop/electron/resources/entitlements.mac.plist",
+        "agi-stack/apps/desktop/electron/resources/entitlements.mac.inherit.plist",
+        "agi-stack/apps/desktop/electron/resources/entitlements.mac.local.plist",
+        ".github/workflows/desktop-release.yml"
+      ],
+      "api_method": "NONE",
+      "api_path": "native:lifecycle/signed-update-and-release",
+      "permissions": [
+        "native-shell",
+        "signed-production-package"
+      ],
+      "actions": [
+        "check",
+        "download",
+        "verify",
+        "install"
+      ],
+      "native_status": "partial",
+      "native_reason_code": "production_install_update_rollback_evidence_missing",
+      "current_actions": [
+        "check",
+        "download",
+        "install"
+      ],
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "NONE",
+          "path": "not_applicable:native-only/signed-update-and-release-boundary",
+          "authority": "none"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "NONE",
+          "path": "native:lifecycle/signed-update-and-release",
+          "authority": "electron"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "native:lifecycle/signed-update-and-release",
+          "authority": "electron"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "native:lifecycle/signed-update-and-release",
+          "authority": "electron"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "native_only",
+          "actions": [
+            "check",
+            "download",
+            "install"
+          ],
+          "authentication": "native_shell",
+          "authorization": [
+            "signed-production-package"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": "authorized_release_feed"
+        }
+      ],
+      "interaction_states": [
+        "development-disabled",
+        "check",
+        "download",
+        "signature-verification",
+        "install",
+        "failure-recovery"
+      ],
+      "expected_observable_result": "Only an authorized signed production package enables the release feed. Runtime update checks, automatic download, and quit-and-install remain traceable, while real cross-platform installation, upgrade, failure handling, and rollback require tag-CI evidence before the boundary can be marked complete.",
+      "evidence_requirements": [
+        "contract",
+        "native_electron",
+        "desktop_bundle",
+        "release_pipeline"
+      ],
+      "judgment_rationale": "Updater code implements check, automatic download, periodic retry, and quit-and-install. There is no rollback authority, and the release workflow does not prove installation, upgrade, or rollback; the combined native capability is therefore partial until real authorized tag evidence exists."
+    }
+  ],
+  "source_ownership": {},
+  "route_owner_overrides": {}
+}

@@ -1,0 +1,607 @@
+{
+  "capabilities": [
+    {
+      "id": "project-project-cron-jobs",
+      "kind": "canonical",
+      "title": "Project Cron Jobs",
+      "domain": "automations",
+      "scope": [
+        "tenant",
+        "project"
+      ],
+      "web_route_ids": [
+        "project-project-cron-jobs"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/projects/{project_id}/cron-jobs",
+      "permissions": [
+        "authenticated",
+        "project_member"
+      ],
+      "actions": [
+        "view",
+        "list",
+        "create",
+        "update",
+        "delete",
+        "toggle",
+        "run-now",
+        "view-history",
+        "inspect-capabilities"
+      ],
+      "web_actions": [
+        "view",
+        "list",
+        "view-history",
+        "inspect-capabilities"
+      ],
+      "cloud_actions": [
+        "view",
+        "list",
+        "view-history",
+        "inspect-capabilities"
+      ],
+      "local_actions": [
+        "view",
+        "list",
+        "create",
+        "update",
+        "delete",
+        "toggle",
+        "view-history",
+        "inspect-capabilities"
+      ],
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/cron-jobs",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/capabilities",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/cron-jobs",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/{cron_job_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PATCH",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/{cron_job_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/{cron_job_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/{cron_job_id}/toggle",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/{cron_job_id}/run",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/{cron_job_id}/runs",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/cron-jobs",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/capabilities",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/cron-jobs",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/{cron_job_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PATCH",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/{cron_job_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/{cron_job_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/{cron_job_id}/toggle",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/{cron_job_id}/run",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/{cron_job_id}/runs",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/cron-jobs",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/capabilities",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/cron-jobs",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/{cron_job_id}",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "PATCH",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/{cron_job_id}",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/{cron_job_id}",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/{cron_job_id}/toggle",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/{cron_job_id}/run",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/cron-jobs/{cron_job_id}/runs",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/project-project-cron-jobs",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "view-history",
+            "inspect-capabilities"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "create",
+            "update",
+            "delete",
+            "toggle",
+            "run-now"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": "cron_capabilities_action_allowed"
+        },
+        {
+          "surface": "desktop_local",
+          "actions": [
+            "view",
+            "list",
+            "create",
+            "update",
+            "delete",
+            "toggle",
+            "view-history",
+            "inspect-capabilities"
+          ],
+          "authentication": "authenticated",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": "local_automation_capabilities"
+        }
+      ],
+      "cloud_status": "partial",
+      "cloud_reason_code": "desktop_cron_route_projection_partial",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/features/automations/AutomationsPage.tsx",
+        "agi-stack/apps/desktop/src/features/automations/automationClient.ts"
+      ],
+      "local_status": "partial",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_cron_route_projection_partial",
+      "local_deviation": "Cron Jobs reuse the native Automations domain model and Local scheduler; they must not create a second scheduling authority.",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/features/automations/AutomationsPage.tsx",
+        "agi-stack/apps/desktop/src/features/automations/automationClient.ts",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/automation.rs"
+      ],
+      "judgment_rationale": "The Cloud capability endpoint currently allows reads only and explicitly denies create, edit, toggle, delete and run-now, so Cloud actions are not reported unconditionally. The Local scheduler supports durable CRUD and history behind its own structured capability gate, while run-now remains scope-dependent. The canonical project route, deep-link restore and matched-state evidence are still incomplete."
+    },
+    {
+      "id": "project-project-settings",
+      "kind": "canonical",
+      "title": "Project Settings",
+      "domain": "project-configuration",
+      "scope": [
+        "tenant",
+        "project"
+      ],
+      "web_route_ids": [
+        "project-project-settings"
+      ],
+      "api_method": "GET",
+      "api_path": "/api/v1/projects/{project_id}",
+      "permissions": [
+        "authenticated",
+        "project_member",
+        "project_admin",
+        "project_owner"
+      ],
+      "actions": [
+        "view",
+        "update",
+        "delete",
+        "configure-sandbox",
+        "inspect-sandbox",
+        "open-terminal",
+        "open-desktop"
+      ],
+      "web_actions": [
+        "view",
+        "update",
+        "delete",
+        "configure-sandbox",
+        "inspect-sandbox",
+        "open-terminal",
+        "open-desktop"
+      ],
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PUT",
+          "path": "/api/v1/projects/{project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/sandbox",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/sandbox",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}/sandbox",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/sandbox/health",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/sandbox/stats",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/sandbox/restart",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/sandbox/sync",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/sandbox/desktop",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}/sandbox/desktop",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/sandbox/terminal",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}/sandbox/terminal",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/projects/{project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/sandbox",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/sandbox",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}/sandbox",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/sandbox/health",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/sandbox/stats",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/sandbox/restart",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/sandbox/sync",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/sandbox/desktop",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}/sandbox/desktop",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/sandbox/terminal",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/projects/{project_id}/sandbox/terminal",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/sandbox",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/sandbox",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/sandbox/proxy-auth-cookie",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/sandbox/desktop",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/sandbox/terminal",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/projects/{project_id}/sandbox/execute",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/project-project-settings",
+          "authority": "none"
+        }
+      ],
+      "permission_requirements": [
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "configure-sandbox",
+            "inspect-sandbox",
+            "open-terminal",
+            "open-desktop"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "update"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "delete"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_owner"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        }
+      ],
+      "cloud_status": "planned",
+      "local_status": "planned",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_project_settings_authority_planned",
+      "local_deviation": "Local project settings may configure bounded workspace and sandbox resources, but secrets and arbitrary host paths must remain outside renderer state and outside the page contract.",
+      "judgment_rationale": "The Web Project Settings page owns project metadata, destructive lifecycle actions and project sandbox controls. The Local sidecar already exposes scoped sandbox get/ensure, execute, terminal and desktop authorities, but Desktop has no complete routed Project Settings page and Local lacks the Cloud lifecycle surface, so both modes remain planned rather than claiming page parity."
+    }
+  ],
+  "source_ownership": {
+    "project-project-cron-jobs": [
+      "CronJobs"
+    ],
+    "project-project-settings": [
+      "ProjectSettings"
+    ]
+  },
+  "route_owner_overrides": {
+    "project-project-cron-jobs": [
+      "production-route-path-tenant-tenantid-project-projectid-cron-jobs"
+    ],
+    "project-project-settings": [
+      "production-route-path-tenant-tenantid-project-projectid-settings"
+    ]
+  }
+}

@@ -4,3 +4,4 @@ release/
 build/sidecar/
 browser-qa/report/
 browser-qa/results/
+browser-qa/paired-results/
