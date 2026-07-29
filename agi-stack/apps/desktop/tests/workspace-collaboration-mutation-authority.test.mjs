@@ -72,6 +72,10 @@ const mutationActions = {
   settings: ['update_workspace'],
 };
 
+const flattenedMutationActions = Object.entries(mutationActions).flatMap(
+  ([surface, actions]) => actions.map((action) => `${surface}:${action}`),
+);
+
 test('available Workspace capability requires exact revision and idempotency action authority', () => {
   const normalized = normalizeWorkspaceCollaborationCapabilityContract(
     {
@@ -97,11 +101,18 @@ test('available Workspace capability requires exact revision and idempotency act
   );
 
   assert.deepEqual(normalized, {
-    status: 'available',
+    availability: 'available',
     reason_code: null,
     service_version: '0.2.0',
     contract_version: '2.0.0',
-    minimum_contract_version: '2.0.0',
+    allowed_actions: flattenedMutationActions,
+    scope: {
+      tenant_id: null,
+      project_id: null,
+      workspace_id: null,
+      instance_id: null,
+    },
+    authority_revision: null,
   });
 });
 
@@ -133,7 +144,7 @@ test('Workspace capability rejects top-level actions that diverge from mutation 
     scope
   );
 
-  assert.equal(normalized.status, 'unavailable');
+  assert.equal(normalized.availability, 'unavailable');
   assert.equal(
     normalized.reason_code,
     'workspace_collaboration_capability_contract_invalid'
