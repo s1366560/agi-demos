@@ -3,6 +3,10 @@
 Contains modular initialization functions for various services.
 """
 
+from .artifact_content_orphan_gc import (
+    initialize_artifact_content_orphan_gc_worker,
+    shutdown_artifact_content_orphan_gc_worker,
+)
 from .attempt_recovery import (
     initialize_attempt_recovery,
     shutdown_attempt_recovery,
@@ -43,6 +47,7 @@ from .workspace_plan_outbox import (
 
 __all__ = [
     "get_channel_manager",
+    "initialize_artifact_content_orphan_gc_worker",
     "initialize_attempt_recovery",
     "initialize_autonomy_idle_waker",
     "initialize_blackboard_outbox_dispatcher",
@@ -61,6 +66,7 @@ __all__ = [
     "initialize_workspace_plan_outbox_worker",
     "reload_channel_manager_connections",
     "set_message_router",
+    "shutdown_artifact_content_orphan_gc_worker",
     "shutdown_attempt_recovery",
     "shutdown_autonomy_idle_waker",
     "shutdown_blackboard_outbox_dispatcher",

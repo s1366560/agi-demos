@@ -149,10 +149,14 @@ async def test_save_content_v2_versions_pointer_and_replays_same_idempotency_key
 
     artifact = await service.get_artifact("artifact-v2")
     assert artifact is not None
-    assert artifact.object_key == (
+    expected_prefix = (
         "artifacts/tenant-v2/project-v2/artifact-v2/versions/"
-        f"r2-{command.content_hash.removeprefix('sha256:')}"
+        f"r2-{command.content_hash.removeprefix('sha256:')}-"
     )
+    assert artifact.object_key.startswith(expected_prefix)
+    nonce = artifact.object_key.removeprefix(expected_prefix)
+    assert len(nonce) == 32
+    assert all(character in "0123456789abcdef" for character in nonce)
     assert artifact.url is None
     assert storage.objects[artifact.object_key] == b"updated"
     assert storage.objects["artifacts/tenant-v2/project-v2/report.txt"] == b"seed"

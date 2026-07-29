@@ -169,3 +169,78 @@ class ArtifactContentReceiptModel(Base):
             "artifact_id",
         ),
     )
+
+
+class ArtifactContentOrphanGcModel(Base):
+    """Durable audit and retry authority for provisional content objects."""
+
+    __tablename__ = "artifact_content_orphan_gc"
+
+    object_key: Mapped[str] = mapped_column(String(500), primary_key=True)
+    artifact_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    project_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    conversation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(71), nullable=False)
+    content_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(71), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    attempts: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    last_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    lease_owner: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "content_revision > 0",
+            name="ck_artifact_orphan_gc_content_revision",
+        ),
+        CheckConstraint("attempts >= 0", name="ck_artifact_orphan_gc_attempts"),
+        CheckConstraint(
+            "status IN ('pending', 'deleted', 'missing', 'retained')",
+            name="ck_artifact_orphan_gc_status",
+        ),
+        CheckConstraint(
+            "(status = 'pending' AND "
+            + "((lease_owner IS NULL AND lease_token IS NULL AND lease_expires_at IS NULL) "
+            + "OR (lease_owner IS NOT NULL AND lease_token IS NOT NULL "
+            + "AND lease_expires_at IS NOT NULL))) "
+            + "OR (status <> 'pending' AND lease_owner IS NULL AND lease_token IS NULL "
+            + "AND lease_expires_at IS NULL)",
+            name="ck_artifact_orphan_gc_lease_complete",
+        ),
+        Index(
+            "ix_artifact_content_orphan_gc_dispatch",
+            "status",
+            "next_attempt_at",
+            "lease_expires_at",
+        ),
+        Index(
+            "ix_artifact_content_orphan_gc_scope",
+            "tenant_id",
+            "project_id",
+            "artifact_id",
+        ),
+    )

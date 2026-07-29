@@ -2,6 +2,7 @@
 
 import hashlib
 import re
+import secrets
 from dataclasses import dataclass, replace
 from typing import cast
 
@@ -36,6 +37,64 @@ EDITABLE_ARTIFACT_MIME_TYPES = frozenset(
         "text/yaml",
     }
 )
+_SAFE_BINARY_ARTIFACT_MIME_TYPES = frozenset(
+    {
+        "application/epub+zip",
+        "application/gzip",
+        "application/msword",
+        "application/octet-stream",
+        "application/pdf",
+        "application/rtf",
+        "application/vnd.ms-excel",
+        "application/vnd.ms-fontobject",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.oasis.opendocument.presentation",
+        "application/vnd.oasis.opendocument.spreadsheet",
+        "application/vnd.oasis.opendocument.text",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/x-7z-compressed",
+        "application/x-rar-compressed",
+        "application/x-tar",
+        "application/zip",
+        "audio/mp4",
+        "audio/mpeg",
+        "audio/ogg",
+        "audio/wav",
+        "audio/webm",
+        "font/otf",
+        "font/ttf",
+        "font/woff",
+        "font/woff2",
+        "image/avif",
+        "image/bmp",
+        "image/gif",
+        "image/jpeg",
+        "image/png",
+        "image/svg+xml",
+        "image/tiff",
+        "image/webp",
+        "video/mp4",
+        "video/quicktime",
+        "video/webm",
+        "video/x-matroska",
+        "video/x-msvideo",
+    }
+)
+KNOWN_ARTIFACT_MIME_TYPES = EDITABLE_ARTIFACT_MIME_TYPES | _SAFE_BINARY_ARTIFACT_MIME_TYPES
+_ACTIVE_RAW_ARTIFACT_MIME_TYPES = frozenset(
+    {
+        "application/javascript",
+        "application/xml",
+        "image/svg+xml",
+        "text/css",
+        "text/html",
+        "text/javascript",
+        "text/xml",
+    }
+)
+_MIME_TOKEN_PATTERN = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
 
 
 @dataclass(frozen=True)
@@ -132,8 +191,59 @@ class ArtifactContentIdempotencyConflictError(ArtifactContentConflictError):
     reason_code = "artifact_content_idempotency_conflict"
 
 
-def normalize_mime_type(value: str) -> str:
-    return value.split(";", maxsplit=1)[0].strip().lower()
+def normalize_mime_type(value: object) -> str:
+    """Return a known, strictly parsed media type or the safe binary fallback."""
+    fallback = "application/octet-stream"
+    if not isinstance(value, str) or not value or len(value) > 255:
+        return fallback
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        return fallback
+    parts = [part.strip() for part in value.split(";")]
+    if not parts or not parts[0] or any(not part for part in parts[1:]):
+        return fallback
+    media_parts = parts[0].split("/")
+    if (
+        len(media_parts) != 2
+        or not _MIME_TOKEN_PATTERN.fullmatch(media_parts[0])
+        or not _MIME_TOKEN_PATTERN.fullmatch(media_parts[1])
+    ):
+        return fallback
+    for parameter in parts[1:]:
+        name, separator, raw_value = parameter.partition("=")
+        if (
+            not separator
+            or not _MIME_TOKEN_PATTERN.fullmatch(name.strip())
+            or not _valid_mime_parameter_value(raw_value.strip())
+        ):
+            return fallback
+    normalized = f"{media_parts[0].lower()}/{media_parts[1].lower()}"
+    return normalized if normalized in KNOWN_ARTIFACT_MIME_TYPES else fallback
+
+
+def preview_response_mime_type(value: str) -> str:
+    """Prevent raw preview responses from declaring active executable content."""
+    normalized = normalize_mime_type(value)
+    if normalized in _ACTIVE_RAW_ARTIFACT_MIME_TYPES:
+        return "application/octet-stream"
+    return normalized
+
+
+def _valid_mime_parameter_value(value: str) -> bool:
+    if _MIME_TOKEN_PATTERN.fullmatch(value):
+        return True
+    if len(value) < 2 or value[0] != '"' or value[-1] != '"':
+        return False
+    escaped = False
+    for character in value[1:-1]:
+        if escaped:
+            escaped = False
+            continue
+        if character == "\\":
+            escaped = True
+            continue
+        if character == '"' or ord(character) < 32 or ord(character) == 127:
+            return False
+    return not escaped
 
 
 def artifact_content_hash(content: bytes) -> str:
@@ -218,7 +328,8 @@ def versioned_artifact_object_key(
     content_hash: str,
 ) -> str:
     digest = content_hash.removeprefix("sha256:")
+    nonce = secrets.token_hex(16)
     return (
         f"{bucket_prefix}/{artifact.tenant_id}/{artifact.project_id}/{artifact.id}/"
-        f"versions/r{revision}-{digest}"
+        f"versions/r{revision}-{digest}-{nonce}"
     )
