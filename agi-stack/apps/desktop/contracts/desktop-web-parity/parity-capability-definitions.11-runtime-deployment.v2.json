@@ -5,12 +5,8 @@
       "kind": "canonical",
       "title": "Clusters",
       "domain": "runtime-infrastructure",
-      "scope": [
-        "tenant"
-      ],
-      "web_route_ids": [
-        "tenant-tenant-clusters"
-      ],
+      "scope": ["tenant"],
+      "web_route_ids": ["tenant-tenant-clusters"],
       "api_method": "GET",
       "api_path": "/api/v1/clusters/",
       "api_contracts": [
@@ -147,10 +143,7 @@
           "authority": "none"
         }
       ],
-      "permissions": [
-        "authenticated",
-        "tenant_member"
-      ],
+      "permissions": ["authenticated", "tenant_member"],
       "actions": [
         "view",
         "list",
@@ -164,15 +157,9 @@
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": [
-            "view",
-            "list",
-            "inspect-health"
-          ],
+          "actions": ["view", "list", "inspect-health"],
           "authentication": "authenticated",
-          "authorization": [
-            "tenant_member"
-          ],
+          "authorization": ["tenant_member"],
           "enforcement": "enforced",
           "feature_gate": null
         },
@@ -186,9 +173,7 @@
             "create-registration-token"
           ],
           "authentication": "authenticated",
-          "authorization": [
-            "tenant_admin"
-          ],
+          "authorization": ["tenant_admin"],
           "enforcement": "enforced",
           "feature_gate": null
         }
@@ -205,13 +190,8 @@
       "kind": "canonical",
       "title": "Deployments",
       "domain": "runtime-infrastructure",
-      "scope": [
-        "tenant",
-        "instance"
-      ],
-      "web_route_ids": [
-        "tenant-tenant-deploy"
-      ],
+      "scope": ["tenant", "instance"],
+      "web_route_ids": ["tenant-tenant-deploy"],
       "api_method": "GET",
       "api_path": "/api/v1/deploys/",
       "api_contracts": [
@@ -324,13 +304,11 @@
           "authority": "none"
         }
       ],
-      "permissions": [
-        "authenticated",
-        "tenant_access"
-      ],
+      "permissions": ["authenticated", "tenant_access"],
       "actions": [
         "view",
         "list",
+        "create",
         "inspect-progress",
         "stream-progress",
         "cancel",
@@ -343,6 +321,7 @@
           "actions": [
             "view",
             "list",
+            "create",
             "inspect-progress",
             "stream-progress",
             "cancel",
@@ -350,9 +329,7 @@
             "mark-failed"
           ],
           "authentication": "authenticated",
-          "authorization": [
-            "tenant_member"
-          ],
+          "authorization": ["tenant_member"],
           "enforcement": "enforced",
           "feature_gate": null
         }
@@ -362,19 +339,15 @@
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_deployment_authority_not_applicable",
       "local_deviation": "Local Desktop may run supervised local work but does not expose the Cloud deployment authority. It must render a stable cloud-only state instead of launching an external control plane.",
-      "judgment_rationale": "DeployProgress is shared by tenant deployment routes and nested instance deployment routes, so one audited Deployments capability owns the source. Native Desktop lacks the route and production progress stream; Local deployment is intentionally cloud-only."
+      "judgment_rationale": "DeployProgress is shared by tenant deployment routes and nested instance deployment routes, so one audited Deployments capability owns the source. Web tenant members can create a deployment as well as inspect and mutate its progress. Native Desktop lacks the route and production progress stream; Local deployment is intentionally cloud-only."
     },
     {
       "id": "tenant-tenant-instance-templates",
       "kind": "canonical",
       "title": "Instance Templates",
       "domain": "runtime-infrastructure",
-      "scope": [
-        "tenant"
-      ],
-      "web_route_ids": [
-        "tenant-tenant-instance-templates"
-      ],
+      "scope": ["tenant"],
+      "web_route_ids": ["tenant-tenant-instance-templates"],
       "api_method": "GET",
       "api_path": "/api/v1/instance-templates/",
       "api_contracts": [
@@ -523,10 +496,7 @@
           "authority": "none"
         }
       ],
-      "permissions": [
-        "authenticated",
-        "tenant_member"
-      ],
+      "permissions": ["authenticated", "tenant_member"],
       "actions": [
         "view",
         "list",
@@ -539,14 +509,9 @@
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": [
-            "view",
-            "list"
-          ],
+          "actions": ["view", "list"],
           "authentication": "authenticated",
-          "authorization": [
-            "tenant_member"
-          ],
+          "authorization": ["tenant_member"],
           "enforcement": "enforced",
           "feature_gate": null
         },
@@ -560,9 +525,7 @@
             "deploy-from-template"
           ],
           "authentication": "authenticated",
-          "authorization": [
-            "tenant_admin"
-          ],
+          "authorization": ["tenant_admin"],
           "enforcement": "enforced",
           "feature_gate": null
         }
@@ -576,13 +539,8 @@
     }
   ],
   "source_ownership": {
-    "tenant-tenant-clusters": [
-      "ClusterList",
-      "ClusterDetail"
-    ],
-    "tenant-tenant-deploy": [
-      "DeployProgress"
-    ],
+    "tenant-tenant-clusters": ["ClusterList", "ClusterDetail"],
+    "tenant-tenant-deploy": ["DeployProgress"],
     "tenant-tenant-instance-templates": [
       "InstanceTemplateList",
       "TemplateDetail"

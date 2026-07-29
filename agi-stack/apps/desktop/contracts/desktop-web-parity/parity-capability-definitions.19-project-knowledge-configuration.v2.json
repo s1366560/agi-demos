@@ -5,20 +5,11 @@
       "kind": "canonical",
       "title": "Project Schema",
       "domain": "knowledge-configuration",
-      "scope": [
-        "tenant",
-        "project"
-      ],
-      "web_route_ids": [
-        "project-project-schema"
-      ],
+      "scope": ["tenant", "project"],
+      "web_route_ids": ["project-project-schema"],
       "api_method": "GET",
       "api_path": "/api/v1/projects/{project_id}/schema/entities",
-      "permissions": [
-        "authenticated",
-        "project_member",
-        "project_contributor"
-      ],
+      "permissions": ["authenticated", "project_member", "project_contributor"],
       "actions": [
         "view",
         "list-entity-types",
@@ -29,7 +20,8 @@
         "create-edge-type",
         "update-edge-type",
         "delete-edge-type",
-        "manage-edge-mappings"
+        "manage-edge-mappings",
+        "export"
       ],
       "web_actions": [
         "view",
@@ -41,7 +33,8 @@
         "create-edge-type",
         "update-edge-type",
         "delete-edge-type",
-        "manage-edge-mappings"
+        "manage-edge-mappings",
+        "export"
       ],
       "api_contracts": [
         {
@@ -192,15 +185,9 @@
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": [
-            "view",
-            "list-entity-types",
-            "list-edge-types"
-          ],
+          "actions": ["view", "list-entity-types", "list-edge-types", "export"],
           "authentication": "authenticated",
-          "authorization": [
-            "project_member"
-          ],
+          "authorization": ["project_member"],
           "enforcement": "enforced",
           "feature_gate": null
         },
@@ -216,9 +203,7 @@
             "manage-edge-mappings"
           ],
           "authentication": "authenticated",
-          "authorization": [
-            "project_contributor"
-          ],
+          "authorization": ["project_contributor"],
           "enforcement": "enforced",
           "feature_gate": null
         }
@@ -227,27 +212,18 @@
       "local_status": "planned",
       "local_policy": "native_equivalent",
       "local_reason_code": "local_schema_authority_planned",
-      "judgment_rationale": "SchemaLayout and its overview, entity, edge, and mapping children are one canonical project capability. Desktop has no audited native schema route or mutation authority in either mode."
+      "judgment_rationale": "SchemaLayout and its overview, entity, edge, and mapping children are one canonical project capability. SchemaOverview performs client-side JSON copy and download export from the loaded entity, edge, and mapping projection without a separate export API. Desktop has no audited native schema route or mutation authority in either mode."
     },
     {
       "id": "project-project-channels",
       "kind": "canonical",
       "title": "Project Channels",
       "domain": "extensions",
-      "scope": [
-        "tenant",
-        "project"
-      ],
-      "web_route_ids": [
-        "project-project-channels"
-      ],
+      "scope": ["tenant", "project"],
+      "web_route_ids": ["project-project-channels"],
       "api_method": "GET",
       "api_path": "/api/v1/channels/projects/{project_id}/configs",
-      "permissions": [
-        "authenticated",
-        "project_member",
-        "project_admin"
-      ],
+      "permissions": ["authenticated", "project_member", "project_admin"],
       "actions": [
         "view",
         "list",
@@ -268,14 +244,7 @@
         "inspect-status",
         "manage-plugin"
       ],
-      "cloud_actions": [
-        "view",
-        "list",
-        "create",
-        "update",
-        "delete",
-        "test"
-      ],
+      "cloud_actions": ["view", "list", "create", "update", "delete", "test"],
       "api_contracts": [
         {
           "surface": "web",
@@ -389,31 +358,17 @@
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": [
-            "view",
-            "list",
-            "test",
-            "inspect-status"
-          ],
+          "actions": ["view", "list", "test", "inspect-status"],
           "authentication": "authenticated",
-          "authorization": [
-            "project_member"
-          ],
+          "authorization": ["project_member"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "web",
-          "actions": [
-            "create",
-            "update",
-            "delete",
-            "manage-plugin"
-          ],
+          "actions": ["create", "update", "delete", "manage-plugin"],
           "authentication": "authenticated",
-          "authorization": [
-            "project_admin"
-          ],
+          "authorization": ["project_admin"],
           "enforcement": "enforced",
           "feature_gate": null
         }
@@ -434,19 +389,11 @@
       "kind": "canonical",
       "title": "Project Maintenance",
       "domain": "knowledge-configuration",
-      "scope": [
-        "tenant",
-        "project"
-      ],
-      "web_route_ids": [
-        "project-project-maintenance"
-      ],
+      "scope": ["tenant", "project"],
+      "web_route_ids": ["project-project-maintenance"],
       "api_method": "GET",
       "api_path": "/api/v1/maintenance/status",
-      "permissions": [
-        "authenticated",
-        "project_member"
-      ],
+      "permissions": ["authenticated", "project_member"],
       "actions": [
         "view",
         "refresh-status",
@@ -615,9 +562,7 @@
             "rebuild-embeddings"
           ],
           "authentication": "authenticated",
-          "authorization": [
-            "project_member"
-          ],
+          "authorization": ["project_member"],
           "enforcement": "enforced",
           "feature_gate": null
         }
@@ -637,9 +582,7 @@
       "EdgeTypeList",
       "EdgeMapList"
     ],
-    "project-project-maintenance": [
-      "Maintenance"
-    ]
+    "project-project-maintenance": ["Maintenance"]
   },
   "route_owner_overrides": {
     "project-project-schema": [

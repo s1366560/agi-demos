@@ -5,29 +5,13 @@
       "kind": "canonical",
       "title": "Project Overview",
       "domain": "project-operations",
-      "scope": [
-        "tenant",
-        "project"
-      ],
-      "web_route_ids": [
-        "project-project-overview"
-      ],
+      "scope": ["tenant", "project"],
+      "web_route_ids": ["project-project-overview"],
       "api_method": "GET",
       "api_path": "/api/v1/projects/{project_id}",
-      "permissions": [
-        "authenticated",
-        "project_member"
-      ],
-      "actions": [
-        "view",
-        "inspect-stats",
-        "navigate"
-      ],
-      "web_actions": [
-        "view",
-        "inspect-stats",
-        "navigate"
-      ],
+      "permissions": ["authenticated", "project_member"],
+      "actions": ["view", "inspect-stats", "navigate"],
+      "web_actions": ["view", "inspect-stats", "navigate"],
       "api_contracts": [
         {
           "surface": "web",
@@ -81,15 +65,9 @@
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": [
-            "view",
-            "inspect-stats",
-            "navigate"
-          ],
+          "actions": ["view", "inspect-stats", "navigate"],
           "authentication": "authenticated",
-          "authorization": [
-            "project_member"
-          ],
+          "authorization": ["project_member"],
           "enforcement": "enforced",
           "feature_gate": null
         }
@@ -105,14 +83,8 @@
       "kind": "canonical",
       "title": "Project Workspaces",
       "domain": "workspace",
-      "scope": [
-        "tenant",
-        "project",
-        "workspace"
-      ],
-      "web_route_ids": [
-        "project-project-workspaces"
-      ],
+      "scope": ["tenant", "project", "workspace"],
+      "web_route_ids": ["project-project-workspaces"],
       "api_method": "GET",
       "api_path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
       "permissions": [
@@ -146,14 +118,15 @@
         "view",
         "list",
         "create",
+        "update",
+        "add-member",
+        "update-member-role",
+        "remove-member",
+        "bind-agent",
+        "unbind-agent",
         "open-blackboard"
       ],
-      "local_actions": [
-        "view",
-        "list",
-        "create",
-        "open-blackboard"
-      ],
+      "local_actions": ["view", "list", "create", "open-blackboard"],
       "api_contracts": [
         {
           "surface": "web",
@@ -247,19 +220,7 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "GET",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
           "method": "PATCH",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "DELETE",
           "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}",
           "authority": "cloud_service"
         },
@@ -297,12 +258,6 @@
           "surface": "desktop_cloud",
           "method": "POST",
           "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "PATCH",
-          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents/{workspace_agent_id}",
           "authority": "cloud_service"
         },
         {
@@ -333,64 +288,39 @@
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": [
-            "view",
-            "list",
-            "open-blackboard"
-          ],
+          "actions": ["view", "list", "open-blackboard"],
           "authentication": "authenticated",
-          "authorization": [
-            "workspace_member"
-          ],
+          "authorization": ["workspace_member"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "web",
-          "actions": [
-            "create"
-          ],
+          "actions": ["create"],
           "authentication": "authenticated",
-          "authorization": [
-            "project_member"
-          ],
+          "authorization": ["project_member"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "web",
-          "actions": [
-            "update",
-            "assign",
-            "unassign"
-          ],
+          "actions": ["update", "assign", "unassign"],
           "authentication": "authenticated",
-          "authorization": [
-            "workspace_editor"
-          ],
+          "authorization": ["workspace_editor"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "web",
-          "actions": [
-            "delete"
-          ],
+          "actions": ["delete"],
           "authentication": "authenticated",
-          "authorization": [
-            "workspace_owner"
-          ],
+          "authorization": ["workspace_owner"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "desktop_local",
-          "actions": [
-            "view",
-            "list",
-            "create",
-            "open-blackboard"
-          ],
+          "actions": ["view", "list", "create", "open-blackboard"],
           "authentication": "authenticated",
           "authorization": [],
           "enforcement": "enforced",
@@ -400,8 +330,10 @@
       "cloud_status": "partial",
       "cloud_reason_code": "desktop_project_workspace_lifecycle_partial",
       "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceDock.tsx",
-        "agi-stack/apps/desktop/src/features/workspace/WorkspaceCreateDialog.tsx"
+        "agi-stack/apps/desktop/src/features/workspace/WorkspaceCreateDialog.tsx",
+        "agi-stack/apps/desktop/src/features/workspace/WorkspaceSettingsDialog.tsx"
       ],
       "local_status": "partial",
       "local_policy": "native_equivalent",
@@ -411,32 +343,33 @@
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceDock.tsx",
         "agi-stack/apps/desktop/src/features/workspace/capabilityWorkspaceCollaborationClient.ts"
       ],
-      "judgment_rationale": "The Web project workspace routes use the tenant/project nested lifecycle and member/agent authorities. Desktop exposes a project-aware dock and creation dialog. The Local sidecar already implements nested list/create, so Local is partial rather than unavailable; item update/delete, assignment, conflict, and recovery semantics remain incomplete."
+      "judgment_rationale": "The Web project workspace route registrations resolve their shared WorkspaceList and WorkspaceCreate production sources through owned route source entries while preserving the tenant capability as their unique source owner. Cloud Desktop also wires WorkspaceSettingsDialog through App for update, member add/role update/removal, and Agent bind/unbind calls. Each mutation captures tenant/project/workspace scope epoch and context revision, forwards an AbortSignal to the nested Cloud API, and rejects a result after a scope change before updating the projection. Cloud delete is not exposed. The Local sidecar implements nested list/create only, so Local remains partial."
     },
     {
       "id": "project-blackboard-dynamic-project-blackboard",
       "kind": "canonical",
       "title": "Project Blackboard",
       "domain": "workspace",
-      "scope": [
-        "tenant",
-        "project",
-        "workspace"
-      ],
-      "web_route_ids": [
-        "project-blackboard-dynamic-project-blackboard"
-      ],
+      "scope": ["tenant", "project", "workspace"],
+      "web_route_ids": ["project-blackboard-dynamic-project-blackboard"],
       "api_method": "GET",
       "api_path": "/api/v1/workspaces/{workspace_id}/plan",
-      "permissions": [
-        "authenticated",
-        "workspace_member",
-        "workspace_editor"
-      ],
+      "permissions": ["authenticated", "workspace_member", "workspace_editor"],
       "actions": [
         "view",
         "select-workspace",
         "review-plan",
+        "inspect-execution-diagnostics",
+        "list-posts",
+        "create-post",
+        "update-post",
+        "delete-post",
+        "pin-post",
+        "unpin-post",
+        "list-replies",
+        "create-reply",
+        "update-reply",
+        "delete-reply",
         "retry-outbox",
         "recover-stale",
         "replan",
@@ -448,6 +381,17 @@
         "view",
         "select-workspace",
         "review-plan",
+        "inspect-execution-diagnostics",
+        "list-posts",
+        "create-post",
+        "update-post",
+        "delete-post",
+        "pin-post",
+        "unpin-post",
+        "list-replies",
+        "create-reply",
+        "update-reply",
+        "delete-reply",
         "retry-outbox",
         "recover-stale",
         "replan",
@@ -458,14 +402,82 @@
       "cloud_actions": [
         "view",
         "select-workspace",
-        "review-plan"
+        "review-plan",
+        "inspect-execution-diagnostics",
+        "list-posts",
+        "create-post",
+        "pin-post",
+        "unpin-post",
+        "create-reply"
       ],
-      "local_actions": [
-        "view",
-        "select-workspace",
-        "review-plan"
-      ],
+      "local_actions": ["view", "select-workspace", "review-plan"],
       "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/execution-diagnostics",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/pin",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/unpin",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/replies",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/replies",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/replies/{reply_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "DELETE",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/replies/{reply_id}",
+          "authority": "web_service"
+        },
         {
           "surface": "web",
           "method": "GET",
@@ -513,6 +525,42 @@
           "method": "POST",
           "path": "/api/v1/workspaces/{workspace_id}/plan/nodes/{node_id}/accept-review",
           "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/execution-diagnostics",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/pin",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/unpin",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/replies",
+          "authority": "cloud_service"
         },
         {
           "surface": "desktop_cloud",
@@ -581,18 +629,27 @@
           "actions": [
             "view",
             "select-workspace",
-            "review-plan"
+            "review-plan",
+            "inspect-execution-diagnostics",
+            "list-posts",
+            "list-replies"
           ],
           "authentication": "authenticated",
-          "authorization": [
-            "workspace_member"
-          ],
+          "authorization": ["workspace_member"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "web",
           "actions": [
+            "create-post",
+            "update-post",
+            "delete-post",
+            "pin-post",
+            "unpin-post",
+            "create-reply",
+            "update-reply",
+            "delete-reply",
             "retry-outbox",
             "recover-stale",
             "replan",
@@ -601,19 +658,40 @@
             "resume"
           ],
           "authentication": "authenticated",
-          "authorization": [
-            "workspace_editor"
+          "authorization": ["workspace_editor"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "select-workspace",
+            "review-plan",
+            "inspect-execution-diagnostics",
+            "list-posts"
           ],
+          "authentication": "authenticated",
+          "authorization": ["workspace_member"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "create-post",
+            "pin-post",
+            "unpin-post",
+            "create-reply"
+          ],
+          "authentication": "authenticated",
+          "authorization": ["workspace_editor"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "desktop_local",
-          "actions": [
-            "view",
-            "select-workspace",
-            "review-plan"
-          ],
+          "actions": ["view", "select-workspace", "review-plan"],
           "authentication": "authenticated",
           "authorization": [],
           "enforcement": "enforced",
@@ -623,7 +701,9 @@
       "cloud_status": "partial",
       "cloud_reason_code": "desktop_blackboard_authority_partial",
       "cloud_entries": [
-        "agi-stack/apps/desktop/src/features/workspace/WorkspaceCollaborationCanvas.tsx"
+        "agi-stack/apps/desktop/src/features/workspace/WorkspaceCollaborationCanvas.tsx",
+        "agi-stack/apps/desktop/src/features/workspace/httpWorkspaceCollaborationClient.ts",
+        "agi-stack/apps/desktop/src/features/workspace/workspaceCollaborationHttpMutations.ts"
       ],
       "local_status": "partial",
       "local_policy": "native_equivalent",
@@ -633,13 +713,11 @@
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceCollaborationCanvas.tsx",
         "agi-stack/apps/desktop/src/features/workspace/capabilityWorkspaceCollaborationClient.ts"
       ],
-      "judgment_rationale": "Blackboard and the workspace-to-Blackboard redirect form one audited project capability. Desktop has a native collaboration canvas. The Local sidecar implements the plan snapshot, so Local is read-only partial rather than unavailable; outbox, recovery, iteration, pipeline, and delivery mutations remain incomplete."
+      "judgment_rationale": "Blackboard and the workspace-to-Blackboard redirect form one audited project capability. Web provides execution diagnostics plus list/create/update/delete for discussion posts and replies and post pin/unpin under tenant/project/workspace scope; workspace members read and workspace editors mutate. Cloud Desktop's native discussion UI loads execution diagnostics and posts and exposes create post, pin/unpin and create reply through the HTTP collaboration client. Although the mutation map supports additional protocol actions, update/delete are not listed as Cloud user actions until the production UI exposes them. The Local sidecar implements the plan snapshot only, so Local remains read-only partial."
     }
   ],
   "source_ownership": {
-    "project-project-overview": [
-      "ProjectOverview"
-    ],
+    "project-project-overview": ["ProjectOverview"],
     "project-blackboard-dynamic-project-blackboard": [
       "Blackboard",
       "WorkspaceBlackboardRedirect"

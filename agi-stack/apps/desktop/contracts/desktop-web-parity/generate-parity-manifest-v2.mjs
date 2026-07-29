@@ -19,6 +19,7 @@ import {
   bindProductionEntrySurfaces,
   validateProductionEntryIntegrity,
 } from "./production-entry-integrity.mjs";
+import { resolveCapabilityWebEntries } from "./web-production-entry-projection.mjs";
 
 const contractRoot = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(contractRoot, "../../../../..");
@@ -36,6 +37,8 @@ const definitionFragments = definitionFragmentRegistry.fragments.map(
     fragment: readJson(resolve(contractRoot, fileName)),
   }),
 );
+const manifestSourceEntry =
+  "agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json";
 const manifestPath = resolve(contractRoot, "parity-manifest.v2.json");
 const cliOptions = parseManifestGeneratorOptions(process.argv.slice(2), {
   manifestPath,
@@ -194,19 +197,23 @@ const judgmentsByCapability = cliOptions.emitInputsPath
 const reviewInputs = [];
 const capabilities = normalizedDefinitions.map((definition) => {
   const webSources = sourcesByCapability.get(definition.id) ?? [];
-  const resolvedWebEntries =
-    definition.kind === "native_only"
-      ? [`not_applicable:web/${definition.id}`]
-      : webSources.length > 0
-        ? webSources
-        : definition.web_missing
-          ? [`not_applicable:web-route-missing/${definition.id}`]
-          : ["web/src/App.tsx"];
+  const ownedRoutes = (registrationsByCapability.get(definition.id) ?? []).map(
+    (routeKey) => productionRouteByKey.get(routeKey),
+  );
+  const resolvedWebEntries = resolveCapabilityWebEntries({
+    capabilityId: definition.id,
+    kind: definition.kind,
+    ownedRoutes,
+    ownedSourceEntries: webSources,
+    webMissing: definition.web_missing,
+  });
   const productionEntries = {
     web: resolvedWebEntries,
     ...bindProductionEntrySurfaces(definition.production_entries, {
       repositoryRoot,
       definitionSourcePath: definition.definition_source_entry,
+      forbiddenSourcePaths: [manifestSourceEntry],
+      sourceRevision: definitions.references.audit_revision,
       integrity: productionEntryIntegrity,
     }),
   };
