@@ -261,6 +261,15 @@ async function observeFinalMatchedState(page, probe) {
       }
       return {
         locale: document.documentElement.lang,
+        locale_rendering: {
+          date_sample: new Intl.DateTimeFormat(document.documentElement.lang, {
+            dateStyle: "full",
+            timeZone: "UTC",
+          }).format(new Date(Date.UTC(2020, 0, 2))),
+          number_sample: new Intl.NumberFormat(
+            document.documentElement.lang,
+          ).format(1234567.89),
+        },
         theme,
         browser_color_scheme: window.matchMedia("(prefers-color-scheme: dark)")
           .matches

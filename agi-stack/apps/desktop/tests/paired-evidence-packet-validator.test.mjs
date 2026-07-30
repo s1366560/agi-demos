@@ -100,6 +100,11 @@ function git(repositoryRoot, args) {
 function finalState(matchedState) {
   const common = {
     ...matchedState,
+    comparison_locale: matchedState.locale,
+    locale_rendering: {
+      date_sample: "Thursday, January 2, 2020",
+      number_sample: "1,234,567.89",
+    },
     browser_color_scheme: matchedState.theme,
     focus: {
       target_id: "email_entry",

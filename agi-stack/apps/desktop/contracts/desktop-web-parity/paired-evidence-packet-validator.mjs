@@ -8,6 +8,10 @@ import {
   inspectEvidenceRepositoryBinding,
   validateEvidenceRun,
 } from "./evidence-run-validator.mjs";
+import {
+  compareObservedLocale,
+  requireLocaleRenderingMatch,
+} from "./paired-locale-contract.mjs";
 
 const PNG_SIGNATURE = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -286,13 +290,23 @@ function validateObservedState(errors, run, metadata) {
   )
     ? run.matched_state.interaction_state.slice("focused:".length)
     : null;
+  const normalizedLocales = {};
   for (const runtime of ["web", "desktop"]) {
     const observed = metadata.final_observed_state?.[runtime];
     const expected = run.matched_state;
+    try {
+      normalizedLocales[runtime] = compareObservedLocale(
+        observed?.locale,
+        expected?.locale,
+      );
+    } catch {
+      errors.push(`${runtime} observed locale is not bound to matched_state`);
+    }
     if (
       !isRecord(observed) ||
       !isRecord(expected) ||
-      observed.locale !== expected.locale ||
+      observed.comparison_locale !==
+        normalizedLocales[runtime]?.comparison_locale ||
       observed.theme !== expected.theme ||
       observed.browser_color_scheme !== expected.theme ||
       observed.viewport?.width !== expected.viewport?.width ||
@@ -307,6 +321,14 @@ function validateObservedState(errors, run, metadata) {
     ) {
       errors.push(`${runtime} observed state is not bound to matched_state`);
     }
+  }
+  try {
+    requireLocaleRenderingMatch(
+      metadata.final_observed_state?.web?.locale_rendering,
+      metadata.final_observed_state?.desktop?.locale_rendering,
+    );
+  } catch {
+    errors.push("paired locale-sensitive rendering is not equivalent");
   }
 }
 

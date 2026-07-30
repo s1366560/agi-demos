@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 
 import {
+  compareObservedLocale,
+  requireLocaleRenderingMatch,
+} from "../contracts/desktop-web-parity/paired-locale-contract.mjs";
+import {
   serializePairedRendererBuildReceipt,
   validatePairedRendererBuildReceipt,
 } from "./production-renderer-build-attestation.mjs";
@@ -281,8 +285,13 @@ function requireFinalRuntimeState(value, runtime, matchedState) {
   ) {
     throw new Error(`${label} must be complete`);
   }
+  const localeComparison = compareObservedLocale(
+    requireString(value.locale, `${label}.locale`),
+    matchedState.locale,
+  );
   const normalized = Object.freeze({
-    locale: requireString(value.locale, `${label}.locale`),
+    locale: localeComparison.raw_locale,
+    comparison_locale: localeComparison.comparison_locale,
     theme: requireString(value.theme, `${label}.theme`),
     browser_color_scheme: requireString(
       value.browser_color_scheme,
@@ -311,9 +320,9 @@ function requireFinalRuntimeState(value, runtime, matchedState) {
       `${label}.interaction_state`,
     ),
     focus: requireFinalFocus(value.focus, `${label}.focus`),
+    locale_rendering: value.locale_rendering,
   });
   const matches =
-    normalized.locale === matchedState.locale &&
     normalized.theme === matchedState.theme &&
     normalized.browser_color_scheme === matchedState.theme &&
     normalized.viewport.width === matchedState.viewport.width &&
@@ -336,9 +345,19 @@ function requireFinalObservedState(value, scenarioId, matchedState) {
   if (!isRecord(value)) {
     throw new Error(`${scenarioId}.finalObservedState must be an object`);
   }
+  const web = requireFinalRuntimeState(value.web, "web", matchedState);
+  const desktop = requireFinalRuntimeState(
+    value.desktop,
+    "desktop",
+    matchedState,
+  );
+  const localeRendering = requireLocaleRenderingMatch(
+    web.locale_rendering,
+    desktop.locale_rendering,
+  );
   return Object.freeze({
-    web: requireFinalRuntimeState(value.web, "web", matchedState),
-    desktop: requireFinalRuntimeState(value.desktop, "desktop", matchedState),
+    web: Object.freeze({ ...web, locale_rendering: localeRendering }),
+    desktop: Object.freeze({ ...desktop, locale_rendering: localeRendering }),
   });
 }
 

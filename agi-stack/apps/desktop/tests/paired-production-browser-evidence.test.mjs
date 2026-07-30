@@ -134,6 +134,11 @@ function encodeSolidPng(width, height, color) {
 function observedStateFor(matchedState) {
   const common = {
     locale: matchedState.locale,
+    comparison_locale: matchedState.locale,
+    locale_rendering: {
+      date_sample: "Thursday, January 2, 2020",
+      number_sample: "1,234,567.89",
+    },
     theme: matchedState.theme,
     browser_color_scheme: matchedState.theme,
     viewport: matchedState.viewport,
