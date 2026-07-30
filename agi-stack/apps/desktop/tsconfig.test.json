@@ -136,6 +136,7 @@
     "src/features/my-work/MyWorkQueue.tsx",
     "src/features/my-work/myWorkModel.ts",
     "src/features/navigation/AuxiliaryView.tsx",
+    "src/features/navigation/desktopRouteRegistry.ts",
     "src/features/navigation/keyboardShortcutModel.ts",
     "src/features/navigation/KeyboardShortcutsDialog.tsx",
     "src/features/runtime/runtimeConfigModel.ts",
