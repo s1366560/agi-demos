@@ -20,6 +20,9 @@ mod sandbox_files_tests;
 mod search;
 #[cfg(test)]
 mod search_tests;
+mod workspace_roster;
+#[cfg(test)]
+mod workspace_roster_tests;
 
 const LOCAL_ROUTE_CONTRACT_VERSION: &str = "desktop-local-route-parity-v1";
 
@@ -29,6 +32,7 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
         .merge(mcp_apps::router())
         .merge(project_overview::router())
         .merge(search::router())
+        .merge(workspace_roster::router())
         .merge(managed_resources::router())
         .route(
             "/api/v1/skills/import/zip",

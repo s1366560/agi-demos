@@ -35,6 +35,24 @@
       }
     },
     {
+      "area": "workspace",
+      "method": "GET",
+      "uri": "/api/v1/tenants/local/projects/local-project/workspaces/local-workspace/members?limit=500&offset=0",
+      "source": "client",
+      "source_marker": "/members?${params.toString()}",
+      "authority": "local_workspace_roster",
+      "body": {}
+    },
+    {
+      "area": "workspace",
+      "method": "GET",
+      "uri": "/api/v1/tenants/local/projects/local-project/workspaces/local-workspace/agents?active_only=false&limit=500&offset=0",
+      "source": "client",
+      "source_marker": "/agents?${params.toString()}",
+      "authority": "local_workspace_roster",
+      "body": {}
+    },
+    {
       "area": "search",
       "method": "GET",
       "uri": "/api/v1/search-enhanced/capabilities",
