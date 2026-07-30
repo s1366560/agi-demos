@@ -1,7 +1,10 @@
 import type { ComponentType } from 'react';
 
 import type { CanonicalDesktopRouteId } from './desktopCanonicalRouteCatalog';
-import type { DesktopRouteLocalPolicy } from './desktopRouteRegistry';
+import type {
+  DesktopRouteContext,
+  DesktopRouteLocalPolicy,
+} from './desktopRouteRegistry';
 
 export type DesktopPlannedRouteReasonCode =
   | 'desktop_native_route_planned'
@@ -35,6 +38,7 @@ export type DesktopRouteModule =
 
 export type DesktopRouteSurfaceProps = Readonly<{
   module: DesktopRouteModule;
+  context: DesktopRouteContext;
 }>;
 
 export type DesktopRouteModuleLoader = () => Promise<DesktopRouteModule>;

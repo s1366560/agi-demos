@@ -144,6 +144,7 @@
     "src/features/project/projectOverviewController.ts",
     "src/features/project/projectOverviewPresentationModel.ts",
     "src/features/project/ProjectOverviewPage.tsx",
+    "src/features/project/projectOverviewRouteModule.tsx",
     "src/features/project/useProjectOverviewController.ts",
     "src/features/navigation/AuxiliaryView.tsx",
     "src/features/navigation/locales/nativeUnavailableRouteMessages.ts",
