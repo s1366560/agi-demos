@@ -8,7 +8,7 @@
 Current desired contract: 2026-07-29
 
 - Audited clean Web/Desktop source baseline:
-  `46f4bfd5b83129cb741a22d1495cc4f6ab69f30a`.
+  `19061ec8c987d5ecb463bfa9e3ed7c8d8ee8ca10`.
 - Desired capability manifest:
   `contracts/desktop-web-parity/parity-manifest.v2.json`.
 - Executed evidence schema:
