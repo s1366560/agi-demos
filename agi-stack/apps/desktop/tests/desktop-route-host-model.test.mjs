@@ -6,12 +6,11 @@ const require = createRequire(import.meta.url);
 const {
   desktopRouteScopeKey,
   evaluateDesktopRouteAccess,
-} = require(
-  '/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteHostModel.js'
-);
-const { createDesktopRouteRegistry, matchDesktopRoute } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js'
-);
+} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteHostModel.js');
+const {
+  createDesktopRouteRegistry,
+  matchDesktopRoute,
+} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js');
 
 function route(overrides = {}) {
   return {
@@ -20,7 +19,7 @@ function route(overrides = {}) {
     scope: ['tenant'],
     navGroup: 'tenant-core',
     capability: 'tenant-tenant-overview',
-    requiredPermission: ['authenticated', 'tenant_member'],
+    requiredPermission: [['authenticated', 'tenant_member']],
     localPolicy: 'native_equivalent',
     loader: async () => ({ default: 'TenantOverview' }),
     ...overrides,
@@ -61,6 +60,34 @@ test('permission gate uses exact membership and reports every missing permission
   });
 
   assert.deepEqual(result, {
+    status: 'forbidden',
+    reasonCode: 'desktop_route_permission_denied',
+    missingPermissions: ['tenant_member'],
+  });
+});
+
+test('permission alternatives are OR while every permission within a row is all-of', () => {
+  const definition = route({
+    requiredPermission: [
+      ['authenticated', 'tenant_member'],
+      ['authenticated', 'global_admin'],
+    ],
+  });
+  const allowed = evaluateDesktopRouteAccess({
+    match: match(definition),
+    mode: 'cloud',
+    permissions: new Set(['authenticated', 'global_admin']),
+    capability: capability(),
+  });
+  const denied = evaluateDesktopRouteAccess({
+    match: match(definition),
+    mode: 'cloud',
+    permissions: new Set(['authenticated']),
+    capability: capability(),
+  });
+
+  assert.equal(allowed.status, 'allowed');
+  assert.deepEqual(denied, {
     status: 'forbidden',
     reasonCode: 'desktop_route_permission_denied',
     missingPermissions: ['tenant_member'],
@@ -110,7 +137,7 @@ test('capability availability preserves structured unavailable and degraded auth
       status: 'unavailable',
       reasonCode: 'tenant_overview_service_unavailable',
       capability: unavailableCapability,
-    }
+    },
   );
 
   const degradedCapability = capability({
@@ -128,7 +155,7 @@ test('capability availability preserves structured unavailable and degraded auth
       status: 'allowed',
       presentation: 'degraded',
       capability: degradedCapability,
-    }
+    },
   );
 });
 
@@ -144,7 +171,7 @@ test('missing and cross-scope capability authority cannot load a matched route',
       status: 'unavailable',
       reasonCode: 'desktop_route_capability_missing',
       capability: null,
-    }
+    },
   );
 
   const crossScope = capability({
@@ -166,7 +193,7 @@ test('missing and cross-scope capability authority cannot load a matched route',
       status: 'unavailable',
       reasonCode: 'desktop_route_capability_scope_mismatch',
       capability: crossScope,
-    }
+    },
   );
 });
 
@@ -177,7 +204,10 @@ test('route scope keys are structural, ordered, and omit absent optional context
       projectId: 'project one',
       workspaceId: 'workspace?draft',
     }),
-    'tenantId=tenant%2F1&projectId=project%20one&workspaceId=workspace%3Fdraft'
+    'tenantId=tenant%2F1&projectId=project%20one&workspaceId=workspace%3Fdraft',
   );
-  assert.equal(desktopRouteScopeKey({ tenantId: 'tenant-1' }), 'tenantId=tenant-1');
+  assert.equal(
+    desktopRouteScopeKey({ tenantId: 'tenant-1' }),
+    'tenantId=tenant-1',
+  );
 });

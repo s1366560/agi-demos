@@ -10,12 +10,10 @@ const require = createRequire(import.meta.url);
 const {
   createDesktopHashRouteHostReactAdapter,
   useDesktopHashRouteHost,
-} = require(
-  '/tmp/agistack-desktop-test-dist/src/features/navigation/useDesktopHashRouteHost.js',
-);
-const { createDesktopRouteRegistry } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js',
-);
+} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/useDesktopHashRouteHost.js');
+const {
+  createDesktopRouteRegistry,
+} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js');
 
 function deferred() {
   let resolve;
@@ -34,7 +32,7 @@ function route(id, suffix, loader) {
     scope: ['tenant'],
     navGroup: 'tenant-core',
     capability: id,
-    requiredPermission: ['authenticated'],
+    requiredPermission: [['authenticated']],
     localPolicy: 'native_equivalent',
     loader,
   };
@@ -175,8 +173,7 @@ test('hash changes publish the current route through the React adapter', async (
   const readyTwo = waitForState(
     adapter,
     (state) =>
-      state.status === 'ready' &&
-      state.match.definition.id === 'tenant-two',
+      state.status === 'ready' && state.match.definition.id === 'tenant-two',
   );
   location.navigate('#/tenant/tenant-1/two');
   await readyTwo;

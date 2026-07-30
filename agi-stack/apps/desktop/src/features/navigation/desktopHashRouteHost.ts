@@ -189,7 +189,7 @@ export function createDesktopHashRouteHost<TModule>(
       return;
     }
     const structuralPermissions = new Set(
-      match.definition.requiredPermission,
+      match.definition.requiredPermission.flat(),
     );
     const structuralPreflight = evaluateDesktopRouteAccess({
       match,
@@ -238,13 +238,9 @@ export function createDesktopHashRouteHost<TModule>(
     });
     if (access.status === 'forbidden') {
       if (
-        !canDeferScopeMembershipPermissions(
-          match,
-          access.missingPermissions,
-        ) ||
+        !canDeferScopeMembershipPermissions(match, access.missingPermissions) ||
         authorityAccess.status !== 'unavailable' ||
-        authorityAccess.reasonCode !==
-          'desktop_route_capability_scope_mismatch'
+        authorityAccess.reasonCode !== 'desktop_route_capability_scope_mismatch'
       ) {
         emit({
           status: 'forbidden',
@@ -304,10 +300,7 @@ export function createDesktopHashRouteHost<TModule>(
       settledPermissions = options.resolvePermissions
         ? options.resolvePermissions(match.context)
         : options.permissions;
-      if (
-        !settledPermissions ||
-        typeof settledPermissions.has !== 'function'
-      ) {
+      if (!settledPermissions || typeof settledPermissions.has !== 'function') {
         throw new Error('desktop_route_permissions_invalid');
       }
     } catch {

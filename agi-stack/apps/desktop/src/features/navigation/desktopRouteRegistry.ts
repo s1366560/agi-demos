@@ -1,4 +1,9 @@
-export type DesktopRouteScope = 'global' | 'tenant' | 'project' | 'workspace' | 'instance';
+export type DesktopRouteScope =
+  | 'global'
+  | 'tenant'
+  | 'project'
+  | 'workspace'
+  | 'instance';
 
 export type DesktopRouteLocalPolicy =
   | 'native_equivalent'
@@ -13,7 +18,7 @@ export type DesktopRouteDefinition<TModule = unknown> = Readonly<{
   scope: readonly DesktopRouteScope[];
   navGroup: string;
   capability: string;
-  requiredPermission: readonly string[];
+  requiredPermission: readonly (readonly string[])[];
   localPolicy: DesktopRouteLocalPolicy;
   loader: DesktopRouteLoader<TModule>;
 }>;
@@ -32,7 +37,9 @@ export type DesktopRouteContextValidation =
     }>
   | Readonly<{
       valid: false;
-      reasonCode: 'desktop_route_context_missing' | 'desktop_route_context_invalid';
+      reasonCode:
+        | 'desktop_route_context_missing'
+        | 'desktop_route_context_invalid';
       scope: DesktopRouteScope;
     }>;
 
@@ -64,7 +71,10 @@ const SCOPE_CONTEXT_KEYS = {
   project: 'projectId',
   workspace: 'workspaceId',
   instance: 'instanceId',
-} as const satisfies Record<ContextualDesktopRouteScope, keyof DesktopRouteContext>;
+} as const satisfies Record<
+  ContextualDesktopRouteScope,
+  keyof DesktopRouteContext
+>;
 
 const SCOPE_PARAMETERS = {
   tenant: 'tenantId',
@@ -254,23 +264,43 @@ export function restoreDesktopRoute<TModule>(
   return { status: 'matched', match };
 }
 
-function assertDesktopRouteDefinition(definition: DesktopRouteDefinition): void {
-  if (!nonEmptyString(definition.id)) throw new Error('route id must be non-empty');
-  if (!nonEmptyString(definition.navGroup)) throw new Error('route navGroup must be non-empty');
+function assertDesktopRouteDefinition(
+  definition: DesktopRouteDefinition,
+): void {
+  if (!nonEmptyString(definition.id))
+    throw new Error('route id must be non-empty');
+  if (!nonEmptyString(definition.navGroup))
+    throw new Error('route navGroup must be non-empty');
   if (!nonEmptyString(definition.capability)) {
     throw new Error('route capability must be non-empty');
   }
   if (
     !Array.isArray(definition.requiredPermission) ||
-    definition.requiredPermission.some((permission) => !nonEmptyString(permission)) ||
-    new Set(definition.requiredPermission).size !== definition.requiredPermission.length
+    definition.requiredPermission.length === 0 ||
+    definition.requiredPermission.some(
+      (alternative) =>
+        !Array.isArray(alternative) ||
+        alternative.length === 0 ||
+        alternative.some((permission) => !nonEmptyString(permission)) ||
+        new Set(alternative).size !== alternative.length,
+    ) ||
+    new Set(
+      definition.requiredPermission.map((alternative) =>
+        JSON.stringify(alternative),
+      ),
+    ).size !== definition.requiredPermission.length
   ) {
-    throw new Error('route requiredPermission must contain unique non-empty permissions');
+    throw new Error(
+      'route requiredPermission must contain unique non-empty permission alternatives',
+    );
   }
   if (!SUPPORTED_LOCAL_POLICIES.has(definition.localPolicy)) {
-    throw new Error(`unsupported local policy: ${String(definition.localPolicy)}`);
+    throw new Error(
+      `unsupported local policy: ${String(definition.localPolicy)}`,
+    );
   }
-  if (typeof definition.loader !== 'function') throw new Error('route loader must be callable');
+  if (typeof definition.loader !== 'function')
+    throw new Error('route loader must be callable');
   if (
     definition.scope.length === 0 ||
     new Set(definition.scope).size !== definition.scope.length ||
@@ -318,9 +348,12 @@ function parseDesktopRouteLocation(location: string): ParsedLocation {
   const hashPath = hashIndex >= 0 ? trimmed.slice(hashIndex + 1) : trimmed;
   const queryIndex = hashPath.indexOf('?');
   const path = queryIndex >= 0 ? hashPath.slice(0, queryIndex) : hashPath;
-  const query = new URLSearchParams(queryIndex >= 0 ? hashPath.slice(queryIndex + 1) : '');
+  const query = new URLSearchParams(
+    queryIndex >= 0 ? hashPath.slice(queryIndex + 1) : '',
+  );
   if (!path.startsWith('/')) return { valid: false };
-  const canonicalInput = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+  const canonicalInput =
+    path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
   const rawSegments = canonicalInput.split('/');
   if (rawSegments.some((segment, index) => index > 0 && !segment)) {
     return { valid: false };
@@ -345,14 +378,22 @@ function freezeDefinition<TModule>(
     scope: Object.freeze([...definition.scope]),
     navGroup: definition.navGroup,
     capability: definition.capability,
-    requiredPermission: Object.freeze([...definition.requiredPermission]),
+    requiredPermission: Object.freeze(
+      definition.requiredPermission.map((alternative) =>
+        Object.freeze([...alternative]),
+      ),
+    ),
     localPolicy: definition.localPolicy,
     loader: definition.loader,
   });
 }
 
-function scopeForParameter(parameter: string): ContextualDesktopRouteScope | null {
-  for (const scope of Object.keys(SCOPE_PARAMETERS) as ContextualDesktopRouteScope[]) {
+function scopeForParameter(
+  parameter: string,
+): ContextualDesktopRouteScope | null {
+  for (const scope of Object.keys(
+    SCOPE_PARAMETERS,
+  ) as ContextualDesktopRouteScope[]) {
     if (SCOPE_PARAMETERS[scope] === parameter) return scope;
   }
   return null;
@@ -424,10 +465,16 @@ function immutableRouteLookup<TKey, TValue>(
       return source.values();
     },
     forEach(
-      callback: (value: TValue, key: TKey, map: ReadonlyMap<TKey, TValue>) => void,
+      callback: (
+        value: TValue,
+        key: TKey,
+        map: ReadonlyMap<TKey, TValue>,
+      ) => void,
       thisArg?: unknown,
     ) {
-      source.forEach((value, key) => callback.call(thisArg, value, key, lookup));
+      source.forEach((value, key) =>
+        callback.call(thisArg, value, key, lookup),
+      );
     },
     [Symbol.iterator]() {
       return source[Symbol.iterator]();

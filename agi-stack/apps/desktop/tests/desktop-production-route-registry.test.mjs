@@ -7,10 +7,7 @@ const require = createRequire(import.meta.url);
 const compiledNavigationDirectory =
   '/tmp/agistack-desktop-test-dist/src/features/navigation';
 mkdirSync(compiledNavigationDirectory, { recursive: true });
-writeFileSync(
-  `${compiledNavigationDirectory}/NativeUnavailableRoute.css`,
-  '',
-);
+writeFileSync(`${compiledNavigationDirectory}/NativeUnavailableRoute.css`, '');
 require.extensions['.css'] = () => {};
 
 const React = require('react');
@@ -21,19 +18,13 @@ const {
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
   createDesktopProductionRouteRegistry,
-} = require(
-  '/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js'
-);
+} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js');
 const {
   NativeUnavailableRoute,
-} = require(
-  '/tmp/agistack-desktop-test-dist/src/features/navigation/NativeUnavailableRoute.js'
-);
+} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/NativeUnavailableRoute.js');
 const {
   evaluateDesktopRouteAccess,
-} = require(
-  '/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteHostModel.js'
-);
+} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteHostModel.js');
 
 const sourceRoot = new URL('../src/features/navigation/', import.meta.url);
 const registrySource = readFileSync(
@@ -140,8 +131,7 @@ test('production registry requires every implemented project route loader', () =
         implementedLoaders: {
           [PROJECT_OVERVIEW_ROUTE_ID]: 'not-callable',
           [PROJECT_SEARCH_ROUTE_ID]: async () => implementedSearchModule(),
-          [PROJECT_CRON_JOBS_ROUTE_ID]: async () =>
-            implementedCronJobsModule(),
+          [PROJECT_CRON_JOBS_ROUTE_ID]: async () => implementedCronJobsModule(),
         },
       }),
     /desktop_production_route_loader_invalid:project-project-overview/u,
@@ -152,8 +142,7 @@ test('production registry requires every implemented project route loader', () =
         implementedLoaders: {
           [PROJECT_OVERVIEW_ROUTE_ID]: async () => implementedProjectModule(),
           [PROJECT_SEARCH_ROUTE_ID]: async () => implementedSearchModule(),
-          [PROJECT_CRON_JOBS_ROUTE_ID]: async () =>
-            implementedCronJobsModule(),
+          [PROJECT_CRON_JOBS_ROUTE_ID]: async () => implementedCronJobsModule(),
           'external-web-handoff': async () => implementedProjectModule(),
         },
       }),
@@ -165,8 +154,7 @@ test('production registry requires every implemented project route loader', () =
         implementedLoaders: {
           [PROJECT_OVERVIEW_ROUTE_ID]: async () => implementedProjectModule(),
           [PROJECT_SEARCH_ROUTE_ID]: async () => implementedSearchModule(),
-          [PROJECT_CRON_JOBS_ROUTE_ID]: async () =>
-            implementedCronJobsModule(),
+          [PROJECT_CRON_JOBS_ROUTE_ID]: async () => implementedCronJobsModule(),
           'tenant-tenant-overview': async () => implementedProjectModule(),
         },
       }),
@@ -178,8 +166,7 @@ test('production registry requires every implemented project route loader', () =
         implementedLoaders: {
           [PROJECT_OVERVIEW_ROUTE_ID]: async () => implementedProjectModule(),
           [PROJECT_SEARCH_ROUTE_ID]: 'not-callable',
-          [PROJECT_CRON_JOBS_ROUTE_ID]: async () =>
-            implementedCronJobsModule(),
+          [PROJECT_CRON_JOBS_ROUTE_ID]: async () => implementedCronJobsModule(),
         },
       }),
     /desktop_production_route_loader_invalid:project-project-search/u,
@@ -250,11 +237,15 @@ test('all 51 production loaders remain lazy and three project routes are real mo
     ].sort(),
   );
   assert.equal(
-    implemented.find(({ definition }) => definition.id === PROJECT_OVERVIEW_ROUTE_ID).module,
+    implemented.find(
+      ({ definition }) => definition.id === PROJECT_OVERVIEW_ROUTE_ID,
+    ).module,
     projectModule,
   );
   assert.equal(
-    implemented.find(({ definition }) => definition.id === PROJECT_SEARCH_ROUTE_ID).module,
+    implemented.find(
+      ({ definition }) => definition.id === PROJECT_SEARCH_ROUTE_ID,
+    ).module,
     searchModule,
   );
   assert.equal(
@@ -295,7 +286,9 @@ test('implemented loader results fail closed when the route module contract drif
       reason: 'desktop_route_module_invalid:project-project-overview',
     },
     {
-      module: implementedProjectModule({ capability: 'project-project-settings' }),
+      module: implementedProjectModule({
+        capability: 'project-project-settings',
+      }),
       reason: 'desktop_route_module_contract_mismatch:project-project-overview',
     },
     {
@@ -341,7 +334,7 @@ test('Local cloud-only and blocked routes stay owned by the Host gate', () => {
         canonicalPath: definition.path,
       },
       mode: 'local',
-      permissions: new Set(definition.requiredPermission),
+      permissions: new Set(definition.requiredPermission.flat()),
       capability: null,
     });
 
@@ -375,9 +368,18 @@ test('generic unavailable surface renders structured route authority without a W
   assert.match(markup, /desktop_native_route_planned/);
   assert.match(markup, /native_equivalent/);
   assert.match(markup, /Unavailable/);
-  assert.doesNotMatch(markup, /Complete|WebView|Open in browser|href=|<iframe|<webview/i);
-  assert.doesNotMatch(surfaceSource, /shell\.openExternal|window\.open|<iframe|<webview/i);
-  assert.doesNotMatch(registrySource, /https?:\/\/|window\.open|shell\.openExternal/);
+  assert.doesNotMatch(
+    markup,
+    /Complete|WebView|Open in browser|href=|<iframe|<webview/i,
+  );
+  assert.doesNotMatch(
+    surfaceSource,
+    /shell\.openExternal|window\.open|<iframe|<webview/i,
+  );
+  assert.doesNotMatch(
+    registrySource,
+    /https?:\/\/|window\.open|shell\.openExternal/,
+  );
 });
 
 test('unavailable route UI uses bilingual domain i18n and declared Desktop tokens', () => {

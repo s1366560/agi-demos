@@ -24,12 +24,10 @@ const {
   DesktopProductionRouterView,
   retryDesktopProductionRoute,
   returnToDesktopWorkbench,
-} = require(
-  '/tmp/agistack-desktop-test-dist/src/features/navigation/DesktopProductionRouter.js'
-);
-const { createDesktopRouteRegistry } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js'
-);
+} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/DesktopProductionRouter.js');
+const {
+  createDesktopRouteRegistry,
+} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js');
 
 const source = readFileSync(
   new URL(
@@ -83,7 +81,7 @@ const registry = createDesktopRouteRegistry([
     scope: ['tenant', 'project'],
     navGroup: 'project-workspace',
     capability: 'project-project-overview',
-    requiredPermission: ['authenticated', 'project_member'],
+    requiredPermission: [['authenticated', 'project_member']],
     localPolicy: 'native_equivalent',
     loader: async () => module,
   },
@@ -122,7 +120,11 @@ test('production router delegates to the React host and keeps legacy children mo
         switchScope: async () => {},
         navigation: { clearHash() {} },
       },
-      React.createElement('article', { 'data-legacy': true }, 'Legacy workbench'),
+      React.createElement(
+        'article',
+        { 'data-legacy': true },
+        'Legacy workbench',
+      ),
     ),
   );
 
@@ -229,7 +231,11 @@ test('loading, forbidden, unavailable, and error states expose structured bounda
         reasonCode: 'desktop_route_permission_denied',
         missingPermissions: ['project_member'],
       },
-      ['Permission required', 'desktop_route_permission_denied', 'project_member'],
+      [
+        'Permission required',
+        'desktop_route_permission_denied',
+        'project_member',
+      ],
     ],
     [
       {
@@ -238,7 +244,11 @@ test('loading, forbidden, unavailable, and error states expose structured bounda
         reasonCode: 'project_overview_authority_unavailable',
         capability: null,
       },
-      ['Native route unavailable', 'project_overview_authority_unavailable', 'Retry'],
+      [
+        'Native route unavailable',
+        'project_overview_authority_unavailable',
+        'Retry',
+      ],
     ],
     [
       {
@@ -270,7 +280,7 @@ test('breadcrumb return and retry actions use only the injected ports', async ()
   assert.equal(clearCalls, 1);
 
   await retryDesktopProductionRoute(async () => {
-      retryCalls += 1;
+    retryCalls += 1;
   });
   assert.equal(retryCalls, 1);
   assert.match(
@@ -335,9 +345,7 @@ function renderView({ state }) {
 }
 
 function render(element) {
-  return renderToStaticMarkup(
-    React.createElement(I18nProvider, null, element),
-  );
+  return renderToStaticMarkup(React.createElement(I18nProvider, null, element));
 }
 
 function hashLocation(initialHash) {

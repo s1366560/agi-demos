@@ -100,10 +100,17 @@ export function evaluateDesktopRouteAccess<TModule>({
   permissions,
   capability,
 }: DesktopRouteAccessInput<TModule>): DesktopRouteAccessResult {
-  const missingPermissions = match.definition.requiredPermission.filter(
-    (permission) => !permissions.has(permission),
+  const missingByAlternative = match.definition.requiredPermission.map(
+    (alternative) =>
+      alternative.filter((permission) => !permissions.has(permission)),
   );
-  if (missingPermissions.length > 0) {
+  const allowed = missingByAlternative.some(
+    (missingPermissions) => missingPermissions.length === 0,
+  );
+  if (!allowed) {
+    const missingPermissions = missingByAlternative.reduce((best, candidate) =>
+      candidate.length < best.length ? candidate : best,
+    );
     return Object.freeze({
       status: 'forbidden',
       reasonCode: 'desktop_route_permission_denied',
@@ -140,8 +147,7 @@ export function evaluateDesktopRouteAccess<TModule>({
   }
   return Object.freeze({
     status: 'allowed',
-    presentation:
-      capability.availability === 'degraded' ? 'degraded' : 'ready',
+    presentation: capability.availability === 'degraded' ? 'degraded' : 'ready',
     capability,
   });
 }

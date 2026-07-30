@@ -56,11 +56,21 @@ test("authorization predicates use a closed vocabulary without tightening legacy
   );
   assert.deepEqual(
     schema.$defs.permissionRequirement.properties.authorization.items,
-    { $ref: "#/$defs/authorizationPredicate" },
+    {
+      $ref: "#/$defs/authorizationPredicate",
+    },
   );
   assert.deepEqual(
     schema.$defs.capability.properties.required_permissions.items,
-    { $ref: "#/$defs/nonEmptyString" },
+    {
+      $ref: "#/$defs/nonEmptyString",
+    },
+  );
+  assert.deepEqual(
+    schema.$defs.capability.properties.route_entry_permissions.items,
+    {
+      $ref: "#/$defs/routeEntryPermission",
+    },
   );
 
   const requirementSchema = {
@@ -95,6 +105,36 @@ test("authorization predicates use a closed vocabulary without tightening legacy
       ["authenticated", "tenant_member_for_read"],
     ),
     [],
+  );
+});
+
+test("canonical capabilities declare reviewed route-entry alternatives separately", () => {
+  const fragmentRegistry = readJson("parity-capability-fragments.v2.json");
+  const fragments = fragmentRegistry.fragments.map(readJson);
+  const canonical = fragments
+    .flatMap((fragment) => fragment.capabilities)
+    .filter((capability) => capability.kind === "canonical");
+  const routeEntryCatalog = readJson("parity-route-entry-permissions.v2.json");
+  const routeEntries = new Map(
+    routeEntryCatalog.capabilities.map((capability) => [
+      capability.id,
+      capability.route_entry_permissions,
+    ]),
+  );
+
+  assert.equal(canonical.length, 51);
+  assert.equal(routeEntries.size, 51);
+  for (const capability of canonical) {
+    assert.equal(routeEntries.has(capability.id), true, capability.id);
+    assert.equal(
+      routeEntries.get(capability.id).length > 0,
+      true,
+      capability.id,
+    );
+  }
+  assert.match(
+    generatorSource,
+    /must declare reviewed route_entry_permissions/u,
   );
 });
 

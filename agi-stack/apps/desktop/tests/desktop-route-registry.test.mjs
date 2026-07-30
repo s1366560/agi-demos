@@ -9,9 +9,7 @@ const {
   matchDesktopRoute,
   restoreDesktopRoute,
   validateDesktopRouteContext,
-} = require(
-  '/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js'
-);
+} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js');
 
 function definition(overrides = {}) {
   return {
@@ -20,7 +18,7 @@ function definition(overrides = {}) {
     scope: ['tenant', 'project'],
     navGroup: 'knowledge',
     capability: 'project-project-overview',
-    requiredPermission: ['project:read'],
+    requiredPermission: [['project:read']],
     localPolicy: 'native_equivalent',
     loader: async () => ({ default: 'ProjectOverview' }),
     ...overrides,
@@ -43,6 +41,7 @@ test('route definitions expose only the fixed production registration fields', (
   assert.equal(Object.isFrozen(route), true);
   assert.equal(Object.isFrozen(route.scope), true);
   assert.equal(Object.isFrozen(route.requiredPermission), true);
+  assert.equal(Object.isFrozen(route.requiredPermission[0]), true);
 });
 
 test('registry rejects duplicate and structurally invalid route definitions', () => {
@@ -52,7 +51,7 @@ test('registry rejects duplicate and structurally invalid route definitions', ()
         definition(),
         definition({ path: '/tenant/:tenantId/project/:projectId/summary' }),
       ]),
-    /duplicate route id/u
+    /duplicate route id/u,
   );
   assert.throws(
     () =>
@@ -60,7 +59,7 @@ test('registry rejects duplicate and structurally invalid route definitions', ()
         definition(),
         definition({ id: 'project-summary' }),
       ]),
-    /duplicate route path/u
+    /duplicate route path/u,
   );
   assert.throws(
     () =>
@@ -70,7 +69,7 @@ test('registry rejects duplicate and structurally invalid route definitions', ()
           scope: ['tenant'],
         }),
       ]),
-    /path parameters must be declared by scope/u
+    /path parameters must be declared by scope/u,
   );
   assert.throws(
     () =>
@@ -80,7 +79,26 @@ test('registry rejects duplicate and structurally invalid route definitions', ()
           path: '/tenant/:tenantId/project/:projectId/:conversationId',
         }),
       ]),
-    /unsupported route parameter/u
+    /unsupported route parameter/u,
+  );
+  assert.throws(
+    () =>
+      createDesktopRouteRegistry([
+        definition({ requiredPermission: [['authenticated'], []] }),
+      ]),
+    /requiredPermission must contain unique non-empty permission alternatives/u,
+  );
+  assert.throws(
+    () =>
+      createDesktopRouteRegistry([
+        definition({
+          requiredPermission: [
+            ['authenticated', 'project_member'],
+            ['authenticated', 'project_member'],
+          ],
+        }),
+      ]),
+    /requiredPermission must contain unique non-empty permission alternatives/u,
   );
 });
 
@@ -89,12 +107,16 @@ test('registry uses the audited canonical-route local policies and immutable loo
     definition({ localPolicy: 'blocked_by_web_contract' }),
   ]);
 
-  assert.equal(registry.byId.get('project-overview')?.localPolicy, 'blocked_by_web_contract');
+  assert.equal(
+    registry.byId.get('project-overview')?.localPolicy,
+    'blocked_by_web_contract',
+  );
   assert.equal(typeof registry.byId.set, 'undefined');
   assert.equal(Object.isFrozen(registry.byId), true);
   assert.throws(
-    () => createDesktopRouteRegistry([definition({ localPolicy: 'native_only' })]),
-    /unsupported local policy: native_only/u
+    () =>
+      createDesktopRouteRegistry([definition({ localPolicy: 'native_only' })]),
+    /unsupported local policy: native_only/u,
   );
 });
 
@@ -113,13 +135,16 @@ test('context validation reports stable structural reason codes', () => {
         tenantId: 'tenant-1',
         projectId: 'project-1',
       },
-    }
+    },
   );
-  assert.deepEqual(validateDesktopRouteContext(route, { tenantId: 'tenant-1' }), {
-    valid: false,
-    reasonCode: 'desktop_route_context_missing',
-    scope: 'project',
-  });
+  assert.deepEqual(
+    validateDesktopRouteContext(route, { tenantId: 'tenant-1' }),
+    {
+      valid: false,
+      reasonCode: 'desktop_route_context_missing',
+      scope: 'project',
+    },
+  );
   assert.deepEqual(
     validateDesktopRouteContext(route, {
       tenantId: 'tenant-1',
@@ -129,7 +154,7 @@ test('context validation reports stable structural reason codes', () => {
       valid: false,
       reasonCode: 'desktop_route_context_invalid',
       scope: 'project',
-    }
+    },
   );
 });
 
@@ -140,7 +165,7 @@ test('path building encodes opaque context ids for every supported scope', () =>
       path: '/tenant/:tenantId/overview',
       scope: ['tenant'],
       capability: 'tenant-tenant-overview',
-      requiredPermission: ['tenant:read'],
+      requiredPermission: [['tenant:read']],
     }),
     definition(),
     definition({
@@ -148,14 +173,14 @@ test('path building encodes opaque context ids for every supported scope', () =>
       path: '/tenant/:tenantId/project/:projectId/workspace/:workspaceId/overview',
       scope: ['tenant', 'project', 'workspace'],
       capability: 'project-project-workspaces',
-      requiredPermission: ['workspace:read'],
+      requiredPermission: [['workspace:read']],
     }),
     definition({
       id: 'instance-overview',
       path: '/tenant/:tenantId/instance/:instanceId/overview',
       scope: ['tenant', 'instance'],
       capability: 'tenant-tenant-instances',
-      requiredPermission: ['instance:read'],
+      requiredPermission: [['instance:read']],
       localPolicy: 'cloud_only',
     }),
   ]);
@@ -164,14 +189,14 @@ test('path building encodes opaque context ids for every supported scope', () =>
     buildDesktopRoutePath(registry.byId.get('tenant-overview'), {
       tenantId: 'tenant/north',
     }),
-    '/tenant/tenant%2Fnorth/overview'
+    '/tenant/tenant%2Fnorth/overview',
   );
   assert.equal(
     buildDesktopRoutePath(registry.byId.get('project-overview'), {
       tenantId: 'tenant north',
       projectId: 'project#1',
     }),
-    '/tenant/tenant%20north/project/project%231/overview'
+    '/tenant/tenant%20north/project/project%231/overview',
   );
   assert.equal(
     buildDesktopRoutePath(registry.byId.get('workspace-overview'), {
@@ -179,21 +204,21 @@ test('path building encodes opaque context ids for every supported scope', () =>
       projectId: 'project-1',
       workspaceId: 'workspace?draft',
     }),
-    '/tenant/tenant-1/project/project-1/workspace/workspace%3Fdraft/overview'
+    '/tenant/tenant-1/project/project-1/workspace/workspace%3Fdraft/overview',
   );
   assert.equal(
     buildDesktopRoutePath(registry.byId.get('instance-overview'), {
       tenantId: 'tenant-1',
       instanceId: 'instance/1',
     }),
-    '/tenant/tenant-1/instance/instance%2F1/overview'
+    '/tenant/tenant-1/instance/instance%2F1/overview',
   );
   assert.throws(
     () =>
       buildDesktopRoutePath(registry.byId.get('project-overview'), {
         tenantId: 'tenant-1',
       }),
-    /desktop_route_context_missing:project/u
+    /desktop_route_context_missing:project/u,
   );
 });
 
@@ -210,7 +235,7 @@ test('matching restores context without invoking declarative loaders', async () 
 
   const match = matchDesktopRoute(
     registry,
-    '/tenant/tenant%20north/project/project%2Fone/overview?tab=recent'
+    '/tenant/tenant%20north/project/project%2Fone/overview?tab=recent',
   );
 
   assert.equal(loadCount, 0);
@@ -221,7 +246,7 @@ test('matching restores context without invoking declarative loaders', async () 
   });
   assert.equal(
     match?.canonicalPath,
-    '/tenant/tenant%20north/project/project%2Fone/overview'
+    '/tenant/tenant%20north/project/project%2Fone/overview',
   );
   await match?.definition.loader();
   assert.equal(loadCount, 1);
@@ -232,17 +257,17 @@ test('deep-link restoration accepts hash and full URL forms and fails closed', (
 
   const hashResult = restoreDesktopRoute(
     registry,
-    '#/tenant/tenant-1/project/project-1/overview/'
+    '#/tenant/tenant-1/project/project-1/overview/',
   );
   assert.equal(hashResult.status, 'matched');
   assert.equal(
     hashResult.match.canonicalPath,
-    '/tenant/tenant-1/project/project-1/overview'
+    '/tenant/tenant-1/project/project-1/overview',
   );
 
   const fullUrlResult = restoreDesktopRoute(
     registry,
-    'agistack://desktop#/tenant/tenant-1/project/project-2/overview?tab=recent'
+    'agistack://desktop#/tenant/tenant-1/project/project-2/overview?tab=recent',
   );
   assert.equal(fullUrlResult.status, 'matched');
   assert.equal(fullUrlResult.match.context.projectId, 'project-2');
@@ -250,12 +275,12 @@ test('deep-link restoration accepts hash and full URL forms and fails closed', (
   assert.deepEqual(
     restoreDesktopRoute(
       registry,
-      '#/tenant/tenant-1/project/%E0%A4%A/overview'
+      '#/tenant/tenant-1/project/%E0%A4%A/overview',
     ),
     {
       status: 'not_found',
       reasonCode: 'desktop_route_malformed',
-    }
+    },
   );
   assert.deepEqual(restoreDesktopRoute(registry, '#/unknown'), {
     status: 'not_found',

@@ -20,9 +20,7 @@ import {
   bindProductionEntrySurfaces,
   validateProductionEntryIntegrity,
 } from "./production-entry-integrity.mjs";
-import {
-  projectReviewedProductionDependencies,
-} from "./web-production-dependency-projection.mjs";
+import { projectReviewedProductionDependencies } from "./web-production-dependency-projection.mjs";
 import { resolveCapabilityWebEntries } from "./web-production-entry-projection.mjs";
 
 const contractRoot = dirname(fileURLToPath(import.meta.url));
@@ -31,6 +29,9 @@ const inventoryPath = resolve(contractRoot, "web-route-inventory.v2.json");
 const metadataPath = resolve(
   contractRoot,
   "parity-capability-definitions.metadata.v2.json",
+);
+const routeEntryPermissionCatalog = readJson(
+  resolve(contractRoot, "parity-route-entry-permissions.v2.json"),
 );
 const definitionFragmentRegistry = readJson(
   resolve(contractRoot, "parity-capability-fragments.v2.json"),
@@ -53,6 +54,27 @@ const inventory = readJson(inventoryPath);
 const definitions = mergeDefinitionFragments(
   readJson(metadataPath),
   definitionFragments,
+);
+const routeEntryPermissionsByCapability = new Map(
+  routeEntryPermissionCatalog.capabilities.map((capability) => [
+    capability.id,
+    capability.route_entry_permissions,
+  ]),
+);
+if (
+  routeEntryPermissionsByCapability.size !==
+  routeEntryPermissionCatalog.capabilities.length
+) {
+  throw new Error(
+    "Route-entry permission catalog contains duplicate capability IDs.",
+  );
+}
+assertExactKeys(
+  routeEntryPermissionsByCapability,
+  definitions.capabilities
+    .filter((definition) => definition.kind === "canonical")
+    .map((definition) => definition.id),
+  "route-entry permission ownership",
 );
 const productionEntryIntegrity = validateProductionEntryIntegrity(
   definitions.production_entry_integrity,
@@ -106,7 +128,12 @@ assertCount(
 );
 
 const normalizedDefinitions = definitions.capabilities.map((definition) => {
-  const normalized = normalizeDefinition(definition);
+  const normalized = normalizeDefinition({
+    ...definition,
+    route_entry_permissions: routeEntryPermissionsByCapability.get(
+      definition.id,
+    ),
+  });
   assertSurfacePermissionCoverage({
     capabilityId: normalized.id,
     capabilityKind: normalized.kind,
@@ -336,6 +363,7 @@ const capabilities = normalizedDefinitions.map((definition) => {
     production_entries: productionEntries,
     api_contracts: definition.api_contracts,
     required_permissions: definition.required_permissions,
+    route_entry_permissions: definition.route_entry_permissions,
     permission_requirements: definition.permission_requirements,
     data_states: definition.data_states,
     interaction_states: definition.interaction_states,
@@ -425,6 +453,7 @@ function groupOwnedKeys(ownership) {
 }
 function normalizeDefinition(definition) {
   const permissionRequirements = requirePermissionRequirements(definition);
+  const routeEntryPermissions = requireRouteEntryPermissions(definition);
   if (definition.kind === "native_only") {
     const nativeStatus = definition.native_status ?? "implemented";
     const nativeAvailability =
@@ -478,6 +507,7 @@ function normalizeDefinition(definition) {
         ),
       ],
       required_permissions: definition.permissions,
+      route_entry_permissions: routeEntryPermissions,
       permission_requirements: permissionRequirements,
       data_states: ["loading", "ready", "forbidden", "unavailable", "retry"],
       interaction_states: definition.interaction_states,
@@ -563,6 +593,7 @@ function normalizeDefinition(definition) {
       { desktop_cloud: desktopCloud, desktop_local: desktopLocal },
     ),
     required_permissions: definition.permissions,
+    route_entry_permissions: routeEntryPermissions,
     permission_requirements: permissionRequirements,
     data_states: [
       "loading",
@@ -780,6 +811,22 @@ function requirePermissionRequirements(definition) {
     );
   }
   return definition.permission_requirements;
+}
+
+function requireRouteEntryPermissions(definition) {
+  if (definition.kind !== "canonical") {
+    return [];
+  }
+  if (
+    !Object.hasOwn(definition, "route_entry_permissions") ||
+    !Array.isArray(definition.route_entry_permissions) ||
+    definition.route_entry_permissions.length === 0
+  ) {
+    throw new Error(
+      `Capability ${definition.id} must declare reviewed route_entry_permissions.`,
+    );
+  }
+  return definition.route_entry_permissions;
 }
 
 function dispositionSummary(surface) {

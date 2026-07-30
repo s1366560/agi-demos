@@ -7,12 +7,13 @@ import {
   type DesktopRouteScope,
 } from './desktopRouteRegistry';
 
+import routeEntryPermissionCatalog from '../../../contracts/desktop-web-parity/parity-route-entry-permissions.v2.json';
+
 type CanonicalRouteMetadata = readonly [
   id: string,
   path: string,
   scope: readonly DesktopRouteScope[],
   navGroup: string,
-  requiredPermission: readonly string[],
   localPolicy: DesktopRouteLocalPolicy,
 ];
 
@@ -22,12 +23,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/agent-workspace',
     ['tenant'],
     'tenant-core-operations',
-    [
-      'authenticated',
-      'tenant_scope',
-      'conversation_read_access',
-      'conversation_or_project_owner_for_roster_mutations',
-    ],
     'native_equivalent',
   ],
   [
@@ -35,7 +30,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/overview',
     ['tenant'],
     'tenant-core-operations',
-    ['authenticated', 'tenant_member'],
     'native_equivalent',
   ],
   [
@@ -43,13 +37,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/projects',
     ['tenant'],
     'tenant-core-operations',
-    [
-      'authenticated',
-      'project_membership_for_list',
-      'tenant_admin_or_owner_for_create',
-      'project_admin_or_owner_for_update',
-      'project_owner_for_delete',
-    ],
     'native_equivalent',
   ],
   [
@@ -57,13 +44,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/workspaces',
     ['tenant', 'workspace'],
     'tenant-core-operations',
-    [
-      'authenticated',
-      'project_access',
-      'workspace_access',
-      'workspace_editor_for_update_and_agent_bindings',
-      'workspace_owner_for_member_management',
-    ],
     'native_equivalent',
   ],
   [
@@ -71,7 +51,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/tasks',
     ['tenant'],
     'tenant-core-operations',
-    ['authenticated', 'accessible_project_scope', 'task_access'],
     'native_equivalent',
   ],
   [
@@ -79,7 +58,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/analytics',
     ['tenant'],
     'tenant-core-operations',
-    ['authenticated', 'tenant_member'],
     'native_equivalent',
   ],
   [
@@ -87,12 +65,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/agents',
     ['tenant'],
     'tenant-agent-building',
-    [
-      'authenticated',
-      'tenant_member',
-      'tenant_admin_for_config_mutations',
-      'conversation_access_for_trace_details',
-    ],
     'native_equivalent',
   ],
   [
@@ -100,12 +72,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/agent-definitions',
     ['tenant'],
     'tenant-agent-building',
-    [
-      'authenticated',
-      'tenant_member_for_read',
-      'tenant_admin_for_mutations',
-      'project_access_when_scoped',
-    ],
     'native_equivalent',
   ],
   [
@@ -113,7 +79,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/agent-bindings',
     ['tenant'],
     'tenant-agent-building',
-    ['authenticated', 'tenant_member_for_read', 'tenant_admin_for_mutations'],
     'native_equivalent',
   ],
   [
@@ -121,13 +86,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/skills',
     ['tenant'],
     'tenant-agent-building',
-    [
-      'authenticated',
-      'tenant_access',
-      'tenant_admin_for_tenant_mutations',
-      'project_member_for_project_reads',
-      'project_contributor_for_project_mutations',
-    ],
     'native_equivalent',
   ],
   [
@@ -135,12 +93,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/evolution',
     ['tenant'],
     'tenant-agent-building',
-    [
-      'authenticated',
-      'tenant_access',
-      'tenant_admin_for_config_and_tenant_run',
-      'tenant_admin_or_project_contributor_for_job_review',
-    ],
     'native_equivalent',
   ],
   [
@@ -148,7 +100,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/patterns',
     ['tenant'],
     'tenant-agent-building',
-    ['authenticated', 'tenant_member_for_read', 'tenant_admin_for_delete'],
     'native_equivalent',
   ],
   [
@@ -156,15 +107,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/plugins',
     ['tenant'],
     'tenant-extensions-integrations',
-    [
-      'authenticated',
-      'tenant_member_for_read',
-      'tenant_admin_or_owner_for_plugin_mutations',
-      'project_access_for_channel_configs',
-      'project_admin_or_owner_for_channel_config_mutations',
-      'project_member_for_channel_config_test',
-      'desktop_tenant_admin_or_owner_for_channel_management',
-    ],
     'native_equivalent',
   ],
   [
@@ -172,11 +114,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/mcp-servers',
     ['tenant'],
     'tenant-extensions-integrations',
-    [
-      'authenticated',
-      'project_member_for_read',
-      'project_owner_admin_or_member_for_mutations',
-    ],
     'native_equivalent',
   ],
   [
@@ -184,7 +121,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/acp',
     ['tenant'],
     'tenant-extensions-integrations',
-    ['authenticated', 'tenant_member_for_read', 'tenant_admin_for_acp_mutations'],
     'cloud_only',
   ],
   [
@@ -192,7 +128,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/templates',
     ['tenant'],
     'tenant-extensions-integrations',
-    ['authenticated', 'tenant_member'],
     'native_equivalent',
   ],
   [
@@ -200,14 +135,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/providers',
     ['tenant'],
     'tenant-extensions-integrations',
-    [
-      'authenticated',
-      'tenant_assignment_access',
-      'tenant_member_or_global_admin_for_usage',
-      'global_admin_for_provider_mutations',
-      'global_admin_for_system_actions',
-      'project_workspace_access_for_routing',
-    ],
     'native_equivalent',
   ],
   [
@@ -215,7 +142,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/webhooks',
     ['tenant'],
     'tenant-extensions-integrations',
-    ['authenticated', 'tenant_admin', 'events_feature_for_event_type_catalog'],
     'cloud_only',
   ],
   [
@@ -223,7 +149,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/runtimes',
     ['tenant', 'global'],
     'tenant-runtime-infrastructure',
-    ['authenticated', 'global_admin', 'tenant_member'],
     'native_equivalent',
   ],
   [
@@ -231,7 +156,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/pool',
     ['tenant', 'global'],
     'tenant-runtime-infrastructure',
-    ['authenticated', 'global_admin'],
     'cloud_only',
   ],
   [
@@ -239,7 +163,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/instances',
     ['tenant', 'instance'],
     'tenant-runtime-infrastructure',
-    ['authenticated', 'tenant_member', 'tenant_admin_for_mutations'],
     'native_equivalent',
   ],
   [
@@ -247,7 +170,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/clusters',
     ['tenant'],
     'tenant-runtime-infrastructure',
-    ['authenticated', 'tenant_member'],
     'cloud_only',
   ],
   [
@@ -255,7 +177,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/deploy',
     ['tenant', 'instance'],
     'tenant-runtime-infrastructure',
-    ['authenticated', 'tenant_access'],
     'cloud_only',
   ],
   [
@@ -263,7 +184,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/instance-templates',
     ['tenant'],
     'tenant-runtime-infrastructure',
-    ['authenticated', 'tenant_member'],
     'native_equivalent',
   ],
   [
@@ -271,7 +191,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/genes',
     ['tenant', 'instance'],
     'tenant-runtime-infrastructure',
-    ['authenticated', 'tenant_scope'],
     'native_equivalent',
   ],
   [
@@ -279,7 +198,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/users',
     ['tenant'],
     'tenant-governance-management',
-    ['authenticated', 'tenant_member'],
     'cloud_only',
   ],
   [
@@ -287,7 +205,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/audit-logs',
     ['tenant'],
     'tenant-governance-management',
-    ['authenticated', 'tenant_access'],
     'cloud_only',
   ],
   [
@@ -295,7 +212,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/events',
     ['tenant'],
     'tenant-governance-management',
-    ['authenticated', 'tenant_access'],
     'native_equivalent',
   ],
   [
@@ -303,7 +219,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/dead-letter-queue',
     ['tenant'],
     'tenant-governance-management',
-    ['authenticated', 'global_admin'],
     'cloud_only',
   ],
   [
@@ -311,7 +226,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/trust-policies',
     ['tenant'],
     'tenant-governance-management',
-    ['authenticated', 'tenant_workspace_access'],
     'cloud_only',
   ],
   [
@@ -319,7 +233,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/decision-records',
     ['tenant'],
     'tenant-governance-management',
-    ['authenticated', 'tenant_workspace_access'],
     'cloud_only',
   ],
   [
@@ -327,7 +240,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/billing',
     ['tenant'],
     'tenant-governance-management',
-    ['authenticated', 'tenant_admin_or_owner'],
     'cloud_only',
   ],
   [
@@ -335,7 +247,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/org-settings/info',
     ['tenant'],
     'tenant-governance-management',
-    ['authenticated', 'tenant_access'],
     'cloud_only',
   ],
   [
@@ -343,7 +254,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/settings',
     ['tenant'],
     'tenant-governance-management',
-    ['authenticated', 'tenant_member'],
     'cloud_only',
   ],
   [
@@ -351,7 +261,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/project/:projectId',
     ['tenant', 'project'],
     'project-workspace',
-    ['authenticated', 'project_member'],
     'native_equivalent',
   ],
   [
@@ -359,13 +268,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/project/:projectId/workspaces',
     ['tenant', 'project', 'workspace'],
     'project-workspace',
-    [
-      'authenticated',
-      'project_member',
-      'workspace_member',
-      'workspace_editor',
-      'workspace_owner',
-    ],
     'native_equivalent',
   ],
   [
@@ -373,7 +275,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/project/:projectId/blackboard',
     ['tenant', 'project', 'workspace'],
     'project-workspace',
-    ['authenticated', 'workspace_member', 'workspace_editor', 'workspace_owner'],
     'native_equivalent',
   ],
   [
@@ -381,7 +282,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/project/:projectId/team',
     ['tenant', 'project'],
     'project-workspace',
-    ['authenticated', 'tenant_admin', 'project_member', 'project_admin'],
     'native_equivalent',
   ],
   [
@@ -389,13 +289,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/project/:projectId/memories',
     ['tenant', 'project'],
     'project-knowledge-base',
-    [
-      'authenticated',
-      'project_member',
-      'project_contributor',
-      'memory_editor',
-      'memory_admin',
-    ],
     'native_equivalent',
   ],
   [
@@ -403,7 +296,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/project/:projectId/entities',
     ['tenant', 'project'],
     'project-knowledge-base',
-    ['authenticated', 'project_member'],
     'native_equivalent',
   ],
   [
@@ -411,7 +303,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/project/:projectId/communities',
     ['tenant', 'project'],
     'project-knowledge-base',
-    ['authenticated', 'project_member'],
     'native_equivalent',
   ],
   [
@@ -419,7 +310,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/project/:projectId/graph',
     ['tenant', 'project'],
     'project-knowledge-base',
-    ['authenticated', 'project_member'],
     'native_equivalent',
   ],
   [
@@ -427,7 +317,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/project/:projectId/advanced-search',
     ['tenant', 'project'],
     'project-discovery',
-    ['authenticated', 'project_member'],
     'native_equivalent',
   ],
   [
@@ -435,7 +324,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/project/:projectId/schema',
     ['tenant', 'project'],
     'project-configuration',
-    ['authenticated', 'project_member', 'project_contributor'],
     'native_equivalent',
   ],
   [
@@ -443,15 +331,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/project/:projectId/channels',
     ['tenant', 'project'],
     'project-configuration',
-    [
-      'authenticated',
-      'tenant_member',
-      'tenant_admin',
-      'tenant_owner',
-      'project_member',
-      'project_admin',
-      'project_owner',
-    ],
     'native_equivalent',
   ],
   [
@@ -459,7 +338,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/project/:projectId/maintenance',
     ['tenant', 'project'],
     'project-configuration',
-    ['authenticated', 'project_member'],
     'native_equivalent',
   ],
   [
@@ -467,7 +345,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/project/:projectId/cron-jobs',
     ['tenant', 'project'],
     'project-configuration',
-    ['authenticated', 'project_member'],
     'native_equivalent',
   ],
   [
@@ -475,7 +352,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/project/:projectId/settings',
     ['tenant', 'project'],
     'project-configuration',
-    ['authenticated', 'project_member', 'project_admin', 'project_owner'],
     'native_equivalent',
   ],
   [
@@ -483,7 +359,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/project/:projectId/agent',
     ['tenant', 'project'],
     'project-workspace',
-    ['authenticated'],
     'blocked_by_web_contract',
   ],
   [
@@ -491,7 +366,6 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/project/:projectId/agent/logs',
     ['tenant', 'project'],
     'project-workspace',
-    ['authenticated'],
     'blocked_by_web_contract',
   ],
   [
@@ -499,27 +373,45 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/project/:projectId/agent/patterns',
     ['tenant', 'project'],
     'project-workspace',
-    ['authenticated'],
     'blocked_by_web_contract',
   ],
 ] as const satisfies readonly CanonicalRouteMetadata[];
 
-export type CanonicalDesktopRouteId = (typeof CANONICAL_ROUTE_METADATA)[number][0];
+export type CanonicalDesktopRouteId =
+  (typeof CANONICAL_ROUTE_METADATA)[number][0];
 
 export const CANONICAL_DESKTOP_ROUTE_IDS: readonly CanonicalDesktopRouteId[] =
   Object.freeze(CANONICAL_ROUTE_METADATA.map(([id]) => id));
 
-const CANONICAL_DESKTOP_ROUTE_ID_SET = new Set<string>(CANONICAL_DESKTOP_ROUTE_IDS);
+const CANONICAL_DESKTOP_ROUTE_ID_SET = new Set<string>(
+  CANONICAL_DESKTOP_ROUTE_IDS,
+);
+const ROUTE_ENTRY_PERMISSION_BY_ID = new Map(
+  routeEntryPermissionCatalog.capabilities.map((capability) => [
+    capability.id,
+    capability.route_entry_permissions,
+  ]),
+);
 
 export function createDesktopCanonicalRouteCatalog<TModule>(
   loaders: Readonly<Record<string, unknown>>,
 ): DesktopRouteRegistry<TModule> {
+  if (
+    ROUTE_ENTRY_PERMISSION_BY_ID.size !==
+      routeEntryPermissionCatalog.capabilities.length ||
+    ROUTE_ENTRY_PERMISSION_BY_ID.size !== CANONICAL_DESKTOP_ROUTE_IDS.length
+  ) {
+    throw new Error('desktop_route_entry_permission_catalog_invalid');
+  }
   for (const id of Object.keys(loaders)) {
     if (!CANONICAL_DESKTOP_ROUTE_ID_SET.has(id)) {
       throw new Error(`desktop_route_loader_unknown:${id}`);
     }
   }
   for (const id of CANONICAL_DESKTOP_ROUTE_IDS) {
+    if (!ROUTE_ENTRY_PERMISSION_BY_ID.has(id)) {
+      throw new Error(`desktop_route_entry_permission_missing:${id}`);
+    }
     if (!Object.hasOwn(loaders, id)) {
       throw new Error(`desktop_route_loader_missing:${id}`);
     }
@@ -529,17 +421,30 @@ export function createDesktopCanonicalRouteCatalog<TModule>(
   }
 
   const definitions = CANONICAL_ROUTE_METADATA.map(
-    ([id, path, scope, navGroup, requiredPermission, localPolicy]) =>
+    ([id, path, scope, navGroup, localPolicy]) =>
       ({
         id,
         path,
         scope,
         navGroup,
         capability: id,
-        requiredPermission,
+        requiredPermission: routeEntryPermissions(id),
         localPolicy,
         loader: loaders[id] as DesktopRouteLoader<TModule>,
       }) satisfies DesktopRouteDefinition<TModule>,
   );
   return createDesktopRouteRegistry(definitions);
+}
+
+function routeEntryPermissions(
+  id: CanonicalDesktopRouteId,
+): readonly (readonly string[])[] {
+  const requirements = ROUTE_ENTRY_PERMISSION_BY_ID.get(id);
+  if (!requirements) {
+    throw new Error(`desktop_route_entry_permission_missing:${id}`);
+  }
+  return requirements.map((requirement) => [
+    requirement.authentication,
+    ...requirement.authorization,
+  ]);
 }

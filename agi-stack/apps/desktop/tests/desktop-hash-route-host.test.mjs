@@ -6,12 +6,10 @@ const require = createRequire(import.meta.url);
 const {
   createBrowserDesktopHashLocationPort,
   createDesktopHashRouteHost,
-} = require(
-  '/tmp/agistack-desktop-test-dist/src/features/navigation/desktopHashRouteHost.js'
-);
-const { createDesktopRouteRegistry } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js'
-);
+} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopHashRouteHost.js');
+const {
+  createDesktopRouteRegistry,
+} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js');
 
 function deferred() {
   let resolve;
@@ -30,7 +28,7 @@ function route(id, path, loader, overrides = {}) {
     scope: ['tenant'],
     navGroup: 'tenant-core',
     capability: id,
-    requiredPermission: ['authenticated'],
+    requiredPermission: [['authenticated']],
     localPolicy: 'native_equivalent',
     loader,
     ...overrides,
@@ -117,7 +115,7 @@ test('host exposes malformed and not-found hash states without loading modules',
 
   const malformedLocation = hashLocation('#/tenant/%E0%A4%A/overview');
   const malformedHost = createDesktopHashRouteHost(
-    hostOptions({ registry, location: malformedLocation.port })
+    hostOptions({ registry, location: malformedLocation.port }),
   );
   await malformedHost.start();
   assert.deepEqual(malformedHost.getState(), {
@@ -129,7 +127,7 @@ test('host exposes malformed and not-found hash states without loading modules',
 
   const missingLocation = hashLocation('#/tenant/tenant-1/missing');
   const missingHost = createDesktopHashRouteHost(
-    hostOptions({ registry, location: missingLocation.port })
+    hostOptions({ registry, location: missingLocation.port }),
   );
   await missingHost.start();
   assert.deepEqual(missingHost.getState(), {
@@ -154,9 +152,9 @@ test('forbidden and unavailable routes never switch scope or load', async () => 
         return { default: 'Billing' };
       },
       {
-        requiredPermission: ['authenticated', 'tenant_admin'],
+        requiredPermission: [['authenticated', 'tenant_admin']],
         localPolicy: 'cloud_only',
-      }
+      },
     ),
   ]);
   const location = hashLocation('#/tenant/tenant-1/billing');
@@ -173,7 +171,7 @@ test('forbidden and unavailable routes never switch scope or load', async () => 
       switchScope: async () => {
         scopeCount += 1;
       },
-    })
+    }),
   );
   await forbiddenHost.start();
   assert.equal(forbiddenHost.getState().status, 'forbidden');
@@ -192,7 +190,7 @@ test('forbidden and unavailable routes never switch scope or load', async () => 
       switchScope: async () => {
         scopeCount += 1;
       },
-    })
+    }),
   );
   await localHost.start();
   assert.deepEqual(localHost.getState(), {
@@ -217,13 +215,11 @@ test('context permission resolver authorizes the exact matched route context', a
       async () => ({ default: 'Project Overview' }),
       {
         scope: ['tenant', 'project'],
-        requiredPermission: ['authenticated', 'project_member'],
-      }
+        requiredPermission: [['authenticated', 'project_member']],
+      },
     ),
   ]);
-  const location = hashLocation(
-    '#/tenant/tenant-2/project/project-2',
-  );
+  const location = hashLocation('#/tenant/tenant-2/project/project-2');
   const host = createDesktopHashRouteHost(
     hostOptions({
       registry,
@@ -242,7 +238,7 @@ test('context permission resolver authorizes the exact matched route context', a
             instance_id: null,
           },
         }),
-    })
+    }),
   );
 
   await host.start();
@@ -274,13 +270,11 @@ test('permission resolver failures fail closed before capability or scope work a
       },
       {
         scope: ['tenant', 'project'],
-        requiredPermission: ['authenticated', 'project_member'],
-      }
+        requiredPermission: [['authenticated', 'project_member']],
+      },
     ),
   ]);
-  const location = hashLocation(
-    '#/tenant/tenant-1/project/project-1',
-  );
+  const location = hashLocation('#/tenant/tenant-1/project/project-1');
   const host = createDesktopHashRouteHost(
     hostOptions({
       registry,
@@ -310,7 +304,7 @@ test('permission resolver failures fail closed before capability or scope work a
       switchScope: async () => {
         scopeCount += 1;
       },
-    })
+    }),
   );
 
   await host.start();
@@ -355,9 +349,11 @@ test('host emits loading then ready or degraded after scope and lazy module reso
         assert.equal(signal.aborted, false);
         scopeContexts.push(context);
       },
-    })
+    }),
   );
-  const unsubscribe = host.subscribe((state) => loadingStates.push(state.status));
+  const unsubscribe = host.subscribe((state) =>
+    loadingStates.push(state.status),
+  );
 
   await host.start();
 
@@ -388,13 +384,11 @@ test('capability scope drift switches authority before loading the route module'
       },
       {
         scope: ['tenant', 'project'],
-        requiredPermission: ['authenticated', 'project_member'],
-      }
+        requiredPermission: [['authenticated', 'project_member']],
+      },
     ),
   ]);
-  const location = hashLocation(
-    '#/tenant/tenant-2/project/project-2',
-  );
+  const location = hashLocation('#/tenant/tenant-2/project/project-2');
   const host = createDesktopHashRouteHost(
     hostOptions({
       registry,
@@ -420,7 +414,7 @@ test('capability scope drift switches authority before loading the route module'
         scopeCount += 1;
         authorityTenantId = context.tenantId;
       },
-    })
+    }),
   );
 
   await host.start();
@@ -429,10 +423,7 @@ test('capability scope drift switches authority before loading the route module'
   assert.equal(permissionCount, 2);
   assert.equal(loadCount, 1);
   assert.equal(host.getState().status, 'ready');
-  assert.equal(
-    host.getState().capability.scope.project_id,
-    'project-2',
-  );
+  assert.equal(host.getState().capability.scope.project_id, 'project-2');
   host.stop();
 });
 
@@ -450,22 +441,17 @@ test('capability scope drift cannot defer non-membership permissions', async () 
       {
         scope: ['tenant', 'project'],
         requiredPermission: [
-          'authenticated',
-          'project_member',
-          'tenant_admin',
+          ['authenticated', 'project_member', 'tenant_admin'],
         ],
-      }
+      },
     ),
   ]);
-  const location = hashLocation(
-    '#/tenant/tenant-2/project/project-2/settings',
-  );
+  const location = hashLocation('#/tenant/tenant-2/project/project-2/settings');
   const host = createDesktopHashRouteHost(
     hostOptions({
       registry,
       location: location.port,
-      resolvePermissions: () =>
-        new Set(['authenticated', 'project_member']),
+      resolvePermissions: () => new Set(['authenticated', 'project_member']),
       resolveCapability: () =>
         capability('tenant-1', {
           scope: {
@@ -478,7 +464,7 @@ test('capability scope drift cannot defer non-membership permissions', async () 
       switchScope: async () => {
         scopeCount += 1;
       },
-    })
+    }),
   );
 
   await host.start();
@@ -495,7 +481,9 @@ test('hash changes abort prior scope work and suppress stale loader completion',
   const firstScopeSignal = deferred();
   const registry = createDesktopRouteRegistry([
     route('tenant-one', '/tenant/:tenantId/one', () => firstModule.promise),
-    route('tenant-two', '/tenant/:tenantId/two', async () => ({ default: 'Two' })),
+    route('tenant-two', '/tenant/:tenantId/two', async () => ({
+      default: 'Two',
+    })),
   ]);
   const location = hashLocation('#/tenant/tenant-1/one');
   const signals = [];
@@ -507,14 +495,15 @@ test('hash changes abort prior scope work and suppress stale loader completion',
         signals.push(signal);
         if (signals.length === 1) firstScopeSignal.resolve();
       },
-    })
+    }),
   );
 
   const startPromise = host.start();
   await firstScopeSignal.promise;
   const readyTwo = waitForState(
     host,
-    (state) => state.status === 'ready' && state.match.definition.id === 'tenant-two'
+    (state) =>
+      state.status === 'ready' && state.match.definition.id === 'tenant-two',
   );
   location.navigate('#/tenant/tenant-1/two');
   await readyTwo;
@@ -549,7 +538,7 @@ test('loader errors are retryable and stop removes the hash listener and aborts 
         latestSignal = signal;
         activeScope.resolve();
       },
-    })
+    }),
   );
 
   await host.start();
@@ -590,7 +579,7 @@ test('capability and scope failures expose distinct retryable error states', asy
       resolveCapability: () => {
         throw new Error('capability failed');
       },
-    })
+    }),
   );
   await capabilityHost.start();
   assert.deepEqual(capabilityHost.getState(), {
@@ -608,7 +597,7 @@ test('capability and scope failures expose distinct retryable error states', asy
       switchScope: async () => {
         throw new Error('scope failed');
       },
-    })
+    }),
   );
   await scopeHost.start();
   assert.deepEqual(scopeHost.getState(), {

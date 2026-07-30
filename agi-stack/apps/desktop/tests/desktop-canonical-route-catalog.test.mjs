@@ -7,22 +7,22 @@ const require = createRequire(import.meta.url);
 const {
   CANONICAL_DESKTOP_ROUTE_IDS,
   createDesktopCanonicalRouteCatalog,
-} = require(
-  '/tmp/agistack-desktop-test-dist/src/features/navigation/desktopCanonicalRouteCatalog.js'
-);
-const { buildDesktopRoutePath, matchDesktopRoute, restoreDesktopRoute } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js'
-);
+} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopCanonicalRouteCatalog.js');
+const {
+  buildDesktopRoutePath,
+  matchDesktopRoute,
+  restoreDesktopRoute,
+} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js');
 
 const CONTRACT_ROOT = new URL(
   '../contracts/desktop-web-parity/',
-  import.meta.url
+  import.meta.url,
 );
 const inventory = JSON.parse(
-  readFileSync(new URL('web-route-inventory.v2.json', CONTRACT_ROOT), 'utf8')
+  readFileSync(new URL('web-route-inventory.v2.json', CONTRACT_ROOT), 'utf8'),
 );
 const manifest = JSON.parse(
-  readFileSync(new URL('parity-manifest.v2.json', CONTRACT_ROOT), 'utf8')
+  readFileSync(new URL('parity-manifest.v2.json', CONTRACT_ROOT), 'utf8'),
 );
 
 function createCompleteLoaders() {
@@ -30,7 +30,7 @@ function createCompleteLoaders() {
     CANONICAL_DESKTOP_ROUTE_IDS.map((id) => [
       id,
       async () => ({ default: { routeId: id } }),
-    ])
+    ]),
   );
 }
 
@@ -46,19 +46,24 @@ function canonicalPath(target) {
     return `${projectRoot}/blackboard`;
   }
   if (target.contexts.includes('agent')) {
-    return `${projectRoot}/agent${
-      target.relative_path ? `/${target.relative_path}` : ''
-    }`;
+    return `${projectRoot}/agent${target.relative_path ? `/${target.relative_path}` : ''}`;
   }
-  return `${projectRoot}${
-    target.relative_path ? `/${target.relative_path}` : ''
-  }`;
+  return `${projectRoot}${target.relative_path ? `/${target.relative_path}` : ''}`;
+}
+
+function runtimeRouteEntryPermissions(capability) {
+  return capability.route_entry_permissions.map((requirement) => [
+    ...(requirement.authentication === 'authenticated'
+      ? ['authenticated']
+      : []),
+    ...requirement.authorization,
+  ]);
 }
 
 test('catalog exactly covers the 51 audited canonical native route definitions', () => {
   const registry = createDesktopCanonicalRouteCatalog(createCompleteLoaders());
   const manifestById = new Map(
-    manifest.capabilities.map((capability) => [capability.id, capability])
+    manifest.capabilities.map((capability) => [capability.id, capability]),
   );
   const expected = inventory.canonical_navigation_targets.map((target) => {
     const capability = manifestById.get(target.route_key);
@@ -69,7 +74,7 @@ test('catalog exactly covers the 51 audited canonical native route definitions',
       scope: capability.scope,
       navGroup: target.group_id,
       capability: target.route_key,
-      requiredPermission: capability.required_permissions,
+      requiredPermission: runtimeRouteEntryPermissions(capability),
       localPolicy: capability.judgment.input.local_policy,
     };
   });
@@ -77,10 +82,36 @@ test('catalog exactly covers the 51 audited canonical native route definitions',
   assert.equal(inventory.counts.canonical_navigation_targets, 51);
   assert.equal(registry.definitions.length, 51);
   assert.deepEqual(
-    registry.definitions.map(({ loader: _loader, ...definition }) => definition),
-    expected
+    registry.definitions.map(
+      ({ loader: _loader, ...definition }) => definition,
+    ),
+    expected,
   );
-  assert.deepEqual([...CANONICAL_DESKTOP_ROUTE_IDS], expected.map(({ id }) => id));
+  assert.deepEqual(
+    [...CANONICAL_DESKTOP_ROUTE_IDS],
+    expected.map(({ id }) => id),
+  );
+});
+
+test('catalog gates route entry independently from action permission inventory', () => {
+  const registry = createDesktopCanonicalRouteCatalog(createCompleteLoaders());
+  const projectSettings = registry.byId.get('project-project-settings');
+  const runtimes = registry.byId.get('tenant-tenant-runtimes');
+  const providers = registry.byId.get('tenant-tenant-providers');
+
+  assert.deepEqual(projectSettings.requiredPermission, [
+    ['authenticated', 'project_member'],
+  ]);
+  assert.deepEqual(runtimes.requiredPermission, [
+    ['authenticated', 'global_admin'],
+    ['authenticated', 'tenant_member'],
+  ]);
+  assert.deepEqual(providers.requiredPermission, [['authenticated']]);
+  assert.notDeepEqual(
+    projectSettings.requiredPermission,
+    manifest.capabilities.find(({ id }) => id === projectSettings.id)
+      .required_permissions,
+  );
 });
 
 test('catalog preserves the audited route-family distribution and project Agent prefix', () => {
@@ -100,7 +131,7 @@ test('catalog preserves the audited route-family distribution and project Agent 
       }
       return result;
     },
-    { tenant: 0, agentWorkspace: 0, project: 0, blackboard: 0 }
+    { tenant: 0, agentWorkspace: 0, project: 0, blackboard: 0 },
   );
 
   assert.deepEqual(counts, {
@@ -111,15 +142,15 @@ test('catalog preserves the audited route-family distribution and project Agent 
   });
   assert.equal(
     registry.byId.get('project-agent-dashboard').path,
-    '/tenant/:tenantId/project/:projectId/agent'
+    '/tenant/:tenantId/project/:projectId/agent',
   );
   assert.equal(
     registry.byId.get('project-agent-logs').path,
-    '/tenant/:tenantId/project/:projectId/agent/logs'
+    '/tenant/:tenantId/project/:projectId/agent/logs',
   );
   assert.equal(
     registry.byId.get('project-agent-patterns').path,
-    '/tenant/:tenantId/project/:projectId/agent/patterns'
+    '/tenant/:tenantId/project/:projectId/agent/patterns',
   );
 });
 
@@ -128,7 +159,7 @@ test('catalog fails closed when any loader is missing, unknown, or non-callable'
   delete missing['tenant-tenant-billing'];
   assert.throws(
     () => createDesktopCanonicalRouteCatalog(missing),
-    /desktop_route_loader_missing:tenant-tenant-billing/u
+    /desktop_route_loader_missing:tenant-tenant-billing/u,
   );
 
   const unknown = {
@@ -137,21 +168,21 @@ test('catalog fails closed when any loader is missing, unknown, or non-callable'
   };
   assert.throws(
     () => createDesktopCanonicalRouteCatalog(unknown),
-    /desktop_route_loader_unknown:external-web-handoff/u
+    /desktop_route_loader_unknown:external-web-handoff/u,
   );
 
   const nonCallable = createCompleteLoaders();
   nonCallable['tenant-tenant-billing'] = 'https://example.test/billing';
   assert.throws(
     () => createDesktopCanonicalRouteCatalog(nonCallable),
-    /desktop_route_loader_invalid:tenant-tenant-billing/u
+    /desktop_route_loader_invalid:tenant-tenant-billing/u,
   );
 });
 
 test('Blackboard structurally preserves optional workspaceId query context', () => {
   const registry = createDesktopCanonicalRouteCatalog(createCompleteLoaders());
   const blackboard = registry.byId.get(
-    'project-blackboard-dynamic-project-blackboard'
+    'project-blackboard-dynamic-project-blackboard',
   );
   assert.ok(blackboard);
 
@@ -161,12 +192,12 @@ test('Blackboard structurally preserves optional workspaceId query context', () 
       projectId: 'project/one',
       workspaceId: 'workspace?draft',
     }),
-    '/tenant/tenant%20north/project/project%2Fone/blackboard?workspaceId=workspace%3Fdraft'
+    '/tenant/tenant%20north/project/project%2Fone/blackboard?workspaceId=workspace%3Fdraft',
   );
 
   const match = matchDesktopRoute(
     registry,
-    '#/tenant/tenant%20north/project/project%2Fone/blackboard?workspaceId=workspace%3Fdraft'
+    '#/tenant/tenant%20north/project/project%2Fone/blackboard?workspaceId=workspace%3Fdraft',
   );
   assert.deepEqual(match?.context, {
     tenantId: 'tenant north',
@@ -175,12 +206,12 @@ test('Blackboard structurally preserves optional workspaceId query context', () 
   });
   assert.equal(
     match?.canonicalPath,
-    '/tenant/tenant%20north/project/project%2Fone/blackboard?workspaceId=workspace%3Fdraft'
+    '/tenant/tenant%20north/project/project%2Fone/blackboard?workspaceId=workspace%3Fdraft',
   );
 
   const withoutWorkspace = restoreDesktopRoute(
     registry,
-    '#/tenant/tenant-1/project/project-1/blackboard'
+    '#/tenant/tenant-1/project/project-1/blackboard',
   );
   assert.equal(withoutWorkspace.status, 'matched');
   assert.deepEqual(withoutWorkspace.match.context, {

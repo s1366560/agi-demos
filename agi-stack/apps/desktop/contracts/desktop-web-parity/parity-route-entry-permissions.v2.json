@@ -1,0 +1,484 @@
+{
+  "capabilities": [
+    {
+      "id": "agent-workspace-tenant-agent-workspace",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member", "conversation_access"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-overview",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-projects",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-workspaces",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["workspace_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-tasks",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-analytics",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-agent-configuration",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-agent-definitions",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-agent-bindings",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-skills",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        },
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-evolution",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-patterns",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-plugins",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-mcp-servers",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-acp",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-templates",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-providers",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": []
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-webhooks",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_admin"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-runtimes",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["global_admin"]
+        },
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-pool",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["global_admin"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-instances",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-clusters",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-deploy",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-instance-templates",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-genes",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-users",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-audit-logs",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-events",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-dead-letter-queue",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["global_admin"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-trust-policies",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-decision-records",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-billing",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_admin"]
+        },
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_owner"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-org-settings",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "tenant-tenant-settings",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-overview",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-workspaces",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["workspace_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-blackboard-dynamic-project-blackboard",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["workspace_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-team",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-memories",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-entities",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-communities",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-graph",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-search",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-schema",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-channels",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["tenant_member", "project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-maintenance",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-cron-jobs",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-project-settings",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": ["project_member"]
+        }
+      ]
+    },
+    {
+      "id": "project-agent-dashboard",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": []
+        }
+      ]
+    },
+    {
+      "id": "project-agent-logs",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": []
+        }
+      ]
+    },
+    {
+      "id": "project-agent-patterns",
+      "route_entry_permissions": [
+        {
+          "authentication": "authenticated",
+          "authorization": []
+        }
+      ]
+    }
+  ],
+  "judgment": {
+    "agent_id": "/root/parity_review_45_66/route_permission_judgment",
+    "tool_name": "structured_route_entry_permission_judgment",
+    "input_digest_or_revision": "2ab2e1323f7361e614c7db8371e811903519f1c1",
+    "verdict": "accepted",
+    "uncertain": [],
+    "latency_ms": 286000,
+    "recorded_at": "2026-07-30T10:26:55Z"
+  }
+}
