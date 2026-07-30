@@ -249,6 +249,7 @@ test('context permission resolver authorizes the exact matched route context', a
 
   assert.deepEqual(permissionContexts, [
     { tenantId: 'tenant-2', projectId: 'project-2' },
+    { tenantId: 'tenant-2', projectId: 'project-2' },
   ]);
   assert.equal(host.getState().status, 'ready');
   assert.deepEqual(host.getState().match.context, {
@@ -325,8 +326,8 @@ test('permission resolver failures fail closed before capability or scope work a
 
   await host.retry();
   assert.equal(host.getState().status, 'ready');
-  assert.equal(permissionAttempts, 2);
-  assert.equal(capabilityCount, 1);
+  assert.equal(permissionAttempts, 3);
+  assert.equal(capabilityCount, 2);
   assert.equal(scopeCount, 1);
   assert.equal(loadCount, 1);
   host.stop();
@@ -369,6 +370,123 @@ test('host emits loading then ready or degraded after scope and lazy module reso
     module: { default: 'Overview' },
   });
   unsubscribe();
+  host.stop();
+});
+
+test('capability scope drift switches authority before loading the route module', async () => {
+  let authorityTenantId = 'tenant-1';
+  let permissionCount = 0;
+  let scopeCount = 0;
+  let loadCount = 0;
+  const registry = createDesktopRouteRegistry([
+    route(
+      'project-overview',
+      '/tenant/:tenantId/project/:projectId',
+      async () => {
+        loadCount += 1;
+        return { default: 'Project Overview' };
+      },
+      {
+        scope: ['tenant', 'project'],
+        requiredPermission: ['authenticated', 'project_member'],
+      }
+    ),
+  ]);
+  const location = hashLocation(
+    '#/tenant/tenant-2/project/project-2',
+  );
+  const host = createDesktopHashRouteHost(
+    hostOptions({
+      registry,
+      location: location.port,
+      resolvePermissions: () => {
+        permissionCount += 1;
+        return new Set([
+          'authenticated',
+          ...(authorityTenantId === 'tenant-2' ? ['project_member'] : []),
+        ]);
+      },
+      resolveCapability: () =>
+        capability(authorityTenantId, {
+          scope: {
+            tenant_id: authorityTenantId,
+            project_id:
+              authorityTenantId === 'tenant-1' ? 'project-1' : 'project-2',
+            workspace_id: null,
+            instance_id: null,
+          },
+        }),
+      switchScope: async (context) => {
+        scopeCount += 1;
+        authorityTenantId = context.tenantId;
+      },
+    })
+  );
+
+  await host.start();
+
+  assert.equal(scopeCount, 1);
+  assert.equal(permissionCount, 2);
+  assert.equal(loadCount, 1);
+  assert.equal(host.getState().status, 'ready');
+  assert.equal(
+    host.getState().capability.scope.project_id,
+    'project-2',
+  );
+  host.stop();
+});
+
+test('capability scope drift cannot defer non-membership permissions', async () => {
+  let scopeCount = 0;
+  let loadCount = 0;
+  const registry = createDesktopRouteRegistry([
+    route(
+      'project-settings',
+      '/tenant/:tenantId/project/:projectId/settings',
+      async () => {
+        loadCount += 1;
+        return { default: 'Project Settings' };
+      },
+      {
+        scope: ['tenant', 'project'],
+        requiredPermission: [
+          'authenticated',
+          'project_member',
+          'tenant_admin',
+        ],
+      }
+    ),
+  ]);
+  const location = hashLocation(
+    '#/tenant/tenant-2/project/project-2/settings',
+  );
+  const host = createDesktopHashRouteHost(
+    hostOptions({
+      registry,
+      location: location.port,
+      resolvePermissions: () =>
+        new Set(['authenticated', 'project_member']),
+      resolveCapability: () =>
+        capability('tenant-1', {
+          scope: {
+            tenant_id: 'tenant-1',
+            project_id: 'project-1',
+            workspace_id: null,
+            instance_id: null,
+          },
+        }),
+      switchScope: async () => {
+        scopeCount += 1;
+      },
+    })
+  );
+
+  await host.start();
+
+  assert.equal(host.getState().status, 'forbidden');
+  assert.deepEqual(host.getState().missingPermissions, ['tenant_admin']);
+  assert.equal(scopeCount, 0);
+  assert.equal(loadCount, 0);
   host.stop();
 });
 

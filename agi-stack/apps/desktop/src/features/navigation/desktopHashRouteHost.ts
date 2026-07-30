@@ -56,6 +56,27 @@ type HashChangeTarget = Readonly<{
   removeEventListener: (type: 'hashchange', listener: () => void) => void;
 }>;
 
+const SCOPE_MEMBERSHIP_PERMISSIONS = Object.freeze({
+  tenant: 'tenant_member',
+  project: 'project_member',
+  workspace: 'workspace_member',
+  instance: 'instance_member',
+});
+
+function canDeferScopeMembershipPermissions(
+  match: DesktopRouteMatch,
+  missingPermissions: readonly string[],
+): boolean {
+  if (missingPermissions.length === 0) return false;
+  const deferrable = new Set<string>(
+    match.definition.scope.flatMap((scope) => {
+      if (scope === 'global') return [];
+      return [SCOPE_MEMBERSHIP_PERMISSIONS[scope]];
+    }),
+  );
+  return missingPermissions.every((permission) => deferrable.has(permission));
+}
+
 export function createBrowserDesktopHashLocationPort(
   target: HashChangeTarget = window,
 ): DesktopHashLocationPort {
@@ -145,26 +166,46 @@ export function createDesktopHashRouteHost<TModule>(
       return;
     }
 
-    const preflight = evaluateDesktopRouteAccess({
+    const permissionPreflight = evaluateDesktopRouteAccess({
       match,
       mode: options.mode,
       permissions,
       capability: null,
     });
-    if (preflight.status === 'forbidden') {
+    if (
+      permissionPreflight.status === 'forbidden' &&
+      (permissionPreflight.missingPermissions.includes('authenticated') ||
+        !canDeferScopeMembershipPermissions(
+          match,
+          permissionPreflight.missingPermissions,
+        ))
+    ) {
       emit({
         status: 'forbidden',
         match,
-        reasonCode: preflight.reasonCode,
-        missingPermissions: preflight.missingPermissions,
+        reasonCode: permissionPreflight.reasonCode,
+        missingPermissions: permissionPreflight.missingPermissions,
       });
       return;
     }
+    const structuralPermissions = new Set(
+      match.definition.requiredPermission,
+    );
+    const structuralPreflight = evaluateDesktopRouteAccess({
+      match,
+      mode: options.mode,
+      permissions: structuralPermissions,
+      capability: null,
+    });
     if (
-      preflight.status === 'unavailable' &&
-      preflight.reasonCode !== 'desktop_route_capability_missing'
+      structuralPreflight.status === 'unavailable' &&
+      structuralPreflight.reasonCode !== 'desktop_route_capability_missing'
     ) {
-      emitUnavailable(match, preflight.reasonCode, preflight.capability);
+      emitUnavailable(
+        match,
+        structuralPreflight.reasonCode,
+        structuralPreflight.capability,
+      );
       return;
     }
 
@@ -189,17 +230,48 @@ export function createDesktopHashRouteHost<TModule>(
       permissions,
       capability,
     });
+    const authorityAccess = evaluateDesktopRouteAccess({
+      match,
+      mode: options.mode,
+      permissions: structuralPermissions,
+      capability,
+    });
     if (access.status === 'forbidden') {
-      emit({
-        status: 'forbidden',
-        match,
-        reasonCode: access.reasonCode,
-        missingPermissions: access.missingPermissions,
-      });
+      if (
+        !canDeferScopeMembershipPermissions(
+          match,
+          access.missingPermissions,
+        ) ||
+        authorityAccess.status !== 'unavailable' ||
+        authorityAccess.reasonCode !==
+          'desktop_route_capability_scope_mismatch'
+      ) {
+        emit({
+          status: 'forbidden',
+          match,
+          reasonCode: access.reasonCode,
+          missingPermissions: access.missingPermissions,
+        });
+        return;
+      }
+    }
+    if (
+      access.status === 'unavailable' &&
+      access.reasonCode !== 'desktop_route_capability_scope_mismatch'
+    ) {
+      emitUnavailable(match, access.reasonCode, access.capability);
       return;
     }
-    if (access.status === 'unavailable') {
-      emitUnavailable(match, access.reasonCode, access.capability);
+    const transitionCapability =
+      authorityAccess.status === 'forbidden'
+        ? null
+        : authorityAccess.capability;
+    if (!transitionCapability) {
+      emitUnavailable(
+        match,
+        'desktop_route_capability_missing',
+        transitionCapability,
+      );
       return;
     }
 
@@ -209,7 +281,7 @@ export function createDesktopHashRouteHost<TModule>(
     emit({
       status: 'loading',
       match,
-      capability: access.capability,
+      capability: transitionCapability,
       attempt,
     });
 
@@ -227,6 +299,67 @@ export function createDesktopHashRouteHost<TModule>(
     }
     if (!currentTransition(revision, controller.signal)) return;
 
+    let settledPermissions: ReadonlySet<string>;
+    try {
+      settledPermissions = options.resolvePermissions
+        ? options.resolvePermissions(match.context)
+        : options.permissions;
+      if (
+        !settledPermissions ||
+        typeof settledPermissions.has !== 'function'
+      ) {
+        throw new Error('desktop_route_permissions_invalid');
+      }
+    } catch {
+      if (!currentTransition(revision, controller.signal)) return;
+      emit({
+        status: 'error',
+        match,
+        reasonCode: 'desktop_route_permission_resolution_failed',
+        retryable: true,
+      });
+      return;
+    }
+    let settledCapability: DesktopCapabilityAvailability | null;
+    try {
+      settledCapability = options.resolveCapability(
+        match.definition.capability,
+        match.context,
+      );
+    } catch {
+      if (!currentTransition(revision, controller.signal)) return;
+      emit({
+        status: 'error',
+        match,
+        reasonCode: 'desktop_route_capability_resolution_failed',
+        retryable: true,
+      });
+      return;
+    }
+    const settledAccess = evaluateDesktopRouteAccess({
+      match,
+      mode: options.mode,
+      permissions: settledPermissions,
+      capability: settledCapability,
+    });
+    if (settledAccess.status === 'forbidden') {
+      emit({
+        status: 'forbidden',
+        match,
+        reasonCode: settledAccess.reasonCode,
+        missingPermissions: settledAccess.missingPermissions,
+      });
+      return;
+    }
+    if (settledAccess.status === 'unavailable') {
+      emitUnavailable(
+        match,
+        settledAccess.reasonCode,
+        settledAccess.capability,
+      );
+      return;
+    }
+
     let loadedModule: TModule;
     try {
       loadedModule = await match.definition.loader();
@@ -242,9 +375,9 @@ export function createDesktopHashRouteHost<TModule>(
     }
     if (!currentTransition(revision, controller.signal)) return;
     emit({
-      status: access.presentation,
+      status: settledAccess.presentation,
       match,
-      capability: access.capability,
+      capability: settledAccess.capability,
       module: loadedModule,
     });
   };
