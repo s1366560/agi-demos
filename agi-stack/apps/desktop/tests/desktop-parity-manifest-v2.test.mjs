@@ -458,6 +458,7 @@ test("governance and runtime capabilities preserve audited Web actions and enfor
     "tenant-tenant-instance-templates": [
       "view",
       "list",
+      "list-items",
       "create",
       "delete",
       "publish",
@@ -478,6 +479,7 @@ test("governance and runtime capabilities preserve audited Web actions and enfor
       "create-review",
       "delete-own-review",
       "inspect-genome",
+      "inspect-evolution",
     ],
     "tenant-tenant-users": [
       "view",
@@ -508,6 +510,8 @@ test("governance and runtime capabilities preserve audited Web actions and enfor
       "navigate-tenant-settings",
       "navigate-members",
       "navigate-clusters",
+      "list-clusters",
+      "inspect-cluster-status",
       "navigate-audit",
       "manage-registries",
       "inspect-smtp",
@@ -534,11 +538,11 @@ test("governance and runtime capabilities preserve audited Web actions and enfor
   );
   assert.equal(
     byId.get("tenant-tenant-instances")?.surfaces.web.reason_code,
-    "runtime_instance_mutation_authorization_not_enforced",
+    "runtime_instance_contract_and_authorization_incomplete",
   );
   assert.equal(
     byId.get("tenant-tenant-org-settings")?.surfaces.web.reason_code,
-    "organization_registry_gene_policy_tenant_authorization_missing",
+    "organization_registry_gene_policy_authorization_and_cluster_route_tenant_scope_incomplete",
   );
   assert.deepEqual(byId.get("tenant-tenant-pool")?.permission_requirements, [
     {
@@ -731,6 +735,7 @@ test("project capabilities preserve audited Local authority and per-surface acti
     "temporal-search",
     "graph-traversal",
     "community-search",
+    "copy-result-id",
   ]);
   assert.deepEqual(search.surfaces.desktop_local.allowed_actions, [
     "view",
@@ -738,22 +743,22 @@ test("project capabilities preserve audited Local authority and per-surface acti
     "filter",
     "faceted-search",
     "temporal-search",
+    "copy-result-id",
   ]);
   assert.deepEqual(cron.surfaces.web.allowed_actions, [
-    "view",
-    "list",
-    "view-history",
-    "inspect-capabilities",
-  ]);
-  assert.deepEqual(cron.surfaces.desktop_local.allowed_actions, [
     "view",
     "list",
     "create",
     "update",
     "delete",
     "toggle",
+    "run-now",
     "view-history",
-    "inspect-capabilities",
+  ]);
+  assert.deepEqual(cron.surfaces.desktop_local.allowed_actions, [
+    "view",
+    "list",
+    "view-history",
   ]);
 });
 

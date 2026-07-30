@@ -57,11 +57,11 @@
 
 - The desired capability ledger is
   `contracts/desktop-web-parity/parity-manifest.v2.json`. It is pinned to the audited clean
-  baseline `main@1171e778797bfc370ea7339cb89b02b891f5274c`; it describes the target contract and
+  baseline `main@46f4bfd5b83129cb741a22d1495cc4f6ab69f30a`; it describes the target contract and
   is not evidence that the current checkout has implemented or verified every capability.
 - The generated source inventory at
   `contracts/desktop-web-parity/web-route-inventory.v2.json` contains 51 canonical navigation
-  targets, 174 production route registrations, 89 lazy production pages, and 95 hashed audited
+  targets, 174 production route registrations, 89 lazy production pages, and 634 hashed audited
   sources. Route registration modules are followed through reachable production component imports.
   Ordinary Web CI regenerates the inventory and fails when a route, registration module, or routed
   source changes without an updated checked-in ledger and a fresh structured Agent judgment.
@@ -78,9 +78,11 @@
 - Tag CI release evidence is separately scoped to static package artifacts. Its v2 contract records
   `package_artifacts_only`, `draft_only`, and the missing native checks; it cannot authorize
   publication without Wave 8 installation, launch, updater-application, and rollback evidence.
-- Desktop package, ordinary CI, and release CI use pnpm `11.15.1`. pnpm 11 intentionally records
-  package-manager integrity in a separate YAML document at the start of `pnpm-lock.yaml`; repeated
-  frozen offline resolution must leave that multi-document lock byte-for-byte stable.
+- Web and Desktop packages, ordinary CI, E2E, and release CI use pnpm `11.15.1` with
+  integrity-qualified package-manager declarations and Node 22. pnpm 11 intentionally records
+  Desktop package-manager dependencies in a separate YAML document at the start of
+  `pnpm-lock.yaml`; repeated frozen offline resolution must leave that multi-document lock
+  byte-for-byte stable.
 - `parity-manifest.v1.json` remains read-only compatibility input for one contract version. Its
   historical 11-case fixtures continue to run, but they do not cover the v2 route inventory and
   cannot establish current full-product parity.
