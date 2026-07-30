@@ -11,6 +11,7 @@
   },
   "include": [
     "tests/css.d.ts",
+    "tests/projectOverviewControllerTypeContract.ts",
     "electron/main/automaticUpdateLoop.ts",
     "electron/main/mediaPermissionPolicy.ts",
     "electron/main/rendererProtocol.ts",

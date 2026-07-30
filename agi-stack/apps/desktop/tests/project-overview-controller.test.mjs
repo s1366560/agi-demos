@@ -30,6 +30,88 @@ const localScope = Object.freeze({
   projectId: 'local-project',
 });
 
+test('controller constructs with only the adapter for its production authority', async () => {
+  const cloudController = createProjectOverviewController({
+    authority: 'cloud',
+    cloudClient: cloudClientFor(async (scope) => cloudProject(scope)),
+    initialScope: cloudScope,
+  });
+  await cloudController.load(cloudScope);
+  assert.equal(cloudController.getSnapshot().state, 'ready');
+  cloudController.stop();
+
+  const localController = createProjectOverviewController({
+    authority: 'local',
+    localClient: {
+      async load(scope) {
+        return localSnapshot(scope);
+      },
+    },
+    initialScope: localScope,
+  });
+  await localController.load(localScope);
+  assert.equal(localController.getSnapshot().state, 'degraded');
+  localController.stop();
+});
+
+test('controller fails closed when a scope authority does not match its adapter', async () => {
+  let cloudReads = 0;
+  const cloudController = createProjectOverviewController({
+    authority: 'cloud',
+    cloudClient: cloudClientFor(async (scope) => {
+      cloudReads += 1;
+      return cloudProject(scope);
+    }),
+    initialScope: cloudScope,
+  });
+  await cloudController.load(localScope);
+  assert.equal(cloudReads, 0);
+  assert.deepEqual(pickTerminal(cloudController.getSnapshot()), {
+    state: 'unavailable',
+    authority: 'local',
+    reasonCode: 'project_overview_controller_authority_mismatch',
+    detail: null,
+    retryVisible: false,
+  });
+  cloudController.stop();
+
+  let localReads = 0;
+  const localController = createProjectOverviewController({
+    authority: 'local',
+    localClient: {
+      async load(scope) {
+        localReads += 1;
+        return localSnapshot(scope);
+      },
+    },
+    initialScope: localScope,
+  });
+  await localController.load(cloudScope);
+  assert.equal(localReads, 0);
+  assert.deepEqual(pickTerminal(localController.getSnapshot()), {
+    state: 'unavailable',
+    authority: 'cloud',
+    reasonCode: 'project_overview_controller_authority_mismatch',
+    detail: null,
+    retryVisible: false,
+  });
+  localController.stop();
+
+  const invalidInitialController = createProjectOverviewController({
+    authority: 'cloud',
+    cloudClient: cloudClientFor(async (scope) => cloudProject(scope)),
+    initialScope: localScope,
+  });
+  assert.deepEqual(pickTerminal(invalidInitialController.getSnapshot()), {
+    state: 'unavailable',
+    authority: 'local',
+    reasonCode: 'project_overview_controller_authority_mismatch',
+    detail: null,
+    retryVisible: false,
+  });
+  invalidInitialController.stop();
+});
+
 test('controller suppresses stale Cloud results during rapid scope changes', async () => {
   const firstProject = deferred();
   const signals = [];
@@ -39,8 +121,8 @@ test('controller suppresses stale Cloud results during rapid scope changes', asy
     return cloudProject(scope);
   });
   const controller = createProjectOverviewController({
+    authority: 'cloud',
     cloudClient,
-    localClient: unexpectedLocalClient(),
     initialScope: cloudScope,
   });
   const states = [];
@@ -70,11 +152,11 @@ test('controller aborts stopped work and retries a structured transient error', 
   const pendingProject = deferred();
   let pendingSignal;
   const stoppedController = createProjectOverviewController({
+    authority: 'cloud',
     cloudClient: cloudClientFor(async (_scope, options) => {
       pendingSignal = options.signal;
       return pendingProject.promise;
     }),
-    localClient: unexpectedLocalClient(),
     initialScope: cloudScope,
   });
   const stoppedLoad = stoppedController.load(cloudScope);
@@ -87,6 +169,7 @@ test('controller aborts stopped work and retries a structured transient error', 
 
   let attempts = 0;
   const retryController = createProjectOverviewController({
+    authority: 'cloud',
     cloudClient: cloudClientFor(async (scope) => {
       attempts += 1;
       if (attempts === 1) {
@@ -96,7 +179,6 @@ test('controller aborts stopped work and retries a structured transient error', 
       }
       return cloudProject(scope);
     }),
-    localClient: unexpectedLocalClient(),
     initialScope: cloudScope,
   });
 
@@ -114,13 +196,13 @@ test('controller aborts stopped work and retries a structured transient error', 
 
 test('controller maps only structured DesktopApiError fields to forbidden', async () => {
   const controller = createProjectOverviewController({
+    authority: 'cloud',
     cloudClient: cloudClientFor(async () => {
       throw new DesktopApiError('message text must not classify the result', 403, {
         detail: 'also not presentation detail',
         reason_code: 'project_overview_scope_forbidden',
       });
     }),
-    localClient: unexpectedLocalClient(),
     initialScope: cloudScope,
   });
 
@@ -140,7 +222,7 @@ test('controller maps Local contract failures to structured unavailable', async 
   let receivedScope;
   let receivedSignal;
   const controller = createProjectOverviewController({
-    cloudClient: unexpectedCloudClient(),
+    authority: 'local',
     localClient: {
       async load(scope, options) {
         receivedScope = scope;
@@ -169,6 +251,7 @@ test('controller maps Local contract failures to structured unavailable', async 
 
 test('controller delegates empty and degraded states to the presentation model', async () => {
   const emptyController = createProjectOverviewController({
+    authority: 'cloud',
     cloudClient: {
       async getProject() {
         return null;
@@ -180,7 +263,6 @@ test('controller delegates empty and degraded states to the presentation model',
         return { memories: [], total: 0, page: 1, page_size: 5 };
       },
     },
-    localClient: unexpectedLocalClient(),
     initialScope: cloudScope,
   });
   await emptyController.load(cloudScope);
@@ -190,7 +272,7 @@ test('controller delegates empty and degraded states to the presentation model',
 
   let localLoads = 0;
   const localController = createProjectOverviewController({
-    cloudClient: unexpectedCloudClient(),
+    authority: 'local',
     localClient: {
       async load(scope) {
         localLoads += 1;
@@ -209,8 +291,8 @@ test('controller delegates empty and degraded states to the presentation model',
 
 test('React hook owns controller load, cancellation, and retry delegation', () => {
   const controller = createProjectOverviewController({
+    authority: 'cloud',
     cloudClient: unexpectedCloudClient(),
-    localClient: unexpectedLocalClient(),
     initialScope: cloudScope,
   });
   const markup = renderToStaticMarkup(
@@ -359,14 +441,6 @@ function unexpectedCloudClient() {
     getProject: fail,
     getProjectStats: fail,
     listMemories: fail,
-  };
-}
-
-function unexpectedLocalClient() {
-  return {
-    async load() {
-      throw new Error('Local client must not be selected');
-    },
   };
 }
 

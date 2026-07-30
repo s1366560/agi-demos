@@ -15,11 +15,19 @@ import {
   type ProjectOverviewPresentationScope,
 } from './projectOverviewPresentationModel';
 
-export type ProjectOverviewControllerOptions = Readonly<{
-  cloudClient: CloudProjectOverviewClient;
-  localClient: LocalProjectOverviewClient;
-  initialScope: ProjectOverviewPresentationScope;
-}>;
+export type ProjectOverviewControllerOptions =
+  | Readonly<{
+      authority: 'cloud';
+      cloudClient: CloudProjectOverviewClient;
+      localClient?: never;
+      initialScope: CloudProjectOverviewScope;
+    }>
+  | Readonly<{
+      authority: 'local';
+      cloudClient?: never;
+      localClient: LocalProjectOverviewClient;
+      initialScope: LocalProjectOverviewScope;
+    }>;
 
 export type ProjectOverviewController = Readonly<{
   getSnapshot: () => ProjectOverviewPresentationModel;
@@ -51,11 +59,15 @@ export function createProjectOverviewController(
   options: ProjectOverviewControllerOptions,
 ): ProjectOverviewController {
   let activeScope = freezeScope(options.initialScope);
-  let model = buildProjectOverviewPresentation({
-    kind: 'loading',
-    scope: activeScope,
-    scopeSwitch: false,
-  });
+  let model = buildProjectOverviewPresentation(
+    scopeMatchesAuthority(options.authority, activeScope)
+      ? {
+          kind: 'loading',
+          scope: activeScope,
+          scopeSwitch: false,
+        }
+      : authorityMismatchPresentation(activeScope),
+  );
   let requestController: AbortController | null = null;
   let requestRevision = 0;
   const listeners = new Set<() => void>();
@@ -77,6 +89,11 @@ export function createProjectOverviewController(
     activeScope = scope;
     const revision = ++requestRevision;
     requestController?.abort();
+    requestController = null;
+    if (!scopeMatchesAuthority(options.authority, scope)) {
+      emit(authorityMismatchPresentation(scope));
+      return;
+    }
     const controller = new AbortController();
     requestController = controller;
     emit({ kind: 'loading', scope, scopeSwitch });
@@ -114,11 +131,11 @@ export function createProjectOverviewController(
 }
 
 async function readProjectOverview(
-  options: Pick<ProjectOverviewControllerOptions, 'cloudClient' | 'localClient'>,
+  options: ProjectOverviewControllerOptions,
   scope: ProjectOverviewPresentationScope,
   signal: AbortSignal,
 ): Promise<ProjectOverviewReaderResult> {
-  if (scope.authority === 'cloud') {
+  if (options.authority === 'cloud' && scope.authority === 'cloud') {
     const cloudScope: CloudProjectOverviewScope = {
       authority: 'cloud',
       tenantId: scope.tenantId,
@@ -129,13 +146,39 @@ async function readProjectOverview(
     return { kind: 'cloud-ready', snapshot: result.snapshot };
   }
 
-  const localScope: LocalProjectOverviewScope = {
-    authority: 'local',
-    tenantId: scope.tenantId,
-    projectId: scope.projectId,
+  if (options.authority === 'local' && scope.authority === 'local') {
+    const localScope: LocalProjectOverviewScope = {
+      authority: 'local',
+      tenantId: scope.tenantId,
+      projectId: scope.projectId,
+    };
+    const snapshot = await options.localClient.load(localScope, { signal });
+    return { kind: 'local-ready', snapshot };
+  }
+
+  throw new DesktopApiError(
+    'project_overview_controller_authority_mismatch',
+    0,
+    { reason_code: 'project_overview_controller_authority_mismatch' },
+  );
+}
+
+function authorityMismatchPresentation(
+  scope: ProjectOverviewPresentationScope,
+): ProjectOverviewPresentationInput {
+  return {
+    kind: 'unavailable',
+    scope,
+    reasonCode: 'project_overview_controller_authority_mismatch',
+    retryable: false,
   };
-  const snapshot = await options.localClient.load(localScope, { signal });
-  return { kind: 'local-ready', snapshot };
+}
+
+function scopeMatchesAuthority(
+  authority: ProjectOverviewControllerOptions['authority'],
+  scope: ProjectOverviewPresentationScope,
+): boolean {
+  return scope.authority === authority;
 }
 
 function errorPresentation(
