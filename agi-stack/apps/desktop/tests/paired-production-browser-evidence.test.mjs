@@ -215,6 +215,7 @@ test("paired production matrix locks identical observable state across Web and D
     role: "textbox",
     name: "Work email",
   });
+  assert.equal(signedOut.web.matchedState.locale, "en");
   assert.equal(
     signedOut.web.matchedState.interaction_state,
     "focused:email_entry",
