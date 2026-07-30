@@ -745,20 +745,33 @@ test("project capabilities preserve audited Local authority and per-surface acti
     "temporal-search",
     "copy-result-id",
   ]);
+  assert.equal(cron.surfaces.web.implementation_status, "partial");
+  assert.equal(cron.surfaces.web.availability, "degraded");
+  assert.equal(
+    cron.surfaces.web.reason_code,
+    "web_cron_mutation_and_run_authority_unavailable",
+  );
   assert.deepEqual(cron.surfaces.web.allowed_actions, [
     "view",
     "list",
+    "view-history",
+  ]);
+  assert.equal(cron.surfaces.desktop_local.implementation_status, "partial");
+  assert.equal(cron.surfaces.desktop_local.availability, "degraded");
+  assert.equal(
+    cron.surfaces.desktop_local.reason_code,
+    "local_automation_projection_partial",
+  );
+  assert.deepEqual(cron.surfaces.desktop_local.allowed_actions, [
+    "view",
+    "list",
+    "view-history",
+    "inspect-capabilities",
     "create",
     "update",
     "delete",
     "toggle",
     "run-now",
-    "view-history",
-  ]);
-  assert.deepEqual(cron.surfaces.desktop_local.allowed_actions, [
-    "view",
-    "list",
-    "view-history",
   ]);
 });
 

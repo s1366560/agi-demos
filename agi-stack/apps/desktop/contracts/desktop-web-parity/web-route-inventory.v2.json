@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "checker_version": "2.0.0",
-  "source_revision": "815008f935095678b5da0f09a733557a4944c892",
+  "source_revision": "e4e83785b6d8f99e4827167e1c9c78866415328e",
   "sources": {
     "canonical_navigation_registry": "web/src/config/navigation.ts#CANONICAL_NAVIGATION_DESTINATIONS",
     "eager_route_entries": "reachable route registration modules#relative imports used by JSX or object routes",
@@ -3869,14 +3869,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:54f768dd561d3b368bae2e7622fea69c364b2582e68542f0e18a83e402bbde3f"
+      "sha256": "sha256:8efa65b2c558eee2b9c5a7713d1b52a1af6276588d9d083b479cf8d17214d935"
     },
     {
       "source_entry": "web/src/theme/tokens.ts",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:9de7f69e72f9f4bd33c2a35c95a65609fc0b7218dda258c009eb5b429c1995fd"
+      "sha256": "sha256:fecbc393c864b7a390dde8af28a4847ef23becd55e7a04046c6d0ea9ad58f0ae"
     },
     {
       "source_entry": "web/src/types/acp.ts",

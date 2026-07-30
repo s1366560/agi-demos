@@ -57,7 +57,7 @@
 
 - The desired capability ledger is
   `contracts/desktop-web-parity/parity-manifest.v2.json`. It is pinned to the audited clean
-  baseline `main@815008f935095678b5da0f09a733557a4944c892`; it describes the target contract and
+  baseline `main@e4e83785b6d8f99e4827167e1c9c78866415328e`; it describes the target contract and
   is not evidence that the current checkout has implemented or verified every capability.
 - The generated source inventory at
   `contracts/desktop-web-parity/web-route-inventory.v2.json` contains 51 canonical navigation
