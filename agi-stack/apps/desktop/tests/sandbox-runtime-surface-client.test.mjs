@@ -111,6 +111,31 @@ test('local runtime snapshot preserves native terminal and file authority withou
   );
 });
 
+test('local runtime capability requests never send browser cookies to the sidecar origin', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (input, init) => {
+    calls.push({ url: String(input), init });
+    return Response.json(localRuntimeSnapshot);
+  };
+  const client = createSandboxRuntimeSurfaceClient({
+    ...DEFAULT_CONFIG,
+    apiBaseUrl: 'http://127.0.0.1:4777',
+    apiKey: 'local-session',
+    localApiToken: 'launch-capability',
+    mode: 'local',
+    projectId: 'local-project',
+  });
+
+  try {
+    await client.loadCapabilities();
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].init.credentials, 'omit');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('runtime client loads capabilities before opening an iframe session', async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
@@ -131,6 +156,7 @@ test('runtime client loads capabilities before opening an iframe session', async
     ...DEFAULT_CONFIG,
     apiBaseUrl: 'https://api.memstack.test/root',
     apiKey: 'session-credential',
+    mode: 'cloud',
     projectId: 'project/1',
   });
 

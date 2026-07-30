@@ -113,7 +113,7 @@ test('Local Project Overview adapter uses the scoped sidecar route, credentials,
   );
   assert.equal(requests[0].init.method, 'GET');
   assert.equal(requests[0].init.signal, signal);
-  assert.equal(requests[0].init.credentials, 'include');
+  assert.equal(requests[0].init.credentials, 'omit');
   const headers = new Headers(requests[0].init.headers);
   assert.equal(headers.get('Accept'), 'application/json');
   assert.equal(headers.get('Authorization'), 'Bearer local-session');

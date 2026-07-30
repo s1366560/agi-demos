@@ -196,7 +196,7 @@ async function requestJson(
   const response = await fetch(absoluteUrl(config.apiBaseUrl, path), {
     method: options.method ?? 'GET',
     headers,
-    credentials: 'include',
+    credentials: config.mode === 'local' ? 'omit' : 'include',
     signal: options.signal,
   });
   if (!response.ok) {

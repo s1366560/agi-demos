@@ -238,7 +238,7 @@ async function requestLocalJson(
   const response = await fetch(absoluteUrl(config.apiBaseUrl, path), {
     method: 'GET',
     headers,
-    credentials: 'include',
+    credentials: 'omit',
     signal: options?.signal,
   });
   const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
