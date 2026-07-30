@@ -26,7 +26,8 @@
         "delete",
         "toggle",
         "run-now",
-        "view-history"
+        "view-history",
+        "inspect-capabilities"
       ],
       "web_actions": [
         "view",
@@ -47,7 +48,13 @@
       "local_actions": [
         "view",
         "list",
-        "view-history"
+        "view-history",
+        "inspect-capabilities",
+        "create",
+        "update",
+        "delete",
+        "toggle",
+        "run-now"
       ],
       "api_contracts": [
         {
@@ -269,30 +276,46 @@
           "actions": [
             "view",
             "list",
-            "view-history"
+            "view-history",
+            "inspect-capabilities",
+            "create",
+            "update",
+            "delete",
+            "toggle",
+            "run-now"
           ],
           "authentication": "authenticated",
           "authorization": [],
           "enforcement": "enforced",
-          "feature_gate": null
+          "feature_gate": "local_automation_capabilities"
         }
       ],
       "cloud_status": "partial",
       "cloud_reason_code": "desktop_cron_route_projection_partial",
       "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/automations/projectCronJobsRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/automations/AutomationsPage.tsx",
         "agi-stack/apps/desktop/src/features/automations/automationClient.ts"
       ],
       "local_status": "partial",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_automation_capability_schema_mismatch",
+      "local_reason_code": "local_automation_projection_partial",
       "local_deviation": "Cron Jobs reuse the native Automations domain model and Local scheduler; they must not create a second scheduling authority.",
       "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/automations/projectCronJobsRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/automations/AutomationsPage.tsx",
         "agi-stack/apps/desktop/src/features/automations/automationClient.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/automation.rs"
       ],
-      "judgment_rationale": "The production Web page exposes list, create, update, delete, toggle, run-now and history directly under the backend project-membership check; it does not consume the Cron capability endpoint and therefore has no client capability gate. Cloud Desktop retains the structured Cloud capability authority, which currently allows reads and denies mutations. The Local sidecar returns automation capability schema_version 2, while the production Desktop normalizer accepts only schema_version 1; capability parsing therefore fails closed and disables create, update, delete, toggle, run-now and inspect-capabilities even though the raw sidecar endpoints exist. Local list and history remain usable. The canonical project route, deep-link restore and matched-state evidence are still incomplete."
+      "judgment_rationale": "The production Web page exposes list, create, update, delete, toggle, run-now and history directly under the backend project-membership check; it does not consume the Cron capability endpoint and therefore has no client capability gate. Cloud Desktop now binds the native Automations surface to the canonical project route and retains the structured Cloud capability authority, which currently allows reads and denies mutations. Local Desktop accepts the sidecar schema_version 2 capability envelope, binds the same canonical native route, and exposes guarded mutations only when the sidecar and automation-run authorities allow them. Cloud and Local remain partial until current matched-state Electron evidence exists and the remaining Web pagination, filtering, history retry, editor DTO and authority-specific mutation transport differences are closed."
     },
     {
       "id": "project-project-settings",

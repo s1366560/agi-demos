@@ -253,7 +253,10 @@ test("Project Cron Jobs separates Web production actions from Desktop capability
     "run-now",
   ];
 
-  assert.deepEqual(capability.actions, expectedWebActions);
+  assert.deepEqual(capability.actions, [
+    ...expectedWebActions,
+    "inspect-capabilities",
+  ]);
   assert.deepEqual(capability.web_actions, expectedWebActions);
   assert.equal(
     contractKeys(capability, "web").includes(
@@ -326,10 +329,16 @@ test("Project Cron Jobs separates Web production actions from Desktop capability
     "view",
     "list",
     "view-history",
+    "inspect-capabilities",
+    "create",
+    "update",
+    "delete",
+    "toggle",
+    "run-now",
   ]);
   assert.equal(
     capability.local_reason_code,
-    "local_automation_capability_schema_mismatch",
+    "local_automation_projection_partial",
   );
   for (const action of capability.local_actions) {
     const requirements = requirementsForAction(
@@ -339,19 +348,14 @@ test("Project Cron Jobs separates Web production actions from Desktop capability
     );
     assert.equal(requirements.length, 1, `unexpected Local permission rows for ${action}`);
     assert.deepEqual(requirements[0].authorization, []);
-    assert.equal(requirements[0].feature_gate, null);
-  }
-  for (const action of [...mutationActions, "inspect-capabilities"]) {
-    assert.equal(capability.local_actions.includes(action), false, action);
     assert.equal(
-      requirementsForAction(capability, "desktop_local", action).length,
-      0,
-      `Local must not advertise unusable ${action}`,
+      requirements[0].feature_gate,
+      "local_automation_capabilities",
     );
   }
   assert.match(capability.judgment_rationale, /schema_version 2/u);
-  assert.match(capability.judgment_rationale, /schema_version 1/u);
-  assert.match(capability.judgment_rationale, /fails?[- ]closed/iu);
+  assert.match(capability.judgment_rationale, /canonical project route/u);
+  assert.match(capability.judgment_rationale, /Electron evidence/u);
 });
 
 test("Project Settings records only the routed page sandbox operations and authorities", () => {
