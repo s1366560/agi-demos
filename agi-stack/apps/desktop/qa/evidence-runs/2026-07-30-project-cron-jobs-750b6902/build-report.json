@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0.0",
+  "record_kind": "desktop-parity-build-report",
+  "source_revision": "750b69024b8f7156571adee7944821f08eca0a00",
+  "worktree_state": "clean",
+  "commands": [
+    {
+      "command": "make -C agi-stack desktop-check",
+      "status": "passed",
+      "results": {
+        "sidecar_tests": "330 passed",
+        "desktop_tests": "1670 passed",
+        "electron_build_modules": 9100,
+        "automation_page_chunk": "AutomationsPage-SQ7mX8Az.js"
+      }
+    },
+    {
+      "command": "make -C agi-stack desktop-browser-qa",
+      "status": "passed",
+      "results": {
+        "browser_qa": "417 passed"
+      }
+    },
+    {
+      "command": "node contracts/desktop-web-parity/generate-parity-manifest-v2.mjs --check",
+      "working_directory": "agi-stack/apps/desktop",
+      "status": "passed",
+      "results": {
+        "capabilities": 66,
+        "routes": 174,
+        "routed_sources": 93
+      }
+    }
+  ],
+  "dependency_observation": {
+    "pnpm": "11.15.1",
+    "warning": "packageManager and devEngines.packageManager are both declared; current commands selected pnpm 11.15.1"
+  },
+  "limitations": [
+    "The Browser QA matrix is deterministic Desktop renderer support evidence, not an authorized matched-state Web versus Cloud Desktop comparison.",
+    "This capability slice did not build an installer and is not signing, notarization, Authenticode, installation, update, or rollback evidence.",
+    "The repository plan's pnpm 10.24.0 versus packaging 11.x reproducibility item remains open; this run used the current pinned pnpm 11.15.1 authority."
+  ],
+  "completed_at": "2026-07-30T10:03:45Z"
+}

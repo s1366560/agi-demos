@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0.0",
+  "record_kind": "desktop-parity-native-authority-report",
+  "source_revision": "750b69024b8f7156571adee7944821f08eca0a00",
+  "capability_id": "project-project-cron-jobs",
+  "status": "blocked",
+  "verified_surface": "desktop_local",
+  "unverified_surfaces": [
+    "desktop_cloud",
+    "computer_use_window_focus_boundary"
+  ],
+  "launch_command": "AGISTACK_DESKTOP_DEBUG_PORT=9333 make -C agi-stack run-desktop",
+  "verification_channel": "Electron DevTools Protocol attached to the make-launched native process",
+  "native_observations": {
+    "route": "#/tenant/local/project/local-project/cron-jobs",
+    "breadcrumb": "project-project-cron-jobs",
+    "deep_link_reload_restored": true,
+    "workbench_history_restored": true,
+    "empty_state_rendered": true,
+    "editor_opened": true,
+    "escape_closed_editor": true,
+    "focus_returned_to_open_button": true,
+    "webview_count": 0,
+    "iframe_count": 0,
+    "external_http_anchor_count": 0,
+    "console_error_count": 0,
+    "page_error_count": 0
+  },
+  "sidecar_authority": {
+    "route": "GET /api/v1/projects/local-project/cron-jobs/capabilities",
+    "status": 200,
+    "schema_version": 2,
+    "service_version": "0.1.0",
+    "contract_version": "2.0.0",
+    "read": true,
+    "durable_execution": false,
+    "revision_guarded": true,
+    "idempotency_guarded": true,
+    "actions": {
+      "create": true,
+      "edit": true,
+      "toggle": true,
+      "run_now": false,
+      "delete": true
+    },
+    "run_now_reason_code": "durable_automation_execution_unavailable"
+  },
+  "blockers": [
+    {
+      "reason_code": "authorized_cloud_native_session_unavailable",
+      "statement": "Cloud Desktop Project Cron Jobs was not exercised because no authorized disposable Cloud project session or repository-supported isolated profile was available."
+    },
+    {
+      "reason_code": "macos_session_locked_for_computer_use",
+      "statement": "Computer Use was attempted twice and could not attach because the Mac was locked and automatic unlock failed; window blur and OS focus behavior therefore remain unverified on this revision."
+    }
+  ],
+  "recorded_at": "2026-07-30T10:07:50Z"
+}

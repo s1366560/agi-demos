@@ -1,0 +1,213 @@
+{
+  "$schema": "./evidence-run.v1.schema.json",
+  "schema_version": "1.0.0",
+  "record_kind": "run",
+  "run_id": "project-cron-jobs-local-native-750b6902",
+  "run_scope": "capability_slice",
+  "artifact_location_base": "evidence_run_directory",
+  "schema_artifact_id": "project-cron-jobs-evidence-schema",
+  "desired_contract": {
+    "path": "agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json",
+    "path_base": "repository_root",
+    "artifact_id": "project-cron-jobs-desired-contract",
+    "schema_version": "2.0.0",
+    "revision": "750b69024b8f7156571adee7944821f08eca0a00",
+    "sha256": "c437a3ea09287dbc76f6525f4fefa4837ae1e5520380871ebc98f9e033b61d0a"
+  },
+  "source_revisions": {
+    "repository_revision": "750b69024b8f7156571adee7944821f08eca0a00",
+    "web_revision": "750b69024b8f7156571adee7944821f08eca0a00",
+    "desktop_revision": "750b69024b8f7156571adee7944821f08eca0a00",
+    "prototype_revision": "61454b2ead1cedda584e95afee9f471aac7851fb"
+  },
+  "source_state": {
+    "head_revision": "750b69024b8f7156571adee7944821f08eca0a00",
+    "worktree_state": "clean"
+  },
+  "started_at": "2026-07-30T09:57:00Z",
+  "completed_at": "2026-07-30T10:07:50Z",
+  "environment": {
+    "host_os": "macOS",
+    "host_os_version": "26.5.2",
+    "architecture": "arm64",
+    "execution_context": "local",
+    "sandboxed": false,
+    "locale": "zh-CN",
+    "timezone": "Asia/Shanghai",
+    "dependency_versions": {
+      "node": "v22.22.3",
+      "pnpm": "11.15.1",
+      "rustc": "1.96.1 (31fca3adb 2026-06-26)",
+      "electron": "43.2.0"
+    }
+  },
+  "matched_state": {
+    "locale": "zh-CN",
+    "theme": "dark",
+    "viewport": {
+      "width": 2048,
+      "height": 1152
+    },
+    "device_scale_factor": 1,
+    "authentication_state": "local_trusted_session",
+    "account_state": "local_desktop",
+    "permission_state": "authenticated_project_member",
+    "data_state": "empty_with_structured_local_capability",
+    "interaction_state": "native_deep_link_reload_history_editor_escape_and_focus_restore"
+  },
+  "capability_results": [
+    {
+      "capability_id": "project-project-cron-jobs",
+      "contract_reference": "agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json#project-project-cron-jobs",
+      "result": "blocked",
+      "summary": "The clean-HEAD build, Desktop Browser matrix, Local sidecar schema-v2 authority, and native Local Cron Jobs flow were verified. The capability cannot pass because authorized matched-state Web and Cloud Desktop evidence was unavailable and the locked macOS session prevented Computer Use verification.",
+      "evidence": {
+        "build": "passed",
+        "browser": "blocked",
+        "native": "blocked"
+      },
+      "artifact_ids": [
+        "project-cron-jobs-evidence-schema",
+        "project-cron-jobs-desired-contract",
+        "project-cron-jobs-build-report",
+        "project-cron-jobs-browser-blocker",
+        "project-cron-jobs-native-authority",
+        "project-cron-jobs-native-screenshot"
+      ],
+      "parity_judgment": {
+        "disposition": "pending_review",
+        "statement": "Full Cron Jobs equivalence remains pending until the same authorized Web and Cloud Desktop project state and native Computer Use focus boundary are retained alongside the Local Electron evidence.",
+        "judgment_audit": null
+      },
+      "intentional_deviation": {
+        "disposition": "accepted",
+        "statement": "Local Cron intentionally reuses the native Automations domain model and sidecar scheduler instead of creating a second scheduling authority.",
+        "judgment_audit": {
+          "agent_id": "/root/parity_review_45_66",
+          "tool_name": "structured_intentional_deviation_judgment",
+          "input": {
+            "contract_reference": "agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json#project-project-cron-jobs",
+            "evidence_digest": "sha256:a690a0f29cfeebe6fb07d909bf3f944ef4b1cdaf0934525bcd370c8540261855",
+            "observation_summary": "Local Cron reuses the native AutomationsPage, automationClient, and sidecar scheduler without creating a second scheduling authority. Sidecar schema-v2 allowed actions govern CRUD and toggle, while run-now is disabled when durable_execution is false. Local Electron/CDP observations passed, but the capability result remains blocked because Cloud and matched Web evidence are missing and Computer Use was blocked by the locked Mac session."
+          },
+          "output": {
+            "verdict": "accepted",
+            "summary": "The intentional deviation is accepted: Local Cron correctly reuses the existing native Automations and sidecar scheduling authority, with mutations and run-now constrained by structured sidecar capabilities. This acceptance applies only to the declared authority-reuse deviation and does not establish overall parity."
+          },
+          "rationale": "The observed implementation preserves a single Local scheduling authority rather than duplicating scheduler state or command semantics in the renderer. AutomationsPage consumes the shared automation client, the sidecar remains the mutation and execution authority, schema-v2 allowed actions deterministically gate CRUD and toggle, and durable_execution=false disables run-now. These facts support the declared intentional deviation. They do not resolve the separate Cloud or matched Web evidence requirements, and the locked macOS session prevented Computer Use validation; therefore the overall capability result must remain blocked and no full parity pass is inferred.",
+          "latency_ms": 48000,
+          "recorded_at": "2026-07-30T10:14:12Z"
+        }
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "artifact_id": "project-cron-jobs-evidence-schema",
+      "kind": "report",
+      "channel": "shared",
+      "evidence_roles": [
+        "contract"
+      ],
+      "location": "evidence-run.v1.schema.json",
+      "media_type": "application/schema+json",
+      "sha256": "673ddd2b0fd38b97cbf71007fd2a6fe9692dc03ca11c74fc12f0254b24aaf0ed",
+      "produced_at": "2026-07-30T09:57:00Z"
+    },
+    {
+      "artifact_id": "project-cron-jobs-desired-contract",
+      "kind": "report",
+      "channel": "shared",
+      "evidence_roles": [
+        "contract"
+      ],
+      "location": "parity-manifest.v2.json",
+      "media_type": "application/json",
+      "sha256": "c437a3ea09287dbc76f6525f4fefa4837ae1e5520380871ebc98f9e033b61d0a",
+      "produced_at": "2026-07-30T09:57:00Z"
+    },
+    {
+      "artifact_id": "project-cron-jobs-build-report",
+      "kind": "report",
+      "channel": "build",
+      "evidence_roles": [
+        "contract"
+      ],
+      "location": "build-report.json",
+      "media_type": "application/json",
+      "sha256": "348ad7370c8564641f4181a42790ed89818cbdfa0b82b1d3302b22ea944bfe68",
+      "produced_at": "2026-07-30T10:03:45Z"
+    },
+    {
+      "artifact_id": "project-cron-jobs-browser-blocker",
+      "kind": "report",
+      "channel": "browser",
+      "evidence_roles": [
+        "desktop_renderer",
+        "observation_metadata"
+      ],
+      "location": "browser-blocker-report.json",
+      "media_type": "application/json",
+      "sha256": "9cb61724a537a48f4d15a0368371fd53d93fb294b83000e92dcee6781a1a8a5f",
+      "produced_at": "2026-07-30T10:03:45Z"
+    },
+    {
+      "artifact_id": "project-cron-jobs-native-authority",
+      "kind": "report",
+      "channel": "native",
+      "evidence_roles": [
+        "native_electron",
+        "sidecar_authority"
+      ],
+      "location": "native-local-authority-report.json",
+      "media_type": "application/json",
+      "sha256": "fa852a459c725ebbef69071f666ece6039917ff360a87e63a389d704c1e7fbf5",
+      "produced_at": "2026-07-30T10:07:50Z"
+    },
+    {
+      "artifact_id": "project-cron-jobs-native-screenshot",
+      "kind": "screenshot",
+      "channel": "native",
+      "evidence_roles": [
+        "native_electron"
+      ],
+      "location": "native-local-project-cron-jobs.png",
+      "media_type": "image/png",
+      "sha256": "f9c422f43b48c538159e22fdb271d1f295f0d091563fdefc16009f15722e1baf",
+      "produced_at": "2026-07-30T10:07:05Z"
+    }
+  ],
+  "evidence": {
+    "build": {
+      "status": "passed",
+      "command": "make -C agi-stack desktop-check && make -C agi-stack desktop-browser-qa && node contracts/desktop-web-parity/generate-parity-manifest-v2.mjs --check",
+      "started_at": "2026-07-30T09:57:00Z",
+      "completed_at": "2026-07-30T10:03:45Z",
+      "summary": "Clean detached HEAD passed sidecar, Desktop, Electron production build, Browser QA, and parity-manifest drift gates.",
+      "artifact_ids": [
+        "project-cron-jobs-build-report"
+      ]
+    },
+    "browser": {
+      "status": "blocked",
+      "command": "make -C agi-stack desktop-browser-qa",
+      "started_at": "2026-07-30T10:02:00Z",
+      "completed_at": "2026-07-30T10:03:45Z",
+      "summary": "The Desktop Browser matrix passed 417 cases, including Automations fixtures, but matched-state Web versus Cloud Desktop evidence was blocked by the absence of an authorized Cloud project session.",
+      "artifact_ids": [
+        "project-cron-jobs-browser-blocker"
+      ]
+    },
+    "native": {
+      "status": "blocked",
+      "command": "AGISTACK_DESKTOP_DEBUG_PORT=9333 make -C agi-stack run-desktop",
+      "started_at": "2026-07-30T10:04:01Z",
+      "completed_at": "2026-07-30T10:07:50Z",
+      "summary": "The make-launched Electron process and its sidecar verified the Local canonical route, schema-v2 authority, deep-link recovery, editor Escape and focus return, route history, no embedded Web content, and zero runtime errors. Cloud native verification and Computer Use window-focus proof remained blocked.",
+      "artifact_ids": [
+        "project-cron-jobs-native-authority",
+        "project-cron-jobs-native-screenshot"
+      ]
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "record_kind": "desktop-parity-browser-blocker-report",
+  "source_revision": "750b69024b8f7156571adee7944821f08eca0a00",
+  "capability_id": "project-project-cron-jobs",
+  "status": "blocked",
+  "supporting_renderer_evidence": {
+    "command": "make -C agi-stack desktop-browser-qa",
+    "status": "passed",
+    "cases": 417,
+    "cron_fixture_covered": true
+  },
+  "blocker": {
+    "reason_code": "authorized_matched_web_cloud_session_unavailable",
+    "statement": "No authorized disposable Web and Cloud Desktop project session was available with matched account, permission, data, locale, theme, viewport, device scale factor and interaction state."
+  },
+  "recorded_at": "2026-07-30T10:03:45Z"
+}
