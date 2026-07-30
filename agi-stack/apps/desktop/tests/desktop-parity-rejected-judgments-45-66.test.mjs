@@ -224,12 +224,12 @@ test("Project Channels Cloud contract matches the native connection dialog", () 
   }
 });
 
-test("Project Cron Jobs separates Web production actions from Desktop capability gates", () => {
+test("Project Cron Jobs separates effective Web reads from unavailable mutations", () => {
   const capability = readCapability(
     "parity-capability-definitions.20-project-automation-settings.v2.json",
     "project-project-cron-jobs",
   );
-  const expectedWebActions = [
+  const allActions = [
     "view",
     "list",
     "create",
@@ -238,7 +238,9 @@ test("Project Cron Jobs separates Web production actions from Desktop capability
     "toggle",
     "run-now",
     "view-history",
+    "inspect-capabilities",
   ];
+  const expectedWebActions = ["view", "list", "view-history"];
   const readActions = [
     "view",
     "list",
@@ -253,10 +255,12 @@ test("Project Cron Jobs separates Web production actions from Desktop capability
     "run-now",
   ];
 
-  assert.deepEqual(capability.actions, [
-    ...expectedWebActions,
-    "inspect-capabilities",
-  ]);
+  assert.deepEqual(capability.actions, allActions);
+  assert.equal(capability.web_status, "partial");
+  assert.equal(
+    capability.web_reason_code,
+    "web_cron_mutation_and_run_authority_unavailable",
+  );
   assert.deepEqual(capability.web_actions, expectedWebActions);
   assert.equal(
     contractKeys(capability, "web").includes(
@@ -281,7 +285,14 @@ test("Project Cron Jobs separates Web production actions from Desktop capability
     assert.equal(
       requirements[0].feature_gate,
       null,
-      `Web ${action} must reflect backend project membership without a client capability gate`,
+      `Web ${action} must retain project membership enforcement`,
+    );
+  }
+  for (const action of mutationActions) {
+    assert.equal(
+      requirementsForAction(capability, "web", action).length,
+      0,
+      `Web must not claim unavailable ${action} authority`,
     );
   }
 
