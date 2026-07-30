@@ -156,6 +156,8 @@
     "src/features/navigation/desktopRouteHostModel.ts",
     "src/features/navigation/desktopRouteRegistry.ts",
     "src/features/navigation/useDesktopHashRouteHost.ts",
+    "src/features/navigation/locales/desktopProductionRouterMessages.ts",
+    "src/features/navigation/DesktopProductionRouter.tsx",
     "src/features/navigation/keyboardShortcutModel.ts",
     "src/features/navigation/KeyboardShortcutsDialog.tsx",
     "src/features/runtime/runtimeConfigModel.ts",

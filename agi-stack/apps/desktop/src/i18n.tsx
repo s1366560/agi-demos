@@ -8,6 +8,10 @@ import {
   nativeUnavailableRouteEnUS,
   nativeUnavailableRouteZhCN,
 } from './features/navigation/locales/nativeUnavailableRouteMessages';
+import {
+  desktopProductionRouterEnUS,
+  desktopProductionRouterZhCN,
+} from './features/navigation/locales/desktopProductionRouterMessages';
 
 export type DesktopLocale = 'en' | 'zh-CN';
 
@@ -22,6 +26,7 @@ type I18nContextValue = {
 const STORAGE_KEY = 'agistack.desktop.locale';
 
 const enUS: Record<string, string> = {
+  ...desktopProductionRouterEnUS,
   ...nativeUnavailableRouteEnUS,
   ...projectOverviewEnUS,
   'common.close': 'Close',
@@ -3614,6 +3619,7 @@ const enUS: Record<string, string> = {
 };
 
 const zhCN: Record<string, string> = {
+  ...desktopProductionRouterZhCN,
   ...nativeUnavailableRouteZhCN,
   ...projectOverviewZhCN,
   'common.close': '关闭',
