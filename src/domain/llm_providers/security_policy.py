@@ -43,6 +43,16 @@ _OFFICIAL_PROVIDER_BASE_PATHS: dict[str, frozenset[str]] = {
     "lmstudio": frozenset({"/v1"}),
 }
 
+# Official provider origins beyond the canonical probe default, each with the
+# exact API base paths that origin is known to serve. These are real first-party
+# endpoints (not custom gateways), so credentials may be sent to them.
+_PROVIDER_EXTRA_OFFICIAL_ENDPOINTS: dict[str, dict[str, frozenset[str]]] = {
+    "kimi": {
+        # Kimi for Coding subscription endpoint (OpenAI-compatible).
+        "api.kimi.com": frozenset({"/coding/v1"}),
+    },
+}
+
 # Custom gateways are permitted, but only at well-known API base paths. Arbitrary
 # path components are rejected because they are commonly used for bearer-like
 # gateway tokens and would otherwise be returned by ordinary Provider responses.
@@ -108,6 +118,8 @@ def _effective_port(scheme: str, port: int | None) -> int | None:
 
 
 def _is_official_origin(provider_type: object, value: str) -> bool:
+    if _extra_official_base_paths(provider_type, value) is not None:
+        return True
     default_base_url = provider_probe_default_base_url(provider_type)
     if default_base_url is None:
         return False
@@ -126,6 +138,23 @@ def _is_official_origin(provider_type: object, value: str) -> bool:
         and _effective_port(candidate.scheme, candidate_port)
         == _effective_port(official.scheme, official_port)
     )
+
+
+def _extra_official_base_paths(provider_type: object, value: str) -> frozenset[str] | None:
+    """Return allowed base paths when the URL targets an extra official origin."""
+    endpoints = _PROVIDER_EXTRA_OFFICIAL_ENDPOINTS.get(normalize_provider_family(provider_type))
+    if not endpoints:
+        return None
+    try:
+        candidate = urlsplit(value)
+        candidate_port = candidate.port
+    except ValueError:
+        return None
+    if not candidate.hostname or candidate.scheme != "https":
+        return None
+    if _effective_port(candidate.scheme, candidate_port) != 443:
+        return None
+    return endpoints.get(candidate.hostname.casefold())
 
 
 def _validate_provider_transport(
@@ -152,6 +181,9 @@ def _validate_provider_transport(
 
 def _allowed_provider_base_paths(provider_type: object, value: str) -> frozenset[str]:
     """Return the exact path set allowed for an official or custom origin."""
+    extra_paths = _extra_official_base_paths(provider_type, value)
+    if extra_paths is not None:
+        return extra_paths
     if not _is_official_origin(provider_type, value):
         return _SAFE_CUSTOM_PROVIDER_BASE_PATHS
     provider_family = normalize_provider_family(provider_type)
