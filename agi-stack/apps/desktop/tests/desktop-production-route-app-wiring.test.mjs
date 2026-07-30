@@ -14,7 +14,7 @@ const routerSource = readFileSync(
   'utf8',
 );
 
-test('App owns one production route registry with a latest-config Project Overview binding', () => {
+test('App owns one production route registry with latest Project Overview and Search bindings', () => {
   assert.match(
     appSource,
     /createDesktopProductionRouteRegistry\(\{[\s\S]*PROJECT_OVERVIEW_ROUTE_ID[\s\S]*createProjectOverviewRouteModuleLoader\(\{[\s\S]*configRef\.current/u,
@@ -26,6 +26,14 @@ test('App owns one production route registry with a latest-config Project Overvi
   assert.doesNotMatch(
     appSource,
     /createCloudProjectOverviewClient|createLocalProjectOverviewClient/u,
+  );
+  assert.match(
+    appSource,
+    /PROJECT_SEARCH_ROUTE_ID[\s\S]*createProjectSearchRouteModuleLoader\(\{[\s\S]*projectSearchRouteBindingRef\.current/u,
+  );
+  assert.match(
+    appSource,
+    /projectSearchRouteBindingRef\.current\s*=\s*Object\.freeze\(\{[\s\S]*api,[\s\S]*config,[\s\S]*project:[\s\S]*capability:[\s\S]*capabilityLoading:/u,
   );
 });
 

@@ -175,6 +175,7 @@
     "src/features/search/DesktopSearchResult.tsx",
     "src/features/search/desktopSearchModel.ts",
     "src/features/search/localSearchClient.ts",
+    "src/features/search/projectSearchRouteModule.tsx",
     "src/features/task/NewTaskFlow.tsx",
     "src/features/task/newTaskPlanModel.ts",
     "src/features/task/newTaskSessionModel.ts",

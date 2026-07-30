@@ -259,7 +259,10 @@ import {
   resolveEarlierTimelinePage,
 } from './features/session/sessionTimelinePaginationModel';
 import { MyWorkQueue } from './features/my-work/MyWorkQueue';
-import { desktopCapability } from './features/runtime/capabilitySnapshot';
+import {
+  desktopCapability,
+  type DesktopCapabilityView,
+} from './features/runtime/capabilitySnapshot';
 import { runtimeTransportIdentityChanged } from './features/runtime/runtimeConfigModel';
 import { useDesktopCapabilitySnapshot } from './features/runtime/useDesktopCapabilitySnapshot';
 import { createDesktopWorkbenchCapabilityClient } from './features/runtime/workbenchCapabilityClient';
@@ -278,6 +281,7 @@ import { createBrowserDesktopHashLocationPort } from './features/navigation/desk
 import {
   createDesktopProductionRouteRegistry,
   PROJECT_OVERVIEW_ROUTE_ID,
+  PROJECT_SEARCH_ROUTE_ID,
 } from './features/navigation/desktopProductionRouteRegistry';
 import {
   createProjectOverviewRouteBindingForRuntime,
@@ -292,6 +296,10 @@ import {
 } from './features/navigation/keyboardShortcutModel';
 import { createProjectOverviewRouteModuleLoader } from './features/project/projectOverviewRouteModule';
 import { DesktopSearch } from './features/search/DesktopSearch';
+import {
+  createProjectSearchRouteModuleLoader,
+  type ProjectSearchRouteBinding,
+} from './features/search/projectSearchRouteModule';
 import {
   terminalInteractiveCapability as resolveTerminalInteractiveCapability,
   type SandboxRuntimeCapability,
@@ -1905,6 +1913,16 @@ export function App() {
       projects: ProjectSummary[],
     ) => Promise<boolean>) | null
   >(null);
+  const projectSearchRouteBindingRef = useRef<
+    Readonly<{
+      api: DesktopApiClient;
+      config: DesktopRuntimeConfig;
+      project: ProjectSummary | null;
+      capability: DesktopCapabilityView;
+      capabilityLoading: boolean;
+      onRetryCapability: () => void;
+    }> | null
+  >(null);
   const desktopProductionRouteLocation = useMemo(
     () => createBrowserDesktopHashLocationPort(),
     [],
@@ -1930,6 +1948,26 @@ export function App() {
                   context,
                 ),
             }),
+          [PROJECT_SEARCH_ROUTE_ID]: createProjectSearchRouteModuleLoader({
+            createBinding: (_context): ProjectSearchRouteBinding => {
+              const current = projectSearchRouteBindingRef.current;
+              const currentConfig = current?.config ?? configRef.current;
+              return Object.freeze({
+                api: current?.api ?? new DesktopApiClient(currentConfig),
+                scope: Object.freeze({
+                  tenantId: currentConfig.tenantId,
+                  projectId: currentConfig.projectId,
+                }),
+                projectName:
+                  current?.project?.name ?? current?.project?.id ?? null,
+                capability:
+                  current?.capability ??
+                  desktopCapability(null, PROJECT_SEARCH_ROUTE_ID),
+                capabilityLoading: current?.capabilityLoading ?? true,
+                onRetryCapability: current?.onRetryCapability,
+              });
+            },
+          }),
         },
       }),
     [],
@@ -2106,6 +2144,20 @@ export function App() {
     [desktopCapabilityState.snapshot],
   );
   const searchCapability = desktopCapability(desktopCapabilityState.snapshot, 'search');
+  const projectSearchCapability = desktopCapability(
+    desktopCapabilityState.snapshot,
+    PROJECT_SEARCH_ROUTE_ID,
+  );
+  projectSearchRouteBindingRef.current = Object.freeze({
+    api,
+    config,
+    project:
+      auth.projects.find((project) => project.id === config.projectId) ??
+      projectSummaryFromConfig(config),
+    capability: projectSearchCapability,
+    capabilityLoading: desktopCapabilityState.loading,
+    onRetryCapability: desktopCapabilityState.reload,
+  });
   const automationRunCapability = desktopCapability(
     desktopCapabilityState.snapshot,
     'automation_run',

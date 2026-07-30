@@ -127,6 +127,10 @@ export function createDesktopWorkbenchCapabilityClient(
             projectOverview,
             projectScope,
           ),
+          'project-project-search': withCapabilityScope(
+            search,
+            projectScope,
+          ),
         },
       };
       const snapshot = parseDesktopCapabilitySnapshot(rawSnapshot);

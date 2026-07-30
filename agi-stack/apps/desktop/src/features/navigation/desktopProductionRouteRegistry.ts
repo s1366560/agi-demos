@@ -18,9 +18,11 @@ import type {
 } from './desktopRouteRegistry';
 
 export const PROJECT_OVERVIEW_ROUTE_ID = 'project-project-overview' as const;
+export const PROJECT_SEARCH_ROUTE_ID = 'project-project-search' as const;
 
 const IMPLEMENTED_ROUTE_IDS = new Set<CanonicalDesktopRouteId>([
   PROJECT_OVERVIEW_ROUTE_ID,
+  PROJECT_SEARCH_ROUTE_ID,
 ]);
 const CANONICAL_ROUTE_ID_SET = new Set<string>(CANONICAL_DESKTOP_ROUTE_IDS);
 
@@ -37,7 +39,7 @@ export function createDesktopProductionRouteRegistry({
   const loaders = Object.fromEntries(
     CANONICAL_DESKTOP_ROUTE_IDS.map((routeId) => [
       routeId,
-      routeId === PROJECT_OVERVIEW_ROUTE_ID
+      IMPLEMENTED_ROUTE_IDS.has(routeId)
         ? implementedLoader(routeId, implementedLoaders[routeId], () =>
             requiredDefinition(registry, routeId),
           )
@@ -70,7 +72,7 @@ function assertImplementedLoaders(
 }
 
 function implementedLoader(
-  routeId: typeof PROJECT_OVERVIEW_ROUTE_ID,
+  routeId: CanonicalDesktopRouteId,
   input: unknown,
   definition: () => DesktopRouteDefinition<DesktopRouteModule>,
 ): DesktopRouteModuleLoader {
@@ -109,7 +111,7 @@ function createPlannedModule(
 function requireImplementedModule(
   input: unknown,
   definition: DesktopRouteDefinition<DesktopRouteModule>,
-  routeId: typeof PROJECT_OVERVIEW_ROUTE_ID,
+  routeId: CanonicalDesktopRouteId,
 ): DesktopImplementedRouteModule {
   if (!isRecord(input)) {
     throw new Error(`desktop_route_module_invalid:${routeId}`);

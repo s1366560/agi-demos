@@ -54,6 +54,15 @@ test('DesktopCapabilitySnapshot v3 validates authority fields and preserves the 
         scope: nullScope,
         authority_revision: null,
       },
+      'project-project-search': {
+        availability: 'unavailable',
+        reason_code: 'capability_not_declared',
+        service_version: null,
+        contract_version: null,
+        allowed_actions: [],
+        scope: nullScope,
+        authority_revision: null,
+      },
     },
   });
   assert.deepEqual(desktopCapability(snapshot, 'search'), {
@@ -194,6 +203,10 @@ test('workbench capability client emits scoped v3 authority metadata', async () 
       },
       authority_revision: 21,
     });
+    assert.deepEqual(
+      snapshot.capabilities['project-project-search'],
+      snapshot.capabilities.search,
+    );
     assert.deepEqual(snapshot.capabilities.automation_run, {
       availability: 'available',
       reason_code: null,

@@ -39,6 +39,17 @@ test('DesktopCapabilitySnapshot v2 normalizes read-only input into v3', () => {
     status: 'unavailable',
     available: false,
   });
+  assert.deepEqual(desktopCapability(snapshot, 'project-project-search'), {
+    availability: 'unavailable',
+    reason_code: 'capability_not_declared',
+    service_version: null,
+    contract_version: null,
+    allowed_actions: [],
+    scope: nullScope,
+    authority_revision: null,
+    status: 'unavailable',
+    available: false,
+  });
   assert.deepEqual(desktopCapability(snapshot, 'sandbox_isolation'), {
     availability: 'not_applicable',
     reason_code: 'local_isolation_not_applicable',

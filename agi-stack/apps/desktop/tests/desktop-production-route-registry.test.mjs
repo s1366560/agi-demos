@@ -18,6 +18,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   PROJECT_OVERVIEW_ROUTE_ID,
+  PROJECT_SEARCH_ROUTE_ID,
   createDesktopProductionRouteRegistry,
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js'
@@ -75,16 +76,37 @@ function implementedProjectModule(overrides = {}) {
   });
 }
 
-function createRegistry(loader = async () => implementedProjectModule()) {
+function implementedSearchModule(overrides = {}) {
+  function ProjectSearchRoute() {
+    return React.createElement('section', null, 'Project Search route');
+  }
+  return Object.freeze({
+    routeId: PROJECT_SEARCH_ROUTE_ID,
+    disposition: 'implemented',
+    availability: 'available',
+    reasonCode: null,
+    capability: PROJECT_SEARCH_ROUTE_ID,
+    localPolicy: 'native_equivalent',
+    Surface: ProjectSearchRoute,
+    ...overrides,
+  });
+}
+
+function createRegistry(
+  projectLoader = async () => implementedProjectModule(),
+  searchLoader = async () => implementedSearchModule(),
+) {
   return createDesktopProductionRouteRegistry({
     implementedLoaders: {
-      [PROJECT_OVERVIEW_ROUTE_ID]: loader,
+      [PROJECT_OVERVIEW_ROUTE_ID]: projectLoader,
+      [PROJECT_SEARCH_ROUTE_ID]: searchLoader,
     },
   });
 }
 
-test('production registry requires the one implemented Project Overview loader', () => {
+test('production registry requires both implemented project route loaders', () => {
   assert.equal(PROJECT_OVERVIEW_ROUTE_ID, 'project-project-overview');
+  assert.equal(PROJECT_SEARCH_ROUTE_ID, 'project-project-search');
   assert.throws(
     () =>
       createDesktopProductionRouteRegistry({
@@ -97,6 +119,7 @@ test('production registry requires the one implemented Project Overview loader',
       createDesktopProductionRouteRegistry({
         implementedLoaders: {
           [PROJECT_OVERVIEW_ROUTE_ID]: 'not-callable',
+          [PROJECT_SEARCH_ROUTE_ID]: async () => implementedSearchModule(),
         },
       }),
     /desktop_production_route_loader_invalid:project-project-overview/u,
@@ -106,6 +129,7 @@ test('production registry requires the one implemented Project Overview loader',
       createDesktopProductionRouteRegistry({
         implementedLoaders: {
           [PROJECT_OVERVIEW_ROUTE_ID]: async () => implementedProjectModule(),
+          [PROJECT_SEARCH_ROUTE_ID]: async () => implementedSearchModule(),
           'external-web-handoff': async () => implementedProjectModule(),
         },
       }),
@@ -116,23 +140,43 @@ test('production registry requires the one implemented Project Overview loader',
       createDesktopProductionRouteRegistry({
         implementedLoaders: {
           [PROJECT_OVERVIEW_ROUTE_ID]: async () => implementedProjectModule(),
+          [PROJECT_SEARCH_ROUTE_ID]: async () => implementedSearchModule(),
           'tenant-tenant-overview': async () => implementedProjectModule(),
         },
       }),
     /desktop_production_route_loader_not_implemented:tenant-tenant-overview/u,
   );
+  assert.throws(
+    () =>
+      createDesktopProductionRouteRegistry({
+        implementedLoaders: {
+          [PROJECT_OVERVIEW_ROUTE_ID]: async () => implementedProjectModule(),
+          [PROJECT_SEARCH_ROUTE_ID]: 'not-callable',
+        },
+      }),
+    /desktop_production_route_loader_invalid:project-project-search/u,
+  );
 });
 
-test('all 51 production loaders remain lazy and Project Overview is the unique real module', async () => {
+test('all 51 production loaders remain lazy and both project routes are real modules', async () => {
   let projectLoadCount = 0;
+  let searchLoadCount = 0;
   const projectModule = implementedProjectModule();
-  const registry = createRegistry(async () => {
-    projectLoadCount += 1;
-    return projectModule;
-  });
+  const searchModule = implementedSearchModule();
+  const registry = createRegistry(
+    async () => {
+      projectLoadCount += 1;
+      return projectModule;
+    },
+    async () => {
+      searchLoadCount += 1;
+      return searchModule;
+    },
+  );
 
   assert.equal(registry.definitions.length, 51);
   assert.equal(projectLoadCount, 0);
+  assert.equal(searchLoadCount, 0);
 
   const loaded = await Promise.all(
     registry.definitions.map(async (definition) => ({
@@ -141,6 +185,7 @@ test('all 51 production loaders remain lazy and Project Overview is the unique r
     })),
   );
   assert.equal(projectLoadCount, 1);
+  assert.equal(searchLoadCount, 1);
 
   const implemented = loaded.filter(
     ({ module }) => module.disposition === 'implemented',
@@ -148,10 +193,20 @@ test('all 51 production loaders remain lazy and Project Overview is the unique r
   const planned = loaded.filter(
     ({ module }) => module.disposition === 'planned',
   );
-  assert.equal(implemented.length, 1);
-  assert.equal(implemented[0].definition.id, PROJECT_OVERVIEW_ROUTE_ID);
-  assert.equal(implemented[0].module, projectModule);
-  assert.equal(planned.length, 50);
+  assert.equal(implemented.length, 2);
+  assert.deepEqual(
+    implemented.map(({ definition }) => definition.id).sort(),
+    [PROJECT_OVERVIEW_ROUTE_ID, PROJECT_SEARCH_ROUTE_ID].sort(),
+  );
+  assert.equal(
+    implemented.find(({ definition }) => definition.id === PROJECT_OVERVIEW_ROUTE_ID).module,
+    projectModule,
+  );
+  assert.equal(
+    implemented.find(({ definition }) => definition.id === PROJECT_SEARCH_ROUTE_ID).module,
+    searchModule,
+  );
+  assert.equal(planned.length, 49);
 
   for (const { definition, module } of planned) {
     assert.equal(module.routeId, definition.id);

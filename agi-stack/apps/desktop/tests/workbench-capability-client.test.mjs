@@ -221,6 +221,10 @@ test('cloud client validates structured Search and Automation authorities', asyn
       ),
     );
     assert.deepEqual(
+      snapshot.capabilities['project-project-search'],
+      snapshot.capabilities.search,
+    );
+    assert.deepEqual(
       snapshot.capabilities.automation_run,
       withScope(availableCapability(['run_now']), scope),
     );
@@ -298,6 +302,10 @@ test('local workbench capability client consumes the scoped degraded Search cont
           instance_id: null,
         },
       ),
+    );
+    assert.deepEqual(
+      snapshot.capabilities['project-project-search'],
+      snapshot.capabilities.search,
     );
     assert.equal(calls.length, 1);
     assert.equal(

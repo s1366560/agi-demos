@@ -24,6 +24,7 @@ const {
 const {
   createDesktopProductionRouteRegistry,
   PROJECT_OVERVIEW_ROUTE_ID,
+  PROJECT_SEARCH_ROUTE_ID,
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js'
 );
@@ -67,6 +68,7 @@ test('factory stays lazy and publishes the exact implemented route module contra
   const registry = createDesktopProductionRouteRegistry({
     implementedLoaders: {
       [PROJECT_OVERVIEW_ROUTE_ID]: loader,
+      [PROJECT_SEARCH_ROUTE_ID]: implementedSearchLoader(),
     },
   });
   const module = await registry.byId.get(PROJECT_OVERVIEW_ROUTE_ID).loader();
@@ -93,6 +95,21 @@ test('factory stays lazy and publishes the exact implemented route module contra
     },
   );
 });
+
+function implementedSearchLoader() {
+  return async () =>
+    Object.freeze({
+      routeId: PROJECT_SEARCH_ROUTE_ID,
+      disposition: 'implemented',
+      availability: 'available',
+      reasonCode: null,
+      capability: PROJECT_SEARCH_ROUTE_ID,
+      localPolicy: 'native_equivalent',
+      Surface() {
+        return null;
+      },
+    });
+}
 
 test('surface binds only the structured route context to controller authority', async () => {
   const receivedContexts = [];

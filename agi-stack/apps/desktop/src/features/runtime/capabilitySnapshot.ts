@@ -19,7 +19,8 @@ export type DesktopCapabilityName =
   | 'search'
   | 'workspace_collaboration'
   | 'sandbox_isolation'
-  | 'project-project-overview';
+  | 'project-project-overview'
+  | 'project-project-search';
 
 export type DesktopCapabilityScope = {
   tenant_id: string | null;
@@ -68,6 +69,7 @@ const CAPABILITY_NAMES: readonly DesktopCapabilityName[] = [
   'workspace_collaboration',
   'sandbox_isolation',
   'project-project-overview',
+  'project-project-search',
 ];
 
 const CURRENT_CAPABILITY_CONTRACT_MINIMUMS = [
