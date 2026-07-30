@@ -1,5 +1,10 @@
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 
+import {
+  projectOverviewEnUS,
+  projectOverviewZhCN,
+} from './features/project/locales/projectOverviewMessages';
+
 export type DesktopLocale = 'en' | 'zh-CN';
 
 type TranslationValues = Record<string, string | number>;
@@ -13,6 +18,7 @@ type I18nContextValue = {
 const STORAGE_KEY = 'agistack.desktop.locale';
 
 const enUS: Record<string, string> = {
+  ...projectOverviewEnUS,
   'common.close': 'Close',
   'common.cancel': 'Cancel',
   'common.delete': 'Delete',
@@ -3603,6 +3609,7 @@ const enUS: Record<string, string> = {
 };
 
 const zhCN: Record<string, string> = {
+  ...projectOverviewZhCN,
   'common.close': '关闭',
   'common.cancel': '取消',
   'common.delete': '删除',
