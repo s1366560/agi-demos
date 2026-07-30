@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0.0",
+  "record_kind": "desktop-parity-native-authority-report",
+  "source_revision": "20059f26aef297b411dfed883d4b17bee504553c",
+  "capability_id": "project-project-overview",
+  "status": "blocked",
+  "verified_surface": "desktop_local",
+  "unverified_surface": "desktop_cloud",
+  "launch_command": "AGISTACK_DESKTOP_DEBUG_PORT=9333 make -C agi-stack run-desktop",
+  "native_observations": {
+    "route": "#/tenant/local/project/local-project",
+    "breadcrumb": "project-project-overview",
+    "reason_code": "local_project_overview_timeline_projection_only",
+    "local_sessions": 1,
+    "timeline_knowledge_items": 2,
+    "webview_or_external_browser_handoff": false
+  },
+  "sidecar_authority": {
+    "route": "GET /api/v1/projects/local-project/overview",
+    "authority": "local_project_overview",
+    "tests": "330 passed",
+    "relevant_tests": [
+      "project_overview_authority_revision_tracks_projection_backfill",
+      "project_overview_exposes_only_local_authoritative_and_degraded_fields",
+      "project_overview_preserves_empty_local_state_without_fabricated_cloud_values",
+      "project_overview_rejects_a_project_outside_the_active_scope",
+      "project_overview_rejects_unknown_query_fields_and_keeps_an_exact_schema",
+      "project_overview_requires_launch_capability_and_authenticated_session"
+    ]
+  },
+  "blocker": {
+    "reason_code": "authorized_cloud_native_session_unavailable",
+    "statement": "Cloud Desktop Project Overview was not exercised because no authorized Cloud session was available."
+  },
+  "recorded_at": "2026-07-30T07:51:43Z"
+}

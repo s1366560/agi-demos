@@ -1,0 +1,70 @@
+{
+  "schema_version": "1.0.0",
+  "record_kind": "desktop-parity-build-report",
+  "source_revision": "20059f26aef297b411dfed883d4b17bee504553c",
+  "worktree_state": "clean",
+  "commands": [
+    {
+      "command": "make -C agi-stack desktop-check",
+      "status": "passed",
+      "results": {
+        "sidecar_tests": "330 passed",
+        "desktop_tests": "1658 passed",
+        "electron_build_modules": 9098
+      }
+    },
+    {
+      "command": "make -C agi-stack desktop-browser-qa",
+      "status": "passed",
+      "results": {
+        "browser_qa": "417 passed"
+      }
+    },
+    {
+      "command": "make -C agi-stack desktop-paired-browser-qa",
+      "status": "passed",
+      "results": {
+        "paired_production_renderer": "1 passed",
+        "matched_state": "signed_out_entry_only"
+      }
+    },
+    {
+      "command": "make -C agi-stack desktop-bundle",
+      "status": "passed",
+      "results": {
+        "platform": "darwin",
+        "architecture": "arm64",
+        "signing": "skipped_local_identity_null"
+      }
+    },
+    {
+      "command": "make -C agi-stack desktop-bundle-smoke",
+      "status": "passed",
+      "results": {
+        "receipt": "DESKTOP_BUNDLE_SMOKE_OK"
+      }
+    }
+  ],
+  "bundle_artifacts": [
+    {
+      "path": "agi-stack/apps/desktop/release/agi-stack-desktop-0.1.0-mac-arm64.zip",
+      "bytes": 185328024,
+      "sha256": "e35d21904d710d847c6b3e4aac4194711b3f3e8f9f7134400e474bf1200cbd33"
+    },
+    {
+      "path": "agi-stack/apps/desktop/release/agi-stack-desktop-0.1.0-mac-arm64.dmg",
+      "bytes": 185091108,
+      "sha256": "eac7c3bb32c48617d0bafab1fbe1519177a72195cc0236018bc0f27f4c2d4d00"
+    },
+    {
+      "path": "agi-stack/apps/desktop/release/mac-arm64/agi-stack Desktop.app/Contents/Resources/sidecar/agistack-desktop-sidecar",
+      "bytes": 7115584,
+      "sha256": "bbc8b69ab0f8633ad942d3baecab7620a90ef0b76cfb04806c20f489dc578e7c"
+    }
+  ],
+  "limitations": [
+    "The paired production renderer case covered only the signed-out entry.",
+    "The local bundle intentionally skipped signing and is not notarization, Authenticode, installation, update, or rollback evidence."
+  ],
+  "completed_at": "2026-07-30T07:45:53.031Z"
+}
