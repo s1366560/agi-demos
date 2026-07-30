@@ -26,6 +26,13 @@ const appSource = readFileSync(
   new URL('../src/App.tsx', import.meta.url),
   'utf8',
 );
+const automationsPageSource = readFileSync(
+  new URL(
+    '../src/features/automations/AutomationsPage.tsx',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 const routeContext = Object.freeze({
   tenantId: 'tenant-1',
@@ -155,6 +162,22 @@ test('AutomationsPage code loads only behind the production route loader boundar
   assert.doesNotMatch(
     appSource,
     /import\s+\{\s*AutomationsPage\s*\}\s+from/u,
+  );
+});
+
+test('controlled automation editor restores the exact opening control on close', () => {
+  assert.match(automationsPageSource, /editorFocusReturnRef/u);
+  assert.match(
+    automationsPageSource,
+    /document\.activeElement instanceof HTMLElement/u,
+  );
+  assert.match(
+    automationsPageSource,
+    /focus\(\{\s*preventScroll:\s*true\s*\}\)/u,
+  );
+  assert.match(
+    automationsPageSource,
+    /onOpenChange=\{setEditorOpenWithFocusReturn\}/u,
   );
 });
 

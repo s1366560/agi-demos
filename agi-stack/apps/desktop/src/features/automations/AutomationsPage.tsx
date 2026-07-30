@@ -70,6 +70,8 @@ export function AutomationsPage({
   const [editorJob, setEditorJob] = useState<AutomationJob | null>(null);
   const [mutationBusy, setMutationBusy] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const editorFocusReturnRef = useRef<HTMLElement | null>(null);
+  const editorFocusFrameRef = useRef<number | null>(null);
   const mutationKeys = useRef(new Map<string, string>());
   const runAttempts = useRef(
     new Map<string, { fingerprint: string; idempotencyKey: string }>(),
@@ -146,6 +148,15 @@ export function AutomationsPage({
     return () => controller.abort();
   }, [api, projectId, selectedJob]);
 
+  useEffect(
+    () => () => {
+      if (editorFocusFrameRef.current !== null) {
+        cancelAnimationFrame(editorFocusFrameRef.current);
+      }
+    },
+    [],
+  );
+
   const enabledCount = jobs.filter((job) => job.enabled).length;
   const createCapability = automationActionAvailability(capabilities, 'create', {
     handler_available: true,
@@ -155,13 +166,37 @@ export function AutomationsPage({
   const createReasonCode = automationCapabilityReasonCode(createCapability.reason_code);
   const createReasonId = 'automation-create-disabled-reason';
 
+  const rememberEditorFocusReturn = () => {
+    editorFocusReturnRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+  };
+
+  const setEditorOpenWithFocusReturn = (open: boolean) => {
+    setEditorOpen(open);
+    if (open) return;
+    const target = editorFocusReturnRef.current;
+    editorFocusReturnRef.current = null;
+    if (!target) return;
+    if (editorFocusFrameRef.current !== null) {
+      cancelAnimationFrame(editorFocusFrameRef.current);
+    }
+    editorFocusFrameRef.current = requestAnimationFrame(() => {
+      editorFocusFrameRef.current = null;
+      if (target.isConnected) target.focus({ preventScroll: true });
+    });
+  };
+
   const openCreate = () => {
+    rememberEditorFocusReturn();
     setEditorJob(null);
     setMutationError(null);
     setEditorOpen(true);
   };
 
   const openEdit = (job: AutomationJob) => {
+    rememberEditorFocusReturn();
     setEditorJob(job);
     setMutationError(null);
     setEditorOpen(true);
@@ -194,7 +229,7 @@ export function AutomationsPage({
           : [saved, ...current];
       });
       setSelectedJobId(saved.id);
-      setEditorOpen(false);
+      setEditorOpenWithFocusReturn(false);
     } catch (caught) {
       setMutationError(caught instanceof Error ? caught.message : String(caught));
       if (caught instanceof DesktopApiError && caught.status === 409) void loadJobs();
@@ -422,7 +457,7 @@ export function AutomationsPage({
         job={editorJob}
         busy={mutationBusy}
         error={mutationError}
-        onOpenChange={setEditorOpen}
+        onOpenChange={setEditorOpenWithFocusReturn}
         onSubmit={submitEditor}
       />
     </section>
