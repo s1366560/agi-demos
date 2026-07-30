@@ -1,10 +1,13 @@
 import {
   absoluteUrl,
+  DesktopApiError,
   desktopApiCredential,
   desktopLaunchCapability,
 } from '../../api/client';
 import type { DesktopAutomationApi } from '../automations/automationClient';
 import { normalizeAutomationCapabilities } from '../automations/automationModel';
+import { createCloudProjectOverviewClient } from '../project/projectOverviewCloudClient';
+import { createLocalProjectOverviewClient } from '../project/projectOverviewLocalClient';
 import { WORKSPACE_HTTP_MUTATION_ACTIONS } from '../workspace/workspaceCollaborationHttpMutations';
 import type { DesktopRuntimeConfig } from '../../types';
 import {
@@ -42,6 +45,8 @@ type WorkspaceCollaborationCapabilityScope = {
 
 const WORKSPACE_COLLABORATION_DEGRADED_REASON =
   'workspace_collaboration_mutation_guards_unavailable';
+const PROJECT_OVERVIEW_SERVICE_VERSION = '0.1.0';
+const PROJECT_OVERVIEW_CONTRACT_VERSION = '3.0.0';
 const LOCAL_SEARCH_SUPPORTED_TYPES = ['advanced', 'temporal', 'faceted'] as const;
 const LOCAL_SEARCH_UNAVAILABLE_TYPES = ['graph_traversal', 'community'] as const;
 
@@ -85,10 +90,16 @@ export function createDesktopWorkbenchCapabilityClient(
 ): DesktopWorkbenchCapabilityClient {
   return {
     async loadSnapshot(signal?: AbortSignal): Promise<DesktopCapabilitySnapshot> {
-      const [search, automationRun, workspaceCollaboration] = await Promise.all([
+      const [
+        search,
+        automationRun,
+        workspaceCollaboration,
+        projectOverview,
+      ] = await Promise.all([
         loadSearchCapability(config, signal),
         loadAutomationCapability(automationApi, config.projectId, signal),
         loadWorkspaceCollaborationCapability(config, signal),
+        loadProjectOverviewCapability(config, signal),
       ]);
       const projectScope = projectCapabilityScope(config);
       const workspaceScope = workspaceCapabilityScope(config);
@@ -112,6 +123,10 @@ export function createDesktopWorkbenchCapabilityClient(
                   unavailable('sandbox_isolation_capability_not_declared'),
                   workspaceScope,
                 ),
+          'project-project-overview': withCapabilityScope(
+            projectOverview,
+            projectScope,
+          ),
         },
       };
       const snapshot = parseDesktopCapabilitySnapshot(rawSnapshot);
@@ -472,6 +487,71 @@ async function loadWorkspaceCollaborationCapability(
   } catch (error) {
     if (signal?.aborted) throw error;
     return unavailable('workspace_collaboration_capability_contract_unavailable');
+  }
+}
+
+async function loadProjectOverviewCapability(
+  config: DesktopRuntimeConfig,
+  signal?: AbortSignal,
+): Promise<DesktopCapabilityAvailability> {
+  const tenantId = scopeIdentifier(config.tenantId);
+  const projectId = scopeIdentifier(config.projectId);
+  if (!tenantId || !projectId) {
+    return unavailable('project_overview_scope_unavailable');
+  }
+
+  try {
+    if (config.mode === 'local') {
+      const snapshot = await createLocalProjectOverviewClient(config).load(
+        {
+          authority: 'local',
+          tenantId,
+          projectId,
+        },
+        { signal },
+      );
+      return {
+        availability: snapshot.capability.availability,
+        reason_code: snapshot.capability.reasonCode,
+        service_version: snapshot.capability.serviceVersion,
+        contract_version: snapshot.capability.contractVersion,
+        allowed_actions: [...snapshot.capability.allowedActions],
+        scope: {
+          tenant_id: snapshot.capability.scope.tenantId,
+          project_id: snapshot.capability.scope.projectId,
+          workspace_id: snapshot.capability.scope.workspaceId,
+          instance_id: snapshot.capability.scope.instanceId,
+        },
+        authority_revision: snapshot.capability.authorityRevision,
+      };
+    }
+
+    await createCloudProjectOverviewClient(config).getProject(
+      {
+        authority: 'cloud',
+        tenantId,
+        projectId,
+      },
+      { signal },
+    );
+    return {
+      availability: 'available',
+      reason_code: null,
+      service_version: PROJECT_OVERVIEW_SERVICE_VERSION,
+      contract_version: PROJECT_OVERVIEW_CONTRACT_VERSION,
+      allowed_actions: ['view'],
+      scope: emptyCapabilityScope(),
+      authority_revision: null,
+    };
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    if (error instanceof DesktopApiError && error.status === 403) {
+      return unavailable('project_overview_forbidden');
+    }
+    if (error instanceof DesktopApiError && error.status === 0) {
+      return unavailable('project_overview_contract_invalid');
+    }
+    return unavailable('project_overview_authority_unavailable');
   }
 }
 

@@ -28,6 +28,17 @@ const nullScope = {
 test('DesktopCapabilitySnapshot v2 normalizes read-only input into v3', () => {
   const snapshot = parseDesktopCapabilitySnapshot(fixture.input.snapshot);
   assert.equal(snapshot?.version, '3.0.0');
+  assert.deepEqual(desktopCapability(snapshot, 'project-project-overview'), {
+    availability: 'unavailable',
+    reason_code: 'capability_not_declared',
+    service_version: null,
+    contract_version: null,
+    allowed_actions: [],
+    scope: nullScope,
+    authority_revision: null,
+    status: 'unavailable',
+    available: false,
+  });
   assert.deepEqual(desktopCapability(snapshot, 'sandbox_isolation'), {
     availability: 'not_applicable',
     reason_code: 'local_isolation_not_applicable',
@@ -87,6 +98,57 @@ test('DesktopCapabilitySnapshot closes missing capabilities and rejects unsafe f
   assert.deepEqual(desktopCapability(null, 'search'), {
     availability: 'unavailable',
     reason_code: 'capability_snapshot_unavailable',
+    service_version: null,
+    contract_version: null,
+    allowed_actions: [],
+    scope: nullScope,
+    authority_revision: null,
+    status: 'unavailable',
+    available: false,
+  });
+});
+
+test('DesktopCapabilitySnapshot resolves route capability strings without inventing authority', () => {
+  const snapshot = parseDesktopCapabilitySnapshot({
+    version: '3.0.0',
+    mode: 'local',
+    capabilities: {
+      'project-project-overview': {
+        availability: 'degraded',
+        reason_code: 'local_project_overview_timeline_projection_only',
+        service_version: '0.1.0',
+        contract_version: '3.0.0',
+        allowed_actions: ['view'],
+        scope: {
+          tenant_id: 'tenant-1',
+          project_id: 'project-1',
+          workspace_id: null,
+          instance_id: null,
+        },
+        authority_revision: 7,
+      },
+    },
+  });
+
+  assert.deepEqual(desktopCapability(snapshot, 'project-project-overview'), {
+    availability: 'degraded',
+    reason_code: 'local_project_overview_timeline_projection_only',
+    service_version: '0.1.0',
+    contract_version: '3.0.0',
+    allowed_actions: ['view'],
+    scope: {
+      tenant_id: 'tenant-1',
+      project_id: 'project-1',
+      workspace_id: null,
+      instance_id: null,
+    },
+    authority_revision: 7,
+    status: 'degraded',
+    available: true,
+  });
+  assert.deepEqual(desktopCapability(snapshot, 'project-project-graph'), {
+    availability: 'unavailable',
+    reason_code: 'capability_not_declared',
     service_version: null,
     contract_version: null,
     allowed_actions: [],

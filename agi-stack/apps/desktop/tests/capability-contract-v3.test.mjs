@@ -41,7 +41,21 @@ const nullScope = {
 
 test('DesktopCapabilitySnapshot v3 validates authority fields and preserves the App view', () => {
   const snapshot = parseDesktopCapabilitySnapshot(fixture);
-  assert.deepEqual(snapshot, fixture);
+  assert.deepEqual(snapshot, {
+    ...fixture,
+    capabilities: {
+      ...fixture.capabilities,
+      'project-project-overview': {
+        availability: 'unavailable',
+        reason_code: 'capability_not_declared',
+        service_version: null,
+        contract_version: null,
+        allowed_actions: [],
+        scope: nullScope,
+        authority_revision: null,
+      },
+    },
+  });
   assert.deepEqual(desktopCapability(snapshot, 'search'), {
     ...fixture.capabilities.search,
     status: 'degraded',

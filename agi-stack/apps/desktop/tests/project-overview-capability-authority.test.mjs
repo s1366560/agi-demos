@@ -1,0 +1,264 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import {
+  createDesktopWorkbenchCapabilityClient,
+} from '/tmp/agistack-desktop-test-dist/src/features/runtime/workbenchCapabilityClient.js';
+import { DEFAULT_CONFIG } from '/tmp/agistack-desktop-test-dist/src/types.js';
+
+const automationContract = {
+  service_version: '0.1.0',
+  contract_version: '2.0.0',
+  schema_version: 1,
+  read: true,
+  revision_guarded: true,
+  idempotency_guarded: true,
+  durable_execution: true,
+  supported_read_trigger_kinds: ['manual', 'schedule', 'event'],
+  create: { allowed: true },
+  edit: { allowed: true },
+  toggle: { allowed: true },
+  run_now: { allowed: true },
+  delete: { allowed: true },
+};
+
+const cloudProject = {
+  id: 'project-1',
+  tenant_id: 'tenant-1',
+  name: 'Project One',
+  description: null,
+  created_at: '2026-07-30T00:00:00Z',
+  updated_at: null,
+};
+
+const localProjectOverview = {
+  capability: 'project_overview',
+  availability: 'degraded',
+  reason_code: 'local_project_overview_timeline_projection_only',
+  service_version: '0.1.0',
+  contract_version: '3.0.0',
+  allowed_actions: ['view'],
+  scope: {
+    tenant_id: 'tenant-1',
+    project_id: 'project-1',
+    workspace_id: null,
+    instance_id: null,
+  },
+  authority_revision: 11,
+  backfill_cursor: null,
+  project: {
+    availability: 'available',
+    reason_code: null,
+    value: {
+      id: 'project-1',
+      tenant_id: 'tenant-1',
+      name: 'Project One',
+      description: null,
+      agent_conversation_mode: 'workspace',
+      created_at: '2026-07-30T00:00:00Z',
+    },
+  },
+  conversation_count: {
+    availability: 'available',
+    reason_code: null,
+    value: 0,
+  },
+  recent_knowledge_items: {
+    availability: 'degraded',
+    reason_code: 'local_project_overview_timeline_projection_only',
+    source: 'desktop_timeline',
+    total: 0,
+    value: [],
+  },
+  active_nodes: {
+    availability: 'unavailable',
+    reason_code: 'local_project_graph_projection_unavailable',
+    value: null,
+  },
+  storage_quota: {
+    availability: 'not_applicable',
+    reason_code: 'local_project_storage_quota_not_applicable',
+    value: null,
+  },
+  collaborators: {
+    availability: 'not_applicable',
+    reason_code: 'local_project_collaboration_governance_not_applicable',
+    value: null,
+  },
+};
+
+const projectScope = {
+  tenant_id: 'tenant-1',
+  project_id: 'project-1',
+  workspace_id: null,
+  instance_id: null,
+};
+
+test('Cloud workbench reads Project Overview authority from the scoped production adapter', async () => {
+  const signal = new AbortController().signal;
+  const calls = [];
+  await withFetch(async (input, init) => {
+    calls.push({ input: String(input), init });
+    if (String(input).includes('/api/v1/projects/project-1?')) {
+      return jsonResponse(cloudProject);
+    }
+    return jsonResponse({}, { status: 404 });
+  }, async () => {
+    const snapshot = await createClient(cloudConfig()).loadSnapshot(signal);
+    assert.deepEqual(snapshot.capabilities['project-project-overview'], {
+      availability: 'available',
+      reason_code: null,
+      service_version: '0.1.0',
+      contract_version: '3.0.0',
+      allowed_actions: ['view'],
+      scope: projectScope,
+      authority_revision: null,
+    });
+  });
+
+  const projectCall = calls.find(({ input }) =>
+    input.includes('/api/v1/projects/project-1?'),
+  );
+  assert.equal(
+    projectCall?.input,
+    'https://api.memstack.test/api/v1/projects/project-1?tenant_id=tenant-1',
+  );
+  assert.equal(projectCall?.init?.signal, signal);
+  assert.equal(
+    new Headers(projectCall?.init?.headers).get('Authorization'),
+    'Bearer cloud-session',
+  );
+});
+
+test('Cloud Project Overview failures stay structured and never infer reason from text', async () => {
+  for (const [response, expectedReason] of [
+    [
+      jsonResponse(
+        { detail: 'cloud_project_overview_project_scope_invalid' },
+        { status: 403 },
+      ),
+      'project_overview_forbidden',
+    ],
+    [
+      jsonResponse(
+        { detail: 'cloud_project_overview_project_scope_invalid' },
+        { status: 503 },
+      ),
+      'project_overview_authority_unavailable',
+    ],
+    [
+      jsonResponse({ ...cloudProject, tenant_id: 'tenant-other' }),
+      'project_overview_contract_invalid',
+    ],
+  ]) {
+    await withFetch(async (input) => {
+      if (String(input).includes('/api/v1/projects/project-1?')) return response;
+      return jsonResponse({}, { status: 404 });
+    }, async () => {
+      const snapshot = await createClient(cloudConfig()).loadSnapshot();
+      assert.deepEqual(snapshot.capabilities['project-project-overview'], {
+        availability: 'unavailable',
+        reason_code: expectedReason,
+        service_version: null,
+        contract_version: null,
+        allowed_actions: [],
+        scope: projectScope,
+        authority_revision: null,
+      });
+    });
+  }
+});
+
+test('Local workbench preserves degraded Project Overview authority metadata', async () => {
+  const signal = new AbortController().signal;
+  const calls = [];
+  await withFetch(async (input, init) => {
+    calls.push({ input: String(input), init });
+    if (String(input).endsWith('/api/v1/projects/project-1/overview')) {
+      return jsonResponse(localProjectOverview);
+    }
+    return jsonResponse({}, { status: 404 });
+  }, async () => {
+    const snapshot = await createClient(localConfig()).loadSnapshot(signal);
+    assert.deepEqual(snapshot.capabilities['project-project-overview'], {
+      availability: 'degraded',
+      reason_code: 'local_project_overview_timeline_projection_only',
+      service_version: '0.1.0',
+      contract_version: '3.0.0',
+      allowed_actions: ['view'],
+      scope: projectScope,
+      authority_revision: 11,
+    });
+  });
+
+  const projectCall = calls.find(({ input }) =>
+    input.endsWith('/api/v1/projects/project-1/overview'),
+  );
+  assert.equal(projectCall?.init?.signal, signal);
+  const headers = new Headers(projectCall?.init?.headers);
+  assert.equal(headers.get('Authorization'), 'Bearer local-session');
+  assert.equal(headers.get('X-Agistack-Launch'), 'launch-capability');
+});
+
+test('Cloud and Local Project Overview authority propagate AbortSignal cancellation', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  await withFetch(async (_input, init) => {
+    if (init?.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    return jsonResponse({}, { status: 404 });
+  }, async () => {
+    for (const config of [cloudConfig(), localConfig()]) {
+      await assert.rejects(
+        createClient(config).loadSnapshot(controller.signal),
+        (error) => error instanceof DOMException && error.name === 'AbortError',
+      );
+    }
+  });
+});
+
+function createClient(config) {
+  return createDesktopWorkbenchCapabilityClient(
+    { getAutomationCapabilities: async () => automationContract },
+    config,
+  );
+}
+
+function cloudConfig() {
+  return {
+    ...DEFAULT_CONFIG,
+    apiBaseUrl: 'https://api.memstack.test',
+    apiKey: 'cloud-session',
+    mode: 'cloud',
+    tenantId: 'tenant-1',
+    projectId: 'project-1',
+  };
+}
+
+function localConfig() {
+  return {
+    ...DEFAULT_CONFIG,
+    apiBaseUrl: 'http://127.0.0.1:4777',
+    apiKey: 'local-session',
+    localApiToken: 'launch-capability',
+    mode: 'local',
+    tenantId: 'tenant-1',
+    projectId: 'project-1',
+  };
+}
+
+function jsonResponse(payload, init = {}) {
+  return new Response(JSON.stringify(payload), {
+    ...init,
+    headers: { 'content-type': 'application/json', ...init.headers },
+  });
+}
+
+async function withFetch(fetchImplementation, operation) {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = fetchImplementation;
+  try {
+    return await operation();
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+}

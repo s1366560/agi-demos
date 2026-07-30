@@ -18,7 +18,8 @@ export type DesktopCapabilityName =
   | 'automation_run'
   | 'search'
   | 'workspace_collaboration'
-  | 'sandbox_isolation';
+  | 'sandbox_isolation'
+  | 'project-project-overview';
 
 export type DesktopCapabilityScope = {
   tenant_id: string | null;
@@ -66,7 +67,13 @@ const CAPABILITY_NAMES: readonly DesktopCapabilityName[] = [
   'search',
   'workspace_collaboration',
   'sandbox_isolation',
+  'project-project-overview',
 ];
+
+const CURRENT_CAPABILITY_CONTRACT_MINIMUMS = [
+  DESKTOP_MINIMUM_CONTRACT_VERSION,
+  DESKTOP_CAPABILITY_SNAPSHOT_VERSION,
+] as const;
 
 const CAPABILITY_ENTRY_KEYS = [
   'availability',
@@ -136,11 +143,13 @@ export function parseDesktopCapabilitySnapshot(
 
 export function desktopCapability(
   snapshot: DesktopCapabilitySnapshot | null,
-  capabilityName: DesktopCapabilityName,
+  capabilityName: string,
 ): DesktopCapabilityView {
   const capability =
-    snapshot?.capabilities[capabilityName] ??
-    unavailableCapability('capability_snapshot_unavailable');
+    snapshot === null
+      ? unavailableCapability('capability_snapshot_unavailable')
+      : snapshot.capabilities[capabilityName as DesktopCapabilityName] ??
+        unavailableCapability('capability_not_declared');
   return {
     ...capability,
     status: capability.availability,
@@ -170,6 +179,7 @@ function readAvailability(input: unknown): DesktopCapabilityAvailability | null 
       input.reason_code,
       input.service_version,
       input.contract_version,
+      CURRENT_CAPABILITY_CONTRACT_MINIMUMS,
     )
   ) {
     return null;
@@ -232,16 +242,20 @@ function isAvailabilityStateValid(
   reasonCode: unknown,
   serviceVersion: string | null,
   contractVersion: string | null,
+  compatibleMinimums: readonly string[] = [
+    DESKTOP_MINIMUM_CONTRACT_VERSION,
+  ],
 ): reasonCode is string | null {
   if (availability === 'available' || availability === 'degraded') {
-    const negotiation = negotiateCapabilityContract(
-      {
-        service_version: serviceVersion,
-        contract_version: contractVersion,
-      },
-      DESKTOP_MINIMUM_CONTRACT_VERSION,
+    const contract = {
+      service_version: serviceVersion,
+      contract_version: contractVersion,
+    };
+    const compatible = compatibleMinimums.some(
+      (minimumContractVersion) =>
+        negotiateCapabilityContract(contract, minimumContractVersion).compatible,
     );
-    if (!negotiation.compatible) return false;
+    if (!compatible) return false;
   }
   if (availability === 'available') return reasonCode === null;
   if (!isStableReasonCode(reasonCode)) return false;
