@@ -271,13 +271,26 @@ import {
   type MyWorkRefreshScope,
 } from './features/my-work/myWorkModel';
 import { AuxiliaryView } from './features/navigation/AuxiliaryView';
+import { DesktopProductionRouter } from './features/navigation/DesktopProductionRouter';
 import { DesktopSidebar } from './features/navigation/DesktopSidebar';
 import { KeyboardShortcutsDialog } from './features/navigation/KeyboardShortcutsDialog';
+import { createBrowserDesktopHashLocationPort } from './features/navigation/desktopHashRouteHost';
+import {
+  createDesktopProductionRouteRegistry,
+  PROJECT_OVERVIEW_ROUTE_ID,
+} from './features/navigation/desktopProductionRouteRegistry';
+import {
+  createProjectOverviewRouteBindingForRuntime,
+  desktopRoutePermissionsForContext,
+  resolveDesktopRouteCapability,
+} from './features/navigation/desktopProductionRouteRuntime';
+import { createDesktopRouteScopeTransaction } from './features/navigation/desktopRouteScopeTransaction';
 import {
   detectShortcutPlatform,
   shortcutById,
   shortcutChordFor,
 } from './features/navigation/keyboardShortcutModel';
+import { createProjectOverviewRouteModuleLoader } from './features/project/projectOverviewRouteModule';
 import { DesktopSearch } from './features/search/DesktopSearch';
 import {
   terminalInteractiveCapability as resolveTerminalInteractiveCapability,
@@ -1686,6 +1699,7 @@ class WorkspaceSsoFlowError extends Error {
 
 const SIDEBAR_WIDTH_STORAGE_KEY = 'agistack.desktop.sidebarWidth';
 const SIDEBAR_WIDTH_CONSTRAINTS = { min: 180, max: 420, default: 220 } as const;
+const EMPTY_DESKTOP_ROUTE_PERMISSIONS: ReadonlySet<string> = new Set();
 
 export function App() {
   const runsInNativeDesktop = detectNativeDesktopShell();
@@ -1885,6 +1899,41 @@ export function App() {
   const mcpAppCanvasStateRef = useRef(mcpAppCanvasState);
   const terminalRunScopeKeyRef = useRef('');
   const workbenchRef = useRef<HTMLElement>(null);
+  const productionRouteRefreshRef = useRef<
+    ((
+      nextConfig: DesktopRuntimeConfig,
+      projects: ProjectSummary[],
+    ) => Promise<boolean>) | null
+  >(null);
+  const desktopProductionRouteLocation = useMemo(
+    () => createBrowserDesktopHashLocationPort(),
+    [],
+  );
+  const desktopProductionRouteNavigation = useMemo(
+    () =>
+      Object.freeze({
+        clearHash: () => {
+          window.location.hash = '';
+        },
+      }),
+    [],
+  );
+  const desktopProductionRouteRegistry = useMemo(
+    () =>
+      createDesktopProductionRouteRegistry({
+        implementedLoaders: {
+          [PROJECT_OVERVIEW_ROUTE_ID]:
+            createProjectOverviewRouteModuleLoader({
+              createBinding: (context) =>
+                createProjectOverviewRouteBindingForRuntime(
+                  configRef.current,
+                  context,
+                ),
+            }),
+        },
+      }),
+    [],
+  );
 
   useEffect(() => {
     datasetRef.current = dataset;
@@ -2038,6 +2087,23 @@ export function App() {
   const desktopCapabilityState = useDesktopCapabilitySnapshot(
     workbenchCapabilityClient,
     identityAuthenticated && showRuntimeConfig,
+  );
+  const resolveProductionRoutePermissions = useCallback(
+    (context: Parameters<typeof desktopRoutePermissionsForContext>[1]) =>
+      desktopRoutePermissionsForContext(auth, context),
+    [auth],
+  );
+  const resolveProductionRouteCapability = useCallback(
+    (
+      capability: string,
+      context: Parameters<typeof resolveDesktopRouteCapability>[2],
+    ) =>
+      resolveDesktopRouteCapability(
+        desktopCapabilityState.snapshot,
+        capability,
+        context,
+      ),
+    [desktopCapabilityState.snapshot],
   );
   const searchCapability = desktopCapability(desktopCapabilityState.snapshot, 'search');
   const automationRunCapability = desktopCapability(
@@ -3718,6 +3784,73 @@ export function App() {
       t,
       updateDataset,
     ],
+  );
+  productionRouteRefreshRef.current = (nextConfig, projects) =>
+    refreshRuntime(nextConfig, projects);
+  const productionRouteScopeTransaction = useMemo(
+    () =>
+      createDesktopRouteScopeTransaction({
+        getCurrent: () => ({
+          config: configRef.current,
+          authRevision: authAttemptRevisionRef.current,
+        }),
+        createAuthority: (authorityConfig) => {
+          const authority = new DesktopApiClient(authorityConfig);
+          return Object.freeze({
+            listProjects: (tenantId: string, signal: AbortSignal) =>
+              authority.listProjects(tenantId, signal),
+            getWorkspaceContext: (signal: AbortSignal) =>
+              authority.getWorkspaceContext(signal),
+            switchWorkspaceContext: (
+              tenantId: string,
+              projectId: string,
+              expectedRevision: number,
+              idempotencyKey: string,
+              signal: AbortSignal,
+            ) =>
+              authority.switchWorkspaceContext(
+                tenantId,
+                projectId,
+                expectedRevision,
+                idempotencyKey,
+                signal,
+              ),
+          });
+        },
+        commit: ({ config: nextConfig, context, projects }) => {
+          contextRevisionRef.current = context.revision;
+          commitRuntimeConfig(nextConfig);
+          setAuth((current) => ({
+            ...current,
+            context,
+            projects: [...projects],
+          }));
+        },
+        refresh: async ({ config: nextConfig, projects }, signal) => {
+          if (signal.aborted) {
+            throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+          }
+          await productionRouteRefreshRef.current?.(
+            nextConfig,
+            [...projects],
+          );
+          if (signal.aborted) {
+            throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+          }
+        },
+      }),
+    [commitRuntimeConfig],
+  );
+  const switchProductionRouteScope = useCallback(
+    async (
+      context: Parameters<
+        typeof productionRouteScopeTransaction.switchScope
+      >[0],
+      signal: AbortSignal,
+    ): Promise<void> => {
+      await productionRouteScopeTransaction.switchScope(context, signal);
+    },
+    [productionRouteScopeTransaction],
   );
 
   useEffect(() => {
@@ -8123,86 +8256,97 @@ export function App() {
           />
 
           <main ref={workbenchRef} className="workbench" tabIndex={-1}>
-            {error ? (
-              <div className="workbench-error" role="alert" aria-live="polite">
-                <span>{error}</span>
-                {connection === 'error' && showRuntimeConfig ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      workbenchRef.current?.focus();
-                      void refreshRuntime();
-                    }}
-                  >
-                    {t('runtime.retryWorkspace')}
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-            {activeSection === 'chat' && sessionDetailViewModel ? (
-              <SessionWorkspace
-                viewModel={sessionDetailViewModel}
-                thread={<section className={paneStageClassName}>{renderWorkbench()}</section>}
-                canvas={
-                  showReviewPanel
-                    ? (controls) => renderWorkspaceReviewPanel(controls)
-                    : null
-                }
-                onOpenCanvas={(tab) => {
-                  if (tab) setReviewTab(tab);
-                  setReviewPanelOpen(true);
-                }}
-                canvasRevealKey={
-                  artifactCanvasState.openRevision > 0 || mcpAppCanvasState.openRevision > 0
-                    ? [
-                        scopedConversationId,
-                        `artifact:${artifactCanvasState.openRevision}`,
-                        `app:${mcpAppCanvasState.openRevision}`,
-                      ].join(':')
-                    : null
-                }
-                onCloseCanvas={() => setReviewPanelOpen(false)}
-                runActionPending={sessionRunActionPending}
-                liveConnected={socket.connected}
-                liveError={socket.error}
-                onRunAction={(action, feedback) =>
-                  void handleSessionRunAction(action, feedback)
-                }
-                onOpenTask={
-                  sessionDetailViewModel.linkedTaskId
-                    ? () => {
-                        setSelectedTaskId(sessionDetailViewModel.linkedTaskId!);
-                        switchSection('board');
-                      }
-                    : undefined
-                }
-                onRenameConversation={
-                  scopedConversation
-                    ? (title) =>
-                        renameConversation(
-                          config.projectId,
-                          config.workspaceId,
-                          scopedConversation,
-                          title,
-                        )
-                    : undefined
-                }
-                onDeleteConversation={
-                  scopedConversation
-                    ? () =>
-                        deleteConversation(
-                          config.projectId,
-                          config.workspaceId,
-                          scopedConversation,
-                        )
-                    : undefined
-                }
-              />
-            ) : (
-              <section className="workbench-layout">
-                <section className={paneStageClassName}>{renderWorkbench()}</section>
-              </section>
-            )}
+            <DesktopProductionRouter
+              location={desktopProductionRouteLocation}
+              mode={config.mode}
+              navigation={desktopProductionRouteNavigation}
+              permissions={EMPTY_DESKTOP_ROUTE_PERMISSIONS}
+              registry={desktopProductionRouteRegistry}
+              resolveCapability={resolveProductionRouteCapability}
+              resolvePermissions={resolveProductionRoutePermissions}
+              switchScope={switchProductionRouteScope}
+            >
+              {error ? (
+                <div className="workbench-error" role="alert" aria-live="polite">
+                  <span>{error}</span>
+                  {connection === 'error' && showRuntimeConfig ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        workbenchRef.current?.focus();
+                        void refreshRuntime();
+                      }}
+                    >
+                      {t('runtime.retryWorkspace')}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+              {activeSection === 'chat' && sessionDetailViewModel ? (
+                <SessionWorkspace
+                  viewModel={sessionDetailViewModel}
+                  thread={<section className={paneStageClassName}>{renderWorkbench()}</section>}
+                  canvas={
+                    showReviewPanel
+                      ? (controls) => renderWorkspaceReviewPanel(controls)
+                      : null
+                  }
+                  onOpenCanvas={(tab) => {
+                    if (tab) setReviewTab(tab);
+                    setReviewPanelOpen(true);
+                  }}
+                  canvasRevealKey={
+                    artifactCanvasState.openRevision > 0 || mcpAppCanvasState.openRevision > 0
+                      ? [
+                          scopedConversationId,
+                          `artifact:${artifactCanvasState.openRevision}`,
+                          `app:${mcpAppCanvasState.openRevision}`,
+                        ].join(':')
+                      : null
+                  }
+                  onCloseCanvas={() => setReviewPanelOpen(false)}
+                  runActionPending={sessionRunActionPending}
+                  liveConnected={socket.connected}
+                  liveError={socket.error}
+                  onRunAction={(action, feedback) =>
+                    void handleSessionRunAction(action, feedback)
+                  }
+                  onOpenTask={
+                    sessionDetailViewModel.linkedTaskId
+                      ? () => {
+                          setSelectedTaskId(sessionDetailViewModel.linkedTaskId!);
+                          switchSection('board');
+                        }
+                      : undefined
+                  }
+                  onRenameConversation={
+                    scopedConversation
+                      ? (title) =>
+                          renameConversation(
+                            config.projectId,
+                            config.workspaceId,
+                            scopedConversation,
+                            title,
+                          )
+                      : undefined
+                  }
+                  onDeleteConversation={
+                    scopedConversation
+                      ? () =>
+                          deleteConversation(
+                            config.projectId,
+                            config.workspaceId,
+                            scopedConversation,
+                          )
+                      : undefined
+                  }
+                />
+              ) : (
+                <section className="workbench-layout">
+                  <section className={paneStageClassName}>{renderWorkbench()}</section>
+                </section>
+              )}
+            </DesktopProductionRouter>
           </main>
         </section>
 

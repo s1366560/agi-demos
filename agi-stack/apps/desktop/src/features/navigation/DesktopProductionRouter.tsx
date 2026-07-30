@@ -52,6 +52,7 @@ export function DesktopProductionRouter({
   navigation,
   permissions,
   registry,
+  resolvePermissions,
   resolveCapability,
   switchScope,
 }: DesktopProductionRouterProps) {
@@ -63,6 +64,7 @@ export function DesktopProductionRouter({
       mode,
       permissions,
       registry,
+      resolvePermissions,
       resolveCapability,
       switchScope,
     }),
@@ -71,6 +73,7 @@ export function DesktopProductionRouter({
       mode,
       permissions,
       registry,
+      resolvePermissions,
       resolveCapability,
       switchScope,
     ],
