@@ -1,4 +1,4 @@
-export type DesktopRouteScope = 'tenant' | 'project' | 'workspace' | 'instance';
+export type DesktopRouteScope = 'global' | 'tenant' | 'project' | 'workspace' | 'instance';
 
 export type DesktopRouteLocalPolicy =
   | 'native_equivalent'
@@ -13,7 +13,7 @@ export type DesktopRouteDefinition<TModule = unknown> = Readonly<{
   scope: readonly DesktopRouteScope[];
   navGroup: string;
   capability: string;
-  requiredPermission: string | null;
+  requiredPermission: readonly string[];
   localPolicy: DesktopRouteLocalPolicy;
   loader: DesktopRouteLoader<TModule>;
 }>;
@@ -57,19 +57,21 @@ export type DesktopRouteRegistry<TModule = unknown> = Readonly<{
   byId: ReadonlyMap<string, DesktopRouteDefinition<TModule>>;
 }>;
 
+type ContextualDesktopRouteScope = Exclude<DesktopRouteScope, 'global'>;
+
 const SCOPE_CONTEXT_KEYS = {
   tenant: 'tenantId',
   project: 'projectId',
   workspace: 'workspaceId',
   instance: 'instanceId',
-} as const satisfies Record<DesktopRouteScope, keyof DesktopRouteContext>;
+} as const satisfies Record<ContextualDesktopRouteScope, keyof DesktopRouteContext>;
 
 const SCOPE_PARAMETERS = {
   tenant: 'tenantId',
   project: 'projectId',
   workspace: 'workspaceId',
   instance: 'instanceId',
-} as const satisfies Record<DesktopRouteScope, string>;
+} as const satisfies Record<ContextualDesktopRouteScope, string>;
 
 const SUPPORTED_LOCAL_POLICIES = new Set<DesktopRouteLocalPolicy>([
   'native_equivalent',
@@ -77,16 +79,12 @@ const SUPPORTED_LOCAL_POLICIES = new Set<DesktopRouteLocalPolicy>([
   'blocked_by_web_contract',
 ]);
 
-const SUPPORTED_SCOPE_PATHS: readonly (readonly DesktopRouteScope[])[] = [
-  [],
-  ['tenant'],
-  ['tenant', 'project'],
-  ['tenant', 'project', 'workspace'],
-  ['tenant', 'instance'],
-];
-
 type ParsedLocation =
-  | Readonly<{ valid: true; segments: readonly string[] }>
+  | Readonly<{
+      valid: true;
+      segments: readonly string[];
+      query: URLSearchParams;
+    }>
   | Readonly<{ valid: false }>;
 
 export function createDesktopRouteRegistry<TModule>(
@@ -118,10 +116,12 @@ export function validateDesktopRouteContext(
   context: DesktopRouteContext,
 ): DesktopRouteContextValidation {
   const scopedContext: Partial<Record<keyof DesktopRouteContext, string>> = {};
-  for (const scope of definition.scope) {
+  const requiredScopes = pathScopes(definition);
+  for (const scope of contextualScopes(definition.scope)) {
     const key = SCOPE_CONTEXT_KEYS[scope];
     const value = context[key];
     if (value === undefined) {
+      if (!requiredScopes.includes(scope)) continue;
       return {
         valid: false,
         reasonCode: 'desktop_route_context_missing',
@@ -153,11 +153,12 @@ export function buildDesktopRoutePath(
   }
   const parameters = new Map<string, string>();
   for (const scope of definition.scope) {
+    if (scope === 'global') continue;
     const key = SCOPE_CONTEXT_KEYS[scope];
     const value = validation.context[key];
     if (value !== undefined) parameters.set(SCOPE_PARAMETERS[scope], value);
   }
-  return routeSegments(definition.path)
+  const path = routeSegments(definition.path)
     .map((segment) => {
       if (!segment.startsWith(':')) return segment;
       const value = parameters.get(segment.slice(1));
@@ -167,6 +168,14 @@ export function buildDesktopRoutePath(
       return encodeURIComponent(value);
     })
     .join('/');
+  const pathScopeSet = new Set(pathScopes(definition));
+  const query = contextualScopes(definition.scope).flatMap((scope) => {
+    if (pathScopeSet.has(scope)) return [];
+    const value = validation.context[SCOPE_CONTEXT_KEYS[scope]];
+    if (value === undefined) return [];
+    return `${SCOPE_PARAMETERS[scope]}=${encodeURIComponent(value)}`;
+  });
+  return query.length > 0 ? `${path}?${query.join('&')}` : path;
 }
 
 export function matchDesktopRoute<TModule>(
@@ -197,10 +206,28 @@ export function matchDesktopRoute<TModule>(
     if (!matches) continue;
     const validation = validateDesktopRouteContext(definition, context);
     if (!validation.valid) continue;
+    for (const scope of contextualScopes(definition.scope)) {
+      if (pathScopes(definition).includes(scope)) continue;
+      const values = parsed.query.getAll(SCOPE_PARAMETERS[scope]);
+      if (values.length > 1) {
+        matches = false;
+        break;
+      }
+      const value = values[0];
+      if (value === undefined) continue;
+      if (!validContextValue(value)) {
+        matches = false;
+        break;
+      }
+      context[SCOPE_CONTEXT_KEYS[scope]] = value.trim();
+    }
+    if (!matches) continue;
+    const queryValidation = validateDesktopRouteContext(definition, context);
+    if (!queryValidation.valid) continue;
     return Object.freeze({
       definition,
-      context: validation.context,
-      canonicalPath: buildDesktopRoutePath(definition, validation.context),
+      context: queryValidation.context,
+      canonicalPath: buildDesktopRoutePath(definition, queryValidation.context),
     });
   }
   return null;
@@ -217,7 +244,7 @@ export function restoreDesktopRoute<TModule>(
       reasonCode: 'desktop_route_malformed',
     };
   }
-  const match = matchDesktopRoute(registry, parsed.segments.map(encodeURIComponent).join('/'));
+  const match = matchDesktopRoute(registry, deepLink);
   if (!match) {
     return {
       status: 'not_found',
@@ -234,29 +261,35 @@ function assertDesktopRouteDefinition(definition: DesktopRouteDefinition): void 
     throw new Error('route capability must be non-empty');
   }
   if (
-    definition.requiredPermission !== null &&
-    !nonEmptyString(definition.requiredPermission)
+    !Array.isArray(definition.requiredPermission) ||
+    definition.requiredPermission.some((permission) => !nonEmptyString(permission)) ||
+    new Set(definition.requiredPermission).size !== definition.requiredPermission.length
   ) {
-    throw new Error('route requiredPermission must be non-empty or null');
+    throw new Error('route requiredPermission must contain unique non-empty permissions');
   }
   if (!SUPPORTED_LOCAL_POLICIES.has(definition.localPolicy)) {
     throw new Error(`unsupported local policy: ${String(definition.localPolicy)}`);
   }
   if (typeof definition.loader !== 'function') throw new Error('route loader must be callable');
-  if (!supportedScopePath(definition.scope)) {
+  if (
+    definition.scope.length === 0 ||
+    new Set(definition.scope).size !== definition.scope.length ||
+    definition.scope.some((scope) => !supportedScope(scope))
+  ) {
     throw new Error(`unsupported route scope: ${definition.scope.join('/')}`);
   }
-  const parameters = routeSegments(definition.path).flatMap((segment) => {
+  const parameterScopes = routeSegments(definition.path).flatMap((segment) => {
     if (!segment.startsWith(':')) return [];
     const parameter = segment.slice(1);
-    if (!scopeForParameter(parameter)) {
+    const scope = scopeForParameter(parameter);
+    if (!scope) {
       throw new Error(`unsupported route parameter: ${parameter}`);
     }
-    return [parameter];
+    return [scope];
   });
-  const expected = definition.scope.map((scope) => SCOPE_PARAMETERS[scope]);
-  if (!sameValues(parameters, expected)) {
-    throw new Error('route path parameters must match scope');
+  const declaredScopes = contextualScopes(definition.scope);
+  if (parameterScopes.some((scope) => !declaredScopes.includes(scope))) {
+    throw new Error('route path parameters must be declared by scope');
   }
 }
 
@@ -283,7 +316,9 @@ function parseDesktopRouteLocation(location: string): ParsedLocation {
   if (!trimmed) return { valid: false };
   const hashIndex = trimmed.indexOf('#');
   const hashPath = hashIndex >= 0 ? trimmed.slice(hashIndex + 1) : trimmed;
-  const path = hashPath.split('?', 1)[0];
+  const queryIndex = hashPath.indexOf('?');
+  const path = queryIndex >= 0 ? hashPath.slice(0, queryIndex) : hashPath;
+  const query = new URLSearchParams(queryIndex >= 0 ? hashPath.slice(queryIndex + 1) : '');
   if (!path.startsWith('/')) return { valid: false };
   const canonicalInput = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
   const rawSegments = canonicalInput.split('/');
@@ -294,6 +329,7 @@ function parseDesktopRouteLocation(location: string): ParsedLocation {
     return {
       valid: true,
       segments: rawSegments.map((segment) => decodeURIComponent(segment)),
+      query,
     };
   } catch {
     return { valid: false };
@@ -309,25 +345,45 @@ function freezeDefinition<TModule>(
     scope: Object.freeze([...definition.scope]),
     navGroup: definition.navGroup,
     capability: definition.capability,
-    requiredPermission: definition.requiredPermission,
+    requiredPermission: Object.freeze([...definition.requiredPermission]),
     localPolicy: definition.localPolicy,
     loader: definition.loader,
   });
 }
 
-function scopeForParameter(parameter: string): DesktopRouteScope | null {
-  for (const scope of Object.keys(SCOPE_PARAMETERS) as DesktopRouteScope[]) {
+function scopeForParameter(parameter: string): ContextualDesktopRouteScope | null {
+  for (const scope of Object.keys(SCOPE_PARAMETERS) as ContextualDesktopRouteScope[]) {
     if (SCOPE_PARAMETERS[scope] === parameter) return scope;
   }
   return null;
 }
 
-function supportedScopePath(scope: readonly DesktopRouteScope[]): boolean {
-  return SUPPORTED_SCOPE_PATHS.some((candidate) => sameValues(candidate, scope));
+function contextualScopes(
+  scopes: readonly DesktopRouteScope[],
+): ContextualDesktopRouteScope[] {
+  return scopes.filter(
+    (scope): scope is ContextualDesktopRouteScope => scope !== 'global',
+  );
 }
 
-function sameValues(left: readonly string[], right: readonly string[]): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
+function pathScopes(
+  definition: DesktopRouteDefinition,
+): ContextualDesktopRouteScope[] {
+  return routeSegments(definition.path).flatMap((segment) => {
+    if (!segment.startsWith(':')) return [];
+    const scope = scopeForParameter(segment.slice(1));
+    return scope ? [scope] : [];
+  });
+}
+
+function supportedScope(scope: unknown): scope is DesktopRouteScope {
+  return (
+    scope === 'global' ||
+    scope === 'tenant' ||
+    scope === 'project' ||
+    scope === 'workspace' ||
+    scope === 'instance'
+  );
 }
 
 function nonEmptyString(value: unknown): value is string {

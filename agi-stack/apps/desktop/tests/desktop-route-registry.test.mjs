@@ -20,7 +20,7 @@ function definition(overrides = {}) {
     scope: ['tenant', 'project'],
     navGroup: 'knowledge',
     capability: 'project-project-overview',
-    requiredPermission: 'project:read',
+    requiredPermission: ['project:read'],
     localPolicy: 'native_equivalent',
     loader: async () => ({ default: 'ProjectOverview' }),
     ...overrides,
@@ -42,6 +42,7 @@ test('route definitions expose only the fixed production registration fields', (
   ]);
   assert.equal(Object.isFrozen(route), true);
   assert.equal(Object.isFrozen(route.scope), true);
+  assert.equal(Object.isFrozen(route.requiredPermission), true);
 });
 
 test('registry rejects duplicate and structurally invalid route definitions', () => {
@@ -65,11 +66,11 @@ test('registry rejects duplicate and structurally invalid route definitions', ()
     () =>
       createDesktopRouteRegistry([
         definition({
-          id: 'workspace-overview',
-          scope: ['tenant', 'project', 'workspace'],
+          id: 'project-without-project-scope',
+          scope: ['tenant'],
         }),
       ]),
-    /path parameters must match scope/u
+    /path parameters must be declared by scope/u
   );
   assert.throws(
     () =>
@@ -139,7 +140,7 @@ test('path building encodes opaque context ids for every supported scope', () =>
       path: '/tenant/:tenantId/overview',
       scope: ['tenant'],
       capability: 'tenant-tenant-overview',
-      requiredPermission: 'tenant:read',
+      requiredPermission: ['tenant:read'],
     }),
     definition(),
     definition({
@@ -147,14 +148,14 @@ test('path building encodes opaque context ids for every supported scope', () =>
       path: '/tenant/:tenantId/project/:projectId/workspace/:workspaceId/overview',
       scope: ['tenant', 'project', 'workspace'],
       capability: 'project-project-workspaces',
-      requiredPermission: 'workspace:read',
+      requiredPermission: ['workspace:read'],
     }),
     definition({
       id: 'instance-overview',
       path: '/tenant/:tenantId/instance/:instanceId/overview',
       scope: ['tenant', 'instance'],
       capability: 'tenant-tenant-instances',
-      requiredPermission: 'instance:read',
+      requiredPermission: ['instance:read'],
       localPolicy: 'cloud_only',
     }),
   ]);
