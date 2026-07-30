@@ -4,7 +4,6 @@ import { ScrollArea } from '@radix-ui/themes';
 import {
   ChevronDownIcon,
   ChevronRightIcon,
-  DashboardIcon,
   DotsHorizontalIcon,
   Pencil1Icon,
   TrashIcon,
@@ -256,7 +255,6 @@ export function WorkspaceDock({
                   {unboundTasksExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
                 </button>
                 <div className="workspace-tree-workspace-action">
-                  <DashboardIcon />
                   <span>
                     <strong>{t('workspaceTree.tasks')}</strong>
                     <small>
