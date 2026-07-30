@@ -465,9 +465,11 @@ export class DesktopApiClient {
     projectId: string,
     expectedRevision: number,
     idempotencyKey: string,
+    signal?: AbortSignal,
   ): Promise<WorkspaceContextSwitchOutcome> {
     return this.request<WorkspaceContextSwitchOutcome>('/api/v1/workspace-context/switch', {
       method: 'POST',
+      signal,
       body: {
         tenant_id: tenantId,
         project_id: projectId,

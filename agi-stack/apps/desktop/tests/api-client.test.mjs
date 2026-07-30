@@ -1713,6 +1713,7 @@ test('conversation execution carries an explicit structured workload role', asyn
 test('workspace context requests preserve the authoritative revision contract', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
   globalThis.fetch = async (input, init) => {
     calls.push({ input, init });
     const context = {
@@ -1743,6 +1744,7 @@ test('workspace context requests preserve the authoritative revision contract', 
       'project-1',
       current.context.revision,
       'context-switch-1',
+      controller.signal,
     );
 
     assert.equal(current.membership_role, 'owner');
@@ -1760,6 +1762,7 @@ test('workspace context requests preserve the authoritative revision contract', 
       expected_revision: 0,
       idempotency_key: 'context-switch-1',
     });
+    assert.equal(calls[1].init.signal, controller.signal);
   } finally {
     globalThis.fetch = originalFetch;
   }
