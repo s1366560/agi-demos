@@ -336,8 +336,37 @@
           ],
           "authentication": "authenticated",
           "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "get"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
             "tenant_member",
             "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "create",
+            "update",
+            "delete",
+            "set-enabled"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
           ],
           "enforcement": "enforced",
           "feature_gate": null
@@ -367,8 +396,37 @@
           ],
           "authentication": "authenticated",
           "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list",
+            "get"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
             "tenant_member",
             "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "create",
+            "update",
+            "delete",
+            "set-enabled"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
           ],
           "enforcement": "enforced",
           "feature_gate": null
@@ -398,8 +456,7 @@
           ],
           "authentication": "authenticated",
           "authorization": [
-            "tenant_member",
-            "project_member"
+            "tenant_member"
           ],
           "enforcement": "enforced",
           "feature_gate": null
@@ -414,8 +471,7 @@
           ],
           "authentication": "authenticated",
           "authorization": [
-            "tenant_admin",
-            "project_member"
+            "tenant_admin"
           ],
           "enforcement": "enforced",
           "feature_gate": null
@@ -432,7 +488,7 @@
         "agi-stack/apps/desktop/src/features/settings/AgentDefinitionEditorDialog.tsx",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/managed_resources.rs"
       ],
-      "judgment_rationale": "Agent definition list, detail, and the legacy SubAgent redirect form one capability. Desktop has native revision-aware CRUD and enablement editors backed by Cloud or sidecar authority, but canonical routed list/detail and the full Web state matrix remain incomplete."
+      "judgment_rationale": "Agent definition list, detail, and the legacy SubAgent redirect form one capability. Web and Cloud tenant-scope reads require tenant membership, while project-scoped reads add project membership; mutations require tenant administration and add project membership only when a project scope is selected. The Local sidecar uses tenant-role authority without a separate project-role gate. Desktop has native revision-aware CRUD and enablement editors, but canonical routed list/detail and the full Web state matrix remain incomplete."
     },
     {
       "id": "tenant-tenant-agent-bindings",

@@ -321,6 +321,37 @@ test("Project Cron Jobs separates Web production actions from Desktop capability
       ),
     );
   }
+
+  assert.deepEqual(capability.local_actions, [
+    "view",
+    "list",
+    "view-history",
+  ]);
+  assert.equal(
+    capability.local_reason_code,
+    "local_automation_capability_schema_mismatch",
+  );
+  for (const action of capability.local_actions) {
+    const requirements = requirementsForAction(
+      capability,
+      "desktop_local",
+      action,
+    );
+    assert.equal(requirements.length, 1, `unexpected Local permission rows for ${action}`);
+    assert.deepEqual(requirements[0].authorization, []);
+    assert.equal(requirements[0].feature_gate, null);
+  }
+  for (const action of [...mutationActions, "inspect-capabilities"]) {
+    assert.equal(capability.local_actions.includes(action), false, action);
+    assert.equal(
+      requirementsForAction(capability, "desktop_local", action).length,
+      0,
+      `Local must not advertise unusable ${action}`,
+    );
+  }
+  assert.match(capability.judgment_rationale, /schema_version 2/u);
+  assert.match(capability.judgment_rationale, /schema_version 1/u);
+  assert.match(capability.judgment_rationale, /fails?[- ]closed/iu);
 });
 
 test("Project Settings records only the routed page sandbox operations and authorities", () => {

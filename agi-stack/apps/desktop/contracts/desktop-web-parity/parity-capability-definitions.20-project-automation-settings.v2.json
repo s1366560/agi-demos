@@ -47,12 +47,7 @@
       "local_actions": [
         "view",
         "list",
-        "create",
-        "update",
-        "delete",
-        "toggle",
-        "view-history",
-        "inspect-capabilities"
+        "view-history"
       ],
       "api_contracts": [
         {
@@ -274,17 +269,12 @@
           "actions": [
             "view",
             "list",
-            "create",
-            "update",
-            "delete",
-            "toggle",
-            "view-history",
-            "inspect-capabilities"
+            "view-history"
           ],
           "authentication": "authenticated",
           "authorization": [],
           "enforcement": "enforced",
-          "feature_gate": "local_automation_capabilities"
+          "feature_gate": null
         }
       ],
       "cloud_status": "partial",
@@ -295,14 +285,14 @@
       ],
       "local_status": "partial",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_cron_route_projection_partial",
+      "local_reason_code": "local_automation_capability_schema_mismatch",
       "local_deviation": "Cron Jobs reuse the native Automations domain model and Local scheduler; they must not create a second scheduling authority.",
       "local_entries": [
         "agi-stack/apps/desktop/src/features/automations/AutomationsPage.tsx",
         "agi-stack/apps/desktop/src/features/automations/automationClient.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/automation.rs"
       ],
-      "judgment_rationale": "The production Web page exposes list, create, update, delete, toggle, run-now and history directly under the backend project-membership check; it does not consume the Cron capability endpoint and therefore has no client capability gate. Cloud Desktop retains the structured Cloud capability authority, which currently allows reads and denies mutations. The Local scheduler supports durable CRUD and history behind its own structured capability gate, while run-now remains scope-dependent. The canonical project route, deep-link restore and matched-state evidence are still incomplete."
+      "judgment_rationale": "The production Web page exposes list, create, update, delete, toggle, run-now and history directly under the backend project-membership check; it does not consume the Cron capability endpoint and therefore has no client capability gate. Cloud Desktop retains the structured Cloud capability authority, which currently allows reads and denies mutations. The Local sidecar returns automation capability schema_version 2, while the production Desktop normalizer accepts only schema_version 1; capability parsing therefore fails closed and disables create, update, delete, toggle, run-now and inspect-capabilities even though the raw sidecar endpoints exist. Local list and history remain usable. The canonical project route, deep-link restore and matched-state evidence are still incomplete."
     },
     {
       "id": "project-project-settings",

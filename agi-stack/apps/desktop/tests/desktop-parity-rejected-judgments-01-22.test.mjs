@@ -301,32 +301,18 @@ test("Skills records the evolution read bound by SkillDetail", () => {
   assert.ok(contractKeys(capability, "web").includes(evolutionContract));
   assert.equal(capability.actions.includes("view-evolution"), true);
   assert.equal(capability.web_actions.includes("view-evolution"), true);
-  assert.equal(capability.cloud_actions.includes("view-evolution"), false);
+  assert.equal(capability.cloud_actions.includes("view-evolution"), true);
   assert.equal(capability.local_actions.includes("view-evolution"), false);
+  assert.ok(
+    contractKeys(capability, "desktop_cloud").includes(evolutionContract),
+  );
   assert.deepEqual(
     permissionRequirementsForAction(
       capability,
       "web",
       "view-evolution",
-    ),
-    [
-      {
-        surface: "web",
-        actions: [
-          "view",
-          "list",
-          "get",
-          "view-evolution",
-          "export",
-          "list-versions",
-          "get-version",
-        ],
-        authentication: "authenticated",
-        authorization: ["tenant_member", "project_member"],
-        enforcement: "enforced",
-        feature_gate: null,
-      },
-    ],
+    ).map((requirement) => requirement.authorization),
+    [["tenant_member"], ["project_member"]],
   );
   assert.match(capability.judgment_rationale, /SkillDetail/u);
   assert.match(capability.judgment_rationale, /getEvolution/u);

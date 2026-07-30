@@ -184,6 +184,12 @@
         },
         {
           "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/skills/{skill_id}/evolution",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
           "method": "POST",
           "path": "/api/v1/skills/{skill_id}/rollback",
           "authority": "cloud_service"
@@ -277,7 +283,8 @@
         "authenticated",
         "tenant_access",
         "tenant_admin_for_tenant_mutations",
-        "project_access_for_project_scope"
+        "project_member_for_project_reads",
+        "project_contributor_for_project_mutations"
       ],
       "actions": [
         "view",
@@ -317,6 +324,7 @@
         "view",
         "list",
         "get",
+        "view-evolution",
         "create",
         "update",
         "delete",
@@ -358,7 +366,24 @@
           ],
           "authentication": "authenticated",
           "authorization": [
-            "tenant_member",
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "view",
+            "list",
+            "get",
+            "view-evolution",
+            "export",
+            "list-versions",
+            "get-version"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
             "project_member"
           ],
           "enforcement": "enforced",
@@ -378,8 +403,26 @@
           ],
           "authentication": "authenticated",
           "authorization": [
-            "tenant_admin",
-            "project_member"
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "web",
+          "actions": [
+            "create",
+            "update",
+            "delete",
+            "set-status",
+            "update-content",
+            "import-package",
+            "import-zip",
+            "rollback"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_contributor"
           ],
           "enforcement": "enforced",
           "feature_gate": null
@@ -390,13 +433,31 @@
             "view",
             "list",
             "get",
+            "view-evolution",
             "export",
             "list-versions",
             "get-version"
           ],
           "authentication": "authenticated",
           "authorization": [
-            "tenant_member",
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list",
+            "get",
+            "view-evolution",
+            "export",
+            "list-versions",
+            "get-version"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
             "project_member"
           ],
           "enforcement": "enforced",
@@ -416,8 +477,26 @@
           ],
           "authentication": "authenticated",
           "authorization": [
-            "tenant_admin",
-            "project_member"
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "create",
+            "update",
+            "delete",
+            "set-status",
+            "update-content",
+            "import-package",
+            "import-zip",
+            "rollback"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_contributor"
           ],
           "enforcement": "enforced",
           "feature_gate": null
@@ -434,8 +513,7 @@
           ],
           "authentication": "authenticated",
           "authorization": [
-            "tenant_member",
-            "project_member"
+            "tenant_member"
           ],
           "enforcement": "enforced",
           "feature_gate": null
@@ -453,8 +531,7 @@
           ],
           "authentication": "authenticated",
           "authorization": [
-            "tenant_admin",
-            "project_member"
+            "tenant_admin"
           ],
           "enforcement": "enforced",
           "feature_gate": null
@@ -462,7 +539,10 @@
       ],
       "cloud_status": "partial",
       "cloud_entries": [
-        "agi-stack/apps/desktop/src/features/settings/ManagedResourceViews.tsx"
+        "agi-stack/apps/desktop/src/features/settings/ManagedResourceViews.tsx",
+        "agi-stack/apps/desktop/src/features/settings/SkillEvolutionDialog.tsx",
+        "agi-stack/apps/desktop/src/features/settings/useSkillPackageManagement.ts",
+        "agi-stack/apps/desktop/src/api/managedResourcesClient.ts"
       ],
       "local_status": "partial",
       "local_policy": "native_equivalent",
@@ -471,7 +551,7 @@
         "agi-stack/apps/desktop/src/features/settings/ManagedResourceViews.tsx",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/managed_resources.rs"
       ],
-      "judgment_rationale": "Web SkillDetail binds getEvolution to the skill evolution read contract in addition to revision-aware CRUD, content, package, export, version, and rollback flows. Desktop has native Cloud or Local authority for the existing resource flows but does not yet expose view-evolution. The canonical route and complete Web state matrix remain partial, and Local ZIP import is explicitly outside the current safe sidecar subset."
+      "judgment_rationale": "Web SkillDetail binds getEvolution to the skill evolution read contract in addition to revision-aware CRUD, content, package, export, version, and rollback flows. Cloud Desktop exposes that per-skill evolution view through its native Skill Evolution dialog; the broader evolution run and review workflow is also tracked by the dedicated Evolution capability. Web and Cloud tenant-scope writes require tenant administration, while project-scope writes use the project contributor branch for owners, admins, and members and exclude project viewers; reads likewise keep tenant-member and project-member branches distinct. Local authority uses tenant roles and has no project-role gate. The canonical Skills route and complete Web state matrix remain partial, and Local ZIP import and evolution remain outside the current safe sidecar subset."
     }
   ],
   "source_ownership": {
