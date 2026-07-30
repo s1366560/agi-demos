@@ -112,6 +112,9 @@ describe('token sync: index.css ↔ tokens.ts', () => {
 
   /* ---------- No retired brand literals anywhere in index.css ---------- */
   it('index.css contains no retired brand palette literals', () => {
+    // NOTE: '#737373' and '#181818' were part of the retired pre-mission-control
+    // palette but are intentionally re-adopted by the current monochrome gray
+    // scales (tokens.ts), so they no longer appear in this list.
     const retired = [
       '#1e3fae',
       '#152d7e',
@@ -123,8 +126,6 @@ describe('token sync: index.css ↔ tokens.ts', () => {
       '#242428',
       '#2c2c31',
       '#3a3a40',
-      '#737373',
-      '#181818',
       '#f87171',
       '#fbbf24',
       '#60a5fa',

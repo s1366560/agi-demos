@@ -1,11 +1,13 @@
 /**
  * MemStack Design System — Single Source of Truth
  *
- * Canonical values sourced from PRODUCT.md (mission-control aesthetic) and the
- * design prototype `design-prototype/memstack-desktop-agent-mission-control/src/styles.css`.
+ * Palette direction: monochrome black/white/gray base. Surfaces, borders, text
+ * and the primary accent are neutral grays; the only saturated hues left are
+ * the semantic status colors (success / warning / error / info) and the accent
+ * tile colors, which act as the deliberate colorful accents.
  *
- * - Dark is the primary theme: blue-black surfaces, luminous cyan accent.
- * - Light is derived: white surfaces with a deeper cyan that meets WCAG AA on white.
+ * - Dark is the primary theme: near-black neutral surfaces, near-white accent.
+ * - Light is derived: white surfaces with a near-black accent (WCAG AA on white).
  *
  * NOTE: `web/src/index.css` `@theme` and `.dark {}` blocks contain LITERAL copies
  * of these values (CSS cannot import TS). `tokenSync.test.ts` asserts the two
@@ -14,38 +16,38 @@
 
 export const tokens = {
   dark: {
-    // Surfaces (prototype: --bg / --panel / --panel-2 / --panel-3)
-    bg: '#080c12',
-    panel: '#0d121a',
-    panel2: '#111720',
-    panel3: '#151c27',
-    border: '#242d3a',
-    borderStrong: '#334154',
+    // Surfaces (neutral near-black ladder)
+    bg: '#0a0a0a',
+    panel: '#121212',
+    panel2: '#181818',
+    panel3: '#1f1f1f',
+    border: '#2b2b2b',
+    borderStrong: '#404040',
 
-    // Text (prototype: --text / --muted / --muted-2)
-    text: '#e7edf6',
-    textMuted: '#8996a9',
-    textMuted2: '#5d6979',
+    // Text (neutral)
+    text: '#ededed',
+    textMuted: '#9c9c9c',
+    textMuted2: '#6e6e6e',
 
-    // Accent (prototype: --cyan / --cyan-soft)
-    cyan: '#38d6ff',
-    cyanSoft: '#112b36',
+    // Accent — monochrome (near-white on dark); `cyan` key kept for compatibility.
+    cyan: '#f2f2f2',
+    cyanSoft: '#242424',
   },
   light: {
-    bg: '#f6f8fa',
+    bg: '#f7f7f7',
     panel: '#ffffff',
-    panel2: '#f1f5f9',
-    panel3: '#e8edf2',
-    border: '#e2e8f0',
-    borderStrong: '#cbd5e1',
+    panel2: '#f2f2f2',
+    panel3: '#e9e9e9',
+    border: '#e3e3e3',
+    borderStrong: '#cccccc',
 
-    text: '#0f172a',
-    textMuted: '#475569',
-    textMuted2: '#64748b',
+    text: '#141414',
+    textMuted: '#4f4f4f',
+    textMuted2: '#6b6b6b',
 
-    // Deeper cyan for AA contrast on white (approx 5.4:1).
-    cyan: '#0e7490',
-    cyanSoft: '#ecfeff',
+    // Near-black accent for AA contrast on white (approx 13:1).
+    cyan: '#262626',
+    cyanSoft: '#eeeeee',
   },
 
   // Status — spec-faithful, tuned for both themes.
@@ -72,48 +74,48 @@ export const tokens = {
  *
  * The app historically uses `blue-*` for brand and `slate-*` / `gray-*` for
  * neutrals. Rather than rewriting ~2000 call sites, we redefine those CSS
- * variables so the utilities resolve to the mission-control palette.
+ * variables so the utilities resolve to the monochrome palette.
  *
- * - `blueLight`  → deeper cyan scale (AA on white); used in light mode.
- * - `blueDark`   → luminous cyan scale centered on #38d6ff; applied under .dark.
- * - `neutralDark`→ blue-black panel family; applied to slate-* / gray-* under .dark.
+ * - `blueLight`  → near-black gray scale (AA on white); used in light mode.
+ * - `blueDark`   → near-white gray scale centered on #f2f2f2; applied under .dark.
+ * - `neutralDark`→ neutral near-black panel family; applied to slate-* / gray-* under .dark.
  */
 export const blueLightScale = {
-  50: '#ecfeff',
-  100: '#cffafe',
-  200: '#a5f3fc',
-  300: '#67e8f9',
-  400: '#22d3ee',
-  500: '#0891b2',
-  600: '#0e7490',
-  700: '#155e75',
-  800: '#164e63',
-  900: '#083344',
+  50: '#f5f5f5',
+  100: '#e8e8e8',
+  200: '#d4d4d4',
+  300: '#a3a3a3',
+  400: '#737373',
+  500: '#525252',
+  600: '#262626',
+  700: '#1f1f1f',
+  800: '#171717',
+  900: '#0f0f0f',
 } as const;
 
 export const blueDarkScale = {
-  50: '#0a1f28',
-  100: '#112b36',
-  200: '#1a3f52',
-  300: '#2a6680',
-  400: '#38d6ff',
-  500: '#38d6ff',
-  600: '#2bb8e0',
-  700: '#2398bd',
-  800: '#1b7a98',
-  900: '#145f7a',
+  50: '#1c1c1c',
+  100: '#242424',
+  200: '#303030',
+  300: '#4d4d4d',
+  400: '#f2f2f2',
+  500: '#f2f2f2',
+  600: '#d9d9d9',
+  700: '#bfbfbf',
+  800: '#a6a6a6',
+  900: '#8c8c8c',
 } as const;
 
 export const neutralDarkScale = {
-  50: '#e7edf6',
-  100: '#d6dde6',
-  200: '#b8c3d2',
-  300: '#8996a9',
-  400: '#5d6979',
-  500: '#334154',
-  600: '#1f2937',
-  700: '#151c27',
-  800: '#111720',
-  900: '#0d121a',
-  950: '#080c12',
+  50: '#ededed',
+  100: '#dbdbdb',
+  200: '#bdbdbd',
+  300: '#9c9c9c',
+  400: '#6e6e6e',
+  500: '#404040',
+  600: '#262626',
+  700: '#1f1f1f',
+  800: '#181818',
+  900: '#121212',
+  950: '#0a0a0a',
 } as const;

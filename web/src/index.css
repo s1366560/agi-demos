@@ -34,69 +34,69 @@ html:not(.app-ready) * {
 @theme {
   /* ========================================================================
      * COLOR PALETTE  (source of truth: web/src/theme/tokens.ts)
-     * Primary: Cyan — #38d6ff (dark) / #0e7490 (light, AA on white).
-     * Brand shim: `blue-*` utilities are remapped to the cyan scale so the
+     * Primary: monochrome — #f2f2f2 (dark) / #262626 (light, AA on white).
+     * Brand shim: `blue-*` utilities are remapped to the gray scale so the
      * legacy ~2000 `blue-*` call sites render the brand color without edits.
      * Dark-mode overrides live in the `.dark` block below.
      * ======================================================================== */
 
-  /* Primary Colors — light defaults (deeper cyan, AA on white) */
-  --color-primary: #0e7490;
-  --color-primary-dark: #155e75;
-  --color-primary-light: #0891b2;
-  --color-primary-glow: #22d3ee;
-  --color-primary-50: #ecfeff;
-  --color-primary-100: #cffafe;
-  --color-primary-200: #a5f3fc;
-  --color-primary-300: #67e8f9;
-  --color-primary-400: #22d3ee;
-  --color-primary-500: #0891b2;
-  --color-primary-600: #0e7490;
-  --color-primary-700: #155e75;
-  --color-primary-800: #164e63;
-  --color-primary-900: #083344;
+  /* Primary Colors — light defaults (near-black, AA on white) */
+  --color-primary: #262626;
+  --color-primary-dark: #171717;
+  --color-primary-light: #525252;
+  --color-primary-glow: #a3a3a3;
+  --color-primary-50: #f5f5f5;
+  --color-primary-100: #e8e8e8;
+  --color-primary-200: #d4d4d4;
+  --color-primary-300: #a3a3a3;
+  --color-primary-400: #737373;
+  --color-primary-500: #525252;
+  --color-primary-600: #262626;
+  --color-primary-700: #1f1f1f;
+  --color-primary-800: #171717;
+  --color-primary-900: #0f0f0f;
 
   /* `blue-*` brand shim (light) — mirrors the primary scale */
-  --color-blue-50: #ecfeff;
-  --color-blue-100: #cffafe;
-  --color-blue-200: #a5f3fc;
-  --color-blue-300: #67e8f9;
-  --color-blue-400: #22d3ee;
-  --color-blue-500: #0891b2;
-  --color-blue-600: #0e7490;
-  --color-blue-700: #155e75;
-  --color-blue-800: #164e63;
-  --color-blue-900: #083344;
+  --color-blue-50: #f5f5f5;
+  --color-blue-100: #e8e8e8;
+  --color-blue-200: #d4d4d4;
+  --color-blue-300: #a3a3a3;
+  --color-blue-400: #737373;
+  --color-blue-500: #525252;
+  --color-blue-600: #262626;
+  --color-blue-700: #1f1f1f;
+  --color-blue-800: #171717;
+  --color-blue-900: #0f0f0f;
 
-  /* Background Colors — dark follows PRODUCT.md mission-control #080c12 */
-  --color-background-light: #f6f8fa;
-  --color-background-dark: #080c12;
+  /* Background Colors — dark: neutral near-black #0a0a0a */
+  --color-background-light: #f7f7f7;
+  --color-background-dark: #0a0a0a;
 
-  /* Surface Colors — dark panels: #0d121a / #111720 / #151c27 */
+  /* Surface Colors — dark panels: #121212 / #181818 / #1f1f1f */
   --color-surface-light: #ffffff;
-  --color-surface-dark: #0d121a;
-  --color-surface-dark-alt: #111720;
-  --color-surface-elevated: #151c27;
+  --color-surface-dark: #121212;
+  --color-surface-dark-alt: #181818;
+  --color-surface-elevated: #1f1f1f;
 
-  /* Border Colors — dark #242d3a (spec --border) */
-  --color-border-light: #e2e8f0;
-  --color-border-dark: #242d3a;
-  --color-border-subtle: #f1f5f9;
+  /* Border Colors — dark #2b2b2b */
+  --color-border-light: #e3e3e3;
+  --color-border-dark: #2b2b2b;
+  --color-border-subtle: #f2f2f2;
 
-  /* Text Colors — dark text #e7edf6, muted #8996a9 (spec) */
-  --color-text-primary: #0f172a;
-  --color-text-secondary: #475569;
-  --color-text-muted: #64748b;
-  --color-text-muted-light: #64748b;
-  --color-text-inverse: #e7edf6;
+  /* Text Colors — dark text #ededed, muted #9c9c9c */
+  --color-text-primary: #141414;
+  --color-text-secondary: #4f4f4f;
+  --color-text-muted: #6b6b6b;
+  --color-text-muted-light: #6b6b6b;
+  --color-text-inverse: #ededed;
 
   /* Surface Variants */
-  --color-surface-alt: #f1f5f9;
-  --color-surface-muted: #f8fafc;
+  --color-surface-alt: #f2f2f2;
+  --color-surface-muted: #f7f7f7;
 
   /* Border Variants */
-  --color-border-separator: #cbd5e1;
-  --color-border-separator-dark: #3f3f46;
+  --color-border-separator: #cccccc;
+  --color-border-separator-dark: #404040;
 
   /* Status Colors — spec-faithful (green #35d399 / amber #f0b35a / red #ff6978) */
   --color-success: #35d399;
@@ -136,8 +136,8 @@ html:not(.app-ready) * {
   --color-caution-border-dark: rgba(249, 115, 22, 0.3);
 
   /* Semantic Status Text (dark mode variants) */
-  --color-status-text-muted: #475569;
-  --color-status-text-muted-dark: #94a3b8;
+  --color-status-text-muted: #4f4f4f;
+  --color-status-text-muted-dark: #9c9c9c;
   --color-status-text-success: #059669;
   --color-status-text-success-dark: #35d399;
   --color-status-text-warning: #d97706;
@@ -238,8 +238,8 @@ html:not(.app-ready) * {
   --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
 
   /* Colored shadows for buttons and cards */
-  --shadow-primary: 0 4px 14px -3px rgba(56, 214, 255, 0.28);
-  --shadow-primary-lg: 0 10px 25px -5px rgba(56, 214, 255, 0.32);
+  --shadow-primary: 0 4px 14px -3px rgba(140, 140, 140, 0.3);
+  --shadow-primary-lg: 0 10px 25px -5px rgba(140, 140, 140, 0.34);
 
   /* ========================================================================
      * ANIMATIONS
@@ -283,10 +283,10 @@ html:not(.app-ready) * {
   @keyframes pulse-ring {
     0%,
     100% {
-      box-shadow: 0 0 0 0 rgba(56, 214, 255, 0.4);
+      box-shadow: 0 0 0 0 rgba(150, 150, 150, 0.45);
     }
     50% {
-      box-shadow: 0 0 0 8px rgba(56, 214, 255, 0);
+      box-shadow: 0 0 0 8px rgba(150, 150, 150, 0);
     }
   }
 
@@ -376,10 +376,10 @@ html:not(.app-ready) * {
   @keyframes glow-pulse {
     0%,
     100% {
-      box-shadow: 0 0 20px rgba(56, 214, 255, 0.2);
+      box-shadow: 0 0 20px rgba(150, 150, 150, 0.22);
     }
     50% {
-      box-shadow: 0 0 40px rgba(56, 214, 255, 0.4);
+      box-shadow: 0 0 40px rgba(150, 150, 150, 0.42);
     }
   }
 
@@ -479,7 +479,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #a3a3a3;
 }
 
 .dark ::-webkit-scrollbar-thumb {
@@ -487,7 +487,7 @@ body {
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: #334154;
+  background: #404040;
 }
 
 /* Thin scrollbar variant */
@@ -514,7 +514,7 @@ body {
 }
 
 .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #525252;
 }
 
 /* ============================================================================
@@ -546,7 +546,7 @@ body {
 }
 
 .dark .chat-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #525252;
 }
 
 /* Focus state for scrollable areas during keyboard navigation */
@@ -615,11 +615,11 @@ body {
 }
 
 .interactive:hover {
-  background-color: rgb(248 250 252); /* slate-50 */
+  background-color: rgb(247 247 247); /* neutral-50 */
 }
 
 .dark .interactive:hover {
-  background-color: rgb(30 41 59 / 0.5); /* slate-800/50 */
+  background-color: rgb(38 38 38 / 0.5); /* neutral-800/50 */
 }
 
 .interactive:active {
@@ -716,123 +716,123 @@ body {
 
   /* Semantic surface aliases — theme-aware, used by AppModal + future primitives. */
   --color-panel: var(--color-surface-light);
-  --color-panel-2: #f6f8fa;
-  --color-panel-3: #eef1f5;
+  --color-panel-2: #f7f7f7;
+  --color-panel-3: #e9e9e9;
   --color-border: var(--color-border-light);
   --color-text: var(--color-text-primary);
   --color-muted: var(--color-text-secondary);
-  --color-overlay-backdrop: rgba(15, 23, 42, 0.55);
+  --color-overlay-backdrop: rgba(0, 0, 0, 0.5);
 }
 
 .dark {
-  /* Form + button tokens — mission-control neutrals (blue-black family). */
-  --form-bg: #151c27; /* panel-3 (elevated input surface) */
-  --form-bg-hover: #1f2937; /* neutral 600 */
-  --form-border: #242d3a; /* panel border */
-  --form-border-hover: #334154; /* border-strong */
-  --form-border-strong: #8996a9; /* muted */
-  --form-text: #e7edf6;
-  --form-placeholder: #5d6979; /* muted-2 */
-  --form-addon-bg: #111720; /* panel-2 */
-  --form-focus-ring: 0 0 0 1px rgba(56, 214, 255, 0.5), 0 0 0 4px rgba(56, 214, 255, 0.18);
+  /* Form + button tokens — monochrome neutrals. */
+  --form-bg: #1f1f1f; /* panel-3 (elevated input surface) */
+  --form-bg-hover: #262626; /* neutral 600 */
+  --form-border: #2b2b2b; /* panel border */
+  --form-border-hover: #404040; /* border-strong */
+  --form-border-strong: #9c9c9c; /* muted */
+  --form-text: #ededed;
+  --form-placeholder: #6e6e6e; /* muted-2 */
+  --form-addon-bg: #181818; /* panel-2 */
+  --form-focus-ring: 0 0 0 1px rgba(255, 255, 255, 0.45), 0 0 0 4px rgba(255, 255, 255, 0.16);
   --form-error-border: #ff6978;
   --form-error-focus-ring: 0 0 0 1px rgba(255, 105, 120, 0.5), 0 0 0 4px rgba(255, 105, 120, 0.18);
   --form-warning-border: #f0b35a;
   --form-warning-focus-ring: 0 0 0 1px rgba(240, 179, 90, 0.5), 0 0 0 4px rgba(240, 179, 90, 0.18);
-  /* Primary CTA: luminous inverted (spec-compliant monochrome accent). */
-  --button-primary-bg: #e7edf6;
-  --button-primary-bg-hover: #d6dde6;
-  --button-primary-bg-active: #b8c3d2;
-  --button-primary-border: #e7edf6;
-  --button-primary-text: #0d121a;
+  /* Primary CTA: inverted monochrome accent. */
+  --button-primary-bg: #ededed;
+  --button-primary-bg-hover: #dbdbdb;
+  --button-primary-bg-active: #bdbdbd;
+  --button-primary-border: #ededed;
+  --button-primary-text: #121212;
   /* Secondary: recessed panel surface. */
-  --button-secondary-bg: #151c27;
-  --button-secondary-bg-hover: #1f2937;
-  --button-secondary-bg-active: #242d3a;
-  --button-secondary-border: #242d3a;
-  --button-secondary-text: #e7edf6;
+  --button-secondary-bg: #1f1f1f;
+  --button-secondary-bg-hover: #262626;
+  --button-secondary-bg-active: #2b2b2b;
+  --button-secondary-border: #2b2b2b;
+  --button-secondary-text: #ededed;
   --button-focus-ring: var(--form-focus-ring);
   --form-control-selected-bg: var(--button-primary-bg);
   --form-control-selected-bg-hover: var(--button-primary-bg-hover);
   --form-control-selected-border: var(--button-primary-border);
-  --form-control-selected-indicator: #0d121a;
+  --form-control-selected-indicator: #121212;
 
   /* Semantic surface aliases — theme-aware, used by AppModal + future primitives. */
   --color-panel: var(--color-surface-dark);
   --color-panel-2: var(--color-surface-dark-alt);
   --color-panel-3: var(--color-surface-elevated);
   --color-border: var(--color-border-dark);
-  --color-text: #e7edf6;
-  --color-muted: #8996a9;
-  --color-overlay-backdrop: rgba(8, 12, 18, 0.8);
+  --color-text: #ededed;
+  --color-muted: #9c9c9c;
+  --color-overlay-backdrop: rgba(0, 0, 0, 0.8);
 }
 
 /* ============================================================================
  * DARK-MODE PALETTE SHIM
  * Remaps the Tailwind default `blue-*` / `slate-*` / `gray-*` scales (and the
- * primary token) to the mission-control palette so the legacy call sites
+ * primary token) to the monochrome palette so the legacy call sites
  * (~2000 blue-*, ~300 slate/gray files) render the reskin without edits.
  * Source of truth: web/src/theme/tokens.ts. Light-mode values stay in @theme.
  * ============================================================================ */
 .dark {
-  /* Brand — luminous cyan centered on #38d6ff */
-  --color-primary: #38d6ff;
-  --color-primary-dark: #2398bd;
-  --color-primary-light: #2bb8e0;
-  --color-primary-glow: #66e6ff;
-  --color-primary-50: #0a1f28;
-  --color-primary-100: #112b36;
-  --color-primary-200: #1a3f52;
-  --color-primary-300: #2a6680;
-  --color-primary-400: #38d6ff;
-  --color-primary-500: #38d6ff;
-  --color-primary-600: #2bb8e0;
-  --color-primary-700: #2398bd;
-  --color-primary-800: #1b7a98;
-  --color-primary-900: #145f7a;
+  /* Brand — near-white monochrome accent */
+  --color-primary: #f2f2f2;
+  --color-primary-dark: #bfbfbf;
+  --color-primary-light: #d9d9d9;
+  --color-primary-glow: #ffffff;
+  --color-primary-50: #1c1c1c;
+  --color-primary-100: #242424;
+  --color-primary-200: #303030;
+  --color-primary-300: #4d4d4d;
+  --color-primary-400: #f2f2f2;
+  --color-primary-500: #f2f2f2;
+  --color-primary-600: #d9d9d9;
+  --color-primary-700: #bfbfbf;
+  --color-primary-800: #a6a6a6;
+  --color-primary-900: #8c8c8c;
 
-  /* `blue-*` → luminous cyan scale */
-  --color-blue-50: #0a1f28;
-  --color-blue-100: #112b36;
-  --color-blue-200: #1a3f52;
-  --color-blue-300: #2a6680;
-  --color-blue-400: #38d6ff;
-  --color-blue-500: #38d6ff;
-  --color-blue-600: #2bb8e0;
-  --color-blue-700: #2398bd;
-  --color-blue-800: #1b7a98;
-  --color-blue-900: #145f7a;
+  /* `blue-*` → near-white gray scale */
+  --color-blue-50: #1c1c1c;
+  --color-blue-100: #242424;
+  --color-blue-200: #303030;
+  --color-blue-300: #4d4d4d;
+  --color-blue-400: #f2f2f2;
+  --color-blue-500: #f2f2f2;
+  --color-blue-600: #d9d9d9;
+  --color-blue-700: #bfbfbf;
+  --color-blue-800: #a6a6a6;
+  --color-blue-900: #8c8c8c;
 
-  /* `slate-*` → mission-control neutral panels (#080c12 family) */
-  --color-slate-50: #e7edf6;
-  --color-slate-100: #d6dde6;
-  --color-slate-200: #b8c3d2;
-  --color-slate-300: #8996a9;
-  --color-slate-400: #5d6979;
-  --color-slate-500: #334154;
-  --color-slate-600: #1f2937;
-  --color-slate-700: #151c27;
-  --color-slate-800: #111720;
-  --color-slate-900: #0d121a;
-  --color-slate-950: #080c12;
+  /* `slate-*` → neutral near-black panels (#0a0a0a family) */
+  --color-slate-50: #ededed;
+  --color-slate-100: #dbdbdb;
+  --color-slate-200: #bdbdbd;
+  --color-slate-300: #9c9c9c;
+  --color-slate-400: #6e6e6e;
+  --color-slate-500: #404040;
+  --color-slate-600: #262626;
+  --color-slate-700: #1f1f1f;
+  --color-slate-800: #181818;
+  --color-slate-900: #121212;
+  --color-slate-950: #0a0a0a;
 
   /* `gray-*` → same neutral family */
-  --color-gray-50: #e7edf6;
-  --color-gray-100: #d6dde6;
-  --color-gray-200: #b8c3d2;
-  --color-gray-300: #8996a9;
-  --color-gray-400: #5d6979;
-  --color-gray-500: #334154;
-  --color-gray-600: #1f2937;
-  --color-gray-700: #151c27;
-  --color-gray-800: #111720;
-  --color-gray-900: #0d121a;
-  --color-gray-950: #080c12;
+  --color-gray-50: #ededed;
+  --color-gray-100: #dbdbdb;
+  --color-gray-200: #bdbdbd;
+  --color-gray-300: #9c9c9c;
+  --color-gray-400: #6e6e6e;
+  --color-gray-500: #404040;
+  --color-gray-600: #262626;
+  --color-gray-700: #1f1f1f;
+  --color-gray-800: #181818;
+  --color-gray-900: #121212;
+  --color-gray-950: #0a0a0a;
 
   /* Semantic text — spec muted values */
-  --color-text-secondary: #8996a9;
-  --color-text-muted: #8996a9;
-  --color-text-muted-light: #5d6979;
+  --color-text-secondary: #9c9c9c;
+  --color-text-muted: #9c9c9c;
+  --color-text-muted-light: #6e6e6e;
 }
 
 /* ============================================================================
@@ -924,7 +924,7 @@ body {
 }
 
 .dark .ant-table-tbody > tr.ant-table-row:hover > td {
-  background: rgba(37, 45, 70, 0.5) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
 }
 
 /* Override Ant Design menu */
