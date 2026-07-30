@@ -1,0 +1,125 @@
+import type { AuthState, DesktopRuntimeConfig } from '../../types';
+import { isIdentityAuthenticated } from '../auth/authContextModel';
+import type { CloudProjectOverviewClient } from '../project/projectOverviewClient';
+import { createCloudProjectOverviewClient } from '../project/projectOverviewCloudClient';
+import {
+  createProjectOverviewController,
+  type ProjectOverviewController,
+  type ProjectOverviewControllerOptions,
+} from '../project/projectOverviewController';
+import {
+  createLocalProjectOverviewClient,
+  type LocalProjectOverviewClient,
+} from '../project/projectOverviewLocalClient';
+import type {
+  ProjectOverviewRouteBinding,
+  ProjectOverviewRouteContext,
+} from '../project/projectOverviewRouteModule';
+import type {
+  DesktopCapabilityAvailability,
+  DesktopCapabilitySnapshot,
+} from '../runtime/capabilitySnapshot';
+import type { DesktopRouteContext } from './desktopRouteRegistry';
+
+export type ProjectOverviewRouteRuntimeDependencies = Readonly<{
+  createCloudClient?: (
+    config: DesktopRuntimeConfig,
+  ) => CloudProjectOverviewClient;
+  createLocalClient?: (
+    config: DesktopRuntimeConfig,
+  ) => LocalProjectOverviewClient;
+  createController?: (
+    options: ProjectOverviewControllerOptions,
+  ) => ProjectOverviewController;
+}>;
+
+export function desktopRoutePermissionsForContext(
+  auth: AuthState,
+  context: DesktopRouteContext,
+): ReadonlySet<string> {
+  const permissions = new Set<string>();
+  if (!isIdentityAuthenticated(auth)) return permissions;
+
+  permissions.add('authenticated');
+  const tenantId = context.tenantId;
+  if (tenantId !== undefined && auth.tenants.some((tenant) => tenant.id === tenantId)) {
+    permissions.add('tenant_member');
+  }
+
+  const projectId = context.projectId;
+  if (
+    tenantId !== undefined &&
+    projectId !== undefined &&
+    auth.projects.some(
+      (project) =>
+        project.id === projectId && project.tenant_id === tenantId,
+    )
+  ) {
+    permissions.add('project_member');
+  }
+  return permissions;
+}
+
+export function resolveDesktopRouteCapability(
+  snapshot: DesktopCapabilitySnapshot | null,
+  capability: string,
+  _context: DesktopRouteContext,
+): DesktopCapabilityAvailability | null {
+  if (snapshot === null || !Object.hasOwn(snapshot.capabilities, capability)) {
+    return null;
+  }
+  const capabilities: Readonly<Record<string, DesktopCapabilityAvailability>> =
+    snapshot.capabilities;
+  return capabilities[capability] ?? null;
+}
+
+export function createProjectOverviewRouteBindingForRuntime(
+  config: DesktopRuntimeConfig,
+  context: ProjectOverviewRouteContext,
+  dependencies: ProjectOverviewRouteRuntimeDependencies = {},
+): ProjectOverviewRouteBinding {
+  if (
+    config.tenantId !== context.tenantId ||
+    config.projectId !== context.projectId
+  ) {
+    throw new Error('project_overview_runtime_scope_mismatch');
+  }
+
+  const createCloudClient =
+    dependencies.createCloudClient ?? createCloudProjectOverviewClient;
+  const createLocalClient =
+    dependencies.createLocalClient ?? createLocalProjectOverviewClient;
+  const createController =
+    dependencies.createController ?? createProjectOverviewController;
+  if (config.mode === 'cloud') {
+    const scope = Object.freeze({
+      authority: config.mode,
+      tenantId: context.tenantId,
+      projectId: context.projectId,
+    });
+    const cloudClient = createCloudClient(config);
+    return Object.freeze({
+      controller: createController({
+        authority: 'cloud',
+        cloudClient,
+        initialScope: scope,
+      }),
+      scope,
+    });
+  }
+
+  const scope = Object.freeze({
+    authority: config.mode,
+    tenantId: context.tenantId,
+    projectId: context.projectId,
+  });
+  const localClient = createLocalClient(config);
+  return Object.freeze({
+    controller: createController({
+      authority: 'local',
+      localClient,
+      initialScope: scope,
+    }),
+    scope,
+  });
+}
