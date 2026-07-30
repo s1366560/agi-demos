@@ -228,6 +228,23 @@ test('cloud client validates structured Search and Automation authorities', asyn
       snapshot.capabilities.automation_run,
       withScope(availableCapability(['run_now']), scope),
     );
+    assert.deepEqual(
+      snapshot.capabilities['project-project-cron-jobs'],
+      withScope(
+        availableCapability([
+          'view',
+          'list',
+          'view-history',
+          'inspect-capabilities',
+          'create',
+          'update',
+          'toggle',
+          'run-now',
+          'delete',
+        ]),
+        scope,
+      ),
+    );
     assert.equal(
       calls[0]?.input,
       'https://api.memstack.test/api/v1/search-enhanced/capabilities',
@@ -318,6 +335,30 @@ test('local workbench capability client consumes the scoped degraded Search cont
       snapshot.capabilities.automation_run,
       withScope(
         unavailableCapability('durable_automation_execution_unavailable', true),
+        {
+          tenant_id: 'local',
+          project_id: 'local-project',
+          workspace_id: null,
+          instance_id: null,
+        },
+      ),
+    );
+    assert.deepEqual(
+      snapshot.capabilities['project-project-cron-jobs'],
+      withScope(
+        degradedCapability(
+          'automation_actions_restricted',
+          [
+            'view',
+            'list',
+            'view-history',
+            'inspect-capabilities',
+            'create',
+            'update',
+            'toggle',
+            'delete',
+          ],
+        ),
         {
           tenant_id: 'local',
           project_id: 'local-project',

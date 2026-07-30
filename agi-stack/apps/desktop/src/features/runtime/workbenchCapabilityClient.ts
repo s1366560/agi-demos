@@ -5,7 +5,10 @@ import {
   desktopLaunchCapability,
 } from '../../api/client';
 import type { DesktopAutomationApi } from '../automations/automationClient';
-import { normalizeAutomationCapabilities } from '../automations/automationModel';
+import {
+  automationActionAvailability,
+  normalizeAutomationCapabilities,
+} from '../automations/automationModel';
 import { createCloudProjectOverviewClient } from '../project/projectOverviewCloudClient';
 import { createLocalProjectOverviewClient } from '../project/projectOverviewLocalClient';
 import { WORKSPACE_HTTP_MUTATION_ACTIONS } from '../workspace/workspaceCollaborationHttpMutations';
@@ -92,12 +95,12 @@ export function createDesktopWorkbenchCapabilityClient(
     async loadSnapshot(signal?: AbortSignal): Promise<DesktopCapabilitySnapshot> {
       const [
         search,
-        automationRun,
+        automationCapabilities,
         workspaceCollaboration,
         projectOverview,
       ] = await Promise.all([
         loadSearchCapability(config, signal),
-        loadAutomationCapability(automationApi, config.projectId, signal),
+        loadAutomationCapabilities(automationApi, config.projectId, signal),
         loadWorkspaceCollaborationCapability(config, signal),
         loadProjectOverviewCapability(config, signal),
       ]);
@@ -107,7 +110,14 @@ export function createDesktopWorkbenchCapabilityClient(
         version: DESKTOP_CAPABILITY_SNAPSHOT_VERSION,
         mode: config.mode,
         capabilities: {
-          automation_run: withCapabilityScope(automationRun, projectScope),
+          automation_run: withCapabilityScope(
+            automationCapabilities.run,
+            projectScope,
+          ),
+          'project-project-cron-jobs': withCapabilityScope(
+            automationCapabilities.cronJobs,
+            projectScope,
+          ),
           search: withCapabilityScope(search, projectScope),
           workspace_collaboration: withCapabilityScope(
             workspaceCollaboration,
@@ -288,6 +298,87 @@ export function normalizeAutomationCapabilityContract(
   return available(negotiation, { allowedActions: ['run_now'] });
 }
 
+export function normalizeProjectCronJobsCapabilityContract(
+  input: unknown,
+): DesktopCapabilityAvailability {
+  const negotiation = negotiateCapabilityContract(
+    input,
+    DESKTOP_MINIMUM_CONTRACT_VERSION,
+  );
+  if (!negotiation.compatible) {
+    return unavailable(
+      negotiation.reason_code ?? 'capability_contract_version_invalid',
+      negotiation,
+    );
+  }
+  if (!isRecord(input)) {
+    return unavailable('automation_capability_contract_invalid', negotiation);
+  }
+  const {
+    service_version: _serviceVersion,
+    contract_version: _contractVersion,
+    ...capabilityPayload
+  } = input;
+  const capabilities = normalizeAutomationCapabilities(capabilityPayload);
+  if (!capabilities || !capabilities.read) {
+    return unavailable('automation_capability_contract_invalid', negotiation);
+  }
+
+  const allowedActions = [
+    'view',
+    'list',
+    'view-history',
+    'inspect-capabilities',
+  ];
+  const actionContracts = [
+    [
+      'create',
+      automationActionAvailability(capabilities, 'create', {
+        handler_available: true,
+        revision_required: false,
+      }),
+    ],
+    [
+      'update',
+      automationActionAvailability(capabilities, 'edit', {
+        handler_available: true,
+        revision_required: true,
+      }),
+    ],
+    [
+      'toggle',
+      automationActionAvailability(capabilities, 'toggle', {
+        handler_available: true,
+        revision_required: true,
+      }),
+    ],
+    [
+      'run-now',
+      automationActionAvailability(capabilities, 'run_now', {
+        handler_available: true,
+        revision_required: true,
+        durable_execution_required: true,
+      }),
+    ],
+    [
+      'delete',
+      automationActionAvailability(capabilities, 'delete', {
+        handler_available: true,
+        revision_required: true,
+      }),
+    ],
+  ] as const;
+  for (const [action, capability] of actionContracts) {
+    if (capability.allowed) allowedActions.push(action);
+  }
+  if (allowedActions.length === 9) {
+    return available(negotiation, { allowedActions });
+  }
+  return degraded('automation_actions_restricted', negotiation, {
+    allowedActions,
+  });
+}
+
 export function normalizeWorkspaceCollaborationCapabilityContract(
   input: unknown,
   scope: WorkspaceCollaborationCapabilityScope,
@@ -436,20 +527,30 @@ async function loadSearchCapability(
   }
 }
 
-async function loadAutomationCapability(
+async function loadAutomationCapabilities(
   automationApi: AutomationCapabilityAuthority,
   projectId: string,
   signal?: AbortSignal,
-): Promise<DesktopCapabilityAvailability> {
+): Promise<Readonly<{
+  run: DesktopCapabilityAvailability;
+  cronJobs: DesktopCapabilityAvailability;
+}>> {
   if (!projectId.trim()) {
-    return unavailable('automation_capability_scope_unavailable');
+    const capability = unavailable('automation_capability_scope_unavailable');
+    return { run: capability, cronJobs: capability };
   }
   try {
     const payload = await automationApi.getAutomationCapabilities(projectId, signal);
-    return normalizeAutomationCapabilityContract(payload);
+    return {
+      run: normalizeAutomationCapabilityContract(payload),
+      cronJobs: normalizeProjectCronJobsCapabilityContract(payload),
+    };
   } catch (error) {
     if (signal?.aborted) throw error;
-    return unavailable('automation_capability_contract_unavailable');
+    const capability = unavailable(
+      'automation_capability_contract_unavailable',
+    );
+    return { run: capability, cronJobs: capability };
   }
 }
 

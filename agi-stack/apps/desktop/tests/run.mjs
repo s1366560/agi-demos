@@ -52,6 +52,24 @@ copyFileSync(
   join(compiledSearchDirectory, 'DesktopSearch.css'),
 );
 
+const compiledAutomationsDirectory = join(
+  compiledRoot,
+  'src',
+  'features',
+  'automations',
+);
+mkdirSync(compiledAutomationsDirectory, { recursive: true });
+copyFileSync(
+  join(
+    desktopRoot,
+    'src',
+    'features',
+    'automations',
+    'AutomationsPage.css',
+  ),
+  join(compiledAutomationsDirectory, 'AutomationsPage.css'),
+);
+
 const compiledFeedbackDirectory = join(compiledRoot, 'src', 'features', 'feedback');
 mkdirSync(compiledFeedbackDirectory, { recursive: true });
 copyFileSync(

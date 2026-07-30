@@ -11,6 +11,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   createDesktopProductionRouteRegistry,
+  PROJECT_CRON_JOBS_ROUTE_ID,
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
 } = require(
@@ -48,6 +49,7 @@ test('factory stays lazy and publishes the exact Project Advanced Search route c
     implementedLoaders: {
       [PROJECT_OVERVIEW_ROUTE_ID]: implementedOverviewLoader(),
       [PROJECT_SEARCH_ROUTE_ID]: loader,
+      [PROJECT_CRON_JOBS_ROUTE_ID]: implementedCronJobsLoader(),
     },
   });
   const module = await registry.byId.get(PROJECT_SEARCH_ROUTE_ID).loader();
@@ -206,6 +208,21 @@ function implementedOverviewLoader() {
       availability: 'available',
       reasonCode: null,
       capability: PROJECT_OVERVIEW_ROUTE_ID,
+      localPolicy: 'native_equivalent',
+      Surface() {
+        return null;
+      },
+    });
+}
+
+function implementedCronJobsLoader() {
+  return async () =>
+    Object.freeze({
+      routeId: PROJECT_CRON_JOBS_ROUTE_ID,
+      disposition: 'implemented',
+      availability: 'available',
+      reasonCode: null,
+      capability: PROJECT_CRON_JOBS_ROUTE_ID,
       localPolicy: 'native_equivalent',
       Surface() {
         return null;

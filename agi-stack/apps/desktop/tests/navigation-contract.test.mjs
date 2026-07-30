@@ -42,8 +42,15 @@ test('primary navigation opens section-based auxiliary views', () => {
   assert.match(renderWorkbench, /activeSection === 'home'/);
   assert.match(renderWorkbench, /activeSection === 'automations'/);
   assert.match(renderWorkbench, /activeSection === 'search'/);
-  assert.match(appSource, /from '\.\/features\/automations\/AutomationsPage'/);
-  assert.match(appSource, /<AutomationsPage/);
+  assert.match(
+    appSource,
+    /lazy\(async \(\) => \{[\s\S]*import\(\s*'\.\/features\/automations\/AutomationsPage'\s*\)/u,
+  );
+  assert.match(appSource, /<LazyAutomationsPage/u);
+  assert.doesNotMatch(
+    appSource,
+    /import\s+\{\s*AutomationsPage\s*\}\s+from/u,
+  );
   assert.match(appSource, /from '\.\/features\/search\/DesktopSearch'/);
   assert.match(appSource, /<DesktopSearch/);
   assert.match(renderWorkbench, /renderSearchPage/);

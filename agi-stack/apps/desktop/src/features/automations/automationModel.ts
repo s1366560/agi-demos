@@ -141,7 +141,7 @@ export function normalizeAutomationCapabilities(
       'run_now',
       'delete',
     ]) ||
-    input.schema_version !== 1 ||
+    (input.schema_version !== 1 && input.schema_version !== 2) ||
     typeof input.read !== 'boolean' ||
     typeof input.revision_guarded !== 'boolean' ||
     typeof input.idempotency_guarded !== 'boolean' ||
@@ -158,7 +158,7 @@ export function normalizeAutomationCapabilities(
   const deleteCapability = normalizeAutomationActionCapability(input.delete);
   if (!create || !edit || !toggle || !runNow || !deleteCapability) return null;
   return {
-    schema_version: 1,
+    schema_version: input.schema_version,
     read: input.read,
     revision_guarded: input.revision_guarded,
     idempotency_guarded: input.idempotency_guarded,

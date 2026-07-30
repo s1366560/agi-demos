@@ -126,6 +126,33 @@ test('versioned automation capability envelopes preserve negotiation metadata', 
   );
 });
 
+test('production schema v2 automation envelopes preserve Local authority', () => {
+  const envelope = {
+    service_version: '0.1.0',
+    contract_version: '2.0.0',
+    schema_version: 2,
+    read: true,
+    revision_guarded: true,
+    idempotency_guarded: true,
+    durable_execution: true,
+    supported_read_trigger_kinds: ['manual', 'schedule', 'event'],
+    create: { allowed: true },
+    edit: { allowed: true },
+    toggle: { allowed: true },
+    run_now: { allowed: true, reason_code: null },
+    delete: { allowed: true },
+  };
+
+  assert.deepEqual(normalizeAutomationCapabilityEnvelope(envelope), envelope);
+  assert.equal(
+    normalizeAutomationCapabilityEnvelope({
+      ...envelope,
+      schema_version: 3,
+    }),
+    null,
+  );
+});
+
 test('mutation controls require server guards and an implemented client handler', () => {
   const guarded = {
     schema_version: 1,

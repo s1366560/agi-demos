@@ -14,7 +14,7 @@ const routerSource = readFileSync(
   'utf8',
 );
 
-test('App owns one production route registry with latest Project Overview and Search bindings', () => {
+test('App owns one production route registry with latest Project Overview, Search, and Cron bindings', () => {
   assert.match(
     appSource,
     /createDesktopProductionRouteRegistry\(\{[\s\S]*PROJECT_OVERVIEW_ROUTE_ID[\s\S]*createProjectOverviewRouteModuleLoader\(\{[\s\S]*configRef\.current/u,
@@ -34,6 +34,14 @@ test('App owns one production route registry with latest Project Overview and Se
   assert.match(
     appSource,
     /projectSearchRouteBindingRef\.current\s*=\s*Object\.freeze\(\{[\s\S]*api,[\s\S]*config,[\s\S]*project:[\s\S]*capability:[\s\S]*capabilityLoading:/u,
+  );
+  assert.match(
+    appSource,
+    /PROJECT_CRON_JOBS_ROUTE_ID[\s\S]*createProjectCronJobsRouteModuleLoader\(\{[\s\S]*projectCronJobsRouteBindingRef\.current/u,
+  );
+  assert.match(
+    appSource,
+    /projectCronJobsRouteBindingRef\.current\s*=\s*Object\.freeze\(\{[\s\S]*api:\s*automationApi,[\s\S]*config,[\s\S]*project:\s*selectedProject,[\s\S]*runCapability:\s*automationRunCapability/u,
   );
 });
 
@@ -70,7 +78,7 @@ test('App scope switching uses the abort-aware transaction and no reset helper',
     'createDesktopRouteScopeTransaction({',
   );
   const transactionEnd = appSource.indexOf(
-    '\n  });',
+    '\n  const switchProductionRouteScope',
     transactionStart,
   );
   const transactionSource =

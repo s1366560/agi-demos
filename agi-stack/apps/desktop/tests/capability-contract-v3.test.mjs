@@ -63,6 +63,15 @@ test('DesktopCapabilitySnapshot v3 validates authority fields and preserves the 
         scope: nullScope,
         authority_revision: null,
       },
+      'project-project-cron-jobs': {
+        availability: 'unavailable',
+        reason_code: 'capability_not_declared',
+        service_version: null,
+        contract_version: null,
+        allowed_actions: [],
+        scope: nullScope,
+        authority_revision: null,
+      },
     },
   });
   assert.deepEqual(desktopCapability(snapshot, 'search'), {
@@ -213,6 +222,30 @@ test('workbench capability client emits scoped v3 authority metadata', async () 
       service_version: '0.1.0',
       contract_version: '2.0.0',
       allowed_actions: ['run_now'],
+      scope: {
+        tenant_id: 'tenant-1',
+        project_id: 'project-1',
+        workspace_id: null,
+        instance_id: null,
+      },
+      authority_revision: null,
+    });
+    assert.deepEqual(snapshot.capabilities['project-project-cron-jobs'], {
+      availability: 'available',
+      reason_code: null,
+      service_version: '0.1.0',
+      contract_version: '2.0.0',
+      allowed_actions: [
+        'view',
+        'list',
+        'view-history',
+        'inspect-capabilities',
+        'create',
+        'update',
+        'toggle',
+        'run-now',
+        'delete',
+      ],
       scope: {
         tenant_id: 'tenant-1',
         project_id: 'project-1',

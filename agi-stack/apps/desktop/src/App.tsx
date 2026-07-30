@@ -3,6 +3,8 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type RefObject,
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -86,8 +88,14 @@ import {
   LoginScreen,
   type WorkspaceSsoPresentation,
 } from './features/auth/LoginScreen';
-import { AutomationsPage } from './features/automations/AutomationsPage';
-import { createDesktopAutomationApi } from './features/automations/automationClient';
+import {
+  createDesktopAutomationApi,
+  type DesktopAutomationApi,
+} from './features/automations/automationClient';
+import {
+  createProjectCronJobsRouteModuleLoader,
+  type ProjectCronJobsRouteBinding,
+} from './features/automations/projectCronJobsRouteModule';
 import {
   normalizeDeviceAuthorizationInterval,
   resolveDeviceAuthorizationUrl,
@@ -280,6 +288,7 @@ import { KeyboardShortcutsDialog } from './features/navigation/KeyboardShortcuts
 import { createBrowserDesktopHashLocationPort } from './features/navigation/desktopHashRouteHost';
 import {
   createDesktopProductionRouteRegistry,
+  PROJECT_CRON_JOBS_ROUTE_ID,
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
 } from './features/navigation/desktopProductionRouteRegistry';
@@ -457,6 +466,13 @@ import type {
   WorkspaceTask,
 } from './types';
 import { DEFAULT_CONFIG, mergeLocalRuntimeStatus } from './types';
+
+const LazyAutomationsPage = lazy(async () => {
+  const { AutomationsPage } = await import(
+    './features/automations/AutomationsPage'
+  );
+  return { default: AutomationsPage };
+});
 
 const emptyDataset: RuntimeDataset = {
   workspaces: [],
@@ -1923,6 +1939,16 @@ export function App() {
       onRetryCapability: () => void;
     }> | null
   >(null);
+  const projectCronJobsRouteBindingRef = useRef<
+    Readonly<{
+      api: DesktopAutomationApi;
+      config: DesktopRuntimeConfig;
+      project: ProjectSummary | null;
+      runCapability: DesktopCapabilityView;
+      onOpenProjectSettings: () => void;
+      onOpenConnection: () => void;
+    }> | null
+  >(null);
   const desktopProductionRouteLocation = useMemo(
     () => createBrowserDesktopHashLocationPort(),
     [],
@@ -1968,6 +1994,34 @@ export function App() {
               });
             },
           }),
+          [PROJECT_CRON_JOBS_ROUTE_ID]:
+            createProjectCronJobsRouteModuleLoader({
+              createBinding: (_context): ProjectCronJobsRouteBinding => {
+                const current = projectCronJobsRouteBindingRef.current;
+                const currentConfig = current?.config ?? configRef.current;
+                return Object.freeze({
+                  api:
+                    current?.api ??
+                    createDesktopAutomationApi(
+                      new DesktopApiClient(currentConfig),
+                      currentConfig,
+                    ),
+                  scope: Object.freeze({
+                    tenantId: currentConfig.tenantId,
+                    projectId: currentConfig.projectId,
+                  }),
+                  projectName:
+                    current?.project?.name ?? current?.project?.id ?? null,
+                  runCapability:
+                    current?.runCapability ??
+                    desktopCapability(null, 'automation_run'),
+                  onOpenProjectSettings:
+                    current?.onOpenProjectSettings ?? (() => undefined),
+                  onOpenConnection:
+                    current?.onOpenConnection ?? (() => undefined),
+                });
+              },
+            }),
         },
       }),
     [],
@@ -7514,6 +7568,14 @@ export function App() {
     }
     openSettingsEntry('runtime_connection');
   };
+  projectCronJobsRouteBindingRef.current = Object.freeze({
+    api: automationApi,
+    config,
+    project: selectedProject,
+    runCapability: automationRunCapability,
+    onOpenProjectSettings: openWorkspaceSettings,
+    onOpenConnection: openConnectionSettings,
+  });
 
   const applySettingsContext = async (tenantId: string, projectId: string) => {
     const requestConfig = configRef.current;
@@ -8048,15 +8110,23 @@ export function App() {
   );
 
   const renderAutomationsPage = () => (
-    <AutomationsPage
-      key={config.projectId || 'no-project'}
-      api={automationApi}
-      projectId={config.projectId}
-      projectName={selectedProject?.name ?? selectedProject?.id ?? null}
-      runCapability={automationRunCapability}
-      onOpenProjectSettings={openWorkspaceSettings}
-      onOpenConnection={openConnectionSettings}
-    />
+    <Suspense
+      fallback={
+        <section className="automations-page" aria-busy="true">
+          <Text>{t('automations.loading')}</Text>
+        </section>
+      }
+    >
+      <LazyAutomationsPage
+        key={config.projectId || 'no-project'}
+        api={automationApi}
+        projectId={config.projectId}
+        projectName={selectedProject?.name ?? selectedProject?.id ?? null}
+        runCapability={automationRunCapability}
+        onOpenProjectSettings={openWorkspaceSettings}
+        onOpenConnection={openConnectionSettings}
+      />
+    </Suspense>
   );
 
   const renderWorkspaceReviewPanel = (sessionControls?: SessionCanvasControls) => (
