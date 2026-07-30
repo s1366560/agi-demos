@@ -53,6 +53,15 @@
       "body": {}
     },
     {
+      "area": "project",
+      "method": "GET",
+      "uri": "/api/v1/projects/local-project/overview",
+      "source": "project_overview_local",
+      "source_marker": "/api/v1/projects/${encodeURIComponent(scope.projectId)}/overview",
+      "authority": "local_project_overview",
+      "body": {}
+    },
+    {
       "area": "search",
       "method": "GET",
       "uri": "/api/v1/search-enhanced/capabilities",

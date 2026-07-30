@@ -27,6 +27,8 @@ const SANDBOX_CLIENT_SOURCE: &str =
     include_str!("../../../src/features/sandbox/sandboxRuntimeClient.ts");
 const SANDBOX_SURFACE_CLIENT_SOURCE: &str =
     include_str!("../../../src/features/sandbox/sandboxRuntimeSurfaceClient.ts");
+const LOCAL_PROJECT_OVERVIEW_CLIENT_SOURCE: &str =
+    include_str!("../../../src/features/project/projectOverviewLocalClient.ts");
 
 #[derive(Debug, Deserialize)]
 struct LocalRouteContract {
@@ -167,6 +169,7 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
             "artifact" => ARTIFACT_CLIENT_SOURCE,
             "capability" => CAPABILITY_CLIENT_SOURCE,
             "client" => DESKTOP_CLIENT_SOURCE,
+            "project_overview_local" => LOCAL_PROJECT_OVERVIEW_CLIENT_SOURCE,
             "search" => SEARCH_CONTRACT_SOURCE,
             "sandbox" => SANDBOX_CLIENT_SOURCE,
             "sandbox_surface" => SANDBOX_SURFACE_CLIENT_SOURCE,

@@ -31,6 +31,14 @@ const cloudProject = {
   updated_at: null,
 };
 
+const cloudProjectStats = {
+  memory_count: 4,
+  storage_used: 1024,
+  storage_limit: 4096,
+  active_nodes: 3,
+  collaborators: 2,
+};
+
 const localProjectOverview = {
   capability: 'project_overview',
   availability: 'degraded',
@@ -102,6 +110,9 @@ test('Cloud workbench reads Project Overview authority from the scoped productio
     if (String(input).includes('/api/v1/projects/project-1?')) {
       return jsonResponse(cloudProject);
     }
+    if (String(input).endsWith('/api/v1/projects/project-1/stats')) {
+      return jsonResponse(cloudProjectStats);
+    }
     return jsonResponse({}, { status: 404 });
   }, async () => {
     const snapshot = await createClient(cloudConfig()).loadSnapshot(signal);
@@ -110,7 +121,7 @@ test('Cloud workbench reads Project Overview authority from the scoped productio
       reason_code: null,
       service_version: '0.1.0',
       contract_version: '3.0.0',
-      allowed_actions: ['view'],
+      allowed_actions: ['view', 'inspect-stats'],
       scope: projectScope,
       authority_revision: null,
     });
@@ -128,6 +139,40 @@ test('Cloud workbench reads Project Overview authority from the scoped productio
     new Headers(projectCall?.init?.headers).get('Authorization'),
     'Bearer cloud-session',
   );
+  const statsCall = calls.find(({ input }) =>
+    input.endsWith('/api/v1/projects/project-1/stats'),
+  );
+  assert.equal(statsCall?.init?.signal, signal);
+  assert.equal(
+    new Headers(statsCall?.init?.headers).get('Authorization'),
+    'Bearer cloud-session',
+  );
+});
+
+test('Cloud workbench does not advertise inspect-stats when stats authority fails', async () => {
+  await withFetch(async (input) => {
+    if (String(input).includes('/api/v1/projects/project-1?')) {
+      return jsonResponse(cloudProject);
+    }
+    if (String(input).endsWith('/api/v1/projects/project-1/stats')) {
+      return jsonResponse(
+        { detail: 'project_stats_authority_unavailable' },
+        { status: 503 },
+      );
+    }
+    return jsonResponse({}, { status: 404 });
+  }, async () => {
+    const snapshot = await createClient(cloudConfig()).loadSnapshot();
+    assert.deepEqual(snapshot.capabilities['project-project-overview'], {
+      availability: 'unavailable',
+      reason_code: 'project_overview_authority_unavailable',
+      service_version: null,
+      contract_version: null,
+      allowed_actions: [],
+      scope: projectScope,
+      authority_revision: null,
+    });
+  });
 });
 
 test('Cloud Project Overview failures stay structured and never infer reason from text', async () => {

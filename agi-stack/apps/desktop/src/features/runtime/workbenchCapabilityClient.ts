@@ -526,20 +526,20 @@ async function loadProjectOverviewCapability(
       };
     }
 
-    await createCloudProjectOverviewClient(config).getProject(
-      {
-        authority: 'cloud',
-        tenantId,
-        projectId,
-      },
-      { signal },
-    );
+    const cloudClient = createCloudProjectOverviewClient(config);
+    const scope = {
+      authority: 'cloud' as const,
+      tenantId,
+      projectId,
+    };
+    await cloudClient.getProject(scope, { signal });
+    await cloudClient.getProjectStats(scope, { signal });
     return {
       availability: 'available',
       reason_code: null,
       service_version: PROJECT_OVERVIEW_SERVICE_VERSION,
       contract_version: PROJECT_OVERVIEW_CONTRACT_VERSION,
-      allowed_actions: ['view'],
+      allowed_actions: ['view', 'inspect-stats'],
       scope: emptyCapabilityScope(),
       authority_revision: null,
     };

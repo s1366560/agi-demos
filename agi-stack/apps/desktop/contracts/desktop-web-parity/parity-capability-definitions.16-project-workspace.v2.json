@@ -16,7 +16,7 @@
         {
           "surface": "web",
           "method": "GET",
-          "path": "/api/v1/projects/{project_id}",
+          "path": "/api/v1/projects/{project_id}?tenant_id={tenant_id}",
           "authority": "web_service"
         },
         {
@@ -28,13 +28,13 @@
         {
           "surface": "web",
           "method": "GET",
-          "path": "/api/v1/memories/?project_id={project_id}",
+          "path": "/api/v1/memories/?page=1&page_size=5&project_id={project_id}",
           "authority": "web_service"
         },
         {
           "surface": "desktop_cloud",
           "method": "GET",
-          "path": "/api/v1/projects/{project_id}",
+          "path": "/api/v1/projects/{project_id}?tenant_id={tenant_id}",
           "authority": "cloud_service"
         },
         {
@@ -46,14 +46,14 @@
         {
           "surface": "desktop_cloud",
           "method": "GET",
-          "path": "/api/v1/memories/?project_id={project_id}",
+          "path": "/api/v1/memories/?page=1&page_size=5&project_id={project_id}",
           "authority": "cloud_service"
         },
         {
           "surface": "desktop_local",
-          "method": "NONE",
-          "path": "unavailable:local_project_overview_authority_planned",
-          "authority": "none"
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/overview",
+          "authority": "sidecar"
         },
         {
           "surface": "native_only",
@@ -63,20 +63,37 @@
         }
       ],
       "permission_requirements": [
-        {
-          "surface": "web",
-          "actions": ["view", "inspect-stats", "navigate"],
-          "authentication": "authenticated",
-          "authorization": ["project_member"],
-          "enforcement": "enforced",
-          "feature_gate": null
-        }
+        {"surface": "web", "actions": ["view", "inspect-stats", "navigate"], "authentication": "authenticated", "authorization": ["project_member"], "enforcement": "enforced", "feature_gate": null},
+        {"surface": "desktop_cloud", "actions": ["view", "inspect-stats"], "authentication": "authenticated", "authorization": ["project_member"], "enforcement": "enforced", "feature_gate": null},
+        {"surface": "desktop_local", "actions": ["view"], "authentication": "authenticated", "authorization": ["project_member"], "enforcement": "enforced", "feature_gate": null}
       ],
-      "cloud_status": "planned",
-      "local_status": "planned",
+      "web_status": "partial",
+      "web_reason_code": "web_project_overview_structured_state_contract_partial",
+      "cloud_status": "partial",
+      "cloud_reason_code": "desktop_project_overview_navigation_and_state_contract_partial",
+      "cloud_actions": ["view", "inspect-stats"],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/project/projectOverviewRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project/ProjectOverviewPage.tsx",
+        "agi-stack/apps/desktop/src/features/project/projectOverviewController.ts",
+        "agi-stack/apps/desktop/src/features/project/projectOverviewCloudClient.ts"
+      ],
+      "local_status": "partial",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_project_overview_authority_planned",
-      "judgment_rationale": "Project Overview is the canonical project landing route and owns the canonical and legacy project-entry registrations. Desktop currently selects project context but has no audited native routed overview with the Web data-state and permission contract, so Cloud and Local remain explicitly planned."
+      "local_reason_code": "local_project_overview_timeline_projection_only",
+      "local_actions": ["view"],
+      "local_deviation": "Local Desktop intentionally projects recent knowledge from the local timeline. Graph metrics remain structurally unavailable, while storage quota and collaboration governance are not applicable; no cloud Memory, quota, graph or collaborator values are fabricated.",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/project/projectOverviewRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project/ProjectOverviewPage.tsx",
+        "agi-stack/apps/desktop/src/features/project/projectOverviewController.ts",
+        "agi-stack/apps/desktop/src/features/project/projectOverviewLocalClient.ts",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/project_overview.rs"
+      ],
+      "judgment_rationale": "The previous planned verdict is stale. Current production code mounts the native Project Overview route with authenticated project scope and separate Cloud and Local authorities. Web remains partial because production 403, 404, conflict and unavailable responses collapse into a generic load error, stale requests have no explicit stale presentation, and complete structured states remain unproven. Cloud Desktop renders native project details, statistics and recent memories and publishes inspect-stats only after both project and statistics authority succeed, but it lacks the Web navigation contract for memories, memory detail and project settings and still lacks complete empty, conflict and explicit stale states. Local Desktop is a sidecar-native degraded equivalent protected by launch capability, session and project scope; it intentionally exposes timeline-backed recent knowledge with view-only authority and never fabricates cloud graph, quota or collaboration values."
     },
     {
       "id": "project-project-workspaces",
