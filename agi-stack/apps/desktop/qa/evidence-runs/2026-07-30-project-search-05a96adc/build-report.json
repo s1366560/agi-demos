@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0.0",
+  "record_kind": "desktop-parity-build-report",
+  "source_revision": "05a96adc65c1cf31721c4c261e3b4d7f36358797",
+  "worktree_state": "clean",
+  "commands": [
+    {
+      "command": "make -C agi-stack desktop-check",
+      "status": "passed",
+      "results": {
+        "sidecar_tests": "330 passed",
+        "desktop_tests": "1663 passed",
+        "electron_build_modules": 9099
+      }
+    },
+    {
+      "command": "make -C agi-stack desktop-browser-qa",
+      "status": "passed",
+      "results": {
+        "browser_qa": "417 passed"
+      }
+    },
+    {
+      "command": "node contracts/desktop-web-parity/generate-parity-manifest-v2.mjs --check",
+      "working_directory": "agi-stack/apps/desktop",
+      "status": "passed",
+      "results": {
+        "capabilities": 66,
+        "routes": 174,
+        "routed_sources": 93
+      }
+    }
+  ],
+  "limitations": [
+    "The Browser QA matrix is deterministic Desktop renderer support evidence, not an authorized matched-state Web versus Cloud Desktop comparison.",
+    "This capability slice did not build an installer and is not signing, notarization, Authenticode, installation, update, or rollback evidence."
+  ],
+  "completed_at": "2026-07-30T08:36:20Z"
+}

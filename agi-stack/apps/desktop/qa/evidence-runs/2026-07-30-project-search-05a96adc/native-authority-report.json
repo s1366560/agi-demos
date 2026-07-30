@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0.0",
+  "record_kind": "desktop-parity-native-authority-report",
+  "source_revision": "05a96adc65c1cf31721c4c261e3b4d7f36358797",
+  "capability_id": "project-project-search",
+  "status": "blocked",
+  "verified_surface": "desktop_local",
+  "unverified_surface": "desktop_cloud",
+  "launch_command": "AGISTACK_DESKTOP_DEBUG_PORT=9333 make -C agi-stack run-desktop",
+  "native_observations": {
+    "route": "#/tenant/local/project/local-project/advanced-search",
+    "breadcrumb": "project-project-search",
+    "deep_link_reload_restored": true,
+    "project_overview_search_history_restored": true,
+    "command_palette_opened": true,
+    "escape_closed_overlays": true,
+    "webview_count": 0,
+    "iframe_count": 0,
+    "console_error_count": 0,
+    "page_error_count": 0,
+    "external_browser_handoff": false
+  },
+  "sidecar_authority": {
+    "advanced_search": {
+      "route": "POST /api/v1/search-enhanced/advanced",
+      "status": 200,
+      "mode": "keyword_degraded",
+      "reason_code": "local_embeddings_unavailable"
+    },
+    "graph_traversal": {
+      "route": "POST /api/v1/search-enhanced/graph-traversal",
+      "status": 501,
+      "availability": "unavailable",
+      "reason_code": "local_structured_graph_projection_unavailable"
+    },
+    "community": {
+      "route": "POST /api/v1/search-enhanced/community",
+      "status": 501,
+      "availability": "unavailable",
+      "reason_code": "local_structured_community_projection_unavailable"
+    },
+    "contract_version": "desktop-local-route-parity-v1",
+    "tests": "330 passed"
+  },
+  "blocker": {
+    "reason_code": "authorized_cloud_native_session_unavailable",
+    "statement": "Cloud Desktop Project Search was not exercised because no authorized disposable Cloud project session or repository-supported isolated profile was available; the active Local trusted session was preserved."
+  },
+  "recorded_at": "2026-07-30T08:47:28Z"
+}

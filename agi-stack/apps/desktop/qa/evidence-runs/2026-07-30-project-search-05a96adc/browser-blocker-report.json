@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0.0",
+  "record_kind": "desktop-parity-browser-blocker",
+  "source_revision": "05a96adc65c1cf31721c4c261e3b4d7f36358797",
+  "capability_id": "project-project-search",
+  "status": "blocked",
+  "reason_code": "authorized_project_search_matched_state_unavailable",
+  "observation": "The 417-case Desktop Browser QA matrix passed, including Search fixtures, but no authorized Cloud account and project state was available for a matched Web versus Cloud Desktop Advanced Search comparison.",
+  "excluded_claims": [
+    "Desktop fixture screenshots do not prove Web versus Cloud Desktop Advanced Search parity.",
+    "Renderer evidence does not prove Electron IPC, sidecar lifecycle, vault persistence, signing, or updates."
+  ],
+  "recorded_at": "2026-07-30T08:47:28Z"
+}
