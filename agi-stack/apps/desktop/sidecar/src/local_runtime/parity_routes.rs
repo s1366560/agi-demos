@@ -11,6 +11,9 @@ mod managed_resources_tests;
 mod mcp_apps;
 #[cfg(test)]
 mod mcp_apps_tests;
+mod project_overview;
+#[cfg(test)]
+mod project_overview_tests;
 mod sandbox_files;
 #[cfg(test)]
 mod sandbox_files_tests;
@@ -24,6 +27,7 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
     Router::new()
         .merge(artifact_content::router())
         .merge(mcp_apps::router())
+        .merge(project_overview::router())
         .merge(search::router())
         .merge(managed_resources::router())
         .route(
