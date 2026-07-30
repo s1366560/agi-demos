@@ -136,6 +136,7 @@
     "src/features/my-work/MyWorkQueue.tsx",
     "src/features/my-work/myWorkModel.ts",
     "src/features/project/projectOverviewClient.ts",
+    "src/features/project/projectOverviewCloudClient.ts",
     "src/features/project/projectOverviewModel.ts",
     "src/features/navigation/AuxiliaryView.tsx",
     "src/features/navigation/desktopRouteRegistry.ts",
