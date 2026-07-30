@@ -1,0 +1,118 @@
+.native-unavailable-route {
+  display: grid;
+  min-height: 100%;
+  padding: 34px clamp(28px, 4.5vw, 64px) 48px;
+  color: var(--desktop-text);
+  background: var(--desktop-surface-3);
+  overflow: auto;
+  place-items: center;
+}
+
+.native-unavailable-route-card {
+  display: grid;
+  justify-items: start;
+  width: min(620px, 100%);
+  padding: 28px;
+  border: 1px solid var(--desktop-border);
+  border-radius: 12px;
+  background: var(--desktop-panel);
+  box-shadow: 0 8px 24px rgba(var(--desktop-black-rgb), 0.18);
+  gap: 10px;
+}
+
+.native-unavailable-route-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--desktop-border-amber);
+  border-radius: 9px;
+  color: var(--desktop-amber);
+  background: var(--desktop-surface-amber);
+  place-items: center;
+}
+
+.native-unavailable-route-eyebrow {
+  color: var(--desktop-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.native-unavailable-route-card h1 {
+  margin: 0;
+  color: var(--desktop-text);
+  font-size: 26px;
+  line-height: 1.2;
+}
+
+.native-unavailable-route-card > p {
+  margin: 0;
+  color: var(--desktop-muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.native-unavailable-route-contract {
+  display: grid;
+  width: 100%;
+  margin: 10px 0 0;
+  border: 1px solid var(--desktop-border);
+  border-radius: 9px;
+  background: var(--desktop-panel-2);
+  overflow: hidden;
+}
+
+.native-unavailable-route-contract > div {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.35fr) minmax(0, 0.65fr);
+  gap: 16px;
+  padding: 11px 13px;
+}
+
+.native-unavailable-route-contract > div + div {
+  border-top: 1px solid var(--desktop-border);
+}
+
+.native-unavailable-route-contract dt {
+  color: var(--desktop-faint);
+  font-size: 11px;
+}
+
+.native-unavailable-route-contract dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.native-unavailable-route-contract code {
+  display: inline-block;
+  max-width: 100%;
+  padding: 2px 6px;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 5px;
+  color: var(--desktop-muted);
+  background: var(--desktop-panel);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.native-unavailable-route-contract code:focus-visible {
+  outline: 2px solid var(--desktop-accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 620px) {
+  .native-unavailable-route {
+    padding: 24px 18px 36px;
+  }
+
+  .native-unavailable-route-card {
+    padding: 22px;
+  }
+
+  .native-unavailable-route-contract > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 5px;
+  }
+}

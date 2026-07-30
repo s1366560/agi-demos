@@ -4,6 +4,10 @@ import {
   projectOverviewEnUS,
   projectOverviewZhCN,
 } from './features/project/locales/projectOverviewMessages';
+import {
+  nativeUnavailableRouteEnUS,
+  nativeUnavailableRouteZhCN,
+} from './features/navigation/locales/nativeUnavailableRouteMessages';
 
 export type DesktopLocale = 'en' | 'zh-CN';
 
@@ -18,6 +22,7 @@ type I18nContextValue = {
 const STORAGE_KEY = 'agistack.desktop.locale';
 
 const enUS: Record<string, string> = {
+  ...nativeUnavailableRouteEnUS,
   ...projectOverviewEnUS,
   'common.close': 'Close',
   'common.cancel': 'Cancel',
@@ -3609,6 +3614,7 @@ const enUS: Record<string, string> = {
 };
 
 const zhCN: Record<string, string> = {
+  ...nativeUnavailableRouteZhCN,
   ...projectOverviewZhCN,
   'common.close': '关闭',
   'common.cancel': '取消',
