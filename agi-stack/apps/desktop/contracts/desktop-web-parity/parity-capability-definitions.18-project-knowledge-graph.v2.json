@@ -480,6 +480,11 @@
       "cloud_status": "partial",
       "cloud_reason_code": "desktop_advanced_search_partial",
       "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/search/projectSearchRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/search/DesktopSearch.tsx"
       ],
       "local_status": "partial",
@@ -487,11 +492,16 @@
       "local_reason_code": "local_search_projection_partial",
       "local_deviation": "Local Desktop provides a keyword-degraded advanced projection plus temporal and faceted search. Embedding-backed semantic search, graph traversal and community search remain unavailable under the sidecar capability contract.",
       "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/search/projectSearchRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/search/DesktopSearch.tsx",
         "agi-stack/apps/desktop/src/features/search/localSearchClient.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/search.rs"
       ],
-      "judgment_rationale": "EnhancedSearch and DesktopSearch both expose copy-result-id through navigator.clipboard without a server API. DesktopSearch is a real native surface in both modes and Cloud wires all EnhancedSearch strategies, but it lacks Web result export and the canonical route/deep-link contract. The Local sidecar explicitly supports advanced keyword-degraded, temporal and faceted search while declaring graph traversal and community search unavailable, so per-surface actions are recorded separately."
+      "judgment_rationale": "EnhancedSearch and DesktopSearch both expose copy-result-id through navigator.clipboard without a server API. DesktopSearch is now bound to the canonical native project route with structured permission, capability and scope gates in both modes. Cloud wires all EnhancedSearch strategies but still lacks Web result export. The Local sidecar explicitly supports advanced keyword-degraded, temporal and faceted search while declaring embedding-backed semantic search, graph traversal and community search unavailable, so per-surface actions remain recorded separately."
     }
   ],
   "source_ownership": {
