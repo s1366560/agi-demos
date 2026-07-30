@@ -288,6 +288,18 @@ export function shouldClearConversationSelectionAfterRefresh(
   );
 }
 
+export function shouldPreserveConversationSelectionDuringSidecarRecovery(
+  recoveryRefreshGeneration: number | null,
+  activeRefreshGeneration: number,
+): boolean {
+  return (
+    Number.isSafeInteger(recoveryRefreshGeneration) &&
+    recoveryRefreshGeneration !== null &&
+    recoveryRefreshGeneration > 0 &&
+    recoveryRefreshGeneration === activeRefreshGeneration
+  );
+}
+
 export function conversationTreeStatusValue(conversation: AgentConversation): string {
   return conversationTreeRunStatusValue(conversation) ?? conversation.status.trim().toLowerCase();
 }

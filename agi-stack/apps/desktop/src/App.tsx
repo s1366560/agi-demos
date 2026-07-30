@@ -386,6 +386,7 @@ import {
   resolveRuntimeWorkspaceId,
   shouldClearConversationSelectionAfterRefresh,
   shouldLoadWorkspaceConversations,
+  shouldPreserveConversationSelectionDuringSidecarRecovery,
   supersedeWorkspaceConversationRequests,
   workspaceTreeRefreshFailed,
 } from './features/workspace/workspaceTreeModel';
@@ -1850,6 +1851,7 @@ export function App() {
   const datasetRef = useRef(dataset);
   const expandedWorkspaceIdsRef = useRef(expandedWorkspaceIds);
   const runtimeRefreshRequestRef = useRef(0);
+  const sidecarRecoveryRefreshGenerationRef = useRef<number | null>(null);
   const conversationModelMutationRequestRef = useRef(0);
   const conversationSummaryMutationRequestRef = useRef(0);
   const activeRuntimeConversationRequestsRef = useRef(new Map<string, number>());
@@ -2476,6 +2478,14 @@ export function App() {
       refreshedScopeKey: string,
       conversations: readonly AgentConversation[],
     ) => {
+      if (
+        shouldPreserveConversationSelectionDuringSidecarRecovery(
+          sidecarRecoveryRefreshGenerationRef.current,
+          runtimeRefreshRequestRef.current,
+        )
+      ) {
+        return;
+      }
       if (
         !shouldClearConversationSelectionAfterRefresh(
           selectionAtRequest,
@@ -3716,7 +3726,16 @@ export function App() {
       window.__MEMSTACK_DESKTOP__?.events?.onSidecarRecovered;
     if (!onSidecarRecovered) return;
     return onSidecarRecovered(() => {
-      void refreshRuntime(configRef.current);
+      const recoveryRefreshGeneration = runtimeRefreshRequestRef.current + 1;
+      sidecarRecoveryRefreshGenerationRef.current = recoveryRefreshGeneration;
+      void refreshRuntime(configRef.current).finally(() => {
+        if (
+          sidecarRecoveryRefreshGenerationRef.current ===
+          recoveryRefreshGeneration
+        ) {
+          sidecarRecoveryRefreshGenerationRef.current = null;
+        }
+      });
     });
   }, [localRuntimeMode, refreshRuntime]);
 
