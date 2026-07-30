@@ -79,6 +79,7 @@ function hostOptions({
   location,
   mode = 'cloud',
   permissions = new Set(['authenticated']),
+  resolvePermissions,
   resolveCapability = (_id, context) => capability(context.tenantId),
   switchScope = async () => {},
 }) {
@@ -87,6 +88,7 @@ function hostOptions({
     location,
     mode,
     permissions,
+    ...(resolvePermissions ? { resolvePermissions } : {}),
     resolveCapability,
     switchScope,
   };
@@ -204,6 +206,130 @@ test('forbidden and unavailable routes never switch scope or load', async () => 
   assert.equal(loadCount, 0);
   assert.equal(scopeCount, 0);
   assert.equal(capabilityCount, 0);
+});
+
+test('context permission resolver authorizes the exact matched route context', async () => {
+  const permissionContexts = [];
+  const registry = createDesktopRouteRegistry([
+    route(
+      'project-overview',
+      '/tenant/:tenantId/project/:projectId',
+      async () => ({ default: 'Project Overview' }),
+      {
+        scope: ['tenant', 'project'],
+        requiredPermission: ['authenticated', 'project_member'],
+      }
+    ),
+  ]);
+  const location = hashLocation(
+    '#/tenant/tenant-2/project/project-2',
+  );
+  const host = createDesktopHashRouteHost(
+    hostOptions({
+      registry,
+      location: location.port,
+      permissions: new Set(['authenticated']),
+      resolvePermissions: (context) => {
+        permissionContexts.push(context);
+        return new Set(['authenticated', 'project_member']);
+      },
+      resolveCapability: (_id, context) =>
+        capability(context.tenantId, {
+          scope: {
+            tenant_id: context.tenantId,
+            project_id: context.projectId,
+            workspace_id: null,
+            instance_id: null,
+          },
+        }),
+    })
+  );
+
+  await host.start();
+
+  assert.deepEqual(permissionContexts, [
+    { tenantId: 'tenant-2', projectId: 'project-2' },
+  ]);
+  assert.equal(host.getState().status, 'ready');
+  assert.deepEqual(host.getState().match.context, {
+    tenantId: 'tenant-2',
+    projectId: 'project-2',
+  });
+  host.stop();
+});
+
+test('permission resolver failures fail closed before capability or scope work and can retry', async () => {
+  let permissionAttempts = 0;
+  let capabilityCount = 0;
+  let scopeCount = 0;
+  let loadCount = 0;
+  const registry = createDesktopRouteRegistry([
+    route(
+      'project-overview',
+      '/tenant/:tenantId/project/:projectId',
+      async () => {
+        loadCount += 1;
+        return { default: 'Project Overview' };
+      },
+      {
+        scope: ['tenant', 'project'],
+        requiredPermission: ['authenticated', 'project_member'],
+      }
+    ),
+  ]);
+  const location = hashLocation(
+    '#/tenant/tenant-1/project/project-1',
+  );
+  const host = createDesktopHashRouteHost(
+    hostOptions({
+      registry,
+      location: location.port,
+      resolvePermissions: (context) => {
+        permissionAttempts += 1;
+        assert.deepEqual(context, {
+          tenantId: 'tenant-1',
+          projectId: 'project-1',
+        });
+        if (permissionAttempts === 1) {
+          throw new Error('permission authority unavailable');
+        }
+        return new Set(['authenticated', 'project_member']);
+      },
+      resolveCapability: (_id, context) => {
+        capabilityCount += 1;
+        return capability(context.tenantId, {
+          scope: {
+            tenant_id: context.tenantId,
+            project_id: context.projectId,
+            workspace_id: null,
+            instance_id: null,
+          },
+        });
+      },
+      switchScope: async () => {
+        scopeCount += 1;
+      },
+    })
+  );
+
+  await host.start();
+  assert.deepEqual(host.getState(), {
+    status: 'error',
+    match: host.getState().match,
+    reasonCode: 'desktop_route_permission_resolution_failed',
+    retryable: true,
+  });
+  assert.equal(capabilityCount, 0);
+  assert.equal(scopeCount, 0);
+  assert.equal(loadCount, 0);
+
+  await host.retry();
+  assert.equal(host.getState().status, 'ready');
+  assert.equal(permissionAttempts, 2);
+  assert.equal(capabilityCount, 1);
+  assert.equal(scopeCount, 1);
+  assert.equal(loadCount, 1);
+  host.stop();
 });
 
 test('host emits loading then ready or degraded after scope and lazy module resolve', async () => {

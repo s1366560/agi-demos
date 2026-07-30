@@ -21,6 +21,10 @@ export type DesktopRouteCapabilityResolver = (
   context: DesktopRouteContext,
 ) => DesktopCapabilityAvailability | null;
 
+export type DesktopRoutePermissionResolver = (
+  context: DesktopRouteContext,
+) => ReadonlySet<string>;
+
 export type DesktopRouteScopeSwitcher = (
   context: DesktopRouteContext,
   signal: AbortSignal,
@@ -31,6 +35,7 @@ export type DesktopHashRouteHostOptions<TModule> = Readonly<{
   location: DesktopHashLocationPort;
   mode: DesktopRouteRuntimeMode;
   permissions: ReadonlySet<string>;
+  resolvePermissions?: DesktopRoutePermissionResolver;
   resolveCapability: DesktopRouteCapabilityResolver;
   switchScope: DesktopRouteScopeSwitcher;
 }>;
@@ -122,10 +127,28 @@ export function createDesktopHashRouteHost<TModule>(
     }
     const { match } = restored;
 
+    let permissions: ReadonlySet<string>;
+    try {
+      permissions = options.resolvePermissions
+        ? options.resolvePermissions(match.context)
+        : options.permissions;
+      if (!permissions || typeof permissions.has !== 'function') {
+        throw new Error('desktop_route_permissions_invalid');
+      }
+    } catch {
+      emit({
+        status: 'error',
+        match,
+        reasonCode: 'desktop_route_permission_resolution_failed',
+        retryable: true,
+      });
+      return;
+    }
+
     const preflight = evaluateDesktopRouteAccess({
       match,
       mode: options.mode,
-      permissions: options.permissions,
+      permissions,
       capability: null,
     });
     if (preflight.status === 'forbidden') {
@@ -163,7 +186,7 @@ export function createDesktopHashRouteHost<TModule>(
     const access = evaluateDesktopRouteAccess({
       match,
       mode: options.mode,
-      permissions: options.permissions,
+      permissions,
       capability,
     });
     if (access.status === 'forbidden') {

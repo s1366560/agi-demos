@@ -63,6 +63,7 @@ export type DesktopRouteHostState<TModule = unknown> =
       status: 'error';
       match: DesktopRouteMatch<TModule>;
       reasonCode:
+        | 'desktop_route_permission_resolution_failed'
         | 'desktop_route_capability_resolution_failed'
         | 'desktop_route_scope_switch_failed'
         | 'desktop_route_module_load_failed';
