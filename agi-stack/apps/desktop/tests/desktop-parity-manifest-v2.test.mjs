@@ -381,14 +381,14 @@ test("known production API contracts and native release actions stay source-accu
   );
   assert.equal(
     overview.surfaces.desktop_cloud.implementation_status,
-    "missing",
+    "partial",
   );
-  assert.equal(overview.surfaces.desktop_cloud.authority, "none");
+  assert.equal(overview.surfaces.desktop_cloud.authority, "cloud_service");
   assert.deepEqual(
     overview.api_contracts
       .filter((contract) => contract.surface === "desktop_cloud")
       .map(({ method, authority }) => ({ method, authority })),
-    [{ method: "NONE", authority: "none" }],
+    [{ method: "GET", authority: "cloud_service" }],
   );
   assert.equal(
     analytics.api_contracts.find((contract) => contract.surface === "web")
