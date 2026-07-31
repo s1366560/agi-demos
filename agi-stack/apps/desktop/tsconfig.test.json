@@ -154,6 +154,8 @@
     "src/features/navigation/desktopRouteModule.ts",
     "src/features/navigation/desktopProductionRouteRegistry.ts",
     "src/features/navigation/desktopProductionRouteRuntime.ts",
+    "src/features/navigation/desktopRoutePermissionAuthority.ts",
+    "src/features/navigation/desktopRoutePermissionHttpClient.ts",
     "src/features/navigation/NativeUnavailableRoute.tsx",
     "src/features/navigation/desktopCanonicalRouteCatalog.ts",
     "src/features/navigation/desktopHashRouteHost.ts",

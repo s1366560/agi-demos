@@ -10254,6 +10254,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn local_auth_me_exposes_structured_non_superuser_authority() {
+        let app = local_router(test_state("launch-secret"));
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/auth/me")
+                    .header("authorization", "Bearer launch-secret")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let body = response_json(response).await;
+        assert_eq!(body["is_superuser"], false);
+        assert_eq!(body["global_roles"], json!([]));
+    }
+
+    #[tokio::test]
     async fn local_session_and_workspace_context_require_two_credentials_and_revoke_cleanly() {
         let state = test_state_without_session("launch-secret");
         let app = local_router(state);

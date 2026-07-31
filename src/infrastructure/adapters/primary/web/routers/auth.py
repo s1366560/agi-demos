@@ -369,13 +369,25 @@ async def read_users_me(
     user_with_roles = result.scalar_one_or_none()
 
     role_names = [r.role.name for r in user_with_roles.roles] if user_with_roles else []
+    global_role_names = (
+        [
+            assignment.role.name
+            for assignment in user_with_roles.roles
+            if getattr(assignment, "tenant_id", None) is None
+            and getattr(assignment, "project_id", None) is None
+        ]
+        if user_with_roles
+        else []
+    )
 
     return UserSchema(
         user_id=current_user.id,
         email=current_user.email,
         name=current_user.full_name or "",
         roles=role_names,
+        global_roles=global_role_names,
         is_active=current_user.is_active,
+        is_superuser=current_user.is_superuser is True,
         created_at=current_user.created_at,
         profile=_user_profile(current_user),
         preferred_language=current_user.preferred_language,
@@ -413,13 +425,25 @@ async def update_user_me(
     )
     user_with_roles = result.scalar_one_or_none()
     role_names = [r.role.name for r in user_with_roles.roles] if user_with_roles else []
+    global_role_names = (
+        [
+            assignment.role.name
+            for assignment in user_with_roles.roles
+            if getattr(assignment, "tenant_id", None) is None
+            and getattr(assignment, "project_id", None) is None
+        ]
+        if user_with_roles
+        else []
+    )
 
     return UserSchema(
         user_id=current_user.id,
         email=current_user.email,
         name=current_user.full_name or "",
         roles=role_names,
+        global_roles=global_role_names,
         is_active=current_user.is_active,
+        is_superuser=current_user.is_superuser is True,
         created_at=current_user.created_at,
         profile=_user_profile(current_user),
         preferred_language=current_user.preferred_language,

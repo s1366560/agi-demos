@@ -3,6 +3,7 @@ import type {
   DesktopRouteContext,
   DesktopRouteMatch,
 } from './desktopRouteRegistry';
+import type { DesktopRoutePermissionAuthorityReasonCode } from './desktopRoutePermissionAuthority';
 
 export type DesktopRouteRuntimeMode = 'cloud' | 'local';
 
@@ -64,6 +65,7 @@ export type DesktopRouteHostState<TModule = unknown> =
       match: DesktopRouteMatch<TModule>;
       reasonCode:
         | 'desktop_route_permission_resolution_failed'
+        | DesktopRoutePermissionAuthorityReasonCode
         | 'desktop_route_capability_resolution_failed'
         | 'desktop_route_scope_switch_failed'
         | 'desktop_route_module_load_failed';

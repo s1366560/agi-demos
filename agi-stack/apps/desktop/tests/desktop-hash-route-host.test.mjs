@@ -78,6 +78,7 @@ function hostOptions({
   mode = 'cloud',
   permissions = new Set(['authenticated']),
   resolvePermissions,
+  resolvePermissionSnapshot,
   resolveCapability = (_id, context) => capability(context.tenantId),
   switchScope = async () => {},
 }) {
@@ -87,8 +88,27 @@ function hostOptions({
     mode,
     permissions,
     ...(resolvePermissions ? { resolvePermissions } : {}),
+    ...(resolvePermissionSnapshot ? { resolvePermissionSnapshot } : {}),
     resolveCapability,
     switchScope,
+  };
+}
+
+function permissionSnapshot(context, overrides = {}) {
+  return {
+    contract_version: '3.0.0',
+    subject_id: 'user-1',
+    scope: {
+      tenant_id: context.tenantId ?? null,
+      project_id: context.projectId ?? null,
+      workspace_id: context.workspaceId ?? null,
+      instance_id: context.instanceId ?? null,
+      conversation_id: null,
+    },
+    permissions: ['authenticated'],
+    authority_revision: 1,
+    reason_code: null,
+    ...overrides,
   };
 }
 
@@ -324,6 +344,153 @@ test('permission resolver failures fail closed before capability or scope work a
   assert.equal(capabilityCount, 2);
   assert.equal(scopeCount, 1);
   assert.equal(loadCount, 1);
+  host.stop();
+});
+
+test('async permission authority resolves after scope switch and gates module loading', async () => {
+  const order = [];
+  const registry = createDesktopRouteRegistry([
+    route(
+      'tenant-billing',
+      '/tenant/:tenantId/billing',
+      async () => {
+        order.push('load');
+        return { default: 'Billing' };
+      },
+      {
+        requiredPermission: [['authenticated', 'tenant_admin']],
+      },
+    ),
+  ]);
+  const location = hashLocation('#/tenant/tenant-2/billing');
+  const host = createDesktopHashRouteHost(
+    hostOptions({
+      registry,
+      location: location.port,
+      permissions: new Set(['authenticated']),
+      resolvePermissionSnapshot: async (context, signal) => {
+        order.push('permission');
+        assert.equal(signal.aborted, false);
+        return permissionSnapshot(context, {
+          permissions: ['authenticated', 'tenant_member', 'tenant_admin'],
+          authority_revision: 4,
+        });
+      },
+      resolveCapability: (_id, context) =>
+        capability(context.tenantId, { authority_revision: 4 }),
+      switchScope: async (_context, signal) => {
+        order.push('scope');
+        assert.equal(signal.aborted, false);
+      },
+    }),
+  );
+
+  await host.start();
+
+  assert.equal(host.getState().status, 'ready');
+  assert.deepEqual(order, ['scope', 'permission', 'load']);
+  host.stop();
+});
+
+test('async permission authority validates scope and revision and retries closed failures', async () => {
+  let attempts = 0;
+  let loadCount = 0;
+  const registry = createDesktopRouteRegistry([
+    route('tenant-overview', '/tenant/:tenantId/overview', async () => {
+      loadCount += 1;
+      return { default: 'Overview' };
+    }),
+  ]);
+  const location = hashLocation('#/tenant/tenant-1/overview');
+  const host = createDesktopHashRouteHost(
+    hostOptions({
+      registry,
+      location: location.port,
+      resolvePermissionSnapshot: async (context) => {
+        attempts += 1;
+        if (attempts === 1) {
+          return permissionSnapshot(context, {
+            scope: {
+              ...permissionSnapshot(context).scope,
+              tenant_id: 'tenant-other',
+            },
+          });
+        }
+        if (attempts === 2) {
+          return permissionSnapshot(context, { authority_revision: 5 });
+        }
+        return permissionSnapshot(context, { authority_revision: 4 });
+      },
+      resolveCapability: () =>
+        capability('tenant-1', { authority_revision: 5 }),
+    }),
+  );
+
+  await host.start();
+  assert.equal(host.getState().status, 'error');
+  assert.equal(
+    host.getState().reasonCode,
+    'desktop_route_permission_scope_mismatch',
+  );
+  assert.equal(loadCount, 0);
+
+  await host.retry();
+  assert.equal(host.getState().status, 'ready');
+  assert.equal(loadCount, 1);
+
+  await host.retry();
+  assert.equal(host.getState().status, 'error');
+  assert.equal(
+    host.getState().reasonCode,
+    'desktop_route_permission_revision_stale',
+  );
+  assert.equal(loadCount, 1);
+  host.stop();
+});
+
+test('hash change aborts async permission authority and suppresses stale completion', async () => {
+  const firstPermission = deferred();
+  const permissionStarted = deferred();
+  const signals = [];
+  const registry = createDesktopRouteRegistry([
+    route('tenant-one', '/tenant/:tenantId/one', async () => ({
+      default: 'One',
+    })),
+    route('tenant-two', '/tenant/:tenantId/two', async () => ({
+      default: 'Two',
+    })),
+  ]);
+  const location = hashLocation('#/tenant/tenant-1/one');
+  const host = createDesktopHashRouteHost(
+    hostOptions({
+      registry,
+      location: location.port,
+      resolvePermissionSnapshot: async (context, signal) => {
+        signals.push(signal);
+        if (signals.length === 1) {
+          permissionStarted.resolve();
+          return firstPermission.promise;
+        }
+        return permissionSnapshot(context, { authority_revision: 2 });
+      },
+    }),
+  );
+
+  const startPromise = host.start();
+  await permissionStarted.promise;
+  const readyTwo = waitForState(
+    host,
+    (state) =>
+      state.status === 'ready' && state.match.definition.id === 'tenant-two',
+  );
+  location.navigate('#/tenant/tenant-1/two');
+  await readyTwo;
+
+  assert.equal(signals[0].aborted, true);
+  firstPermission.resolve(permissionSnapshot({ tenantId: 'tenant-1' }));
+  await startPromise;
+  await Promise.resolve();
+  assert.equal(host.getState().match.definition.id, 'tenant-two');
   host.stop();
 });
 

@@ -294,9 +294,17 @@ import {
 } from './features/navigation/desktopProductionRouteRegistry';
 import {
   createProjectOverviewRouteBindingForRuntime,
-  desktopRoutePermissionsForContext,
+  desktopRouteBasePermissionsForAuth,
   resolveDesktopRouteCapability,
 } from './features/navigation/desktopProductionRouteRuntime';
+import {
+  createCloudDesktopRoutePermissionResolver,
+  createLocalDesktopRoutePermissionResolver,
+} from './features/navigation/desktopRoutePermissionAuthority';
+import {
+  createCloudDesktopRoutePermissionClient,
+  createLocalDesktopRoutePermissionClient,
+} from './features/navigation/desktopRoutePermissionHttpClient';
 import { createDesktopRouteScopeTransaction } from './features/navigation/desktopRouteScopeTransaction';
 import {
   detectShortcutPlatform,
@@ -1723,7 +1731,6 @@ class WorkspaceSsoFlowError extends Error {
 
 const SIDEBAR_WIDTH_STORAGE_KEY = 'agistack.desktop.sidebarWidth';
 const SIDEBAR_WIDTH_CONSTRAINTS = { min: 180, max: 420, default: 220 } as const;
-const EMPTY_DESKTOP_ROUTE_PERMISSIONS: ReadonlySet<string> = new Set();
 
 export function App() {
   const runsInNativeDesktop = detectNativeDesktopShell();
@@ -2180,11 +2187,25 @@ export function App() {
     workbenchCapabilityClient,
     identityAuthenticated && showRuntimeConfig,
   );
-  const resolveProductionRoutePermissions = useCallback(
-    (context: Parameters<typeof desktopRoutePermissionsForContext>[1]) =>
-      desktopRoutePermissionsForContext(auth, context),
+  const productionRouteBasePermissions = useMemo(
+    () => desktopRouteBasePermissionsForAuth(auth),
     [auth],
   );
+  const productionRoutePermissionClient = useMemo(
+    () =>
+      config.mode === 'cloud'
+        ? createCloudDesktopRoutePermissionClient(config)
+        : createLocalDesktopRoutePermissionClient(config),
+    [config],
+  );
+  const resolveProductionRoutePermissionSnapshot = useMemo(() => {
+    const options = Object.freeze({
+      client: productionRoutePermissionClient,
+    });
+    return config.mode === 'cloud'
+      ? createCloudDesktopRoutePermissionResolver(options)
+      : createLocalDesktopRoutePermissionResolver(options);
+  }, [config.mode, productionRoutePermissionClient]);
   const resolveProductionRouteCapability = useCallback(
     (
       capability: string,
@@ -8382,10 +8403,12 @@ export function App() {
               location={desktopProductionRouteLocation}
               mode={config.mode}
               navigation={desktopProductionRouteNavigation}
-              permissions={EMPTY_DESKTOP_ROUTE_PERMISSIONS}
+              permissions={productionRouteBasePermissions}
               registry={desktopProductionRouteRegistry}
               resolveCapability={resolveProductionRouteCapability}
-              resolvePermissions={resolveProductionRoutePermissions}
+              resolvePermissionSnapshot={
+                resolveProductionRoutePermissionSnapshot
+              }
               switchScope={switchProductionRouteScope}
             >
               {error ? (

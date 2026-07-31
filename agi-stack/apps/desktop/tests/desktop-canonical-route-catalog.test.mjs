@@ -98,7 +98,27 @@ test('catalog gates route entry independently from action permission inventory',
   const projectSettings = registry.byId.get('project-project-settings');
   const runtimes = registry.byId.get('tenant-tenant-runtimes');
   const providers = registry.byId.get('tenant-tenant-providers');
+  const agentWorkspace = registry.byId.get(
+    'agent-workspace-tenant-agent-workspace',
+  );
+  const tenantWorkspaces = registry.byId.get('tenant-tenant-workspaces');
+  const projectWorkspaces = registry.byId.get('project-project-workspaces');
+  const blackboard = registry.byId.get(
+    'project-blackboard-dynamic-project-blackboard',
+  );
 
+  assert.deepEqual(agentWorkspace.requiredPermission, [
+    ['authenticated', 'tenant_member'],
+  ]);
+  assert.deepEqual(tenantWorkspaces.requiredPermission, [
+    ['authenticated', 'tenant_member'],
+  ]);
+  assert.deepEqual(projectWorkspaces.requiredPermission, [
+    ['authenticated', 'project_member'],
+  ]);
+  assert.deepEqual(blackboard.requiredPermission, [
+    ['authenticated', 'project_member'],
+  ]);
   assert.deepEqual(projectSettings.requiredPermission, [
     ['authenticated', 'project_member'],
   ]);

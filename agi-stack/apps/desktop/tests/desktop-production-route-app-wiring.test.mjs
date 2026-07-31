@@ -45,21 +45,34 @@ test('App owns one production route registry with latest Project Overview, Searc
   );
 });
 
-test('App injects exact permission and real capability snapshot resolvers', () => {
+test('App injects async Cloud or Local permission authority and real capability snapshots', () => {
+  assert.match(appSource, /desktopRouteBasePermissionsForAuth\(auth\)/u);
   assert.match(
     appSource,
-    /desktopRoutePermissionsForContext\(auth,\s*context\)/u,
+    /config\.mode === 'cloud'[\s\S]*createCloudDesktopRoutePermissionClient\(config\)[\s\S]*createLocalDesktopRoutePermissionClient\(config\)/u,
   );
+  assert.match(
+    appSource,
+    /createCloudDesktopRoutePermissionResolver\(options\)[\s\S]*createLocalDesktopRoutePermissionResolver\(options\)/u,
+  );
+  assert.doesNotMatch(
+    appSource,
+    /getActiveConversationId:\s*\(\)\s*=>/u,
+  );
+  assert.doesNotMatch(appSource, /getActiveWorkspaceId:\s*\(\)\s*=>/u);
   assert.match(
     appSource,
     /resolveDesktopRouteCapability\(\s*desktopCapabilityState\.snapshot,\s*capability,\s*context,?\s*\)/u,
   );
-  assert.match(appSource, /resolvePermissions=\{resolveProductionRoutePermissions\}/u);
+  assert.match(
+    appSource,
+    /resolvePermissionSnapshot=\{\s*resolveProductionRoutePermissionSnapshot\s*\}/u,
+  );
   assert.match(appSource, /resolveCapability=\{resolveProductionRouteCapability\}/u);
-  assert.match(routerSource, /resolvePermissions/u);
+  assert.match(routerSource, /resolvePermissionSnapshot/u);
   assert.match(
     routerSource,
-    /resolvePermissions,\s*resolveCapability,\s*switchScope/u,
+    /resolvePermissions,\s*resolvePermissionSnapshot,\s*resolveCapability,\s*switchScope/u,
   );
 });
 

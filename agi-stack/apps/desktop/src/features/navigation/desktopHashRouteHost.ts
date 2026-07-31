@@ -10,6 +10,12 @@ import {
   type DesktopRouteMatch,
   type DesktopRouteRegistry,
 } from './desktopRouteRegistry';
+import {
+  DesktopRoutePermissionAuthorityError,
+  desktopRoutePermissionSnapshotMatchesContext,
+  parseDesktopRoutePermissionSnapshot,
+  type DesktopRoutePermissionSnapshotResolver,
+} from './desktopRoutePermissionAuthority';
 
 export type DesktopHashLocationPort = Readonly<{
   readHash: () => string;
@@ -36,6 +42,7 @@ export type DesktopHashRouteHostOptions<TModule> = Readonly<{
   mode: DesktopRouteRuntimeMode;
   permissions: ReadonlySet<string>;
   resolvePermissions?: DesktopRoutePermissionResolver;
+  resolvePermissionSnapshot?: DesktopRoutePermissionSnapshotResolver;
   resolveCapability: DesktopRouteCapabilityResolver;
   switchScope: DesktopRouteScopeSwitcher;
 }>;
@@ -101,6 +108,7 @@ export function createDesktopHashRouteHost<TModule>(
   let transitionRevision = 0;
   let attempt = 0;
   let started = false;
+  const permissionRevisions = new Map<string, number>();
 
   const emit = (nextState: DesktopRouteHostState<TModule>) => {
     state = Object.freeze(nextState);
@@ -174,11 +182,13 @@ export function createDesktopHashRouteHost<TModule>(
     });
     if (
       permissionPreflight.status === 'forbidden' &&
-      (permissionPreflight.missingPermissions.includes('authenticated') ||
-        !canDeferScopeMembershipPermissions(
-          match,
-          permissionPreflight.missingPermissions,
-        ))
+      (options.resolvePermissionSnapshot
+        ? permissionPreflight.missingPermissions.includes('authenticated')
+        : permissionPreflight.missingPermissions.includes('authenticated') ||
+          !canDeferScopeMembershipPermissions(
+            match,
+            permissionPreflight.missingPermissions,
+          ))
     ) {
       emit({
         status: 'forbidden',
@@ -227,7 +237,9 @@ export function createDesktopHashRouteHost<TModule>(
     const access = evaluateDesktopRouteAccess({
       match,
       mode: options.mode,
-      permissions,
+      permissions: options.resolvePermissionSnapshot
+        ? structuralPermissions
+        : permissions,
       capability,
     });
     const authorityAccess = evaluateDesktopRouteAccess({
@@ -297,18 +309,50 @@ export function createDesktopHashRouteHost<TModule>(
 
     let settledPermissions: ReadonlySet<string>;
     try {
-      settledPermissions = options.resolvePermissions
-        ? options.resolvePermissions(match.context)
-        : options.permissions;
+      if (options.resolvePermissionSnapshot) {
+        const snapshot = parseDesktopRoutePermissionSnapshot(
+          await options.resolvePermissionSnapshot(
+            match.context,
+            controller.signal,
+          ),
+        );
+        if (!currentTransition(revision, controller.signal)) return;
+        if (
+          !desktopRoutePermissionSnapshotMatchesContext(snapshot, match.context)
+        ) {
+          throw new DesktopRoutePermissionAuthorityError(
+            'desktop_route_permission_scope_mismatch',
+          );
+        }
+        const revisionKey = permissionRevisionKey(snapshot.scope);
+        const previousRevision = permissionRevisions.get(revisionKey);
+        if (
+          previousRevision !== undefined &&
+          snapshot.authority_revision < previousRevision
+        ) {
+          throw new DesktopRoutePermissionAuthorityError(
+            'desktop_route_permission_revision_stale',
+          );
+        }
+        permissionRevisions.set(revisionKey, snapshot.authority_revision);
+        settledPermissions = new Set(snapshot.permissions);
+      } else {
+        settledPermissions = options.resolvePermissions
+          ? options.resolvePermissions(match.context)
+          : options.permissions;
+      }
       if (!settledPermissions || typeof settledPermissions.has !== 'function') {
         throw new Error('desktop_route_permissions_invalid');
       }
-    } catch {
+    } catch (caught) {
       if (!currentTransition(revision, controller.signal)) return;
       emit({
         status: 'error',
         match,
-        reasonCode: 'desktop_route_permission_resolution_failed',
+        reasonCode:
+          caught instanceof DesktopRoutePermissionAuthorityError
+            ? caught.reasonCode
+            : 'desktop_route_permission_resolution_failed',
         retryable: true,
       });
       return;
@@ -409,4 +453,22 @@ export function createDesktopHashRouteHost<TModule>(
       await resolveCurrentHash();
     },
   });
+}
+
+function permissionRevisionKey(
+  scope: Readonly<{
+    tenant_id: string | null;
+    project_id: string | null;
+    workspace_id: string | null;
+    instance_id: string | null;
+    conversation_id: string | null;
+  }>,
+): string {
+  return [
+    scope.tenant_id ?? '',
+    scope.project_id ?? '',
+    scope.workspace_id ?? '',
+    scope.instance_id ?? '',
+    scope.conversation_id ?? '',
+  ].join('\u0000');
 }

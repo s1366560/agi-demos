@@ -42,7 +42,9 @@ class User(BaseModel):
     email: str
     name: str
     roles: list[str] = Field(default_factory=list)
+    global_roles: list[str] = Field(default_factory=list)
     is_active: bool = True
+    is_superuser: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     profile: dict[str, Any] | None = Field(default_factory=dict)
     preferred_language: str | None = None
@@ -108,7 +110,9 @@ class UserResponse(BaseModel):
     email: str
     name: str
     roles: list[str]
+    global_roles: list[str] = Field(default_factory=list)
     is_active: bool
+    is_superuser: bool = False
     created_at: datetime
     profile: dict[str, Any] | None = Field(default_factory=dict)
 

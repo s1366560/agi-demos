@@ -5,7 +5,7 @@
       "route_entry_permissions": [
         {
           "authentication": "authenticated",
-          "authorization": ["tenant_member", "conversation_access"]
+          "authorization": ["tenant_member"]
         }
       ]
     },
@@ -32,7 +32,7 @@
       "route_entry_permissions": [
         {
           "authentication": "authenticated",
-          "authorization": ["workspace_member"]
+          "authorization": ["tenant_member"]
         }
       ]
     },
@@ -332,7 +332,7 @@
       "route_entry_permissions": [
         {
           "authentication": "authenticated",
-          "authorization": ["workspace_member"]
+          "authorization": ["project_member"]
         }
       ]
     },
@@ -341,7 +341,7 @@
       "route_entry_permissions": [
         {
           "authentication": "authenticated",
-          "authorization": ["workspace_member"]
+          "authorization": ["project_member"]
         }
       ]
     },

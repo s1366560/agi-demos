@@ -17,6 +17,41 @@ from src.infrastructure.adapters.primary.web.routers.auth import (
 
 @pytest.mark.unit
 class TestAuthRouter:
+    async def test_read_users_me_exposes_structured_superuser_authority(self) -> None:
+        current_user = Mock(
+            id="global-user",
+            email="global@example.com",
+            full_name="Global User",
+            is_active=True,
+            is_superuser=True,
+            created_at=datetime.now(UTC),
+            profile={},
+            preferred_language="en-US",
+        )
+        result = Mock()
+        result.scalar_one_or_none.return_value = SimpleNamespace(
+            roles=[
+                SimpleNamespace(
+                    role=SimpleNamespace(name="admin"),
+                    tenant_id=None,
+                    project_id=None,
+                ),
+                SimpleNamespace(
+                    role=SimpleNamespace(name="tenant_admin"),
+                    tenant_id="tenant-1",
+                    project_id=None,
+                ),
+            ]
+        )
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=result)
+
+        response = await read_users_me(current_user=current_user, db=db)
+
+        assert response.is_superuser is True
+        assert response.roles == ["admin", "tenant_admin"]
+        assert response.global_roles == ["admin"]
+
     async def test_read_users_me_returns_persisted_profile(self) -> None:
         created_at = datetime.now(UTC)
         current_user = Mock()

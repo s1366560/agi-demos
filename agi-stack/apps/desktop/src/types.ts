@@ -145,7 +145,9 @@ export type CurrentUser = {
   email: string;
   name: string;
   roles: string[];
+  global_roles?: string[];
   is_active: boolean;
+  is_superuser?: boolean;
   created_at: string;
   profile: Record<string, unknown>;
   preferred_language?: string | null;

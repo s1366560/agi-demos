@@ -60,6 +60,12 @@ export function desktopRoutePermissionsForContext(
   return permissions;
 }
 
+export function desktopRouteBasePermissionsForAuth(
+  auth: AuthState,
+): ReadonlySet<string> {
+  return desktopRoutePermissionsForContext(auth, Object.freeze({}));
+}
+
 export function resolveDesktopRouteCapability(
   snapshot: DesktopCapabilitySnapshot | null,
   capability: string,

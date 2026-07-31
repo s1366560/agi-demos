@@ -5,6 +5,7 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const {
   createProjectOverviewRouteBindingForRuntime,
+  desktopRouteBasePermissionsForAuth,
   desktopRoutePermissionsForContext,
   resolveDesktopRouteCapability,
 } = require(
@@ -49,6 +50,24 @@ test('permission projection requires authenticated exact catalog membership', ()
   assert.deepEqual(
     [...desktopRoutePermissionsForContext(projectMember, routeContext)],
     ['authenticated', 'tenant_member', 'project_member'],
+  );
+});
+
+test('base permission projection carries only authenticated route preflight authority', () => {
+  assert.deepEqual(
+    [...desktopRouteBasePermissionsForAuth(authState())],
+    ['authenticated'],
+  );
+  assert.deepEqual(
+    [
+      ...desktopRouteBasePermissionsForAuth(
+        authState({
+          tenants: [{ id: tenantId }],
+          projects: [{ id: projectId, tenant_id: tenantId }],
+        }),
+      ),
+    ],
+    ['authenticated'],
   );
 });
 
