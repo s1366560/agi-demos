@@ -498,6 +498,24 @@ test('command palette cannot bypass the workspace and conversation hierarchy', (
   assert.doesNotMatch(commandItems, /Open in VS Code|Run selected session|Search local memory/);
 });
 
+test('command palette opens Tenant Tasks through the scoped production route registry', () => {
+  const commandItems =
+    appSource.match(/const commandItems: CommandPaletteItem\[\] = \[[\s\S]*?\n  \];/)?.[0] ?? '';
+
+  assert.match(commandItems, /id: 'tenant-tasks'/);
+  assert.match(commandItems, /label: t\('tenantTasks\.title'\)/);
+  assert.match(commandItems, /description: t\('tenantTasks\.commandDescription'\)/);
+  assert.match(
+    commandItems,
+    /desktopProductionRouteRegistry\.byId\.get\(TENANT_TASKS_ROUTE_ID\)/,
+  );
+  assert.match(
+    commandItems,
+    /buildDesktopRoutePath\(tenantTasksRoute, \{\s*tenantId: config\.tenantId,/,
+  );
+  assert.match(commandItems, /desktopProductionRouteNavigation\.openPath\(tenantTasksPath\)/);
+});
+
 test('connection recovery cannot bypass governed model or workspace settings', () => {
   assert.match(runtimeConfigSource, /update\('apiBaseUrl'/);
   assert.match(runtimeConfigSource, /update\('apiKey'/);

@@ -296,6 +296,7 @@ import {
   TENANT_TASKS_ROUTE_ID,
   TENANT_WORKSPACES_ROUTE_ID,
 } from './features/navigation/desktopProductionRouteRegistry';
+import { buildDesktopRoutePath } from './features/navigation/desktopRouteRegistry';
 import {
   createProjectOverviewRouteBindingForRuntime,
   createTenantOverviewRouteBindingForRuntime,
@@ -1977,6 +1978,9 @@ export function App() {
       Object.freeze({
         clearHash: () => {
           window.location.hash = '';
+        },
+        openPath: (path: string) => {
+          window.location.hash = path;
         },
       }),
     [],
@@ -7796,6 +7800,22 @@ export function App() {
       description: t('automations.commandDescription'),
       icon: <ActivityLogIcon />,
       onSelect: () => switchSection('automations'),
+    },
+    {
+      id: 'tenant-tasks',
+      label: t('tenantTasks.title'),
+      description: t('tenantTasks.commandDescription'),
+      icon: <ActivityLogIcon />,
+      disabled: !identityAuthenticated || !config.tenantId.trim(),
+      onSelect: () => {
+        const tenantTasksRoute =
+          desktopProductionRouteRegistry.byId.get(TENANT_TASKS_ROUTE_ID);
+        if (!tenantTasksRoute) return;
+        const tenantTasksPath = buildDesktopRoutePath(tenantTasksRoute, {
+          tenantId: config.tenantId,
+        });
+        desktopProductionRouteNavigation.openPath(tenantTasksPath);
+      },
     },
     {
       id: 'settings',

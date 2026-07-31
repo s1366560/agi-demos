@@ -3,6 +3,7 @@ export const tenantTasksEnUS: Readonly<Record<string, string>> = {
   'tenantTasks.title': 'Task Dashboard',
   'tenantTasks.subtitle':
     'Inspect task throughput, queue health and authoritative task actions.',
+  'tenantTasks.commandDescription': 'Open the tenant-scoped native task dashboard.',
   'tenantTasks.resumePending': 'Resume pending',
   'tenantTasks.scope.tenant': 'Tenant scope',
   'tenantTasks.scope.project': 'Selected project',
@@ -87,6 +88,7 @@ export const tenantTasksZhCN: Readonly<Record<string, string>> = {
   'tenantTasks.eyebrow': '租户运营',
   'tenantTasks.title': '任务看板',
   'tenantTasks.subtitle': '查看任务吞吐、队列健康状态与权威任务操作。',
+  'tenantTasks.commandDescription': '打开当前租户范围的原生任务看板。',
   'tenantTasks.resumePending': '恢复待处理任务',
   'tenantTasks.scope.tenant': '租户范围',
   'tenantTasks.scope.project': '当前项目',
