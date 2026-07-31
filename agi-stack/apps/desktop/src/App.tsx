@@ -293,11 +293,13 @@ import {
   PROJECT_SEARCH_ROUTE_ID,
   TENANT_OVERVIEW_ROUTE_ID,
   TENANT_PROJECTS_ROUTE_ID,
+  TENANT_WORKSPACES_ROUTE_ID,
 } from './features/navigation/desktopProductionRouteRegistry';
 import {
   createProjectOverviewRouteBindingForRuntime,
   createTenantOverviewRouteBindingForRuntime,
   createTenantProjectsRouteBindingForRuntime,
+  createTenantWorkspacesRouteBindingForRuntime,
   desktopRouteBasePermissionsForAuth,
   resolveDesktopRouteCapability,
 } from './features/navigation/desktopProductionRouteRuntime';
@@ -318,6 +320,7 @@ import {
 import { createProjectOverviewRouteModuleLoader } from './features/project/projectOverviewRouteModule';
 import { createTenantOverviewRouteModuleLoader } from './features/tenant/tenantOverviewRouteModule';
 import { createTenantProjectsRouteModuleLoader } from './features/tenant/tenantProjectsRouteModule';
+import { createTenantWorkspacesRouteModuleLoader } from './features/tenant/tenantWorkspacesRouteModule';
 import { DesktopSearch } from './features/search/DesktopSearch';
 import {
   createProjectSearchRouteModuleLoader,
@@ -1991,6 +1994,14 @@ export function App() {
             createTenantProjectsRouteModuleLoader({
               createBinding: (context) =>
                 createTenantProjectsRouteBindingForRuntime(
+                  configRef.current,
+                  context,
+                ),
+            }),
+          [TENANT_WORKSPACES_ROUTE_ID]:
+            createTenantWorkspacesRouteModuleLoader({
+              createBinding: (context) =>
+                createTenantWorkspacesRouteBindingForRuntime(
                   configRef.current,
                   context,
                 ),

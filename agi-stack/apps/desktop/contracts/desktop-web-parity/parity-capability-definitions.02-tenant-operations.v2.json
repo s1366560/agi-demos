@@ -520,9 +520,16 @@
         }
       ],
       "cloud_status": "partial",
+      "cloud_reason_code": "desktop_tenant_workspaces_advanced_management_partial",
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/api/client.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantWorkspacesRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/TenantWorkspacesPage.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/tenantWorkspacesController.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantWorkspacesHttpClient.ts",
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceDock.tsx",
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceCreateDialog.tsx",
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceSettingsDialog.tsx",
@@ -536,11 +543,18 @@
       "local_reason_code": "local_workspace_lifecycle_partial",
       "local_deviation": "The sidecar supports native workspace list and create authority. Workspace update, delete, member management, and Agent binding operations remain unavailable until the revisioned Local workspace contract is completed.",
       "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantWorkspacesRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/TenantWorkspacesPage.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/tenantWorkspacesController.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantWorkspacesHttpClient.ts",
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceDock.tsx",
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceCreateDialog.tsx",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
       ],
-      "judgment_rationale": "Tenant Workspace list and creation share one Web source pair and one scheduling model. WorkspaceList also opens Blackboard and loads each workspace summary from objectives, then a plan snapshot, then tasks as the fallback. Settings, member management, and Agent binding are owned by their separately audited production capability rather than inferred from service methods. Cloud Desktop wires list and create through the dock and create dialog, opens the native Blackboard, applies update and Agent binding through the workspace editor role, and reserves member management for the workspace owner using App, the API client, WorkspaceSettingsDialog, WorkspaceMembersPanel, workspaceMembersModel, WorkspaceAgentBindingsPanel, and workspaceAgentBindingsModel. The authority has no workspace manager role; delete and the complete routed lifecycle remain absent. Local Desktop supports authenticated native list, create, and Blackboard navigation while the remaining lifecycle and collaboration mutations are unavailable."
+      "judgment_rationale": "The previous route verdict is stale. Web workspace summary inspection reads objectives, then a plan snapshot, then tasks as its fallback before Blackboard navigation. Desktop now mounts a native Tenant Workspaces route with selected-project scope, request cancellation, loading, empty, ready, degraded, conflict, forbidden, unavailable and retry states. Cloud and Local both bind their production list and create authorities through the same page-level client port. The route remains partial because the compact catalog does not yet expose Web workspace summary inspection or Blackboard navigation, while update, member management and Agent bindings remain in the existing Cloud workbench surfaces. Local update, delete, member management and Agent bindings remain structurally unavailable under the stable local_workspace_lifecycle_partial reason."
     },
     {
       "id": "tenant-tenant-tasks",

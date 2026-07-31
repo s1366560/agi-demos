@@ -19,6 +19,7 @@ const {
   PROJECT_SEARCH_ROUTE_ID,
   TENANT_OVERVIEW_ROUTE_ID,
   TENANT_PROJECTS_ROUTE_ID,
+  TENANT_WORKSPACES_ROUTE_ID,
   createDesktopProductionRouteRegistry,
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js');
 const {
@@ -134,12 +135,29 @@ function implementedTenantProjectsModule(overrides = {}) {
   });
 }
 
+function implementedTenantWorkspacesModule(overrides = {}) {
+  function TenantWorkspacesRoute() {
+    return React.createElement('section', null, 'Tenant Workspaces route');
+  }
+  return Object.freeze({
+    routeId: TENANT_WORKSPACES_ROUTE_ID,
+    disposition: 'implemented',
+    availability: 'available',
+    reasonCode: null,
+    capability: TENANT_WORKSPACES_ROUTE_ID,
+    localPolicy: 'native_equivalent',
+    Surface: TenantWorkspacesRoute,
+    ...overrides,
+  });
+}
+
 function createRegistry(
   projectLoader = async () => implementedProjectModule(),
   searchLoader = async () => implementedSearchModule(),
   cronJobsLoader = async () => implementedCronJobsModule(),
   tenantLoader = async () => implementedTenantModule(),
   tenantProjectsLoader = async () => implementedTenantProjectsModule(),
+  tenantWorkspacesLoader = async () => implementedTenantWorkspacesModule(),
 ) {
   return createDesktopProductionRouteRegistry({
     implementedLoaders: {
@@ -148,6 +166,7 @@ function createRegistry(
       [PROJECT_CRON_JOBS_ROUTE_ID]: cronJobsLoader,
       [TENANT_OVERVIEW_ROUTE_ID]: tenantLoader,
       [TENANT_PROJECTS_ROUTE_ID]: tenantProjectsLoader,
+      [TENANT_WORKSPACES_ROUTE_ID]: tenantWorkspacesLoader,
     },
   });
 }
@@ -158,6 +177,7 @@ test('production registry requires every implemented project route loader', () =
   assert.equal(PROJECT_CRON_JOBS_ROUTE_ID, 'project-project-cron-jobs');
   assert.equal(TENANT_OVERVIEW_ROUTE_ID, 'tenant-tenant-overview');
   assert.equal(TENANT_PROJECTS_ROUTE_ID, 'tenant-tenant-projects');
+  assert.equal(TENANT_WORKSPACES_ROUTE_ID, 'tenant-tenant-workspaces');
   assert.throws(
     () =>
       createDesktopProductionRouteRegistry({
@@ -224,17 +244,19 @@ test('production registry requires every implemented project route loader', () =
   );
 });
 
-test('all 51 production loaders remain lazy and five routes are real modules', async () => {
+test('all 51 production loaders remain lazy and six routes are real modules', async () => {
   let projectLoadCount = 0;
   let searchLoadCount = 0;
   let cronJobsLoadCount = 0;
   let tenantLoadCount = 0;
   let tenantProjectsLoadCount = 0;
+  let tenantWorkspacesLoadCount = 0;
   const projectModule = implementedProjectModule();
   const searchModule = implementedSearchModule();
   const cronJobsModule = implementedCronJobsModule();
   const tenantModule = implementedTenantModule();
   const tenantProjectsModule = implementedTenantProjectsModule();
+  const tenantWorkspacesModule = implementedTenantWorkspacesModule();
   const registry = createRegistry(
     async () => {
       projectLoadCount += 1;
@@ -256,6 +278,10 @@ test('all 51 production loaders remain lazy and five routes are real modules', a
       tenantProjectsLoadCount += 1;
       return tenantProjectsModule;
     },
+    async () => {
+      tenantWorkspacesLoadCount += 1;
+      return tenantWorkspacesModule;
+    },
   );
 
   assert.equal(registry.definitions.length, 51);
@@ -264,6 +290,7 @@ test('all 51 production loaders remain lazy and five routes are real modules', a
   assert.equal(cronJobsLoadCount, 0);
   assert.equal(tenantLoadCount, 0);
   assert.equal(tenantProjectsLoadCount, 0);
+  assert.equal(tenantWorkspacesLoadCount, 0);
 
   const loaded = await Promise.all(
     registry.definitions.map(async (definition) => ({
@@ -276,6 +303,7 @@ test('all 51 production loaders remain lazy and five routes are real modules', a
   assert.equal(cronJobsLoadCount, 1);
   assert.equal(tenantLoadCount, 1);
   assert.equal(tenantProjectsLoadCount, 1);
+  assert.equal(tenantWorkspacesLoadCount, 1);
 
   const implemented = loaded.filter(
     ({ module }) => module.disposition === 'implemented',
@@ -283,7 +311,7 @@ test('all 51 production loaders remain lazy and five routes are real modules', a
   const planned = loaded.filter(
     ({ module }) => module.disposition === 'planned',
   );
-  assert.equal(implemented.length, 5);
+  assert.equal(implemented.length, 6);
   assert.deepEqual(
     implemented.map(({ definition }) => definition.id).sort(),
     [
@@ -292,6 +320,7 @@ test('all 51 production loaders remain lazy and five routes are real modules', a
       PROJECT_CRON_JOBS_ROUTE_ID,
       TENANT_OVERVIEW_ROUTE_ID,
       TENANT_PROJECTS_ROUTE_ID,
+      TENANT_WORKSPACES_ROUTE_ID,
     ].sort(),
   );
   assert.equal(
@@ -324,7 +353,13 @@ test('all 51 production loaders remain lazy and five routes are real modules', a
     ).module,
     tenantProjectsModule,
   );
-  assert.equal(planned.length, 46);
+  assert.equal(
+    implemented.find(
+      ({ definition }) => definition.id === TENANT_WORKSPACES_ROUTE_ID,
+    ).module,
+    tenantWorkspacesModule,
+  );
+  assert.equal(planned.length, 45);
 
   for (const { definition, module } of planned) {
     assert.equal(module.routeId, definition.id);
