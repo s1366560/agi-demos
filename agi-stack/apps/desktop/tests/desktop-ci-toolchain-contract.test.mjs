@@ -157,8 +157,7 @@ test("ordinary PR CI runs the complete desktop parity gate", () => {
 test("Web, Desktop, CI, E2E, and release use one integrity-pinned pnpm toolchain", () => {
   assert.equal(webPackage.packageManager, PACKAGE_MANAGER_DECLARATION);
   assert.equal(desktopPackage.packageManager, PACKAGE_MANAGER_DECLARATION);
-  assert.equal(desktopPackage.devEngines.packageManager.version, PNPM_VERSION);
-  assert.equal(desktopPackage.devEngines.packageManager.onFail, "error");
+  assert.equal(desktopPackage.devEngines, undefined);
   assert.equal(desktopPackage.pnpm, undefined);
   assert.equal(desktopPackage.devDependencies["electron-builder"], "26.15.3");
   assert.deepEqual(desktopWorkspace.packages, ["."]);
