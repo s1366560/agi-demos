@@ -21,6 +21,10 @@ import {
   tenantProjectsZhCN,
 } from './features/tenant/locales/tenantProjectsMessages';
 import {
+  tenantTasksEnUS,
+  tenantTasksZhCN,
+} from './features/tenant/locales/tenantTasksMessages';
+import {
   tenantWorkspacesEnUS,
   tenantWorkspacesZhCN,
 } from './features/tenant/locales/tenantWorkspacesMessages';
@@ -43,6 +47,7 @@ const enUS: Record<string, string> = {
   ...projectOverviewEnUS,
   ...tenantOverviewEnUS,
   ...tenantProjectsEnUS,
+  ...tenantTasksEnUS,
   ...tenantWorkspacesEnUS,
   'common.close': 'Close',
   'common.cancel': 'Cancel',
@@ -3639,6 +3644,7 @@ const zhCN: Record<string, string> = {
   ...projectOverviewZhCN,
   ...tenantOverviewZhCN,
   ...tenantProjectsZhCN,
+  ...tenantTasksZhCN,
   ...tenantWorkspacesZhCN,
   'common.close': '关闭',
   'common.cancel': '取消',

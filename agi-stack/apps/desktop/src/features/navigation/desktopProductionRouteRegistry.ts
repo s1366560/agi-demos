@@ -24,6 +24,7 @@ export const PROJECT_CRON_JOBS_ROUTE_ID =
 export const TENANT_OVERVIEW_ROUTE_ID = 'tenant-tenant-overview' as const;
 export const TENANT_PROJECTS_ROUTE_ID = 'tenant-tenant-projects' as const;
 export const TENANT_WORKSPACES_ROUTE_ID = 'tenant-tenant-workspaces' as const;
+export const TENANT_TASKS_ROUTE_ID = 'tenant-tenant-tasks' as const;
 
 const IMPLEMENTED_ROUTE_IDS = new Set<CanonicalDesktopRouteId>([
   PROJECT_OVERVIEW_ROUTE_ID,
@@ -32,6 +33,7 @@ const IMPLEMENTED_ROUTE_IDS = new Set<CanonicalDesktopRouteId>([
   TENANT_OVERVIEW_ROUTE_ID,
   TENANT_PROJECTS_ROUTE_ID,
   TENANT_WORKSPACES_ROUTE_ID,
+  TENANT_TASKS_ROUTE_ID,
 ]);
 const CANONICAL_ROUTE_ID_SET = new Set<string>(CANONICAL_DESKTOP_ROUTE_IDS);
 

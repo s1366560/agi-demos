@@ -28,6 +28,7 @@ const {
   PROJECT_SEARCH_ROUTE_ID,
   TENANT_OVERVIEW_ROUTE_ID,
   TENANT_PROJECTS_ROUTE_ID,
+  TENANT_TASKS_ROUTE_ID,
   TENANT_WORKSPACES_ROUTE_ID,
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js'
@@ -77,6 +78,7 @@ test('factory stays lazy and publishes the exact implemented route module contra
       [TENANT_OVERVIEW_ROUTE_ID]: implementedTenantLoader(),
       [TENANT_PROJECTS_ROUTE_ID]: implementedRouteLoader(TENANT_PROJECTS_ROUTE_ID),
       [TENANT_WORKSPACES_ROUTE_ID]: implementedRouteLoader(TENANT_WORKSPACES_ROUTE_ID),
+      [TENANT_TASKS_ROUTE_ID]: implementedRouteLoader(TENANT_TASKS_ROUTE_ID),
     },
   });
   const module = await registry.byId.get(PROJECT_OVERVIEW_ROUTE_ID).loader();

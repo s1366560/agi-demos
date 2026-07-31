@@ -1,0 +1,331 @@
+.tenant-tasks-page {
+  height: 100%;
+  overflow: auto;
+  padding: 28px;
+  color: var(--desktop-text);
+  background: var(--desktop-surface-1);
+}
+
+.tenant-tasks-header,
+.tenant-tasks-header-actions,
+.tenant-tasks-notice,
+.tenant-tasks-scope,
+.tenant-tasks-queue header,
+.tenant-tasks-list > header,
+.tenant-tasks-list > header > div,
+.tenant-tasks-list > footer,
+.tenant-tasks-list > footer > div,
+.tenant-tasks-links {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tenant-tasks-header {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.tenant-tasks-header > div:first-child {
+  display: grid;
+  gap: 6px;
+}
+
+.tenant-tasks-header span,
+.tenant-tasks-scope span {
+  color: var(--desktop-faint);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.tenant-tasks-header h1,
+.tenant-tasks-queue h2,
+.tenant-tasks-list h2,
+.tenant-tasks-empty h3,
+.tenant-tasks-state h1 {
+  margin: 0;
+}
+
+.tenant-tasks-header p,
+.tenant-tasks-queue p,
+.tenant-tasks-empty p,
+.tenant-tasks-state p {
+  margin: 0;
+  color: var(--desktop-muted);
+}
+
+.tenant-tasks-notice,
+.tenant-tasks-scope {
+  margin-top: 18px;
+  padding: 11px 13px;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 9px;
+  background: var(--desktop-surface-2);
+}
+
+.tenant-tasks-notice code,
+.tenant-tasks-scope small {
+  margin-left: auto;
+  color: var(--desktop-faint);
+}
+
+.tenant-tasks-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.tenant-tasks-stats article,
+.tenant-tasks-queue,
+.tenant-tasks-list,
+.tenant-tasks-empty {
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 12px;
+  background: var(--desktop-surface-2);
+}
+
+.tenant-tasks-stats article {
+  display: grid;
+  gap: 9px;
+  padding: 16px;
+}
+
+.tenant-tasks-stats span {
+  color: var(--desktop-muted);
+  font-size: 12px;
+}
+
+.tenant-tasks-stats strong {
+  font-size: 24px;
+}
+
+.tenant-tasks-stats small {
+  color: var(--red-9);
+}
+
+.tenant-tasks-queue {
+  margin-top: 14px;
+  padding: 18px;
+}
+
+.tenant-tasks-queue header {
+  justify-content: space-between;
+}
+
+.tenant-tasks-queue header > div {
+  display: grid;
+  gap: 5px;
+}
+
+.tenant-tasks-queue header > strong {
+  font-size: 28px;
+}
+
+.tenant-tasks-queue-bars {
+  display: flex;
+  height: 90px;
+  align-items: end;
+  gap: 5px;
+  margin-top: 18px;
+  border-bottom: 1px solid var(--desktop-border);
+}
+
+.tenant-tasks-queue-bars i {
+  flex: 1;
+  min-height: 4px;
+  border-radius: 3px 3px 0 0;
+  background: var(--desktop-cyan);
+  opacity: 0.7;
+}
+
+.tenant-tasks-queue-unavailable {
+  margin-top: 18px !important;
+  padding: 12px;
+  border: 1px dashed var(--desktop-border);
+  border-radius: 8px;
+}
+
+.tenant-tasks-list {
+  margin-top: 14px;
+  overflow: hidden;
+}
+
+.tenant-tasks-list > header,
+.tenant-tasks-list > footer {
+  justify-content: space-between;
+  padding: 14px 16px;
+}
+
+.tenant-tasks-list > header {
+  border-bottom: 1px solid var(--desktop-border-soft);
+}
+
+.tenant-tasks-list label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.tenant-tasks-list label > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.tenant-tasks-table-scroll {
+  overflow-x: auto;
+}
+
+.tenant-tasks-list table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tenant-tasks-list th,
+.tenant-tasks-list td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--desktop-border-soft);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.tenant-tasks-list th {
+  color: var(--desktop-faint);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.tenant-tasks-list td {
+  color: var(--desktop-muted);
+  font-size: 12px;
+}
+
+.tenant-tasks-list td:nth-child(2) {
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+}
+
+.tenant-tasks-list td:nth-child(2) strong {
+  color: var(--desktop-text);
+}
+
+.tenant-tasks-list td:last-child {
+  white-space: nowrap;
+}
+
+.tenant-tasks-list td:last-child > * {
+  margin-right: 6px;
+}
+
+.tenant-task-status {
+  display: inline-flex;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--desktop-surface-4);
+}
+
+.tenant-task-status.status-processing {
+  color: var(--desktop-cyan);
+}
+
+.tenant-task-status.status-failed {
+  color: var(--red-9);
+}
+
+.tenant-task-status.status-completed {
+  color: var(--green-9);
+}
+
+.tenant-tasks-empty {
+  margin: 16px;
+  padding: 28px;
+}
+
+.tenant-tasks-list > footer {
+  color: var(--desktop-muted);
+  font-size: 12px;
+}
+
+.tenant-tasks-links {
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.tenant-tasks-links a,
+.tenant-tasks-list td a {
+  color: var(--desktop-cyan);
+}
+
+.tenant-tasks-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: color-mix(in srgb, var(--gray-12) 58%, transparent);
+}
+
+.tenant-tasks-dialog-card {
+  position: relative;
+  width: min(460px, 100%);
+  padding: 22px;
+  border: 1px solid var(--desktop-border);
+  border-radius: 14px;
+  background: var(--desktop-surface-3);
+  box-shadow: var(--shadow-6);
+}
+
+.tenant-tasks-dialog-card > button:first-child {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  border: 0;
+  background: transparent;
+  color: var(--desktop-muted);
+}
+
+.tenant-tasks-dialog-card > div:last-child {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.tenant-tasks-state {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px;
+  background: var(--desktop-surface-1);
+}
+
+.tenant-tasks-page :focus-visible,
+.tenant-tasks-state :focus-visible {
+  outline: 2px solid var(--desktop-cyan);
+  outline-offset: 2px;
+}
+
+@media (max-width: 900px) {
+  .tenant-tasks-page {
+    padding: 18px;
+  }
+
+  .tenant-tasks-header,
+  .tenant-tasks-list > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tenant-tasks-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

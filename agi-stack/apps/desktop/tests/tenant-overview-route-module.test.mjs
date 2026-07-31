@@ -15,6 +15,7 @@ const {
   PROJECT_SEARCH_ROUTE_ID,
   TENANT_OVERVIEW_ROUTE_ID,
   TENANT_PROJECTS_ROUTE_ID,
+  TENANT_TASKS_ROUTE_ID,
   TENANT_WORKSPACES_ROUTE_ID,
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js'
@@ -45,6 +46,7 @@ test('Tenant Overview loader stays lazy and renders the exact tenant binding', a
       [PROJECT_CRON_JOBS_ROUTE_ID]: fakeLoader(PROJECT_CRON_JOBS_ROUTE_ID),
       [TENANT_PROJECTS_ROUTE_ID]: fakeLoader(TENANT_PROJECTS_ROUTE_ID),
       [TENANT_WORKSPACES_ROUTE_ID]: fakeLoader(TENANT_WORKSPACES_ROUTE_ID),
+      [TENANT_TASKS_ROUTE_ID]: fakeLoader(TENANT_TASKS_ROUTE_ID),
     },
   });
   assert.equal(bindingCalls, 0);

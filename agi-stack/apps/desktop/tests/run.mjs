@@ -124,6 +124,10 @@ copyFileSync(
   join(desktopRoot, 'src', 'features', 'tenant', 'TenantWorkspacesPage.css'),
   join(compiledTenantDirectory, 'TenantWorkspacesPage.css'),
 );
+copyFileSync(
+  join(desktopRoot, 'src', 'features', 'tenant', 'TenantTasksPage.css'),
+  join(compiledTenantDirectory, 'TenantTasksPage.css'),
+);
 
 const testFiles = discoverTestFiles(testsDirectory);
 assertTestInventoryComplete({ testsDirectory, testFiles });

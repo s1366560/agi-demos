@@ -605,7 +605,37 @@
         {
           "surface": "desktop_cloud",
           "method": "GET",
-          "path": "/api/v1/projects/{project_id}/my-work",
+          "path": "/api/v1/tasks/stats",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tasks/queue-depth",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/tasks/recent",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tasks/{task_id}/retry",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tasks/{task_id}/stop",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/tasks/retry-pending",
           "authority": "cloud_service"
         },
         {
@@ -646,8 +676,8 @@
         "retry-pending",
         "navigate-dead-letter-queue"
       ],
-      "cloud_actions": ["view","list","open-workspace"],
-      "local_actions": ["view","list","open-workspace"],
+      "cloud_actions": ["view","list","search","filter","paginate","refresh","retry-task","stop-task","retry-pending"],
+      "local_actions": ["view","list","search","filter","paginate","refresh","open-workspace"],
       "permission_requirements": [
         {
           "surface": "web",
@@ -670,7 +700,7 @@
         },
         {
           "surface": "desktop_cloud",
-          "actions": ["view","list","open-workspace"],
+          "actions": ["view","list","search","filter","paginate","refresh","retry-task","stop-task","retry-pending"],
           "authentication": "authenticated",
           "authorization": ["project_member"],
           "enforcement": "enforced",
@@ -678,7 +708,7 @@
         },
         {
           "surface": "desktop_local",
-          "actions": ["view","list","open-workspace"],
+          "actions": ["view","list","search","filter","paginate","refresh","open-workspace"],
           "authentication": "authenticated",
           "authorization": ["project_member"],
           "enforcement": "enforced",
@@ -686,15 +716,14 @@
         }
       ],
       "cloud_status": "partial",
-      "cloud_entries": ["agi-stack/apps/desktop/src/features/my-work/MyWorkQueue.tsx"],
+      "cloud_reason_code": "desktop_tenant_tasks_dlq_navigation_partial",
+      "cloud_entries": ["agi-stack/apps/desktop/src/App.tsx","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts","agi-stack/apps/desktop/src/features/tenant/tenantTasksRouteModule.tsx","agi-stack/apps/desktop/src/features/tenant/TenantTasksPage.tsx","agi-stack/apps/desktop/src/features/tenant/tenantTasksController.ts","agi-stack/apps/desktop/src/features/tenant/tenantTasksHttpClient.ts"],
       "local_status": "partial",
       "local_policy": "native_equivalent",
       "local_reason_code": "local_task_dashboard_partial",
-      "local_entries": [
-        "agi-stack/apps/desktop/src/features/my-work/MyWorkQueue.tsx",
-        "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
-      ],
-      "judgment_rationale": "At revision 3cf279b2f, Web taskAPI consumes the QueueDepth[] authority, TaskDashboard projects the latest queue-depth point as current and preserves every point as history, and focused tests cover populated and empty responses. Desktop My Work covers an authenticated task queue projection, but it is not yet a complete native equivalent of the Web tenant Task Dashboard across all states and task actions."
+      "local_deviation": "Local Desktop uses the project-scoped My Work authority for native task discovery, search, filtering, pagination, refresh and Workspace navigation. The sidecar does not expose tenant-wide task statistics, queue-depth history, retry, stop or retry-pending authority, so those actions remain unavailable under the stable local_task_dashboard_partial reason.",
+      "local_entries": ["agi-stack/apps/desktop/src/App.tsx","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts","agi-stack/apps/desktop/src/features/tenant/tenantTasksRouteModule.tsx","agi-stack/apps/desktop/src/features/tenant/TenantTasksPage.tsx","agi-stack/apps/desktop/src/features/tenant/tenantTasksController.ts","agi-stack/apps/desktop/src/features/tenant/tenantTasksHttpClient.ts","agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"],
+      "judgment_rationale": "Cloud Desktop now mounts a native Tenant Tasks route and binds Cloud task statistics, queue-depth history, recent-task search, status filtering, pagination, automatic and manual refresh, individual retry and stop, and bounded retry-pending. Tenant-wide results remain tenant-scoped instead of being mislabeled as the selected project. Cloud remains degraded under desktop_tenant_tasks_dlq_navigation_partial because the related Dead Letter Queue route is not yet a native implemented destination, so the link is not advertised. The shared controller covers loading, empty, ready, stale, conflict, forbidden, unavailable, retry and scope-switch states without remounting the active workbench. Local Desktop uses the sidecar My Work authority for native project-scoped discovery, search, filtering, pagination, refresh and Workspace navigation, but tenant-wide statistics, queue history and task mutations remain unavailable under local_task_dashboard_partial."
     },
     {
       "id": "tenant-tenant-analytics",

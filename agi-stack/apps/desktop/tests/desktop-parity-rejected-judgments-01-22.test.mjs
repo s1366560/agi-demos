@@ -208,7 +208,7 @@ test("Tenant Workspaces binds native settings entries, contracts, and permission
   );
 });
 
-test("Tenant Tasks records the fixed Web projection and native partial coverage", () => {
+test("Tenant Tasks records explicit Cloud and Local degradation boundaries", () => {
   const capability = readCapability(
     "parity-capability-definitions.02-tenant-operations.v2.json",
     "tenant-tenant-tasks",
@@ -217,10 +217,32 @@ test("Tenant Tasks records the fixed Web projection and native partial coverage"
   assert.equal(Object.hasOwn(capability, "web_status"), false);
   assert.equal(Object.hasOwn(capability, "web_reason_code"), false);
   assert.equal(capability.cloud_status, "partial");
+  assert.equal(
+    capability.cloud_reason_code,
+    "desktop_tenant_tasks_dlq_navigation_partial",
+  );
   assert.equal(capability.local_status, "partial");
   assert.equal(capability.local_reason_code, "local_task_dashboard_partial");
-  assert.match(capability.judgment_rationale, /latest queue-depth point/u);
-  assert.match(capability.judgment_rationale, /not yet a complete native equivalent/u);
+  assert.deepEqual(
+    capability.cloud_actions,
+    capability.web_actions.filter(
+      (action) => action !== "navigate-dead-letter-queue",
+    ),
+  );
+  assert.deepEqual(capability.local_actions, [
+    "view",
+    "list",
+    "search",
+    "filter",
+    "paginate",
+    "refresh",
+    "open-workspace",
+  ]);
+  assert.match(
+    capability.judgment_rationale,
+    /desktop_tenant_tasks_dlq_navigation_partial/u,
+  );
+  assert.match(capability.judgment_rationale, /local_task_dashboard_partial/u);
   assertPermissionCoverage(
     capability,
     "desktop_cloud",

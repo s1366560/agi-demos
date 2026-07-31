@@ -25,6 +25,9 @@ import { createTenantOverviewHttpClient } from '../tenant/tenantOverviewHttpClie
 import type { TenantProjectsRouteBinding } from '../tenant/tenantProjectsRouteModule';
 import { createTenantProjectsController } from '../tenant/tenantProjectsController';
 import { createTenantProjectsHttpClient } from '../tenant/tenantProjectsHttpClient';
+import type { TenantTasksRouteBinding } from '../tenant/tenantTasksRouteModule';
+import { createTenantTasksController } from '../tenant/tenantTasksController';
+import { createTenantTasksHttpClient } from '../tenant/tenantTasksHttpClient';
 import type { TenantWorkspacesRouteBinding } from '../tenant/tenantWorkspacesRouteModule';
 import { createTenantWorkspacesController } from '../tenant/tenantWorkspacesController';
 import { createTenantWorkspacesHttpClient } from '../tenant/tenantWorkspacesHttpClient';
@@ -202,6 +205,33 @@ export function createTenantWorkspacesRouteBindingForRuntime(
   const client = createTenantWorkspacesHttpClient(config);
   return Object.freeze({
     controller: createTenantWorkspacesController({
+      authority: config.mode,
+      client,
+      initialScope: scope,
+    }),
+    scope,
+  });
+}
+
+export function createTenantTasksRouteBindingForRuntime(
+  config: DesktopRuntimeConfig,
+  context: Readonly<{ tenantId: string }>,
+): TenantTasksRouteBinding {
+  if (
+    config.tenantId !== context.tenantId ||
+    typeof config.projectId !== 'string' ||
+    !config.projectId.trim()
+  ) {
+    throw new Error('tenant_tasks_runtime_scope_mismatch');
+  }
+  const scope = Object.freeze({
+    authority: config.mode,
+    tenantId: context.tenantId,
+    projectId: config.projectId,
+  });
+  const client = createTenantTasksHttpClient(config);
+  return Object.freeze({
+    controller: createTenantTasksController({
       authority: config.mode,
       client,
       initialScope: scope,
