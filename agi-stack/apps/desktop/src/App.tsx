@@ -291,9 +291,11 @@ import {
   PROJECT_CRON_JOBS_ROUTE_ID,
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
+  TENANT_OVERVIEW_ROUTE_ID,
 } from './features/navigation/desktopProductionRouteRegistry';
 import {
   createProjectOverviewRouteBindingForRuntime,
+  createTenantOverviewRouteBindingForRuntime,
   desktopRouteBasePermissionsForAuth,
   resolveDesktopRouteCapability,
 } from './features/navigation/desktopProductionRouteRuntime';
@@ -312,6 +314,7 @@ import {
   shortcutChordFor,
 } from './features/navigation/keyboardShortcutModel';
 import { createProjectOverviewRouteModuleLoader } from './features/project/projectOverviewRouteModule';
+import { createTenantOverviewRouteModuleLoader } from './features/tenant/tenantOverviewRouteModule';
 import { DesktopSearch } from './features/search/DesktopSearch';
 import {
   createProjectSearchRouteModuleLoader,
@@ -1973,6 +1976,14 @@ export function App() {
     () =>
       createDesktopProductionRouteRegistry({
         implementedLoaders: {
+          [TENANT_OVERVIEW_ROUTE_ID]:
+            createTenantOverviewRouteModuleLoader({
+              createBinding: (context) =>
+                createTenantOverviewRouteBindingForRuntime(
+                  configRef.current,
+                  context,
+                ),
+            }),
           [PROJECT_OVERVIEW_ROUTE_ID]:
             createProjectOverviewRouteModuleLoader({
               createBinding: (context) =>

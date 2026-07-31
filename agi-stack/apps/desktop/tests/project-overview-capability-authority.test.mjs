@@ -95,6 +95,103 @@ const localProjectOverview = {
   },
 };
 
+const cloudTenantOverview = {
+  storage: { used: 1024, total: 4096, percentage: 25 },
+  projects: {
+    active: 1,
+    new_this_week: 1,
+    list: [
+      {
+        id: 'project-1',
+        name: 'Project One',
+        owner: 'Ada',
+        memory_consumed: '1.0 KB',
+        status: 'active',
+      },
+    ],
+  },
+  members: { total: 2, new_added: 1 },
+  memory_history: [
+    {
+      date: '2026-07-30',
+      used: 1024,
+      daily_added: 128,
+      memory_count: 4,
+      percentage: 25,
+    },
+  ],
+  tenant_info: {
+    organization_id: '#TENANT-1',
+    plan: 'Pro',
+    region: null,
+    next_billing_date: null,
+  },
+};
+
+const localTenantOverview = {
+  capability: 'tenant_overview',
+  availability: 'degraded',
+  reason_code: 'local_tenant_overview_memory_projection_unavailable',
+  service_version: '0.1.0',
+  contract_version: '3.0.0',
+  allowed_actions: ['view'],
+  scope: {
+    tenant_id: 'tenant-1',
+    project_id: null,
+    workspace_id: null,
+    instance_id: null,
+  },
+  authority_revision: 13,
+  tenant_info: {
+    organization_id: '#TEN-LOCAL',
+    plan: 'Local',
+    region: {
+      availability: 'not_applicable',
+      reason_code: 'local_tenant_region_not_applicable',
+      value: null,
+    },
+    next_billing_date: {
+      availability: 'not_applicable',
+      reason_code: 'local_billing_authority_not_applicable',
+      value: null,
+    },
+  },
+  storage: {
+    availability: 'unavailable',
+    reason_code: 'local_tenant_memory_projection_unavailable',
+    value: null,
+  },
+  projects: {
+    availability: 'degraded',
+    reason_code: 'local_tenant_project_owner_projection_unavailable',
+    active: 1,
+    new_this_week: 0,
+    list: [
+      {
+        id: 'project-1',
+        name: 'Project One',
+        owner: {
+          availability: 'unavailable',
+          reason_code: 'local_project_owner_projection_unavailable',
+          value: null,
+        },
+        memory_consumed: {
+          availability: 'unavailable',
+          reason_code: 'local_project_memory_projection_unavailable',
+          value: null,
+        },
+        status: 'active',
+      },
+    ],
+  },
+  members: { total: 1, new_added: 0 },
+  memory_history: {
+    availability: 'unavailable',
+    reason_code: 'local_tenant_memory_projection_unavailable',
+    value: [],
+  },
+};
+
 const projectScope = {
   tenant_id: 'tenant-1',
   project_id: 'project-1',
@@ -107,6 +204,9 @@ test('Cloud workbench reads Project Overview authority from the scoped productio
   const calls = [];
   await withFetch(async (input, init) => {
     calls.push({ input: String(input), init });
+    if (String(input).endsWith('/api/v1/tenants/tenant-1/stats')) {
+      return jsonResponse(cloudTenantOverview);
+    }
     if (String(input).includes('/api/v1/projects/project-1?')) {
       return jsonResponse(cloudProject);
     }
@@ -123,6 +223,20 @@ test('Cloud workbench reads Project Overview authority from the scoped productio
       contract_version: '3.0.0',
       allowed_actions: ['view', 'inspect-stats'],
       scope: projectScope,
+      authority_revision: null,
+    });
+    assert.deepEqual(snapshot.capabilities['tenant-tenant-overview'], {
+      availability: 'available',
+      reason_code: null,
+      service_version: '0.1.0',
+      contract_version: '3.0.0',
+      allowed_actions: ['view'],
+      scope: {
+        tenant_id: 'tenant-1',
+        project_id: null,
+        workspace_id: null,
+        instance_id: null,
+      },
       authority_revision: null,
     });
   });
@@ -219,6 +333,9 @@ test('Local workbench preserves degraded Project Overview authority metadata', a
   const calls = [];
   await withFetch(async (input, init) => {
     calls.push({ input: String(input), init });
+    if (String(input).endsWith('/api/v1/tenants/tenant-1/stats')) {
+      return jsonResponse(localTenantOverview);
+    }
     if (String(input).endsWith('/api/v1/projects/project-1/overview')) {
       return jsonResponse(localProjectOverview);
     }
@@ -233,6 +350,20 @@ test('Local workbench preserves degraded Project Overview authority metadata', a
       allowed_actions: ['view'],
       scope: projectScope,
       authority_revision: 11,
+    });
+    assert.deepEqual(snapshot.capabilities['tenant-tenant-overview'], {
+      availability: 'degraded',
+      reason_code: 'local_tenant_overview_memory_projection_unavailable',
+      service_version: '0.1.0',
+      contract_version: '3.0.0',
+      allowed_actions: ['view'],
+      scope: {
+        tenant_id: 'tenant-1',
+        project_id: null,
+        workspace_id: null,
+        instance_id: null,
+      },
+      authority_revision: 13,
     });
   });
 

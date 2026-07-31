@@ -11,6 +11,7 @@ import {
 } from '../automations/automationModel';
 import { createCloudProjectOverviewClient } from '../project/projectOverviewCloudClient';
 import { createLocalProjectOverviewClient } from '../project/projectOverviewLocalClient';
+import { loadTenantOverviewCapability } from '../tenant/tenantOverviewCapability';
 import { WORKSPACE_HTTP_MUTATION_ACTIONS } from '../workspace/workspaceCollaborationHttpMutations';
 import type { DesktopRuntimeConfig } from '../../types';
 import {
@@ -98,11 +99,13 @@ export function createDesktopWorkbenchCapabilityClient(
         automationCapabilities,
         workspaceCollaboration,
         projectOverview,
+        tenantOverview,
       ] = await Promise.all([
         loadSearchCapability(config, signal),
         loadAutomationCapabilities(automationApi, config.projectId, signal),
         loadWorkspaceCollaborationCapability(config, signal),
         loadProjectOverviewCapability(config, signal),
+        loadTenantOverviewCapability(config, signal),
       ]);
       const projectScope = projectCapabilityScope(config);
       const workspaceScope = workspaceCapabilityScope(config);
@@ -141,6 +144,7 @@ export function createDesktopWorkbenchCapabilityClient(
             search,
             projectScope,
           ),
+          'tenant-tenant-overview': tenantOverview,
         },
       };
       const snapshot = parseDesktopCapabilitySnapshot(rawSnapshot);

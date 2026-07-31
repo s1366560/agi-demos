@@ -21,11 +21,13 @@ export const PROJECT_OVERVIEW_ROUTE_ID = 'project-project-overview' as const;
 export const PROJECT_SEARCH_ROUTE_ID = 'project-project-search' as const;
 export const PROJECT_CRON_JOBS_ROUTE_ID =
   'project-project-cron-jobs' as const;
+export const TENANT_OVERVIEW_ROUTE_ID = 'tenant-tenant-overview' as const;
 
 const IMPLEMENTED_ROUTE_IDS = new Set<CanonicalDesktopRouteId>([
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
   PROJECT_CRON_JOBS_ROUTE_ID,
+  TENANT_OVERVIEW_ROUTE_ID,
 ]);
 const CANONICAL_ROUTE_ID_SET = new Set<string>(CANONICAL_DESKTOP_ROUTE_IDS);
 

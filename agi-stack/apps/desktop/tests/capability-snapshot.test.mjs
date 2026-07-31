@@ -124,6 +124,20 @@ test('DesktopCapabilitySnapshot resolves route capability strings without invent
     version: '3.0.0',
     mode: 'local',
     capabilities: {
+      'tenant-tenant-overview': {
+        availability: 'degraded',
+        reason_code: 'local_tenant_overview_memory_projection_unavailable',
+        service_version: '0.1.0',
+        contract_version: '3.0.0',
+        allowed_actions: ['view'],
+        scope: {
+          tenant_id: 'tenant-1',
+          project_id: null,
+          workspace_id: null,
+          instance_id: null,
+        },
+        authority_revision: 9,
+      },
       'project-project-overview': {
         availability: 'degraded',
         reason_code: 'local_project_overview_timeline_projection_only',
@@ -154,6 +168,22 @@ test('DesktopCapabilitySnapshot resolves route capability strings without invent
       instance_id: null,
     },
     authority_revision: 7,
+    status: 'degraded',
+    available: true,
+  });
+  assert.deepEqual(desktopCapability(snapshot, 'tenant-tenant-overview'), {
+    availability: 'degraded',
+    reason_code: 'local_tenant_overview_memory_projection_unavailable',
+    service_version: '0.1.0',
+    contract_version: '3.0.0',
+    allowed_actions: ['view'],
+    scope: {
+      tenant_id: 'tenant-1',
+      project_id: null,
+      workspace_id: null,
+      instance_id: null,
+    },
+    authority_revision: 9,
     status: 'degraded',
     available: true,
   });

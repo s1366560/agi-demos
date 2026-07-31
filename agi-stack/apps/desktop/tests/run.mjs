@@ -110,6 +110,13 @@ copyFileSync(
   join(compiledWorkspaceDirectory, 'WorkspaceOverview.css'),
 );
 
+const compiledTenantDirectory = join(compiledRoot, 'src', 'features', 'tenant');
+mkdirSync(compiledTenantDirectory, { recursive: true });
+copyFileSync(
+  join(desktopRoot, 'src', 'features', 'tenant', 'TenantOverviewPage.css'),
+  join(compiledTenantDirectory, 'TenantOverviewPage.css'),
+);
+
 const testFiles = discoverTestFiles(testsDirectory);
 assertTestInventoryComplete({ testsDirectory, testFiles });
 

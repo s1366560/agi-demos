@@ -1,0 +1,99 @@
+.tenant-overview-page {
+  min-height: 100%;
+  padding: 28px;
+  color: var(--gray-12);
+  background: var(--color-panel-solid);
+}
+
+.tenant-overview-header,
+.tenant-overview-projects > div,
+.tenant-overview-project-list article,
+.tenant-overview-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tenant-overview-header span,
+.tenant-overview-summary span {
+  color: var(--gray-10);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tenant-overview-header h1 {
+  margin: 6px 0;
+  font-size: 28px;
+}
+
+.tenant-overview-notice {
+  justify-content: flex-start;
+  margin: 20px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--amber-7);
+  border-radius: 10px;
+  background: var(--amber-2);
+}
+
+.tenant-overview-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin: 24px 0;
+}
+
+.tenant-overview-summary article,
+.tenant-overview-projects {
+  padding: 18px;
+  border: 1px solid var(--gray-6);
+  border-radius: 12px;
+  background: var(--gray-2);
+}
+
+.tenant-overview-summary strong {
+  display: block;
+  margin-top: 10px;
+  font-size: 24px;
+}
+
+.tenant-overview-projects h2 {
+  margin: 0;
+}
+
+.tenant-overview-project-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.tenant-overview-project-list article {
+  padding: 12px;
+  border-top: 1px solid var(--gray-5);
+}
+
+.tenant-overview-project-list article > div {
+  display: grid;
+  gap: 4px;
+  min-width: 180px;
+}
+
+.tenant-overview-state {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .tenant-overview-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .tenant-overview-project-list article {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

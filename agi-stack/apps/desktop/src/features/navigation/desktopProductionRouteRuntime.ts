@@ -19,6 +19,9 @@ import type {
   DesktopCapabilityAvailability,
   DesktopCapabilitySnapshot,
 } from '../runtime/capabilitySnapshot';
+import type { TenantOverviewRouteBinding } from '../tenant/tenantOverviewRouteModule';
+import { createTenantOverviewController } from '../tenant/tenantOverviewController';
+import { createTenantOverviewHttpClient } from '../tenant/tenantOverviewHttpClient';
 import type { DesktopRouteContext } from './desktopRouteRegistry';
 
 export type ProjectOverviewRouteRuntimeDependencies = Readonly<{
@@ -124,6 +127,28 @@ export function createProjectOverviewRouteBindingForRuntime(
     controller: createController({
       authority: 'local',
       localClient,
+      initialScope: scope,
+    }),
+    scope,
+  });
+}
+
+export function createTenantOverviewRouteBindingForRuntime(
+  config: DesktopRuntimeConfig,
+  context: Readonly<{ tenantId: string }>,
+): TenantOverviewRouteBinding {
+  if (config.tenantId !== context.tenantId) {
+    throw new Error('tenant_overview_runtime_scope_mismatch');
+  }
+  const scope = Object.freeze({
+    authority: config.mode,
+    tenantId: context.tenantId,
+  });
+  const client = createTenantOverviewHttpClient(config);
+  return Object.freeze({
+    controller: createTenantOverviewController({
+      authority: config.mode,
+      client,
       initialScope: scope,
     }),
     scope,

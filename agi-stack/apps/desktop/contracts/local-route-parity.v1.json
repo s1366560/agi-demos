@@ -62,6 +62,15 @@
       "body": {}
     },
     {
+      "area": "tenant",
+      "method": "GET",
+      "uri": "/api/v1/tenants/local/stats",
+      "source": "tenant_overview",
+      "source_marker": "/api/v1/tenants/${encodeURIComponent(scope.tenantId)}/stats",
+      "authority": "local_tenant_overview",
+      "body": {}
+    },
+    {
       "area": "search",
       "method": "GET",
       "uri": "/api/v1/search-enhanced/capabilities",

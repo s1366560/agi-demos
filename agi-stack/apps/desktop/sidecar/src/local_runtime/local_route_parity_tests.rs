@@ -29,6 +29,8 @@ const SANDBOX_SURFACE_CLIENT_SOURCE: &str =
     include_str!("../../../src/features/sandbox/sandboxRuntimeSurfaceClient.ts");
 const LOCAL_PROJECT_OVERVIEW_CLIENT_SOURCE: &str =
     include_str!("../../../src/features/project/projectOverviewLocalClient.ts");
+const TENANT_OVERVIEW_CLIENT_SOURCE: &str =
+    include_str!("../../../src/features/tenant/tenantOverviewHttpClient.ts");
 
 #[derive(Debug, Deserialize)]
 struct LocalRouteContract {
@@ -173,6 +175,7 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
             "search" => SEARCH_CONTRACT_SOURCE,
             "sandbox" => SANDBOX_CLIENT_SOURCE,
             "sandbox_surface" => SANDBOX_SURFACE_CLIENT_SOURCE,
+            "tenant_overview" => TENANT_OVERVIEW_CLIENT_SOURCE,
             other => panic!("unsupported route source {other}"),
         };
         if !source.contains(&route.source_marker) {

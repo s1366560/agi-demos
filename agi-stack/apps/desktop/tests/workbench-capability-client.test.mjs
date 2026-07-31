@@ -324,13 +324,16 @@ test('local workbench capability client consumes the scoped degraded Search cont
       snapshot.capabilities['project-project-search'],
       snapshot.capabilities.search,
     );
-    assert.equal(calls.length, 1);
+    const searchCall = calls.find(({ input }) =>
+      input.endsWith('/api/v1/search-enhanced/capabilities'),
+    );
+    assert.ok(searchCall);
     assert.equal(
-      calls[0]?.input,
+      searchCall.input,
       'http://127.0.0.1:4123/api/v1/search-enhanced/capabilities',
     );
-    assert.equal(calls[0]?.init?.headers.get('Authorization'), null);
-    assert.equal(calls[0]?.init?.headers.get('X-Agistack-Launch'), 'launch-capability');
+    assert.equal(searchCall.init?.headers.get('Authorization'), null);
+    assert.equal(searchCall.init?.headers.get('X-Agistack-Launch'), 'launch-capability');
     assert.deepEqual(
       snapshot.capabilities.automation_run,
       withScope(

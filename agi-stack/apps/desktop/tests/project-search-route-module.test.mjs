@@ -14,6 +14,7 @@ const {
   PROJECT_CRON_JOBS_ROUTE_ID,
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
+  TENANT_OVERVIEW_ROUTE_ID,
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js'
 );
@@ -50,6 +51,7 @@ test('factory stays lazy and publishes the exact Project Advanced Search route c
       [PROJECT_OVERVIEW_ROUTE_ID]: implementedOverviewLoader(),
       [PROJECT_SEARCH_ROUTE_ID]: loader,
       [PROJECT_CRON_JOBS_ROUTE_ID]: implementedCronJobsLoader(),
+      [TENANT_OVERVIEW_ROUTE_ID]: implementedTenantLoader(),
     },
   });
   const module = await registry.byId.get(PROJECT_SEARCH_ROUTE_ID).loader();
@@ -228,4 +230,18 @@ function implementedCronJobsLoader() {
         return null;
       },
     });
+}
+
+function implementedTenantLoader() {
+  return async () => ({
+    routeId: TENANT_OVERVIEW_ROUTE_ID,
+    capability: TENANT_OVERVIEW_ROUTE_ID,
+    localPolicy: 'native_equivalent',
+    disposition: 'implemented',
+    availability: 'available',
+    reasonCode: null,
+    Surface() {
+      return null;
+    },
+  });
 }

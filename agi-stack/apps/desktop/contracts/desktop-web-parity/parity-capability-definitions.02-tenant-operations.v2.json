@@ -28,9 +28,9 @@
         },
         {
           "surface": "desktop_local",
-          "method": "NONE",
-          "path": "not_applicable:local_native_authority_planned",
-          "authority": "none"
+          "method": "GET",
+          "path": "/api/v1/tenants/{tenant_id}/stats",
+          "authority": "sidecar"
         },
         {
           "surface": "native_only",
@@ -51,15 +51,32 @@
         "view",
         "navigate"
       ],
-      "cloud_actions": [],
-      "local_actions": [],
+      "cloud_actions": ["view"],
+      "local_actions": ["view"],
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": [
-            "view",
-            "navigate"
+          "actions": ["view", "navigate"],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
           ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": ["view"],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": ["view"],
           "authentication": "authenticated",
           "authorization": [
             "tenant_member"
@@ -68,10 +85,29 @@
           "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
-      "local_status": "planned",
+      "cloud_status": "partial",
+      "cloud_reason_code": "desktop_tenant_overview_visual_and_navigation_partial",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/tenantOverviewRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/TenantOverviewPage.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/tenantOverviewController.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantOverviewHttpClient.ts"
+      ],
+      "local_status": "partial",
+      "local_reason_code": "local_tenant_overview_memory_projection_unavailable",
+      "local_deviation": "Local Desktop lists authoritative local projects and the single local member, while storage, memory history, project owners, project memory usage, hosted region and billing dates remain structurally unavailable or not applicable.",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/tenantOverviewRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/TenantOverviewPage.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/tenantOverviewController.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantOverviewHttpClient.ts",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/tenant_overview.rs"
+      ],
       "local_policy": "native_equivalent",
-      "judgment_rationale": "Tenant Overview owns the canonical tenant landing destination and TenantLayout routed source. Neither Desktop mode currently exposes a complete native overview route, so both remain explicitly planned."
+      "judgment_rationale": "The previous planned verdict is stale. Desktop now mounts a native Tenant Overview route with scope-aware cancellation, fail-closed Cloud contract validation and a same-shape Local sidecar authority. Cloud remains partial because the compact native page does not yet reproduce Web memory-history visualization and complete project navigation. Local is a degraded native equivalent: local projects and membership are authoritative, while cloud storage, memory history, project-owner, region and billing fields are never fabricated."
     },
     {
       "id": "tenant-tenant-projects",

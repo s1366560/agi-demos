@@ -17,6 +17,7 @@ const {
   PROJECT_CRON_JOBS_ROUTE_ID,
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
+  TENANT_OVERVIEW_ROUTE_ID,
   createDesktopProductionRouteRegistry,
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js');
 const {
@@ -100,16 +101,34 @@ function implementedCronJobsModule(overrides = {}) {
   });
 }
 
+function implementedTenantModule(overrides = {}) {
+  function TenantOverviewRoute() {
+    return React.createElement('section', null, 'Tenant Overview route');
+  }
+  return Object.freeze({
+    routeId: TENANT_OVERVIEW_ROUTE_ID,
+    disposition: 'implemented',
+    availability: 'available',
+    reasonCode: null,
+    capability: TENANT_OVERVIEW_ROUTE_ID,
+    localPolicy: 'native_equivalent',
+    Surface: TenantOverviewRoute,
+    ...overrides,
+  });
+}
+
 function createRegistry(
   projectLoader = async () => implementedProjectModule(),
   searchLoader = async () => implementedSearchModule(),
   cronJobsLoader = async () => implementedCronJobsModule(),
+  tenantLoader = async () => implementedTenantModule(),
 ) {
   return createDesktopProductionRouteRegistry({
     implementedLoaders: {
       [PROJECT_OVERVIEW_ROUTE_ID]: projectLoader,
       [PROJECT_SEARCH_ROUTE_ID]: searchLoader,
       [PROJECT_CRON_JOBS_ROUTE_ID]: cronJobsLoader,
+      [TENANT_OVERVIEW_ROUTE_ID]: tenantLoader,
     },
   });
 }
@@ -118,6 +137,7 @@ test('production registry requires every implemented project route loader', () =
   assert.equal(PROJECT_OVERVIEW_ROUTE_ID, 'project-project-overview');
   assert.equal(PROJECT_SEARCH_ROUTE_ID, 'project-project-search');
   assert.equal(PROJECT_CRON_JOBS_ROUTE_ID, 'project-project-cron-jobs');
+  assert.equal(TENANT_OVERVIEW_ROUTE_ID, 'tenant-tenant-overview');
   assert.throws(
     () =>
       createDesktopProductionRouteRegistry({
@@ -155,10 +175,10 @@ test('production registry requires every implemented project route loader', () =
           [PROJECT_OVERVIEW_ROUTE_ID]: async () => implementedProjectModule(),
           [PROJECT_SEARCH_ROUTE_ID]: async () => implementedSearchModule(),
           [PROJECT_CRON_JOBS_ROUTE_ID]: async () => implementedCronJobsModule(),
-          'tenant-tenant-overview': async () => implementedProjectModule(),
+          [TENANT_OVERVIEW_ROUTE_ID]: 'not-callable',
         },
       }),
-    /desktop_production_route_loader_not_implemented:tenant-tenant-overview/u,
+    /desktop_production_route_loader_invalid:tenant-tenant-overview/u,
   );
   assert.throws(
     () =>
@@ -184,13 +204,15 @@ test('production registry requires every implemented project route loader', () =
   );
 });
 
-test('all 51 production loaders remain lazy and three project routes are real modules', async () => {
+test('all 51 production loaders remain lazy and four routes are real modules', async () => {
   let projectLoadCount = 0;
   let searchLoadCount = 0;
   let cronJobsLoadCount = 0;
+  let tenantLoadCount = 0;
   const projectModule = implementedProjectModule();
   const searchModule = implementedSearchModule();
   const cronJobsModule = implementedCronJobsModule();
+  const tenantModule = implementedTenantModule();
   const registry = createRegistry(
     async () => {
       projectLoadCount += 1;
@@ -204,12 +226,17 @@ test('all 51 production loaders remain lazy and three project routes are real mo
       cronJobsLoadCount += 1;
       return cronJobsModule;
     },
+    async () => {
+      tenantLoadCount += 1;
+      return tenantModule;
+    },
   );
 
   assert.equal(registry.definitions.length, 51);
   assert.equal(projectLoadCount, 0);
   assert.equal(searchLoadCount, 0);
   assert.equal(cronJobsLoadCount, 0);
+  assert.equal(tenantLoadCount, 0);
 
   const loaded = await Promise.all(
     registry.definitions.map(async (definition) => ({
@@ -220,6 +247,7 @@ test('all 51 production loaders remain lazy and three project routes are real mo
   assert.equal(projectLoadCount, 1);
   assert.equal(searchLoadCount, 1);
   assert.equal(cronJobsLoadCount, 1);
+  assert.equal(tenantLoadCount, 1);
 
   const implemented = loaded.filter(
     ({ module }) => module.disposition === 'implemented',
@@ -227,13 +255,14 @@ test('all 51 production loaders remain lazy and three project routes are real mo
   const planned = loaded.filter(
     ({ module }) => module.disposition === 'planned',
   );
-  assert.equal(implemented.length, 3);
+  assert.equal(implemented.length, 4);
   assert.deepEqual(
     implemented.map(({ definition }) => definition.id).sort(),
     [
       PROJECT_OVERVIEW_ROUTE_ID,
       PROJECT_SEARCH_ROUTE_ID,
       PROJECT_CRON_JOBS_ROUTE_ID,
+      TENANT_OVERVIEW_ROUTE_ID,
     ].sort(),
   );
   assert.equal(
@@ -254,7 +283,13 @@ test('all 51 production loaders remain lazy and three project routes are real mo
     ).module,
     cronJobsModule,
   );
-  assert.equal(planned.length, 48);
+  assert.equal(
+    implemented.find(
+      ({ definition }) => definition.id === TENANT_OVERVIEW_ROUTE_ID,
+    ).module,
+    tenantModule,
+  );
+  assert.equal(planned.length, 47);
 
   for (const { definition, module } of planned) {
     assert.equal(module.routeId, definition.id);
@@ -352,7 +387,7 @@ test('Local cloud-only and blocked routes stay owned by the Host gate', () => {
 
 test('generic unavailable surface renders structured route authority without a Web escape', async () => {
   const registry = createRegistry();
-  const definition = registry.byId.get('tenant-tenant-overview');
+  const definition = registry.byId.get('tenant-tenant-projects');
   assert.ok(definition);
   const module = await definition.loader();
   const markup = renderToStaticMarkup(
@@ -364,7 +399,7 @@ test('generic unavailable surface renders structured route authority without a W
   );
 
   assert.match(markup, /Native route planned/);
-  assert.match(markup, /tenant-tenant-overview/);
+  assert.match(markup, /tenant-tenant-projects/);
   assert.match(markup, /desktop_native_route_planned/);
   assert.match(markup, /native_equivalent/);
   assert.match(markup, /Unavailable/);

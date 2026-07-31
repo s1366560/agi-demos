@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.test.json",
+  "files": [
+    "src/features/tenant/tenantOverviewClient.ts",
+    "src/features/tenant/tenantOverviewHttpClient.ts",
+    "src/features/tenant/tenantOverviewPresentationModel.ts",
+    "src/features/tenant/tenantOverviewController.ts"
+  ]
+}
