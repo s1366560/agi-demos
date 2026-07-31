@@ -245,6 +245,30 @@ test('cloud client validates structured Search and Automation authorities', asyn
         scope,
       ),
     );
+    assert.deepEqual(snapshot.capabilities['tenant-tenant-tasks'], {
+      availability: 'degraded',
+      reason_code: 'desktop_tenant_tasks_dlq_navigation_partial',
+      service_version: '0.1.0',
+      contract_version: '3.0.0',
+      allowed_actions: [
+        'view',
+        'list',
+        'search',
+        'filter',
+        'paginate',
+        'refresh',
+        'retry-task',
+        'stop-task',
+        'retry-pending',
+      ],
+      scope: {
+        tenant_id: 'default',
+        project_id: null,
+        workspace_id: null,
+        instance_id: null,
+      },
+      authority_revision: null,
+    });
     assert.equal(
       calls[0]?.input,
       'https://api.memstack.test/api/v1/search-enhanced/capabilities',
@@ -370,6 +394,28 @@ test('local workbench capability client consumes the scoped degraded Search cont
         },
       ),
     );
+    assert.deepEqual(snapshot.capabilities['tenant-tenant-tasks'], {
+      availability: 'degraded',
+      reason_code: 'local_task_dashboard_partial',
+      service_version: '0.1.0',
+      contract_version: '3.0.0',
+      allowed_actions: [
+        'view',
+        'list',
+        'search',
+        'filter',
+        'paginate',
+        'refresh',
+        'open-workspace',
+      ],
+      scope: {
+        tenant_id: 'local',
+        project_id: 'local-project',
+        workspace_id: null,
+        instance_id: null,
+      },
+      authority_revision: null,
+    });
     assert.deepEqual(
       snapshot.capabilities.sandbox_isolation,
       withScope(notApplicableCapability('local_isolation_not_applicable'), {

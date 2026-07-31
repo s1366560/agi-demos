@@ -13,6 +13,7 @@ import { createCloudProjectOverviewClient } from '../project/projectOverviewClou
 import { createLocalProjectOverviewClient } from '../project/projectOverviewLocalClient';
 import { loadTenantOverviewCapability } from '../tenant/tenantOverviewCapability';
 import { loadTenantProjectsCapability } from '../tenant/tenantProjectsCapability';
+import { tenantTasksCapability } from '../tenant/tenantTasksCapability';
 import { WORKSPACE_HTTP_MUTATION_ACTIONS } from '../workspace/workspaceCollaborationHttpMutations';
 import type { DesktopRuntimeConfig } from '../../types';
 import {
@@ -149,6 +150,7 @@ export function createDesktopWorkbenchCapabilityClient(
           ),
           'tenant-tenant-overview': tenantOverview,
           'tenant-tenant-projects': tenantProjects,
+          'tenant-tenant-tasks': tenantTasksCapability(config),
         },
       };
       const snapshot = parseDesktopCapabilitySnapshot(rawSnapshot);
