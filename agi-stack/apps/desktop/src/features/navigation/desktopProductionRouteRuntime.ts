@@ -22,6 +22,9 @@ import type {
 import type { TenantOverviewRouteBinding } from '../tenant/tenantOverviewRouteModule';
 import { createTenantOverviewController } from '../tenant/tenantOverviewController';
 import { createTenantOverviewHttpClient } from '../tenant/tenantOverviewHttpClient';
+import type { TenantProjectsRouteBinding } from '../tenant/tenantProjectsRouteModule';
+import { createTenantProjectsController } from '../tenant/tenantProjectsController';
+import { createTenantProjectsHttpClient } from '../tenant/tenantProjectsHttpClient';
 import type { DesktopRouteContext } from './desktopRouteRegistry';
 
 export type ProjectOverviewRouteRuntimeDependencies = Readonly<{
@@ -147,6 +150,28 @@ export function createTenantOverviewRouteBindingForRuntime(
   const client = createTenantOverviewHttpClient(config);
   return Object.freeze({
     controller: createTenantOverviewController({
+      authority: config.mode,
+      client,
+      initialScope: scope,
+    }),
+    scope,
+  });
+}
+
+export function createTenantProjectsRouteBindingForRuntime(
+  config: DesktopRuntimeConfig,
+  context: Readonly<{ tenantId: string }>,
+): TenantProjectsRouteBinding {
+  if (config.tenantId !== context.tenantId) {
+    throw new Error('tenant_projects_runtime_scope_mismatch');
+  }
+  const scope = Object.freeze({
+    authority: config.mode,
+    tenantId: context.tenantId,
+  });
+  const client = createTenantProjectsHttpClient(config);
+  return Object.freeze({
+    controller: createTenantProjectsController({
       authority: config.mode,
       client,
       initialScope: scope,

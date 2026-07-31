@@ -16,6 +16,10 @@ import {
   tenantOverviewEnUS,
   tenantOverviewZhCN,
 } from './features/tenant/locales/tenantOverviewMessages';
+import {
+  tenantProjectsEnUS,
+  tenantProjectsZhCN,
+} from './features/tenant/locales/tenantProjectsMessages';
 
 export type DesktopLocale = 'en' | 'zh-CN';
 
@@ -34,6 +38,7 @@ const enUS: Record<string, string> = {
   ...nativeUnavailableRouteEnUS,
   ...projectOverviewEnUS,
   ...tenantOverviewEnUS,
+  ...tenantProjectsEnUS,
   'common.close': 'Close',
   'common.cancel': 'Cancel',
   'common.delete': 'Delete',
@@ -3628,6 +3633,7 @@ const zhCN: Record<string, string> = {
   ...nativeUnavailableRouteZhCN,
   ...projectOverviewZhCN,
   ...tenantOverviewZhCN,
+  ...tenantProjectsZhCN,
   'common.close': '关闭',
   'common.cancel': '取消',
   'common.delete': '删除',

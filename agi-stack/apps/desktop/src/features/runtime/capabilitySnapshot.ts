@@ -20,6 +20,7 @@ export type DesktopCapabilityName =
   | 'workspace_collaboration'
   | 'sandbox_isolation'
   | 'tenant-tenant-overview'
+  | 'tenant-tenant-projects'
   | 'project-project-overview'
   | 'project-project-search'
   | 'project-project-cron-jobs';
@@ -71,6 +72,7 @@ const CAPABILITY_NAMES: readonly DesktopCapabilityName[] = [
   'workspace_collaboration',
   'sandbox_isolation',
   'tenant-tenant-overview',
+  'tenant-tenant-projects',
   'project-project-overview',
   'project-project-search',
   'project-project-cron-jobs',

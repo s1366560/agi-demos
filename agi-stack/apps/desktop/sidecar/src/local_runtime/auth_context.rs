@@ -47,8 +47,16 @@ pub(super) struct DesktopProject {
     pub(super) tenant_id: String,
     pub(super) name: String,
     pub(super) description: Option<String>,
+    pub(super) owner_id: String,
+    pub(super) member_ids: Vec<String>,
+    pub(super) memory_rules: Value,
+    pub(super) graph_config: Value,
+    pub(super) graph_store_id: Option<String>,
+    pub(super) retrieval_store_id: Option<String>,
+    pub(super) is_public: bool,
     pub(super) agent_conversation_mode: String,
     pub(super) created_at: String,
+    pub(super) updated_at: Option<String>,
     pub(super) stats: Value,
 }
 
@@ -174,6 +182,19 @@ pub(super) fn initialize_auth_context_schema(connection: &Connection) -> Result<
                FOREIGN KEY(tenant_id) REFERENCES desktop_tenants(id),
                UNIQUE(tenant_id, id)
              );
+             CREATE TABLE IF NOT EXISTS desktop_tenant_project_mutation_receipts (
+               user_id TEXT NOT NULL,
+               tenant_id TEXT NOT NULL,
+               idempotency_key TEXT NOT NULL,
+               operation TEXT NOT NULL CHECK(operation IN ('create', 'update', 'delete')),
+               project_id TEXT NOT NULL,
+               payload_hash TEXT NOT NULL,
+               response_json TEXT NOT NULL,
+               created_at_ms INTEGER NOT NULL,
+               PRIMARY KEY(user_id, tenant_id, idempotency_key),
+               FOREIGN KEY(user_id) REFERENCES desktop_users(id),
+               FOREIGN KEY(tenant_id) REFERENCES desktop_tenants(id)
+             );
              CREATE TABLE IF NOT EXISTS desktop_tenant_memberships (
                user_id TEXT NOT NULL,
                tenant_id TEXT NOT NULL,
@@ -231,6 +252,8 @@ pub(super) fn initialize_auth_context_schema(connection: &Connection) -> Result<
              );
              CREATE INDEX IF NOT EXISTS idx_desktop_projects_tenant
                ON desktop_projects(tenant_id, name);
+             CREATE INDEX IF NOT EXISTS idx_desktop_tenant_project_receipts_created
+               ON desktop_tenant_project_mutation_receipts(created_at_ms);
              CREATE INDEX IF NOT EXISTS idx_desktop_sessions_digest
                ON desktop_user_sessions(token_digest, status, expires_at_ms);
              CREATE INDEX IF NOT EXISTS idx_desktop_context_events_user
@@ -657,8 +680,26 @@ impl DesktopSessionStore {
                     tenant_id: row.get(1)?,
                     name: row.get(2)?,
                     description: row.get(3)?,
+                    owner_id: user_id.to_string(),
+                    member_ids: vec![user_id.to_string()],
+                    memory_rules: json!({
+                        "max_episodes": 1000,
+                        "retention_days": 30,
+                        "auto_refresh": true,
+                        "refresh_interval": 24,
+                    }),
+                    graph_config: json!({
+                        "max_nodes": 5000,
+                        "max_edges": 10000,
+                        "similarity_threshold": 0.7,
+                        "community_detection": true,
+                    }),
+                    graph_store_id: None,
+                    retrieval_store_id: None,
+                    is_public: false,
                     agent_conversation_mode: "workspace".to_string(),
                     created_at: iso_from_millis(row.get(4)?),
+                    updated_at: None,
                     stats: json!({}),
                 })
             })

@@ -31,6 +31,8 @@ const LOCAL_PROJECT_OVERVIEW_CLIENT_SOURCE: &str =
     include_str!("../../../src/features/project/projectOverviewLocalClient.ts");
 const TENANT_OVERVIEW_CLIENT_SOURCE: &str =
     include_str!("../../../src/features/tenant/tenantOverviewHttpClient.ts");
+const TENANT_PROJECTS_CLIENT_SOURCE: &str =
+    include_str!("../../../src/features/tenant/tenantProjectsHttpClient.ts");
 
 #[derive(Debug, Deserialize)]
 struct LocalRouteContract {
@@ -48,6 +50,8 @@ struct LocalRouteProbe {
     authority: String,
     #[serde(default)]
     expected_status: Option<u16>,
+    #[serde(default)]
+    idempotency_key: Option<String>,
     body: Value,
 }
 
@@ -126,20 +130,26 @@ fn test_state(credential: &str) -> Arc<LocalRuntimeState> {
     state
 }
 
-fn authenticated_request(method: &str, uri: &str, credential: &str, body: &Value) -> Request<Body> {
+fn authenticated_request(
+    method: &str,
+    uri: &str,
+    credential: &str,
+    idempotency_key: Option<&str>,
+    body: &Value,
+) -> Request<Body> {
     let mut builder = Request::builder()
         .method(Method::from_bytes(method.as_bytes()).expect("HTTP method"))
         .uri(uri)
         .header("authorization", format!("Bearer {credential}"))
         .header("x-agistack-launch", credential)
         .header("content-type", "application/json");
-    if let (Some(expected_revision), Some(idempotency_key)) = (
-        body.get("expected_revision").and_then(Value::as_u64),
-        body.get("idempotency_key").and_then(Value::as_str),
-    ) {
-        builder = builder
-            .header("x-expected-revision", expected_revision)
-            .header("idempotency-key", idempotency_key);
+    if let Some(expected_revision) = body.get("expected_revision").and_then(Value::as_u64) {
+        builder = builder.header("x-expected-revision", expected_revision);
+    }
+    if let Some(idempotency_key) =
+        idempotency_key.or_else(|| body.get("idempotency_key").and_then(Value::as_str))
+    {
+        builder = builder.header("idempotency-key", idempotency_key);
     }
     builder
         .body(Body::from(body.to_string()))
@@ -176,6 +186,7 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
             "sandbox" => SANDBOX_CLIENT_SOURCE,
             "sandbox_surface" => SANDBOX_SURFACE_CLIENT_SOURCE,
             "tenant_overview" => TENANT_OVERVIEW_CLIENT_SOURCE,
+            "tenant_projects" => TENANT_PROJECTS_CLIENT_SOURCE,
             other => panic!("unsupported route source {other}"),
         };
         if !source.contains(&route.source_marker) {
@@ -191,6 +202,7 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
                 &route.method,
                 &route.uri,
                 credential,
+                route.idempotency_key.as_deref(),
                 &route.body,
             ))
             .await
@@ -359,6 +371,7 @@ async fn unavailable_routes_fail_closed_on_scope_and_role() {
             "GET",
             "/api/v1/subagents/?tenant_id=orbital",
             credential,
+            None,
             &json!({}),
         ))
         .await
@@ -371,6 +384,7 @@ async fn unavailable_routes_fail_closed_on_scope_and_role() {
             "POST",
             "/api/v1/search-enhanced/advanced",
             credential,
+            None,
             &json!({
                 "tenant_id": "local",
                 "project_id": "desktop-client",
@@ -404,6 +418,7 @@ async fn unavailable_routes_fail_closed_on_scope_and_role() {
             "POST",
             "/api/v1/subagents/?tenant_id=orbital",
             credential,
+            None,
             &json!({}),
         ))
         .await

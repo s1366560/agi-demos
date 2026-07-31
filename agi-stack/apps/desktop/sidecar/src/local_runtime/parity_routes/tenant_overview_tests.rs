@@ -106,8 +106,16 @@ fn tenant_overview_new_project_window_uses_structured_creation_time() {
         tenant_id: "tenant".to_string(),
         name: "Recent".to_string(),
         description: None,
+        owner_id: "owner".to_string(),
+        member_ids: vec!["owner".to_string()],
+        memory_rules: serde_json::json!({}),
+        graph_config: serde_json::json!({}),
+        graph_store_id: None,
+        retrieval_store_id: None,
+        is_public: false,
         agent_conversation_mode: "shared".to_string(),
         created_at: chrono::Utc::now().to_rfc3339(),
+        updated_at: None,
         stats: serde_json::json!({}),
     };
     let old = DesktopProject {

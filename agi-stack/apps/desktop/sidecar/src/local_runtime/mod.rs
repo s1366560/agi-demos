@@ -2839,6 +2839,7 @@ fn local_cors_layer() -> CorsLayer {
         .allow_headers([
             AUTHORIZATION,
             CONTENT_TYPE,
+            HeaderName::from_static("idempotency-key"),
             HeaderName::from_static("x-agistack-launch"),
         ])
 }
@@ -13320,6 +13321,43 @@ mod tests {
             .and_then(|value| value.to_str().ok())
             .expect("allowed provider PUT headers");
         for expected in ["authorization", "content-type", "x-agistack-launch"] {
+            assert!(allowed_headers
+                .split(',')
+                .any(|header| header.trim().eq_ignore_ascii_case(expected)));
+        }
+
+        let tenant_project_post_preflight = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::OPTIONS)
+                    .uri("/api/v1/tenant-projects")
+                    .header("origin", "http://localhost:5173")
+                    .header("access-control-request-method", "POST")
+                    .header(
+                        "access-control-request-headers",
+                        "authorization,content-type,idempotency-key,x-agistack-launch",
+                    )
+                    .body(Body::empty())
+                    .expect("tenant project POST preflight request"),
+            )
+            .await
+            .expect("tenant project POST preflight response");
+        assert_eq!(
+            tenant_project_post_preflight.status(),
+            axum::http::StatusCode::OK
+        );
+        let allowed_headers = tenant_project_post_preflight
+            .headers()
+            .get("access-control-allow-headers")
+            .and_then(|value| value.to_str().ok())
+            .expect("allowed tenant project POST headers");
+        for expected in [
+            "authorization",
+            "content-type",
+            "idempotency-key",
+            "x-agistack-launch",
+        ] {
             assert!(allowed_headers
                 .split(',')
                 .any(|header| header.trim().eq_ignore_ascii_case(expected)));

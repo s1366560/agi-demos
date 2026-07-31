@@ -5,12 +5,8 @@
       "kind": "canonical",
       "title": "Tenant Overview",
       "domain": "tenant-operations",
-      "scope": [
-        "tenant"
-      ],
-      "web_route_ids": [
-        "tenant-tenant-overview"
-      ],
+      "scope": ["tenant"],
+      "web_route_ids": ["tenant-tenant-overview"],
       "api_method": "GET",
       "api_path": "/api/v1/tenants/{tenant_id}/stats",
       "api_contracts": [
@@ -39,28 +35,17 @@
           "authority": "none"
         }
       ],
-      "permissions": [
-        "authenticated",
-        "tenant_member"
-      ],
-      "actions": [
-        "view",
-        "navigate"
-      ],
-      "web_actions": [
-        "view",
-        "navigate"
-      ],
+      "permissions": ["authenticated","tenant_member"],
+      "actions": ["view","navigate"],
+      "web_actions": ["view","navigate"],
       "cloud_actions": ["view"],
       "local_actions": ["view"],
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": ["view", "navigate"],
+          "actions": ["view","navigate"],
           "authentication": "authenticated",
-          "authorization": [
-            "tenant_member"
-          ],
+          "authorization": ["tenant_member"],
           "enforcement": "enforced",
           "feature_gate": null
         },
@@ -68,9 +53,7 @@
           "surface": "desktop_cloud",
           "actions": ["view"],
           "authentication": "authenticated",
-          "authorization": [
-            "tenant_member"
-          ],
+          "authorization": ["tenant_member"],
           "enforcement": "enforced",
           "feature_gate": null
         },
@@ -78,9 +61,7 @@
           "surface": "desktop_local",
           "actions": ["view"],
           "authentication": "authenticated",
-          "authorization": [
-            "tenant_member"
-          ],
+          "authorization": ["tenant_member"],
           "enforcement": "enforced",
           "feature_gate": null
         }
@@ -114,12 +95,8 @@
       "kind": "canonical",
       "title": "Projects",
       "domain": "tenant-operations",
-      "scope": [
-        "tenant"
-      ],
-      "web_route_ids": [
-        "tenant-tenant-projects"
-      ],
+      "scope": ["tenant"],
+      "web_route_ids": ["tenant-tenant-projects"],
       "api_method": "GET",
       "api_path": "/api/v1/projects/",
       "api_contracts": [
@@ -161,6 +138,12 @@
         },
         {
           "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
           "method": "POST",
           "path": "/api/v1/projects/",
           "authority": "cloud_service"
@@ -179,9 +162,33 @@
         },
         {
           "surface": "desktop_local",
-          "method": "NONE",
-          "path": "not_applicable:local_native_authority_planned",
-          "authority": "none"
+          "method": "GET",
+          "path": "/api/v1/tenant-projects",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/tenant-projects/{project_id}",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/tenant-projects",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "PUT",
+          "path": "/api/v1/tenant-projects/{project_id}",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/tenant-projects/{project_id}/archive",
+          "authority": "sidecar"
         },
         {
           "surface": "native_only",
@@ -197,90 +204,123 @@
         "project_admin_or_owner_for_update",
         "project_owner_for_delete"
       ],
-      "actions": [
-        "view",
-        "list",
-        "create",
-        "update",
-        "delete"
-      ],
-      "web_actions": [
-        "view",
-        "list",
-        "create",
-        "update",
-        "delete"
-      ],
-      "cloud_actions": [],
-      "local_actions": [],
+      "actions": ["view","list","create","update","delete"],
+      "web_actions": ["view","list","create","update","delete"],
+      "cloud_actions": ["view","list","create","update","delete"],
+      "local_actions": ["view","list","create","update","delete"],
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": [
-            "view",
-            "list"
-          ],
+          "actions": ["view","list"],
           "authentication": "authenticated",
-          "authorization": [
-            "project_member"
-          ],
+          "authorization": ["project_member"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "web",
-          "actions": [
-            "create"
-          ],
+          "actions": ["create"],
           "authentication": "authenticated",
-          "authorization": [
-            "tenant_admin"
-          ],
+          "authorization": ["tenant_admin"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "web",
-          "actions": [
-            "update"
-          ],
+          "actions": ["update"],
           "authentication": "authenticated",
-          "authorization": [
-            "project_admin"
-          ],
+          "authorization": ["project_admin"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "web",
-          "actions": [
-            "delete"
-          ],
+          "actions": ["delete"],
           "authentication": "authenticated",
-          "authorization": [
-            "project_owner"
-          ],
+          "authorization": ["project_owner"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": ["view","list"],
+          "authentication": "authenticated",
+          "authorization": ["project_member"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": ["create"],
+          "authentication": "authenticated",
+          "authorization": ["tenant_admin"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": ["update"],
+          "authentication": "authenticated",
+          "authorization": ["project_admin"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": ["delete"],
+          "authentication": "authenticated",
+          "authorization": ["project_owner"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": ["view","list"],
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": ["create","update","delete"],
+          "authentication": "authenticated",
+          "authorization": ["tenant_admin"],
           "enforcement": "enforced",
           "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
-      "local_status": "planned",
+      "cloud_status": "partial",
+      "cloud_reason_code": "desktop_tenant_projects_filters_and_configuration_partial",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/tenantProjectsRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/TenantProjectsPage.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/tenantProjectsController.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantProjectsHttpClient.ts"
+      ],
+      "local_status": "partial",
+      "local_reason_code": "local_project_configuration_projection_partial",
+      "local_deviation": "Local Desktop provides tenant-scoped private project CRUD and role-derived actions. Public visibility, backend-store bindings, memory rules and graph configuration remain structurally unavailable and are never fabricated.",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/tenantProjectsRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/TenantProjectsPage.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/tenantProjectsController.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantProjectsHttpClient.ts",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/tenant_projects.rs"
+      ],
       "local_policy": "native_equivalent",
-      "judgment_rationale": "Project list, create, and edit pages form the canonical tenant Projects capability. Desktop has project context selection but not the full native lifecycle route or its complete state matrix."
+      "judgment_rationale": "The previous planned verdict is stale. Desktop now mounts a native Tenant Projects route with scope-aware cancellation, loading, empty, ready, degraded, conflict, forbidden, unavailable and retry states. Cloud binds the production project list/detail/create/update/delete contracts, but remains partial because server-side filters, pagination, advanced memory/graph/backend-store configuration and direct project navigation are not yet exposed by the compact native page. Local uses a private same-shape client port backed by tenant-scoped sidecar CRUD, stable degraded authority metadata and role-derived allowed actions; public projects and advanced configuration remain structurally unavailable."
     },
     {
       "id": "tenant-tenant-workspaces",
       "kind": "canonical",
       "title": "Tenant Workspaces",
       "domain": "tenant-operations",
-      "scope": [
-        "tenant",
-        "workspace"
-      ],
-      "web_route_ids": [
-        "tenant-tenant-workspaces"
-      ],
+      "scope": ["tenant","workspace"],
+      "web_route_ids": ["tenant-tenant-workspaces"],
       "api_method": "GET",
       "api_path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
       "api_contracts": [
@@ -400,20 +440,8 @@
         "workspace_editor_for_update_and_agent_bindings",
         "workspace_owner_for_member_management"
       ],
-      "actions": [
-        "view",
-        "list",
-        "inspect-summary",
-        "create",
-        "open-blackboard"
-      ],
-      "web_actions": [
-        "view",
-        "list",
-        "inspect-summary",
-        "create",
-        "open-blackboard"
-      ],
+      "actions": ["view","list","inspect-summary","create","open-blackboard"],
+      "web_actions": ["view","list","inspect-summary","create","open-blackboard"],
       "cloud_actions": [
         "view",
         "list",
@@ -424,16 +452,11 @@
         "bind-agent",
         "unbind-agent"
       ],
-      "local_actions": [
-        "view",
-        "list",
-        "create",
-        "open-blackboard"
-      ],
+      "local_actions": ["view","list","create","open-blackboard"],
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": ["view", "list", "inspect-summary", "open-blackboard"],
+          "actions": ["view","list","inspect-summary","open-blackboard"],
           "authentication": "authenticated",
           "authorization": ["workspace_member"],
           "enforcement": "enforced",
@@ -449,7 +472,7 @@
         },
         {
           "surface": "desktop_cloud",
-          "actions": ["view", "list", "open-blackboard"],
+          "actions": ["view","list","open-blackboard"],
           "authentication": "authenticated",
           "authorization": ["workspace_member"],
           "enforcement": "enforced",
@@ -465,7 +488,7 @@
         },
         {
           "surface": "desktop_cloud",
-          "actions": ["update", "bind-agent", "unbind-agent"],
+          "actions": ["update","bind-agent","unbind-agent"],
           "authentication": "authenticated",
           "authorization": ["workspace_editor"],
           "enforcement": "enforced",
@@ -481,7 +504,7 @@
         },
         {
           "surface": "desktop_local",
-          "actions": ["view", "list", "open-blackboard"],
+          "actions": ["view","list","open-blackboard"],
           "authentication": "authenticated",
           "authorization": ["workspace_member"],
           "enforcement": "enforced",
@@ -524,12 +547,8 @@
       "kind": "canonical",
       "title": "Task Dashboard",
       "domain": "tenant-operations",
-      "scope": [
-        "tenant"
-      ],
-      "web_route_ids": [
-        "tenant-tenant-tasks"
-      ],
+      "scope": ["tenant"],
+      "web_route_ids": ["tenant-tenant-tasks"],
       "api_method": "GET",
       "api_path": "/api/v1/tasks/stats",
       "api_contracts": [
@@ -588,11 +607,7 @@
           "authority": "none"
         }
       ],
-      "permissions": [
-        "authenticated",
-        "accessible_project_scope",
-        "task_access"
-      ],
+      "permissions": ["authenticated","accessible_project_scope","task_access"],
       "actions": [
         "view",
         "list",
@@ -617,16 +632,8 @@
         "retry-pending",
         "navigate-dead-letter-queue"
       ],
-      "cloud_actions": [
-        "view",
-        "list",
-        "open-workspace"
-      ],
-      "local_actions": [
-        "view",
-        "list",
-        "open-workspace"
-      ],
+      "cloud_actions": ["view","list","open-workspace"],
+      "local_actions": ["view","list","open-workspace"],
       "permission_requirements": [
         {
           "surface": "web",
@@ -643,45 +650,29 @@
             "navigate-dead-letter-queue"
           ],
           "authentication": "authenticated",
-          "authorization": [
-            "project_member"
-          ],
+          "authorization": ["project_member"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "desktop_cloud",
-          "actions": [
-            "view",
-            "list",
-            "open-workspace"
-          ],
+          "actions": ["view","list","open-workspace"],
           "authentication": "authenticated",
-          "authorization": [
-            "project_member"
-          ],
+          "authorization": ["project_member"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "desktop_local",
-          "actions": [
-            "view",
-            "list",
-            "open-workspace"
-          ],
+          "actions": ["view","list","open-workspace"],
           "authentication": "authenticated",
-          "authorization": [
-            "project_member"
-          ],
+          "authorization": ["project_member"],
           "enforcement": "enforced",
           "feature_gate": null
         }
       ],
       "cloud_status": "partial",
-      "cloud_entries": [
-        "agi-stack/apps/desktop/src/features/my-work/MyWorkQueue.tsx"
-      ],
+      "cloud_entries": ["agi-stack/apps/desktop/src/features/my-work/MyWorkQueue.tsx"],
       "local_status": "partial",
       "local_policy": "native_equivalent",
       "local_reason_code": "local_task_dashboard_partial",
@@ -696,12 +687,8 @@
       "kind": "canonical",
       "title": "Tenant Analytics",
       "domain": "tenant-operations",
-      "scope": [
-        "tenant"
-      ],
-      "web_route_ids": [
-        "tenant-tenant-analytics"
-      ],
+      "scope": ["tenant"],
+      "web_route_ids": ["tenant-tenant-analytics"],
       "api_method": "GET",
       "api_path": "/api/v1/tenants/{tenant_id}/analytics",
       "api_contracts": [
@@ -730,31 +717,17 @@
           "authority": "none"
         }
       ],
-      "permissions": [
-        "authenticated",
-        "tenant_member"
-      ],
-      "actions": [
-        "view",
-        "retry"
-      ],
-      "web_actions": [
-        "view",
-        "retry"
-      ],
+      "permissions": ["authenticated","tenant_member"],
+      "actions": ["view","retry"],
+      "web_actions": ["view","retry"],
       "cloud_actions": [],
       "local_actions": [],
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": [
-            "view",
-            "retry"
-          ],
+          "actions": ["view","retry"],
           "authentication": "authenticated",
-          "authorization": [
-            "tenant_member"
-          ],
+          "authorization": ["tenant_member"],
           "enforcement": "enforced",
           "feature_gate": null
         }
@@ -766,30 +739,13 @@
     }
   ],
   "source_ownership": {
-    "tenant-tenant-overview": [
-      "TenantOverview",
-      "TenantLayout"
-    ],
-    "tenant-tenant-projects": [
-      "ProjectList",
-      "NewProject",
-      "EditProject"
-    ],
-    "tenant-tenant-workspaces": [
-      "WorkspaceList",
-      "WorkspaceCreate"
-    ],
-    "tenant-tenant-tasks": [
-      "TaskDashboard"
-    ],
-    "tenant-tenant-analytics": [
-      "Analytics"
-    ]
+    "tenant-tenant-overview": ["TenantOverview","TenantLayout"],
+    "tenant-tenant-projects": ["ProjectList","NewProject","EditProject"],
+    "tenant-tenant-workspaces": ["WorkspaceList","WorkspaceCreate"],
+    "tenant-tenant-tasks": ["TaskDashboard"],
+    "tenant-tenant-analytics": ["Analytics"]
   },
   "route_owner_overrides": {
-    "tenant-tenant-overview": [
-      "production-route-path-tenant",
-      "production-route-path-tenant-segment"
-    ]
+    "tenant-tenant-overview": ["production-route-path-tenant","production-route-path-tenant-segment"]
   }
 }

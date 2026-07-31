@@ -23,6 +23,9 @@ mod search_tests;
 mod tenant_overview;
 #[cfg(test)]
 mod tenant_overview_tests;
+mod tenant_projects;
+#[cfg(test)]
+mod tenant_projects_tests;
 mod workspace_roster;
 #[cfg(test)]
 mod workspace_roster_tests;
@@ -35,6 +38,7 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
         .merge(mcp_apps::router())
         .merge(project_overview::router())
         .merge(tenant_overview::router())
+        .merge(tenant_projects::router())
         .merge(search::router())
         .merge(workspace_roster::router())
         .merge(managed_resources::router())

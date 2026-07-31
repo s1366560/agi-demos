@@ -71,6 +71,62 @@
       "body": {}
     },
     {
+      "area": "tenant_projects",
+      "method": "GET",
+      "uri": "/api/v1/tenant-projects?tenant_id=local&page=1&page_size=20",
+      "source": "tenant_projects",
+      "source_marker": "'/api/v1/tenant-projects'",
+      "authority": "local_tenant_projects",
+      "body": {}
+    },
+    {
+      "area": "tenant_projects",
+      "method": "GET",
+      "uri": "/api/v1/tenant-projects/local-project?tenant_id=local",
+      "source": "tenant_projects",
+      "source_marker": "`${root}/${encodeURIComponent(projectId)}`",
+      "authority": "local_tenant_projects",
+      "body": {}
+    },
+    {
+      "area": "tenant_projects",
+      "method": "POST",
+      "uri": "/api/v1/tenant-projects",
+      "source": "tenant_projects",
+      "source_marker": "collectionPath(runtimeConfig)",
+      "authority": "local_tenant_projects",
+      "idempotency_key": "route-parity-create-project",
+      "body": {
+        "tenant_id": "local",
+        "name": "Route Parity Project",
+        "description": "Created by the executable local route contract"
+      }
+    },
+    {
+      "area": "tenant_projects",
+      "method": "PUT",
+      "uri": "/api/v1/tenant-projects/local-project",
+      "source": "tenant_projects",
+      "source_marker": "projectPath(runtimeConfig, id)",
+      "authority": "local_tenant_projects",
+      "idempotency_key": "route-parity-update-project",
+      "body": {
+        "name": "Updated Local Project",
+        "description": "Updated by the executable local route contract"
+      }
+    },
+    {
+      "area": "tenant_projects",
+      "method": "POST",
+      "uri": "/api/v1/tenant-projects/local-project/archive",
+      "source": "tenant_projects",
+      "source_marker": "`${project}/archive`",
+      "authority": "local_tenant_projects",
+      "expected_status": 409,
+      "idempotency_key": "route-parity-archive-project",
+      "body": {}
+    },
+    {
       "area": "search",
       "method": "GET",
       "uri": "/api/v1/search-enhanced/capabilities",

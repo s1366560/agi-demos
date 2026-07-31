@@ -15,6 +15,7 @@ const {
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
   TENANT_OVERVIEW_ROUTE_ID,
+  TENANT_PROJECTS_ROUTE_ID,
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js'
 );
@@ -52,6 +53,7 @@ test('factory stays lazy and publishes the exact Project Advanced Search route c
       [PROJECT_SEARCH_ROUTE_ID]: loader,
       [PROJECT_CRON_JOBS_ROUTE_ID]: implementedCronJobsLoader(),
       [TENANT_OVERVIEW_ROUTE_ID]: implementedTenantLoader(),
+      [TENANT_PROJECTS_ROUTE_ID]: implementedRouteLoader(TENANT_PROJECTS_ROUTE_ID),
     },
   });
   const module = await registry.byId.get(PROJECT_SEARCH_ROUTE_ID).loader();
@@ -78,6 +80,21 @@ test('factory stays lazy and publishes the exact Project Advanced Search route c
     },
   );
 });
+
+function implementedRouteLoader(routeId) {
+  return async () =>
+    Object.freeze({
+      routeId,
+      disposition: 'implemented',
+      availability: 'available',
+      reasonCode: null,
+      capability: routeId,
+      localPolicy: 'native_equivalent',
+      Surface() {
+        return null;
+      },
+    });
+}
 
 test('surface reuses DesktopSearch and binds only exact tenant and project context', async () => {
   const receivedContexts = [];
