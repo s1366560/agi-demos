@@ -676,7 +676,7 @@
         "retry-pending",
         "navigate-dead-letter-queue"
       ],
-      "cloud_actions": ["view","list","search","filter","paginate","refresh","retry-task","stop-task","retry-pending"],
+      "cloud_actions": ["view","list","search","filter","paginate","refresh","retry-task","stop-task","retry-pending","navigate-dead-letter-queue"],
       "local_actions": ["view","list","search","filter","paginate","refresh","open-workspace"],
       "permission_requirements": [
         {
@@ -700,7 +700,7 @@
         },
         {
           "surface": "desktop_cloud",
-          "actions": ["view","list","search","filter","paginate","refresh","retry-task","stop-task","retry-pending"],
+          "actions": ["view","list","search","filter","paginate","refresh","retry-task","stop-task","retry-pending","navigate-dead-letter-queue"],
           "authentication": "authenticated",
           "authorization": ["project_member"],
           "enforcement": "enforced",
@@ -715,15 +715,14 @@
           "feature_gate": null
         }
       ],
-      "cloud_status": "partial",
-      "cloud_reason_code": "desktop_tenant_tasks_dlq_navigation_partial",
+      "cloud_status": "implemented",
       "cloud_entries": ["agi-stack/apps/desktop/src/App.tsx","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts","agi-stack/apps/desktop/src/features/tenant/tenantTasksRouteModule.tsx","agi-stack/apps/desktop/src/features/tenant/TenantTasksPage.tsx","agi-stack/apps/desktop/src/features/tenant/tenantTasksController.ts","agi-stack/apps/desktop/src/features/tenant/tenantTasksHttpClient.ts"],
       "local_status": "partial",
       "local_policy": "native_equivalent",
       "local_reason_code": "local_task_dashboard_partial",
       "local_deviation": "Local Desktop uses the project-scoped My Work authority for native task discovery, search, filtering, pagination, refresh and Workspace navigation. The sidecar does not expose tenant-wide task statistics, queue-depth history, retry, stop or retry-pending authority, so those actions remain unavailable under the stable local_task_dashboard_partial reason.",
       "local_entries": ["agi-stack/apps/desktop/src/App.tsx","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts","agi-stack/apps/desktop/src/features/tenant/tenantTasksRouteModule.tsx","agi-stack/apps/desktop/src/features/tenant/TenantTasksPage.tsx","agi-stack/apps/desktop/src/features/tenant/tenantTasksController.ts","agi-stack/apps/desktop/src/features/tenant/tenantTasksHttpClient.ts","agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"],
-      "judgment_rationale": "Cloud Desktop now mounts a native Tenant Tasks route and binds Cloud task statistics, queue-depth history, recent-task search, status filtering, pagination, automatic and manual refresh, individual retry and stop, and bounded retry-pending. Tenant-wide results remain tenant-scoped instead of being mislabeled as the selected project. Cloud remains degraded under desktop_tenant_tasks_dlq_navigation_partial because the related Dead Letter Queue route is not yet a native implemented destination, so the link is not advertised. The shared controller covers loading, empty, ready, stale, conflict, forbidden, unavailable, retry and scope-switch states without remounting the active workbench. Local Desktop uses the sidecar My Work authority for native project-scoped discovery, search, filtering, pagination, refresh and Workspace navigation, but tenant-wide statistics, queue history and task mutations remain unavailable under local_task_dashboard_partial."
+      "judgment_rationale": "Cloud Desktop mounts the native Tenant Tasks route and binds Cloud task statistics, queue-depth history, recent-task search, status filtering, pagination, automatic and manual refresh, individual retry and stop, bounded retry-pending, and native navigation to the implemented Dead Letter Queue route. Tenant-wide results remain tenant-scoped instead of being mislabeled as the selected project. The shared controller covers loading, empty, ready, stale, conflict, forbidden, unavailable, retry and scope-switch states without remounting the active workbench. Local Desktop uses the sidecar My Work authority for native project-scoped discovery, search, filtering, pagination, refresh and Workspace navigation, but tenant-wide statistics, queue history and task mutations remain unavailable under local_task_dashboard_partial."
     },
     {
       "id": "tenant-tenant-analytics",

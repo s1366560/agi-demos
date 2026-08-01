@@ -492,6 +492,36 @@
         "view",
         "list",
         "inspect-stats",
+        "inspect-message",
+        "filter",
+        "paginate",
+        "refresh",
+        "retry-message",
+        "retry-batch",
+        "discard",
+        "cleanup"
+      ],
+      "web_actions": [
+        "view",
+        "list",
+        "inspect-stats",
+        "inspect-message",
+        "filter",
+        "paginate",
+        "refresh",
+        "retry-message",
+        "retry-batch",
+        "discard",
+        "cleanup"
+      ],
+      "cloud_actions": [
+        "view",
+        "list",
+        "inspect-stats",
+        "inspect-message",
+        "filter",
+        "paginate",
+        "refresh",
         "retry-message",
         "retry-batch",
         "discard",
@@ -504,6 +534,30 @@
             "view",
             "list",
             "inspect-stats",
+            "inspect-message",
+            "filter",
+            "paginate",
+            "refresh",
+            "retry-message",
+            "retry-batch",
+            "discard",
+            "cleanup"
+          ],
+          "authentication": "authenticated",
+          "authorization": ["global_admin"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list",
+            "inspect-stats",
+            "inspect-message",
+            "filter",
+            "paginate",
+            "refresh",
             "retry-message",
             "retry-batch",
             "discard",
@@ -517,12 +571,24 @@
           "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
+      "cloud_status": "implemented",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/governance/DeadLetterQueuePage.tsx",
+        "agi-stack/apps/desktop/src/features/governance/deadLetterQueueCapability.ts",
+        "agi-stack/apps/desktop/src/features/governance/deadLetterQueueClient.ts",
+        "agi-stack/apps/desktop/src/features/governance/deadLetterQueueController.ts",
+        "agi-stack/apps/desktop/src/features/governance/deadLetterQueueHttpClient.ts",
+        "agi-stack/apps/desktop/src/features/governance/deadLetterQueueRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/governance/useDeadLetterQueueController.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts"
+      ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_message_bus_dlq_not_applicable",
       "local_deviation": "The Cloud message-bus DLQ has no Local equivalent. Local retry and recovery remain owned by their specific sidecar outbox contracts rather than a fabricated global queue.",
-      "judgment_rationale": "DeadLetterQueue is an administrative Web surface with retry, discard, cleanup, and aggregate statistics authority. Its detail drawer uses the selected list row and does not call the single-message GET service method. Desktop lacks the route, and Local does not run the Cloud message bus represented by this queue."
+      "judgment_rationale": "Cloud Desktop now mounts a native global-admin Dead Letter Queue route with strict Cloud DTO validation, separate message and statistics loading/error/retry states, empty and stale preservation, status/event/error/routing filters, pagination, manual and visible-tab 30-second refresh, authoritative detail reads, single and batch retry, reason-required single and batch discard, cleanup confirmation, conflict and forbidden handling, and scope-aware cancellation. The renderer advertises only actions granted by the capability snapshot and route entry remains gated by the structured global_admin permission. Local does not call Cloud APIs and retains the stable cloud_message_bus_dlq_not_applicable disposition because retry and recovery remain owned by their specific sidecar outbox contracts."
     }
   ],
   "source_ownership": {

@@ -208,7 +208,7 @@ test("Tenant Workspaces binds native settings entries, contracts, and permission
   );
 });
 
-test("Tenant Tasks records explicit Cloud and Local degradation boundaries", () => {
+test("Tenant Tasks records implemented Cloud and explicit Local degradation boundaries", () => {
   const capability = readCapability(
     "parity-capability-definitions.02-tenant-operations.v2.json",
     "tenant-tenant-tasks",
@@ -216,19 +216,11 @@ test("Tenant Tasks records explicit Cloud and Local degradation boundaries", () 
 
   assert.equal(Object.hasOwn(capability, "web_status"), false);
   assert.equal(Object.hasOwn(capability, "web_reason_code"), false);
-  assert.equal(capability.cloud_status, "partial");
-  assert.equal(
-    capability.cloud_reason_code,
-    "desktop_tenant_tasks_dlq_navigation_partial",
-  );
+  assert.equal(capability.cloud_status, "implemented");
+  assert.equal(Object.hasOwn(capability, "cloud_reason_code"), false);
   assert.equal(capability.local_status, "partial");
   assert.equal(capability.local_reason_code, "local_task_dashboard_partial");
-  assert.deepEqual(
-    capability.cloud_actions,
-    capability.web_actions.filter(
-      (action) => action !== "navigate-dead-letter-queue",
-    ),
-  );
+  assert.deepEqual(capability.cloud_actions, capability.web_actions);
   assert.deepEqual(capability.local_actions, [
     "view",
     "list",
@@ -240,7 +232,7 @@ test("Tenant Tasks records explicit Cloud and Local degradation boundaries", () 
   ]);
   assert.match(
     capability.judgment_rationale,
-    /desktop_tenant_tasks_dlq_navigation_partial/u,
+    /native navigation to the implemented Dead Letter Queue route/u,
   );
   assert.match(capability.judgment_rationale, /local_task_dashboard_partial/u);
   assertPermissionCoverage(
