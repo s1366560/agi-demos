@@ -129,6 +129,13 @@ copyFileSync(
   join(compiledTenantDirectory, 'TenantTasksPage.css'),
 );
 
+const compiledGovernanceDirectory = join(compiledRoot, 'src', 'features', 'governance');
+mkdirSync(compiledGovernanceDirectory, { recursive: true });
+copyFileSync(
+  join(desktopRoot, 'src', 'features', 'governance', 'DeadLetterQueuePage.css'),
+  join(compiledGovernanceDirectory, 'DeadLetterQueuePage.css'),
+);
+
 const testFiles = discoverTestFiles(testsDirectory);
 assertTestInventoryComplete({ testsDirectory, testFiles });
 

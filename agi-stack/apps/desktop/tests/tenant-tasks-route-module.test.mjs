@@ -55,7 +55,8 @@ test('Tenant Tasks loader stays lazy and renders the complete native dashboard s
   assert.match(markup, /Task Dashboard/);
   assert.match(markup, /Process episode/);
   assert.match(markup, /Resume pending/);
-  assert.doesNotMatch(markup, /Dead letter queue/);
+  assert.match(markup, /Dead letter queue/);
+  assert.match(markup, /#\/tenant\/tenant-1\/dead-letter-queue/);
   assert.match(markup, /Search tasks/);
   assert.doesNotMatch(markup, /iframe|webview|Open in browser/iu);
 });
@@ -110,6 +111,7 @@ function controller() {
           'retry-task',
           'stop-task',
           'retry-pending',
+          'navigate-dead-letter-queue',
         ],
         stats: {
           total: 1,

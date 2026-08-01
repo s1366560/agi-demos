@@ -16,6 +16,7 @@ const TENANT_TASKS_CLOUD_ACTIONS = Object.freeze([
   'retry-task',
   'stop-task',
   'retry-pending',
+  'navigate-dead-letter-queue',
 ]);
 const TENANT_TASKS_LOCAL_ACTIONS = Object.freeze([
   'view',
@@ -38,11 +39,8 @@ export function tenantTasksCapability(
     return unavailable(scope);
   }
   return {
-    availability: 'degraded',
-    reason_code:
-      config.mode === 'local'
-        ? 'local_task_dashboard_partial'
-        : 'desktop_tenant_tasks_dlq_navigation_partial',
+    availability: config.mode === 'local' ? 'degraded' : 'available',
+    reason_code: config.mode === 'local' ? 'local_task_dashboard_partial' : null,
     service_version: TENANT_TASKS_SERVICE_VERSION,
     contract_version: TENANT_TASKS_CONTRACT_VERSION,
     allowed_actions:

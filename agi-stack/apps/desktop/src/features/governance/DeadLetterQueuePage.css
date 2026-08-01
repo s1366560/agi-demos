@@ -1,0 +1,310 @@
+.dead-letter-queue-page {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+  padding: 28px;
+  color: var(--gray-12);
+}
+
+.dead-letter-queue-header,
+.dead-letter-queue-catalog > header,
+.dead-letter-queue-catalog > footer,
+.dead-letter-queue-detail > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dead-letter-queue-header h1,
+.dead-letter-queue-catalog h2,
+.dead-letter-queue-detail h2 {
+  margin: 4px 0 0;
+}
+
+.dead-letter-queue-header p,
+.dead-letter-queue-catalog p,
+.dead-letter-queue-dialog-backdrop p {
+  margin: 6px 0 0;
+  color: var(--gray-11);
+}
+
+.dead-letter-queue-header > div:first-child > span {
+  color: var(--gray-10);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.dead-letter-queue-header-actions,
+.dead-letter-queue-batch-actions,
+.dead-letter-queue-catalog > footer > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dead-letter-queue-scope {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--gray-5);
+  border-radius: 10px;
+  background: var(--gray-2);
+}
+
+.dead-letter-queue-scope small {
+  margin-left: auto;
+  color: var(--gray-10);
+}
+
+.dead-letter-queue-stats {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.dead-letter-queue-stats article {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--gray-5);
+  border-radius: 10px;
+  background: var(--gray-2);
+}
+
+.dead-letter-queue-stats span {
+  color: var(--gray-10);
+  font-size: 12px;
+}
+
+.dead-letter-queue-stats strong {
+  font-size: 24px;
+}
+
+.dead-letter-queue-catalog {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--gray-5);
+  border-radius: 12px;
+  background: var(--gray-1);
+}
+
+.dead-letter-queue-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.dead-letter-queue-filters label,
+.dead-letter-queue-dialog-backdrop label {
+  display: grid;
+  gap: 6px;
+  color: var(--gray-11);
+  font-size: 12px;
+}
+
+.dead-letter-queue-filters select,
+.dead-letter-queue-dialog-backdrop textarea {
+  min-height: 34px;
+  padding: 7px 9px;
+  border: 1px solid var(--gray-6);
+  border-radius: 7px;
+  background: var(--gray-2);
+  color: var(--gray-12);
+}
+
+.dead-letter-queue-table-scroll {
+  overflow: auto;
+}
+
+.dead-letter-queue-table-scroll table {
+  width: 100%;
+  min-width: 1040px;
+  border-collapse: collapse;
+}
+
+.dead-letter-queue-table-scroll th,
+.dead-letter-queue-table-scroll td {
+  padding: 10px;
+  border-bottom: 1px solid var(--gray-5);
+  text-align: left;
+  vertical-align: top;
+}
+
+.dead-letter-queue-table-scroll th {
+  color: var(--gray-10);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dead-letter-queue-table-scroll td strong,
+.dead-letter-queue-table-scroll td code,
+.dead-letter-queue-table-scroll td span {
+  display: block;
+  max-width: 260px;
+}
+
+.dead-letter-queue-table-scroll td code,
+.dead-letter-queue-table-scroll td span {
+  margin-top: 3px;
+  color: var(--gray-10);
+  overflow-wrap: anywhere;
+}
+
+.dead-letter-status {
+  display: inline-flex !important;
+  width: fit-content;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--gray-4);
+  color: var(--gray-12) !important;
+}
+
+.dead-letter-status.status-pending,
+.dead-letter-status.status-retrying {
+  background: var(--amber-4);
+  color: var(--amber-11) !important;
+}
+
+.dead-letter-status.status-resolved {
+  background: var(--green-4);
+  color: var(--green-11) !important;
+}
+
+.dead-letter-status.status-discarded,
+.dead-letter-status.status-expired {
+  background: var(--red-4);
+  color: var(--red-11) !important;
+}
+
+.dead-letter-queue-resource-notice,
+.dead-letter-queue-mutation-notice,
+.dead-letter-queue-loading,
+.dead-letter-queue-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--gray-5);
+  border-radius: 9px;
+  background: var(--gray-2);
+}
+
+.dead-letter-queue-resource-notice code,
+.dead-letter-queue-mutation-notice code {
+  color: var(--gray-10);
+}
+
+.dead-letter-queue-resource-notice button {
+  margin-left: auto;
+}
+
+.dead-letter-queue-resource-notice[data-state='forbidden'],
+.dead-letter-queue-resource-notice[data-state='unavailable'],
+.dead-letter-queue-mutation-notice[data-state='forbidden'],
+.dead-letter-queue-mutation-notice[data-state='conflict'] {
+  border-color: var(--red-7);
+}
+
+.dead-letter-queue-empty {
+  display: grid;
+  min-height: 140px;
+  place-content: center;
+  text-align: center;
+}
+
+.dead-letter-queue-detail {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(560px, 90vw);
+  padding: 22px;
+  overflow: auto;
+  border-left: 1px solid var(--gray-6);
+  background: var(--gray-1);
+  box-shadow: -18px 0 50px rgba(var(--desktop-black-rgb), 24%);
+}
+
+.dead-letter-queue-detail dl,
+.dead-letter-queue-detail dl > div {
+  display: grid;
+  gap: 6px;
+}
+
+.dead-letter-queue-detail dl {
+  gap: 14px;
+}
+
+.dead-letter-queue-detail dt {
+  color: var(--gray-10);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dead-letter-queue-detail dd {
+  margin: 0;
+}
+
+.dead-letter-queue-detail pre {
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  border-radius: 7px;
+  background: var(--gray-3);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.dead-letter-queue-dialog-backdrop {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  display: grid;
+  padding: 20px;
+  place-items: center;
+  background: rgba(var(--desktop-black-rgb), 55%);
+}
+
+.dead-letter-queue-dialog-backdrop > section {
+  display: grid;
+  gap: 14px;
+  width: min(480px, 100%);
+  padding: 20px;
+  border: 1px solid var(--gray-6);
+  border-radius: 12px;
+  background: var(--gray-2);
+  box-shadow: 0 20px 60px rgba(var(--desktop-black-rgb), 35%);
+}
+
+.dead-letter-queue-dialog-backdrop h2 {
+  margin: 0;
+}
+
+.dead-letter-queue-dialog-backdrop textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.dead-letter-queue-dialog-backdrop footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 1100px) {
+  .dead-letter-queue-stats {
+    grid-template-columns: repeat(3, minmax(110px, 1fr));
+  }
+
+  .dead-letter-queue-filters {
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+  }
+}

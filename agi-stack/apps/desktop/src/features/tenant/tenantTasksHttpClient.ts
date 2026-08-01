@@ -24,6 +24,7 @@ const CLOUD_ACTIONS = Object.freeze([
   'retry-task',
   'stop-task',
   'retry-pending',
+  'navigate-dead-letter-queue',
 ]);
 const LOCAL_ACTIONS = Object.freeze([
   'view',

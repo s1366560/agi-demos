@@ -75,6 +75,7 @@ test('Cloud Tenant Tasks binds the complete Web task dashboard authority', async
     'retry-task',
     'stop-task',
     'retry-pending',
+    'navigate-dead-letter-queue',
   ]);
   assert.equal(snapshot.queue.current, 1);
   assert.equal(snapshot.tasks[0].projectId, null);

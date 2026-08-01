@@ -121,6 +121,15 @@ export function evaluateDesktopRouteAccess<TModule>({
   }
 
   if (mode === 'local' && match.definition.localPolicy === 'cloud_only') {
+    if (
+      capability?.availability === 'not_applicable' &&
+      capabilityScopeMatches(match.context, capability)
+    ) {
+      return unavailable(
+        capability.reason_code ?? 'desktop_route_capability_not_applicable',
+        capability,
+      );
+    }
     return unavailable('desktop_route_local_cloud_only', null);
   }
   if (

@@ -5,6 +5,10 @@ import {
   projectOverviewZhCN,
 } from './features/project/locales/projectOverviewMessages';
 import {
+  deadLetterQueueEnUS,
+  deadLetterQueueZhCN,
+} from './features/governance/locales/deadLetterQueueMessages';
+import {
   nativeUnavailableRouteEnUS,
   nativeUnavailableRouteZhCN,
 } from './features/navigation/locales/nativeUnavailableRouteMessages';
@@ -42,6 +46,7 @@ type I18nContextValue = {
 const STORAGE_KEY = 'agistack.desktop.locale';
 
 const enUS: Record<string, string> = {
+  ...deadLetterQueueEnUS,
   ...desktopProductionRouterEnUS,
   ...nativeUnavailableRouteEnUS,
   ...projectOverviewEnUS,
@@ -3639,6 +3644,7 @@ const enUS: Record<string, string> = {
 };
 
 const zhCN: Record<string, string> = {
+  ...deadLetterQueueZhCN,
   ...desktopProductionRouterZhCN,
   ...nativeUnavailableRouteZhCN,
   ...projectOverviewZhCN,

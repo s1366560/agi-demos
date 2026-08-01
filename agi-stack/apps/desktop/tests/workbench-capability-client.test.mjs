@@ -246,8 +246,8 @@ test('cloud client validates structured Search and Automation authorities', asyn
       ),
     );
     assert.deepEqual(snapshot.capabilities['tenant-tenant-tasks'], {
-      availability: 'degraded',
-      reason_code: 'desktop_tenant_tasks_dlq_navigation_partial',
+      availability: 'available',
+      reason_code: null,
       service_version: '0.1.0',
       contract_version: '3.0.0',
       allowed_actions: [
@@ -260,6 +260,28 @@ test('cloud client validates structured Search and Automation authorities', asyn
         'retry-task',
         'stop-task',
         'retry-pending',
+        'navigate-dead-letter-queue',
+      ],
+      scope: { tenant_id: 'default', project_id: null, workspace_id: null, instance_id: null },
+      authority_revision: null,
+    });
+    assert.deepEqual(snapshot.capabilities['tenant-tenant-dead-letter-queue'], {
+      availability: 'available',
+      reason_code: null,
+      service_version: '0.1.0',
+      contract_version: '3.0.0',
+      allowed_actions: [
+        'view',
+        'list',
+        'inspect-stats',
+        'inspect-message',
+        'filter',
+        'paginate',
+        'refresh',
+        'retry-message',
+        'retry-batch',
+        'discard',
+        'cleanup',
       ],
       scope: {
         tenant_id: 'default',

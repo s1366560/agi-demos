@@ -294,10 +294,12 @@ import {
   TENANT_OVERVIEW_ROUTE_ID,
   TENANT_PROJECTS_ROUTE_ID,
   TENANT_TASKS_ROUTE_ID,
+  TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
   TENANT_WORKSPACES_ROUTE_ID,
 } from './features/navigation/desktopProductionRouteRegistry';
 import { buildDesktopRoutePath } from './features/navigation/desktopRouteRegistry';
 import {
+  createDeadLetterQueueRouteBindingForRuntime,
   createProjectOverviewRouteBindingForRuntime,
   createTenantOverviewRouteBindingForRuntime,
   createTenantProjectsRouteBindingForRuntime,
@@ -321,6 +323,7 @@ import {
   shortcutChordFor,
 } from './features/navigation/keyboardShortcutModel';
 import { createProjectOverviewRouteModuleLoader } from './features/project/projectOverviewRouteModule';
+import { createDeadLetterQueueRouteModuleLoader } from './features/governance/deadLetterQueueRouteModule';
 import { createTenantOverviewRouteModuleLoader } from './features/tenant/tenantOverviewRouteModule';
 import { createTenantProjectsRouteModuleLoader } from './features/tenant/tenantProjectsRouteModule';
 import { createTenantTasksRouteModuleLoader } from './features/tenant/tenantTasksRouteModule';
@@ -2019,6 +2022,14 @@ export function App() {
                 configRef.current,
                 context,
               ),
+          }),
+          [TENANT_DEAD_LETTER_QUEUE_ROUTE_ID]:
+            createDeadLetterQueueRouteModuleLoader({
+              createBinding: (context) =>
+                createDeadLetterQueueRouteBindingForRuntime(
+                  configRef.current,
+                  context,
+                ),
           }),
           [PROJECT_OVERVIEW_ROUTE_ID]:
             createProjectOverviewRouteModuleLoader({

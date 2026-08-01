@@ -18,6 +18,7 @@ const {
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
   TENANT_OVERVIEW_ROUTE_ID,
+  TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
   TENANT_PROJECTS_ROUTE_ID,
   TENANT_TASKS_ROUTE_ID,
   TENANT_WORKSPACES_ROUTE_ID,
@@ -168,6 +169,22 @@ function implementedTenantTasksModule(overrides = {}) {
   });
 }
 
+function implementedDeadLetterQueueModule(overrides = {}) {
+  function DeadLetterQueueRoute() {
+    return React.createElement('section', null, 'Dead Letter Queue route');
+  }
+  return Object.freeze({
+    routeId: TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
+    disposition: 'implemented',
+    availability: 'available',
+    reasonCode: null,
+    capability: TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
+    localPolicy: 'cloud_only',
+    Surface: DeadLetterQueueRoute,
+    ...overrides,
+  });
+}
+
 function createRegistry(
   projectLoader = async () => implementedProjectModule(),
   searchLoader = async () => implementedSearchModule(),
@@ -176,6 +193,7 @@ function createRegistry(
   tenantProjectsLoader = async () => implementedTenantProjectsModule(),
   tenantWorkspacesLoader = async () => implementedTenantWorkspacesModule(),
   tenantTasksLoader = async () => implementedTenantTasksModule(),
+  deadLetterQueueLoader = async () => implementedDeadLetterQueueModule(),
 ) {
   return createDesktopProductionRouteRegistry({
     implementedLoaders: {
@@ -186,6 +204,7 @@ function createRegistry(
       [TENANT_PROJECTS_ROUTE_ID]: tenantProjectsLoader,
       [TENANT_WORKSPACES_ROUTE_ID]: tenantWorkspacesLoader,
       [TENANT_TASKS_ROUTE_ID]: tenantTasksLoader,
+      [TENANT_DEAD_LETTER_QUEUE_ROUTE_ID]: deadLetterQueueLoader,
     },
   });
 }
@@ -198,6 +217,7 @@ test('production registry requires every implemented project route loader', () =
   assert.equal(TENANT_PROJECTS_ROUTE_ID, 'tenant-tenant-projects');
   assert.equal(TENANT_WORKSPACES_ROUTE_ID, 'tenant-tenant-workspaces');
   assert.equal(TENANT_TASKS_ROUTE_ID, 'tenant-tenant-tasks');
+  assert.equal(TENANT_DEAD_LETTER_QUEUE_ROUTE_ID, 'tenant-tenant-dead-letter-queue');
   assert.throws(
     () =>
       createDesktopProductionRouteRegistry({
@@ -264,7 +284,7 @@ test('production registry requires every implemented project route loader', () =
   );
 });
 
-test('all 51 production loaders remain lazy and seven routes are real modules', async () => {
+test('all 51 production loaders remain lazy and eight routes are real modules', async () => {
   let projectLoadCount = 0;
   let searchLoadCount = 0;
   let cronJobsLoadCount = 0;
@@ -272,6 +292,7 @@ test('all 51 production loaders remain lazy and seven routes are real modules', 
   let tenantProjectsLoadCount = 0;
   let tenantWorkspacesLoadCount = 0;
   let tenantTasksLoadCount = 0;
+  let deadLetterQueueLoadCount = 0;
   const projectModule = implementedProjectModule();
   const searchModule = implementedSearchModule();
   const cronJobsModule = implementedCronJobsModule();
@@ -279,6 +300,7 @@ test('all 51 production loaders remain lazy and seven routes are real modules', 
   const tenantProjectsModule = implementedTenantProjectsModule();
   const tenantWorkspacesModule = implementedTenantWorkspacesModule();
   const tenantTasksModule = implementedTenantTasksModule();
+  const deadLetterQueueModule = implementedDeadLetterQueueModule();
   const registry = createRegistry(
     async () => {
       projectLoadCount += 1;
@@ -308,6 +330,10 @@ test('all 51 production loaders remain lazy and seven routes are real modules', 
       tenantTasksLoadCount += 1;
       return tenantTasksModule;
     },
+    async () => {
+      deadLetterQueueLoadCount += 1;
+      return deadLetterQueueModule;
+    },
   );
 
   assert.equal(registry.definitions.length, 51);
@@ -318,6 +344,7 @@ test('all 51 production loaders remain lazy and seven routes are real modules', 
   assert.equal(tenantProjectsLoadCount, 0);
   assert.equal(tenantWorkspacesLoadCount, 0);
   assert.equal(tenantTasksLoadCount, 0);
+  assert.equal(deadLetterQueueLoadCount, 0);
 
   const loaded = await Promise.all(
     registry.definitions.map(async (definition) => ({
@@ -332,6 +359,7 @@ test('all 51 production loaders remain lazy and seven routes are real modules', 
   assert.equal(tenantProjectsLoadCount, 1);
   assert.equal(tenantWorkspacesLoadCount, 1);
   assert.equal(tenantTasksLoadCount, 1);
+  assert.equal(deadLetterQueueLoadCount, 1);
 
   const implemented = loaded.filter(
     ({ module }) => module.disposition === 'implemented',
@@ -339,7 +367,7 @@ test('all 51 production loaders remain lazy and seven routes are real modules', 
   const planned = loaded.filter(
     ({ module }) => module.disposition === 'planned',
   );
-  assert.equal(implemented.length, 7);
+  assert.equal(implemented.length, 8);
   assert.deepEqual(
     implemented.map(({ definition }) => definition.id).sort(),
     [
@@ -350,6 +378,7 @@ test('all 51 production loaders remain lazy and seven routes are real modules', 
       TENANT_PROJECTS_ROUTE_ID,
       TENANT_WORKSPACES_ROUTE_ID,
       TENANT_TASKS_ROUTE_ID,
+      TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
     ].sort(),
   );
   assert.equal(
@@ -394,7 +423,12 @@ test('all 51 production loaders remain lazy and seven routes are real modules', 
     ).module,
     tenantTasksModule,
   );
-  assert.equal(planned.length, 44);
+  assert.equal(
+    implemented.find(({ definition }) => definition.id === TENANT_DEAD_LETTER_QUEUE_ROUTE_ID)
+      .module,
+    deadLetterQueueModule,
+  );
+  assert.equal(planned.length, 43);
 
   for (const { definition, module } of planned) {
     assert.equal(module.routeId, definition.id);
