@@ -312,12 +312,12 @@ const StatusPhaseDot: FC<{ active: boolean; completed: boolean }> = ({ active, c
 
 const EMPTY_TASKS: never[] = [];
 const POOL_STATUS_REFRESH_MS = 15000;
-const POOL_INSTANCE_REFRESH_MS = 60000;
 const POOL_STATUS_CACHE_TTL_MS = 15000;
 
 interface PoolStatusSnapshot {
   enabled: boolean;
   instance: PoolInstance | null;
+  allowedActions: Array<'view' | 'pause' | 'resume' | 'terminate'>;
   fetchedAt: number;
 }
 
@@ -396,7 +396,6 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
   const [poolLoading, setPoolLoading] = useState(false);
   const [poolError, setPoolError] = useState<string | null>(null);
   const [poolRefreshNonce, setPoolRefreshNonce] = useState(0);
-  const lastPoolInstanceFetchAtRef = useRef(0);
   const poolEffectTokenRef = useRef(0);
 
   // Fetch pool instance status when pool management is enabled
@@ -422,35 +421,12 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
       }, delayMs);
     };
 
-    const loadPoolSnapshot = async (
-      reason: 'initial' | 'timer' | 'manual'
-    ): Promise<PoolStatusSnapshot> => {
-      const statusResponse = await poolService.getStatus();
-
-      if (!statusResponse.enabled) {
-        return {
-          enabled: false,
-          instance: null,
-          fetchedAt: Date.now(),
-        };
-      }
-
-      let nextInstance = poolStatusSnapshotCache.get(cacheKey)?.instance ?? null;
-      const now = Date.now();
-      const shouldRefreshInstance =
-        reason !== 'timer' || now - lastPoolInstanceFetchAtRef.current >= POOL_INSTANCE_REFRESH_MS;
-
-      if (shouldRefreshInstance) {
-        const instanceKey = `${tenantId}:${projectId}:chat`;
-        const instances = await poolService.listInstances({ page: 1, page_size: 100 });
-
-        nextInstance =
-          instances.instances.find((i: PoolInstance) => i.instance_key === instanceKey) || null;
-      }
-
+    const loadPoolSnapshot = async (): Promise<PoolStatusSnapshot> => {
+      const response = await poolService.getProjectInstance(tenantId, projectId, 'chat');
       return {
-        enabled: true,
-        instance: nextInstance,
+        enabled: response.enabled,
+        instance: response.instance,
+        allowedActions: response.allowed_actions,
         fetchedAt: Date.now(),
       };
     };
@@ -459,10 +435,9 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
       poolStatusSnapshotCache.set(cacheKey, snapshot);
       setPoolEnabled(snapshot.enabled);
       setPoolInstance(snapshot.instance);
-      lastPoolInstanceFetchAtRef.current = snapshot.enabled ? snapshot.fetchedAt : 0;
     };
 
-    const fetchPoolInstance = async (reason: 'initial' | 'timer' | 'manual') => {
+    const fetchPoolInstance = async (_reason: 'initial' | 'timer' | 'manual') => {
       if (!isEffectActive() || inFlight) {
         return;
       }
@@ -473,7 +448,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
       try {
         let sharedRequest = poolStatusSnapshotInFlight.get(cacheKey);
         if (!sharedRequest) {
-          sharedRequest = loadPoolSnapshot(reason).finally(() => {
+          sharedRequest = loadPoolSnapshot().finally(() => {
             if (poolStatusSnapshotInFlight.get(cacheKey) === sharedRequest) {
               poolStatusSnapshotInFlight.delete(cacheKey);
             }
@@ -493,6 +468,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
           const snapshot = {
             enabled: false,
             instance: null,
+            allowedActions: [],
             fetchedAt: Date.now(),
           };
           poolStatusSnapshotCache.set(cacheKey, snapshot);
@@ -513,7 +489,6 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
     if (cachedSnapshot && isCacheFresh) {
       setPoolEnabled(cachedSnapshot.enabled);
       setPoolInstance(cachedSnapshot.instance);
-      lastPoolInstanceFetchAtRef.current = cachedSnapshot.fetchedAt;
       scheduleNextRefresh();
     } else {
       void fetchPoolInstance('initial');
@@ -540,6 +515,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
 
   const config = lifecycleConfig[lifecycleState];
   const error = enablePoolManagement ? poolError : wsError;
+  const instanceKey = `${tenantId}:${projectId}:chat`;
 
   const StatusIcon = config.icon;
   const isError = lifecycleState === 'error';
@@ -554,10 +530,18 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
     lifecycleState !== 'initializing';
   // Check if agent can be paused (pool mode only)
   const canPause =
-    enablePoolManagement && poolEnabled && poolInstance && lifecycleState === 'ready';
+    enablePoolManagement &&
+    poolEnabled &&
+    poolInstance &&
+    lifecycleState === 'ready' &&
+    poolStatusSnapshotCache.get(instanceKey)?.allowedActions.includes('pause');
   // Check if agent can be resumed (pool mode only)
   const canResume =
-    enablePoolManagement && poolEnabled && poolInstance && lifecycleState === 'paused';
+    enablePoolManagement &&
+    poolEnabled &&
+    poolInstance &&
+    lifecycleState === 'paused' &&
+    poolStatusSnapshotCache.get(instanceKey)?.allowedActions.includes('resume');
 
   const domainLane =
     (executionPathDecision?.metadata?.domain_lane as string | undefined) ??
@@ -566,16 +550,14 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
     null;
   const hasInsights = Boolean(executionPathDecision || selectionTrace || policyFiltered);
 
-  // Get instance key for pool operations
-  const instanceKey = `${tenantId}:${projectId}:chat`;
-
   // Lifecycle control handlers - use pool API when enabled, fallback to WebSocket
   const handleStopAgent = useCallback(async () => {
     setIsActionPending(true);
     try {
-      if (enablePoolManagement && poolEnabled && poolInstance) {
-        // Use pool API to terminate instance
-        await poolService.terminateInstance(instanceKey, false);
+      const canTerminatePool =
+        poolStatusSnapshotCache.get(instanceKey)?.allowedActions.includes('terminate') ?? false;
+      if (enablePoolManagement && poolEnabled && poolInstance && canTerminatePool) {
+        await poolService.terminateProjectInstance(tenantId, projectId, 'chat');
         poolStatusSnapshotCache.delete(instanceKey);
         setPoolRefreshNonce((prev) => prev + 1);
         message.info(t('agent.lifecycle.messages.terminating'));
@@ -591,14 +573,15 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         setIsActionPending(false);
       }, 3000);
     }
-  }, [projectId, enablePoolManagement, poolEnabled, poolInstance, instanceKey, t]);
+  }, [tenantId, projectId, enablePoolManagement, poolEnabled, poolInstance, instanceKey, t]);
 
   const handleRestartAgent = useCallback(async () => {
     setIsActionPending(true);
     try {
-      if (enablePoolManagement && poolEnabled && poolInstance) {
-        // Terminate and let auto-create handle restart
-        await poolService.terminateInstance(instanceKey, true);
+      const canTerminatePool =
+        poolStatusSnapshotCache.get(instanceKey)?.allowedActions.includes('terminate') ?? false;
+      if (enablePoolManagement && poolEnabled && poolInstance && canTerminatePool) {
+        await poolService.terminateProjectInstance(tenantId, projectId, 'chat');
         poolStatusSnapshotCache.delete(instanceKey);
         setPoolRefreshNonce((prev) => prev + 1);
         message.info(t('agent.lifecycle.messages.restarting'));
@@ -613,13 +596,13 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         setIsActionPending(false);
       }, 5000);
     }
-  }, [projectId, enablePoolManagement, poolEnabled, poolInstance, instanceKey, t]);
+  }, [tenantId, projectId, enablePoolManagement, poolEnabled, poolInstance, instanceKey, t]);
 
   const handlePauseAgent = useCallback(async () => {
     if (!poolInstance) return;
     setIsActionPending(true);
     try {
-      await poolService.pauseInstance(instanceKey);
+      await poolService.pauseProjectInstance(tenantId, projectId, 'chat');
       poolStatusSnapshotCache.delete(instanceKey);
       setPoolRefreshNonce((prev) => prev + 1);
       message.info(t('agent.lifecycle.messages.pausing'));
@@ -630,13 +613,13 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         setIsActionPending(false);
       }, 2000);
     }
-  }, [poolInstance, instanceKey, t]);
+  }, [poolInstance, instanceKey, tenantId, projectId, t]);
 
   const handleResumeAgent = useCallback(async () => {
     if (!poolInstance) return;
     setIsActionPending(true);
     try {
-      await poolService.resumeInstance(instanceKey);
+      await poolService.resumeProjectInstance(tenantId, projectId, 'chat');
       poolStatusSnapshotCache.delete(instanceKey);
       setPoolRefreshNonce((prev) => prev + 1);
       message.info(t('agent.lifecycle.messages.resuming'));
@@ -647,7 +630,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         setIsActionPending(false);
       }, 2000);
     }
-  }, [poolInstance, instanceKey, t]);
+  }, [poolInstance, instanceKey, tenantId, projectId, t]);
 
   // Get pool tier config
   const poolTierConfig = poolInstance?.tier ? tierConfig[poolInstance.tier] : null;

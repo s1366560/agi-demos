@@ -18,13 +18,22 @@ Pool Status API Router.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import PlainTextResponse
 
+from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.routers.agent.access import has_global_admin_access
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
+from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import Tenant, User
+from src.infrastructure.audit.audit_log_service import get_audit_service
 from src.infrastructure.i18n import gettext as _
 
 from ..integration.session_adapter import get_global_adapter
@@ -52,8 +61,11 @@ class PoolStatusResponse(BaseModel):
     ready_instances: int = Field(..., description="就绪实例数")
     executing_instances: int = Field(..., description="执行中实例数")
     unhealthy_instances: int = Field(..., description="不健康实例数")
-    prewarm_pool: dict[str, int] = Field(..., description="预热池状态")
-    resource_usage: dict[str, Any] = Field(..., description="资源使用情况")
+    prewarm_pool: dict[str, int] | None = Field(..., description="预热池状态")
+    resource_usage: dict[str, Any] | None = Field(..., description="资源使用情况")
+    resolved_scope: str = Field(..., description="已解析的池作用域")
+    tenant_id: str | None = Field(None, description="租户作用域")
+    reason_code: str | None = Field(None, description="结构化降级原因")
 
 
 class InstanceInfo(BaseModel):
@@ -80,6 +92,8 @@ class InstanceListResponse(BaseModel):
     total: int = Field(..., description="总数")
     page: int = Field(1, description="当前页")
     page_size: int = Field(20, description="每页大小")
+    resolved_scope: str = Field(..., description="已解析的池作用域")
+    tenant_id: str | None = Field(None, description="租户作用域")
 
 
 class SetTierRequest(BaseModel):
@@ -95,6 +109,8 @@ class SetTierResponse(BaseModel):
     previous_tier: str | None = Field(None, description="之前的分级")
     current_tier: str = Field(..., description="当前分级")
     message: str = Field(..., description="操作结果")
+    resolved_scope: str = Field(..., description="已解析的池作用域")
+    tenant_id: str = Field(..., description="租户作用域")
 
 
 class MetricsResponse(BaseModel):
@@ -102,7 +118,10 @@ class MetricsResponse(BaseModel):
 
     instances: dict[str, Any] = Field(..., description="实例指标")
     health: dict[str, Any] = Field(..., description="健康指标")
-    prewarm: dict[str, Any] = Field(..., description="预热池指标")
+    prewarm: dict[str, Any] | None = Field(..., description="预热池指标")
+    resolved_scope: str = Field(..., description="已解析的池作用域")
+    tenant_id: str | None = Field(None, description="租户作用域")
+    reason_code: str | None = Field(None, description="结构化降级原因")
 
 
 class OperationResponse(BaseModel):
@@ -110,6 +129,24 @@ class OperationResponse(BaseModel):
 
     success: bool = Field(..., description="是否成功")
     message: str = Field(..., description="操作结果消息")
+    resolved_scope: str = Field(..., description="已解析的池作用域")
+    tenant_id: str | None = Field(None, description="租户作用域")
+
+
+class PoolScope(str, Enum):
+    """Discriminated administrative pool scope."""
+
+    GLOBAL = "global"
+    TENANT = "tenant"
+
+
+@dataclass(frozen=True, slots=True)
+class PoolAuthorityScope:
+    """Validated scope used by every administrative pool handler."""
+
+    scope: PoolScope
+    tenant_id: str | None = None
+    deprecated_implicit_global: bool = False
 
 
 # ============================================================================
@@ -147,6 +184,64 @@ async def _get_pool_manager() -> AgentPoolManager:
     )
 
 
+async def require_pool_global_admin(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """Require persisted global administration for every pool authority."""
+    if not await has_global_admin_access(db, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Global admin access required"),
+        )
+    return current_user
+
+
+async def resolve_pool_authority_scope(
+    response: Response,
+    scope: PoolScope | None = Query(None),
+    tenant_id: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+) -> PoolAuthorityScope:
+    """Resolve an explicit global or tenant disclosure boundary."""
+    if scope is None:
+        if tenant_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=_("Pool scope is required when tenant_id is provided"),
+            )
+        response.headers["Deprecation"] = "true"
+        response.headers["Sunset"] = "Sat, 01 Nov 2026 00:00:00 GMT"
+        return PoolAuthorityScope(
+            scope=PoolScope.GLOBAL,
+            deprecated_implicit_global=True,
+        )
+
+    if scope is PoolScope.GLOBAL:
+        if tenant_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=_("tenant_id is not allowed for global pool scope"),
+            )
+        return PoolAuthorityScope(scope=PoolScope.GLOBAL)
+
+    if not tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=_("tenant_id is required for tenant pool scope"),
+        )
+
+    tenant_result = await db.execute(
+        refresh_select_statement(select(Tenant.id).where(Tenant.id == tenant_id).limit(1))
+    )
+    if tenant_result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("Tenant not found"),
+        )
+    return PoolAuthorityScope(scope=PoolScope.TENANT, tenant_id=tenant_id)
+
+
 # ============================================================================
 # Helper: build InstanceInfo from an instance
 # ============================================================================
@@ -168,9 +263,77 @@ def _build_instance_info(instance_key: str, instance: Any) -> InstanceInfo:
         active_requests=instance._metrics.active_requests if instance._metrics else 0,
         total_requests=instance._metrics.total_requests if instance._metrics else 0,
         memory_used_mb=instance._metrics.memory_used_mb if instance._metrics else 0.0,
-        health_status=instance._last_health_status.value
-        if instance._last_health_status
-        else "unknown",
+        health_status=_instance_health_status(instance),
+    )
+
+
+def _instance_health_status(instance: Any) -> str:
+    health_check = getattr(instance, "_last_health_check", None)
+    health_status = getattr(health_check, "status", None)
+    return str(getattr(health_status, "value", "unknown"))
+
+
+def _instance_matches_scope(instance: Any, resolved_scope: PoolAuthorityScope) -> bool:
+    if resolved_scope.scope is PoolScope.GLOBAL:
+        return True
+    return instance.config.tenant_id == resolved_scope.tenant_id
+
+
+def _get_scoped_instance(
+    manager: AgentPoolManager,
+    instance_key: str,
+    resolved_scope: PoolAuthorityScope,
+) -> Any:
+    instance = manager._instances.get(instance_key)
+    if instance is None or not _instance_matches_scope(instance, resolved_scope):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Instance not found"))
+    return instance
+
+
+def _require_lifecycle_action(instance: Any, action: str) -> None:
+    allowed_states = {
+        "pause": frozenset({"ready", "executing"}),
+        "resume": frozenset({"paused"}),
+        "terminate": frozenset(
+            {
+                "created",
+                "initializing",
+                "initialization_failed",
+                "ready",
+                "executing",
+                "paused",
+                "unhealthy",
+                "degraded",
+            }
+        ),
+    }
+    if instance.status.value not in allowed_states[action]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_("Pool instance state conflict"),
+        )
+
+
+async def _audit_lifecycle_operation(
+    *,
+    action: str,
+    instance_key: str,
+    instance: Any,
+    current_user: User,
+    resolved_scope: PoolAuthorityScope,
+) -> None:
+    await get_audit_service().log_event(
+        action=f"runtime_pool.instance.{action}",
+        resource_type="runtime_pool_instance",
+        resource_id=instance_key,
+        actor=str(current_user.id),
+        tenant_id=str(instance.config.tenant_id),
+        details={
+            "scope": resolved_scope.scope.value,
+            "project_id": str(instance.config.project_id),
+            "agent_mode": str(instance.config.agent_mode),
+            "result": "success",
+        },
     )
 
 
@@ -187,11 +350,16 @@ _EMPTY_RESOURCE: dict[str, Any] = {
 }
 
 
-def _empty_pool_status(enabled: bool, status: str) -> PoolStatusResponse:
+def _empty_pool_status(
+    enabled: bool,
+    status_value: str,
+    resolved_scope: PoolAuthorityScope,
+) -> PoolStatusResponse:
     """Return a PoolStatusResponse with zero counts."""
+    tenant_scoped = resolved_scope.scope is PoolScope.TENANT
     return PoolStatusResponse(
         enabled=enabled,
-        status=status,
+        status=status_value,
         total_instances=0,
         hot_instances=0,
         warm_instances=0,
@@ -199,8 +367,11 @@ def _empty_pool_status(enabled: bool, status: str) -> PoolStatusResponse:
         ready_instances=0,
         executing_instances=0,
         unhealthy_instances=0,
-        prewarm_pool=dict(_EMPTY_PREWARM),
-        resource_usage=dict(_EMPTY_RESOURCE),
+        prewarm_pool=None if tenant_scoped else dict(_EMPTY_PREWARM),
+        resource_usage=None if tenant_scoped else dict(_EMPTY_RESOURCE),
+        resolved_scope=resolved_scope.scope.value,
+        tenant_id=resolved_scope.tenant_id,
+        reason_code="global_pool_capacity_not_available_in_tenant_scope" if tenant_scoped else None,
     )
 
 
@@ -209,7 +380,9 @@ def _empty_pool_status(enabled: bool, status: str) -> PoolStatusResponse:
 # ============================================================================
 
 
-async def _get_pool_status() -> PoolStatusResponse:
+async def _get_pool_status(
+    resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
+) -> PoolStatusResponse:
     """获取池状态概览.
 
     此端点始终返回200，即使池未启用也会返回disabled状态。
@@ -220,12 +393,37 @@ async def _get_pool_status() -> PoolStatusResponse:
 
     # 如果池未启用，返回disabled状态
     if not settings.agent_pool_enabled:
-        return _empty_pool_status(enabled=False, status="disabled")
+        return _empty_pool_status(False, "disabled", resolved_scope)
 
     # 尝试获取池管理器
     manager = await _get_pool_manager_optional()
     if not manager:
-        return _empty_pool_status(enabled=True, status="initializing")
+        return _empty_pool_status(True, "initializing", resolved_scope)
+
+    if resolved_scope.scope is PoolScope.TENANT:
+        instances = [
+            instance
+            for instance in manager._instances.values()
+            if _instance_matches_scope(instance, resolved_scope)
+        ]
+        return PoolStatusResponse(
+            enabled=True,
+            status="running",
+            total_instances=len(instances),
+            hot_instances=sum(i.config.tier.value == "hot" for i in instances),
+            warm_instances=sum(i.config.tier.value == "warm" for i in instances),
+            cold_instances=sum(i.config.tier.value == "cold" for i in instances),
+            ready_instances=sum(i.status.value == "ready" for i in instances),
+            executing_instances=sum(i.status.value == "executing" for i in instances),
+            unhealthy_instances=sum(
+                _instance_health_status(i) == "unhealthy" for i in instances
+            ),
+            prewarm_pool=None,
+            resource_usage=None,
+            resolved_scope=resolved_scope.scope.value,
+            tenant_id=resolved_scope.tenant_id,
+            reason_code="global_pool_capacity_not_available_in_tenant_scope",
+        )
 
     stats = manager.get_stats()
 
@@ -250,11 +448,15 @@ async def _get_pool_status() -> PoolStatusResponse:
             "total_cpu_cores": stats.total_cpu_cores,
             "used_cpu_cores": stats.used_cpu_cores,
         },
+        resolved_scope=resolved_scope.scope.value,
+        tenant_id=None,
+        reason_code=None,
     )
 
 
 async def _list_instances(
     manager: AgentPoolManager = Depends(_get_pool_manager),
+    resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
     tier: str | None = Query(None, description="按分级筛选"),
     status: str | None = Query(None, description="按状态筛选"),
     page: int = Query(1, ge=1, description="页码"),
@@ -265,6 +467,8 @@ async def _list_instances(
 
     # 从池管理器获取实例
     for instance_key, instance in manager._instances.items():
+        if not _instance_matches_scope(instance, resolved_scope):
+            continue
         if tier and instance.config.tier.value != tier:
             continue
         if status and instance.status.value != status:
@@ -283,17 +487,18 @@ async def _list_instances(
         total=total,
         page=page,
         page_size=page_size,
+        resolved_scope=resolved_scope.scope.value,
+        tenant_id=resolved_scope.tenant_id,
     )
 
 
 async def _get_instance(
     instance_key: str,
     manager: AgentPoolManager = Depends(_get_pool_manager),
+    resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
 ) -> InstanceInfo:
     """获取实例详情."""
-    instance = manager._instances.get(instance_key)
-    if not instance:
-        raise HTTPException(status_code=404, detail=_("Instance not found"))
+    instance = _get_scoped_instance(manager, instance_key, resolved_scope)
 
     return _build_instance_info(instance_key, instance)
 
@@ -301,40 +506,60 @@ async def _get_instance(
 async def _pause_instance(
     instance_key: str,
     manager: AgentPoolManager = Depends(_get_pool_manager),
+    resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
+    current_user: User = Depends(require_pool_global_admin),
 ) -> OperationResponse:
     """暂停实例."""
-    instance = manager._instances.get(instance_key)
-    if not instance:
-        raise HTTPException(status_code=404, detail=_("Instance not found"))
+    instance = _get_scoped_instance(manager, instance_key, resolved_scope)
+    _require_lifecycle_action(instance, "pause")
 
     try:
         await instance.pause()
+        await _audit_lifecycle_operation(
+            action="paused",
+            instance_key=instance_key,
+            instance=instance,
+            current_user=current_user,
+            resolved_scope=resolved_scope,
+        )
         return OperationResponse(
             success=True,
             message=f"Instance {instance_key} paused",
+            resolved_scope=resolved_scope.scope.value,
+            tenant_id=resolved_scope.tenant_id,
         )
     except Exception as e:
-        logger.error(f"Failed to pause instance {instance_key}: {e}")
+        logger.error("Failed to pause pool instance: error_type=%s", type(e).__name__)
         raise HTTPException(status_code=500, detail=_("Failed to pause instance")) from e
 
 
 async def _resume_instance(
     instance_key: str,
     manager: AgentPoolManager = Depends(_get_pool_manager),
+    resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
+    current_user: User = Depends(require_pool_global_admin),
 ) -> OperationResponse:
     """恢复实例."""
-    instance = manager._instances.get(instance_key)
-    if not instance:
-        raise HTTPException(status_code=404, detail=_("Instance not found"))
+    instance = _get_scoped_instance(manager, instance_key, resolved_scope)
+    _require_lifecycle_action(instance, "resume")
 
     try:
         await instance.resume()
+        await _audit_lifecycle_operation(
+            action="resumed",
+            instance_key=instance_key,
+            instance=instance,
+            current_user=current_user,
+            resolved_scope=resolved_scope,
+        )
         return OperationResponse(
             success=True,
             message=f"Instance {instance_key} resumed",
+            resolved_scope=resolved_scope.scope.value,
+            tenant_id=resolved_scope.tenant_id,
         )
     except Exception as e:
-        logger.error(f"Failed to resume instance {instance_key}: {e}")
+        logger.error("Failed to resume pool instance: error_type=%s", type(e).__name__)
         raise HTTPException(status_code=500, detail=_("Failed to resume instance")) from e
 
 
@@ -342,27 +567,36 @@ async def _terminate_instance(
     instance_key: str,
     graceful: bool = Query(True, description="是否优雅终止"),
     manager: AgentPoolManager = Depends(_get_pool_manager),
+    resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
+    current_user: User = Depends(require_pool_global_admin),
 ) -> OperationResponse:
     """终止实例."""
-    instance = manager._instances.get(instance_key)
-    if not instance:
-        raise HTTPException(status_code=404, detail=_("Instance not found"))
+    instance = _get_scoped_instance(manager, instance_key, resolved_scope)
+    _require_lifecycle_action(instance, "terminate")
 
     try:
-        # 解析 instance_key
-        parts = instance_key.split(":")
-        if len(parts) >= 3:
-            tenant_id, project_id, agent_mode = parts[0], parts[1], parts[2]
-            await manager.terminate_instance(tenant_id, project_id, agent_mode)
-        else:
-            await instance.stop(graceful=graceful)
+        await manager.terminate_instance(
+            instance.config.tenant_id,
+            instance.config.project_id,
+            instance.config.agent_mode,
+            graceful=graceful,
+        )
+        await _audit_lifecycle_operation(
+            action="terminated",
+            instance_key=instance_key,
+            instance=instance,
+            current_user=current_user,
+            resolved_scope=resolved_scope,
+        )
 
         return OperationResponse(
             success=True,
             message=f"Instance {instance_key} terminated",
+            resolved_scope=resolved_scope.scope.value,
+            tenant_id=resolved_scope.tenant_id,
         )
     except Exception as e:
-        logger.error(f"Failed to terminate instance {instance_key}: {e}")
+        logger.error("Failed to terminate pool instance: error_type=%s", type(e).__name__)
         raise HTTPException(status_code=500, detail=_("Failed to terminate instance")) from e
 
 
@@ -371,8 +605,16 @@ async def _set_project_tier(
     request: SetTierRequest,
     tenant_id: str = Query(..., description="租户ID"),
     manager: AgentPoolManager = Depends(_get_pool_manager),
+    resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
+    current_user: User = Depends(require_pool_global_admin),
 ) -> SetTierResponse:
     """设置项目分级."""
+    if resolved_scope.scope is not PoolScope.TENANT or resolved_scope.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("Project not found"),
+        )
+
     # 验证 tier
     try:
         new_tier = ProjectTier(request.tier)
@@ -387,12 +629,26 @@ async def _set_project_tier(
 
     # 设置新分级
     await manager.set_project_tier(tenant_id, project_id, new_tier)
+    await get_audit_service().log_event(
+        action="runtime_pool.project_tier.updated",
+        resource_type="runtime_pool_project_tier",
+        resource_id=project_id,
+        actor=str(current_user.id),
+        tenant_id=tenant_id,
+        details={
+            "previous_tier": current_tier.value if current_tier else None,
+            "current_tier": new_tier.value,
+            "scope": resolved_scope.scope.value,
+        },
+    )
 
     return SetTierResponse(
         project_id=project_id,
         previous_tier=current_tier.value if current_tier else None,
         current_tier=new_tier.value,
         message=f"Project tier updated from {current_tier.value if current_tier else 'auto'} to {new_tier.value}",
+        resolved_scope=resolved_scope.scope.value,
+        tenant_id=tenant_id,
     )
 
 
@@ -400,20 +656,57 @@ async def _get_project_tier(
     project_id: str,
     tenant_id: str = Query(..., description="租户ID"),
     manager: AgentPoolManager = Depends(_get_pool_manager),
+    resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
 ) -> dict[str, Any]:
     """获取项目分级."""
+    if resolved_scope.scope is not PoolScope.TENANT or resolved_scope.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("Project not found"),
+        )
     tier = await manager.classify_project(tenant_id, project_id)
     return {
         "project_id": project_id,
         "tenant_id": tenant_id,
         "tier": tier.value,
+        "resolved_scope": resolved_scope.scope.value,
     }
 
 
 async def _get_metrics_json(
     manager: AgentPoolManager = Depends(_get_pool_manager),
+    resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
 ) -> MetricsResponse:
     """获取指标 (JSON 格式)."""
+    if resolved_scope.scope is PoolScope.TENANT:
+        instances = [
+            instance
+            for instance in manager._instances.values()
+            if _instance_matches_scope(instance, resolved_scope)
+        ]
+        return MetricsResponse(
+            instances={
+                "total": len(instances),
+                "by_tier": {
+                    tier: sum(i.config.tier.value == tier for i in instances)
+                    for tier in ("hot", "warm", "cold")
+                },
+                "by_status": {
+                    state: sum(i.status.value == state for i in instances)
+                    for state in ("ready", "executing", "unhealthy")
+                },
+            },
+            health={
+                "unhealthy_count": sum(
+                    _instance_health_status(i) == "unhealthy" for i in instances
+                )
+            },
+            prewarm=None,
+            resolved_scope=resolved_scope.scope.value,
+            tenant_id=resolved_scope.tenant_id,
+            reason_code="global_pool_capacity_not_available_in_tenant_scope",
+        )
+
     metrics = get_metrics_collector()
     stats = manager.get_stats()
     metrics.update_from_pool_stats(stats)
@@ -423,13 +716,22 @@ async def _get_metrics_json(
         instances=data.get("instances", {}),
         health=data.get("health", {}),
         prewarm=data.get("prewarm", {}),
+        resolved_scope=resolved_scope.scope.value,
+        tenant_id=None,
+        reason_code=None,
     )
 
 
 async def _get_metrics_prometheus(
     manager: AgentPoolManager = Depends(_get_pool_manager),
+    resolved_scope: PoolAuthorityScope = Depends(resolve_pool_authority_scope),
 ) -> PlainTextResponse:
     """获取指标 (Prometheus 格式)."""
+    if resolved_scope.scope is not PoolScope.GLOBAL:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=_("Prometheus pool metrics require global scope"),
+        )
     from fastapi.responses import PlainTextResponse
 
     metrics = get_metrics_collector()
@@ -468,6 +770,7 @@ def create_pool_router(
     router = APIRouter(
         prefix=prefix,
         tags=cast("list[str | Enum]", tags or ["Agent Pool Admin"]),
+        dependencies=[Depends(require_pool_global_admin)],
     )
 
     # Status

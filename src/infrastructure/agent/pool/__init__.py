@@ -153,6 +153,7 @@ __all__ = [
     "TierMigration",
     "create_orchestrator",
     "create_pooled_adapter",
+    "create_project_pool_router",
     "get_feature_flags",
     "get_global_adapter",
     "get_global_orchestrator",
@@ -162,7 +163,7 @@ __all__ = [
 
 # Integration (lazy import to avoid circular dependencies)
 # API
-from .api import create_pool_router
+from .api import create_pool_router, create_project_pool_router
 
 # Feature Flags
 from .feature_flags import (

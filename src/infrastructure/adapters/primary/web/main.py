@@ -840,9 +840,10 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     app.include_router(invitations.public_router)
 
     # Agent Pool Admin API (always registered, returns disabled status when pool not enabled)
-    from src.infrastructure.agent.pool import create_pool_router
+    from src.infrastructure.agent.pool import create_pool_router, create_project_pool_router
 
     app.include_router(create_pool_router())
+    app.include_router(create_project_pool_router())
 
     logger.info("Agent Pool Admin API registered at /api/v1/admin/pool")
 

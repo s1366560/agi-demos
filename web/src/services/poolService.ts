@@ -46,6 +46,12 @@ export type InstanceStatus =
  */
 export type HealthStatus = 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
 
+export type PoolAuthorityScope =
+  | Readonly<{ scope: 'global' }>
+  | Readonly<{ scope: 'tenant'; tenant_id: string }>;
+
+export const GLOBAL_POOL_SCOPE: PoolAuthorityScope = Object.freeze({ scope: 'global' });
+
 /**
  * Pool status response
  */
@@ -63,13 +69,16 @@ export interface PoolStatus {
     l1: number;
     l2: number;
     l3: number;
-  };
+  } | null;
   resource_usage: {
     total_memory_mb: number;
     used_memory_mb: number;
     total_cpu_cores: number;
     used_cpu_cores: number;
-  };
+  } | null;
+  resolved_scope: 'global' | 'tenant';
+  tenant_id: string | null;
+  reason_code: string | null;
 }
 
 /**
@@ -98,6 +107,8 @@ export interface InstanceListResponse {
   total: number;
   page: number;
   page_size: number;
+  resolved_scope: 'global' | 'tenant';
+  tenant_id: string | null;
 }
 
 /**
@@ -115,6 +126,8 @@ export interface SetTierResponse {
   previous_tier: ProjectTier | null;
   current_tier: ProjectTier;
   message: string;
+  resolved_scope: 'tenant';
+  tenant_id: string;
 }
 
 /**
@@ -123,6 +136,8 @@ export interface SetTierResponse {
 export interface OperationResponse {
   success: boolean;
   message: string;
+  resolved_scope: 'global' | 'tenant';
+  tenant_id: string | null;
 }
 
 /**
@@ -149,7 +164,23 @@ export interface MetricsResponse {
     l1: number;
     l2: number;
     l3: number;
-  };
+  } | null;
+  resolved_scope: 'global' | 'tenant';
+  tenant_id: string | null;
+  reason_code: string | null;
+}
+
+export interface ProjectPoolInstanceResponse {
+  enabled: boolean;
+  instance: PoolInstance | null;
+  allowed_actions: Array<'view' | 'pause' | 'resume' | 'terminate'>;
+  reason_code: string | null;
+}
+
+export interface ProjectPoolOperationResponse {
+  success: boolean;
+  action: 'pause' | 'resume' | 'terminate';
+  allowed_actions: Array<'view' | 'pause' | 'resume' | 'terminate'>;
 }
 
 /**
@@ -169,6 +200,16 @@ export interface ListInstancesParams {
 // Note: httpClient already has baseURL '/api/v1', so we only need the relative path
 const BASE_PATH = '/admin/pool';
 
+function poolScopeParams(scope: PoolAuthorityScope): Record<string, string> {
+  return scope.scope === 'tenant'
+    ? { scope: scope.scope, tenant_id: scope.tenant_id }
+    : { scope: scope.scope };
+}
+
+function projectPoolPath(tenantId: string, projectId: string, agentMode: string): string {
+  return `/tenants/${encodeURIComponent(tenantId)}/projects/${encodeURIComponent(projectId)}/pool/instances/${encodeURIComponent(agentMode)}`;
+}
+
 /**
  * Agent Pool management service
  */
@@ -176,9 +217,11 @@ export const poolService = {
   /**
    * Get pool status overview
    */
-  getStatus: async (): Promise<PoolStatus> => {
+  getStatus: async (scope: PoolAuthorityScope = GLOBAL_POOL_SCOPE): Promise<PoolStatus> => {
     try {
-      const response = await httpClient.get<PoolStatus>(`${BASE_PATH}/status`);
+      const response = await httpClient.get<PoolStatus>(`${BASE_PATH}/status`, {
+        params: poolScopeParams(scope),
+      });
       return response;
     } catch (error) {
       logger.error('[PoolService] Failed to get pool status:', error);
@@ -189,10 +232,13 @@ export const poolService = {
   /**
    * List all instances
    */
-  listInstances: async (params?: ListInstancesParams): Promise<InstanceListResponse> => {
+  listInstances: async (
+    params?: ListInstancesParams,
+    scope: PoolAuthorityScope = GLOBAL_POOL_SCOPE
+  ): Promise<InstanceListResponse> => {
     try {
       const response = await httpClient.get<InstanceListResponse>(`${BASE_PATH}/instances`, {
-        params,
+        params: { ...params, ...poolScopeParams(scope) },
       });
       return response;
     } catch (error) {
@@ -204,10 +250,14 @@ export const poolService = {
   /**
    * Get instance details
    */
-  getInstance: async (instanceKey: string): Promise<PoolInstance> => {
+  getInstance: async (
+    instanceKey: string,
+    scope: PoolAuthorityScope = GLOBAL_POOL_SCOPE
+  ): Promise<PoolInstance> => {
     try {
       const response = await httpClient.get<PoolInstance>(
-        `${BASE_PATH}/instances/${encodeURIComponent(instanceKey)}`
+        `${BASE_PATH}/instances/${encodeURIComponent(instanceKey)}`,
+        { params: poolScopeParams(scope) }
       );
       return response;
     } catch (error) {
@@ -219,10 +269,15 @@ export const poolService = {
   /**
    * Pause an instance
    */
-  pauseInstance: async (instanceKey: string): Promise<OperationResponse> => {
+  pauseInstance: async (
+    instanceKey: string,
+    scope: PoolAuthorityScope = GLOBAL_POOL_SCOPE
+  ): Promise<OperationResponse> => {
     try {
       const response = await httpClient.post<OperationResponse>(
-        `${BASE_PATH}/instances/${encodeURIComponent(instanceKey)}/pause`
+        `${BASE_PATH}/instances/${encodeURIComponent(instanceKey)}/pause`,
+        undefined,
+        { params: poolScopeParams(scope) }
       );
       return response;
     } catch (error) {
@@ -234,10 +289,15 @@ export const poolService = {
   /**
    * Resume an instance
    */
-  resumeInstance: async (instanceKey: string): Promise<OperationResponse> => {
+  resumeInstance: async (
+    instanceKey: string,
+    scope: PoolAuthorityScope = GLOBAL_POOL_SCOPE
+  ): Promise<OperationResponse> => {
     try {
       const response = await httpClient.post<OperationResponse>(
-        `${BASE_PATH}/instances/${encodeURIComponent(instanceKey)}/resume`
+        `${BASE_PATH}/instances/${encodeURIComponent(instanceKey)}/resume`,
+        undefined,
+        { params: poolScopeParams(scope) }
       );
       return response;
     } catch (error) {
@@ -251,12 +311,13 @@ export const poolService = {
    */
   terminateInstance: async (
     instanceKey: string,
-    graceful: boolean = true
+    graceful: boolean = true,
+    scope: PoolAuthorityScope = GLOBAL_POOL_SCOPE
   ): Promise<OperationResponse> => {
     try {
       const response = await httpClient.delete<OperationResponse>(
         `${BASE_PATH}/instances/${encodeURIComponent(instanceKey)}`,
-        { params: { graceful } }
+        { params: { graceful, ...poolScopeParams(scope) } }
       );
       return response;
     } catch (error) {
@@ -277,7 +338,9 @@ export const poolService = {
         project_id: string;
         tenant_id: string;
         tier: ProjectTier;
-      }>(`${BASE_PATH}/projects/${projectId}/tier`, { params: { tenant_id: tenantId } });
+      }>(`${BASE_PATH}/projects/${projectId}/tier`, {
+        params: { scope: 'tenant', tenant_id: tenantId },
+      });
       return response;
     } catch (error) {
       logger.error(`[PoolService] Failed to get tier for project ${projectId}:`, error);
@@ -297,7 +360,7 @@ export const poolService = {
       const response = await httpClient.post<SetTierResponse>(
         `${BASE_PATH}/projects/${projectId}/tier`,
         { tier },
-        { params: { tenant_id: tenantId } }
+        { params: { scope: 'tenant', tenant_id: tenantId } }
       );
       return response;
     } catch (error) {
@@ -309,9 +372,11 @@ export const poolService = {
   /**
    * Get metrics (JSON format)
    */
-  getMetrics: async (): Promise<MetricsResponse> => {
+  getMetrics: async (scope: PoolAuthorityScope = GLOBAL_POOL_SCOPE): Promise<MetricsResponse> => {
     try {
-      const response = await httpClient.get<MetricsResponse>(`${BASE_PATH}/metrics`);
+      const response = await httpClient.get<MetricsResponse>(`${BASE_PATH}/metrics`, {
+        params: poolScopeParams(scope),
+      });
       return response;
     } catch (error) {
       logger.error('[PoolService] Failed to get metrics:', error);
@@ -326,6 +391,7 @@ export const poolService = {
     try {
       const response = await httpClient.get<string>(`${BASE_PATH}/metrics/prometheus`, {
         headers: { Accept: 'text/plain' },
+        params: poolScopeParams(GLOBAL_POOL_SCOPE),
       });
       return response;
     } catch (error) {
@@ -333,6 +399,40 @@ export const poolService = {
       throw error;
     }
   },
+
+  getProjectInstance: async (
+    tenantId: string,
+    projectId: string,
+    agentMode: string = 'chat'
+  ): Promise<ProjectPoolInstanceResponse> =>
+    httpClient.get<ProjectPoolInstanceResponse>(projectPoolPath(tenantId, projectId, agentMode)),
+
+  pauseProjectInstance: async (
+    tenantId: string,
+    projectId: string,
+    agentMode: string = 'chat'
+  ): Promise<ProjectPoolOperationResponse> =>
+    httpClient.post<ProjectPoolOperationResponse>(
+      `${projectPoolPath(tenantId, projectId, agentMode)}/pause`
+    ),
+
+  resumeProjectInstance: async (
+    tenantId: string,
+    projectId: string,
+    agentMode: string = 'chat'
+  ): Promise<ProjectPoolOperationResponse> =>
+    httpClient.post<ProjectPoolOperationResponse>(
+      `${projectPoolPath(tenantId, projectId, agentMode)}/resume`
+    ),
+
+  terminateProjectInstance: async (
+    tenantId: string,
+    projectId: string,
+    agentMode: string = 'chat'
+  ): Promise<ProjectPoolOperationResponse> =>
+    httpClient.delete<ProjectPoolOperationResponse>(
+      projectPoolPath(tenantId, projectId, agentMode)
+    ),
 };
 
 export default poolService;

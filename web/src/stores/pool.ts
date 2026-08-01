@@ -17,6 +17,8 @@ import {
   type ProjectTier,
   type InstanceStatus,
   type ListInstancesParams,
+  type PoolAuthorityScope,
+  GLOBAL_POOL_SCOPE,
 } from '../services/poolService';
 import { logger } from '../utils/logger';
 
@@ -25,6 +27,8 @@ import { logger } from '../utils/logger';
 // ============================================================================
 
 export interface PoolState {
+  scope: PoolAuthorityScope;
+
   // Status
   status: PoolStatus | null;
   isStatusLoading: boolean;
@@ -53,6 +57,8 @@ export interface PoolState {
 }
 
 export interface PoolActions {
+  setScope: (scope: PoolAuthorityScope) => void;
+
   // Status
   fetchStatus: () => Promise<void>;
 
@@ -87,6 +93,8 @@ export interface PoolActions {
 // ============================================================================
 
 const initialState: PoolState = {
+  scope: GLOBAL_POOL_SCOPE,
+
   status: null,
   isStatusLoading: false,
   statusError: null,
@@ -109,186 +117,240 @@ const initialState: PoolState = {
   refreshInterval: 30,
 };
 
+const isSamePoolScope = (left: PoolAuthorityScope, right: PoolAuthorityScope): boolean =>
+  left.scope === right.scope &&
+  (left.scope === 'global' || (right.scope === 'tenant' && left.tenant_id === right.tenant_id));
+
 // ============================================================================
 // Store
 // ============================================================================
 
 export const usePoolStore = create<PoolState & PoolActions>()(
   devtools(
-    (set, get) => ({
-      ...initialState,
+    (set, get) => {
+      let scopeRevision = 0;
 
-      // ======================================================================
-      // Status
-      // ======================================================================
+      return {
+        ...initialState,
 
-      fetchStatus: async () => {
-        set({ isStatusLoading: true, statusError: null });
-        try {
-          const status = await poolService.getStatus();
-          set({ status, isStatusLoading: false });
-          logger.debug('[PoolStore] Status fetched:', status);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Failed to fetch status';
-          set({ statusError: message, isStatusLoading: false });
-          logger.error('[PoolStore] Failed to fetch status:', error);
-        }
-      },
-
-      // ======================================================================
-      // Instances
-      // ======================================================================
-
-      fetchInstances: async (params?: ListInstancesParams) => {
-        const { currentPage, pageSize, tierFilter, statusFilter } = get();
-
-        set({ isInstancesLoading: true, instancesError: null });
-        try {
-          const response = await poolService.listInstances({
-            page: params?.page ?? currentPage,
-            page_size: params?.page_size ?? pageSize,
-            tier: params?.tier ?? tierFilter ?? undefined,
-            status: params?.status ?? statusFilter ?? undefined,
-          });
-
+        setScope: (scope: PoolAuthorityScope) => {
+          if (isSamePoolScope(get().scope, scope)) return;
+          scopeRevision += 1;
           set({
-            instances: response.instances,
-            totalInstances: response.total,
-            currentPage: response.page,
-            pageSize: response.page_size,
+            scope,
+            status: null,
+            isStatusLoading: false,
+            statusError: null,
+            instances: [],
+            totalInstances: 0,
             isInstancesLoading: false,
+            instancesError: null,
+            metrics: null,
+            isMetricsLoading: false,
+            metricsError: null,
+            currentPage: 1,
           });
+        },
 
-          logger.debug(`[PoolStore] Instances fetched: ${String(response.total)} total`);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Failed to fetch instances';
-          set({ instancesError: message, isInstancesLoading: false });
-          logger.error('[PoolStore] Failed to fetch instances:', error);
-        }
-      },
+        // ======================================================================
+        // Status
+        // ======================================================================
 
-      setPage: (page: number) => {
-        set({ currentPage: page });
-        void get().fetchInstances({ page });
-      },
-
-      setPageSize: (size: number) => {
-        set({ pageSize: size, currentPage: 1 });
-        void get().fetchInstances({ page: 1, page_size: size });
-      },
-
-      setTierFilter: (tier: ProjectTier | null) => {
-        set({ tierFilter: tier, currentPage: 1 });
-        void get().fetchInstances({ page: 1, tier: tier ?? undefined });
-      },
-
-      setStatusFilter: (status: InstanceStatus | null) => {
-        set({ statusFilter: status, currentPage: 1 });
-        void get().fetchInstances({ page: 1, status: status ?? undefined });
-      },
-
-      // ======================================================================
-      // Instance Operations
-      // ======================================================================
-
-      pauseInstance: async (instanceKey: string) => {
-        try {
-          const result = await poolService.pauseInstance(instanceKey);
-          if (result.success) {
-            // Refresh instances list
-            await get().fetchInstances();
-            logger.info(`[PoolStore] Instance paused: ${instanceKey}`);
+        fetchStatus: async () => {
+          const requestScope = get().scope;
+          const requestRevision = scopeRevision;
+          set({ isStatusLoading: true, statusError: null });
+          try {
+            const status = await poolService.getStatus(requestScope);
+            if (requestRevision !== scopeRevision || !isSamePoolScope(get().scope, requestScope)) {
+              return;
+            }
+            set({ status, isStatusLoading: false });
+            logger.debug('[PoolStore] Status fetched:', status);
+          } catch (error) {
+            if (requestRevision !== scopeRevision || !isSamePoolScope(get().scope, requestScope)) {
+              return;
+            }
+            const message = error instanceof Error ? error.message : 'Failed to fetch status';
+            set({ statusError: message, isStatusLoading: false });
+            logger.error('[PoolStore] Failed to fetch status:', error);
           }
-          return result.success;
-        } catch (error) {
-          logger.error(`[PoolStore] Failed to pause instance ${instanceKey}:`, error);
-          return false;
-        }
-      },
+        },
 
-      resumeInstance: async (instanceKey: string) => {
-        try {
-          const result = await poolService.resumeInstance(instanceKey);
-          if (result.success) {
-            await get().fetchInstances();
-            logger.info(`[PoolStore] Instance resumed: ${instanceKey}`);
+        // ======================================================================
+        // Instances
+        // ======================================================================
+
+        fetchInstances: async (params?: ListInstancesParams) => {
+          const { currentPage, pageSize, tierFilter, statusFilter, scope: requestScope } = get();
+          const requestRevision = scopeRevision;
+
+          set({ isInstancesLoading: true, instancesError: null });
+          try {
+            const response = await poolService.listInstances(
+              {
+                page: params?.page ?? currentPage,
+                page_size: params?.page_size ?? pageSize,
+                tier: params?.tier ?? tierFilter ?? undefined,
+                status: params?.status ?? statusFilter ?? undefined,
+              },
+              requestScope
+            );
+
+            if (requestRevision !== scopeRevision || !isSamePoolScope(get().scope, requestScope)) {
+              return;
+            }
+            set({
+              instances: response.instances,
+              totalInstances: response.total,
+              currentPage: response.page,
+              pageSize: response.page_size,
+              isInstancesLoading: false,
+            });
+
+            logger.debug(`[PoolStore] Instances fetched: ${String(response.total)} total`);
+          } catch (error) {
+            if (requestRevision !== scopeRevision || !isSamePoolScope(get().scope, requestScope)) {
+              return;
+            }
+            const message = error instanceof Error ? error.message : 'Failed to fetch instances';
+            set({ instancesError: message, isInstancesLoading: false });
+            logger.error('[PoolStore] Failed to fetch instances:', error);
           }
-          return result.success;
-        } catch (error) {
-          logger.error(`[PoolStore] Failed to resume instance ${instanceKey}:`, error);
-          return false;
-        }
-      },
+        },
 
-      terminateInstance: async (instanceKey: string) => {
-        try {
-          const result = await poolService.terminateInstance(instanceKey);
-          if (result.success) {
-            await get().fetchInstances();
-            logger.info(`[PoolStore] Instance terminated: ${instanceKey}`);
+        setPage: (page: number) => {
+          set({ currentPage: page });
+          void get().fetchInstances({ page });
+        },
+
+        setPageSize: (size: number) => {
+          set({ pageSize: size, currentPage: 1 });
+          void get().fetchInstances({ page: 1, page_size: size });
+        },
+
+        setTierFilter: (tier: ProjectTier | null) => {
+          set({ tierFilter: tier, currentPage: 1 });
+          void get().fetchInstances({ page: 1, tier: tier ?? undefined });
+        },
+
+        setStatusFilter: (status: InstanceStatus | null) => {
+          set({ statusFilter: status, currentPage: 1 });
+          void get().fetchInstances({ page: 1, status: status ?? undefined });
+        },
+
+        // ======================================================================
+        // Instance Operations
+        // ======================================================================
+
+        pauseInstance: async (instanceKey: string) => {
+          try {
+            const result = await poolService.pauseInstance(instanceKey, get().scope);
+            if (result.success) {
+              // Refresh instances list
+              await get().fetchInstances();
+              logger.info(`[PoolStore] Instance paused: ${instanceKey}`);
+            }
+            return result.success;
+          } catch (error) {
+            logger.error(`[PoolStore] Failed to pause instance ${instanceKey}:`, error);
+            return false;
           }
-          return result.success;
-        } catch (error) {
-          logger.error(`[PoolStore] Failed to terminate instance ${instanceKey}:`, error);
-          return false;
-        }
-      },
+        },
 
-      // ======================================================================
-      // Project Tier
-      // ======================================================================
+        resumeInstance: async (instanceKey: string) => {
+          try {
+            const result = await poolService.resumeInstance(instanceKey, get().scope);
+            if (result.success) {
+              await get().fetchInstances();
+              logger.info(`[PoolStore] Instance resumed: ${instanceKey}`);
+            }
+            return result.success;
+          } catch (error) {
+            logger.error(`[PoolStore] Failed to resume instance ${instanceKey}:`, error);
+            return false;
+          }
+        },
 
-      setProjectTier: async (projectId: string, tenantId: string, tier: ProjectTier) => {
-        try {
-          const result = await poolService.setProjectTier(projectId, tenantId, tier);
-          logger.info(`[PoolStore] Project ${projectId} tier set to ${tier}:`, result.message);
-          // Refresh data
-          await get().fetchStatus();
-          await get().fetchInstances();
-          return true;
-        } catch (error) {
-          logger.error(`[PoolStore] Failed to set tier for project ${projectId}:`, error);
-          return false;
-        }
-      },
+        terminateInstance: async (instanceKey: string) => {
+          try {
+            const result = await poolService.terminateInstance(instanceKey, true, get().scope);
+            if (result.success) {
+              await get().fetchInstances();
+              logger.info(`[PoolStore] Instance terminated: ${instanceKey}`);
+            }
+            return result.success;
+          } catch (error) {
+            logger.error(`[PoolStore] Failed to terminate instance ${instanceKey}:`, error);
+            return false;
+          }
+        },
 
-      // ======================================================================
-      // Metrics
-      // ======================================================================
+        // ======================================================================
+        // Project Tier
+        // ======================================================================
 
-      fetchMetrics: async () => {
-        set({ isMetricsLoading: true, metricsError: null });
-        try {
-          const metrics = await poolService.getMetrics();
-          set({ metrics, isMetricsLoading: false });
-          logger.debug('[PoolStore] Metrics fetched:', metrics);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Failed to fetch metrics';
-          set({ metricsError: message, isMetricsLoading: false });
-          logger.error('[PoolStore] Failed to fetch metrics:', error);
-        }
-      },
+        setProjectTier: async (projectId: string, tenantId: string, tier: ProjectTier) => {
+          try {
+            const result = await poolService.setProjectTier(projectId, tenantId, tier);
+            logger.info(`[PoolStore] Project ${projectId} tier set to ${tier}:`, result.message);
+            // Refresh data
+            await get().fetchStatus();
+            await get().fetchInstances();
+            return true;
+          } catch (error) {
+            logger.error(`[PoolStore] Failed to set tier for project ${projectId}:`, error);
+            return false;
+          }
+        },
 
-      // ======================================================================
-      // Auto-refresh
-      // ======================================================================
+        // ======================================================================
+        // Metrics
+        // ======================================================================
 
-      setAutoRefresh: (enabled: boolean) => {
-        set({ autoRefresh: enabled });
-      },
+        fetchMetrics: async () => {
+          const requestScope = get().scope;
+          const requestRevision = scopeRevision;
+          set({ isMetricsLoading: true, metricsError: null });
+          try {
+            const metrics = await poolService.getMetrics(requestScope);
+            if (requestRevision !== scopeRevision || !isSamePoolScope(get().scope, requestScope)) {
+              return;
+            }
+            set({ metrics, isMetricsLoading: false });
+            logger.debug('[PoolStore] Metrics fetched:', metrics);
+          } catch (error) {
+            if (requestRevision !== scopeRevision || !isSamePoolScope(get().scope, requestScope)) {
+              return;
+            }
+            const message = error instanceof Error ? error.message : 'Failed to fetch metrics';
+            set({ metricsError: message, isMetricsLoading: false });
+            logger.error('[PoolStore] Failed to fetch metrics:', error);
+          }
+        },
 
-      setRefreshInterval: (seconds: number) => {
-        set({ refreshInterval: Math.max(5, seconds) }); // Minimum 5 seconds
-      },
+        // ======================================================================
+        // Auto-refresh
+        // ======================================================================
 
-      // ======================================================================
-      // Reset
-      // ======================================================================
+        setAutoRefresh: (enabled: boolean) => {
+          set({ autoRefresh: enabled });
+        },
 
-      reset: () => {
-        set(initialState);
-      },
-    }),
+        setRefreshInterval: (seconds: number) => {
+          set({ refreshInterval: Math.max(5, seconds) }); // Minimum 5 seconds
+        },
+
+        // ======================================================================
+        // Reset
+        // ======================================================================
+
+        reset: () => {
+          scopeRevision += 1;
+          set(initialState);
+        },
+      };
+    },
     { name: 'pool-store' }
   )
 );

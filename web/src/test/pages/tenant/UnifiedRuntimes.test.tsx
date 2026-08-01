@@ -61,6 +61,9 @@ describe('UnifiedRuntimes', () => {
       used_cpu_cores: 1,
       used_memory_mb: 512,
     },
+    resolved_scope: 'tenant',
+    tenant_id: 'tenant-1',
+    reason_code: 'global_pool_capacity_not_available_in_tenant_scope',
   };
 
   const poolInstance: PoolInstance = {
@@ -108,6 +111,8 @@ describe('UnifiedRuntimes', () => {
       page: 1,
       page_size: 200,
       total: 1,
+      resolved_scope: 'tenant',
+      tenant_id: 'tenant-1',
     });
     vi.mocked(projectSandboxService.listProjectSandboxes).mockResolvedValue({
       sandboxes: [sandbox],
@@ -127,7 +132,10 @@ describe('UnifiedRuntimes', () => {
     expect(document.querySelector('.ant-table-content')).toHaveStyle({ overflowX: 'auto' });
 
     await waitFor(() => {
-      expect(poolService.listInstances).toHaveBeenCalledWith({ page: 1, page_size: 100 });
+      expect(poolService.listInstances).toHaveBeenCalledWith(
+        { page: 1, page_size: 100 },
+        { scope: 'tenant', tenant_id: 'tenant-1' }
+      );
       expect(projectSandboxService.listProjectSandboxes).toHaveBeenCalledWith({ limit: 100 });
       expect(projectSandboxService.getStats).toHaveBeenCalledWith('project-1');
     });

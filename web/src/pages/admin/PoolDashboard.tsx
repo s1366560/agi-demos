@@ -9,7 +9,7 @@
 import React, { useEffect, useCallback, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 
 import {
   Card,
@@ -135,6 +135,7 @@ const PoolDashboard: React.FC = () => {
     isStatusLoading,
     statusError,
     fetchStatus,
+    setScope,
     // Instances
     instances,
     totalInstances,
@@ -160,15 +161,17 @@ const PoolDashboard: React.FC = () => {
   } = usePoolStore();
 
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const { tenantId } = useParams<{ tenantId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [instanceSearch, setInstanceSearch] = useState('');
 
   // Initial load
   useEffect(() => {
+    setScope(tenantId ? { scope: 'tenant', tenant_id: tenantId } : { scope: 'global' });
     void fetchStatus();
     void fetchInstances();
     void fetchMetrics();
-  }, [fetchStatus, fetchInstances, fetchMetrics]);
+  }, [tenantId, setScope, fetchStatus, fetchInstances, fetchMetrics]);
 
   // Restore page/tier view state from the URL once on mount
   useEffect(() => {
@@ -567,21 +570,21 @@ const PoolDashboard: React.FC = () => {
               <Col xs={24} sm={8}>
                 <Statistic
                   title={t('admin.poolDashboard.prewarm.l1')}
-                  value={status?.prewarm_pool.l1 ?? 0}
+                  value={status?.prewarm_pool?.l1 ?? 0}
                   suffix={t('admin.poolDashboard.prewarm.instances')}
                 />
               </Col>
               <Col xs={24} sm={8}>
                 <Statistic
                   title={t('admin.poolDashboard.prewarm.l2')}
-                  value={status?.prewarm_pool.l2 ?? 0}
+                  value={status?.prewarm_pool?.l2 ?? 0}
                   suffix={t('admin.poolDashboard.prewarm.instances')}
                 />
               </Col>
               <Col xs={24} sm={8}>
                 <Statistic
                   title={t('admin.poolDashboard.prewarm.l3')}
-                  value={status?.prewarm_pool.l3 ?? 0}
+                  value={status?.prewarm_pool?.l3 ?? 0}
                   suffix={t('admin.poolDashboard.prewarm.instances')}
                 />
               </Col>

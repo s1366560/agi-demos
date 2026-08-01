@@ -2,7 +2,7 @@ import { render, act, cleanup, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useUnifiedAgentStatus } from '../../../hooks/useUnifiedAgentStatus';
-import { poolService, type PoolStatus } from '../../../services/poolService';
+import { poolService, type ProjectPoolInstanceResponse } from '../../../services/poolService';
 import { useAgentV3Store } from '../../../stores/agentV3';
 import { ProjectAgentStatusBar } from '../../../components/agent/ProjectAgentStatusBar';
 
@@ -33,11 +33,10 @@ vi.mock('../../../stores/agentV3', () => ({
 
 vi.mock('../../../services/poolService', () => ({
   poolService: {
-    getStatus: vi.fn(),
-    listInstances: vi.fn(),
-    terminateInstance: vi.fn(),
-    pauseInstance: vi.fn(),
-    resumeInstance: vi.fn(),
+    getProjectInstance: vi.fn(),
+    terminateProjectInstance: vi.fn(),
+    pauseProjectInstance: vi.fn(),
+    resumeProjectInstance: vi.fn(),
   },
 }));
 
@@ -68,8 +67,7 @@ const createDeferred = <T,>() => {
 
 const mockedUseUnifiedAgentStatus = vi.mocked(useUnifiedAgentStatus);
 const mockedUseAgentV3Store = vi.mocked(useAgentV3Store);
-const mockedGetStatus = vi.mocked(poolService.getStatus);
-const mockedListInstances = vi.mocked(poolService.listInstances);
+const mockedGetProjectInstance = vi.mocked(poolService.getProjectInstance);
 
 describe('ProjectAgentStatusBar polling behavior', () => {
   beforeEach(() => {
@@ -122,15 +120,8 @@ describe('ProjectAgentStatusBar polling behavior', () => {
   });
 
   it('does not start overlapping pool requests when previous poll is still running', async () => {
-    const statusDeferred = createDeferred<PoolStatus>();
-
-    mockedGetStatus.mockReturnValue(statusDeferred.promise);
-    mockedListInstances.mockResolvedValue({
-      instances: [],
-      total: 0,
-      page: 1,
-      page_size: 100,
-    });
+    const statusDeferred = createDeferred<ProjectPoolInstanceResponse>();
+    mockedGetProjectInstance.mockReturnValue(statusDeferred.promise);
 
     render(
       <ProjectAgentStatusBar
@@ -145,74 +136,38 @@ describe('ProjectAgentStatusBar polling behavior', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(poolService.getStatus).toHaveBeenCalledTimes(1);
+    expect(poolService.getProjectInstance).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(30000);
     });
 
     // No overlap: still only one call while first request is unresolved
-    expect(poolService.getStatus).toHaveBeenCalledTimes(1);
+    expect(poolService.getProjectInstance).toHaveBeenCalledTimes(1);
 
     statusDeferred.resolve({
       enabled: true,
-      status: 'ok',
-      total_instances: 0,
-      hot_instances: 0,
-      warm_instances: 0,
-      cold_instances: 0,
-      ready_instances: 0,
-      executing_instances: 0,
-      unhealthy_instances: 0,
-      prewarm_pool: { l1: 0, l2: 0, l3: 0 },
-      resource_usage: {
-        total_memory_mb: 0,
-        used_memory_mb: 0,
-        total_cpu_cores: 0,
-        used_cpu_cores: 0,
-      },
+      instance: null,
+      allowed_actions: ['view'],
+      reason_code: 'project_pool_instance_not_found',
     });
 
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(poolService.listInstances).toHaveBeenCalledTimes(1);
-
     await act(async () => {
       await vi.advanceTimersByTimeAsync(15000);
     });
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(poolService.getStatus).toHaveBeenCalledTimes(2);
+    expect(poolService.getProjectInstance).toHaveBeenCalledTimes(2);
   });
 
   it('reuses fresh snapshot cache on rapid remount for same project', async () => {
-    mockedGetStatus.mockResolvedValue({
+    mockedGetProjectInstance.mockResolvedValue({
       enabled: true,
-      status: 'ok',
-      total_instances: 0,
-      hot_instances: 0,
-      warm_instances: 0,
-      cold_instances: 0,
-      ready_instances: 0,
-      executing_instances: 0,
-      unhealthy_instances: 0,
-      prewarm_pool: { l1: 0, l2: 0, l3: 0 },
-      resource_usage: {
-        total_memory_mb: 0,
-        used_memory_mb: 0,
-        total_cpu_cores: 0,
-        used_cpu_cores: 0,
-      },
-    });
-    mockedListInstances.mockResolvedValue({
-      instances: [],
-      total: 0,
-      page: 1,
-      page_size: 100,
+      instance: null,
+      allowed_actions: ['view'],
+      reason_code: 'project_pool_instance_not_found',
     });
 
     const firstRender = render(
@@ -228,7 +183,7 @@ describe('ProjectAgentStatusBar polling behavior', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(poolService.getStatus).toHaveBeenCalledTimes(1);
+    expect(poolService.getProjectInstance).toHaveBeenCalledTimes(1);
 
     firstRender.unmount();
 
@@ -246,18 +201,12 @@ describe('ProjectAgentStatusBar polling behavior', () => {
     });
 
     // New mount should use short-lived cache and avoid immediate network refetch.
-    expect(poolService.getStatus).toHaveBeenCalledTimes(1);
+    expect(poolService.getProjectInstance).toHaveBeenCalledTimes(1);
   });
 
   it('coalesces pool status requests while first same-project mount is still pending', async () => {
-    const statusDeferred = createDeferred<PoolStatus>();
-    mockedGetStatus.mockReturnValue(statusDeferred.promise);
-    mockedListInstances.mockResolvedValue({
-      instances: [],
-      total: 0,
-      page: 1,
-      page_size: 100,
-    });
+    const statusDeferred = createDeferred<ProjectPoolInstanceResponse>();
+    mockedGetProjectInstance.mockReturnValue(statusDeferred.promise);
 
     render(
       <>
@@ -281,25 +230,13 @@ describe('ProjectAgentStatusBar polling behavior', () => {
       await Promise.resolve();
     });
 
-    expect(poolService.getStatus).toHaveBeenCalledTimes(1);
+    expect(poolService.getProjectInstance).toHaveBeenCalledTimes(1);
 
     statusDeferred.resolve({
       enabled: false,
-      status: 'ok',
-      total_instances: 0,
-      hot_instances: 0,
-      warm_instances: 0,
-      cold_instances: 0,
-      ready_instances: 0,
-      executing_instances: 0,
-      unhealthy_instances: 0,
-      prewarm_pool: { l1: 0, l2: 0, l3: 0 },
-      resource_usage: {
-        total_memory_mb: 0,
-        used_memory_mb: 0,
-        total_cpu_cores: 0,
-        used_cpu_cores: 0,
-      },
+      instance: null,
+      allowed_actions: ['view'],
+      reason_code: 'agent_pool_disabled',
     });
 
     await act(async () => {
@@ -307,7 +244,7 @@ describe('ProjectAgentStatusBar polling behavior', () => {
       await Promise.resolve();
     });
 
-    expect(poolService.listInstances).not.toHaveBeenCalled();
+    expect(poolService.getProjectInstance).toHaveBeenCalledTimes(1);
   });
 
   it('can hide the embedded sandbox indicator when sandbox is rendered in the merged status bar', () => {

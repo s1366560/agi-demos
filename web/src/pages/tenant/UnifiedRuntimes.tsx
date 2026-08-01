@@ -24,7 +24,12 @@ import { useQuery } from '@tanstack/react-query';
 import { Alert, Badge, Button, Card, Empty, Space, Table, Tag, Typography } from 'antd';
 import { RefreshCw } from 'lucide-react';
 
-import { poolService, type PoolInstance, type PoolStatus } from '@/services/poolService';
+import {
+  poolService,
+  type PoolAuthorityScope,
+  type PoolInstance,
+  type PoolStatus,
+} from '@/services/poolService';
 import {
   projectSandboxService,
   type ProjectSandbox,
@@ -98,15 +103,19 @@ async function fetchSandboxRuntimeRecords(): Promise<SandboxRuntimeRecord[]> {
 export function UnifiedRuntimes() {
   const { t } = useTranslation();
   const { tenantId } = useParams<{ tenantId?: string }>();
+  const poolScope = useMemo<PoolAuthorityScope>(
+    () => (tenantId ? { scope: 'tenant', tenant_id: tenantId } : { scope: 'global' }),
+    [tenantId]
+  );
   const poolStatusQuery = useQuery<PoolStatus>({
-    queryKey: ['runtimes', 'pool', 'status'],
-    queryFn: () => poolService.getStatus(),
+    queryKey: ['runtimes', 'pool', 'status', tenantId ?? 'global'],
+    queryFn: () => poolService.getStatus(poolScope),
     refetchInterval: 15_000,
   });
 
   const poolInstancesQuery = useQuery({
-    queryKey: ['runtimes', 'pool', 'instances'],
-    queryFn: () => poolService.listInstances({ page: 1, page_size: 100 }),
+    queryKey: ['runtimes', 'pool', 'instances', tenantId ?? 'global'],
+    queryFn: () => poolService.listInstances({ page: 1, page_size: 100 }, poolScope),
     refetchInterval: 15_000,
   });
 
@@ -312,8 +321,13 @@ export function UnifiedRuntimes() {
                 </Card>
                 <Card size="small" title={t('tenant.runtimes.cards.memory')}>
                   <Text className="tabular-nums">
-                    {Math.round(poolStatus.resource_usage.used_memory_mb)} /{' '}
-                    {Math.round(poolStatus.resource_usage.total_memory_mb)} MB
+                    {poolStatus.resource_usage
+                      ? `${String(Math.round(poolStatus.resource_usage.used_memory_mb))} / ${String(
+                          Math.round(poolStatus.resource_usage.total_memory_mb)
+                        )} MB`
+                      : t('tenant.runtimes.cards.capacityUnavailable', {
+                          defaultValue: 'Tenant capacity unavailable',
+                        })}
                   </Text>
                 </Card>
               </>
