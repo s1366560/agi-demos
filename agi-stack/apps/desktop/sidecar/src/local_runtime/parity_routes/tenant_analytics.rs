@@ -8,6 +8,7 @@ const SERVICE_VERSION: &str = env!("CARGO_PKG_VERSION");
 const CONTRACT_VERSION: &str = "3.0.0";
 const DEGRADED_REASON: &str = "local_tenant_analytics_memory_projection_unavailable";
 const MEMORY_REASON: &str = "local_tenant_memory_projection_unavailable";
+const TENANT_STORAGE_REASON: &str = "local_tenant_storage_projection_unavailable";
 const PROJECT_STORAGE_REASON: &str = "local_project_storage_projection_unavailable";
 const PROJECT_MEMORY_REASON: &str = "local_project_memory_projection_unavailable";
 
@@ -78,7 +79,7 @@ async fn tenant_analytics(
         },
         summary: AnalyticsSummary {
             total_memories: NullableNumberField::unavailable(MEMORY_REASON),
-            total_storage_bytes: NullableNumberField::unavailable(MEMORY_REASON),
+            total_storage_bytes: NullableNumberField::unavailable(TENANT_STORAGE_REASON),
             total_projects: NullableNumberField::available(total_projects),
             period_days,
         },

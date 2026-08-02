@@ -110,7 +110,7 @@ test('local analytics client preserves degraded field authority without fabricat
         },
         total_storage_bytes: {
           availability: 'unavailable',
-          reason_code: 'local_tenant_memory_projection_unavailable',
+          reason_code: 'local_tenant_storage_projection_unavailable',
           value: null,
         },
         total_projects: {
@@ -141,6 +141,10 @@ test('local analytics client preserves degraded field authority without fabricat
     'local_tenant_analytics_memory_projection_unavailable',
   );
   assert.equal(result.summary.totalMemories.value, null);
+  assert.equal(
+    result.summary.totalStorageBytes.reasonCode,
+    'local_tenant_storage_projection_unavailable',
+  );
   assert.equal(result.summary.totalProjects.value, 1);
   assert.equal(result.projectStorage.value[0].storageBytes.value, null);
   assert.deepEqual(result.allowedActions, ['view', 'retry']);

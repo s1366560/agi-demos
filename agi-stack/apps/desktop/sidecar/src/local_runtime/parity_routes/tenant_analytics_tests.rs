@@ -117,6 +117,10 @@ async fn tenant_analytics_returns_project_totals_and_structured_memory_unavailab
         "local_tenant_memory_projection_unavailable"
     );
     assert_eq!(
+        payload["summary"]["total_storage_bytes"]["reason_code"],
+        "local_tenant_storage_projection_unavailable"
+    );
+    assert_eq!(
         payload["projectStorage"]["value"][0]["storage_bytes"]["reason_code"],
         "local_project_storage_projection_unavailable"
     );
