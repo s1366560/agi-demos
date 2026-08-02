@@ -9,6 +9,10 @@ import {
   deadLetterQueueZhCN,
 } from './features/governance/locales/deadLetterQueueMessages';
 import {
+  deviceApprovalEnUS,
+  deviceApprovalZhCN,
+} from './features/device-approval/locales/deviceApprovalMessages';
+import {
   instanceTemplatesEnUS,
   instanceTemplatesZhCN,
 } from './features/instance-templates/locales/instanceTemplatesMessages';
@@ -71,6 +75,7 @@ const STORAGE_KEY = 'agistack.desktop.locale';
 
 const enUS: Record<string, string> = {
   ...deadLetterQueueEnUS,
+  ...deviceApprovalEnUS,
   ...desktopProductionRouterEnUS,
   ...instanceTemplatesEnUS,
   ...nativeUnavailableRouteEnUS,
@@ -3675,6 +3680,7 @@ const enUS: Record<string, string> = {
 
 const zhCN: Record<string, string> = {
   ...deadLetterQueueZhCN,
+  ...deviceApprovalZhCN,
   ...desktopProductionRouterZhCN,
   ...instanceTemplatesZhCN,
   ...nativeUnavailableRouteZhCN,

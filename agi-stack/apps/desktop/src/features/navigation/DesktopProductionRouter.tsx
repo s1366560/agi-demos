@@ -30,6 +30,7 @@ export type DesktopProductionRouterProps = Readonly<
     DesktopHashRouteHostOptions<DesktopRouteModule>,
     'location'
   > & {
+    authenticationPassthroughRouteIds?: ReadonlySet<string>;
     children: ReactNode;
     location: DesktopHashLocationPort;
     navigation: DesktopProductionRouterNavigationPort;
@@ -37,6 +38,7 @@ export type DesktopProductionRouterProps = Readonly<
 >;
 
 export type DesktopProductionRouterViewProps = Readonly<{
+  authenticationPassthroughRouteIds?: ReadonlySet<string>;
   children: ReactNode;
   currentLocation?: string;
   navigation: DesktopProductionRouterNavigationPort;
@@ -45,6 +47,7 @@ export type DesktopProductionRouterViewProps = Readonly<{
 }>;
 
 export function DesktopProductionRouter({
+  authenticationPassthroughRouteIds,
   children,
   location,
   mode,
@@ -83,6 +86,7 @@ export function DesktopProductionRouter({
   const { state, retry } = useDesktopHashRouteHost(hostOptions);
   return (
     <DesktopProductionRouterView
+      authenticationPassthroughRouteIds={authenticationPassthroughRouteIds}
       currentLocation={location.readHash()}
       navigation={navigation}
       retry={retry}
@@ -94,6 +98,7 @@ export function DesktopProductionRouter({
 }
 
 export function DesktopProductionRouterView({
+  authenticationPassthroughRouteIds,
   children,
   currentLocation = '',
   navigation,
@@ -101,7 +106,11 @@ export function DesktopProductionRouterView({
   state,
 }: DesktopProductionRouterViewProps) {
   const { t } = useI18n();
-  const routeActive = productionRouteOwnsState(state, currentLocation);
+  const routeActive = productionRouteOwnsState(
+    state,
+    currentLocation,
+    authenticationPassthroughRouteIds,
+  );
   const routeId =
     'match' in state
       ? state.match.definition.id
@@ -372,6 +381,7 @@ function boundaryIcon(status: DesktopRouteHostState['status']) {
 function productionRouteOwnsState(
   state: DesktopRouteHostState<DesktopRouteModule>,
   currentLocation: string,
+  authenticationPassthroughRouteIds?: ReadonlySet<string>,
 ): boolean {
   if (state.status === 'idle') {
     return hasNonEmptyHash(currentLocation);
@@ -379,7 +389,26 @@ function productionRouteOwnsState(
   if (state.status === 'malformed' || state.status === 'not_found') {
     return hasNonEmptyHash(state.location);
   }
+  if (
+    shouldPassThroughAuthenticationBoundary(
+      state,
+      authenticationPassthroughRouteIds,
+    )
+  ) {
+    return false;
+  }
   return true;
+}
+
+export function shouldPassThroughAuthenticationBoundary(
+  state: DesktopRouteHostState<DesktopRouteModule>,
+  authenticationPassthroughRouteIds?: ReadonlySet<string>,
+): boolean {
+  return Boolean(
+    state.status === 'forbidden' &&
+      authenticationPassthroughRouteIds?.has(state.match.definition.id) &&
+      state.missingPermissions.includes('authenticated'),
+  );
 }
 
 function hasNonEmptyHash(

@@ -78,6 +78,10 @@ import {
   resolveSignOutDisposition,
   workspaceContextMatchesSelection,
 } from './features/auth/authContextModel';
+import { createDeviceApprovalClient } from './features/device-approval/deviceApprovalClient';
+import { deviceApprovalCapability } from './features/device-approval/deviceApprovalCapability';
+import { readDeviceApprovalCodeFromHash } from './features/device-approval/deviceApprovalModel';
+import { createDeviceApprovalRouteModuleLoader } from './features/device-approval/deviceApprovalRouteModule';
 import { ForcePasswordChangeScreen } from './features/auth/ForcePasswordChangeScreen';
 import {
   completeForcedPasswordChangeOutcome,
@@ -288,6 +292,7 @@ import { KeyboardShortcutsDialog } from './features/navigation/KeyboardShortcuts
 import { createBrowserDesktopHashLocationPort } from './features/navigation/desktopHashRouteHost';
 import {
   createDesktopProductionRouteRegistry,
+  DEVICE_APPROVAL_ROUTE_ID,
   PROJECT_CRON_JOBS_ROUTE_ID,
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
@@ -1765,6 +1770,9 @@ class WorkspaceSsoFlowError extends Error {
 
 const SIDEBAR_WIDTH_STORAGE_KEY = 'agistack.desktop.sidebarWidth';
 const SIDEBAR_WIDTH_CONSTRAINTS = { min: 180, max: 420, default: 220 } as const;
+const AUTHENTICATION_PASSTHROUGH_ROUTE_IDS: ReadonlySet<string> = new Set([
+  DEVICE_APPROVAL_ROUTE_ID,
+]);
 
 export function App() {
   const runsInNativeDesktop = detectNativeDesktopShell();
@@ -1926,6 +1934,7 @@ export function App() {
   const myWorkRefreshTimerRef = useRef<number | null>(null);
   const myWorkEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const contextRevisionRef = useRef(0);
+  const authRef = useRef(auth);
   const configRef = useRef(config);
   const datasetRef = useRef(dataset);
   const expandedWorkspaceIdsRef = useRef(expandedWorkspaceIds);
@@ -2010,6 +2019,21 @@ export function App() {
     () =>
       createDesktopProductionRouteRegistry({
         implementedLoaders: {
+          [DEVICE_APPROVAL_ROUTE_ID]:
+            createDeviceApprovalRouteModuleLoader({
+              createBinding: () => {
+                const currentConfig = configRef.current;
+                return Object.freeze({
+                  client: createDeviceApprovalClient(currentConfig),
+                  accountLabel: authRef.current.user?.email ?? '',
+                  initialCode: readDeviceApprovalCodeFromHash(
+                    desktopProductionRouteLocation.readHash(),
+                  ),
+                  onNavigateBack:
+                    desktopProductionRouteNavigation.clearHash,
+                });
+              },
+            }),
           [TENANT_OVERVIEW_ROUTE_ID]:
             createTenantOverviewRouteModuleLoader({
               createBinding: (context) =>
@@ -2213,6 +2237,7 @@ export function App() {
   }, [updateDataset]);
 
   const identityAuthenticated = isIdentityAuthenticated(auth);
+  authRef.current = auth;
   const showRuntimeConfig = isWorkspaceReady(auth, config);
   const scopedConversation =
     agentConversationSession?.scopeKey === agentConversationScopeKey(config)
@@ -2333,13 +2358,17 @@ export function App() {
     (
       capability: string,
       context: Parameters<typeof resolveDesktopRouteCapability>[2],
-    ) =>
-      resolveDesktopRouteCapability(
+    ) => {
+      if (capability === DEVICE_APPROVAL_ROUTE_ID) {
+        return deviceApprovalCapability(config);
+      }
+      return resolveDesktopRouteCapability(
         desktopCapabilityState.snapshot,
         capability,
         context,
-      ),
-    [desktopCapabilityState.snapshot],
+      );
+    },
+    [config, desktopCapabilityState.snapshot],
   );
   const searchCapability = desktopCapability(desktopCapabilityState.snapshot, 'search');
   const projectSearchCapability = desktopCapability(
@@ -8423,6 +8452,9 @@ export function App() {
         scaling="95%"
       >
         <DesktopProductionRouter
+          authenticationPassthroughRouteIds={
+            AUTHENTICATION_PASSTHROUGH_ROUTE_IDS
+          }
           location={desktopProductionRouteLocation}
           mode={config.mode}
           navigation={desktopProductionRouteNavigation}
@@ -8552,6 +8584,9 @@ export function App() {
 
           <main ref={workbenchRef} className="workbench" tabIndex={-1}>
             <DesktopProductionRouter
+              authenticationPassthroughRouteIds={
+                AUTHENTICATION_PASSTHROUGH_ROUTE_IDS
+              }
               location={desktopProductionRouteLocation}
               mode={config.mode}
               navigation={desktopProductionRouteNavigation}

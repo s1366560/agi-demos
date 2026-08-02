@@ -1,0 +1,213 @@
+.device-approval-page {
+  width: min(100%, 620px);
+  margin: clamp(24px, 8vh, 88px) auto;
+  padding: clamp(24px, 4vw, 42px);
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 22px;
+  background: var(--desktop-surface-2);
+  color: var(--desktop-text);
+  box-shadow: 0 18px 50px rgba(var(--desktop-black-rgb), 0.35);
+}
+
+.device-approval-page > header,
+.device-approval-success {
+  text-align: center;
+}
+
+.device-approval-icon,
+.device-approval-success > svg {
+  display: inline-grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--desktop-surface-3);
+  color: var(--desktop-accent);
+}
+
+.device-approval-icon svg,
+.device-approval-success > svg {
+  width: 25px;
+  height: 25px;
+}
+
+.device-approval-eyebrow {
+  margin: 18px 0 6px;
+  color: var(--desktop-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.device-approval-page h1,
+.device-approval-page h2,
+.device-approval-page p {
+  margin: 0;
+}
+
+.device-approval-page h1 {
+  font-size: clamp(26px, 4vw, 36px);
+}
+
+.device-approval-page header > p:last-child,
+.device-approval-success > p:not(.device-approval-eyebrow) {
+  margin-top: 10px;
+  color: var(--desktop-muted);
+  line-height: 1.6;
+}
+
+.device-approval-account,
+.device-approval-error {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  padding: 14px 16px;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 14px;
+  background: var(--desktop-surface-3);
+}
+
+.device-approval-account span {
+  display: grid;
+  gap: 4px;
+}
+
+.device-approval-account small {
+  color: var(--desktop-muted);
+}
+
+.device-approval-error {
+  display: grid;
+  color: var(--desktop-red);
+}
+
+.device-approval-error code {
+  color: var(--desktop-faint);
+  font-size: 11px;
+}
+
+.device-approval-page form {
+  display: grid;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.device-approval-page label {
+  font-weight: 650;
+}
+
+.device-approval-page input {
+  min-width: 0;
+  padding: 14px 18px;
+  border: 1px solid var(--desktop-border-6);
+  border-radius: 12px;
+  background: var(--desktop-surface-1);
+  color: var(--desktop-text);
+  font: 650 24px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.22em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.device-approval-page input:focus-visible,
+.device-approval-page button:focus-visible {
+  outline: 2px solid var(--desktop-cyan);
+  outline-offset: 2px;
+}
+
+.device-approval-page form > p {
+  color: var(--desktop-faint);
+  font-size: 12px;
+}
+
+.device-approval-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.device-approval-page button {
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--desktop-border-6);
+  border-radius: 10px;
+  background: var(--desktop-surface-3);
+  color: var(--desktop-text);
+  font-weight: 650;
+}
+
+.device-approval-page button:last-child {
+  border-color: var(--desktop-text);
+  background: var(--desktop-text);
+  color: var(--desktop-bg);
+}
+
+.device-approval-page button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.device-approval-dialog-backdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(var(--desktop-overlay-1-rgb), 0.76);
+}
+
+.device-approval-dialog {
+  width: min(100%, 480px);
+  padding: 26px;
+  border: 1px solid var(--desktop-border-6);
+  border-radius: 18px;
+  background: var(--desktop-surface-2);
+  box-shadow: 0 24px 80px rgba(var(--desktop-black-rgb), 0.5);
+}
+
+.device-approval-dialog > svg {
+  width: 24px;
+  height: 24px;
+  color: var(--desktop-amber);
+}
+
+.device-approval-dialog h2 {
+  margin-top: 12px;
+}
+
+.device-approval-dialog > p {
+  margin-top: 10px;
+  color: var(--desktop-muted);
+  line-height: 1.55;
+}
+
+.device-approval-dialog > code {
+  display: block;
+  margin-top: 16px;
+  color: var(--desktop-text);
+  font-size: 18px;
+  letter-spacing: 0.16em;
+}
+
+.device-approval-success > button {
+  margin-top: 24px;
+}
+
+@media (max-width: 640px) {
+  .device-approval-page {
+    margin: 16px auto;
+    padding: 22px;
+    border-radius: 16px;
+  }
+
+  .device-approval-actions {
+    flex-direction: column-reverse;
+  }
+
+  .device-approval-page button {
+    width: 100%;
+  }
+}

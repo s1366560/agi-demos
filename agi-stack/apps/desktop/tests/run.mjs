@@ -79,6 +79,24 @@ copyFileSync(
   join(compiledFeedbackDirectory, 'ToastCenter.css'),
 );
 
+const compiledDeviceApprovalDirectory = join(
+  compiledRoot,
+  'src',
+  'features',
+  'device-approval',
+);
+mkdirSync(compiledDeviceApprovalDirectory, { recursive: true });
+copyFileSync(
+  join(
+    desktopRoot,
+    'src',
+    'features',
+    'device-approval',
+    'DeviceApprovalPage.css',
+  ),
+  join(compiledDeviceApprovalDirectory, 'DeviceApprovalPage.css'),
+);
+
 const compiledSettingsDirectory = join(compiledRoot, 'src', 'features', 'settings');
 mkdirSync(compiledSettingsDirectory, { recursive: true });
 copyFileSync(

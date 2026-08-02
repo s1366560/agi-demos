@@ -10,6 +10,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   createDesktopProductionRouteRegistry,
+  DEVICE_APPROVAL_ROUTE_ID,
   PROJECT_CRON_JOBS_ROUTE_ID,
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
@@ -47,6 +48,7 @@ test('Tenant Overview loader stays lazy and renders the exact tenant binding', a
   });
   const registry = createDesktopProductionRouteRegistry({
     implementedLoaders: {
+      [DEVICE_APPROVAL_ROUTE_ID]: fakeLoader(DEVICE_APPROVAL_ROUTE_ID),
       [TENANT_OVERVIEW_ROUTE_ID]: tenantLoader,
       [PROJECT_OVERVIEW_ROUTE_ID]: fakeLoader(PROJECT_OVERVIEW_ROUTE_ID),
       [PROJECT_SEARCH_ROUTE_ID]: fakeLoader(PROJECT_SEARCH_ROUTE_ID),

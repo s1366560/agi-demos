@@ -9,6 +9,7 @@ import {
   automationActionAvailability,
   normalizeAutomationCapabilities,
 } from '../automations/automationModel';
+import { deviceApprovalCapability } from '../device-approval/deviceApprovalCapability';
 import { deadLetterQueueCapability } from '../governance/deadLetterQueueCapability';
 import { instanceTemplatesCapability } from '../instance-templates/instanceTemplatesCapability';
 import { runtimeClustersCapability } from '../runtime-clusters/runtimeClustersCapability';
@@ -147,6 +148,7 @@ export function createDesktopWorkbenchCapabilityClient(
                   unavailable('sandbox_isolation_capability_not_declared'),
                   workspaceScope,
                 ),
+          'device-approval': deviceApprovalCapability(config),
           'project-project-overview': withCapabilityScope(
             projectOverview,
             projectScope,

@@ -11,6 +11,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   createDesktopProductionRouteRegistry,
+  DEVICE_APPROVAL_ROUTE_ID,
   PROJECT_CRON_JOBS_ROUTE_ID,
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
@@ -58,6 +59,9 @@ test('factory stays lazy and publishes the exact Project Advanced Search route c
 
   const registry = createDesktopProductionRouteRegistry({
     implementedLoaders: {
+      [DEVICE_APPROVAL_ROUTE_ID]: implementedRouteLoader(
+        DEVICE_APPROVAL_ROUTE_ID,
+      ),
       [PROJECT_OVERVIEW_ROUTE_ID]: implementedOverviewLoader(),
       [PROJECT_SEARCH_ROUTE_ID]: loader,
       [PROJECT_CRON_JOBS_ROUTE_ID]: implementedCronJobsLoader(),

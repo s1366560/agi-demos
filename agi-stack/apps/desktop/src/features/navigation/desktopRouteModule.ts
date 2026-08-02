@@ -1,6 +1,5 @@
 import type { ComponentType } from 'react';
 
-import type { CanonicalDesktopRouteId } from './desktopCanonicalRouteCatalog';
 import type {
   DesktopRouteContext,
   DesktopRouteLocalPolicy,
@@ -12,7 +11,7 @@ export type DesktopPlannedRouteReasonCode =
   | 'desktop_native_route_web_contract_blocked';
 
 type DesktopRouteModuleBase = Readonly<{
-  routeId: CanonicalDesktopRouteId;
+  routeId: string;
   capability: string;
   localPolicy: DesktopRouteLocalPolicy;
   Surface: ComponentType<DesktopRouteSurfaceProps>;

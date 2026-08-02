@@ -16,7 +16,9 @@ import type {
   DesktopRouteLocalPolicy,
   DesktopRouteRegistry,
 } from './desktopRouteRegistry';
+import { createDesktopRouteRegistry } from './desktopRouteRegistry';
 
+export const DEVICE_APPROVAL_ROUTE_ID = 'device-approval' as const;
 export const PROJECT_OVERVIEW_ROUTE_ID = 'project-project-overview' as const;
 export const PROJECT_SEARCH_ROUTE_ID = 'project-project-search' as const;
 export const PROJECT_CRON_JOBS_ROUTE_ID =
@@ -34,7 +36,7 @@ export const TENANT_INSTANCE_TEMPLATES_ROUTE_ID =
   'tenant-tenant-instance-templates' as const;
 export const TENANT_DEAD_LETTER_QUEUE_ROUTE_ID = 'tenant-tenant-dead-letter-queue' as const;
 
-const IMPLEMENTED_ROUTE_IDS = new Set<CanonicalDesktopRouteId>([
+const IMPLEMENTED_ROUTE_IDS = new Set<string>([
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
   PROJECT_CRON_JOBS_ROUTE_ID,
@@ -49,8 +51,12 @@ const IMPLEMENTED_ROUTE_IDS = new Set<CanonicalDesktopRouteId>([
   TENANT_DEPLOY_ROUTE_ID,
   TENANT_INSTANCE_TEMPLATES_ROUTE_ID,
   TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
+  DEVICE_APPROVAL_ROUTE_ID,
 ]);
-const CANONICAL_ROUTE_ID_SET = new Set<string>(CANONICAL_DESKTOP_ROUTE_IDS);
+const PRODUCTION_ROUTE_ID_SET = new Set<string>([
+  ...CANONICAL_DESKTOP_ROUTE_IDS,
+  DEVICE_APPROVAL_ROUTE_ID,
+]);
 
 export type DesktopProductionRouteRegistryOptions = Readonly<{
   implementedLoaders: Readonly<Record<string, unknown>>;
@@ -72,7 +78,26 @@ export function createDesktopProductionRouteRegistry({
         : plannedLoader(routeId, () => requiredDefinition(registry, routeId)),
     ]),
   );
-  registry = createDesktopCanonicalRouteCatalog<DesktopRouteModule>(loaders);
+  const canonicalRegistry =
+    createDesktopCanonicalRouteCatalog<DesktopRouteModule>(loaders);
+  const deviceApprovalDefinition: DesktopRouteDefinition<DesktopRouteModule> = {
+    id: DEVICE_APPROVAL_ROUTE_ID,
+    path: '/device',
+    scope: ['global'],
+    navGroup: 'identity-entry',
+    capability: DEVICE_APPROVAL_ROUTE_ID,
+    requiredPermission: [['authenticated']],
+    localPolicy: 'cloud_only',
+    loader: implementedLoader(
+      DEVICE_APPROVAL_ROUTE_ID,
+      implementedLoaders[DEVICE_APPROVAL_ROUTE_ID],
+      () => requiredDefinition(registry, DEVICE_APPROVAL_ROUTE_ID),
+    ),
+  };
+  registry = createDesktopRouteRegistry([
+    ...canonicalRegistry.definitions,
+    deviceApprovalDefinition,
+  ]);
   return registry;
 }
 
@@ -80,10 +105,10 @@ function assertImplementedLoaders(
   implementedLoaders: Readonly<Record<string, unknown>>,
 ): void {
   for (const routeId of Object.keys(implementedLoaders)) {
-    if (!CANONICAL_ROUTE_ID_SET.has(routeId)) {
+    if (!PRODUCTION_ROUTE_ID_SET.has(routeId)) {
       throw new Error(`desktop_production_route_loader_unknown:${routeId}`);
     }
-    if (!IMPLEMENTED_ROUTE_IDS.has(routeId as CanonicalDesktopRouteId)) {
+    if (!IMPLEMENTED_ROUTE_IDS.has(routeId)) {
       throw new Error(`desktop_production_route_loader_not_implemented:${routeId}`);
     }
   }
@@ -98,7 +123,7 @@ function assertImplementedLoaders(
 }
 
 function implementedLoader(
-  routeId: CanonicalDesktopRouteId,
+  routeId: string,
   input: unknown,
   definition: () => DesktopRouteDefinition<DesktopRouteModule>,
 ): DesktopRouteModuleLoader {
@@ -137,7 +162,7 @@ function createPlannedModule(
 function requireImplementedModule(
   input: unknown,
   definition: DesktopRouteDefinition<DesktopRouteModule>,
-  routeId: CanonicalDesktopRouteId,
+  routeId: string,
 ): DesktopImplementedRouteModule {
   if (!isRecord(input)) {
     throw new Error(`desktop_route_module_invalid:${routeId}`);
@@ -176,7 +201,7 @@ function plannedReasonCode(
 
 function requiredDefinition(
   registry: DesktopRouteRegistry<DesktopRouteModule> | null,
-  routeId: CanonicalDesktopRouteId,
+  routeId: string,
 ): DesktopRouteDefinition<DesktopRouteModule> {
   const definition = registry?.byId.get(routeId);
   if (!definition) {

@@ -23,6 +23,7 @@ const {
 );
 const {
   createDesktopProductionRouteRegistry,
+  DEVICE_APPROVAL_ROUTE_ID,
   PROJECT_CRON_JOBS_ROUTE_ID,
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
@@ -79,6 +80,9 @@ test('factory stays lazy and publishes the exact implemented route module contra
 
   const registry = createDesktopProductionRouteRegistry({
     implementedLoaders: {
+      [DEVICE_APPROVAL_ROUTE_ID]: implementedRouteLoader(
+        DEVICE_APPROVAL_ROUTE_ID,
+      ),
       [PROJECT_OVERVIEW_ROUTE_ID]: loader,
       [PROJECT_SEARCH_ROUTE_ID]: implementedSearchLoader(),
       [PROJECT_CRON_JOBS_ROUTE_ID]: implementedCronJobsLoader(),

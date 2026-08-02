@@ -25,6 +25,7 @@ const {
   handleDesktopProductionRouteBoundaryEscape,
   retryDesktopProductionRoute,
   returnToDesktopWorkbench,
+  shouldPassThroughAuthenticationBoundary,
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/DesktopProductionRouter.js');
 const {
   createDesktopRouteRegistry,
@@ -268,6 +269,45 @@ test('loading, forbidden, unavailable, and error states expose structured bounda
   }
 });
 
+test('authentication-required route can preserve its deep link behind the login surface', () => {
+  const deviceMatch = {
+    definition: {
+      ...match.definition,
+      id: 'device-approval',
+      path: '/device',
+      scope: ['global'],
+      capability: 'device-approval',
+      requiredPermission: [['authenticated']],
+      localPolicy: 'cloud_only',
+    },
+    context: {},
+    canonicalPath: '/device',
+  };
+  const state = {
+    status: 'forbidden',
+    match: deviceMatch,
+    reasonCode: 'desktop_route_permission_denied',
+    missingPermissions: ['authenticated'],
+  };
+  assert.equal(
+    shouldPassThroughAuthenticationBoundary(
+      state,
+      new Set(['device-approval']),
+    ),
+    true,
+  );
+  assert.equal(
+    shouldPassThroughAuthenticationBoundary(state, new Set()),
+    false,
+  );
+  const markup = renderView({
+    state,
+    authenticationPassthroughRouteIds: new Set(['device-approval']),
+  });
+  assert.match(markup, /data-legacy="true"/u);
+  assert.doesNotMatch(markup, /desktop-production-route-stage/u);
+});
+
 test('breadcrumb return and retry actions use only the injected ports', async () => {
   let clearCalls = 0;
   let retryCalls = 0;
@@ -353,7 +393,7 @@ test('router styling and copy remain native, responsive, and bilingual', () => {
   }
 });
 
-function renderView({ state }) {
+function renderView({ state, authenticationPassthroughRouteIds }) {
   return render(
     React.createElement(
       DesktopProductionRouterView,
@@ -362,6 +402,7 @@ function renderView({ state }) {
         registry,
         retry: async () => {},
         navigation: { clearHash() {} },
+        authenticationPassthroughRouteIds,
       },
       React.createElement(
         'article',
