@@ -1,0 +1,229 @@
+{
+  "$schema": "./evidence-run.v1.schema.json",
+  "schema_version": "1.0.0",
+  "record_kind": "run",
+  "run_id": "runtime-clusters-local-electron-c29dc783",
+  "run_scope": "capability_slice",
+  "artifact_location_base": "evidence_run_directory",
+  "schema_artifact_id": "runtime-clusters-evidence-schema",
+  "source_revisions": {
+    "repository_revision": "c29dc7832e7827e7b094b8102fe095f35a726086",
+    "web_revision": "c29dc7832e7827e7b094b8102fe095f35a726086",
+    "desktop_revision": "c29dc7832e7827e7b094b8102fe095f35a726086",
+    "prototype_revision": "61454b2ead1cedda584e95afee9f471aac7851fb"
+  },
+  "source_state": {
+    "head_revision": "c29dc7832e7827e7b094b8102fe095f35a726086",
+    "worktree_state": "clean"
+  },
+  "desired_contract": {
+    "path": "agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json",
+    "path_base": "repository_root",
+    "artifact_id": "runtime-clusters-desired-contract",
+    "schema_version": "2.0.0",
+    "revision": "c29dc7832e7827e7b094b8102fe095f35a726086",
+    "sha256": "939ba47d2ecba36bff1781384c341735169c9f67804c9bd72fbcf65d2f407819"
+  },
+  "started_at": "2026-08-02T13:17:50Z",
+  "completed_at": "2026-08-02T13:32:00Z",
+  "environment": {
+    "host_os": "macOS",
+    "host_os_version": "26.5.2",
+    "architecture": "arm64",
+    "execution_context": "local",
+    "sandboxed": false,
+    "locale": "zh-CN",
+    "timezone": "Asia/Shanghai",
+    "dependency_versions": {
+      "node": "v22.22.3",
+      "pnpm": "11.15.1",
+      "rustc": "1.96.1 (31fca3adb 2026-06-26)",
+      "electron": "43.2.0"
+    }
+  },
+  "matched_state": {
+    "locale": "zh-CN",
+    "theme": "dark",
+    "viewport": {
+      "width": 1728,
+      "height": 992
+    },
+    "device_scale_factor": 2,
+    "authentication_state": "local_trusted_session",
+    "account_state": "local_desktop",
+    "permission_state": "authenticated_tenant_member",
+    "data_state": "cloud_cluster_control_not_applicable",
+    "interaction_state": "electron_deep_link_retry_and_reload_supporting_observation"
+  },
+  "evidence": {
+    "build": {
+      "status": "passed",
+      "command": "make -C agi-stack desktop-check && CI=true corepack pnpm run qa:browser && node contracts/desktop-web-parity/generate-parity-manifest-v2.mjs --check",
+      "started_at": "2026-08-02T13:17:50Z",
+      "completed_at": "2026-08-02T13:22:54Z",
+      "summary": "Clean detached source passed sidecar, Desktop, Electron production build, Browser QA, manifest drift, and structured judgment gates.",
+      "artifact_ids": [
+        "runtime-clusters-build-report"
+      ]
+    },
+    "browser": {
+      "status": "passed",
+      "command": "AGISTACK_PAIRED_SOURCE_REVISION=c29dc7832e7827e7b094b8102fe095f35a726086 CI=true corepack pnpm run qa:paired-production; Electron CDP supporting observation",
+      "started_at": "2026-08-02T13:24:00Z",
+      "completed_at": "2026-08-02T13:29:16Z",
+      "summary": "The paired production signed-out case passed. The make-launched Electron renderer also preserved the Local Clusters deep link, stable reason code, and no-network retry boundary, but this is not a Computer Use native pass.",
+      "artifact_ids": [
+        "runtime-clusters-paired-renderer-report",
+        "runtime-clusters-electron-screenshot"
+      ]
+    },
+    "native": {
+      "status": "blocked",
+      "command": "AGISTACK_DESKTOP_DEBUG_PORT=9333 make -C agi-stack run-desktop",
+      "started_at": "2026-08-02T13:26:40Z",
+      "completed_at": "2026-08-02T13:30:00Z",
+      "summary": "The canonical Electron process and Local route started, but the locked Mac prevented Computer Use window, focus, keyboard, menu, and Cmd+R verification. Authorized Cloud cluster integration was also unavailable.",
+      "artifact_ids": [
+        "runtime-clusters-electron-support-report"
+      ]
+    }
+  },
+  "capability_results": [
+    {
+      "capability_id": "tenant-tenant-clusters",
+      "contract_reference": "agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json#tenant-tenant-clusters",
+      "result": "blocked",
+      "summary": "Build, contract, Browser QA, paired renderer, and make-launched Electron Local supporting checks passed. Full Clusters parity remains blocked by the partial Cloud surface, unavailable authorized Cloud data, and locked-screen Computer Use gap.",
+      "evidence": {
+        "build": "passed",
+        "browser": "passed",
+        "native": "blocked"
+      },
+      "artifact_ids": [
+        "runtime-clusters-evidence-schema",
+        "runtime-clusters-desired-contract",
+        "runtime-clusters-build-report",
+        "runtime-clusters-paired-renderer-report",
+        "runtime-clusters-electron-support-report",
+        "runtime-clusters-electron-screenshot"
+      ],
+      "parity_judgment": {
+        "disposition": "accepted",
+        "statement": "The retained evidence supports the current Cloud partial and degraded and Local not-applicable classifications, but not complete Clusters parity.",
+        "judgment_audit": {
+          "agent_id": "/root/parity_review_a_01_22",
+          "tool_name": "structured_capability_slice_judgment",
+          "input": {
+            "contract_reference": "agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json#tenant-tenant-clusters",
+            "evidence_digest": "sha256:c110e4cf946416a70032a7e1d8e67ef1f6a1762bf2389463d4646572484e41cc",
+            "observation_summary": "Build, Browser QA, paired signed-out rendering, and Local Electron CDP checks passed. Computer Use remained blocked by the locked Mac, authorized Cloud cluster data was unavailable, and detail plus administrative flows remain incomplete."
+          },
+          "output": {
+            "verdict": "accepted",
+            "summary": "The evidence supports the current Cloud partial/degraded and Local not-applicable classifications, but does not establish complete Clusters parity."
+          },
+          "rationale": "Desktop-check, Electron build, Browser QA, and the Local CDP run support the native route wiring and stable Local cloud_cluster_control_not_applicable behavior. Reload and retry remained stable, no /clusters requests were issued in Local mode, and no renderer errors were observed. Cloud behavior lacks an authorized cluster dataset, paired-production coverage is only a signed-out supporting case, and cluster detail, mutations, ACP runner pools, and registration-token flows are not implemented. The macOS lock also blocked Computer Use validation of window, focus, keyboard, and Cmd+R behavior. Therefore Cloud must remain partial/degraded, Local remains not applicable, and the overall capability cannot pass.",
+          "latency_ms": 14,
+          "recorded_at": "2026-08-02T13:31:00.000Z"
+        }
+      },
+      "intentional_deviation": {
+        "disposition": "accepted",
+        "statement": "Local Desktop intentionally exposes a native cloud-only unavailable state instead of simulating cluster topology or authority.",
+        "judgment_audit": {
+          "agent_id": "/root/parity_review_a_01_22",
+          "tool_name": "structured_capability_slice_judgment",
+          "input": {
+            "contract_reference": "agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json#tenant-tenant-clusters",
+            "evidence_digest": "sha256:c110e4cf946416a70032a7e1d8e67ef1f6a1762bf2389463d4646572484e41cc",
+            "observation_summary": "Local Desktop returns cloud_cluster_control_not_applicable before any cluster network request and exposes no topology, credentials, Provider configuration, registration token, or mutation authority."
+          },
+          "output": {
+            "verdict": "accepted",
+            "summary": "Local Desktop intentionally exposes a native cloud-only unavailable state instead of simulating cluster topology or authority."
+          },
+          "rationale": "A supervised single-machine sidecar has no honest local equivalent for multi-node cluster control, ACP runner-pool administration, or registration-token issuance. The observed Local route returns the stable cloud_cluster_control_not_applicable reason before any cluster network request and exposes no mutation authority. This is a valid intentional deviation, provided it remains native, structured, deterministic, and covered by Local regression evidence.",
+          "latency_ms": 10,
+          "recorded_at": "2026-08-02T13:31:00.001Z"
+        }
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "artifact_id": "runtime-clusters-evidence-schema",
+      "kind": "report",
+      "channel": "shared",
+      "evidence_roles": [
+        "contract"
+      ],
+      "location": "evidence-run.v1.schema.json",
+      "media_type": "application/schema+json",
+      "sha256": "673ddd2b0fd38b97cbf71007fd2a6fe9692dc03ca11c74fc12f0254b24aaf0ed",
+      "produced_at": "2026-08-02T13:32:00Z"
+    },
+    {
+      "artifact_id": "runtime-clusters-desired-contract",
+      "kind": "report",
+      "channel": "shared",
+      "evidence_roles": [
+        "contract"
+      ],
+      "location": "parity-manifest.v2.json",
+      "media_type": "application/json",
+      "sha256": "939ba47d2ecba36bff1781384c341735169c9f67804c9bd72fbcf65d2f407819",
+      "produced_at": "2026-08-02T13:32:00Z"
+    },
+    {
+      "artifact_id": "runtime-clusters-build-report",
+      "kind": "report",
+      "channel": "build",
+      "evidence_roles": [
+        "contract"
+      ],
+      "location": "build-report.json",
+      "media_type": "application/json",
+      "sha256": "1017271f3d5791c40b46be1ecef2100c1aace7d2357d151af9f303cf1dac5f54",
+      "produced_at": "2026-08-02T13:32:00Z"
+    },
+    {
+      "artifact_id": "runtime-clusters-paired-renderer-report",
+      "kind": "report",
+      "channel": "browser",
+      "evidence_roles": [
+        "web_renderer",
+        "desktop_renderer",
+        "visual_diff",
+        "observation_metadata"
+      ],
+      "location": "paired-renderer-report.json",
+      "media_type": "application/json",
+      "sha256": "e8bb9058946e8b095344bf2fc8a7a337bb4d766f0ddffada6da55633411b717b",
+      "produced_at": "2026-08-02T13:25:17Z"
+    },
+    {
+      "artifact_id": "runtime-clusters-electron-support-report",
+      "kind": "report",
+      "channel": "native",
+      "evidence_roles": [
+        "native_electron"
+      ],
+      "location": "electron-local-support-report.json",
+      "media_type": "application/json",
+      "sha256": "38342b6cf7ed0683ec1fb451481bedfcf357ae2844aecb95b53a82e76082c03a",
+      "produced_at": "2026-08-02T13:30:00Z"
+    },
+    {
+      "artifact_id": "runtime-clusters-electron-screenshot",
+      "kind": "screenshot",
+      "channel": "browser",
+      "evidence_roles": [
+        "desktop_full_screenshot"
+      ],
+      "location": "electron-local-runtime-clusters.png",
+      "media_type": "image/png",
+      "sha256": "afa13691a2e10bdb56f8e9b6c735122d86e82af9bb7ccb7b2f9d7b820f473fb9",
+      "produced_at": "2026-08-02T13:29:16Z"
+    }
+  ]
+}

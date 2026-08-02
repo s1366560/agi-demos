@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0.0",
+  "record_kind": "desktop-parity-electron-support-report",
+  "source_revision": "c29dc7832e7827e7b094b8102fe095f35a726086",
+  "capability_id": "tenant-tenant-clusters",
+  "status": "blocked",
+  "observed_surface": "desktop_local",
+  "launch_command": "AGISTACK_DESKTOP_DEBUG_PORT=9333 make -C agi-stack run-desktop",
+  "verification_channel": "CDP observation of the make-launched Electron renderer; Computer Use was blocked because the Mac was locked",
+  "electron_observations": {
+    "route": "#/tenant/northstar/clusters",
+    "breadcrumb": "tenant-tenant-clusters",
+    "availability": "not_applicable",
+    "reason_code": "cloud_cluster_control_not_applicable",
+    "deep_link_reload_restored": true,
+    "retry_preserved_reason_code": true,
+    "cluster_api_requests": 0,
+    "renderer_errors": 0,
+    "cloud_cluster_data_rendered": false,
+    "cluster_mutation_controls_rendered": false,
+    "registration_token_rendered": false
+  },
+  "authority_boundary": {
+    "policy": "cloud_only",
+    "local_network_short_circuit": true,
+    "simulated_cluster_topology": false,
+    "credential_projection": false,
+    "provider_configuration_projection": false,
+    "registration_token_projection": false
+  },
+  "blockers": [
+    {
+      "reason_code": "native_computer_use_mac_locked",
+      "statement": "The Mac lock screen prevented Computer Use from observing the real application window, focus, keyboard, menu, and Cmd+R behavior."
+    },
+    {
+      "reason_code": "authorized_cloud_cluster_dataset_unavailable",
+      "statement": "Cloud Desktop list and health requests were not exercised because no authorized disposable Cloud cluster dataset was available."
+    },
+    {
+      "reason_code": "runtime_clusters_detail_and_mutations_partial",
+      "statement": "Cluster detail, create, update, delete, ACP runner-pool management, and registration-token flows are outside this implemented slice."
+    }
+  ],
+  "recorded_at": "2026-08-02T13:30:00Z"
+}
