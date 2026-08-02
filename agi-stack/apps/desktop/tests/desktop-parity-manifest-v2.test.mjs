@@ -887,16 +887,36 @@ test("agent ecosystem capabilities do not overstate missing controls or Local au
     "refresh",
     "retry",
   ]);
-  for (const capability of [configuration, bindings]) {
-    for (const surfaceName of ["desktop_cloud", "desktop_local"]) {
-      assert.equal(
-        capability.surfaces[surfaceName].implementation_status,
-        "missing",
-      );
-      assert.equal(capability.surfaces[surfaceName].authority, "none");
-      assert.deepEqual(capability.surfaces[surfaceName].allowed_actions, []);
-    }
+  for (const surfaceName of ["desktop_cloud", "desktop_local"]) {
+    assert.equal(
+      configuration.surfaces[surfaceName].implementation_status,
+      "missing",
+    );
+    assert.equal(configuration.surfaces[surfaceName].authority, "none");
+    assert.deepEqual(
+      configuration.surfaces[surfaceName].allowed_actions,
+      [],
+    );
   }
+  assert.equal(bindings.surfaces.desktop_cloud.implementation_status, "implemented");
+  assert.equal(bindings.surfaces.desktop_cloud.availability, "available");
+  assert.equal(bindings.surfaces.desktop_cloud.authority, "cloud_service");
+  assert.deepEqual(bindings.surfaces.desktop_cloud.allowed_actions, [
+    "view",
+    "list",
+    "create",
+    "delete",
+    "set-enabled",
+    "test",
+  ]);
+  assert.equal(bindings.surfaces.desktop_local.implementation_status, "unavailable");
+  assert.equal(bindings.surfaces.desktop_local.availability, "unavailable");
+  assert.equal(bindings.surfaces.desktop_local.authority, "sidecar");
+  assert.equal(
+    bindings.surfaces.desktop_local.reason_code,
+    "local_agent_binding_routing_authority_unavailable",
+  );
+  assert.deepEqual(bindings.surfaces.desktop_local.allowed_actions, []);
   assert.equal(evolution.surfaces.desktop_local.disposition, "native_equivalent");
   assert.equal(evolution.surfaces.desktop_local.implementation_status, "partial");
   assert.equal(evolution.surfaces.desktop_local.availability, "unavailable");

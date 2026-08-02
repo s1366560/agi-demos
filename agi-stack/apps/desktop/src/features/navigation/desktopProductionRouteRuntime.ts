@@ -46,6 +46,9 @@ import { createTenantOverviewHttpClient } from '../tenant/tenantOverviewHttpClie
 import type { TenantAnalyticsRouteBinding } from '../tenant/tenantAnalyticsRouteModule';
 import { createTenantAnalyticsController } from '../tenant/tenantAnalyticsController';
 import { createTenantAnalyticsHttpClient } from '../tenant/tenantAnalyticsHttpClient';
+import type { TenantAgentBindingsRouteBinding } from '../tenant/tenantAgentBindingsRouteModule';
+import { createTenantAgentBindingsController } from '../tenant/tenantAgentBindingsController';
+import { createTenantAgentBindingsHttpClient } from '../tenant/tenantAgentBindingsHttpClient';
 import type { TenantProjectsRouteBinding } from '../tenant/tenantProjectsRouteModule';
 import { createTenantProjectsController } from '../tenant/tenantProjectsController';
 import { createTenantProjectsHttpClient } from '../tenant/tenantProjectsHttpClient';
@@ -227,6 +230,28 @@ export function createTenantAnalyticsRouteBindingForRuntime(
     }),
     scope,
     tenantPlan,
+  });
+}
+
+export function createTenantAgentBindingsRouteBindingForRuntime(
+  config: DesktopRuntimeConfig,
+  context: Readonly<{ tenantId: string }>,
+): TenantAgentBindingsRouteBinding {
+  if (config.tenantId !== context.tenantId) {
+    throw new Error('tenant_agent_bindings_runtime_scope_mismatch');
+  }
+  const scope = Object.freeze({
+    authority: config.mode,
+    tenantId: context.tenantId,
+  });
+  const client = createTenantAgentBindingsHttpClient(config);
+  return Object.freeze({
+    controller: createTenantAgentBindingsController({
+      authority: config.mode,
+      client,
+      initialScope: scope,
+    }),
+    scope,
   });
 }
 

@@ -1,0 +1,267 @@
+.tenant-agent-bindings-page {
+  display: grid;
+  gap: 18px;
+  min-height: 100%;
+  padding: 28px;
+  color: var(--gray-12);
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--gray-5) 42%, transparent), transparent 34%),
+    var(--color-panel, var(--gray-1));
+}
+
+.tenant-agent-bindings-header,
+.tenant-agent-bindings-header-actions,
+.tenant-agent-bindings-notice,
+.tenant-agent-bindings-summary,
+.tenant-agent-bindings-filters,
+.tenant-agent-bindings-grid article > header,
+.tenant-agent-bindings-grid article > footer,
+.tenant-agent-bindings-dialog-card > header,
+.tenant-agent-bindings-dialog-card > footer,
+.tenant-agent-bindings-test-result {
+  display: flex;
+  align-items: center;
+}
+
+.tenant-agent-bindings-header {
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.tenant-agent-bindings-header h1,
+.tenant-agent-bindings-dialog-card h2,
+.tenant-agent-bindings-state h1 {
+  margin: 4px 0;
+}
+
+.tenant-agent-bindings-header p,
+.tenant-agent-bindings-state p {
+  margin: 0;
+  color: var(--gray-10);
+}
+
+.tenant-agent-bindings-header > div:first-child > span {
+  color: var(--gray-9);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.tenant-agent-bindings-header-actions {
+  gap: 10px;
+}
+
+.tenant-agent-bindings-notice {
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--amber-7);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--amber-3) 55%, transparent);
+}
+
+.tenant-agent-bindings-notice button {
+  margin-left: auto;
+}
+
+.tenant-agent-bindings-filters {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 180px 160px;
+  gap: 12px;
+}
+
+.tenant-agent-bindings-filters label {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 7px 9px;
+  align-items: center;
+}
+
+.tenant-agent-bindings-filters label > span {
+  font-size: 12px;
+  color: var(--gray-10);
+}
+
+.tenant-agent-bindings-filters label > div {
+  grid-column: 1 / -1;
+}
+
+.tenant-agent-bindings-summary {
+  gap: 9px;
+  color: var(--gray-10);
+}
+
+.tenant-agent-bindings-summary strong {
+  color: var(--gray-12);
+  font-size: 22px;
+}
+
+.tenant-agent-bindings-summary code {
+  margin-left: auto;
+}
+
+.tenant-agent-bindings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 14px;
+}
+
+.tenant-agent-bindings-grid article,
+.tenant-agent-bindings-empty,
+.tenant-agent-bindings-test-result {
+  border: 1px solid var(--gray-6);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--gray-2) 82%, transparent);
+  box-shadow: var(--shadow-6);
+}
+
+.tenant-agent-bindings-grid article {
+  display: grid;
+  gap: 15px;
+  padding: 17px;
+}
+
+.tenant-agent-bindings-grid article > header {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tenant-agent-bindings-grid article > header > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.tenant-agent-bindings-grid code,
+.tenant-agent-bindings-notice code,
+.tenant-agent-bindings-summary code {
+  overflow: hidden;
+  color: var(--gray-9);
+  font-size: 11px;
+  text-overflow: ellipsis;
+}
+
+.tenant-agent-bindings-grid dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.tenant-agent-bindings-grid dl div {
+  min-width: 0;
+  padding: 9px;
+  border-radius: 9px;
+  background: var(--gray-3);
+}
+
+.tenant-agent-bindings-grid dt {
+  color: var(--gray-9);
+  font-size: 11px;
+}
+
+.tenant-agent-bindings-grid dd {
+  overflow: hidden;
+  margin: 4px 0 0;
+  text-overflow: ellipsis;
+}
+
+.tenant-agent-bindings-grid article > footer {
+  justify-content: flex-end;
+}
+
+.tenant-agent-bindings-empty {
+  padding: 42px 24px;
+  text-align: center;
+}
+
+.tenant-agent-bindings-empty h2,
+.tenant-agent-bindings-empty p {
+  margin: 0 0 6px;
+}
+
+.tenant-agent-bindings-empty p {
+  color: var(--gray-10);
+}
+
+.tenant-agent-bindings-dialog {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--gray-12) 58%, transparent);
+}
+
+.tenant-agent-bindings-dialog-card {
+  display: grid;
+  gap: 14px;
+  width: min(520px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--gray-7);
+  border-radius: 16px;
+  background: var(--gray-2);
+  box-shadow: var(--shadow-6);
+}
+
+.tenant-agent-bindings-dialog-card > header {
+  justify-content: space-between;
+}
+
+.tenant-agent-bindings-dialog-card > label {
+  display: grid;
+  gap: 7px;
+  color: var(--gray-10);
+  font-size: 12px;
+}
+
+.tenant-agent-bindings-dialog-card > footer {
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+.tenant-agent-bindings-test-result {
+  gap: 12px;
+  padding: 15px;
+}
+
+.tenant-agent-bindings-test-result code {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--gray-4);
+}
+
+.tenant-agent-bindings-test-result span:last-child {
+  margin-left: auto;
+  color: var(--gray-9);
+}
+
+.tenant-agent-bindings-state {
+  place-content: center;
+  justify-items: center;
+  text-align: center;
+}
+
+.tenant-agent-bindings-state > svg {
+  width: 30px;
+  height: 30px;
+  color: var(--gray-9);
+}
+
+@media (max-width: 800px) {
+  .tenant-agent-bindings-page {
+    padding: 20px;
+  }
+
+  .tenant-agent-bindings-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .tenant-agent-bindings-filters {
+    grid-template-columns: 1fr;
+  }
+}
