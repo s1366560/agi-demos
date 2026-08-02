@@ -405,12 +405,6 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "PUT",
-          "path": "/api/v1/instance-templates/{template_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
           "method": "DELETE",
           "path": "/api/v1/instance-templates/{template_id}",
           "authority": "cloud_service"
@@ -419,12 +413,6 @@
           "surface": "desktop_cloud",
           "method": "POST",
           "path": "/api/v1/instance-templates/{template_id}/publish",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/instance-templates/{template_id}/unpublish",
           "authority": "cloud_service"
         },
         {
@@ -440,21 +428,9 @@
           "authority": "cloud_service"
         },
         {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/instance-templates/{template_id}/items",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "DELETE",
-          "path": "/api/v1/instance-templates/{template_id}/items/{item_id}",
-          "authority": "cloud_service"
-        },
-        {
           "surface": "desktop_local",
           "method": "NONE",
-          "path": "not_applicable:local_instance_template_authority_planned",
+          "path": "unavailable:local_instance_template_authority_unavailable",
           "authority": "none"
         },
         {
@@ -466,6 +442,20 @@
       ],
       "permissions": ["authenticated", "tenant_member"],
       "actions": [
+        "view",
+        "list",
+        "list-items",
+        "create",
+        "delete",
+        "publish",
+        "clone",
+        "deploy-from-template",
+        "refresh",
+        "paginate",
+        "search-current-page",
+        "filter-status"
+      ],
+      "web_actions": [
         "view",
         "list",
         "list-items",
@@ -496,16 +486,84 @@
           "authorization": ["tenant_admin"],
           "enforcement": "missing",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list",
+            "list-items",
+            "refresh",
+            "paginate",
+            "search-current-page",
+            "filter-status"
+          ],
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "create",
+            "delete",
+            "publish",
+            "clone"
+          ],
+          "authentication": "authenticated",
+          "authorization": ["tenant_admin"],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
       "web_status": "partial",
       "web_reason_code": "web_instance_template_route_tenant_scope_mismatch",
-      "cloud_status": "planned",
-      "local_status": "planned",
+      "cloud_status": "partial",
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_instance_template_authority_planned",
-      "local_deviation": "Local templates must describe only sidecar-supported resources and keep imported files within the workspace root and declared size and MIME limits.",
-      "judgment_rationale": "InstanceTemplateList and TemplateDetail form a dedicated canonical lifecycle distinct from the general template marketplace. The production pages expose list, create, detail, list-items, delete, publish, clone, and deploy-from-template, and do not call update, unpublish, add-item, or remove-item APIs. Deploy-from-template only navigates to instance creation, whose production authority requires an authenticated tenant member rather than tenant administration. Web is degraded because template calls and instance creation do not carry the route tenant while the backend resolves get_current_user_tenant from the user's first membership, so non-default tenant routes read and mutate the first tenant; route-selected tenant member and admin enforcement is therefore missing. All actions remain present for the resolved first tenant. No routed native editor or Local sidecar contract currently proves parity, although a bounded single-machine equivalent is meaningful."
+      "local_reason_code": "local_instance_template_authority_unavailable",
+      "local_deviation": "Local Desktop keeps the native route and stable zero-network unavailable state until a sidecar template authority can safely describe only supported resources and keep imported files within the workspace root and declared size and MIME limits.",
+      "judgment_rationale": "InstanceTemplateList and TemplateDetail form a dedicated canonical lifecycle distinct from the general template marketplace. The production pages expose list, create, detail, list-items, delete, publish, clone, and deploy-from-template, and do not call update, unpublish, add-item, or remove-item APIs. Deploy-from-template only navigates to instance creation, whose production authority requires an authenticated tenant member rather than tenant administration. Web is degraded because template calls and instance creation do not carry the route tenant while the backend resolves get_current_user_tenant from the user's first membership, so non-default tenant routes read and mutate the first tenant; route-selected tenant member and admin enforcement is therefore missing. Cloud Desktop now implements the native tenant route with strict list and detail projections, pagination, current-page search, published-state filtering, items, create, delete, publish, and clone. It remains partial because nested detail deep links and deploy-from-template are not implemented. Local Desktop exposes the same native page contract but returns local_instance_template_authority_unavailable without issuing template requests or fabricating a sidecar authority.",
+      "cloud_actions": [
+        "view",
+        "list",
+        "list-items",
+        "create",
+        "delete",
+        "publish",
+        "clone",
+        "refresh",
+        "paginate",
+        "search-current-page",
+        "filter-status"
+      ],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesCapability.ts",
+        "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesClient.ts",
+        "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesController.ts",
+        "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/instance-templates/InstanceTemplatesPage.tsx"
+      ],
+      "cloud_reason_code": "instance_templates_nested_deep_link_and_deploy_partial",
+      "local_actions": [],
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesCapability.ts",
+        "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesClient.ts",
+        "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesController.ts",
+        "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/instance-templates/InstanceTemplatesPage.tsx"
+      ]
     }
   ],
   "source_ownership": {
