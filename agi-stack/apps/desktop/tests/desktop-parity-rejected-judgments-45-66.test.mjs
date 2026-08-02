@@ -468,3 +468,38 @@ test("User Profile reads the authenticated identity from auth-me", () => {
   assert.match(capability.judgment_rationale, /\/auth\/me/u);
   assert.match(capability.judgment_rationale, /\/users\/me/u);
 });
+
+test("Not Found is an implemented renderer-owned route without service authority", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.24-native-product-auxiliary.v2.json",
+    "not-found",
+  );
+  const expectedEntries = [
+    "agi-stack/apps/desktop/src/App.tsx",
+    "agi-stack/apps/desktop/src/features/navigation/DesktopProductionRouter.tsx",
+    "agi-stack/apps/desktop/src/features/navigation/desktopHashRouteHost.ts",
+  ];
+
+  assert.equal(capability.kind, "route_only");
+  assert.deepEqual(capability.web_route_ids, []);
+  assert.equal(capability.cloud_status, "implemented");
+  assert.equal(capability.local_status, "implemented");
+  assert.equal(capability.cloud_authority, "none");
+  assert.equal(capability.local_authority, "none");
+  assert.deepEqual(capability.cloud_entries, expectedEntries);
+  assert.deepEqual(capability.local_entries, expectedEntries);
+  assert.deepEqual(capability.cloud_actions, capability.actions);
+  assert.deepEqual(capability.local_actions, capability.actions);
+  for (const surface of ["desktop_cloud", "desktop_local"]) {
+    assert.deepEqual(contractKeys(capability, surface), [
+      "NONE not_applicable:routing/not-found",
+    ]);
+    assert.deepEqual(
+      requirementsForAction(capability, surface, "restore-safe-route")[0]
+        .authorization,
+      [],
+    );
+  }
+  assert.match(capability.judgment_rationale, /all non-empty hashes/u);
+  assert.match(capability.judgment_rationale, /no service authority/u);
+});

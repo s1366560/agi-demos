@@ -49,3 +49,28 @@ test("unavailable authority requires a stable reason code", () => {
     /stable reason_code/u,
   );
 });
+
+test("implemented renderer-owned routes preserve their explicit NONE contracts", () => {
+  const contracts = [
+    apiContract("desktop_cloud", "NONE", "not_applicable:routing/not-found", "none"),
+    apiContract("desktop_local", "NONE", "not_applicable:routing/not-found", "none"),
+  ];
+
+  assert.deepEqual(
+    normalizeUnavailableDesktopContracts(contracts, {
+      desktop_cloud: {
+        authority: "none",
+        implementation_status: "implemented",
+        availability: "available",
+        reason_code: null,
+      },
+      desktop_local: {
+        authority: "none",
+        implementation_status: "implemented",
+        availability: "available",
+        reason_code: null,
+      },
+    }),
+    contracts,
+  );
+});

@@ -647,7 +647,7 @@ function cloudSurface(definition) {
       "implemented",
       "available",
       null,
-      "cloud_service",
+      definition.cloud_authority ?? "cloud_service",
       definition.cloud_actions ?? definition.actions,
     );
   }
@@ -690,7 +690,7 @@ function localSurface(definition) {
       "implemented",
       "available",
       null,
-      "sidecar",
+      definition.local_authority ?? "sidecar",
       definition.local_actions ?? definition.actions,
       definition.local_deviation,
     );

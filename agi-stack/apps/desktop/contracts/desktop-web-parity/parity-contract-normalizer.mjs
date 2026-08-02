@@ -10,6 +10,12 @@ export function normalizeUnavailableDesktopContracts(contracts, surfaces) {
     const surface = surfaces[surfaceName];
     if (surface?.authority !== "none") continue;
     if (
+      surface.implementation_status === "implemented" &&
+      surface.availability === "available"
+    ) {
+      continue;
+    }
+    if (
       typeof surface.reason_code !== "string" ||
       surface.reason_code.length === 0
     ) {

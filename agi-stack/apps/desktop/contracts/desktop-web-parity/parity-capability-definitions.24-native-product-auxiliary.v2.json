@@ -417,10 +417,31 @@
         "view",
         "return-home"
       ],
-      "cloud_status": "planned",
-      "local_status": "planned",
+      "cloud_actions": [
+        "view",
+        "return-home",
+        "restore-safe-route"
+      ],
+      "local_actions": [
+        "view",
+        "return-home",
+        "restore-safe-route"
+      ],
+      "cloud_status": "implemented",
+      "cloud_authority": "none",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/DesktopProductionRouter.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopHashRouteHost.ts"
+      ],
+      "local_status": "implemented",
+      "local_authority": "none",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_native_not_found_route_planned",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/DesktopProductionRouter.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopHashRouteHost.ts"
+      ],
       "api_contracts": [
         {
           "surface": "web",
@@ -431,13 +452,13 @@
         {
           "surface": "desktop_cloud",
           "method": "NONE",
-          "path": "unavailable:desktop_native_route_planned",
+          "path": "not_applicable:routing/not-found",
           "authority": "none"
         },
         {
           "surface": "desktop_local",
           "method": "NONE",
-          "path": "unavailable:local_native_not_found_route_planned",
+          "path": "not_applicable:routing/not-found",
           "authority": "none"
         },
         {
@@ -458,6 +479,30 @@
           "authorization": [],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "return-home",
+            "restore-safe-route"
+          ],
+          "authentication": "anonymous",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": [
+            "view",
+            "return-home",
+            "restore-safe-route"
+          ],
+          "authentication": "anonymous",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
       "interaction_states": [
@@ -467,7 +512,7 @@
         "trusted-route-restore"
       ],
       "expected_observable_result": "Both Desktop modes render a native safe not-found surface for unknown or rejected deep links, preserve no untrusted route state, and return to the correct mode-aware home without loading Web content.",
-      "judgment_rationale": "NotFound owns the wildcard production route and has no canonical navigation target. Desktop currently lacks the production HashRouter fallback required to prove safe native deep-link recovery."
+      "judgment_rationale": "NotFound owns the wildcard production route and has no canonical navigation target. DesktopProductionRouter now owns all non-empty hashes before the anonymous login gate, rejects malformed or unknown routes without consulting permission, capability, scope, or loader authorities, hides untrusted path and query data, and restores the mode-aware safe entry through hash clearing, focus, and Escape recovery. This renderer-owned structural route has no service authority or API contract in either Desktop mode."
     }
   ],
   "source_ownership": {
