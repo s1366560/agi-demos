@@ -184,6 +184,10 @@ copyFileSync(
   join(desktopRoot, 'src', 'features', 'tenant', 'TenantTasksPage.css'),
   join(compiledTenantDirectory, 'TenantTasksPage.css'),
 );
+copyFileSync(
+  join(desktopRoot, 'src', 'features', 'tenant', 'TenantAnalyticsPage.css'),
+  join(compiledTenantDirectory, 'TenantAnalyticsPage.css'),
+);
 
 const compiledGovernanceDirectory = join(compiledRoot, 'src', 'features', 'governance');
 mkdirSync(compiledGovernanceDirectory, { recursive: true });

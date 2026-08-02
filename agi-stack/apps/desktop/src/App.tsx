@@ -310,6 +310,7 @@ import {
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
   TENANT_OVERVIEW_ROUTE_ID,
+  TENANT_ANALYTICS_ROUTE_ID,
   TENANT_CLUSTERS_ROUTE_ID,
   TENANT_DEPLOY_ROUTE_ID,
   TENANT_INSTANCE_TEMPLATES_ROUTE_ID,
@@ -332,6 +333,7 @@ import {
   createRuntimePoolRouteBindingForRuntime,
   createUnifiedRuntimesRouteBindingForRuntime,
   createTenantOverviewRouteBindingForRuntime,
+  createTenantAnalyticsRouteBindingForRuntime,
   createTenantProjectsRouteBindingForRuntime,
   createTenantTasksRouteBindingForRuntime,
   createTenantWorkspacesRouteBindingForRuntime,
@@ -361,6 +363,7 @@ import { createRuntimeInstancesRouteModuleLoader } from './features/runtime-inst
 import { createRuntimePoolRouteModuleLoader } from './features/runtime-pool/runtimePoolRouteModule';
 import { createUnifiedRuntimesRouteModuleLoader } from './features/unified-runtimes/unifiedRuntimesRouteModule';
 import { createTenantOverviewRouteModuleLoader } from './features/tenant/tenantOverviewRouteModule';
+import { createTenantAnalyticsRouteModuleLoader } from './features/tenant/tenantAnalyticsRouteModule';
 import { createTenantProjectsRouteModuleLoader } from './features/tenant/tenantProjectsRouteModule';
 import { createTenantTasksRouteModuleLoader } from './features/tenant/tenantTasksRouteModule';
 import { createTenantWorkspacesRouteModuleLoader } from './features/tenant/tenantWorkspacesRouteModule';
@@ -2148,6 +2151,17 @@ export function App() {
                 createTenantOverviewRouteBindingForRuntime(
                   configRef.current,
                   context,
+                ),
+            }),
+          [TENANT_ANALYTICS_ROUTE_ID]:
+            createTenantAnalyticsRouteModuleLoader({
+              createBinding: (context) =>
+                createTenantAnalyticsRouteBindingForRuntime(
+                  configRef.current,
+                  context,
+                  authRef.current.tenants.find(
+                    (tenant) => tenant.id === context.tenantId,
+                  )?.plan ?? null,
                 ),
             }),
           [TENANT_PROJECTS_ROUTE_ID]:

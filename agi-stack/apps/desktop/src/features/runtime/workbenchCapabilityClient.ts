@@ -21,6 +21,7 @@ import { runtimePoolCapability } from '../runtime-pool/runtimePoolCapability';
 import { unifiedRuntimesCapability } from '../unified-runtimes/unifiedRuntimesCapability';
 import { createCloudProjectOverviewClient } from '../project/projectOverviewCloudClient';
 import { createLocalProjectOverviewClient } from '../project/projectOverviewLocalClient';
+import { loadTenantAnalyticsCapability } from '../tenant/tenantAnalyticsCapability';
 import { loadTenantOverviewCapability } from '../tenant/tenantOverviewCapability';
 import { loadTenantProjectsCapability } from '../tenant/tenantProjectsCapability';
 import { tenantTasksCapability } from '../tenant/tenantTasksCapability';
@@ -112,6 +113,7 @@ export function createDesktopWorkbenchCapabilityClient(
         workspaceCollaboration,
         projectOverview,
         tenantOverview,
+        tenantAnalytics,
         tenantProjects,
       ] = await Promise.all([
         loadSearchCapability(config, signal),
@@ -119,6 +121,7 @@ export function createDesktopWorkbenchCapabilityClient(
         loadWorkspaceCollaborationCapability(config, signal),
         loadProjectOverviewCapability(config, signal),
         loadTenantOverviewCapability(config, signal),
+        loadTenantAnalyticsCapability(config, signal),
         loadTenantProjectsCapability(config, signal),
       ]);
       const projectScope = projectCapabilityScope(config);
@@ -162,6 +165,7 @@ export function createDesktopWorkbenchCapabilityClient(
             projectScope,
           ),
           'tenant-tenant-overview': tenantOverview,
+          'tenant-tenant-analytics': tenantAnalytics,
           'tenant-tenant-projects': tenantProjects,
           'tenant-tenant-tasks': tenantTasksCapability(config),
           'tenant-tenant-runtimes': unifiedRuntimesCapability(config),
