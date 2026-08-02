@@ -5,6 +5,7 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const {
   createProjectOverviewRouteBindingForRuntime,
+  createRuntimeInstancesRouteBindingForRuntime,
   createRuntimePoolRouteBindingForRuntime,
   createUnifiedRuntimesRouteBindingForRuntime,
   desktopRouteBasePermissionsForAuth,
@@ -286,6 +287,32 @@ test('Runtime Pool binding rejects tenant scope drift before client authority', 
         tenantId: 'tenant-other',
       }),
     /runtime_pool_runtime_scope_mismatch/u,
+  );
+});
+
+test('Runtime Instances binding preserves exact Cloud and Local tenant authority', () => {
+  const cloud = createRuntimeInstancesRouteBindingForRuntime(
+    runtimeConfig('cloud'),
+    { tenantId },
+  );
+  assert.deepEqual(cloud.scope, { authority: 'cloud', tenantId });
+  assert.equal(cloud.controller.getSnapshot().authority, 'cloud');
+
+  const local = createRuntimeInstancesRouteBindingForRuntime(
+    runtimeConfig('local'),
+    { tenantId },
+  );
+  assert.deepEqual(local.scope, { authority: 'local', tenantId });
+  assert.equal(local.controller.getSnapshot().authority, 'local');
+});
+
+test('Runtime Instances binding rejects tenant scope drift before client authority', () => {
+  assert.throws(
+    () =>
+      createRuntimeInstancesRouteBindingForRuntime(runtimeConfig('cloud'), {
+        tenantId: 'tenant-other',
+      }),
+    /runtime_instances_runtime_scope_mismatch/u,
   );
 });
 

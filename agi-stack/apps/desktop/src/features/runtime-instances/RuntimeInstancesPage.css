@@ -1,0 +1,275 @@
+.runtime-instances-page {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+  padding: 24px;
+  color: var(--text-primary);
+}
+.runtime-instances-header,
+.runtime-instances-inventory > header,
+.runtime-instances-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.runtime-instances-header h1,
+.runtime-instances-inventory h2,
+.runtime-instances-empty h3 {
+  margin: 4px 0;
+}
+
+.runtime-instances-header p,
+.runtime-instances-inventory p,
+.runtime-instances-deviation p,
+.runtime-instances-empty p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.runtime-instances-header > div > span {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.runtime-instances-page button,
+.runtime-instances-page input,
+.runtime-instances-page select {
+  min-height: 34px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-primary);
+  color: inherit;
+}
+
+.runtime-instances-page button {
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.runtime-instances-page button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.runtime-instances-scope {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--surface-secondary);
+}
+
+.runtime-instances-scope span,
+.runtime-instances-scope small {
+  color: var(--text-secondary);
+}
+
+.runtime-instances-scope small {
+  margin-left: auto;
+}
+
+.runtime-instances-deviation {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px;
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--accent-primary);
+  border-radius: 10px;
+  background: var(--surface-secondary);
+}
+
+.runtime-instances-deviation code {
+  align-self: start;
+  max-width: 44%;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.runtime-instances-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.runtime-instances-summary article {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--surface-primary);
+}
+
+.runtime-instances-summary span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.runtime-instances-summary strong {
+  font-size: 24px;
+}
+
+.runtime-instances-inventory {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--surface-primary);
+}
+
+.runtime-instances-inventory > header,
+.runtime-instances-pagination {
+  padding: 16px;
+}
+
+.runtime-instances-filters {
+  display: flex;
+  gap: 10px;
+}
+
+.runtime-instances-filters label {
+  display: grid;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.runtime-instances-filters input {
+  width: min(260px, 30vw);
+  padding: 0 10px;
+}
+
+.runtime-instances-filters select {
+  min-width: 130px;
+  padding: 0 8px;
+}
+
+.runtime-instances-table-scroll {
+  overflow-x: auto;
+  border-block: 1px solid var(--border-subtle);
+}
+
+.runtime-instances-table-scroll table {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+}
+
+.runtime-instances-table-scroll th,
+.runtime-instances-table-scroll td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  vertical-align: top;
+}
+
+.runtime-instances-table-scroll th {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.runtime-instances-table-scroll td:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.runtime-instances-table-scroll td code,
+.runtime-instances-table-scroll td small {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.runtime-instances-status {
+  display: inline-flex;
+  padding: 3px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--surface-secondary);
+  font-size: 12px;
+}
+
+.runtime-instances-status[data-state='running'] {
+  border-color: var(--success-border, var(--border-subtle));
+  color: var(--success-text, var(--text-primary));
+}
+
+.runtime-instances-row-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.runtime-instances-row-actions .danger {
+  color: var(--danger-text, var(--text-primary));
+}
+
+.runtime-instances-empty {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  padding: 32px 16px;
+}
+
+.runtime-instances-pagination {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.runtime-instances-pagination > div {
+  display: flex;
+  gap: 8px;
+}
+
+.runtime-instances-mutation-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--danger-border, var(--border-subtle));
+  border-radius: 9px;
+}
+
+.runtime-instances-mutation-error code {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 780px) {
+  .runtime-instances-page {
+    padding: 16px;
+  }
+
+  .runtime-instances-header,
+  .runtime-instances-inventory > header,
+  .runtime-instances-deviation {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .runtime-instances-deviation code {
+    max-width: none;
+  }
+
+  .runtime-instances-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .runtime-instances-filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .runtime-instances-filters input {
+    width: auto;
+  }
+}

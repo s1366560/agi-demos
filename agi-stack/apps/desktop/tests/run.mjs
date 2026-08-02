@@ -150,6 +150,24 @@ copyFileSync(
   join(compiledRuntimePoolDirectory, 'RuntimePoolPage.css'),
 );
 
+const compiledRuntimeInstancesDirectory = join(
+  compiledRoot,
+  'src',
+  'features',
+  'runtime-instances',
+);
+mkdirSync(compiledRuntimeInstancesDirectory, { recursive: true });
+copyFileSync(
+  join(
+    desktopRoot,
+    'src',
+    'features',
+    'runtime-instances',
+    'RuntimeInstancesPage.css',
+  ),
+  join(compiledRuntimeInstancesDirectory, 'RuntimeInstancesPage.css'),
+);
+
 const compiledUnifiedRuntimesDirectory = join(
   compiledRoot,
   'src',

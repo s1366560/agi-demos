@@ -292,6 +292,29 @@ test('cloud client validates structured Search and Automation authorities', asyn
       },
       authority_revision: null,
     });
+    assert.deepEqual(snapshot.capabilities['tenant-tenant-instances'], {
+      availability: 'degraded',
+      reason_code: 'runtime_instances_nested_routes_partial',
+      service_version: '0.1.0',
+      contract_version: '3.0.0',
+      allowed_actions: [
+        'view',
+        'list',
+        'refresh',
+        'search',
+        'filter-status',
+        'paginate',
+        'restart',
+        'delete',
+      ],
+      scope: {
+        tenant_id: 'default',
+        project_id: null,
+        workspace_id: null,
+        instance_id: null,
+      },
+      authority_revision: null,
+    });
     assert.deepEqual(snapshot.capabilities['tenant-tenant-dead-letter-queue'], {
       availability: 'available',
       reason_code: null,
@@ -808,6 +831,26 @@ test('Workspace Collaboration 404 and local mode remain structured unavailable',
       service_version: null,
       contract_version: null,
       allowed_actions: [],
+      scope: {
+        tenant_id: 'local',
+        project_id: null,
+        workspace_id: null,
+        instance_id: null,
+      },
+      authority_revision: null,
+    });
+    assert.deepEqual(local.capabilities['tenant-tenant-instances'], {
+      availability: 'degraded',
+      reason_code: 'local_instance_sidecar_projection_partial',
+      service_version: '0.1.0',
+      contract_version: '3.0.0',
+      allowed_actions: [
+        'view',
+        'list',
+        'refresh',
+        'search',
+        'filter-status',
+      ],
       scope: {
         tenant_id: 'local',
         project_id: null,
