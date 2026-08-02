@@ -38,6 +38,7 @@ const {
   TENANT_RUNTIMES_ROUTE_ID,
   TENANT_TASKS_ROUTE_ID,
   TENANT_WORKSPACES_ROUTE_ID,
+  TENANT_CREATION_ROUTE_ID,
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js'
 );
@@ -82,6 +83,9 @@ test('factory stays lazy and publishes the exact implemented route module contra
     implementedLoaders: {
       [DEVICE_APPROVAL_ROUTE_ID]: implementedRouteLoader(
         DEVICE_APPROVAL_ROUTE_ID,
+      ),
+      [TENANT_CREATION_ROUTE_ID]: implementedRouteLoader(
+        TENANT_CREATION_ROUTE_ID,
       ),
       [PROJECT_OVERVIEW_ROUTE_ID]: loader,
       [PROJECT_SEARCH_ROUTE_ID]: implementedSearchLoader(),

@@ -20,6 +20,7 @@ export type DesktopCapabilityName =
   | 'workspace_collaboration'
   | 'sandbox_isolation'
   | 'device-approval'
+  | 'tenant-creation'
   | 'tenant-tenant-overview'
   | 'tenant-tenant-projects'
   | 'tenant-tenant-tasks'
@@ -81,6 +82,7 @@ const CAPABILITY_NAMES: readonly DesktopCapabilityName[] = [
   'workspace_collaboration',
   'sandbox_isolation',
   'device-approval',
+  'tenant-creation',
   'tenant-tenant-overview',
   'tenant-tenant-projects',
   'tenant-tenant-tasks',

@@ -82,6 +82,10 @@ import { createDeviceApprovalClient } from './features/device-approval/deviceApp
 import { deviceApprovalCapability } from './features/device-approval/deviceApprovalCapability';
 import { readDeviceApprovalCodeFromHash } from './features/device-approval/deviceApprovalModel';
 import { createDeviceApprovalRouteModuleLoader } from './features/device-approval/deviceApprovalRouteModule';
+import { createTenantCreationClient } from './features/tenant-creation/tenantCreationClient';
+import { tenantCreationCapability } from './features/tenant-creation/tenantCreationCapability';
+import { upsertCreatedTenant } from './features/tenant-creation/tenantCreationModel';
+import { createTenantCreationRouteModuleLoader } from './features/tenant-creation/tenantCreationRouteModule';
 import { ForcePasswordChangeScreen } from './features/auth/ForcePasswordChangeScreen';
 import {
   completeForcedPasswordChangeOutcome,
@@ -293,6 +297,7 @@ import { createBrowserDesktopHashLocationPort } from './features/navigation/desk
 import {
   createDesktopProductionRouteRegistry,
   DEVICE_APPROVAL_ROUTE_ID,
+  TENANT_CREATION_ROUTE_ID,
   PROJECT_CRON_JOBS_ROUTE_ID,
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
@@ -2034,6 +2039,47 @@ export function App() {
                 });
               },
             }),
+          [TENANT_CREATION_ROUTE_ID]:
+            createTenantCreationRouteModuleLoader({
+              createBinding: () => {
+                const currentConfig = configRef.current;
+                return Object.freeze({
+                  client: createTenantCreationClient(currentConfig),
+                  onCreated: async (created, signal) => {
+                    setAuth((current) => ({
+                      ...current,
+                      tenants: [
+                        ...upsertCreatedTenant(current.tenants, created),
+                      ],
+                    }));
+                    try {
+                      const authoritativeTenants =
+                        await new DesktopApiClient(
+                          currentConfig,
+                        ).listTenants(signal);
+                      if (signal.aborted) {
+                        return Object.freeze({
+                          catalogRefreshed: false,
+                        });
+                      }
+                      setAuth((current) => ({
+                        ...current,
+                        tenants: authoritativeTenants,
+                      }));
+                      return Object.freeze({
+                        catalogRefreshed: true,
+                      });
+                    } catch {
+                      return Object.freeze({
+                        catalogRefreshed: false,
+                      });
+                    }
+                  },
+                  onNavigateBack:
+                    desktopProductionRouteNavigation.clearHash,
+                });
+              },
+            }),
           [TENANT_OVERVIEW_ROUTE_ID]:
             createTenantOverviewRouteModuleLoader({
               createBinding: (context) =>
@@ -2361,6 +2407,9 @@ export function App() {
     ) => {
       if (capability === DEVICE_APPROVAL_ROUTE_ID) {
         return deviceApprovalCapability(config);
+      }
+      if (capability === TENANT_CREATION_ROUTE_ID) {
+        return tenantCreationCapability(config);
       }
       return resolveDesktopRouteCapability(
         desktopCapabilityState.snapshot,

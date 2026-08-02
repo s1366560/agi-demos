@@ -5,51 +5,51 @@ import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const compiledDirectory =
-  '/tmp/agistack-desktop-test-dist/src/features/device-approval';
+  '/tmp/agistack-desktop-test-dist/src/features/tenant-creation';
 mkdirSync(compiledDirectory, { recursive: true });
-writeFileSync(`${compiledDirectory}/DeviceApprovalPage.css`, '');
+writeFileSync(`${compiledDirectory}/TenantCreationPage.css`, '');
 require.extensions['.css'] = () => {};
 
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
-  DEVICE_APPROVAL_ROUTE_ID,
+  TENANT_CREATION_ROUTE_ID,
   createDesktopProductionRouteRegistry,
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js');
 const {
-  createDeviceApprovalRouteModuleLoader,
-} = require('/tmp/agistack-desktop-test-dist/src/features/device-approval/deviceApprovalRouteModule.js');
+  createTenantCreationRouteModuleLoader,
+} = require('/tmp/agistack-desktop-test-dist/src/features/tenant-creation/tenantCreationRouteModule.js');
+const {
+  tenantCreationCapability,
+} = require('/tmp/agistack-desktop-test-dist/src/features/tenant-creation/tenantCreationCapability.js');
 const {
   evaluateDesktopRouteAccess,
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteHostModel.js');
-const {
-  deviceApprovalCapability,
-} = require('/tmp/agistack-desktop-test-dist/src/features/device-approval/deviceApprovalCapability.js');
 
-test('production registry keeps native device approval beside global native routes', async () => {
+test('production registry adds authenticated tenant creation after the canonical routes', async () => {
   const registry = createRegistry();
-  assert.equal(DEVICE_APPROVAL_ROUTE_ID, 'device-approval');
+  assert.equal(TENANT_CREATION_ROUTE_ID, 'tenant-creation');
   assert.equal(registry.definitions.length, 53);
-  const definition = registry.byId.get(DEVICE_APPROVAL_ROUTE_ID);
-  assert.equal(definition.path, '/device');
+  const definition = registry.byId.get(TENANT_CREATION_ROUTE_ID);
+  assert.equal(definition.path, '/tenants/new');
   assert.deepEqual(definition.scope, ['global']);
   assert.deepEqual(definition.requiredPermission, [['authenticated']]);
   assert.equal(definition.localPolicy, 'cloud_only');
 
   const module = await definition.loader();
-  assert.equal(module.routeId, DEVICE_APPROVAL_ROUTE_ID);
+  assert.equal(module.routeId, TENANT_CREATION_ROUTE_ID);
   assert.equal(module.disposition, 'implemented');
   assert.equal(module.availability, 'available');
 });
 
-test('device approval capability is Cloud available and Local not applicable', () => {
-  assert.deepEqual(deviceApprovalCapability({ mode: 'cloud' }), {
+test('tenant creation capability is Cloud available and Local explicitly not applicable', () => {
+  assert.deepEqual(tenantCreationCapability({ mode: 'cloud' }), {
     availability: 'available',
     reason_code: null,
     service_version: '0.1.0',
     contract_version: '3.0.0',
-    allowed_actions: ['enter-code', 'approve', 'navigate-back', 'retry'],
+    allowed_actions: ['create', 'cancel', 'return-to-tenant-list', 'retry'],
     scope: {
       tenant_id: null,
       project_id: null,
@@ -58,9 +58,9 @@ test('device approval capability is Cloud available and Local not applicable', (
     },
     authority_revision: null,
   });
-  assert.deepEqual(deviceApprovalCapability({ mode: 'local' }), {
+  assert.deepEqual(tenantCreationCapability({ mode: 'local' }), {
     availability: 'not_applicable',
-    reason_code: 'local_cloud_device_approval_not_applicable',
+    reason_code: 'local_tenant_creation_not_applicable',
     service_version: null,
     contract_version: null,
     allowed_actions: [],
@@ -74,27 +74,24 @@ test('device approval capability is Cloud available and Local not applicable', (
   });
 });
 
-test('Local device approval is stopped before module loading', () => {
-  const definition = createRegistry().byId.get(DEVICE_APPROVAL_ROUTE_ID);
+test('Local tenant creation stops at capability authority before loading', () => {
+  const definition = createRegistry().byId.get(TENANT_CREATION_ROUTE_ID);
   const access = evaluateDesktopRouteAccess({
     match: {
       definition,
       context: {},
-      canonicalPath: '/device',
+      canonicalPath: '/tenants/new',
     },
     mode: 'local',
     permissions: new Set(['authenticated']),
-    capability: deviceApprovalCapability({ mode: 'local' }),
+    capability: tenantCreationCapability({ mode: 'local' }),
   });
   assert.equal(access.status, 'unavailable');
-  assert.equal(
-    access.reasonCode,
-    'local_cloud_device_approval_not_applicable',
-  );
+  assert.equal(access.reasonCode, 'local_tenant_creation_not_applicable');
 });
 
-test('device approval route renders native code entry from the injected hash port', async () => {
-  const definition = createRegistry().byId.get(DEVICE_APPROVAL_ROUTE_ID);
+test('tenant creation route renders a native form without Web embedding', async () => {
+  const definition = createRegistry().byId.get(TENANT_CREATION_ROUTE_ID);
   const module = await definition.loader();
   const markup = render(
     React.createElement(module.Surface, {
@@ -102,39 +99,52 @@ test('device approval route renders native code entry from the injected hash por
       context: {},
     }),
   );
-  assert.match(markup, /Approve another device/u);
-  assert.match(markup, /value="ABCD2345"/u);
-  assert.match(markup, /current@example\.test/u);
+  assert.match(markup, /Create organization/u);
+  assert.match(markup, /name="name"/u);
+  assert.match(markup, /name="description"/u);
+  assert.match(markup, /name="plan"/u);
   assert.doesNotMatch(markup, /<iframe|<webview/u);
 });
 
-test('device approval implementation remains isolated from the monolithic API client', () => {
-  const clientSource = readFileSync(
-    new URL(
-      '../src/features/device-approval/deviceApprovalClient.ts',
-      import.meta.url,
-    ),
-    'utf8',
-  );
+test('tenant creation wiring keeps mode checks out of the page and refreshes auth catalog', () => {
   const pageSource = readFileSync(
     new URL(
-      '../src/features/device-approval/DeviceApprovalPage.tsx',
+      '../src/features/tenant-creation/TenantCreationPage.tsx',
       import.meta.url,
     ),
     'utf8',
   );
-  assert.doesNotMatch(clientSource, /new DesktopApiClient|class DesktopApiClient/u);
-  assert.doesNotMatch(pageSource, /window\.location|config\.mode|apiBaseUrl/u);
+  const appSource = readFileSync(
+    new URL('../src/App.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.doesNotMatch(pageSource, /config\.mode|apiBaseUrl|window\.location/u);
+  assert.match(appSource, /upsertCreatedTenant/u);
+  assert.match(appSource, /listTenants\(signal\)/u);
+  assert.match(appSource, /tenantCreationCapability/u);
 });
 
 function createRegistry() {
   const implementedLoaders = new Proxy(
     {
-      [DEVICE_APPROVAL_ROUTE_ID]: createDeviceApprovalRouteModuleLoader({
+      [TENANT_CREATION_ROUTE_ID]: createTenantCreationRouteModuleLoader({
         createBinding: () => ({
-          client: { approve: async () => ({ status: 'approved' }) },
-          accountLabel: 'current@example.test',
-          initialCode: 'ABCD2345',
+          client: {
+            create: async () => ({
+              id: 'tenant-2',
+              name: 'Acme',
+              slug: 'acme',
+              description: null,
+              owner_id: 'user-1',
+              plan: 'free',
+              max_projects: 3,
+              max_users: 10,
+              max_storage: 1073741824,
+              created_at: '2026-08-02T12:00:00Z',
+              updated_at: null,
+            }),
+          },
+          onCreated: async () => ({ catalogRefreshed: true }),
           onNavigateBack() {},
         }),
       }),
@@ -149,12 +159,14 @@ function createRegistry() {
           availability: 'available',
           reasonCode: null,
           capability: property,
-          localPolicy: String(property).includes('pool') ||
+          localPolicy:
+            String(property).includes('pool') ||
             String(property).includes('clusters') ||
             String(property).includes('deploy') ||
-            String(property).includes('dead-letter')
-            ? 'cloud_only'
-            : 'native_equivalent',
+            String(property).includes('dead-letter') ||
+            property === TENANT_CREATION_ROUTE_ID
+              ? 'cloud_only'
+              : 'native_equivalent',
           Surface: () => React.createElement('div'),
         });
       },
