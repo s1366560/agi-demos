@@ -115,6 +115,24 @@ copyFileSync(
   join(compiledTenantCreationDirectory, 'TenantCreationPage.css'),
 );
 
+const compiledInvitationAcceptanceDirectory = join(
+  compiledRoot,
+  'src',
+  'features',
+  'invitation-acceptance',
+);
+mkdirSync(compiledInvitationAcceptanceDirectory, { recursive: true });
+copyFileSync(
+  join(
+    desktopRoot,
+    'src',
+    'features',
+    'invitation-acceptance',
+    'InvitationAcceptancePage.css',
+  ),
+  join(compiledInvitationAcceptanceDirectory, 'InvitationAcceptancePage.css'),
+);
+
 const compiledSettingsDirectory = join(compiledRoot, 'src', 'features', 'settings');
 mkdirSync(compiledSettingsDirectory, { recursive: true });
 copyFileSync(

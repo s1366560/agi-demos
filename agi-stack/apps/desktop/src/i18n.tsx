@@ -17,6 +17,10 @@ import {
   tenantCreationZhCN,
 } from './features/tenant-creation/locales/tenantCreationMessages';
 import {
+  invitationAcceptanceEnUS,
+  invitationAcceptanceZhCN,
+} from './features/invitation-acceptance/locales/invitationAcceptanceMessages';
+import {
   instanceTemplatesEnUS,
   instanceTemplatesZhCN,
 } from './features/instance-templates/locales/instanceTemplatesMessages';
@@ -81,6 +85,7 @@ const enUS: Record<string, string> = {
   ...deadLetterQueueEnUS,
   ...deviceApprovalEnUS,
   ...tenantCreationEnUS,
+  ...invitationAcceptanceEnUS,
   ...desktopProductionRouterEnUS,
   ...instanceTemplatesEnUS,
   ...nativeUnavailableRouteEnUS,
@@ -3685,6 +3690,7 @@ const enUS: Record<string, string> = {
 
 const zhCN: Record<string, string> = {
   ...tenantCreationZhCN,
+  ...invitationAcceptanceZhCN,
   ...deadLetterQueueZhCN,
   ...deviceApprovalZhCN,
   ...desktopProductionRouterZhCN,

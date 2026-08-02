@@ -24,6 +24,7 @@ const {
 const {
   createDesktopProductionRouteRegistry,
   DEVICE_APPROVAL_ROUTE_ID,
+  INVITATION_ACCEPTANCE_ROUTE_ID,
   PROJECT_CRON_JOBS_ROUTE_ID,
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
@@ -86,6 +87,9 @@ test('factory stays lazy and publishes the exact implemented route module contra
       ),
       [TENANT_CREATION_ROUTE_ID]: implementedRouteLoader(
         TENANT_CREATION_ROUTE_ID,
+      ),
+      [INVITATION_ACCEPTANCE_ROUTE_ID]: implementedRouteLoader(
+        INVITATION_ACCEPTANCE_ROUTE_ID,
       ),
       [PROJECT_OVERVIEW_ROUTE_ID]: loader,
       [PROJECT_SEARCH_ROUTE_ID]: implementedSearchLoader(),

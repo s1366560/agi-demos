@@ -86,6 +86,10 @@ import { createTenantCreationClient } from './features/tenant-creation/tenantCre
 import { tenantCreationCapability } from './features/tenant-creation/tenantCreationCapability';
 import { upsertCreatedTenant } from './features/tenant-creation/tenantCreationModel';
 import { createTenantCreationRouteModuleLoader } from './features/tenant-creation/tenantCreationRouteModule';
+import { createInvitationAcceptanceClient } from './features/invitation-acceptance/invitationAcceptanceClient';
+import { invitationAcceptanceCapability } from './features/invitation-acceptance/invitationAcceptanceCapability';
+import { readInvitationTokenFromHash } from './features/invitation-acceptance/invitationAcceptanceModel';
+import { createInvitationAcceptanceRouteModuleLoader } from './features/invitation-acceptance/invitationAcceptanceRouteModule';
 import { ForcePasswordChangeScreen } from './features/auth/ForcePasswordChangeScreen';
 import {
   completeForcedPasswordChangeOutcome,
@@ -297,6 +301,7 @@ import { createBrowserDesktopHashLocationPort } from './features/navigation/desk
 import {
   createDesktopProductionRouteRegistry,
   DEVICE_APPROVAL_ROUTE_ID,
+  INVITATION_ACCEPTANCE_ROUTE_ID,
   TENANT_CREATION_ROUTE_ID,
   PROJECT_CRON_JOBS_ROUTE_ID,
   PROJECT_OVERVIEW_ROUTE_ID,
@@ -1777,6 +1782,7 @@ const SIDEBAR_WIDTH_STORAGE_KEY = 'agistack.desktop.sidebarWidth';
 const SIDEBAR_WIDTH_CONSTRAINTS = { min: 180, max: 420, default: 220 } as const;
 const AUTHENTICATION_PASSTHROUGH_ROUTE_IDS: ReadonlySet<string> = new Set([
   DEVICE_APPROVAL_ROUTE_ID,
+  INVITATION_ACCEPTANCE_ROUTE_ID,
 ]);
 
 export function App() {
@@ -1789,6 +1795,7 @@ export function App() {
   );
   const [auth, setAuth] = useState<AuthState>(emptyAuthState);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const [invitationSignInRequested, setInvitationSignInRequested] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
@@ -2076,6 +2083,58 @@ export function App() {
                     }
                   },
                   onNavigateBack:
+                    desktopProductionRouteNavigation.clearHash,
+                });
+              },
+            }),
+          [INVITATION_ACCEPTANCE_ROUTE_ID]:
+            createInvitationAcceptanceRouteModuleLoader({
+              createBinding: () => {
+                return Object.freeze({
+                  client: Object.freeze({
+                    verify: (token, options) =>
+                      createInvitationAcceptanceClient(
+                        configRef.current,
+                      ).verify(token, options),
+                    accept: (token, options) =>
+                      createInvitationAcceptanceClient(
+                        configRef.current,
+                      ).accept(token, options),
+                  }),
+                  token: readInvitationTokenFromHash(
+                    desktopProductionRouteLocation.readHash(),
+                  ),
+                  authenticated: () =>
+                    isIdentityAuthenticated(authRef.current),
+                  accountEmail: () => authRef.current.user?.email ?? '',
+                  onRequireSignIn: () => setInvitationSignInRequested(true),
+                  onAccepted: async (invitation, signal) => {
+                    try {
+                      const authoritativeTenants = await new DesktopApiClient(
+                        configRef.current,
+                      ).listTenants(signal);
+                      if (signal.aborted) return;
+                      setAuth((current) => ({
+                        ...current,
+                        tenants: authoritativeTenants,
+                      }));
+                      if (
+                        authoritativeTenants.some(
+                          (tenant) => tenant.id === invitation.tenant_id,
+                        )
+                      ) {
+                        commitRuntimeConfig({
+                          ...configRef.current,
+                          tenantId: invitation.tenant_id,
+                          projectId: '',
+                          workspaceId: '',
+                        });
+                      }
+                    } catch {
+                      // Acceptance remains authoritative even if catalog refresh is stale.
+                    }
+                  },
+                  onNavigateHome:
                     desktopProductionRouteNavigation.clearHash,
                 });
               },
@@ -2410,6 +2469,9 @@ export function App() {
       }
       if (capability === TENANT_CREATION_ROUTE_ID) {
         return tenantCreationCapability(config);
+      }
+      if (capability === INVITATION_ACCEPTANCE_ROUTE_ID) {
+        return invitationAcceptanceCapability(config);
       }
       return resolveDesktopRouteCapability(
         desktopCapabilityState.snapshot,
@@ -8492,6 +8554,9 @@ export function App() {
   }
 
   if (!identityAuthenticated) {
+    const authenticationPassthroughRouteIds = invitationSignInRequested
+      ? new Set([DEVICE_APPROVAL_ROUTE_ID])
+      : AUTHENTICATION_PASSTHROUGH_ROUTE_IDS;
     return (
       <Theme
         appearance={themeAppearance}
@@ -8502,7 +8567,7 @@ export function App() {
       >
         <DesktopProductionRouter
           authenticationPassthroughRouteIds={
-            AUTHENTICATION_PASSTHROUGH_ROUTE_IDS
+            authenticationPassthroughRouteIds
           }
           location={desktopProductionRouteLocation}
           mode={config.mode}

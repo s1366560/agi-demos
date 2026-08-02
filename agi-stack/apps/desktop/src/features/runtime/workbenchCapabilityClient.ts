@@ -11,6 +11,7 @@ import {
 } from '../automations/automationModel';
 import { deviceApprovalCapability } from '../device-approval/deviceApprovalCapability';
 import { tenantCreationCapability } from '../tenant-creation/tenantCreationCapability';
+import { invitationAcceptanceCapability } from '../invitation-acceptance/invitationAcceptanceCapability';
 import { deadLetterQueueCapability } from '../governance/deadLetterQueueCapability';
 import { instanceTemplatesCapability } from '../instance-templates/instanceTemplatesCapability';
 import { runtimeClustersCapability } from '../runtime-clusters/runtimeClustersCapability';
@@ -151,6 +152,7 @@ export function createDesktopWorkbenchCapabilityClient(
                 ),
           'device-approval': deviceApprovalCapability(config),
           'tenant-creation': tenantCreationCapability(config),
+          'invitation-acceptance': invitationAcceptanceCapability(config),
           'project-project-overview': withCapabilityScope(
             projectOverview,
             projectScope,
