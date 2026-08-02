@@ -28,6 +28,10 @@ from src.infrastructure.adapters.primary.web.routers.agent.config import (
 from src.infrastructure.adapters.primary.web.routers.agent.schemas import (
     UpdateTenantAgentConfigRequest,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_tenant_agent_config_authority_repository import (
+    TenantAgentConfigAuthoritySnapshot,
+    TenantAgentConfigAuthorityWrite,
+)
 
 
 def _make_user(*, is_global_admin: bool = False, is_superuser: bool = False) -> SimpleNamespace:
@@ -36,6 +40,31 @@ def _make_user(*, is_global_admin: bool = False, is_superuser: bool = False) -> 
     if is_global_admin:
         roles.append(SimpleNamespace(tenant_id=None, role=SimpleNamespace(name="system_admin")))
     return SimpleNamespace(id="user-1", roles=roles, is_superuser=is_superuser)
+
+
+def _make_authority_repo(
+    config: TenantAgentConfig | None,
+    *,
+    persist_error: Exception | None = None,
+) -> MagicMock:
+    repository = MagicMock()
+    repository.lock_for_update = AsyncMock(
+        return_value=TenantAgentConfigAuthoritySnapshot(
+            tenant_id="tenant-1",
+            authority_revision=1,
+            config=config,
+        )
+    )
+    if persist_error is not None:
+        repository.persist = AsyncMock(side_effect=persist_error)
+    else:
+        repository.persist = AsyncMock(
+            side_effect=lambda _snapshot, updated: TenantAgentConfigAuthorityWrite(
+                config=updated,
+                authority_revision=2,
+            )
+        )
+    return repository
 
 
 @pytest.mark.unit
@@ -365,9 +394,9 @@ class TestValidateToolPolicy:
 class TestUpdateTenantAgentConfig:
     @pytest.mark.asyncio
     async def test_first_save_returns_custom_config_type(self) -> None:
-        repo = MagicMock()
-        repo.get_by_tenant = AsyncMock(return_value=None)
-        repo.save = AsyncMock(side_effect=lambda config: config)
+        repo = _make_authority_repo(None)
+        db = MagicMock()
+        db.commit = AsyncMock()
 
         with (
             patch(
@@ -375,7 +404,7 @@ class TestUpdateTenantAgentConfig:
                 AsyncMock(),
             ),
             patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.config.SqlTenantAgentConfigRepository",
+                "src.infrastructure.adapters.primary.web.routers.agent.config.SqlTenantAgentConfigAuthorityRepository",
                 return_value=repo,
             ),
             patch(
@@ -386,17 +415,17 @@ class TestUpdateTenantAgentConfig:
                 UpdateTenantAgentConfigRequest(llm_model="openai/gpt-5.4"),
                 request=MagicMock(),
                 tenant_id="tenant-1",
+                expected_revision=1,
                 current_user=_make_user(),
-                db=MagicMock(),
+                db=db,
             )
 
         assert response.config_type == "custom"
 
     @pytest.mark.asyncio
     async def test_unrelated_update_does_not_revalidate_existing_runtime_hooks(self) -> None:
-        repo = MagicMock()
-        repo.get_by_tenant = AsyncMock(
-            return_value=TenantAgentConfig(
+        repo = _make_authority_repo(
+            TenantAgentConfig(
                 id="cfg-1",
                 tenant_id="tenant-1",
                 config_type=ConfigType.CUSTOM,
@@ -416,9 +445,10 @@ class TestUpdateTenantAgentConfig:
                         settings={"legacy_setting": "stale"},
                     )
                 ],
-            )
+            ),
         )
-        repo.save = AsyncMock(side_effect=lambda config: config)
+        db = MagicMock()
+        db.commit = AsyncMock()
 
         with (
             patch(
@@ -426,7 +456,7 @@ class TestUpdateTenantAgentConfig:
                 AsyncMock(),
             ),
             patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.config.SqlTenantAgentConfigRepository",
+                "src.infrastructure.adapters.primary.web.routers.agent.config.SqlTenantAgentConfigAuthorityRepository",
                 return_value=repo,
             ),
             patch(
@@ -440,8 +470,9 @@ class TestUpdateTenantAgentConfig:
                 UpdateTenantAgentConfigRequest(llm_model="anthropic/claude-sonnet-4.5"),
                 request=MagicMock(),
                 tenant_id="tenant-1",
+                expected_revision=1,
                 current_user=_make_user(),
-                db=MagicMock(),
+                db=db,
             )
 
         validate_runtime_hooks.assert_not_called()
@@ -449,9 +480,8 @@ class TestUpdateTenantAgentConfig:
 
     @pytest.mark.asyncio
     async def test_non_tool_update_still_validates_final_tool_policy(self) -> None:
-        repo = MagicMock()
-        repo.get_by_tenant = AsyncMock(
-            return_value=TenantAgentConfig(
+        repo = _make_authority_repo(
+            TenantAgentConfig(
                 id="cfg-1",
                 tenant_id="tenant-1",
                 config_type=ConfigType.CUSTOM,
@@ -464,7 +494,7 @@ class TestUpdateTenantAgentConfig:
                 enabled_tools=["bash"],
                 disabled_tools=["bash"],
                 runtime_hooks=[],
-            )
+            ),
         )
 
         with (
@@ -473,7 +503,7 @@ class TestUpdateTenantAgentConfig:
                 AsyncMock(),
             ),
             patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.config.SqlTenantAgentConfigRepository",
+                "src.infrastructure.adapters.primary.web.routers.agent.config.SqlTenantAgentConfigAuthorityRepository",
                 return_value=repo,
             ),
             patch(
@@ -485,6 +515,7 @@ class TestUpdateTenantAgentConfig:
                 UpdateTenantAgentConfigRequest(llm_model="anthropic/claude-sonnet-4.5"),
                 request=MagicMock(),
                 tenant_id="tenant-1",
+                expected_revision=1,
                 current_user=_make_user(),
                 db=MagicMock(),
             )
@@ -493,9 +524,10 @@ class TestUpdateTenantAgentConfig:
 
     @pytest.mark.asyncio
     async def test_update_value_errors_are_sanitized(self) -> None:
-        repo = MagicMock()
-        repo.get_by_tenant = AsyncMock(return_value=None)
-        repo.save = AsyncMock(side_effect=ValueError("secret config validation"))
+        repo = _make_authority_repo(
+            None,
+            persist_error=ValueError("secret config validation"),
+        )
 
         with (
             patch(
@@ -503,7 +535,7 @@ class TestUpdateTenantAgentConfig:
                 AsyncMock(),
             ),
             patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.config.SqlTenantAgentConfigRepository",
+                "src.infrastructure.adapters.primary.web.routers.agent.config.SqlTenantAgentConfigAuthorityRepository",
                 return_value=repo,
             ),
             patch(
@@ -515,6 +547,7 @@ class TestUpdateTenantAgentConfig:
                 UpdateTenantAgentConfigRequest(llm_model="openai/gpt-5.4"),
                 request=MagicMock(),
                 tenant_id="tenant-1",
+                expected_revision=1,
                 current_user=_make_user(),
                 db=MagicMock(),
             )
@@ -529,6 +562,8 @@ class TestGetTenantAgentConfig:
     @pytest.mark.asyncio
     async def test_non_admin_redacts_runtime_hook_settings(self) -> None:
         repo = MagicMock()
+        authority_repo = MagicMock()
+        authority_repo.get_revision = AsyncMock(return_value=3)
         repo.get_by_tenant = AsyncMock(
             return_value=TenantAgentConfig(
                 id="cfg-1",
@@ -566,6 +601,10 @@ class TestGetTenantAgentConfig:
                 "src.infrastructure.adapters.primary.web.routers.agent.config.SqlTenantAgentConfigRepository",
                 return_value=repo,
             ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.config.SqlTenantAgentConfigAuthorityRepository",
+                return_value=authority_repo,
+            ),
         ):
             response = await get_tenant_agent_config(
                 request=MagicMock(),
@@ -576,10 +615,13 @@ class TestGetTenantAgentConfig:
 
         assert response.runtime_hook_settings_redacted is True
         assert response.runtime_hooks[0].settings == {}
+        assert response.authority_revision == 3
 
     @pytest.mark.asyncio
     async def test_admin_keeps_runtime_hook_settings_visible(self) -> None:
         repo = MagicMock()
+        authority_repo = MagicMock()
+        authority_repo.get_revision = AsyncMock(return_value=4)
         repo.get_by_tenant = AsyncMock(
             return_value=TenantAgentConfig(
                 id="cfg-1",
@@ -617,6 +659,10 @@ class TestGetTenantAgentConfig:
                 "src.infrastructure.adapters.primary.web.routers.agent.config.SqlTenantAgentConfigRepository",
                 return_value=repo,
             ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.config.SqlTenantAgentConfigAuthorityRepository",
+                return_value=authority_repo,
+            ),
         ):
             response = await get_tenant_agent_config(
                 request=MagicMock(),
@@ -627,6 +673,7 @@ class TestGetTenantAgentConfig:
 
         assert response.runtime_hook_settings_redacted is False
         assert response.runtime_hooks[0].settings == {"response_reminder": "keep going"}
+        assert response.authority_revision == 4
 
 
 @pytest.mark.unit

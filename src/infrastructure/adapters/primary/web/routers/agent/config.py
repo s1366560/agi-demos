@@ -21,6 +21,10 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.sql_tenant_agent_config_authority_repository import (
+    SqlTenantAgentConfigAuthorityRepository,
+    TenantAgentConfigRevisionConflictError,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_tenant_agent_config_repository import (
     SqlTenantAgentConfigRepository,
 )
@@ -43,6 +47,7 @@ from .schemas import (
     HookCatalogEntryResponse,
     HookCatalogResponse,
     RuntimeHookConfigResponse,
+    TenantAgentConfigAuthorityRevisionResponse,
     TenantAgentConfigResponse,
     UpdateTenantAgentConfigRequest,
 )
@@ -63,6 +68,7 @@ INTERNAL_ERROR_DETAIL = "Internal server error"
 def _build_config_response(
     config: TenantAgentConfig,
     *,
+    authority_revision: int = 1,
     redact_runtime_hook_settings: bool = False,
 ) -> TenantAgentConfigResponse:
     """Convert domain config into API response payload."""
@@ -94,6 +100,7 @@ def _build_config_response(
         ],
         runtime_hook_settings_redacted=redact_runtime_hook_settings,
         multi_agent_enabled=get_settings().multi_agent_enabled,
+        authority_revision=authority_revision,
         created_at=config.created_at.isoformat(),
         updated_at=config.updated_at.isoformat(),
     )
@@ -137,9 +144,7 @@ def _validate_runtime_hook_override(
     """Validate one runtime hook override against the catalog."""
     hook_label = f"{hook.plugin_name}:{hook.hook_name}"
     if hook.key in seen_hooks:
-        raise HTTPException(
-            status_code=422, detail=_("Duplicate runtime hook override")
-        )
+        raise HTTPException(status_code=422, detail=_("Duplicate runtime hook override"))
     seen_hooks.add(hook.key)
 
     _validate_runtime_hook_priority(hook, hook_label)
@@ -149,7 +154,10 @@ def _validate_runtime_hook_override(
 
     if catalog_entry is None:
         registry = get_plugin_registry()
-        if hook.key not in allowed_unknown_keys and hook.hook_name not in registry.list_well_known_hooks():
+        if (
+            hook.key not in allowed_unknown_keys
+            and hook.hook_name not in registry.list_well_known_hooks()
+        ):
             raise HTTPException(status_code=422, detail=_("Unknown runtime hook"))
         return
 
@@ -197,7 +205,9 @@ def _validate_runtime_hook_identity(
             status_code=422,
             detail=_("Custom runtime hook requires entrypoint"),
         )
-    effective_family = (hook.hook_family or (catalog_entry.hook_family if catalog_entry else "")).strip()
+    effective_family = (
+        hook.hook_family or (catalog_entry.hook_family if catalog_entry else "")
+    ).strip()
     if not effective_family:
         raise HTTPException(
             status_code=422,
@@ -236,9 +246,7 @@ def _validate_runtime_hook_security_boundary(
     if timeout_override is not None:
         timeout_seconds = float(timeout_override)
         if not (
-            MIN_CUSTOM_HOOK_TIMEOUT_SECONDS
-            <= timeout_seconds
-            <= MAX_CUSTOM_HOOK_TIMEOUT_SECONDS
+            MIN_CUSTOM_HOOK_TIMEOUT_SECONDS <= timeout_seconds <= MAX_CUSTOM_HOOK_TIMEOUT_SECONDS
         ):
             raise HTTPException(
                 status_code=422,
@@ -396,6 +404,7 @@ async def get_tenant_agent_config(
         await require_tenant_access(db, current_user, tenant_id)
 
         config_repo = SqlTenantAgentConfigRepository(db)
+        authority_repo = SqlTenantAgentConfigAuthorityRepository(db)
 
         # Get config or return default
         config = await config_repo.get_by_tenant(tenant_id)
@@ -406,6 +415,7 @@ async def get_tenant_agent_config(
         can_view_runtime_hook_settings = await has_tenant_admin_access(db, current_user, tenant_id)
         return _build_config_response(
             config,
+            authority_revision=await authority_repo.get_revision(tenant_id),
             redact_runtime_hook_settings=not can_view_runtime_hook_settings,
         )
 
@@ -413,6 +423,32 @@ async def get_tenant_agent_config(
         raise
     except Exception as e:
         logger.error(f"Error getting tenant agent config: {e}")
+        raise HTTPException(status_code=500, detail=INTERNAL_ERROR_DETAIL) from e
+
+
+@router.get(
+    "/config/authority-revision",
+    response_model=TenantAgentConfigAuthorityRevisionResponse,
+)
+async def get_tenant_agent_config_authority_revision(
+    tenant_id: str = Query(..., description="Tenant ID to get config revision for"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> TenantAgentConfigAuthorityRevisionResponse:
+    """Return the current tenant agent configuration authority revision."""
+    try:
+        await require_tenant_access(db, current_user, tenant_id)
+        authority_revision = await SqlTenantAgentConfigAuthorityRepository(db).get_revision(
+            tenant_id
+        )
+        return TenantAgentConfigAuthorityRevisionResponse(
+            tenant_id=tenant_id,
+            authority_revision=authority_revision,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting tenant agent config authority revision: {e}")
         raise HTTPException(status_code=500, detail=INTERNAL_ERROR_DETAIL) from e
 
 
@@ -449,6 +485,11 @@ async def update_tenant_agent_config(
     update_request: UpdateTenantAgentConfigRequest,
     request: Request,
     tenant_id: str = Query(..., description="Tenant ID to update config for"),
+    expected_revision: int = Query(
+        ...,
+        ge=1,
+        description="Authority revision returned by the latest config read",
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TenantAgentConfigResponse:
@@ -459,10 +500,13 @@ async def update_tenant_agent_config(
     """
     try:
         await require_tenant_access(db, current_user, tenant_id, require_admin=True)
-        config_repo = SqlTenantAgentConfigRepository(db)
+        authority_repo = SqlTenantAgentConfigAuthorityRepository(db)
 
-        # Get existing config or create default
-        config = await config_repo.get_by_tenant(tenant_id)
+        snapshot = await authority_repo.lock_for_update(
+            tenant_id,
+            expected_revision=expected_revision,
+        )
+        config = snapshot.config
         if not config:
             config = TenantAgentConfig.create_default(tenant_id=tenant_id)
 
@@ -548,13 +592,25 @@ async def update_tenant_agent_config(
             updated_at=datetime.now(UTC),
         )
 
-        # Save updated config
-        saved_config = await config_repo.save(updated_config)
+        write = await authority_repo.persist(snapshot, updated_config)
+        await db.commit()
         invalidate_agent_session(tenant_id=tenant_id)
-        return _build_config_response(saved_config)
+        return _build_config_response(
+            write.config,
+            authority_revision=write.authority_revision,
+        )
 
     except HTTPException:
         raise
+    except TenantAgentConfigRevisionConflictError as e:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "reason_code": "tenant_agent_config_revision_conflict",
+                "expected_revision": e.expected_revision,
+                "authority_revision": e.authority_revision,
+            },
+        ) from e
     except ValueError as e:
         # Validation error from entity
         raise HTTPException(status_code=422, detail=_("Invalid tenant agent config")) from e

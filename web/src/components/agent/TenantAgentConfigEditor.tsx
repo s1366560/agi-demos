@@ -172,6 +172,7 @@ export function TenantAgentConfigEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
+  const [authorityRevision, setAuthorityRevision] = useState<number | null>(null);
   const [multiAgentEnabled, setMultiAgentEnabled] = useState(false);
   const [runtimeInfo, setRuntimeInfo] = useState<SystemInfoResponse | null>(null);
   const [hookCatalog, setHookCatalog] = useState<HookCatalogEntry[]>([]);
@@ -192,23 +193,23 @@ export function TenantAgentConfigEditor({
       setError(null);
 
       try {
-        const [config, systemInfo] = await Promise.all([
+        const [config, systemInfo, revision, catalogResult] = await Promise.all([
           initialConfig ? Promise.resolve(initialConfig) : agentConfigService.getConfig(tenantId),
           systemService.getInfo().catch(() => null),
+          agentConfigService.getAuthorityRevision(tenantId),
+          agentConfigService
+            .getHookCatalog(tenantId)
+            .then((catalog) => ({ catalog, error: null }))
+            .catch(() => ({
+              catalog: [],
+              error: t('tenant.agentConfigEditor.runtimeHooks.catalogUnavailableDescription'),
+            })),
         ]);
-        let catalog: HookCatalogEntry[] = [];
-        let nextHookCatalogError: string | null = null;
-
-        try {
-          catalog = await agentConfigService.getHookCatalog(tenantId);
-        } catch {
-          nextHookCatalogError = t(
-            'tenant.agentConfigEditor.runtimeHooks.catalogUnavailableDescription'
-          );
-        }
+        const { catalog, error: nextHookCatalogError } = catalogResult;
 
         const catalogKeys = new Set(catalog.map((entry) => hookKey(entry)));
 
+        setAuthorityRevision(revision);
         setMultiAgentEnabled(config.multi_agent_enabled);
         setRuntimeInfo(systemInfo);
         setHookCatalog(catalog);
@@ -344,6 +345,12 @@ export function TenantAgentConfigEditor({
       setSaving(true);
       setError(null);
 
+      if (authorityRevision === null) {
+        setError(t('tenant.agentConfigEditor.authorityUnavailable'));
+        message.error(t('tenant.agentConfigEditor.authorityUnavailable'));
+        return;
+      }
+
       const request: UpdateTenantAgentConfigRequest = {
         llm_model: values.llm_model?.trim(),
         llm_temperature: values.llm_temperature,
@@ -368,7 +375,12 @@ export function TenantAgentConfigEditor({
         ],
       };
 
-      await agentConfigService.updateConfig(tenantId, request);
+      const write = await agentConfigService.updateConfigWithRevision(
+        tenantId,
+        request,
+        authorityRevision
+      );
+      setAuthorityRevision(write.authorityRevision);
 
       message.success(t('tenant.agentConfigEditor.saveSuccess'));
       setHasChanges(false);
@@ -376,7 +388,13 @@ export function TenantAgentConfigEditor({
       onClose();
     } catch (err) {
       if (err instanceof TenantAgentConfigError) {
-        setError(err.message);
+        if (err.statusCode === 409) {
+          const conflictMessage = t('tenant.agentConfigEditor.revisionConflict');
+          setError(conflictMessage);
+          message.error(conflictMessage);
+        } else {
+          setError(err.message);
+        }
         if (err.statusCode === 403) {
           message.error(t('tenant.agentConfigEditor.accessDenied'));
           onClose();
