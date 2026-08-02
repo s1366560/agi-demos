@@ -909,7 +909,7 @@ test("agent ecosystem capabilities do not overstate missing controls or Local au
     "set-enabled",
     "test",
   ]);
-  assert.equal(bindings.surfaces.desktop_local.implementation_status, "unavailable");
+  assert.equal(bindings.surfaces.desktop_local.implementation_status, "partial");
   assert.equal(bindings.surfaces.desktop_local.availability, "unavailable");
   assert.equal(bindings.surfaces.desktop_local.authority, "sidecar");
   assert.equal(
