@@ -72,50 +72,8 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/clusters/",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "GET",
-          "path": "/api/v1/clusters/{cluster_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "PUT",
-          "path": "/api/v1/clusters/{cluster_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "DELETE",
-          "path": "/api/v1/clusters/{cluster_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
           "method": "GET",
           "path": "/api/v1/clusters/{cluster_id}/health",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "GET",
-          "path": "/api/v1/clusters/{cluster_id}/acp-runner-pools",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/clusters/{cluster_id}/acp-runner-pools",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/clusters/{cluster_id}/acp-runner-pools/{pool_key}/registration-token",
           "authority": "cloud_service"
         },
         {
@@ -164,14 +122,52 @@
           "authorization": ["tenant_admin"],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list",
+            "refresh",
+            "search-current-page",
+            "filter-status-current-page",
+            "paginate",
+            "inspect-health"
+          ],
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
+      "cloud_status": "partial",
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_cluster_control_not_applicable",
       "local_deviation": "Cluster and ACP runner-pool administration remain visible as a native route contract in Local mode but require Cloud authority; registration tokens are never synthesized or cached by the renderer.",
-      "judgment_rationale": "Cluster list and detail pages are direct sources for the canonical cluster control plane. Reads require tenant membership while cluster create, update, delete, ACP runner-pool creation, and registration-token actions require tenant administration; the uncalled runner-pool update service method is not surface authority, and no cluster:read permission exists. Desktop has no audited native implementation, and a single-machine Local runtime cannot honestly claim cluster authority."
+      "judgment_rationale": "Cluster list and detail pages are direct sources for the canonical cluster control plane. Reads require tenant membership while cluster create, update, delete, ACP runner-pool creation, and registration-token actions require tenant administration; the uncalled runner-pool update service method is not surface authority, and no cluster:read permission exists. Cloud Desktop now implements a native tenant-member slice with paginated list reads, current-page search and status filtering, refresh, and health inspection. It does not expose cluster detail, mutations, ACP runner-pool management, or registration-token authority, and its strict client projection discards encrypted credentials, Provider configuration, and token fields. Local Desktop keeps the native route shell but returns the stable not-applicable authority instead of simulating a cluster topology.",
+      "cloud_actions": [
+        "view",
+        "list",
+        "refresh",
+        "search-current-page",
+        "filter-status-current-page",
+        "paginate",
+        "inspect-health"
+      ],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersCapability.ts",
+        "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersClient.ts",
+        "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersController.ts",
+        "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/runtime-clusters/RuntimeClustersPage.tsx"
+      ],
+      "cloud_reason_code": "runtime_clusters_detail_and_mutations_partial"
     },
     {
       "id": "tenant-tenant-deploy",
