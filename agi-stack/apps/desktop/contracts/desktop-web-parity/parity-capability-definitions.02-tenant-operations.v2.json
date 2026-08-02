@@ -734,50 +734,29 @@
       "api_method": "GET",
       "api_path": "/api/v1/tenants/{tenant_id}/analytics",
       "api_contracts": [
-        {
-          "surface": "web",
-          "method": "GET",
-          "path": "/api/v1/tenants/{tenant_id}/analytics",
-          "authority": "web_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "GET",
-          "path": "/api/v1/tenants/{tenant_id}/analytics",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_local",
-          "method": "NONE",
-          "path": "not_applicable:local_native_authority_planned",
-          "authority": "none"
-        },
-        {
-          "surface": "native_only",
-          "method": "NONE",
-          "path": "not_applicable:no-native-only-api/tenant-tenant-analytics",
-          "authority": "none"
-        }
+        {"surface":"web","method":"GET","path":"/api/v1/tenants/{tenant_id}/analytics","authority":"web_service"},
+        {"surface":"desktop_cloud","method":"GET","path":"/api/v1/tenants/{tenant_id}/analytics","authority":"cloud_service"},
+        {"surface":"desktop_local","method":"GET","path":"/api/v1/tenants/{tenant_id}/analytics","authority":"sidecar"},
+        {"surface":"native_only","method":"NONE","path":"not_applicable:no-native-only-api/tenant-tenant-analytics","authority":"none"}
       ],
       "permissions": ["authenticated","tenant_member"],
       "actions": ["view","retry"],
       "web_actions": ["view","retry"],
-      "cloud_actions": [],
-      "local_actions": [],
+      "cloud_actions": ["view","retry"],
+      "local_actions": ["view","retry"],
       "permission_requirements": [
-        {
-          "surface": "web",
-          "actions": ["view","retry"],
-          "authentication": "authenticated",
-          "authorization": ["tenant_member"],
-          "enforcement": "enforced",
-          "feature_gate": null
-        }
+        {"surface":"web","actions":["view","retry"],"authentication":"authenticated","authorization":["tenant_member"],"enforcement":"enforced","feature_gate":null},
+        {"surface":"desktop_cloud","actions":["view","retry"],"authentication":"authenticated","authorization":["tenant_member"],"enforcement":"enforced","feature_gate":null},
+        {"surface":"desktop_local","actions":["view","retry"],"authentication":"authenticated","authorization":["tenant_member"],"enforcement":"enforced","feature_gate":null}
       ],
-      "cloud_status": "planned",
-      "local_status": "planned",
+      "cloud_status": "implemented",
+      "cloud_entries": ["agi-stack/apps/desktop/src/App.tsx","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts","agi-stack/apps/desktop/src/features/tenant/tenantAnalyticsRouteModule.tsx","agi-stack/apps/desktop/src/features/tenant/TenantAnalyticsPage.tsx","agi-stack/apps/desktop/src/features/tenant/tenantAnalyticsController.ts","agi-stack/apps/desktop/src/features/tenant/tenantAnalyticsHttpClient.ts"],
+      "local_status": "partial",
       "local_policy": "native_equivalent",
-      "judgment_rationale": "Tenant Analytics is a distinct canonical Web capability. No audited native Desktop analytics route exists; Local analytics remains meaningful only after a sidecar aggregate contract is defined."
+      "local_reason_code": "local_tenant_analytics_memory_projection_unavailable",
+      "local_deviation": "Local Desktop reports the authoritative project total and project names for the selected tenant. Local memory growth, total memory, total storage, per-project storage and per-project memory counts remain structurally unavailable with stable field-level reason codes until a trusted local memory and storage aggregate authority exists.",
+      "local_entries": ["agi-stack/apps/desktop/src/App.tsx","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts","agi-stack/apps/desktop/src/features/tenant/tenantAnalyticsRouteModule.tsx","agi-stack/apps/desktop/src/features/tenant/TenantAnalyticsPage.tsx","agi-stack/apps/desktop/src/features/tenant/tenantAnalyticsController.ts","agi-stack/apps/desktop/src/features/tenant/tenantAnalyticsHttpClient.ts","agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs","agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/tenant_analytics.rs"],
+      "judgment_rationale": "Cloud Desktop mounts a native tenant-scoped analytics route and strictly consumes the Web analytics contract for 7-day, 30-day and 90-day periods. The shared controller covers loading, empty, ready, degraded, conflict, forbidden, unavailable, retry and scope-switch states without remounting the active workbench. Local Desktop exposes the same native route through a sidecar authority: the project total and project identities are authoritative, while memory and storage aggregates remain field-level unavailable rather than being fabricated as zero."
     }
   ],
   "source_ownership": {
