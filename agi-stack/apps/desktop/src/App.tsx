@@ -86,7 +86,10 @@ import { createTenantCreationClient } from './features/tenant-creation/tenantCre
 import { tenantCreationCapability } from './features/tenant-creation/tenantCreationCapability';
 import { upsertCreatedTenant } from './features/tenant-creation/tenantCreationModel';
 import { createTenantCreationRouteModuleLoader } from './features/tenant-creation/tenantCreationRouteModule';
-import { createInvitationAcceptanceClient } from './features/invitation-acceptance/invitationAcceptanceClient';
+import {
+  createInvitationAcceptanceClient,
+  type InvitationAcceptanceClient,
+} from './features/invitation-acceptance/invitationAcceptanceClient';
 import { invitationAcceptanceCapability } from './features/invitation-acceptance/invitationAcceptanceCapability';
 import { readInvitationTokenFromHash } from './features/invitation-acceptance/invitationAcceptanceModel';
 import { createInvitationAcceptanceRouteModuleLoader } from './features/invitation-acceptance/invitationAcceptanceRouteModule';
@@ -2091,7 +2094,7 @@ export function App() {
             createInvitationAcceptanceRouteModuleLoader({
               createBinding: () => {
                 return Object.freeze({
-                  client: Object.freeze({
+                  client: Object.freeze<InvitationAcceptanceClient>({
                     verify: (token, options) =>
                       createInvitationAcceptanceClient(
                         configRef.current,
