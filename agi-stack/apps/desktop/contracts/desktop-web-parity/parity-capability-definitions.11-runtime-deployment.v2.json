@@ -229,12 +229,6 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/deploys/",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
           "method": "GET",
           "path": "/api/v1/deploys/{deploy_id}",
           "authority": "cloud_service"
@@ -242,31 +236,7 @@
         {
           "surface": "desktop_cloud",
           "method": "GET",
-          "path": "/api/v1/deploys/instances/{instance_id}/latest",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "GET",
           "path": "/api/v1/deploys/{deploy_id}/progress",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/deploys/{deploy_id}/success",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/deploys/{deploy_id}/failed",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/deploys/{deploy_id}/cancel",
           "authority": "cloud_service"
         },
         {
@@ -282,7 +252,7 @@
           "authority": "none"
         }
       ],
-      "permissions": ["authenticated", "tenant_access"],
+      "permissions": ["authenticated", "tenant_member"],
       "actions": [
         "view",
         "list",
@@ -316,16 +286,52 @@
           "authorization": ["tenant_member"],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list",
+            "refresh",
+            "paginate",
+            "inspect-progress",
+            "reconnect-progress"
+          ],
+          "authentication": "authenticated",
+          "authorization": ["tenant_member"],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
       "web_status": "partial",
       "web_reason_code": "web_deploy_contract_mismatch",
-      "cloud_status": "planned",
+      "cloud_status": "partial",
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_deployment_authority_not_applicable",
       "local_deviation": "Local Desktop may run supervised local work but does not expose the Cloud deployment authority. It must render a stable cloud-only state instead of launching an external control plane.",
-      "judgment_rationale": "DeployProgress is shared by tenant deployment routes and nested instance deployment routes, so one audited Deployments capability owns the source. The routed page calls list, create, detail, progress, success, failed, and cancel, but not getLatestForInstance. Web is degraded because the backend list field deploys is read as deployments, finished_at and message are rendered as completed_at and error_message, success sends no required body, failed supplies no required non-empty message, and the running status is tested as in_progress for cancellation. Native Desktop lacks the route and production progress stream; Local deployment is intentionally cloud-only."
+      "judgment_rationale": "DeployProgress is shared by tenant deployment routes and nested instance deployment routes, so one audited Deployments capability owns the source. The routed Web page calls list, create, detail, progress, success, failed, and cancel, but not getLatestForInstance. Web stays degraded because the backend list field deploys is read as deployments, finished_at and message are rendered as completed_at and error_message, success sends no required body, failed supplies no required non-empty message, and the running status is tested as in_progress for cancellation. Cloud Desktop now implements a native instance-scoped read slice with paginated history, detail refresh, authenticated SSE progress observation, explicit disconnect state, and reconnect. It does not expose instance discovery, nested deployment aliases, latest, create, cancel, success, or failed mutations. Its strict renderer projection excludes config_snapshot, message, triggered_by, encrypted credentials, and unknown fields. Local Desktop retains the native route contract and returns the stable cloud-only reason without network access or a simulated deployment authority.",
+      "cloud_actions": [
+        "view",
+        "list",
+        "refresh",
+        "paginate",
+        "inspect-progress",
+        "reconnect-progress"
+      ],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/runtime-deployments/runtimeDeploymentsCapability.ts",
+        "agi-stack/apps/desktop/src/features/runtime-deployments/runtimeDeploymentsClient.ts",
+        "agi-stack/apps/desktop/src/features/runtime-deployments/runtimeDeploymentsController.ts",
+        "agi-stack/apps/desktop/src/features/runtime-deployments/runtimeDeploymentsRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/runtime-deployments/RuntimeDeploymentsPage.tsx"
+      ],
+      "cloud_reason_code": "runtime_deployments_mutations_and_instance_discovery_partial"
     },
     {
       "id": "tenant-tenant-instance-templates",
