@@ -2845,6 +2845,8 @@
       "saveError": "Failed to save configuration",
       "saveErrorToast": "We could not save the tenant policy. Try again.",
       "saveSuccess": "Tenant policy saved.",
+      "authorityUnavailable": "The configuration revision could not be loaded. Reopen the editor and try again.",
+      "revisionConflict": "This policy changed elsewhere while you were editing. Your edits are preserved; review them before trying again.",
       "validationError": "Some configuration values are invalid. Review the highlighted fields.",
       "accessDenied": "You do not have access to edit this tenant policy.",
       "alertTitle": "We couldn't save the tenant policy",

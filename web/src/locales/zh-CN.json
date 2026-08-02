@@ -1957,6 +1957,8 @@
       "saveError": "保存配置失败",
       "saveErrorToast": "无法保存租户策略，请稍后重试。",
       "saveSuccess": "租户策略已保存。",
+      "authorityUnavailable": "无法加载配置版本，请重新打开编辑器后再试。",
+      "revisionConflict": "你编辑期间该策略已在其他位置更新。当前编辑内容已保留，请检查后重试。",
       "validationError": "部分配置值无效，请检查高亮字段。",
       "accessDenied": "你没有权限编辑该租户策略。",
       "alertTitle": "无法保存租户策略",
