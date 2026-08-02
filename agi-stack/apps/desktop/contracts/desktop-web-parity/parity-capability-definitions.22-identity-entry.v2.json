@@ -213,9 +213,15 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "NONE",
-          "path": "unavailable:desktop_native_route_planned",
-          "authority": "none"
+          "method": "GET",
+          "path": "/api/v1/invitations/verify/{token}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/invitations/accept/{token}",
+          "authority": "cloud_service"
         },
         {
           "surface": "desktop_local",
@@ -317,6 +323,25 @@
         "open-tenant",
         "retry"
       ],
+      "cloud_actions": [
+        "verify",
+        "sign-in",
+        "accept",
+        "open-tenant",
+        "retry"
+      ],
+      "cloud_status": "implemented",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/navigation/DesktopProductionRouter.tsx",
+        "agi-stack/apps/desktop/src/features/invitation-acceptance/invitationAcceptanceRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/invitation-acceptance/InvitationAcceptancePage.tsx",
+        "agi-stack/apps/desktop/src/features/invitation-acceptance/invitationAcceptanceClient.ts",
+        "agi-stack/apps/desktop/src/features/invitation-acceptance/invitationAcceptanceCapability.ts",
+        "agi-stack/apps/desktop/src/features/invitation-acceptance/invitationAcceptanceModel.ts"
+      ],
       "permission_requirements": [
         {
           "surface": "web",
@@ -362,9 +387,53 @@
           "authorization": [],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "verify",
+            "sign-in"
+          ],
+          "authentication": "anonymous",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "accept"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "valid_invitation_token"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "open-tenant"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "retry"
+          ],
+          "authentication": "mixed",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "local_tenant_invitation_not_applicable",
@@ -375,10 +444,17 @@
         "authentication-required",
         "acceptance",
         "expired",
+        "invalid",
+        "forbidden",
+        "conflict",
+        "authority-unavailable",
+        "accepting",
+        "accepted",
+        "catalog-refresh",
         "retry"
       ],
-      "expected_observable_result": "Cloud Desktop verifies and accepts the invitation through Cloud authority, preserves the native deep link across sign-in, and opens the invited tenant with structured expired, forbidden, and conflict states. Local Desktop returns a stable not-applicable result.",
-      "judgment_rationale": "InviteAccept is a production-only Web route with verify and accept operations. No native Desktop invitation route is registered, and Local mode does not reproduce organization membership governance."
+      "expected_observable_result": "Cloud Desktop restores the native #/invite?token= deep link without placing the opaque token in route scope or logs; verifies anonymously through GET /api/v1/invitations/verify/{token}; preserves the hash across native sign-in; accepts through authenticated POST /api/v1/invitations/accept/{token}; refreshes the authoritative tenant catalog; and exposes structured invalid, expired, forbidden, conflict, unavailable, and retry states. Local Desktop returns local_tenant_invitation_not_applicable before module loading or fetch.",
+      "judgment_rationale": "InviteAccept is a production-only Web route backed by public verify and authenticated accept operations. Cloud Desktop now owns a native global /invite route with the opaque token isolated in one bounded query parameter, anonymous verification without an Authorization header, authenticated acceptance using the current vault-backed session after sign-in, strict response contracts, abortable requests, explicit email-mismatch and expiry presentation, and an authoritative post-accept tenant-catalog refresh. The Desktop query-form path is an intentional native security deviation from Web /invite/:token: it keeps the credential-like token out of DesktopRouteContext, capability scope, breadcrumb identity, and permission audit fields while preserving the hash across sign-in. Local mode does not reproduce multi-user organization membership and fails closed with local_tenant_invitation_not_applicable."
     },
     {
       "id": "device-approval",
