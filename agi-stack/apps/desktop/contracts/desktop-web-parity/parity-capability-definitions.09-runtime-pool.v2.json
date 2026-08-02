@@ -98,6 +98,13 @@
         "inspect-sidecar",
         "inspect-sandbox-capabilities"
       ],
+      "web_actions": [
+        "view",
+        "list",
+        "refresh",
+        "inspect-pool",
+        "inspect-sandbox"
+      ],
       "cloud_actions": [
         "view",
         "list",
