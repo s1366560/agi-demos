@@ -1,0 +1,229 @@
+{
+  "$schema": "./evidence-run.v1.schema.json",
+  "schema_version": "1.0.0",
+  "record_kind": "run",
+  "run_id": "runtime-deployments-local-electron-b1d831a6",
+  "run_scope": "capability_slice",
+  "artifact_location_base": "evidence_run_directory",
+  "schema_artifact_id": "runtime-deployments-evidence-schema",
+  "source_revisions": {
+    "repository_revision": "b1d831a649e35a4ca439a980583efecacd442aa4",
+    "web_revision": "b1d831a649e35a4ca439a980583efecacd442aa4",
+    "desktop_revision": "b1d831a649e35a4ca439a980583efecacd442aa4",
+    "prototype_revision": "61454b2ead1cedda584e95afee9f471aac7851fb"
+  },
+  "source_state": {
+    "head_revision": "b1d831a649e35a4ca439a980583efecacd442aa4",
+    "worktree_state": "clean"
+  },
+  "desired_contract": {
+    "path": "agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json",
+    "path_base": "repository_root",
+    "artifact_id": "runtime-deployments-desired-contract",
+    "schema_version": "2.0.0",
+    "revision": "b1d831a649e35a4ca439a980583efecacd442aa4",
+    "sha256": "cf9f909e3c12eda73211058a99a0d33f2fed384ce49303656e542bb26f6719cc"
+  },
+  "started_at": "2026-08-02T14:55:00Z",
+  "completed_at": "2026-08-02T15:26:01Z",
+  "environment": {
+    "host_os": "macOS",
+    "host_os_version": "26.5.2",
+    "architecture": "arm64",
+    "execution_context": "local",
+    "sandboxed": false,
+    "locale": "zh-CN",
+    "timezone": "Asia/Shanghai",
+    "dependency_versions": {
+      "node": "v22.22.3",
+      "pnpm": "11.15.1",
+      "rustc": "1.96.1 (31fca3adb 2026-06-26)",
+      "electron": "43.2.0"
+    }
+  },
+  "matched_state": {
+    "locale": "zh-CN",
+    "theme": "dark",
+    "viewport": {
+      "width": 1728,
+      "height": 992
+    },
+    "device_scale_factor": 2,
+    "authentication_state": "local_trusted_session",
+    "account_state": "local_desktop",
+    "permission_state": "authenticated_tenant_member",
+    "data_state": "cloud_deployment_authority_not_applicable",
+    "interaction_state": "electron_deep_link_retry_and_reload_supporting_observation"
+  },
+  "evidence": {
+    "build": {
+      "status": "passed",
+      "command": "make -C agi-stack desktop-check && make -C agi-stack desktop-parity-check",
+      "started_at": "2026-08-02T14:55:00Z",
+      "completed_at": "2026-08-02T15:20:00Z",
+      "summary": "Clean detached source passed sidecar, Desktop, Electron production build, route inventory, Browser QA with one recovered flaky case, paired renderer, manifest drift, and structured judgment gates.",
+      "artifact_ids": [
+        "runtime-deployments-build-report"
+      ]
+    },
+    "browser": {
+      "status": "passed",
+      "command": "make -C agi-stack desktop-parity-check; Electron CDP supporting observation",
+      "started_at": "2026-08-02T15:10:00Z",
+      "completed_at": "2026-08-02T15:24:22Z",
+      "summary": "The paired production signed-out case passed. The make-launched Electron renderer also preserved the Local Deployments deep link, stable reason code, no-network retry boundary, and no iframe or WebView, but this is not a Computer Use native pass.",
+      "artifact_ids": [
+        "runtime-deployments-paired-renderer-report",
+        "runtime-deployments-electron-screenshot"
+      ]
+    },
+    "native": {
+      "status": "blocked",
+      "command": "AGISTACK_DESKTOP_DEBUG_PORT=9333 make -C agi-stack run-desktop",
+      "started_at": "2026-08-02T15:21:55Z",
+      "completed_at": "2026-08-02T15:25:00Z",
+      "summary": "The canonical Electron process and Local route started, but the locked Mac prevented Computer Use window, focus, keyboard, menu, and reload verification. Authorized Cloud deployment integration was also unavailable.",
+      "artifact_ids": [
+        "runtime-deployments-electron-support-report"
+      ]
+    }
+  },
+  "capability_results": [
+    {
+      "capability_id": "tenant-tenant-deploy",
+      "contract_reference": "agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json#tenant-tenant-deploy",
+      "result": "blocked",
+      "summary": "Build, contract, Browser QA, paired renderer, and make-launched Electron Local supporting checks passed. Full Deployments parity remains blocked by unavailable authorized Cloud data and the locked-screen Computer Use gap.",
+      "evidence": {
+        "build": "passed",
+        "browser": "passed",
+        "native": "blocked"
+      },
+      "artifact_ids": [
+        "runtime-deployments-evidence-schema",
+        "runtime-deployments-desired-contract",
+        "runtime-deployments-build-report",
+        "runtime-deployments-paired-renderer-report",
+        "runtime-deployments-electron-support-report",
+        "runtime-deployments-electron-screenshot"
+      ],
+      "parity_judgment": {
+        "disposition": "accepted",
+        "statement": "The evidence supports an available native Cloud read-only implementation slice and the Local not-applicable classification, while the overall Deployments evidence remains blocked and does not establish complete parity.",
+        "judgment_audit": {
+          "agent_id": "/root/parity_review_a_23_44",
+          "tool_name": "structured_capability_slice_judgment",
+          "input": {
+            "contract_reference": "agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json#tenant-tenant-deploy",
+            "evidence_digest": "sha256:4edd5a94af4910e4419784f82982ee1ea98e84863e4edb834161aa1cc437e33d",
+            "observation_summary": "Clean source b1d831a649e35a4ca439a980583efecacd442aa4 passed desktop-check (sidecar 337, Desktop 1806, Electron build) and desktop-parity-check (inventory 13, manifest 66, Browser QA 416 direct plus 1 retry, paired signed-out 1). Canonical make-launched Electron Local returned cloud_deployment_authority_not_applicable across reload and retry, issued zero /deploys requests, and showed no iframe, WebView, or renderer errors. Computer Use was blocked by the locked Mac. No authorized disposable Cloud deployment dataset was available, so Cloud list, detail, pagination, and authenticated SSE were not executed. Create, cancel, result marking, latest, nested aliases, and instance discovery are outside the read-only slice."
+          },
+          "output": {
+            "verdict": "accepted",
+            "summary": "The evidence supports an available native Cloud read-only implementation slice and the Local not-applicable classification, while the overall Deployments evidence remains blocked and does not establish complete parity."
+          },
+          "rationale": "The clean build and contract gates support the existence, registration, compilation, and Browser-level behavior of the native read-only Deployments slice. The canonical Electron Local run independently supports its stable structured cloud-only short circuit and absence of WebView fallback. However, the signed-out paired case does not exercise deployment data, no authorized Cloud dataset was available to execute list, detail, pagination, or authenticated SSE, and the locked Mac prevented Computer Use validation of native window and focus behavior. The slice also intentionally omits instance discovery, nested aliases, latest lookup, creation, cancellation, and terminal-result mutations. Therefore the narrow Cloud read-only implementation declaration and Local not-applicable state are supported, but the capability evidence result must remain blocked rather than passed.",
+          "latency_ms": 19,
+          "recorded_at": "2026-08-02T15:38:09.000Z"
+        }
+      },
+      "intentional_deviation": {
+        "disposition": "accepted",
+        "statement": "Local Desktop's native, structured, zero-network not-applicable short circuit is an acceptable intentional deviation from Cloud deployment authority.",
+        "judgment_audit": {
+          "agent_id": "/root/parity_review_a_23_44",
+          "tool_name": "structured_intentional_deviation_judgment",
+          "input": {
+            "contract_reference": "agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json#tenant-tenant-deploy",
+            "evidence_digest": "sha256:4edd5a94af4910e4419784f82982ee1ea98e84863e4edb834161aa1cc437e33d",
+            "observation_summary": "Local Desktop does not simulate Cloud deployment authority. In the canonical make-launched Electron run it returned the stable structured reason cloud_deployment_authority_not_applicable before any /deploys request, remained stable across reload and retry, and exposed no iframe, WebView, or mutation authority."
+          },
+          "output": {
+            "verdict": "accepted",
+            "summary": "Local Desktop's native, structured, zero-network not-applicable short circuit is an acceptable intentional deviation from Cloud deployment authority."
+          },
+          "rationale": "A supervised single-machine sidecar has no honest authority for discovering or mutating Cloud runtime instances and deployments. Simulating that authority locally would create misleading state and unsafe semantics. The observed Local route instead fails closed with a stable reason code before network access, survives reload and retry, and remains inside the native Electron surface without iframe or WebView fallback. This is an acceptable intentional deviation as long as the reason code, zero-network behavior, and lack of Cloud mutations remain deterministic and regression-tested; it does not imply that the separate Cloud execution evidence has passed.",
+          "latency_ms": 13,
+          "recorded_at": "2026-08-02T15:38:10.000Z"
+        }
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "artifact_id": "runtime-deployments-evidence-schema",
+      "kind": "report",
+      "channel": "shared",
+      "evidence_roles": [
+        "contract"
+      ],
+      "location": "evidence-run.v1.schema.json",
+      "media_type": "application/schema+json",
+      "sha256": "673ddd2b0fd38b97cbf71007fd2a6fe9692dc03ca11c74fc12f0254b24aaf0ed",
+      "produced_at": "2026-08-02T15:26:01Z"
+    },
+    {
+      "artifact_id": "runtime-deployments-desired-contract",
+      "kind": "report",
+      "channel": "shared",
+      "evidence_roles": [
+        "contract"
+      ],
+      "location": "parity-manifest.v2.json",
+      "media_type": "application/json",
+      "sha256": "cf9f909e3c12eda73211058a99a0d33f2fed384ce49303656e542bb26f6719cc",
+      "produced_at": "2026-08-02T15:26:01Z"
+    },
+    {
+      "artifact_id": "runtime-deployments-build-report",
+      "kind": "report",
+      "channel": "build",
+      "evidence_roles": [
+        "contract"
+      ],
+      "location": "build-report.json",
+      "media_type": "application/json",
+      "sha256": "b9f2678999d9a529bc2ace0ac8d6470bdc4bf3055fc588f62af39684f8ec0428",
+      "produced_at": "2026-08-02T15:26:01Z"
+    },
+    {
+      "artifact_id": "runtime-deployments-paired-renderer-report",
+      "kind": "report",
+      "channel": "browser",
+      "evidence_roles": [
+        "web_renderer",
+        "desktop_renderer",
+        "visual_diff",
+        "observation_metadata"
+      ],
+      "location": "paired-renderer-report.json",
+      "media_type": "application/json",
+      "sha256": "013e2443b59b8d41ab9d08c3afd166f313cd93d5f4c209f1a879c31164aacfb6",
+      "produced_at": "2026-08-02T15:19:00Z"
+    },
+    {
+      "artifact_id": "runtime-deployments-electron-support-report",
+      "kind": "report",
+      "channel": "native",
+      "evidence_roles": [
+        "native_electron"
+      ],
+      "location": "electron-local-support-report.json",
+      "media_type": "application/json",
+      "sha256": "fb833c38a028f5b5e9962c655f271559a70ba1fd876368efc88d82161e8b81d5",
+      "produced_at": "2026-08-02T15:25:00Z"
+    },
+    {
+      "artifact_id": "runtime-deployments-electron-screenshot",
+      "kind": "screenshot",
+      "channel": "browser",
+      "evidence_roles": [
+        "desktop_full_screenshot"
+      ],
+      "location": "electron-local-runtime-deployments.png",
+      "media_type": "image/png",
+      "sha256": "4134508c1735172cfa0c92ec0e3cc349f5d88b47d23baf6ca1e5d2fcf3ea7b53",
+      "produced_at": "2026-08-02T15:24:22Z"
+    }
+  ]
+}

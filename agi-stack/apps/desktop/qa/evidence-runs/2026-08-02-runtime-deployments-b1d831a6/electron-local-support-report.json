@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.0.0",
+  "record_kind": "desktop-parity-electron-support-report",
+  "source_revision": "b1d831a649e35a4ca439a980583efecacd442aa4",
+  "capability_id": "tenant-tenant-deploy",
+  "status": "blocked",
+  "observed_surface": "desktop_local",
+  "launch_command": "AGISTACK_DESKTOP_DEBUG_PORT=9333 make -C agi-stack run-desktop",
+  "verification_channel": "CDP observation of the make-launched Electron renderer; Computer Use was blocked because the Mac was locked",
+  "electron_observations": {
+    "route": "#/tenant/northstar/deploy?instanceId=local-instance-proof",
+    "breadcrumb": "tenant-tenant-deploy",
+    "availability": "not_applicable",
+    "reason_code": "cloud_deployment_authority_not_applicable",
+    "deep_link_reload_restored": true,
+    "retry_preserved_reason_code": true,
+    "deploy_api_requests": 0,
+    "renderer_errors": 0,
+    "page_errors": 0,
+    "webview_count": 0,
+    "iframe_count": 0,
+    "cloud_deployment_data_rendered": false,
+    "deployment_mutation_controls_rendered": false
+  },
+  "authority_boundary": {
+    "policy": "cloud_only",
+    "local_network_short_circuit": true,
+    "simulated_deployment_authority": false,
+    "credential_projection": false,
+    "config_snapshot_projection": false,
+    "message_projection": false,
+    "triggered_by_projection": false
+  },
+  "blockers": [
+    {
+      "reason_code": "native_computer_use_mac_locked",
+      "statement": "The Mac lock screen prevented Computer Use from observing the real application window, focus, keyboard, menu, and reload behavior."
+    },
+    {
+      "reason_code": "authorized_cloud_deployment_dataset_unavailable",
+      "statement": "Cloud Desktop list, detail, pagination, and authenticated SSE progress were not exercised because no authorized disposable Cloud deployment dataset was available."
+    },
+    {
+      "reason_code": "runtime_deployment_mutations_intentionally_unimplemented",
+      "statement": "Create, cancel, mark-success, mark-failed, latest, nested deployment aliases, and instance discovery are outside this read-only implemented slice."
+    }
+  ],
+  "recorded_at": "2026-08-02T15:25:00Z"
+}

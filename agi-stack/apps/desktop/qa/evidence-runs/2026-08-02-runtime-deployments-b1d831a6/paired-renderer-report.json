@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0.0",
+  "record_kind": "desktop-parity-paired-renderer-report",
+  "source_revision": "b1d831a649e35a4ca439a980583efecacd442aa4",
+  "status": "passed",
+  "verification_channel": "paired production Web and Desktop renderer harness",
+  "matched_state": {
+    "locale": "en",
+    "theme": "light",
+    "viewport": {
+      "width": 1440,
+      "height": 1024
+    },
+    "device_scale_factor": 1,
+    "authentication_state": "signed_out",
+    "permission_state": "public_entry_only",
+    "data_state": "empty",
+    "interaction_state": "focused:email_entry"
+  },
+  "results": {
+    "cases": "1 passed",
+    "source_worktree": "clean",
+    "web_build": "passed",
+    "desktop_build": "passed",
+    "interaction": "passed",
+    "screenshots_retained_by_harness": true,
+    "visual_diff_retained": true,
+    "evidence_packet": "passed"
+  },
+  "limitations": [
+    "This configured paired case is supporting renderer evidence only and does not exercise the authenticated Deployments route.",
+    "No authorized disposable Cloud deployment dataset was available, so Cloud list, detail, pagination, and authenticated SSE progress remain unverified."
+  ],
+  "recorded_at": "2026-08-02T15:19:00Z"
+}
