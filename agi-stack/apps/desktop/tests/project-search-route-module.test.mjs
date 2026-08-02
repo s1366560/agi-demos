@@ -22,6 +22,7 @@ const {
   TENANT_INSTANCE_TEMPLATES_ROUTE_ID,
   TENANT_INSTANCES_ROUTE_ID,
   TENANT_POOL_ROUTE_ID,
+  TENANT_ANALYTICS_ROUTE_ID,
   TENANT_OVERVIEW_ROUTE_ID,
   TENANT_PROJECTS_ROUTE_ID,
   TENANT_RUNTIMES_ROUTE_ID,
@@ -77,6 +78,9 @@ test('factory stays lazy and publishes the exact Project Advanced Search route c
       [TENANT_PROJECTS_ROUTE_ID]: implementedRouteLoader(TENANT_PROJECTS_ROUTE_ID),
       [TENANT_WORKSPACES_ROUTE_ID]: implementedRouteLoader(TENANT_WORKSPACES_ROUTE_ID),
       [TENANT_TASKS_ROUTE_ID]: implementedRouteLoader(TENANT_TASKS_ROUTE_ID),
+      [TENANT_ANALYTICS_ROUTE_ID]: implementedRouteLoader(
+        TENANT_ANALYTICS_ROUTE_ID,
+      ),
       [TENANT_DEAD_LETTER_QUEUE_ROUTE_ID]: implementedRouteLoader(
         TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
       ),

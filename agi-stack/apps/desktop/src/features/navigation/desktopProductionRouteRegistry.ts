@@ -29,6 +29,7 @@ export const TENANT_OVERVIEW_ROUTE_ID = 'tenant-tenant-overview' as const;
 export const TENANT_PROJECTS_ROUTE_ID = 'tenant-tenant-projects' as const;
 export const TENANT_WORKSPACES_ROUTE_ID = 'tenant-tenant-workspaces' as const;
 export const TENANT_TASKS_ROUTE_ID = 'tenant-tenant-tasks' as const;
+export const TENANT_ANALYTICS_ROUTE_ID = 'tenant-tenant-analytics' as const;
 export const TENANT_RUNTIMES_ROUTE_ID = 'tenant-tenant-runtimes' as const;
 export const TENANT_POOL_ROUTE_ID = 'tenant-tenant-pool' as const;
 export const TENANT_INSTANCES_ROUTE_ID = 'tenant-tenant-instances' as const;
@@ -46,6 +47,7 @@ const IMPLEMENTED_ROUTE_IDS = new Set<string>([
   TENANT_PROJECTS_ROUTE_ID,
   TENANT_WORKSPACES_ROUTE_ID,
   TENANT_TASKS_ROUTE_ID,
+  TENANT_ANALYTICS_ROUTE_ID,
   TENANT_RUNTIMES_ROUTE_ID,
   TENANT_POOL_ROUTE_ID,
   TENANT_INSTANCES_ROUTE_ID,

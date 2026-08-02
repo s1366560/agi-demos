@@ -1,0 +1,233 @@
+.tenant-analytics-page {
+  display: grid;
+  gap: 20px;
+  min-height: 100%;
+  padding: 24px;
+  color: var(--gray-12);
+  background:
+    radial-gradient(circle at 86% 6%, color-mix(in srgb, var(--gray-5) 36%, transparent), transparent 34%),
+    var(--color-panel-solid);
+}
+
+.tenant-analytics-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.tenant-analytics-header span,
+.tenant-analytics-summary span,
+.tenant-analytics-panel p {
+  color: var(--gray-10);
+  font-size: 12px;
+}
+
+.tenant-analytics-header h1,
+.tenant-analytics-panel h2 {
+  margin: 4px 0;
+}
+
+.tenant-analytics-header p {
+  max-width: 620px;
+  margin: 0;
+  color: var(--gray-10);
+}
+
+.tenant-analytics-context {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
+.tenant-analytics-context code,
+.tenant-analytics-notice code,
+.tenant-analytics-summary code,
+.tenant-analytics-projects code {
+  color: var(--gray-10);
+  font-size: 11px;
+}
+
+.tenant-analytics-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--amber-7);
+  border-radius: 12px;
+  background: var(--amber-2);
+}
+
+.tenant-analytics-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tenant-analytics-summary article,
+.tenant-analytics-panel {
+  border: 1px solid var(--gray-6);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--color-panel-solid) 92%, transparent);
+  box-shadow: 0 12px 36px color-mix(in srgb, var(--gray-12) 6%, transparent);
+}
+
+.tenant-analytics-summary article {
+  display: grid;
+  gap: 7px;
+  min-height: 118px;
+  padding: 16px;
+}
+
+.tenant-analytics-summary strong {
+  font-size: 25px;
+  line-height: 1;
+}
+
+.tenant-analytics-summary small {
+  color: var(--green-10);
+}
+
+.tenant-analytics-summary article[data-availability='unavailable'] strong {
+  color: var(--gray-9);
+}
+
+.tenant-analytics-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.tenant-analytics-panel {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-height: 330px;
+  padding: 18px;
+}
+
+.tenant-analytics-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.tenant-analytics-panel-heading p {
+  margin: 0;
+}
+
+.tenant-analytics-bars {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  min-height: 230px;
+  overflow-x: auto;
+}
+
+.tenant-analytics-bars > div {
+  display: grid;
+  grid-template-rows: 160px auto auto;
+  align-items: end;
+  justify-items: center;
+  gap: 4px;
+  min-width: 44px;
+}
+
+.tenant-analytics-bars > div > span {
+  width: 24px;
+  min-height: 4px;
+  border-radius: 7px 7px 2px 2px;
+  background: var(--gray-12);
+}
+
+.tenant-analytics-bars small {
+  max-width: 70px;
+  overflow: hidden;
+  color: var(--gray-9);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tenant-analytics-projects {
+  display: grid;
+  gap: 14px;
+}
+
+.tenant-analytics-projects article {
+  display: grid;
+  gap: 7px;
+}
+
+.tenant-analytics-projects article > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tenant-analytics-meter {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--gray-4);
+}
+
+.tenant-analytics-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--gray-12);
+}
+
+.tenant-analytics-empty,
+.tenant-analytics-projection-unavailable {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  min-height: 220px;
+  color: var(--gray-10);
+  text-align: center;
+}
+
+.tenant-analytics-state {
+  place-items: center;
+  align-content: center;
+  text-align: center;
+}
+
+.tenant-analytics-state > svg {
+  width: 28px;
+  height: 28px;
+}
+
+.tenant-analytics-state p {
+  max-width: 440px;
+  color: var(--gray-10);
+}
+
+@media (max-width: 980px) {
+  .tenant-analytics-summary,
+  .tenant-analytics-panels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .tenant-analytics-page {
+    padding: 16px;
+  }
+
+  .tenant-analytics-header {
+    display: grid;
+  }
+
+  .tenant-analytics-context {
+    justify-items: start;
+  }
+
+  .tenant-analytics-summary,
+  .tenant-analytics-panels {
+    grid-template-columns: 1fr;
+  }
+}

@@ -53,6 +53,10 @@ import {
   desktopProductionRouterZhCN,
 } from './features/navigation/locales/desktopProductionRouterMessages';
 import {
+  tenantAnalyticsEnUS,
+  tenantAnalyticsZhCN,
+} from './features/tenant/locales/tenantAnalyticsMessages';
+import {
   tenantOverviewEnUS,
   tenantOverviewZhCN,
 } from './features/tenant/locales/tenantOverviewMessages';
@@ -95,6 +99,7 @@ const enUS: Record<string, string> = {
   ...runtimeInstancesEnUS,
   ...runtimePoolEnUS,
   ...unifiedRuntimesEnUS,
+  ...tenantAnalyticsEnUS,
   ...tenantOverviewEnUS,
   ...tenantProjectsEnUS,
   ...tenantTasksEnUS,
@@ -3702,6 +3707,7 @@ const zhCN: Record<string, string> = {
   ...runtimeInstancesZhCN,
   ...runtimePoolZhCN,
   ...unifiedRuntimesZhCN,
+  ...tenantAnalyticsZhCN,
   ...tenantOverviewZhCN,
   ...tenantProjectsZhCN,
   ...tenantTasksZhCN,
