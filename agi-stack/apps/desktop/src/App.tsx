@@ -309,6 +309,7 @@ import {
   PROJECT_CRON_JOBS_ROUTE_ID,
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
+  PROJECT_SUPPORT_ROUTE_ID,
   TENANT_OVERVIEW_ROUTE_ID,
   TENANT_ANALYTICS_ROUTE_ID,
   TENANT_CLUSTERS_ROUTE_ID,
@@ -355,6 +356,8 @@ import {
   shortcutChordFor,
 } from './features/navigation/keyboardShortcutModel';
 import { createProjectOverviewRouteModuleLoader } from './features/project/projectOverviewRouteModule';
+import { createProjectSupportRouteModuleLoader } from './features/project-support/projectSupportRouteModule';
+import { createProjectSupportRouteBindingForRuntime } from './features/project-support/projectSupportRuntime';
 import { createDeadLetterQueueRouteModuleLoader } from './features/governance/deadLetterQueueRouteModule';
 import { createInstanceTemplatesRouteModuleLoader } from './features/instance-templates/instanceTemplatesRouteModule';
 import { createRuntimeClustersRouteModuleLoader } from './features/runtime-clusters/runtimeClustersRouteModule';
@@ -2199,6 +2202,14 @@ export function App() {
             createProjectOverviewRouteModuleLoader({
               createBinding: (context) =>
                 createProjectOverviewRouteBindingForRuntime(
+                  configRef.current,
+                  context,
+                ),
+            }),
+          [PROJECT_SUPPORT_ROUTE_ID]:
+            createProjectSupportRouteModuleLoader({
+              createBinding: (context) =>
+                createProjectSupportRouteBindingForRuntime(
                   configRef.current,
                   context,
                 ),

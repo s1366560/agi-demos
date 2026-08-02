@@ -25,6 +25,7 @@ export const PROJECT_OVERVIEW_ROUTE_ID = 'project-project-overview' as const;
 export const PROJECT_SEARCH_ROUTE_ID = 'project-project-search' as const;
 export const PROJECT_CRON_JOBS_ROUTE_ID =
   'project-project-cron-jobs' as const;
+export const PROJECT_SUPPORT_ROUTE_ID = 'project-support' as const;
 export const TENANT_OVERVIEW_ROUTE_ID = 'tenant-tenant-overview' as const;
 export const TENANT_PROJECTS_ROUTE_ID = 'tenant-tenant-projects' as const;
 export const TENANT_WORKSPACES_ROUTE_ID = 'tenant-tenant-workspaces' as const;
@@ -58,9 +59,11 @@ const IMPLEMENTED_ROUTE_IDS = new Set<string>([
   DEVICE_APPROVAL_ROUTE_ID,
   TENANT_CREATION_ROUTE_ID,
   INVITATION_ACCEPTANCE_ROUTE_ID,
+  PROJECT_SUPPORT_ROUTE_ID,
 ]);
 const PRODUCTION_ROUTE_ID_SET = new Set<string>([
   ...CANONICAL_DESKTOP_ROUTE_IDS,
+  PROJECT_SUPPORT_ROUTE_ID,
   DEVICE_APPROVAL_ROUTE_ID,
   TENANT_CREATION_ROUTE_ID,
   INVITATION_ACCEPTANCE_ROUTE_ID,
@@ -130,8 +133,23 @@ export function createDesktopProductionRouteRegistry({
       () => requiredDefinition(registry, INVITATION_ACCEPTANCE_ROUTE_ID),
     ),
   };
+  const projectSupportDefinition: DesktopRouteDefinition<DesktopRouteModule> = {
+    id: PROJECT_SUPPORT_ROUTE_ID,
+    path: '/tenant/:tenantId/project/:projectId/support',
+    scope: ['tenant', 'project'],
+    navGroup: 'project-operations',
+    capability: PROJECT_SUPPORT_ROUTE_ID,
+    requiredPermission: [['authenticated', 'tenant_member']],
+    localPolicy: 'cloud_only',
+    loader: implementedLoader(
+      PROJECT_SUPPORT_ROUTE_ID,
+      implementedLoaders[PROJECT_SUPPORT_ROUTE_ID],
+      () => requiredDefinition(registry, PROJECT_SUPPORT_ROUTE_ID),
+    ),
+  };
   registry = createDesktopRouteRegistry([
     ...canonicalRegistry.definitions,
+    projectSupportDefinition,
     deviceApprovalDefinition,
     tenantCreationDefinition,
     invitationAcceptanceDefinition,

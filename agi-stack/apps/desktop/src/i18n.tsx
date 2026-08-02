@@ -5,6 +5,10 @@ import {
   projectOverviewZhCN,
 } from './features/project/locales/projectOverviewMessages';
 import {
+  projectSupportEnUS,
+  projectSupportZhCN,
+} from './features/project-support/locales/projectSupportMessages';
+import {
   deadLetterQueueEnUS,
   deadLetterQueueZhCN,
 } from './features/governance/locales/deadLetterQueueMessages';
@@ -94,6 +98,7 @@ const enUS: Record<string, string> = {
   ...instanceTemplatesEnUS,
   ...nativeUnavailableRouteEnUS,
   ...projectOverviewEnUS,
+  ...projectSupportEnUS,
   ...runtimeClustersEnUS,
   ...runtimeDeploymentsEnUS,
   ...runtimeInstancesEnUS,
@@ -3702,6 +3707,7 @@ const zhCN: Record<string, string> = {
   ...instanceTemplatesZhCN,
   ...nativeUnavailableRouteZhCN,
   ...projectOverviewZhCN,
+  ...projectSupportZhCN,
   ...runtimeClustersZhCN,
   ...runtimeDeploymentsZhCN,
   ...runtimeInstancesZhCN,

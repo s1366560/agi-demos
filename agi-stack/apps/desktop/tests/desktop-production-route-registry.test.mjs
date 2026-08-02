@@ -20,6 +20,7 @@ const {
   PROJECT_CRON_JOBS_ROUTE_ID,
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
+  PROJECT_SUPPORT_ROUTE_ID,
   TENANT_ANALYTICS_ROUTE_ID,
   TENANT_OVERVIEW_ROUTE_ID,
   TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
@@ -111,6 +112,22 @@ function implementedCronJobsModule(overrides = {}) {
     capability: PROJECT_CRON_JOBS_ROUTE_ID,
     localPolicy: 'native_equivalent',
     Surface: ProjectCronJobsRoute,
+    ...overrides,
+  });
+}
+
+function implementedProjectSupportModule(overrides = {}) {
+  function ProjectSupportRoute() {
+    return React.createElement('section', null, 'Project Support route');
+  }
+  return Object.freeze({
+    routeId: PROJECT_SUPPORT_ROUTE_ID,
+    disposition: 'implemented',
+    availability: 'available',
+    reasonCode: null,
+    capability: PROJECT_SUPPORT_ROUTE_ID,
+    localPolicy: 'cloud_only',
+    Surface: ProjectSupportRoute,
     ...overrides,
   });
 }
@@ -375,12 +392,14 @@ function createRegistry(
   tenantCreationLoader = async () => implementedTenantCreationModule(),
   invitationAcceptanceLoader = async () =>
     implementedInvitationAcceptanceModule(),
+  projectSupportLoader = async () => implementedProjectSupportModule(),
 ) {
   return createDesktopProductionRouteRegistry({
     implementedLoaders: {
       [PROJECT_OVERVIEW_ROUTE_ID]: projectLoader,
       [PROJECT_SEARCH_ROUTE_ID]: searchLoader,
       [PROJECT_CRON_JOBS_ROUTE_ID]: cronJobsLoader,
+      [PROJECT_SUPPORT_ROUTE_ID]: projectSupportLoader,
       [TENANT_OVERVIEW_ROUTE_ID]: tenantLoader,
       [TENANT_PROJECTS_ROUTE_ID]: tenantProjectsLoader,
       [TENANT_WORKSPACES_ROUTE_ID]: tenantWorkspacesLoader,
@@ -404,6 +423,7 @@ test('production registry requires every implemented project route loader', () =
   assert.equal(PROJECT_OVERVIEW_ROUTE_ID, 'project-project-overview');
   assert.equal(PROJECT_SEARCH_ROUTE_ID, 'project-project-search');
   assert.equal(PROJECT_CRON_JOBS_ROUTE_ID, 'project-project-cron-jobs');
+  assert.equal(PROJECT_SUPPORT_ROUTE_ID, 'project-support');
   assert.equal(TENANT_OVERVIEW_ROUTE_ID, 'tenant-tenant-overview');
   assert.equal(TENANT_PROJECTS_ROUTE_ID, 'tenant-tenant-projects');
   assert.equal(TENANT_WORKSPACES_ROUTE_ID, 'tenant-tenant-workspaces');
@@ -487,7 +507,7 @@ test('production registry requires every implemented project route loader', () =
   );
 });
 
-test('all 54 production loaders remain lazy and eighteen routes are real modules', async () => {
+test('all 55 production loaders remain lazy and nineteen routes are real modules', async () => {
   let projectLoadCount = 0;
   let searchLoadCount = 0;
   let cronJobsLoadCount = 0;
@@ -506,6 +526,7 @@ test('all 54 production loaders remain lazy and eighteen routes are real modules
   let deviceApprovalLoadCount = 0;
   let tenantCreationLoadCount = 0;
   let invitationAcceptanceLoadCount = 0;
+  let projectSupportLoadCount = 0;
   const projectModule = implementedProjectModule();
   const searchModule = implementedSearchModule();
   const cronJobsModule = implementedCronJobsModule();
@@ -524,6 +545,7 @@ test('all 54 production loaders remain lazy and eighteen routes are real modules
   const deviceApprovalModule = implementedDeviceApprovalModule();
   const tenantCreationModule = implementedTenantCreationModule();
   const invitationAcceptanceModule = implementedInvitationAcceptanceModule();
+  const projectSupportModule = implementedProjectSupportModule();
   const registry = createRegistry(
     async () => {
       projectLoadCount += 1;
@@ -597,9 +619,13 @@ test('all 54 production loaders remain lazy and eighteen routes are real modules
       invitationAcceptanceLoadCount += 1;
       return invitationAcceptanceModule;
     },
+    async () => {
+      projectSupportLoadCount += 1;
+      return projectSupportModule;
+    },
   );
 
-  assert.equal(registry.definitions.length, 54);
+  assert.equal(registry.definitions.length, 55);
   assert.equal(projectLoadCount, 0);
   assert.equal(searchLoadCount, 0);
   assert.equal(cronJobsLoadCount, 0);
@@ -618,6 +644,7 @@ test('all 54 production loaders remain lazy and eighteen routes are real modules
   assert.equal(deviceApprovalLoadCount, 0);
   assert.equal(tenantCreationLoadCount, 0);
   assert.equal(invitationAcceptanceLoadCount, 0);
+  assert.equal(projectSupportLoadCount, 0);
 
   const loaded = await Promise.all(
     registry.definitions.map(async (definition) => ({
@@ -643,6 +670,7 @@ test('all 54 production loaders remain lazy and eighteen routes are real modules
   assert.equal(deviceApprovalLoadCount, 1);
   assert.equal(tenantCreationLoadCount, 1);
   assert.equal(invitationAcceptanceLoadCount, 1);
+  assert.equal(projectSupportLoadCount, 1);
 
   const implemented = loaded.filter(
     ({ module }) => module.disposition === 'implemented',
@@ -650,13 +678,14 @@ test('all 54 production loaders remain lazy and eighteen routes are real modules
   const planned = loaded.filter(
     ({ module }) => module.disposition === 'planned',
   );
-  assert.equal(implemented.length, 18);
+  assert.equal(implemented.length, 19);
   assert.deepEqual(
     implemented.map(({ definition }) => definition.id).sort(),
     [
       PROJECT_OVERVIEW_ROUTE_ID,
       PROJECT_SEARCH_ROUTE_ID,
       PROJECT_CRON_JOBS_ROUTE_ID,
+      PROJECT_SUPPORT_ROUTE_ID,
       TENANT_OVERVIEW_ROUTE_ID,
       TENANT_PROJECTS_ROUTE_ID,
       TENANT_WORKSPACES_ROUTE_ID,
@@ -691,6 +720,12 @@ test('all 54 production loaders remain lazy and eighteen routes are real modules
       ({ definition }) => definition.id === PROJECT_CRON_JOBS_ROUTE_ID,
     ).module,
     cronJobsModule,
+  );
+  assert.equal(
+    implemented.find(
+      ({ definition }) => definition.id === PROJECT_SUPPORT_ROUTE_ID,
+    ).module,
+    projectSupportModule,
   );
   assert.equal(
     implemented.find(

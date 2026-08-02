@@ -45,6 +45,17 @@ test('App owns one production route registry with latest Project Overview, Searc
   );
 });
 
+test('App wires Project Support through the native scoped Cloud authority', () => {
+  assert.match(
+    appSource,
+    /PROJECT_SUPPORT_ROUTE_ID[\s\S]*createProjectSupportRouteModuleLoader\(\{[\s\S]*createProjectSupportRouteBindingForRuntime\(\s*configRef\.current,\s*context,?\s*\)/u,
+  );
+  assert.doesNotMatch(
+    appSource,
+    /project-support[\s\S]{0,500}(?:iframe|webview|openExternal|window\.open)/iu,
+  );
+});
+
 test('App wires the native Runtime Pool loader through the scoped runtime binding', () => {
   assert.match(
     appSource,

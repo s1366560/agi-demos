@@ -198,6 +198,15 @@ test('DesktopCapabilitySnapshot v3 validates authority fields and preserves the 
         scope: nullScope,
         authority_revision: null,
       },
+      'project-support': {
+        availability: 'unavailable',
+        reason_code: 'capability_not_declared',
+        service_version: null,
+        contract_version: null,
+        allowed_actions: [],
+        scope: nullScope,
+        authority_revision: null,
+      },
     },
   });
   assert.deepEqual(desktopCapability(snapshot, 'search'), {

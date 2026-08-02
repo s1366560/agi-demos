@@ -21,6 +21,7 @@ import { runtimePoolCapability } from '../runtime-pool/runtimePoolCapability';
 import { unifiedRuntimesCapability } from '../unified-runtimes/unifiedRuntimesCapability';
 import { createCloudProjectOverviewClient } from '../project/projectOverviewCloudClient';
 import { createLocalProjectOverviewClient } from '../project/projectOverviewLocalClient';
+import { projectSupportCapability } from '../project-support/projectSupportCapability';
 import { loadTenantAnalyticsCapability } from '../tenant/tenantAnalyticsCapability';
 import { loadTenantOverviewCapability } from '../tenant/tenantOverviewCapability';
 import { loadTenantProjectsCapability } from '../tenant/tenantProjectsCapability';
@@ -164,6 +165,7 @@ export function createDesktopWorkbenchCapabilityClient(
             search,
             projectScope,
           ),
+          'project-support': projectSupportCapability(config),
           'tenant-tenant-overview': tenantOverview,
           'tenant-tenant-analytics': tenantAnalytics,
           'tenant-tenant-projects': tenantProjects,

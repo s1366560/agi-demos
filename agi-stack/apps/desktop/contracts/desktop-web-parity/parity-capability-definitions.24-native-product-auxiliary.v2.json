@@ -214,7 +214,24 @@
         "close",
         "retry"
       ],
-      "cloud_status": "planned",
+      "cloud_status": "implemented",
+      "cloud_authority": "cloud_service",
+      "cloud_actions": [
+        "view",
+        "list",
+        "create",
+        "close",
+        "retry"
+      ],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/project-support/projectSupportClient.ts",
+        "agi-stack/apps/desktop/src/features/project-support/projectSupportController.ts",
+        "agi-stack/apps/desktop/src/features/project-support/projectSupportRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-support/ProjectSupportPage.tsx",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts"
+      ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "local_support_service_not_applicable",
@@ -240,9 +257,21 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "NONE",
-          "path": "unavailable:desktop_native_route_planned",
-          "authority": "none"
+          "method": "GET",
+          "path": "/api/v1/support/tickets?tenant_id={tenant_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/support/tickets",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/support/tickets/{ticket_id}/close",
+          "authority": "cloud_service"
         },
         {
           "surface": "desktop_local",
@@ -284,6 +313,33 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list",
+            "create",
+            "retry"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "close"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "resource_owner"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
       "interaction_states": [
@@ -295,7 +351,7 @@
         "retry"
       ],
       "expected_observable_result": "Cloud Desktop natively lists, creates, and closes the caller's tenant-scoped support tickets from the project route with scoped errors and retry behavior. Local Desktop keeps the native route and returns a stable not-applicable result.",
-      "judgment_rationale": "Support is a project production route without a canonical navigation target, but its current authority is tenant membership plus caller-owned tickets rather than a project permission. It has no audited native Desktop page, and the hosted support-ticket service is intentionally not duplicated for Local mode."
+      "judgment_rationale": "Support is a project production route without a canonical navigation target. Cloud Desktop now owns a native list/create/close page backed by the hosted tenant-scoped caller-owned ticket authority. The hosted support-ticket service remains intentionally not duplicated for Local mode."
     },
     {
       "id": "project-playbooks",

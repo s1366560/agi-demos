@@ -1,0 +1,275 @@
+.project-support-page {
+  display: grid;
+  gap: 18px;
+  min-height: 100%;
+  padding: 24px;
+  color: var(--gray-12);
+  background:
+    radial-gradient(
+      circle at 88% 5%,
+      color-mix(in srgb, var(--gray-5) 38%, transparent),
+      transparent 34%
+    ),
+    var(--color-panel-solid);
+}
+
+.project-support-header,
+.project-support-toolbar,
+.project-support-list article > header,
+.project-support-list article > footer,
+.project-support-pagination {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.project-support-header > div:first-child > span,
+.project-support-toolbar span,
+.project-support-list article > header span,
+.project-support-list article > footer span {
+  color: var(--gray-10);
+  font-size: 12px;
+}
+
+.project-support-header h1 {
+  margin: 4px 0;
+}
+
+.project-support-header p {
+  max-width: 650px;
+  margin: 0;
+  color: var(--gray-10);
+}
+
+.project-support-context {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+}
+
+.project-support-context span {
+  padding: 4px 8px;
+  border: 1px solid var(--gray-6);
+  border-radius: 999px;
+  background: var(--gray-3);
+  font-size: 11px;
+}
+
+.project-support-context span[data-authority='local'] {
+  border-color: var(--amber-7);
+  background: var(--amber-3);
+}
+
+.project-support-context code,
+.project-support-notice code,
+.project-support-list code {
+  color: var(--gray-10);
+  font-size: 11px;
+}
+
+.project-support-notice {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 14px;
+  border: 1px solid var(--amber-7);
+  border-radius: 12px;
+  background: var(--amber-2);
+}
+
+.project-support-notice code {
+  margin-left: auto;
+}
+
+.project-support-toolbar {
+  align-items: center;
+  padding: 14px 16px;
+  border: 1px solid var(--gray-6);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--color-panel-solid) 94%, transparent);
+}
+
+.project-support-toolbar > div {
+  display: grid;
+  gap: 2px;
+}
+
+.project-support-toolbar strong {
+  font-size: 24px;
+}
+
+.project-support-list {
+  display: grid;
+  gap: 12px;
+}
+
+.project-support-list article {
+  display: grid;
+  gap: 10px;
+  padding: 17px;
+  border: 1px solid var(--gray-6);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--color-panel-solid) 94%, transparent);
+  box-shadow: 0 12px 34px color-mix(in srgb, var(--gray-12) 5%, transparent);
+}
+
+.project-support-list article > header {
+  align-items: center;
+}
+
+.project-support-list article > header > div {
+  display: flex;
+  gap: 7px;
+}
+
+.project-support-list article > header span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--gray-4);
+}
+
+.project-support-list article > header span[data-status='open'],
+.project-support-list article > header span[data-status='in_progress'] {
+  color: var(--blue-11);
+  background: var(--blue-3);
+}
+
+.project-support-list article > header span[data-priority='high'],
+.project-support-list article > header span[data-priority='urgent'] {
+  color: var(--red-11);
+  background: var(--red-3);
+}
+
+.project-support-list h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.project-support-list p {
+  margin: 0;
+  color: var(--gray-11);
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.project-support-list article > footer {
+  align-items: end;
+  padding-top: 5px;
+  border-top: 1px solid var(--gray-5);
+}
+
+.project-support-list article > footer > div {
+  display: grid;
+  gap: 3px;
+}
+
+.project-support-empty,
+.project-support-state {
+  place-items: center;
+  align-content: center;
+  min-height: 320px;
+  text-align: center;
+}
+
+.project-support-empty {
+  display: grid;
+  gap: 6px;
+  padding: 28px;
+  border: 1px dashed var(--gray-7);
+  border-radius: 16px;
+}
+
+.project-support-empty h2,
+.project-support-empty p,
+.project-support-state h1,
+.project-support-state p {
+  margin: 0;
+}
+
+.project-support-empty p,
+.project-support-state p {
+  color: var(--gray-10);
+}
+
+.project-support-pagination {
+  align-items: center;
+}
+
+.project-support-pagination > span {
+  color: var(--gray-10);
+  font-size: 12px;
+}
+
+.project-support-editor {
+  position: fixed;
+  z-index: 70;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--gray-12) 44%, transparent);
+}
+
+.project-support-editor form {
+  display: grid;
+  gap: 16px;
+  width: min(560px, 100%);
+  padding: 22px;
+  border: 1px solid var(--gray-7);
+  border-radius: 18px;
+  background: var(--color-panel-solid);
+  box-shadow: 0 22px 70px color-mix(in srgb, var(--gray-12) 22%, transparent);
+}
+
+.project-support-editor h2 {
+  margin: 0;
+}
+
+.project-support-editor label {
+  display: grid;
+  gap: 7px;
+}
+
+.project-support-editor label > span {
+  color: var(--gray-11);
+  font-size: 12px;
+}
+
+.project-support-editor form > div:last-child {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.project-support-state > svg {
+  width: 30px;
+  height: 30px;
+}
+
+.project-support-state dl {
+  display: grid;
+  gap: 5px;
+  margin: 4px 0;
+}
+
+.project-support-state dt {
+  color: var(--gray-10);
+  font-size: 11px;
+}
+
+.project-support-state dd {
+  margin: 0;
+}
+
+@media (max-width: 720px) {
+  .project-support-header,
+  .project-support-list article > footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .project-support-context {
+    justify-items: start;
+  }
+}

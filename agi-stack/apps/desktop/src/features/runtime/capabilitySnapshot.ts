@@ -35,7 +35,8 @@ export type DesktopCapabilityName =
   | 'tenant-tenant-dead-letter-queue'
   | 'project-project-overview'
   | 'project-project-search'
-  | 'project-project-cron-jobs';
+  | 'project-project-cron-jobs'
+  | 'project-support';
 
 export type DesktopCapabilityScope = {
   tenant_id: string | null;
@@ -100,6 +101,7 @@ const CAPABILITY_NAMES: readonly DesktopCapabilityName[] = [
   'project-project-overview',
   'project-project-search',
   'project-project-cron-jobs',
+  'project-support',
 ];
 
 const CURRENT_CAPABILITY_CONTRACT_MINIMUMS = [

@@ -189,6 +189,24 @@ copyFileSync(
   join(compiledTenantDirectory, 'TenantAnalyticsPage.css'),
 );
 
+const compiledProjectSupportDirectory = join(
+  compiledRoot,
+  'src',
+  'features',
+  'project-support',
+);
+mkdirSync(compiledProjectSupportDirectory, { recursive: true });
+copyFileSync(
+  join(
+    desktopRoot,
+    'src',
+    'features',
+    'project-support',
+    'ProjectSupportPage.css',
+  ),
+  join(compiledProjectSupportDirectory, 'ProjectSupportPage.css'),
+);
+
 const compiledGovernanceDirectory = join(compiledRoot, 'src', 'features', 'governance');
 mkdirSync(compiledGovernanceDirectory, { recursive: true });
 copyFileSync(

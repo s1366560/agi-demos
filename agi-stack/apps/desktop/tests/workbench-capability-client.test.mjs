@@ -385,6 +385,20 @@ test('cloud client validates structured Search and Automation authorities', asyn
       },
       authority_revision: null,
     });
+    assert.deepEqual(snapshot.capabilities['project-support'], {
+      availability: 'available',
+      reason_code: null,
+      service_version: '0.1.0',
+      contract_version: '3.0.0',
+      allowed_actions: ['view', 'list', 'create', 'close', 'retry'],
+      scope: {
+        tenant_id: 'default',
+        project_id: 'project/1',
+        workspace_id: null,
+        instance_id: null,
+      },
+      authority_revision: null,
+    });
     assert.equal(
       calls[0]?.input,
       'https://api.memstack.test/api/v1/search-enhanced/capabilities',
@@ -464,6 +478,20 @@ test('local workbench capability client consumes the scoped degraded Search cont
       snapshot.capabilities['project-project-search'],
       snapshot.capabilities.search,
     );
+    assert.deepEqual(snapshot.capabilities['project-support'], {
+      availability: 'not_applicable',
+      reason_code: 'local_support_service_not_applicable',
+      service_version: null,
+      contract_version: null,
+      allowed_actions: [],
+      scope: {
+        tenant_id: 'local',
+        project_id: 'local-project',
+        workspace_id: null,
+        instance_id: null,
+      },
+      authority_revision: null,
+    });
     const searchCall = calls.find(({ input }) =>
       input.endsWith('/api/v1/search-enhanced/capabilities'),
     );
