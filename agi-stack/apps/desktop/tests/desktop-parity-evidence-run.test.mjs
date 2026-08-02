@@ -39,6 +39,20 @@ test("repository binding reads the committed contract from the requested HEAD", 
   assert.equal(binding.contractRelativePath, "AGENTS.md");
 });
 
+test("repository binding reads committed contracts larger than the default exec buffer", () => {
+  const repositoryRoot = fileURLToPath(
+    new URL("../../../../", import.meta.url),
+  );
+  const binding = inspectEvidenceRepositoryBinding({
+    repositoryRoot,
+    contractRelativePath: desiredContractRepositoryPath,
+  });
+  assert.equal(binding.contractExistsAtHead, true);
+  assert.match(binding.contractSha256, /^[0-9a-f]{64}$/u);
+  assert.equal(binding.workingTreeContractSha256, binding.contractSha256);
+  assert.equal(binding.contractMatchesWorkingTree, true);
+});
+
 function createAcceptedRun(capabilityId) {
   const run = readContractJson("evidence-run.v1.template.json");
   const contractReference =

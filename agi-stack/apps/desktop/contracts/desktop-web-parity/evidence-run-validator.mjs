@@ -17,6 +17,7 @@ import { validateJsonSchema } from "./schema-validator.mjs";
 
 const PLACEHOLDER_REVISION = "0000000000000000000000000000000000000000";
 const PLACEHOLDER_SHA256 = "0".repeat(64);
+const MAX_COMMITTED_CONTRACT_BYTES = 16 * 1024 * 1024;
 const EXECUTED_RESULTS = new Set(["passed", "failed", "blocked"]);
 const EVIDENCE_CHANNELS = ["build", "browser", "native"];
 const REQUIREMENT_CHANNELS = Object.freeze({
@@ -343,7 +344,10 @@ export function inspectEvidenceRepositoryBinding({
     committedContract = execFileSync(
       "git",
       ["show", `${headRevision}:${normalizedContractRelativePath}`],
-      { cwd: repositoryRoot },
+      {
+        cwd: repositoryRoot,
+        maxBuffer: MAX_COMMITTED_CONTRACT_BYTES,
+      },
     );
   } catch {
     // A new or modified contract cannot produce commit-bound evidence yet.
