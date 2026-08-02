@@ -2343,6 +2343,11 @@ export function App() {
 
   const identityAuthenticated = isIdentityAuthenticated(auth);
   authRef.current = auth;
+  useEffect(() => {
+    if (identityAuthenticated && invitationSignInRequested) {
+      setInvitationSignInRequested(false);
+    }
+  }, [identityAuthenticated, invitationSignInRequested]);
   const showRuntimeConfig = isWorkspaceReady(auth, config);
   const scopedConversation =
     agentConversationSession?.scopeKey === agentConversationScopeKey(config)
@@ -8569,6 +8574,7 @@ export function App() {
           authenticationPassthroughRouteIds={
             authenticationPassthroughRouteIds
           }
+          forceLegacyChildren={invitationSignInRequested}
           location={desktopProductionRouteLocation}
           mode={config.mode}
           navigation={desktopProductionRouteNavigation}

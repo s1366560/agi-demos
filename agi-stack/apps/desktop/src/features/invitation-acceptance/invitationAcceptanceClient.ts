@@ -140,6 +140,7 @@ function reasonCodeForStatus(
   status: number,
   phase: 'verification' | 'acceptance',
 ): string {
+  if (status === 400) return 'invitation_token_invalid_or_expired';
   if (status === 401) return 'invitation_acceptance_authentication_required';
   if (status === 403) return 'invitation_acceptance_forbidden';
   if (status === 404 || status === 410) return 'invitation_token_invalid_or_expired';
