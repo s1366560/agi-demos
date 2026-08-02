@@ -70,7 +70,7 @@ test('analytics presentation exposes empty and degraded states without replacing
         ),
         totalStorageBytes: unavailableField(
           null,
-          'local_tenant_memory_projection_unavailable',
+          'local_tenant_storage_projection_unavailable',
         ),
         totalProjects: availableField(1),
         periodDays: 30,
