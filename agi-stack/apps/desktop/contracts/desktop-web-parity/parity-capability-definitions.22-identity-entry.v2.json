@@ -407,7 +407,23 @@
         "navigate-back",
         "retry"
       ],
-      "cloud_status": "planned",
+      "cloud_actions": [
+        "enter-code",
+        "approve",
+        "navigate-back",
+        "retry"
+      ],
+      "cloud_status": "implemented",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/DesktopProductionRouter.tsx",
+        "agi-stack/apps/desktop/src/features/device-approval/deviceApprovalRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/device-approval/DeviceApprovalPage.tsx",
+        "agi-stack/apps/desktop/src/features/device-approval/deviceApprovalClient.ts",
+        "agi-stack/apps/desktop/src/features/device-approval/deviceApprovalCapability.ts",
+        "agi-stack/apps/desktop/src/features/device-approval/deviceApprovalModel.ts"
+      ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "local_cloud_device_approval_not_applicable",
@@ -421,9 +437,9 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "NONE",
-          "path": "unavailable:desktop_native_route_planned",
-          "authority": "none"
+          "method": "POST",
+          "path": "/api/v1/auth/device/approve",
+          "authority": "cloud_service"
         },
         {
           "surface": "desktop_local",
@@ -452,6 +468,30 @@
           "feature_gate": null
         },
         {
+          "surface": "desktop_cloud",
+          "actions": [
+            "enter-code",
+            "navigate-back",
+            "retry"
+          ],
+          "authentication": "authenticated",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "approve"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "pending_device_code"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
           "surface": "web",
           "actions": [
             "approve"
@@ -473,7 +513,7 @@
         "retry"
       ],
       "expected_observable_result": "Cloud Desktop renders a native device approval route, validates the one-time code, requires an authenticated Cloud identity, and returns structured approval or expiry state without loading the Web page. Local Desktop returns a stable not-applicable result.",
-      "judgment_rationale": "DeviceApprove is a production-only Web route for approving another client's device code. Electron can initiate its own device flow but does not implement this approval page, and the operation has no Local authority."
+      "judgment_rationale": "DeviceApprove is a production-only Web route for approving another client's device code. Cloud Desktop now registers a native global /device route, preserves the authenticated deep link, validates and confirms the code, and calls the strict Cloud approval contract through an isolated client. Local mode is stopped by the capability gate with local_cloud_device_approval_not_applicable and performs no approval request."
     }
   ],
   "source_ownership": {
