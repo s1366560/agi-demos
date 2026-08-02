@@ -109,7 +109,7 @@
       "title": "Tenant Creation",
       "domain": "tenant-operations",
       "scope": [
-        "tenant"
+        "global"
       ],
       "web_route_ids": [],
       "api_method": "POST",
@@ -129,7 +129,23 @@
         "return-to-tenant-list",
         "retry"
       ],
-      "cloud_status": "planned",
+      "cloud_actions": [
+        "create",
+        "cancel",
+        "return-to-tenant-list",
+        "retry"
+      ],
+      "cloud_status": "implemented",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/DesktopProductionRouter.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-creation/tenantCreationRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-creation/TenantCreationPage.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-creation/tenantCreationClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-creation/tenantCreationCapability.ts",
+        "agi-stack/apps/desktop/src/features/tenant-creation/tenantCreationModel.ts"
+      ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "local_tenant_creation_not_applicable",
@@ -143,9 +159,9 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "NONE",
-          "path": "unavailable:desktop_native_route_planned",
-          "authority": "none"
+          "method": "POST",
+          "path": "/api/v1/tenants/",
+          "authority": "cloud_service"
         },
         {
           "surface": "desktop_local",
@@ -173,17 +189,39 @@
           "authorization": [],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "create",
+            "cancel",
+            "return-to-tenant-list",
+            "retry"
+          ],
+          "authentication": "authenticated",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
       "interaction_states": [
         "form-entry",
+        "validation-error",
         "submit",
+        "submitting",
+        "success",
         "conflict",
+        "forbidden",
+        "authority-unavailable",
         "cancel",
+        "escape",
+        "window-blur",
+        "focus-restore",
+        "catalog-refresh",
         "retry"
       ],
-      "expected_observable_result": "Cloud Desktop applies the same authenticated tenant-creation authority as Web, renders creation natively, and returns to the tenant selection flow while preserving server validation errors. Local Desktop returns a stable not-applicable result.",
-      "judgment_rationale": "NewTenant is a production-only Web page. It returns to the tenant list after creation rather than opening the new tenant, and the server does not publish a dedicated conflict response for generated slug collisions. Desktop has no complete native tenant-creation route; Local mode intentionally keeps a fixed application tenant."
+      "expected_observable_result": "Cloud Desktop opens an authenticated global /tenants/new route without changing the active tenant, project, workspace, or conversation; validates and submits the native form through POST /api/v1/tenants/; displays the plan actually returned by authority; and refreshes the tenant catalog before returning to the workbench. Local Desktop returns local_tenant_creation_not_applicable before loading the module or making a Cloud request.",
+      "judgment_rationale": "NewTenant is a production-only Web page backed by POST /api/v1/tenants/. Cloud Desktop now registers a native global route with an isolated strict 201 client, Web-compatible name, description, and plan inputs, deterministic dirty-cancel behavior, duplicate-submit prevention, request cancellation, structured HTTP reason codes, an immutable catalog upsert, and an authoritative catalog refresh. The backend create handler currently persists name and description but comments out requested plan and quota persistence, so Desktop reports a returned-plan mismatch instead of claiming the requested plan was saved. Local mode intentionally keeps a fixed application tenant and is stopped by the capability gate with local_tenant_creation_not_applicable."
     },
     {
       "id": "user-profile",
