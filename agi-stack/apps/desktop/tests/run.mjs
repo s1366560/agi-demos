@@ -97,6 +97,24 @@ copyFileSync(
   join(compiledDeviceApprovalDirectory, 'DeviceApprovalPage.css'),
 );
 
+const compiledTenantCreationDirectory = join(
+  compiledRoot,
+  'src',
+  'features',
+  'tenant-creation',
+);
+mkdirSync(compiledTenantCreationDirectory, { recursive: true });
+copyFileSync(
+  join(
+    desktopRoot,
+    'src',
+    'features',
+    'tenant-creation',
+    'TenantCreationPage.css',
+  ),
+  join(compiledTenantCreationDirectory, 'TenantCreationPage.css'),
+);
+
 const compiledSettingsDirectory = join(compiledRoot, 'src', 'features', 'settings');
 mkdirSync(compiledSettingsDirectory, { recursive: true });
 copyFileSync(

@@ -1,0 +1,212 @@
+.tenant-creation-page {
+  width: min(100%, 660px);
+  margin: clamp(24px, 7vh, 76px) auto;
+  padding: clamp(24px, 4vw, 42px);
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 22px;
+  background: var(--desktop-surface-2);
+  color: var(--desktop-text);
+  box-shadow: 0 18px 50px rgba(var(--desktop-black-rgb), 0.35);
+}
+
+.tenant-creation-page > header,
+.tenant-creation-success {
+  text-align: center;
+}
+
+.tenant-creation-icon,
+.tenant-creation-success > svg {
+  display: inline-grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--desktop-surface-3);
+  color: var(--desktop-accent);
+}
+
+.tenant-creation-icon svg,
+.tenant-creation-success > svg {
+  width: 25px;
+  height: 25px;
+}
+
+.tenant-creation-eyebrow {
+  margin: 18px 0 6px;
+  color: var(--desktop-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.tenant-creation-page h1,
+.tenant-creation-page h2,
+.tenant-creation-page p {
+  margin: 0;
+}
+
+.tenant-creation-page h1 {
+  font-size: clamp(26px, 4vw, 36px);
+}
+
+.tenant-creation-page header > p:last-child,
+.tenant-creation-success > p:not(.tenant-creation-eyebrow) {
+  margin-top: 10px;
+  color: var(--desktop-muted);
+  line-height: 1.6;
+}
+
+.tenant-creation-error,
+.tenant-creation-warning {
+  display: grid;
+  gap: 6px;
+  margin-top: 24px;
+  padding: 14px 16px;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 14px;
+  background: var(--desktop-surface-3);
+}
+
+.tenant-creation-error {
+  color: var(--desktop-red);
+}
+
+.tenant-creation-error code {
+  color: var(--desktop-faint);
+  font-size: 11px;
+}
+
+.tenant-creation-warning {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  color: var(--desktop-amber);
+  text-align: left;
+}
+
+.tenant-creation-warning p {
+  color: var(--desktop-muted);
+  line-height: 1.5;
+}
+
+.tenant-creation-page form {
+  display: grid;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.tenant-creation-page label {
+  margin-top: 8px;
+  font-weight: 650;
+}
+
+.tenant-creation-page input,
+.tenant-creation-page textarea,
+.tenant-creation-page select {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--desktop-border-6);
+  border-radius: 12px;
+  background: var(--desktop-surface-1);
+  color: var(--desktop-text);
+  font: inherit;
+}
+
+.tenant-creation-page textarea {
+  resize: vertical;
+}
+
+.tenant-creation-page input:focus-visible,
+.tenant-creation-page textarea:focus-visible,
+.tenant-creation-page select:focus-visible,
+.tenant-creation-page button:focus-visible {
+  outline: 2px solid var(--desktop-cyan);
+  outline-offset: 2px;
+}
+
+.tenant-creation-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.tenant-creation-page button {
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--desktop-border-6);
+  border-radius: 10px;
+  background: var(--desktop-surface-3);
+  color: var(--desktop-text);
+  font-weight: 650;
+}
+
+.tenant-creation-page button:last-child {
+  border-color: var(--desktop-text);
+  background: var(--desktop-text);
+  color: var(--desktop-bg);
+}
+
+.tenant-creation-page button:disabled,
+.tenant-creation-page input:disabled,
+.tenant-creation-page textarea:disabled,
+.tenant-creation-page select:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.tenant-creation-dialog-backdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(var(--desktop-overlay-1-rgb), 0.76);
+}
+
+.tenant-creation-dialog {
+  width: min(100%, 480px);
+  padding: 26px;
+  border: 1px solid var(--desktop-border-6);
+  border-radius: 18px;
+  background: var(--desktop-surface-2);
+  box-shadow: 0 24px 80px rgba(var(--desktop-black-rgb), 0.5);
+  text-align: left;
+}
+
+.tenant-creation-dialog > svg {
+  width: 24px;
+  height: 24px;
+  color: var(--desktop-amber);
+}
+
+.tenant-creation-dialog h2 {
+  margin-top: 12px;
+}
+
+.tenant-creation-dialog > p {
+  margin-top: 10px;
+  color: var(--desktop-muted);
+  line-height: 1.55;
+}
+
+.tenant-creation-success > button {
+  margin-top: 24px;
+}
+
+@media (max-width: 680px) {
+  .tenant-creation-page {
+    margin: 16px auto;
+    padding: 22px;
+    border-radius: 16px;
+  }
+
+  .tenant-creation-actions {
+    flex-direction: column-reverse;
+  }
+
+  .tenant-creation-page button {
+    width: 100%;
+  }
+}
