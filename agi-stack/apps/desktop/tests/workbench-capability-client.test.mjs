@@ -337,6 +337,28 @@ test('cloud client validates structured Search and Automation authorities', asyn
       },
       authority_revision: null,
     });
+    assert.deepEqual(snapshot.capabilities['tenant-tenant-deploy'], {
+      availability: 'degraded',
+      reason_code:
+        'runtime_deployments_mutations_and_instance_discovery_partial',
+      service_version: '0.1.0',
+      contract_version: '3.0.0',
+      allowed_actions: [
+        'view',
+        'list',
+        'refresh',
+        'paginate',
+        'inspect-progress',
+        'reconnect-progress',
+      ],
+      scope: {
+        tenant_id: 'default',
+        project_id: null,
+        workspace_id: null,
+        instance_id: null,
+      },
+      authority_revision: null,
+    });
     assert.deepEqual(snapshot.capabilities['tenant-tenant-dead-letter-queue'], {
       availability: 'available',
       reason_code: null,
@@ -884,6 +906,20 @@ test('Workspace Collaboration 404 and local mode remain structured unavailable',
     assert.deepEqual(local.capabilities['tenant-tenant-clusters'], {
       availability: 'not_applicable',
       reason_code: 'cloud_cluster_control_not_applicable',
+      service_version: null,
+      contract_version: null,
+      allowed_actions: [],
+      scope: {
+        tenant_id: 'local',
+        project_id: null,
+        workspace_id: null,
+        instance_id: null,
+      },
+      authority_revision: null,
+    });
+    assert.deepEqual(local.capabilities['tenant-tenant-deploy'], {
+      availability: 'not_applicable',
+      reason_code: 'cloud_deployment_authority_not_applicable',
       service_version: null,
       contract_version: null,
       allowed_actions: [],

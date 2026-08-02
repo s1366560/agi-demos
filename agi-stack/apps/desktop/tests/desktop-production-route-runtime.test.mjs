@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 const {
   createProjectOverviewRouteBindingForRuntime,
   createRuntimeClustersRouteBindingForRuntime,
+  createRuntimeDeploymentsRouteBindingForRuntime,
   createRuntimeInstancesRouteBindingForRuntime,
   createRuntimePoolRouteBindingForRuntime,
   createUnifiedRuntimesRouteBindingForRuntime,
@@ -140,6 +141,27 @@ test('capability resolution returns only the exact own snapshot entry', () => {
     ),
     null,
   );
+});
+
+test('deployment capability resolution binds the optional instance route context', () => {
+  const entry = capabilityEntry({
+    scope: {
+      tenant_id: tenantId,
+      project_id: null,
+      workspace_id: null,
+      instance_id: null,
+    },
+  });
+  const snapshot = capabilitySnapshot({
+    'tenant-tenant-deploy': entry,
+  });
+  const resolved = resolveDesktopRouteCapability(
+    snapshot,
+    'tenant-tenant-deploy',
+    { tenantId, instanceId: 'instance-1' },
+  );
+  assert.equal(resolved.scope.instance_id, 'instance-1');
+  assert.equal(entry.scope.instance_id, null);
 });
 
 test('cloud project overview binding constructs only cloud authority', () => {
@@ -346,6 +368,52 @@ test('Runtime Clusters binding rejects tenant scope drift before client authorit
       }),
     /runtime_clusters_runtime_scope_mismatch/u,
   );
+});
+
+test('Runtime Deployments binding preserves instance scope and keeps Local cloud-only', async () => {
+  const cloud = createRuntimeDeploymentsRouteBindingForRuntime(
+    runtimeConfig('cloud'),
+    { tenantId, instanceId: 'instance-1' },
+  );
+  assert.deepEqual(cloud.scope, {
+    authority: 'cloud',
+    tenantId,
+    instanceId: 'instance-1',
+  });
+  assert.equal(cloud.controller.getSnapshot().authority, 'cloud');
+
+  const local = createRuntimeDeploymentsRouteBindingForRuntime(
+    runtimeConfig('local'),
+    { tenantId, instanceId: 'instance-1' },
+  );
+  assert.deepEqual(local.scope, {
+    authority: 'local',
+    tenantId,
+    instanceId: 'instance-1',
+  });
+  await local.controller.load(local.scope);
+  assert.equal(local.controller.getSnapshot().state, 'unavailable');
+  assert.equal(
+    local.controller.getSnapshot().reasonCode,
+    'cloud_deployment_authority_not_applicable',
+  );
+});
+
+test('Runtime Deployments binding rejects tenant drift and preserves missing instance scope', () => {
+  assert.throws(
+    () =>
+      createRuntimeDeploymentsRouteBindingForRuntime(
+        runtimeConfig('cloud'),
+        { tenantId: 'tenant-other', instanceId: 'instance-1' },
+      ),
+    /runtime_deployments_runtime_scope_mismatch/u,
+  );
+  const missing = createRuntimeDeploymentsRouteBindingForRuntime(
+    runtimeConfig('cloud'),
+    { tenantId },
+  );
+  assert.equal(missing.scope.instanceId, null);
+  assert.equal(missing.controller.getSnapshot().state, 'loading');
 });
 
 test('Unified Runtimes binding preserves exact Cloud and Local scope authority', async () => {

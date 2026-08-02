@@ -27,6 +27,9 @@ import { createRuntimeInstancesClient } from '../runtime-instances/runtimeInstan
 import type { RuntimeClustersRouteBinding } from '../runtime-clusters/runtimeClustersRouteModule';
 import { createRuntimeClustersController } from '../runtime-clusters/runtimeClustersController';
 import { createRuntimeClustersClient } from '../runtime-clusters/runtimeClustersClient';
+import type { RuntimeDeploymentsRouteBinding } from '../runtime-deployments/runtimeDeploymentsRouteModule';
+import { createRuntimeDeploymentsController } from '../runtime-deployments/runtimeDeploymentsController';
+import { createRuntimeDeploymentsClient } from '../runtime-deployments/runtimeDeploymentsClient';
 import type { UnifiedRuntimesRouteBinding } from '../unified-runtimes/unifiedRuntimesRouteModule';
 import { createUnifiedRuntimesController } from '../unified-runtimes/unifiedRuntimesController';
 import { createUnifiedRuntimesClient } from '../unified-runtimes/unifiedRuntimesClient';
@@ -96,14 +99,28 @@ export function desktopRouteBasePermissionsForAuth(
 export function resolveDesktopRouteCapability(
   snapshot: DesktopCapabilitySnapshot | null,
   capability: string,
-  _context: DesktopRouteContext,
+  context: DesktopRouteContext,
 ): DesktopCapabilityAvailability | null {
   if (snapshot === null || !Object.hasOwn(snapshot.capabilities, capability)) {
     return null;
   }
   const capabilities: Readonly<Record<string, DesktopCapabilityAvailability>> =
     snapshot.capabilities;
-  return capabilities[capability] ?? null;
+  const availability = capabilities[capability] ?? null;
+  if (
+    availability === null ||
+    capability !== 'tenant-tenant-deploy' ||
+    context.instanceId === undefined
+  ) {
+    return availability;
+  }
+  return Object.freeze({
+    ...availability,
+    scope: Object.freeze({
+      ...availability.scope,
+      instance_id: context.instanceId,
+    }),
+  });
 }
 
 export function createProjectOverviewRouteBindingForRuntime(
@@ -332,6 +349,29 @@ export function createRuntimeClustersRouteBindingForRuntime(
   const client = createRuntimeClustersClient(config);
   return Object.freeze({
     controller: createRuntimeClustersController({
+      authority: config.mode,
+      client,
+      initialScope: scope,
+    }),
+    scope,
+  });
+}
+
+export function createRuntimeDeploymentsRouteBindingForRuntime(
+  config: DesktopRuntimeConfig,
+  context: Readonly<{ tenantId: string; instanceId?: string }>,
+): RuntimeDeploymentsRouteBinding {
+  if (config.tenantId !== context.tenantId) {
+    throw new Error('runtime_deployments_runtime_scope_mismatch');
+  }
+  const scope = Object.freeze({
+    authority: config.mode,
+    tenantId: context.tenantId,
+    instanceId: context.instanceId ?? null,
+  });
+  const client = createRuntimeDeploymentsClient(config);
+  return Object.freeze({
+    controller: createRuntimeDeploymentsController({
       authority: config.mode,
       client,
       initialScope: scope,

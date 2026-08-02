@@ -29,6 +29,7 @@ export const TENANT_RUNTIMES_ROUTE_ID = 'tenant-tenant-runtimes' as const;
 export const TENANT_POOL_ROUTE_ID = 'tenant-tenant-pool' as const;
 export const TENANT_INSTANCES_ROUTE_ID = 'tenant-tenant-instances' as const;
 export const TENANT_CLUSTERS_ROUTE_ID = 'tenant-tenant-clusters' as const;
+export const TENANT_DEPLOY_ROUTE_ID = 'tenant-tenant-deploy' as const;
 export const TENANT_DEAD_LETTER_QUEUE_ROUTE_ID = 'tenant-tenant-dead-letter-queue' as const;
 
 const IMPLEMENTED_ROUTE_IDS = new Set<CanonicalDesktopRouteId>([
@@ -43,6 +44,7 @@ const IMPLEMENTED_ROUTE_IDS = new Set<CanonicalDesktopRouteId>([
   TENANT_POOL_ROUTE_ID,
   TENANT_INSTANCES_ROUTE_ID,
   TENANT_CLUSTERS_ROUTE_ID,
+  TENANT_DEPLOY_ROUTE_ID,
   TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
 ]);
 const CANONICAL_ROUTE_ID_SET = new Set<string>(CANONICAL_DESKTOP_ROUTE_IDS);

@@ -174,6 +174,24 @@ copyFileSync(
   ),
   join(compiledRuntimeClustersDirectory, 'RuntimeClustersPage.css'),
 );
+
+const compiledRuntimeDeploymentsDirectory = join(
+  compiledRoot,
+  'src',
+  'features',
+  'runtime-deployments',
+);
+mkdirSync(compiledRuntimeDeploymentsDirectory, { recursive: true });
+copyFileSync(
+  join(
+    desktopRoot,
+    'src',
+    'features',
+    'runtime-deployments',
+    'RuntimeDeploymentsPage.css',
+  ),
+  join(compiledRuntimeDeploymentsDirectory, 'RuntimeDeploymentsPage.css'),
+);
 mkdirSync(compiledRuntimeInstancesDirectory, { recursive: true });
 copyFileSync(
   join(
