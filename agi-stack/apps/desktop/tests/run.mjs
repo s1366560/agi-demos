@@ -192,6 +192,23 @@ copyFileSync(
   ),
   join(compiledRuntimeDeploymentsDirectory, 'RuntimeDeploymentsPage.css'),
 );
+const compiledInstanceTemplatesDirectory = join(
+  compiledRoot,
+  'src',
+  'features',
+  'instance-templates',
+);
+mkdirSync(compiledInstanceTemplatesDirectory, { recursive: true });
+copyFileSync(
+  join(
+    desktopRoot,
+    'src',
+    'features',
+    'instance-templates',
+    'InstanceTemplatesPage.css',
+  ),
+  join(compiledInstanceTemplatesDirectory, 'InstanceTemplatesPage.css'),
+);
 mkdirSync(compiledRuntimeInstancesDirectory, { recursive: true });
 copyFileSync(
   join(

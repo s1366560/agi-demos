@@ -5,6 +5,7 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const {
   createProjectOverviewRouteBindingForRuntime,
+  createInstanceTemplatesRouteBindingForRuntime,
   createRuntimeClustersRouteBindingForRuntime,
   createRuntimeDeploymentsRouteBindingForRuntime,
   createRuntimeInstancesRouteBindingForRuntime,
@@ -414,6 +415,37 @@ test('Runtime Deployments binding rejects tenant drift and preserves missing ins
   );
   assert.equal(missing.scope.instanceId, null);
   assert.equal(missing.controller.getSnapshot().state, 'loading');
+});
+
+test('Instance Templates binding preserves exact Cloud and Local tenant authority', async () => {
+  const cloud = createInstanceTemplatesRouteBindingForRuntime(
+    runtimeConfig('cloud'),
+    { tenantId },
+  );
+  assert.deepEqual(cloud.scope, { authority: 'cloud', tenantId });
+  assert.equal(cloud.controller.getSnapshot().authority, 'cloud');
+
+  const local = createInstanceTemplatesRouteBindingForRuntime(
+    runtimeConfig('local'),
+    { tenantId },
+  );
+  assert.deepEqual(local.scope, { authority: 'local', tenantId });
+  await local.controller.load(local.scope);
+  assert.equal(local.controller.getSnapshot().state, 'unavailable');
+  assert.equal(
+    local.controller.getSnapshot().reasonCode,
+    'local_instance_template_authority_unavailable',
+  );
+});
+
+test('Instance Templates binding rejects tenant scope drift', () => {
+  assert.throws(
+    () =>
+      createInstanceTemplatesRouteBindingForRuntime(runtimeConfig('cloud'), {
+        tenantId: 'tenant-other',
+      }),
+    /instance_templates_runtime_scope_mismatch/u,
+  );
 });
 
 test('Unified Runtimes binding preserves exact Cloud and Local scope authority', async () => {

@@ -10,6 +10,7 @@ import {
   normalizeAutomationCapabilities,
 } from '../automations/automationModel';
 import { deadLetterQueueCapability } from '../governance/deadLetterQueueCapability';
+import { instanceTemplatesCapability } from '../instance-templates/instanceTemplatesCapability';
 import { runtimeClustersCapability } from '../runtime-clusters/runtimeClustersCapability';
 import { runtimeDeploymentsCapability } from '../runtime-deployments/runtimeDeploymentsCapability';
 import { runtimeInstancesCapability } from '../runtime-instances/runtimeInstancesCapability';
@@ -162,6 +163,8 @@ export function createDesktopWorkbenchCapabilityClient(
           'tenant-tenant-instances': runtimeInstancesCapability(config),
           'tenant-tenant-clusters': runtimeClustersCapability(config),
           'tenant-tenant-deploy': runtimeDeploymentsCapability(config),
+          'tenant-tenant-instance-templates':
+            instanceTemplatesCapability(config),
           'tenant-tenant-dead-letter-queue': deadLetterQueueCapability(config),
         },
       };

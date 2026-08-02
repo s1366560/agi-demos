@@ -30,6 +30,9 @@ import { createRuntimeClustersClient } from '../runtime-clusters/runtimeClusters
 import type { RuntimeDeploymentsRouteBinding } from '../runtime-deployments/runtimeDeploymentsRouteModule';
 import { createRuntimeDeploymentsController } from '../runtime-deployments/runtimeDeploymentsController';
 import { createRuntimeDeploymentsClient } from '../runtime-deployments/runtimeDeploymentsClient';
+import type { InstanceTemplatesRouteBinding } from '../instance-templates/instanceTemplatesRouteModule';
+import { createInstanceTemplatesController } from '../instance-templates/instanceTemplatesController';
+import { createInstanceTemplatesClient } from '../instance-templates/instanceTemplatesClient';
 import type { UnifiedRuntimesRouteBinding } from '../unified-runtimes/unifiedRuntimesRouteModule';
 import { createUnifiedRuntimesController } from '../unified-runtimes/unifiedRuntimesController';
 import { createUnifiedRuntimesClient } from '../unified-runtimes/unifiedRuntimesClient';
@@ -372,6 +375,28 @@ export function createRuntimeDeploymentsRouteBindingForRuntime(
   const client = createRuntimeDeploymentsClient(config);
   return Object.freeze({
     controller: createRuntimeDeploymentsController({
+      authority: config.mode,
+      client,
+      initialScope: scope,
+    }),
+    scope,
+  });
+}
+
+export function createInstanceTemplatesRouteBindingForRuntime(
+  config: DesktopRuntimeConfig,
+  context: Readonly<{ tenantId: string }>,
+): InstanceTemplatesRouteBinding {
+  if (config.tenantId !== context.tenantId) {
+    throw new Error('instance_templates_runtime_scope_mismatch');
+  }
+  const scope = Object.freeze({
+    authority: config.mode,
+    tenantId: context.tenantId,
+  });
+  const client = createInstanceTemplatesClient(config);
+  return Object.freeze({
+    controller: createInstanceTemplatesController({
       authority: config.mode,
       client,
       initialScope: scope,

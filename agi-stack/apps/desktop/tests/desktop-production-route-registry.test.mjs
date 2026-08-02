@@ -21,6 +21,7 @@ const {
   TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
   TENANT_CLUSTERS_ROUTE_ID,
   TENANT_DEPLOY_ROUTE_ID,
+  TENANT_INSTANCE_TEMPLATES_ROUTE_ID,
   TENANT_INSTANCES_ROUTE_ID,
   TENANT_POOL_ROUTE_ID,
   TENANT_PROJECTS_ROUTE_ID,
@@ -254,6 +255,22 @@ function implementedRuntimeDeploymentsModule(overrides = {}) {
   });
 }
 
+function implementedInstanceTemplatesModule(overrides = {}) {
+  function InstanceTemplatesRoute() {
+    return React.createElement('section', null, 'Instance Templates route');
+  }
+  return Object.freeze({
+    routeId: TENANT_INSTANCE_TEMPLATES_ROUTE_ID,
+    disposition: 'implemented',
+    availability: 'available',
+    reasonCode: null,
+    capability: TENANT_INSTANCE_TEMPLATES_ROUTE_ID,
+    localPolicy: 'native_equivalent',
+    Surface: InstanceTemplatesRoute,
+    ...overrides,
+  });
+}
+
 function implementedUnifiedRuntimesModule(overrides = {}) {
   function UnifiedRuntimesRoute() {
     return React.createElement('section', null, 'Unified Runtimes route');
@@ -284,6 +301,7 @@ function createRegistry(
   runtimeInstancesLoader = async () => implementedRuntimeInstancesModule(),
   runtimeClustersLoader = async () => implementedRuntimeClustersModule(),
   runtimeDeploymentsLoader = async () => implementedRuntimeDeploymentsModule(),
+  instanceTemplatesLoader = async () => implementedInstanceTemplatesModule(),
 ) {
   return createDesktopProductionRouteRegistry({
     implementedLoaders: {
@@ -300,6 +318,7 @@ function createRegistry(
       [TENANT_INSTANCES_ROUTE_ID]: runtimeInstancesLoader,
       [TENANT_CLUSTERS_ROUTE_ID]: runtimeClustersLoader,
       [TENANT_DEPLOY_ROUTE_ID]: runtimeDeploymentsLoader,
+      [TENANT_INSTANCE_TEMPLATES_ROUTE_ID]: instanceTemplatesLoader,
     },
   });
 }
@@ -318,6 +337,10 @@ test('production registry requires every implemented project route loader', () =
   assert.equal(TENANT_INSTANCES_ROUTE_ID, 'tenant-tenant-instances');
   assert.equal(TENANT_CLUSTERS_ROUTE_ID, 'tenant-tenant-clusters');
   assert.equal(TENANT_DEPLOY_ROUTE_ID, 'tenant-tenant-deploy');
+  assert.equal(
+    TENANT_INSTANCE_TEMPLATES_ROUTE_ID,
+    'tenant-tenant-instance-templates',
+  );
   assert.throws(
     () =>
       createDesktopProductionRouteRegistry({
@@ -384,7 +407,7 @@ test('production registry requires every implemented project route loader', () =
   );
 });
 
-test('all 51 production loaders remain lazy and thirteen routes are real modules', async () => {
+test('all 51 production loaders remain lazy and fourteen routes are real modules', async () => {
   let projectLoadCount = 0;
   let searchLoadCount = 0;
   let cronJobsLoadCount = 0;
@@ -398,6 +421,7 @@ test('all 51 production loaders remain lazy and thirteen routes are real modules
   let runtimeInstancesLoadCount = 0;
   let runtimeClustersLoadCount = 0;
   let runtimeDeploymentsLoadCount = 0;
+  let instanceTemplatesLoadCount = 0;
   const projectModule = implementedProjectModule();
   const searchModule = implementedSearchModule();
   const cronJobsModule = implementedCronJobsModule();
@@ -411,6 +435,7 @@ test('all 51 production loaders remain lazy and thirteen routes are real modules
   const runtimeInstancesModule = implementedRuntimeInstancesModule();
   const runtimeClustersModule = implementedRuntimeClustersModule();
   const runtimeDeploymentsModule = implementedRuntimeDeploymentsModule();
+  const instanceTemplatesModule = implementedInstanceTemplatesModule();
   const registry = createRegistry(
     async () => {
       projectLoadCount += 1;
@@ -464,6 +489,10 @@ test('all 51 production loaders remain lazy and thirteen routes are real modules
       runtimeDeploymentsLoadCount += 1;
       return runtimeDeploymentsModule;
     },
+    async () => {
+      instanceTemplatesLoadCount += 1;
+      return instanceTemplatesModule;
+    },
   );
 
   assert.equal(registry.definitions.length, 51);
@@ -480,6 +509,7 @@ test('all 51 production loaders remain lazy and thirteen routes are real modules
   assert.equal(runtimeInstancesLoadCount, 0);
   assert.equal(runtimeClustersLoadCount, 0);
   assert.equal(runtimeDeploymentsLoadCount, 0);
+  assert.equal(instanceTemplatesLoadCount, 0);
 
   const loaded = await Promise.all(
     registry.definitions.map(async (definition) => ({
@@ -500,6 +530,7 @@ test('all 51 production loaders remain lazy and thirteen routes are real modules
   assert.equal(runtimeInstancesLoadCount, 1);
   assert.equal(runtimeClustersLoadCount, 1);
   assert.equal(runtimeDeploymentsLoadCount, 1);
+  assert.equal(instanceTemplatesLoadCount, 1);
 
   const implemented = loaded.filter(
     ({ module }) => module.disposition === 'implemented',
@@ -507,7 +538,7 @@ test('all 51 production loaders remain lazy and thirteen routes are real modules
   const planned = loaded.filter(
     ({ module }) => module.disposition === 'planned',
   );
-  assert.equal(implemented.length, 13);
+  assert.equal(implemented.length, 14);
   assert.deepEqual(
     implemented.map(({ definition }) => definition.id).sort(),
     [
@@ -524,6 +555,7 @@ test('all 51 production loaders remain lazy and thirteen routes are real modules
       TENANT_INSTANCES_ROUTE_ID,
       TENANT_CLUSTERS_ROUTE_ID,
       TENANT_DEPLOY_ROUTE_ID,
+      TENANT_INSTANCE_TEMPLATES_ROUTE_ID,
     ].sort(),
   );
   assert.equal(
@@ -597,7 +629,14 @@ test('all 51 production loaders remain lazy and thirteen routes are real modules
       .module,
     runtimeDeploymentsModule,
   );
-  assert.equal(planned.length, 38);
+  assert.equal(
+    implemented.find(
+      ({ definition }) =>
+        definition.id === TENANT_INSTANCE_TEMPLATES_ROUTE_ID,
+    ).module,
+    instanceTemplatesModule,
+  );
+  assert.equal(planned.length, 37);
 
   for (const { definition, module } of planned) {
     assert.equal(module.routeId, definition.id);

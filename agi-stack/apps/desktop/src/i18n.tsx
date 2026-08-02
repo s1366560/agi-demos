@@ -9,6 +9,10 @@ import {
   deadLetterQueueZhCN,
 } from './features/governance/locales/deadLetterQueueMessages';
 import {
+  instanceTemplatesEnUS,
+  instanceTemplatesZhCN,
+} from './features/instance-templates/locales/instanceTemplatesMessages';
+import {
   runtimePoolEnUS,
   runtimePoolZhCN,
 } from './features/runtime-pool/locales/runtimePoolMessages';
@@ -68,6 +72,7 @@ const STORAGE_KEY = 'agistack.desktop.locale';
 const enUS: Record<string, string> = {
   ...deadLetterQueueEnUS,
   ...desktopProductionRouterEnUS,
+  ...instanceTemplatesEnUS,
   ...nativeUnavailableRouteEnUS,
   ...projectOverviewEnUS,
   ...runtimeClustersEnUS,
@@ -3671,6 +3676,7 @@ const enUS: Record<string, string> = {
 const zhCN: Record<string, string> = {
   ...deadLetterQueueZhCN,
   ...desktopProductionRouterZhCN,
+  ...instanceTemplatesZhCN,
   ...nativeUnavailableRouteZhCN,
   ...projectOverviewZhCN,
   ...runtimeClustersZhCN,

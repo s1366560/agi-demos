@@ -294,6 +294,7 @@ import {
   TENANT_OVERVIEW_ROUTE_ID,
   TENANT_CLUSTERS_ROUTE_ID,
   TENANT_DEPLOY_ROUTE_ID,
+  TENANT_INSTANCE_TEMPLATES_ROUTE_ID,
   TENANT_INSTANCES_ROUTE_ID,
   TENANT_POOL_ROUTE_ID,
   TENANT_PROJECTS_ROUTE_ID,
@@ -308,6 +309,7 @@ import {
   createProjectOverviewRouteBindingForRuntime,
   createRuntimeClustersRouteBindingForRuntime,
   createRuntimeDeploymentsRouteBindingForRuntime,
+  createInstanceTemplatesRouteBindingForRuntime,
   createRuntimeInstancesRouteBindingForRuntime,
   createRuntimePoolRouteBindingForRuntime,
   createUnifiedRuntimesRouteBindingForRuntime,
@@ -334,6 +336,7 @@ import {
 } from './features/navigation/keyboardShortcutModel';
 import { createProjectOverviewRouteModuleLoader } from './features/project/projectOverviewRouteModule';
 import { createDeadLetterQueueRouteModuleLoader } from './features/governance/deadLetterQueueRouteModule';
+import { createInstanceTemplatesRouteModuleLoader } from './features/instance-templates/instanceTemplatesRouteModule';
 import { createRuntimeClustersRouteModuleLoader } from './features/runtime-clusters/runtimeClustersRouteModule';
 import { createRuntimeDeploymentsRouteModuleLoader } from './features/runtime-deployments/runtimeDeploymentsRouteModule';
 import { createRuntimeInstancesRouteModuleLoader } from './features/runtime-instances/runtimeInstancesRouteModule';
@@ -2081,6 +2084,14 @@ export function App() {
             createRuntimeDeploymentsRouteModuleLoader({
               createBinding: (context) =>
                 createRuntimeDeploymentsRouteBindingForRuntime(
+                  configRef.current,
+                  context,
+                ),
+            }),
+          [TENANT_INSTANCE_TEMPLATES_ROUTE_ID]:
+            createInstanceTemplatesRouteModuleLoader({
+              createBinding: (context) =>
+                createInstanceTemplatesRouteBindingForRuntime(
                   configRef.current,
                   context,
                 ),
