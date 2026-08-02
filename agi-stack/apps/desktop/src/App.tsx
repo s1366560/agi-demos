@@ -8422,23 +8422,36 @@ export function App() {
         radius="medium"
         scaling="95%"
       >
-        <LoginScreen
-          auth={auth}
+        <DesktopProductionRouter
+          location={desktopProductionRouteLocation}
           mode={config.mode}
-          localReady={localRuntimeAuthorityReady}
-          localModeAvailable={runsInNativeDesktop}
-          email={loginEmail}
-          password={loginPassword}
-          onModeChange={changeLoginMode}
-          onEmailChange={setLoginEmail}
-          onPasswordChange={setLoginPassword}
-          onEmailLogin={(trustedDevice) => void login(trustedDevice)}
-          onLocalSession={(trustedDevice) => void loginLocalSession(trustedDevice)}
-          onWorkspaceSso={(trustedDevice) => void loginWithWorkspaceSso(trustedDevice)}
-          workspaceSso={workspaceSso}
-          onOpenWorkspaceSso={openCurrentWorkspaceSso}
-          onCancelWorkspaceSso={cancelWorkspaceSso}
-        />
+          navigation={desktopProductionRouteNavigation}
+          permissions={productionRouteBasePermissions}
+          registry={desktopProductionRouteRegistry}
+          resolveCapability={resolveProductionRouteCapability}
+          resolvePermissionSnapshot={
+            resolveProductionRoutePermissionSnapshot
+          }
+          switchScope={switchProductionRouteScope}
+        >
+          <LoginScreen
+            auth={auth}
+            mode={config.mode}
+            localReady={localRuntimeAuthorityReady}
+            localModeAvailable={runsInNativeDesktop}
+            email={loginEmail}
+            password={loginPassword}
+            onModeChange={changeLoginMode}
+            onEmailChange={setLoginEmail}
+            onPasswordChange={setLoginPassword}
+            onEmailLogin={(trustedDevice) => void login(trustedDevice)}
+            onLocalSession={(trustedDevice) => void loginLocalSession(trustedDevice)}
+            onWorkspaceSso={(trustedDevice) => void loginWithWorkspaceSso(trustedDevice)}
+            workspaceSso={workspaceSso}
+            onOpenWorkspaceSso={openCurrentWorkspaceSso}
+            onCancelWorkspaceSso={cancelWorkspaceSso}
+          />
+        </DesktopProductionRouter>
       </Theme>
     );
   }

@@ -147,7 +147,7 @@ test('App scope switching uses the abort-aware transaction and no reset helper',
 });
 
 test('production routing wraps the existing workbench tree without keying or remounting it', () => {
-  const routerStart = appSource.indexOf('<DesktopProductionRouter');
+  const routerStart = appSource.lastIndexOf('<DesktopProductionRouter');
   const routerEnd = appSource.indexOf('</DesktopProductionRouter>', routerStart);
   const routedWorkbench =
     routerStart >= 0 && routerEnd > routerStart
@@ -162,4 +162,33 @@ test('production routing wraps the existing workbench tree without keying or rem
     /<iframe|<webview|window\.open|shell\.openExternal/iu,
   );
   assert.match(appSource, /const socket = useAgentSocket\(/u);
+});
+
+test('anonymous unknown routes are handled natively before the login gate', () => {
+  const forcedPasswordGate = appSource.lastIndexOf(
+    "auth.status === 'password_change_required'",
+  );
+  const anonymousGate = appSource.indexOf(
+    'if (!identityAuthenticated)',
+    forcedPasswordGate,
+  );
+  const authenticatedShell = appSource.indexOf(
+    '\n  return (\n    <Theme',
+    anonymousGate + 1,
+  );
+  const anonymousSource =
+    anonymousGate >= 0 && authenticatedShell > anonymousGate
+      ? appSource.slice(anonymousGate, authenticatedShell)
+      : '';
+
+  assert.ok(forcedPasswordGate >= 0);
+  assert.ok(anonymousGate > forcedPasswordGate);
+  assert.match(
+    anonymousSource,
+    /<DesktopProductionRouter[\s\S]*<LoginScreen[\s\S]*<\/DesktopProductionRouter>/u,
+  );
+  assert.match(
+    anonymousSource,
+    /location=\{desktopProductionRouteLocation\}[\s\S]*mode=\{config\.mode\}[\s\S]*navigation=\{desktopProductionRouteNavigation\}/u,
+  );
 });

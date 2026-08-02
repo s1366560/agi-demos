@@ -126,16 +126,41 @@ function waitForState(host, predicate) {
 
 test('host exposes malformed and not-found hash states without loading modules', async () => {
   let loadCount = 0;
+  let permissionCount = 0;
+  let permissionSnapshotCount = 0;
+  let capabilityCount = 0;
+  let scopeCount = 0;
   const registry = createDesktopRouteRegistry([
     route('tenant-overview', '/tenant/:tenantId/overview', async () => {
       loadCount += 1;
       return { default: 'Overview' };
     }),
   ]);
+  const authorityOptions = {
+    resolvePermissions: () => {
+      permissionCount += 1;
+      return new Set(['authenticated']);
+    },
+    resolvePermissionSnapshot: async () => {
+      permissionSnapshotCount += 1;
+      return permissionSnapshot({ tenantId: 'tenant-1' });
+    },
+    resolveCapability: () => {
+      capabilityCount += 1;
+      return capability();
+    },
+    switchScope: async () => {
+      scopeCount += 1;
+    },
+  };
 
   const malformedLocation = hashLocation('#/tenant/%E0%A4%A/overview');
   const malformedHost = createDesktopHashRouteHost(
-    hostOptions({ registry, location: malformedLocation.port }),
+    hostOptions({
+      registry,
+      location: malformedLocation.port,
+      ...authorityOptions,
+    }),
   );
   await malformedHost.start();
   assert.deepEqual(malformedHost.getState(), {
@@ -145,18 +170,26 @@ test('host exposes malformed and not-found hash states without loading modules',
   });
   malformedHost.stop();
 
-  const missingLocation = hashLocation('#/tenant/tenant-1/missing');
+  const missingLocation = hashLocation('#/unknown?token=untrusted');
   const missingHost = createDesktopHashRouteHost(
-    hostOptions({ registry, location: missingLocation.port }),
+    hostOptions({
+      registry,
+      location: missingLocation.port,
+      ...authorityOptions,
+    }),
   );
   await missingHost.start();
   assert.deepEqual(missingHost.getState(), {
     status: 'not_found',
-    location: '#/tenant/tenant-1/missing',
+    location: '#/unknown?token=untrusted',
     reasonCode: 'desktop_route_not_found',
   });
   missingHost.stop();
   assert.equal(loadCount, 0);
+  assert.equal(permissionCount, 0);
+  assert.equal(permissionSnapshotCount, 0);
+  assert.equal(capabilityCount, 0);
+  assert.equal(scopeCount, 0);
 });
 
 test('forbidden and unavailable routes never switch scope or load', async () => {

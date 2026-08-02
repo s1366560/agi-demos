@@ -22,6 +22,7 @@ const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   DesktopProductionRouter,
   DesktopProductionRouterView,
+  handleDesktopProductionRouteBoundaryEscape,
   retryDesktopProductionRoute,
   returnToDesktopWorkbench,
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/DesktopProductionRouter.js');
@@ -166,23 +167,16 @@ test('ready and degraded states render the exact module Surface and route contex
   }
 });
 
-test('empty and non-canonical hashes retain legacy while canonical failures take over', () => {
-  for (const state of [
-    {
+test('only an empty hash retains legacy while every rejected deep link uses native recovery', () => {
+  const emptyMarkup = renderView({
+    state: {
       status: 'malformed',
       location: '',
       reasonCode: 'desktop_route_malformed',
     },
-    {
-      status: 'not_found',
-      location: '#/legacy/workbench',
-      reasonCode: 'desktop_route_not_found',
-    },
-  ]) {
-    const markup = renderView({ state });
-    assert.match(markup, /data-legacy="true"/u);
-    assert.doesNotMatch(markup, /desktop-production-route-stage/u);
-  }
+  });
+  assert.match(emptyMarkup, /data-legacy="true"/u);
+  assert.doesNotMatch(emptyMarkup, /desktop-production-route-stage/u);
 
   for (const [state, expected] of [
     [
@@ -196,7 +190,7 @@ test('empty and non-canonical hashes retain legacy while canonical failures take
     [
       {
         status: 'not_found',
-        location: '#/tenant/tenant-1/not-a-route',
+        location: '#/unknown?token=untrusted',
         reasonCode: 'desktop_route_not_found',
       },
       'Native route not found',
@@ -210,6 +204,11 @@ test('empty and non-canonical hashes retain legacy while canonical failures take
     assert.match(markup, /data-legacy="true"/u);
     assert.match(markup, new RegExp(expected, 'u'));
     assert.match(markup, new RegExp(state.reasonCode, 'u'));
+    assert.match(
+      markup,
+      /data-action="return-workbench"[^>]*autofocus=""/u,
+    );
+    assert.doesNotMatch(markup, /unknown\?token=untrusted/u);
   }
 });
 
@@ -291,6 +290,35 @@ test('breadcrumb return and retry actions use only the injected ports', async ()
     source,
     /data-action="retry-route"[\s\S]*retryDesktopProductionRoute/u,
   );
+});
+
+test('Escape returns rejected deep links through the injected navigation port only', () => {
+  let clearCalls = 0;
+  let prevented = 0;
+  const navigation = {
+    clearHash() {
+      clearCalls += 1;
+    },
+  };
+  const event = {
+    key: 'Escape',
+    preventDefault() {
+      prevented += 1;
+    },
+  };
+
+  assert.equal(
+    handleDesktopProductionRouteBoundaryEscape('not_found', navigation, event),
+    true,
+  );
+  assert.equal(clearCalls, 1);
+  assert.equal(prevented, 1);
+  assert.equal(
+    handleDesktopProductionRouteBoundaryEscape('ready', navigation, event),
+    false,
+  );
+  assert.equal(clearCalls, 1);
+  assert.equal(prevented, 1);
 });
 
 test('router styling and copy remain native, responsive, and bilingual', () => {

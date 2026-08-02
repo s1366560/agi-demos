@@ -40,7 +40,6 @@ export type DesktopProductionRouterViewProps = Readonly<{
   children: ReactNode;
   currentLocation?: string;
   navigation: DesktopProductionRouterNavigationPort;
-  registry: DesktopRouteRegistry<DesktopRouteModule>;
   retry: () => Promise<void>;
   state: DesktopRouteHostState<DesktopRouteModule>;
 }>;
@@ -86,7 +85,6 @@ export function DesktopProductionRouter({
     <DesktopProductionRouterView
       currentLocation={location.readHash()}
       navigation={navigation}
-      registry={registry}
       retry={retry}
       state={state}
     >
@@ -99,16 +97,11 @@ export function DesktopProductionRouterView({
   children,
   currentLocation = '',
   navigation,
-  registry,
   retry,
   state,
 }: DesktopProductionRouterViewProps) {
   const { t } = useI18n();
-  const routeActive = productionRouteOwnsState(
-    state,
-    currentLocation,
-    registry,
-  );
+  const routeActive = productionRouteOwnsState(state, currentLocation);
   const routeId =
     'match' in state
       ? state.match.definition.id
@@ -129,6 +122,13 @@ export function DesktopProductionRouterView({
           className="desktop-production-route-stage"
           data-route-state={state.status}
           data-route-id={'match' in state ? state.match.definition.id : undefined}
+          onKeyDown={(event) => {
+            handleDesktopProductionRouteBoundaryEscape(
+              state.status,
+              navigation,
+              event,
+            );
+          }}
         >
           <nav
             className="desktop-production-route-breadcrumb"
@@ -137,6 +137,9 @@ export function DesktopProductionRouterView({
             <button
               type="button"
               data-action="return-workbench"
+              autoFocus={
+                state.status === 'malformed' || state.status === 'not_found'
+              }
               onClick={() => returnToDesktopWorkbench(navigation)}
             >
               {t('desktopProductionRouter.returnWorkbench')}
@@ -338,6 +341,22 @@ export function returnToDesktopWorkbench(
   navigation.clearHash();
 }
 
+export function handleDesktopProductionRouteBoundaryEscape(
+  status: DesktopRouteHostState['status'],
+  navigation: DesktopProductionRouterNavigationPort,
+  event: Readonly<{ key: string; preventDefault: () => void }>,
+): boolean {
+  if (
+    event.key !== 'Escape' ||
+    (status !== 'malformed' && status !== 'not_found')
+  ) {
+    return false;
+  }
+  event.preventDefault();
+  returnToDesktopWorkbench(navigation);
+  return true;
+}
+
 export function retryDesktopProductionRoute(
   retry: () => Promise<void>,
 ): Promise<void> {
@@ -353,50 +372,22 @@ function boundaryIcon(status: DesktopRouteHostState['status']) {
 function productionRouteOwnsState(
   state: DesktopRouteHostState<DesktopRouteModule>,
   currentLocation: string,
-  registry: DesktopRouteRegistry<DesktopRouteModule>,
 ): boolean {
   if (state.status === 'idle') {
-    return matchesCanonicalNamespace(currentLocation, registry);
+    return hasNonEmptyHash(currentLocation);
   }
   if (state.status === 'malformed' || state.status === 'not_found') {
-    return matchesCanonicalNamespace(state.location, registry);
+    return hasNonEmptyHash(state.location);
   }
   return true;
 }
 
-function matchesCanonicalNamespace(
+function hasNonEmptyHash(
   location: string,
-  registry: DesktopRouteRegistry<DesktopRouteModule>,
 ): boolean {
-  const path = hashPath(location);
-  if (!path) return false;
-  return canonicalNamespaces(registry).some(
-    (namespace) =>
-      path === namespace || path.startsWith(`${namespace}/`),
-  );
-}
-
-function canonicalNamespaces(
-  registry: DesktopRouteRegistry<DesktopRouteModule>,
-): readonly string[] {
-  return [
-    ...new Set(
-      registry.definitions.flatMap((definition) => {
-        const firstSegment = definition.path
-          .split('/')
-          .find((segment) => segment.length > 0);
-        if (!firstSegment || firstSegment.startsWith(':')) return [];
-        return `/${firstSegment}`;
-      }),
-    ),
-  ];
-}
-
-function hashPath(location: string): string {
   const trimmed = location.trim();
-  if (!trimmed) return '';
+  if (!trimmed) return false;
   const hashIndex = trimmed.indexOf('#');
   const value = hashIndex >= 0 ? trimmed.slice(hashIndex + 1) : trimmed;
-  const queryIndex = value.indexOf('?');
-  return queryIndex >= 0 ? value.slice(0, queryIndex) : value;
+  return value.trim().length > 0;
 }
