@@ -9,6 +9,10 @@ import {
   deadLetterQueueZhCN,
 } from './features/governance/locales/deadLetterQueueMessages';
 import {
+  runtimePoolEnUS,
+  runtimePoolZhCN,
+} from './features/runtime-pool/locales/runtimePoolMessages';
+import {
   nativeUnavailableRouteEnUS,
   nativeUnavailableRouteZhCN,
 } from './features/navigation/locales/nativeUnavailableRouteMessages';
@@ -50,6 +54,7 @@ const enUS: Record<string, string> = {
   ...desktopProductionRouterEnUS,
   ...nativeUnavailableRouteEnUS,
   ...projectOverviewEnUS,
+  ...runtimePoolEnUS,
   ...tenantOverviewEnUS,
   ...tenantProjectsEnUS,
   ...tenantTasksEnUS,
@@ -3648,6 +3653,7 @@ const zhCN: Record<string, string> = {
   ...desktopProductionRouterZhCN,
   ...nativeUnavailableRouteZhCN,
   ...projectOverviewZhCN,
+  ...runtimePoolZhCN,
   ...tenantOverviewZhCN,
   ...tenantProjectsZhCN,
   ...tenantTasksZhCN,

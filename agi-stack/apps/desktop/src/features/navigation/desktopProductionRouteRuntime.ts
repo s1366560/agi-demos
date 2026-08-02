@@ -18,6 +18,9 @@ import type {
 import type { DeadLetterQueueRouteBinding } from '../governance/deadLetterQueueRouteModule';
 import { createDeadLetterQueueController } from '../governance/deadLetterQueueController';
 import { createDeadLetterQueueHttpClient } from '../governance/deadLetterQueueHttpClient';
+import type { RuntimePoolRouteBinding } from '../runtime-pool/runtimePoolRouteModule';
+import { createRuntimePoolController } from '../runtime-pool/runtimePoolController';
+import { createRuntimePoolHttpClient } from '../runtime-pool/runtimePoolClient';
 import type {
   DesktopCapabilityAvailability,
   DesktopCapabilitySnapshot,
@@ -254,6 +257,28 @@ export function createDeadLetterQueueRouteBindingForRuntime(
   const client = createDeadLetterQueueHttpClient(config);
   return Object.freeze({
     controller: createDeadLetterQueueController({
+      authority: config.mode,
+      client,
+      initialScope: scope,
+    }),
+    scope,
+  });
+}
+
+export function createRuntimePoolRouteBindingForRuntime(
+  config: DesktopRuntimeConfig,
+  context: Readonly<{ tenantId: string }>,
+): RuntimePoolRouteBinding {
+  if (config.tenantId !== context.tenantId) {
+    throw new Error('runtime_pool_runtime_scope_mismatch');
+  }
+  const scope = Object.freeze({
+    authority: config.mode,
+    tenantId: context.tenantId,
+  });
+  const client = createRuntimePoolHttpClient(config);
+  return Object.freeze({
+    controller: createRuntimePoolController({
       authority: config.mode,
       client,
       initialScope: scope,

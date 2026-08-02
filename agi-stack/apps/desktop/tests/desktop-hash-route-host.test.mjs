@@ -202,10 +202,17 @@ test('forbidden and unavailable routes never switch scope or load', async () => 
       registry,
       location: location.port,
       mode: 'local',
-      permissions: new Set(['authenticated', 'tenant_admin']),
+      permissions: new Set(['authenticated']),
       resolveCapability: () => {
         capabilityCount += 1;
-        return capability();
+        return capability('tenant-1', {
+          availability: 'not_applicable',
+          reason_code: 'cloud_runtime_pool_not_applicable',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          authority_revision: null,
+        });
       },
       switchScope: async () => {
         scopeCount += 1;
@@ -216,14 +223,58 @@ test('forbidden and unavailable routes never switch scope or load', async () => 
   assert.deepEqual(localHost.getState(), {
     status: 'unavailable',
     match: localHost.getState().match,
-    reasonCode: 'desktop_route_local_cloud_only',
-    capability: null,
+    reasonCode: 'cloud_runtime_pool_not_applicable',
+    capability: localHost.getState().capability,
   });
   localHost.stop();
 
   assert.equal(loadCount, 0);
   assert.equal(scopeCount, 0);
+  assert.equal(capabilityCount, 1);
+});
+
+test('unauthenticated Local cloud-only routes stop before capability authority', async () => {
+  let capabilityCount = 0;
+  let scopeCount = 0;
+  let loadCount = 0;
+  const registry = createDesktopRouteRegistry([
+    route(
+      'tenant-pool',
+      '/tenant/:tenantId/pool',
+      async () => {
+        loadCount += 1;
+        return { default: 'Pool' };
+      },
+      {
+        requiredPermission: [['authenticated', 'global_admin']],
+        localPolicy: 'cloud_only',
+      },
+    ),
+  ]);
+  const location = hashLocation('#/tenant/tenant-1/pool');
+  const host = createDesktopHashRouteHost(
+    hostOptions({
+      registry,
+      location: location.port,
+      mode: 'local',
+      permissions: new Set(),
+      resolveCapability: () => {
+        capabilityCount += 1;
+        return capability();
+      },
+      switchScope: async () => {
+        scopeCount += 1;
+      },
+    }),
+  );
+
+  await host.start();
+
+  assert.equal(host.getState().status, 'forbidden');
   assert.equal(capabilityCount, 0);
+  assert.equal(scopeCount, 0);
+  assert.equal(loadCount, 0);
+  host.stop();
 });
 
 test('context permission resolver authorizes the exact matched route context', async () => {

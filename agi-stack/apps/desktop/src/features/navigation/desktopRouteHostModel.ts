@@ -109,18 +109,11 @@ export function evaluateDesktopRouteAccess<TModule>({
   const allowed = missingByAlternative.some(
     (missingPermissions) => missingPermissions.length === 0,
   );
-  if (!allowed) {
-    const missingPermissions = missingByAlternative.reduce((best, candidate) =>
-      candidate.length < best.length ? candidate : best,
-    );
-    return Object.freeze({
-      status: 'forbidden',
-      reasonCode: 'desktop_route_permission_denied',
-      missingPermissions: Object.freeze([...missingPermissions]),
-    });
-  }
-
-  if (mode === 'local' && match.definition.localPolicy === 'cloud_only') {
+  if (
+    mode === 'local' &&
+    match.definition.localPolicy === 'cloud_only' &&
+    permissions.has('authenticated')
+  ) {
     if (
       capability?.availability === 'not_applicable' &&
       capabilityScopeMatches(match.context, capability)
@@ -132,6 +125,17 @@ export function evaluateDesktopRouteAccess<TModule>({
     }
     return unavailable('desktop_route_local_cloud_only', null);
   }
+  if (!allowed) {
+    const missingPermissions = missingByAlternative.reduce((best, candidate) =>
+      candidate.length < best.length ? candidate : best,
+    );
+    return Object.freeze({
+      status: 'forbidden',
+      reasonCode: 'desktop_route_permission_denied',
+      missingPermissions: Object.freeze([...missingPermissions]),
+    });
+  }
+
   if (
     mode === 'local' &&
     match.definition.localPolicy === 'blocked_by_web_contract'

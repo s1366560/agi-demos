@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync } from 'node:fs';
+import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -9,6 +9,8 @@ const testsDirectory = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = dirname(testsDirectory);
 const compiledRoot = '/tmp/agistack-desktop-test-dist';
 const tscEntrypoint = join(desktopRoot, 'node_modules', 'typescript', 'bin', 'tsc');
+
+rmSync(compiledRoot, { recursive: true, force: true });
 
 const compile = spawnSync(process.execPath, [tscEntrypoint, '-p', 'tsconfig.test.json'], {
   cwd: desktopRoot,
@@ -134,6 +136,18 @@ mkdirSync(compiledGovernanceDirectory, { recursive: true });
 copyFileSync(
   join(desktopRoot, 'src', 'features', 'governance', 'DeadLetterQueuePage.css'),
   join(compiledGovernanceDirectory, 'DeadLetterQueuePage.css'),
+);
+
+const compiledRuntimePoolDirectory = join(
+  compiledRoot,
+  'src',
+  'features',
+  'runtime-pool',
+);
+mkdirSync(compiledRuntimePoolDirectory, { recursive: true });
+copyFileSync(
+  join(desktopRoot, 'src', 'features', 'runtime-pool', 'RuntimePoolPage.css'),
+  join(compiledRuntimePoolDirectory, 'RuntimePoolPage.css'),
 );
 
 const testFiles = discoverTestFiles(testsDirectory);

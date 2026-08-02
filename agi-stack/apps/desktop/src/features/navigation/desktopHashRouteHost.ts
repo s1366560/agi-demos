@@ -209,7 +209,8 @@ export function createDesktopHashRouteHost<TModule>(
     });
     if (
       structuralPreflight.status === 'unavailable' &&
-      structuralPreflight.reasonCode !== 'desktop_route_capability_missing'
+      structuralPreflight.reasonCode !== 'desktop_route_capability_missing' &&
+      structuralPreflight.reasonCode !== 'desktop_route_local_cloud_only'
     ) {
       emitUnavailable(
         match,

@@ -10,6 +10,7 @@ import {
   normalizeAutomationCapabilities,
 } from '../automations/automationModel';
 import { deadLetterQueueCapability } from '../governance/deadLetterQueueCapability';
+import { runtimePoolCapability } from '../runtime-pool/runtimePoolCapability';
 import { createCloudProjectOverviewClient } from '../project/projectOverviewCloudClient';
 import { createLocalProjectOverviewClient } from '../project/projectOverviewLocalClient';
 import { loadTenantOverviewCapability } from '../tenant/tenantOverviewCapability';
@@ -152,6 +153,7 @@ export function createDesktopWorkbenchCapabilityClient(
           'tenant-tenant-overview': tenantOverview,
           'tenant-tenant-projects': tenantProjects,
           'tenant-tenant-tasks': tenantTasksCapability(config),
+          'tenant-tenant-pool': runtimePoolCapability(config),
           'tenant-tenant-dead-letter-queue': deadLetterQueueCapability(config),
         },
       };

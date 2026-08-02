@@ -5,6 +5,7 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const {
   createProjectOverviewRouteBindingForRuntime,
+  createRuntimePoolRouteBindingForRuntime,
   desktopRouteBasePermissionsForAuth,
   desktopRoutePermissionsForContext,
   resolveDesktopRouteCapability,
@@ -254,6 +255,37 @@ test('project overview scope mismatch fails before constructing any authority', 
     );
     assert.deepEqual(calls, []);
   }
+});
+
+test('Runtime Pool binding preserves exact Cloud and Local tenant authority', async () => {
+  const cloud = createRuntimePoolRouteBindingForRuntime(
+    runtimeConfig('cloud'),
+    { tenantId },
+  );
+  assert.deepEqual(cloud.scope, { authority: 'cloud', tenantId });
+  assert.equal(cloud.controller.getSnapshot().authority, 'cloud');
+
+  const local = createRuntimePoolRouteBindingForRuntime(
+    runtimeConfig('local'),
+    { tenantId },
+  );
+  assert.deepEqual(local.scope, { authority: 'local', tenantId });
+  await local.controller.load(local.scope);
+  assert.equal(local.controller.getSnapshot().statusState, 'unavailable');
+  assert.equal(
+    local.controller.getSnapshot().statusReasonCode,
+    'cloud_runtime_pool_not_applicable',
+  );
+});
+
+test('Runtime Pool binding rejects tenant scope drift before client authority', () => {
+  assert.throws(
+    () =>
+      createRuntimePoolRouteBindingForRuntime(runtimeConfig('cloud'), {
+        tenantId: 'tenant-other',
+      }),
+    /runtime_pool_runtime_scope_mismatch/u,
+  );
 });
 
 function authState(overrides = {}) {

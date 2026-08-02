@@ -101,7 +101,7 @@
           "authorization": [
             "global_admin"
           ],
-          "enforcement": "missing",
+          "enforcement": "enforced",
           "feature_gate": null
         },
         {
@@ -118,13 +118,13 @@
         }
       ],
       "web_status": "partial",
-      "web_reason_code": "runtime_pool_authentication_admin_and_tenant_scope_not_enforced",
+      "web_reason_code": "global_pool_capacity_not_available_in_tenant_scope",
       "cloud_status": "planned",
       "local_status": "planned",
       "local_policy": "native_equivalent",
       "local_reason_code": "local_unified_runtime_inventory_planned",
       "local_deviation": "Local Desktop should project the supervised sidecar and local sandboxes instead of inventing Cloud pool resources.",
-      "judgment_rationale": "Unified Runtimes combines global Cloud pool status and instances with tenant-scoped project sandboxes in one tenant route. The pool requests ignore the route tenant, expose records for multiple tenants, and the pool router enforces neither authentication nor global administration; only the sandbox half has tenant membership authority. Desktop currently exposes connection settings and runtime telemetry fragments, not this routed inventory; a single-machine sidecar projection remains meaningful and is planned."
+      "judgment_rationale": "Unified Runtimes combines tenant-scoped Cloud pool status and instances with tenant-scoped project sandboxes in one tenant route. The pool router now enforces authentication, global administration, tenant scoping, cross-tenant 404 behavior and lifecycle conflicts. Tenant scope intentionally withholds global capacity, so the Web resource cards remain degraded until they render the structured unavailable reason instead of zero values. Desktop currently exposes connection settings and runtime telemetry fragments, not this routed inventory; a single-machine sidecar projection remains meaningful and is planned."
     },
     {
       "id": "tenant-tenant-pool",
@@ -245,6 +245,20 @@
         "inspect-pool-status",
         "inspect-resource-usage"
       ],
+      "cloud_actions": [
+        "view",
+        "refresh",
+        "toggle-auto-refresh",
+        "list-instances",
+        "search-current-page",
+        "filter-by-tier",
+        "paginate-instances",
+        "pause-instance",
+        "resume-instance",
+        "terminate-instance",
+        "retry-list-instances",
+        "inspect-pool-status"
+      ],
       "permission_requirements": [
         {
           "surface": "web",
@@ -267,18 +281,52 @@
           "authorization": [
             "global_admin"
           ],
-          "enforcement": "missing",
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "refresh",
+            "toggle-auto-refresh",
+            "list-instances",
+            "search-current-page",
+            "filter-by-tier",
+            "paginate-instances",
+            "pause-instance",
+            "resume-instance",
+            "terminate-instance",
+            "retry-list-instances",
+            "inspect-pool-status"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "global_admin"
+          ],
+          "enforcement": "enforced",
           "feature_gate": null
         }
       ],
       "web_status": "partial",
-      "web_reason_code": "runtime_pool_authentication_admin_and_tenant_scope_not_enforced",
-      "cloud_status": "planned",
+      "web_reason_code": "global_pool_capacity_not_available_in_tenant_scope",
+      "cloud_status": "partial",
+      "cloud_reason_code": "global_pool_capacity_not_available_in_tenant_scope",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime-pool/runtimePoolCapability.ts",
+        "agi-stack/apps/desktop/src/features/runtime-pool/runtimePoolClient.ts",
+        "agi-stack/apps/desktop/src/features/runtime-pool/runtimePoolController.ts",
+        "agi-stack/apps/desktop/src/features/runtime-pool/runtimePoolRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/runtime-pool/RuntimePoolPage.tsx"
+      ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_runtime_pool_not_applicable",
       "local_deviation": "A single supervised Local sidecar is not a multi-tenant resource pool. The native page must return this stable cloud-only disposition without emulating capacity or billing controls.",
-      "judgment_rationale": "PoolDashboard calls global pool status, instance list, pause, resume, terminate, and JSON metrics endpoints. It renders status/resource summaries and current-page filters, while the JSON metrics response is not consumed and detail, project-tier, and Prometheus service methods are not bound to the page. The router enforces neither authentication nor global administration and does not tenant-scope list or lifecycle operations, so the tenant route is degraded. No native Desktop route exists, and reproducing a Cloud resource pool in Local mode would create false authority."
+      "judgment_rationale": "PoolDashboard calls tenant-scoped pool status, instance list, pause, resume, terminate and JSON metrics endpoints. The router enforces authentication, global administration, tenant scoping, cross-tenant 404 behavior, lifecycle conflicts and audit logging. Tenant scope intentionally withholds global capacity, so resource usage and prewarm remain degraded. Cloud Desktop now provides the native status, filtering, pagination, lifecycle and retry surface with the same stable degraded reason and without claiming unavailable capacity. Local Desktop stops before network, scope switching or module loading and returns cloud_runtime_pool_not_applicable because a single supervised sidecar is not a multi-tenant resource pool."
     }
   ],
   "source_ownership": {

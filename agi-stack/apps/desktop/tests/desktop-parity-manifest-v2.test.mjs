@@ -530,11 +530,11 @@ test("governance and runtime capabilities preserve audited Web actions and enfor
   }
   assert.equal(
     byId.get("tenant-tenant-runtimes")?.surfaces.web.reason_code,
-    "runtime_pool_authentication_admin_and_tenant_scope_not_enforced",
+    "global_pool_capacity_not_available_in_tenant_scope",
   );
   assert.equal(
     byId.get("tenant-tenant-pool")?.surfaces.web.reason_code,
-    "runtime_pool_authentication_admin_and_tenant_scope_not_enforced",
+    "global_pool_capacity_not_available_in_tenant_scope",
   );
   assert.equal(
     byId.get("tenant-tenant-instances")?.surfaces.web.reason_code,
@@ -564,7 +564,28 @@ test("governance and runtime capabilities preserve audited Web actions and enfor
       ],
       authentication: "authenticated",
       authorization: ["global_admin"],
-      enforcement: "missing",
+      enforcement: "enforced",
+      feature_gate: null,
+    },
+    {
+      surface: "desktop_cloud",
+      actions: [
+        "view",
+        "refresh",
+        "toggle-auto-refresh",
+        "list-instances",
+        "search-current-page",
+        "filter-by-tier",
+        "paginate-instances",
+        "pause-instance",
+        "resume-instance",
+        "terminate-instance",
+        "retry-list-instances",
+        "inspect-pool-status",
+      ],
+      authentication: "authenticated",
+      authorization: ["global_admin"],
+      enforcement: "enforced",
       feature_gate: null,
     },
   ]);

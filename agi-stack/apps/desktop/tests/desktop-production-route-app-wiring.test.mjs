@@ -45,6 +45,13 @@ test('App owns one production route registry with latest Project Overview, Searc
   );
 });
 
+test('App wires the native Runtime Pool loader through the scoped runtime binding', () => {
+  assert.match(
+    appSource,
+    /TENANT_POOL_ROUTE_ID[\s\S]*createRuntimePoolRouteModuleLoader\(\{[\s\S]*createRuntimePoolRouteBindingForRuntime\(\s*configRef\.current,\s*context,?\s*\)/u,
+  );
+});
+
 test('App injects async Cloud or Local permission authority and real capability snapshots', () => {
   assert.match(appSource, /desktopRouteBasePermissionsForAuth\(auth\)/u);
   assert.match(

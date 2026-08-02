@@ -138,6 +138,20 @@ test('DesktopCapabilitySnapshot resolves route capability strings without invent
         },
         authority_revision: 9,
       },
+      'tenant-tenant-pool': {
+        availability: 'not_applicable',
+        reason_code: 'cloud_runtime_pool_not_applicable',
+        service_version: null,
+        contract_version: null,
+        allowed_actions: [],
+        scope: {
+          tenant_id: 'tenant-1',
+          project_id: null,
+          workspace_id: null,
+          instance_id: null,
+        },
+        authority_revision: null,
+      },
       'project-project-overview': {
         availability: 'degraded',
         reason_code: 'local_project_overview_timeline_projection_only',
@@ -186,6 +200,22 @@ test('DesktopCapabilitySnapshot resolves route capability strings without invent
     authority_revision: 9,
     status: 'degraded',
     available: true,
+  });
+  assert.deepEqual(desktopCapability(snapshot, 'tenant-tenant-pool'), {
+    availability: 'not_applicable',
+    reason_code: 'cloud_runtime_pool_not_applicable',
+    service_version: null,
+    contract_version: null,
+    allowed_actions: [],
+    scope: {
+      tenant_id: 'tenant-1',
+      project_id: null,
+      workspace_id: null,
+      instance_id: null,
+    },
+    authority_revision: null,
+    status: 'not_applicable',
+    available: false,
   });
   assert.deepEqual(desktopCapability(snapshot, 'project-project-graph'), {
     availability: 'unavailable',

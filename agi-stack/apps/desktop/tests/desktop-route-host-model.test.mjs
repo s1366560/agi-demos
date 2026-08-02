@@ -120,6 +120,48 @@ test('Local cloud-only and blocked Web contracts fail closed with stable reason 
   });
 });
 
+test('Local cloud-only disposition requires authentication but not Cloud-only administration', () => {
+  const definition = route({
+    requiredPermission: [['authenticated', 'global_admin']],
+    localPolicy: 'cloud_only',
+  });
+  const localCapability = capability({
+    availability: 'not_applicable',
+    reason_code: 'cloud_runtime_pool_not_applicable',
+    service_version: null,
+    contract_version: null,
+    allowed_actions: [],
+    authority_revision: null,
+  });
+
+  assert.deepEqual(
+    evaluateDesktopRouteAccess({
+      match: match(definition),
+      mode: 'local',
+      permissions: new Set(['authenticated']),
+      capability: localCapability,
+    }),
+    {
+      status: 'unavailable',
+      reasonCode: 'cloud_runtime_pool_not_applicable',
+      capability: localCapability,
+    },
+  );
+  assert.deepEqual(
+    evaluateDesktopRouteAccess({
+      match: match(definition),
+      mode: 'local',
+      permissions: new Set(),
+      capability: localCapability,
+    }),
+    {
+      status: 'forbidden',
+      reasonCode: 'desktop_route_permission_denied',
+      missingPermissions: ['authenticated', 'global_admin'],
+    },
+  );
+});
+
 test('capability availability preserves structured unavailable and degraded authority', () => {
   const unavailableCapability = capability({
     availability: 'unavailable',

@@ -265,6 +265,33 @@ test('cloud client validates structured Search and Automation authorities', asyn
       scope: { tenant_id: 'default', project_id: null, workspace_id: null, instance_id: null },
       authority_revision: null,
     });
+    assert.deepEqual(snapshot.capabilities['tenant-tenant-pool'], {
+      availability: 'degraded',
+      reason_code: 'global_pool_capacity_not_available_in_tenant_scope',
+      service_version: '0.1.0',
+      contract_version: '3.0.0',
+      allowed_actions: [
+        'view',
+        'refresh',
+        'toggle-auto-refresh',
+        'list-instances',
+        'search-current-page',
+        'filter-by-tier',
+        'paginate-instances',
+        'pause-instance',
+        'resume-instance',
+        'terminate-instance',
+        'retry-list-instances',
+        'inspect-pool-status',
+      ],
+      scope: {
+        tenant_id: 'default',
+        project_id: null,
+        workspace_id: null,
+        instance_id: null,
+      },
+      authority_revision: null,
+    });
     assert.deepEqual(snapshot.capabilities['tenant-tenant-dead-letter-queue'], {
       availability: 'available',
       reason_code: null,
@@ -775,6 +802,20 @@ test('Workspace Collaboration 404 and local mode remain structured unavailable',
         },
       ),
     );
+    assert.deepEqual(local.capabilities['tenant-tenant-pool'], {
+      availability: 'not_applicable',
+      reason_code: 'cloud_runtime_pool_not_applicable',
+      service_version: null,
+      contract_version: null,
+      allowed_actions: [],
+      scope: {
+        tenant_id: 'local',
+        project_id: null,
+        workspace_id: null,
+        instance_id: null,
+      },
+      authority_revision: null,
+    });
     assert.equal(capabilityFetchCalls, 1);
   } finally {
     globalThis.fetch = originalFetch;
