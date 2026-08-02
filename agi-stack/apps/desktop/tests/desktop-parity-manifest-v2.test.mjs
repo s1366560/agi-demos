@@ -412,7 +412,12 @@ test("missing Desktop surfaces never claim a fabricated production authority", (
   for (const capability of manifest.capabilities) {
     for (const surfaceName of ["desktop_cloud", "desktop_local"]) {
       const surface = capability.surfaces[surfaceName];
-      if (surface.authority !== "none") continue;
+      if (
+        surface.authority !== "none" ||
+        surface.implementation_status !== "missing"
+      ) {
+        continue;
+      }
 
       assert.deepEqual(
         surface.allowed_actions,
@@ -445,6 +450,40 @@ test("missing Desktop surfaces never claim a fabricated production authority", (
         );
       }
     }
+  }
+});
+
+test("Not Found is available in both Desktop modes without a service authority", () => {
+  const manifest = readJson("parity-manifest.v2.json");
+  const capability = manifest.capabilities.find(
+    (candidate) => candidate.id === "not-found",
+  );
+
+  assert.ok(capability);
+  assert.equal(capability.web_route_ids.length, 0);
+  for (const surfaceName of ["desktop_cloud", "desktop_local"]) {
+    assert.deepEqual(capability.surfaces[surfaceName], {
+      disposition: "native_equivalent",
+      implementation_status: "implemented",
+      availability: "available",
+      reason_code: null,
+      authority: "none",
+      allowed_actions: ["view", "return-home", "restore-safe-route"],
+      intentional_deviation: null,
+    });
+    assert.deepEqual(
+      capability.api_contracts.filter(
+        (contract) => contract.surface === surfaceName,
+      ),
+      [
+        {
+          surface: surfaceName,
+          method: "NONE",
+          path: "not_applicable:routing/not-found",
+          authority: "none",
+        },
+      ],
+    );
   }
 });
 
