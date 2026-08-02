@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0.0",
+  "record_kind": "desktop-parity-electron-support-report",
+  "source_revision": "dd5ec61d1b6474f42d8ac104ab0f5798d3f6bf61",
+  "capability_id": "tenant-tenant-instance-templates",
+  "status": "blocked",
+  "observed_surface": "desktop_local",
+  "launch_command": "AGISTACK_DESKTOP_DEBUG_PORT=9333 make -C agi-stack run-desktop",
+  "verification_channel": "CDP observation of the make-launched Electron renderer; Computer Use was blocked because the Mac was locked",
+  "electron_observations": {
+    "route": "#/tenant/northstar/instance-templates",
+    "breadcrumb": "tenant-tenant-instance-templates",
+    "availability": "unavailable",
+    "reason_code": "local_instance_template_authority_unavailable",
+    "deep_link_reload_restored": true,
+    "retry_preserved_reason_code": true,
+    "instance_template_api_requests": 0,
+    "vite_source_module_requests": 5,
+    "renderer_errors": 0,
+    "page_errors": 0,
+    "webview_count": 0,
+    "iframe_count": 0,
+    "cloud_instance_template_data_rendered": false,
+    "instance_template_mutation_controls_rendered": false
+  },
+  "authority_boundary": {
+    "policy": "native_equivalent",
+    "local_network_short_circuit": true,
+    "simulated_instance_template_authority": false,
+    "arbitrary_host_path_projection": false,
+    "credential_projection": false
+  },
+  "blockers": [
+    {
+      "reason_code": "native_computer_use_mac_locked",
+      "statement": "The Mac lock screen prevented Computer Use from observing the real application window, focus, keyboard, menu, Escape, and reload behavior."
+    },
+    {
+      "reason_code": "authorized_cloud_instance_template_dataset_unavailable",
+      "statement": "Cloud Desktop list, detail, pagination, search, filtering, create, publish, clone, and delete were not exercised because no authorized disposable Cloud instance-template dataset was available."
+    },
+    {
+      "reason_code": "instance_template_nested_deep_link_and_deploy_partial",
+      "statement": "Nested template detail deep-link restoration and deploy-from-template remain outside this implemented slice."
+    }
+  ],
+  "recorded_at": "2026-08-02T16:49:00Z"
+}

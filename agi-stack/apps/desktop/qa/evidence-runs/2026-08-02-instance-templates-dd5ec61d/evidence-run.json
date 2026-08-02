@@ -1,0 +1,229 @@
+{
+  "$schema": "./evidence-run.v1.schema.json",
+  "schema_version": "1.0.0",
+  "record_kind": "run",
+  "run_id": "instance-templates-local-electron-dd5ec61d",
+  "run_scope": "capability_slice",
+  "artifact_location_base": "evidence_run_directory",
+  "schema_artifact_id": "instance-templates-evidence-schema",
+  "source_revisions": {
+    "repository_revision": "dd5ec61d1b6474f42d8ac104ab0f5798d3f6bf61",
+    "web_revision": "dd5ec61d1b6474f42d8ac104ab0f5798d3f6bf61",
+    "desktop_revision": "dd5ec61d1b6474f42d8ac104ab0f5798d3f6bf61",
+    "prototype_revision": "61454b2ead1cedda584e95afee9f471aac7851fb"
+  },
+  "source_state": {
+    "head_revision": "dd5ec61d1b6474f42d8ac104ab0f5798d3f6bf61",
+    "worktree_state": "clean"
+  },
+  "desired_contract": {
+    "path": "agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json",
+    "path_base": "repository_root",
+    "artifact_id": "instance-templates-desired-contract",
+    "schema_version": "2.0.0",
+    "revision": "dd5ec61d1b6474f42d8ac104ab0f5798d3f6bf61",
+    "sha256": "6c1bfdd89a51eba7be680f1b9a024d9f1fc46c17b77afe7ee7da80b0dca86df2"
+  },
+  "started_at": "2026-08-02T16:39:00Z",
+  "completed_at": "2026-08-02T16:49:00Z",
+  "environment": {
+    "host_os": "macOS",
+    "host_os_version": "26.5.2",
+    "architecture": "arm64",
+    "execution_context": "local",
+    "sandboxed": false,
+    "locale": "zh-CN",
+    "timezone": "Asia/Shanghai",
+    "dependency_versions": {
+      "node": "v22.22.3",
+      "pnpm": "11.15.1",
+      "rustc": "1.96.1 (31fca3adb 2026-06-26)",
+      "electron": "43.2.0"
+    }
+  },
+  "matched_state": {
+    "locale": "zh-CN",
+    "theme": "dark",
+    "viewport": {
+      "width": 1728,
+      "height": 992
+    },
+    "device_scale_factor": 2,
+    "authentication_state": "local_trusted_session",
+    "account_state": "local_desktop",
+    "permission_state": "authenticated_tenant_member",
+    "data_state": "local_instance_template_authority_unavailable",
+    "interaction_state": "electron_deep_link_retry_and_reload_supporting_observation"
+  },
+  "evidence": {
+    "build": {
+      "status": "passed",
+      "command": "make -C agi-stack desktop-check && make -C agi-stack desktop-parity-check",
+      "started_at": "2026-08-02T16:39:00Z",
+      "completed_at": "2026-08-02T16:44:51Z",
+      "summary": "Clean detached source passed sidecar, Desktop, Electron production build, route inventory, Browser QA, paired renderer, manifest drift, and structured judgment gates.",
+      "artifact_ids": [
+        "instance-templates-build-report"
+      ]
+    },
+    "browser": {
+      "status": "passed",
+      "command": "make -C agi-stack desktop-parity-check; Electron CDP supporting observation",
+      "started_at": "2026-08-02T16:43:29Z",
+      "completed_at": "2026-08-02T16:49:00Z",
+      "summary": "The paired production signed-out case passed. The make-launched Electron renderer also preserved the Local Instance Templates deep link, stable reason code, zero-API retry boundary, and no iframe or WebView, but this is not a Computer Use native pass.",
+      "artifact_ids": [
+        "instance-templates-paired-renderer-report",
+        "instance-templates-electron-screenshot"
+      ]
+    },
+    "native": {
+      "status": "blocked",
+      "command": "AGISTACK_DESKTOP_DEBUG_PORT=9333 make -C agi-stack run-desktop",
+      "started_at": "2026-08-02T16:45:52Z",
+      "completed_at": "2026-08-02T16:49:00Z",
+      "summary": "The canonical Electron process and Local route started, but the locked Mac prevented Computer Use window, focus, keyboard, Escape, menu, and reload verification. Authorized Cloud instance-template integration was also unavailable.",
+      "artifact_ids": [
+        "instance-templates-electron-support-report"
+      ]
+    }
+  },
+  "capability_results": [
+    {
+      "capability_id": "tenant-tenant-instance-templates",
+      "contract_reference": "agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json#tenant-tenant-instance-templates",
+      "result": "blocked",
+      "summary": "Build, contract, Browser QA, paired renderer, and make-launched Electron Local supporting checks passed. Full Instance Templates parity remains blocked by unavailable authorized Cloud data and the locked-screen Computer Use gap.",
+      "evidence": {
+        "build": "passed",
+        "browser": "passed",
+        "native": "blocked"
+      },
+      "artifact_ids": [
+        "instance-templates-evidence-schema",
+        "instance-templates-desired-contract",
+        "instance-templates-build-report",
+        "instance-templates-paired-renderer-report",
+        "instance-templates-electron-support-report",
+        "instance-templates-electron-screenshot"
+      ],
+      "parity_judgment": {
+        "disposition": "accepted",
+        "statement": "The evidence supports the declared Cloud partial implementation and Local unavailable state, while the overall Instance Templates evidence result must remain blocked and cannot establish complete parity.",
+        "judgment_audit": {
+          "agent_id": "/root/parity_review_a_23_44",
+          "tool_name": "structured_capability_slice_judgment",
+          "input": {
+            "contract_reference": "agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json#tenant-tenant-instance-templates",
+            "evidence_digest": "sha256:4d1a2070bfc74248390e5cf81f44f68e67db435d311d0cb45a4c75b19ee566b0",
+            "observation_summary": "clean source dd5ec61d1b6474f42d8ac104ab0f5798d3f6bf61 passed desktop-check (sidecar 337, Desktop 1817, Electron main/preload/renderer build) and desktop-parity-check (inventory 13, manifest 66 capabilities/174 routes/93 routed sources/66 accepted judgments, Browser QA 417, paired signed-out 1). Canonical make-launched Electron Local preserved #/tenant/northstar/instance-templates across retry/reload, returned availability=unavailable reason_code=local_instance_template_authority_unavailable, issued 0 /api/v1/instance-templates requests (5 requests were Vite source modules only), had 0 renderer/page errors and no iframe/WebView. Computer Use was blocked because Mac locked. No authorized disposable Cloud dataset, so Cloud list/detail/items/pagination/search/filter/create/publish/clone/delete were not live-executed. Nested detail deep-link and deploy-from-template remain unimplemented."
+          },
+          "output": {
+            "verdict": "accepted",
+            "summary": "The evidence supports the declared Cloud partial implementation and Local unavailable state, while the overall Instance Templates evidence result must remain blocked and cannot establish complete parity."
+          },
+          "rationale": "The clean desktop and parity gates support contract consistency, native route registration, buildability, renderer behavior, and the declared partial Cloud action surface. The canonical Electron Local run separately proves stable route restoration, structured local_instance_template_authority_unavailable behavior, zero Instance Templates API traffic, absence of renderer errors, and no iframe or WebView fallback. However, signed-out paired rendering does not exercise the capability data path, no authorized Cloud dataset was available to execute any listed Cloud read or mutation, and the locked Mac prevented Computer Use validation. Nested detail deep links and deploy-from-template are also absent. The narrow Cloud partial and Local unavailable declarations are therefore supported, but complete parity and an overall passed evidence result are not.",
+          "latency_ms": 18,
+          "recorded_at": "2026-08-02T16:55:56.597Z"
+        }
+      },
+      "intentional_deviation": {
+        "disposition": "accepted",
+        "statement": "The stable native zero-API Local unavailable state is an acceptable intentional deviation until a safe sidecar Instance Templates authority exists.",
+        "judgment_audit": {
+          "agent_id": "/root/parity_review_a_23_44",
+          "tool_name": "structured_intentional_deviation_judgment",
+          "input": {
+            "contract_reference": "agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json#tenant-tenant-instance-templates",
+            "evidence_digest": "sha256:4d1a2070bfc74248390e5cf81f44f68e67db435d311d0cb45a4c75b19ee566b0",
+            "observation_summary": "clean source dd5ec61d1b6474f42d8ac104ab0f5798d3f6bf61 passed desktop-check (sidecar 337, Desktop 1817, Electron main/preload/renderer build) and desktop-parity-check (inventory 13, manifest 66 capabilities/174 routes/93 routed sources/66 accepted judgments, Browser QA 417, paired signed-out 1). Canonical make-launched Electron Local preserved #/tenant/northstar/instance-templates across retry/reload, returned availability=unavailable reason_code=local_instance_template_authority_unavailable, issued 0 /api/v1/instance-templates requests (5 requests were Vite source modules only), had 0 renderer/page errors and no iframe/WebView. Computer Use was blocked because Mac locked. No authorized disposable Cloud dataset, so Cloud list/detail/items/pagination/search/filter/create/publish/clone/delete were not live-executed. Nested detail deep-link and deploy-from-template remain unimplemented."
+          },
+          "output": {
+            "verdict": "accepted",
+            "summary": "The stable native zero-API Local unavailable state is an acceptable intentional deviation until a safe sidecar Instance Templates authority exists."
+          },
+          "rationale": "Local Desktop must not fabricate template resources, lifecycle mutations, tenant administration, or import safety that the sidecar does not own. The retained Electron evidence shows the native route stays in place across retry and reload, returns a stable structured unavailable reason before any Instance Templates API request, and does not escape through iframe or WebView. This fail-closed behavior is preferable to simulating Cloud authority and is an acceptable temporary intentional deviation until a workspace-root, size, MIME, and supported-resource-bounded sidecar authority is implemented and evidenced. This acceptance is limited to the Local deviation and does not resolve the unexecuted Cloud flows or the overall blocked capability evidence.",
+          "latency_ms": 14,
+          "recorded_at": "2026-08-02T16:55:56.598Z"
+        }
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "artifact_id": "instance-templates-evidence-schema",
+      "kind": "report",
+      "channel": "shared",
+      "evidence_roles": [
+        "contract"
+      ],
+      "location": "evidence-run.v1.schema.json",
+      "media_type": "application/schema+json",
+      "sha256": "673ddd2b0fd38b97cbf71007fd2a6fe9692dc03ca11c74fc12f0254b24aaf0ed",
+      "produced_at": "2026-08-02T16:49:00Z"
+    },
+    {
+      "artifact_id": "instance-templates-desired-contract",
+      "kind": "report",
+      "channel": "shared",
+      "evidence_roles": [
+        "contract"
+      ],
+      "location": "parity-manifest.v2.json",
+      "media_type": "application/json",
+      "sha256": "6c1bfdd89a51eba7be680f1b9a024d9f1fc46c17b77afe7ee7da80b0dca86df2",
+      "produced_at": "2026-08-02T16:49:00Z"
+    },
+    {
+      "artifact_id": "instance-templates-build-report",
+      "kind": "report",
+      "channel": "build",
+      "evidence_roles": [
+        "contract"
+      ],
+      "location": "build-report.json",
+      "media_type": "application/json",
+      "sha256": "81a6b0da1401bfcbde0b48b1c5947cde32d7c253c13ce66c87b480297a1fbd1c",
+      "produced_at": "2026-08-02T16:44:51Z"
+    },
+    {
+      "artifact_id": "instance-templates-paired-renderer-report",
+      "kind": "report",
+      "channel": "browser",
+      "evidence_roles": [
+        "web_renderer",
+        "desktop_renderer",
+        "visual_diff",
+        "observation_metadata"
+      ],
+      "location": "paired-renderer-report.json",
+      "media_type": "application/json",
+      "sha256": "a558ecd6451e22473e3082209ef652a5a4675b68530c4399a045157da7721df5",
+      "produced_at": "2026-08-02T16:44:51Z"
+    },
+    {
+      "artifact_id": "instance-templates-electron-support-report",
+      "kind": "report",
+      "channel": "native",
+      "evidence_roles": [
+        "native_electron"
+      ],
+      "location": "electron-local-support-report.json",
+      "media_type": "application/json",
+      "sha256": "a2e397d5efab9de56798498a661dc003179b7c4b990dfcadb6089ce8acb096df",
+      "produced_at": "2026-08-02T16:49:00Z"
+    },
+    {
+      "artifact_id": "instance-templates-electron-screenshot",
+      "kind": "screenshot",
+      "channel": "browser",
+      "evidence_roles": [
+        "desktop_full_screenshot"
+      ],
+      "location": "electron-local-instance-templates.png",
+      "media_type": "image/png",
+      "sha256": "36a5c1840b89341f5268825cd67ef22112f4d666bf0efdc977cd8b508856445f",
+      "produced_at": "2026-08-02T16:49:00Z"
+    }
+  ]
+}

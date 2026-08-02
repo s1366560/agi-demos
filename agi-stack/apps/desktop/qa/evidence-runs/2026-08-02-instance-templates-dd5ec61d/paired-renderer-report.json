@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0.0",
+  "record_kind": "desktop-parity-paired-renderer-report",
+  "source_revision": "dd5ec61d1b6474f42d8ac104ab0f5798d3f6bf61",
+  "status": "passed",
+  "verification_channel": "paired production Web and Desktop renderer harness",
+  "matched_state": {
+    "locale": "en",
+    "theme": "light",
+    "viewport": {
+      "width": 1440,
+      "height": 1024
+    },
+    "device_scale_factor": 1,
+    "authentication_state": "signed_out",
+    "permission_state": "public_entry_only",
+    "data_state": "empty",
+    "interaction_state": "focused:email_entry"
+  },
+  "results": {
+    "cases": "1 passed",
+    "source_worktree": "clean",
+    "web_build": "passed",
+    "desktop_build": "passed",
+    "interaction": "passed",
+    "screenshots_retained_by_harness": true,
+    "visual_diff_retained": true,
+    "evidence_packet": "passed"
+  },
+  "limitations": [
+    "This configured paired case is supporting renderer evidence only and does not exercise the authenticated Instance Templates route.",
+    "No authorized disposable Cloud instance-template dataset was available, so Cloud list, detail, pagination, search, filtering, create, publish, clone, and delete were not executed in this evidence run."
+  ],
+  "recorded_at": "2026-08-02T16:44:51Z"
+}
