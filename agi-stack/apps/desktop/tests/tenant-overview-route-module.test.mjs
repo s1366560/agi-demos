@@ -15,6 +15,7 @@ const {
   PROJECT_SEARCH_ROUTE_ID,
   TENANT_CLUSTERS_ROUTE_ID,
   TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
+  TENANT_DEPLOY_ROUTE_ID,
   TENANT_INSTANCES_ROUTE_ID,
   TENANT_POOL_ROUTE_ID,
   TENANT_OVERVIEW_ROUTE_ID,
@@ -59,6 +60,7 @@ test('Tenant Overview loader stays lazy and renders the exact tenant binding', a
       [TENANT_RUNTIMES_ROUTE_ID]: fakeLoader(TENANT_RUNTIMES_ROUTE_ID),
       [TENANT_INSTANCES_ROUTE_ID]: fakeLoader(TENANT_INSTANCES_ROUTE_ID),
       [TENANT_CLUSTERS_ROUTE_ID]: fakeLoader(TENANT_CLUSTERS_ROUTE_ID),
+      [TENANT_DEPLOY_ROUTE_ID]: fakeLoader(TENANT_DEPLOY_ROUTE_ID),
     },
   });
   assert.equal(bindingCalls, 0);
