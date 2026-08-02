@@ -100,7 +100,29 @@ test("Instance Templates limits APIs to production page callers", () => {
     templates.web_reason_code,
     "web_instance_template_route_tenant_scope_mismatch",
   );
-  assert.deepEqual(templates.web_actions ?? templates.actions, templates.actions);
+  assert.deepEqual(templates.web_actions, [
+    "view",
+    "list",
+    "list-items",
+    "create",
+    "delete",
+    "publish",
+    "clone",
+    "deploy-from-template",
+  ]);
+  assert.deepEqual(templates.cloud_actions, [
+    "view",
+    "list",
+    "list-items",
+    "create",
+    "delete",
+    "publish",
+    "clone",
+    "refresh",
+    "paginate",
+    "search-current-page",
+    "filter-status",
+  ]);
   const webRequirements = templates.permission_requirements.filter(
     (requirement) => requirement.surface === "web",
   );
