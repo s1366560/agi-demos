@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0.0",
+  "record_kind": "desktop-parity-paired-renderer-report",
+  "source_revision": "8114a38681333537c98aa9d05f98ae5db18e1451",
+  "status": "passed",
+  "verification_channel": "paired production Web and Desktop renderer harness",
+  "matched_state": {
+    "account": "same configured account",
+    "permissions": "same configured permissions",
+    "data": "same deterministic data",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "viewport": "matched",
+    "device_scale_factor": "matched",
+    "interaction_state": "matched"
+  },
+  "results": {
+    "cases": "1 passed",
+    "web_build": "passed",
+    "desktop_build": "passed",
+    "interaction": "passed",
+    "screenshots_retained_by_harness": true,
+    "visual_diff": "passed",
+    "evidence_packet": "passed"
+  },
+  "limitations": [
+    "No authorized Cloud runtime-instance record was available, so Cloud list, restart, and delete integration remain unverified."
+  ],
+  "recorded_at": "2026-08-02T12:21:05Z"
+}

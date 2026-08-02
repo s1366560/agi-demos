@@ -1,0 +1,60 @@
+{
+  "schema_version": "1.0.0",
+  "record_kind": "desktop-parity-native-authority-report",
+  "source_revision": "8114a38681333537c98aa9d05f98ae5db18e1451",
+  "capability_id": "tenant-tenant-instances",
+  "status": "blocked",
+  "verified_surface": "desktop_local",
+  "unverified_surfaces": [
+    "desktop_cloud_authorized_instance_integration",
+    "desktop_cloud_nested_instance_routes"
+  ],
+  "launch_command": "AGISTACK_DESKTOP_DEBUG_PORT=9333 make -C agi-stack run-desktop",
+  "verification_channel": "Computer Use against the make-launched native Electron process",
+  "native_observations": {
+    "route": "#/tenant/northstar/instances",
+    "breadcrumb": "tenant-tenant-instances",
+    "deep_link_reload_restored": true,
+    "refresh_preserved_authority_state": true,
+    "search_empty_state_rendered": true,
+    "status_filter_empty_state_rendered": true,
+    "status_filter_restored": true,
+    "instance_count": 1,
+    "instance_name": "Local sidecar",
+    "runtime_status": "running",
+    "health_status": "healthy",
+    "reason_code": "local_instance_sidecar_projection_partial",
+    "host_path_value_exposed": false,
+    "endpoint_value_exposed": false,
+    "credential_value_exposed": false,
+    "provider_value_exposed": false,
+    "replica_value_exposed": false,
+    "cluster_value_exposed": false,
+    "lifecycle_mutation_exposed": false
+  },
+  "sidecar_authority": {
+    "transport": "private Electron IPC",
+    "command": "local_runtime_status",
+    "projection_cardinality": "exactly_one_supervised_sidecar",
+    "allowed_actions": [
+      "view",
+      "list",
+      "refresh",
+      "search",
+      "filter-status"
+    ],
+    "availability": "degraded",
+    "reason_code": "local_instance_sidecar_projection_partial"
+  },
+  "blockers": [
+    {
+      "reason_code": "authorized_cloud_runtime_instance_unavailable",
+      "statement": "Cloud Desktop list, restart, and delete were not exercised because no authorized disposable runtime-instance dataset was available."
+    },
+    {
+      "reason_code": "runtime_instances_nested_routes_partial",
+      "statement": "Create and nested instance overview, members, files, genes, channels, settings, evolution, and deploy surfaces are not implemented by this slice."
+    }
+  ],
+  "recorded_at": "2026-08-02T12:21:05Z"
+}

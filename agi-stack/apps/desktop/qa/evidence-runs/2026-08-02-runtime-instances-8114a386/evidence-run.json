@@ -1,0 +1,230 @@
+{
+  "$schema": "./evidence-run.v1.schema.json",
+  "schema_version": "1.0.0",
+  "record_kind": "run",
+  "run_id": "runtime-instances-local-native-8114a386",
+  "run_scope": "capability_slice",
+  "artifact_location_base": "evidence_run_directory",
+  "schema_artifact_id": "runtime-instances-evidence-schema",
+  "desired_contract": {
+    "path": "agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json",
+    "path_base": "repository_root",
+    "artifact_id": "runtime-instances-desired-contract",
+    "schema_version": "2.0.0",
+    "revision": "8114a38681333537c98aa9d05f98ae5db18e1451",
+    "sha256": "a9a2dfac4e4de7eeab414b23c1a597760cf4cea53af9d69c198be87f18f2dc4c"
+  },
+  "source_revisions": {
+    "repository_revision": "8114a38681333537c98aa9d05f98ae5db18e1451",
+    "web_revision": "8114a38681333537c98aa9d05f98ae5db18e1451",
+    "desktop_revision": "8114a38681333537c98aa9d05f98ae5db18e1451",
+    "prototype_revision": "61454b2ead1cedda584e95afee9f471aac7851fb"
+  },
+  "source_state": {
+    "head_revision": "8114a38681333537c98aa9d05f98ae5db18e1451",
+    "worktree_state": "clean"
+  },
+  "started_at": "2026-08-02T11:52:56Z",
+  "completed_at": "2026-08-02T12:21:05Z",
+  "environment": {
+    "host_os": "macOS",
+    "host_os_version": "26.5.2",
+    "architecture": "arm64",
+    "execution_context": "local",
+    "sandboxed": false,
+    "locale": "zh-CN",
+    "timezone": "Asia/Shanghai",
+    "dependency_versions": {
+      "node": "v22.22.3",
+      "pnpm": "11.15.1",
+      "rustc": "1.96.1 (31fca3adb 2026-06-26)",
+      "electron": "43.2.0"
+    }
+  },
+  "matched_state": {
+    "locale": "zh-CN",
+    "theme": "dark",
+    "viewport": {
+      "width": 1296,
+      "height": 768
+    },
+    "device_scale_factor": 1,
+    "authentication_state": "local_trusted_session",
+    "account_state": "local_desktop",
+    "permission_state": "authenticated_tenant_member",
+    "data_state": "one_supervised_local_sidecar",
+    "interaction_state": "native_deep_link_search_filter_refresh_and_reload"
+  },
+  "capability_results": [
+    {
+      "capability_id": "tenant-tenant-instances",
+      "contract_reference": "agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json#tenant-tenant-instances",
+      "result": "blocked",
+      "summary": "The committed build and contract gates, paired production renderer case, and native Local supervised-sidecar projection passed. Full Runtime Instances parity remains blocked because authorized Cloud instance integration and all create or nested instance routes are unavailable.",
+      "evidence": {
+        "build": "passed",
+        "browser": "passed",
+        "native": "blocked"
+      },
+      "artifact_ids": [
+        "runtime-instances-evidence-schema",
+        "runtime-instances-desired-contract",
+        "runtime-instances-build-report",
+        "runtime-instances-paired-renderer-report",
+        "runtime-instances-native-authority",
+        "runtime-instances-native-screenshot"
+      ],
+      "parity_judgment": {
+        "disposition": "accepted",
+        "statement": "The partial and degraded classifications accurately describe the implemented native list slice and do not claim nested-route or Cloud integration equivalence.",
+        "judgment_audit": {
+          "agent_id": "/root/parity_review_a_01_22",
+          "tool_name": "structured_parity_judgment",
+          "input": {
+            "contract_reference": "agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json#tenant-tenant-instances",
+            "evidence_digest": "sha256:bbc05aa503c9736e9cf5d20e3424619372bd350d05c91f61052fcafc1e21fada",
+            "observation_summary": "Desktop and sidecar checks, Electron builds, Browser QA, and paired renderer checks passed. Computer Use verified the fixed Local sidecar projection and reload flow. Authorized Cloud instance data and create or nested instance routes remain unavailable."
+          },
+          "output": {
+            "verdict": "accepted",
+            "summary": "The evidence supports the implemented partial Runtime Instances slice, but not full capability parity."
+          },
+          "rationale": "Desktop and sidecar checks, Electron builds, Browser QA, paired renderer evidence, and make-launched Electron Local validation support the native shell, fixed Local sidecar projection, search, filtering, refresh, Cmd+R recovery, and safe-field boundary. The paired renderer run lacked authorized Cloud runtime-instance data, Cloud instance integration was not validated, and create plus nested instance routes remain unimplemented or unverified. Therefore the partial and degraded classification is accepted while full parity remains blocked.",
+          "latency_ms": 12,
+          "recorded_at": "2026-08-02T12:03:00.000Z"
+        }
+      },
+      "intentional_deviation": {
+        "disposition": "accepted",
+        "statement": "Local Desktop intentionally exposes one safe supervised-sidecar projection and does not reproduce Cloud replica, cluster, endpoint, credential, Provider, or lifecycle authority.",
+        "judgment_audit": {
+          "agent_id": "/root/parity_review_a_01_22",
+          "tool_name": "structured_parity_judgment",
+          "input": {
+            "contract_reference": "agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json#tenant-tenant-instances",
+            "evidence_digest": "sha256:bbc05aa503c9736e9cf5d20e3424619372bd350d05c91f61052fcafc1e21fada",
+            "observation_summary": "Local Desktop exposes one supervised sidecar with safe read-only fields and omits Cloud topology, credentials, host paths, and lifecycle authority."
+          },
+          "output": {
+            "verdict": "accepted",
+            "summary": "Local Desktop intentionally represents the supervised sidecar instead of emulating Cloud instance infrastructure."
+          },
+          "rationale": "The Local route exposes exactly one running and healthy sidecar through a fixed projection and omits host paths, endpoints, credentials, Provider details, replicas, clusters, and lifecycle mutations. This is an appropriate native Local equivalent because fabricating Cloud instance topology or management authority would violate the Local authority boundary.",
+          "latency_ms": 9,
+          "recorded_at": "2026-08-02T12:03:00.000Z"
+        }
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "artifact_id": "runtime-instances-evidence-schema",
+      "kind": "report",
+      "channel": "shared",
+      "evidence_roles": [
+        "contract"
+      ],
+      "location": "evidence-run.v1.schema.json",
+      "media_type": "application/schema+json",
+      "sha256": "673ddd2b0fd38b97cbf71007fd2a6fe9692dc03ca11c74fc12f0254b24aaf0ed",
+      "produced_at": "2026-08-02T12:21:05Z"
+    },
+    {
+      "artifact_id": "runtime-instances-desired-contract",
+      "kind": "report",
+      "channel": "shared",
+      "evidence_roles": [
+        "contract"
+      ],
+      "location": "parity-manifest.v2.json",
+      "media_type": "application/json",
+      "sha256": "a9a2dfac4e4de7eeab414b23c1a597760cf4cea53af9d69c198be87f18f2dc4c",
+      "produced_at": "2026-08-02T12:21:05Z"
+    },
+    {
+      "artifact_id": "runtime-instances-build-report",
+      "kind": "report",
+      "channel": "build",
+      "evidence_roles": [
+        "contract"
+      ],
+      "location": "build-report.json",
+      "media_type": "application/json",
+      "sha256": "46cb1590036cdd196bac4127ea9f2466ecf066c65d7c3963bac266e44b0e0b1d",
+      "produced_at": "2026-08-02T12:21:05Z"
+    },
+    {
+      "artifact_id": "runtime-instances-paired-renderer-report",
+      "kind": "report",
+      "channel": "browser",
+      "evidence_roles": [
+        "web_renderer",
+        "desktop_renderer",
+        "visual_diff",
+        "observation_metadata"
+      ],
+      "location": "paired-renderer-report.json",
+      "media_type": "application/json",
+      "sha256": "e1e2fc44edc4a34a794ab7abf7e62c93b7ea49737838dc25da7d9a968c63aee8",
+      "produced_at": "2026-08-02T12:21:05Z"
+    },
+    {
+      "artifact_id": "runtime-instances-native-authority",
+      "kind": "report",
+      "channel": "native",
+      "evidence_roles": [
+        "native_electron",
+        "sidecar_authority"
+      ],
+      "location": "native-local-authority-report.json",
+      "media_type": "application/json",
+      "sha256": "503ab37256c437befc1ba3fa9a44e9cca3312033657ca2d9bc5b5829e8e7fd11",
+      "produced_at": "2026-08-02T12:21:05Z"
+    },
+    {
+      "artifact_id": "runtime-instances-native-screenshot",
+      "kind": "screenshot",
+      "channel": "native",
+      "evidence_roles": [
+        "native_electron"
+      ],
+      "location": "native-local-runtime-instances.png",
+      "media_type": "image/png",
+      "sha256": "d5ddec7cc5fba0005aee9095b528cb420f76a27870f47764e5dcb48255b07e1d",
+      "produced_at": "2026-08-02T12:21:05Z"
+    }
+  ],
+  "evidence": {
+    "build": {
+      "status": "passed",
+      "command": "make -C agi-stack desktop-check && make -C agi-stack desktop-browser-qa && node contracts/desktop-web-parity/generate-parity-manifest-v2.mjs --check",
+      "started_at": "2026-08-02T11:52:56Z",
+      "completed_at": "2026-08-02T12:12:26Z",
+      "summary": "Clean detached source passed sidecar, Desktop, Electron production build, Browser QA, manifest drift, and structured judgment gates.",
+      "artifact_ids": [
+        "runtime-instances-build-report"
+      ]
+    },
+    "browser": {
+      "status": "passed",
+      "command": "paired-production-evidence.mjs",
+      "started_at": "2026-08-02T12:00:00Z",
+      "completed_at": "2026-08-02T12:12:26Z",
+      "summary": "The configured matched-state paired Web and Desktop production renderer case passed build, interaction, screenshot, visual diff, and evidence packet checks. It did not contain authorized Cloud runtime-instance data.",
+      "artifact_ids": [
+        "runtime-instances-paired-renderer-report"
+      ]
+    },
+    "native": {
+      "status": "blocked",
+      "command": "AGISTACK_DESKTOP_DEBUG_PORT=9333 make -C agi-stack run-desktop",
+      "started_at": "2026-08-02T12:12:26Z",
+      "completed_at": "2026-08-02T12:21:05Z",
+      "summary": "Computer Use verified Local search, status filtering, refresh, supervised-sidecar health, fixed safe projection, and deep-link reload. Authorized Cloud runtime-instance integration and nested routes remain unavailable.",
+      "artifact_ids": [
+        "runtime-instances-native-authority",
+        "runtime-instances-native-screenshot"
+      ]
+    }
+  }
+}
