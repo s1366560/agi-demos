@@ -28,6 +28,7 @@ const {
   PROJECT_CRON_JOBS_ROUTE_ID,
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
+  PROJECT_SUPPORT_ROUTE_ID,
   TENANT_CLUSTERS_ROUTE_ID,
   TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
   TENANT_DEPLOY_ROUTE_ID,
@@ -95,6 +96,9 @@ test('factory stays lazy and publishes the exact implemented route module contra
       [PROJECT_OVERVIEW_ROUTE_ID]: loader,
       [PROJECT_SEARCH_ROUTE_ID]: implementedSearchLoader(),
       [PROJECT_CRON_JOBS_ROUTE_ID]: implementedCronJobsLoader(),
+      [PROJECT_SUPPORT_ROUTE_ID]: implementedRouteLoader(
+        PROJECT_SUPPORT_ROUTE_ID,
+      ),
       [TENANT_OVERVIEW_ROUTE_ID]: implementedTenantLoader(),
       [TENANT_PROJECTS_ROUTE_ID]: implementedRouteLoader(TENANT_PROJECTS_ROUTE_ID),
       [TENANT_WORKSPACES_ROUTE_ID]: implementedRouteLoader(TENANT_WORKSPACES_ROUTE_ID),

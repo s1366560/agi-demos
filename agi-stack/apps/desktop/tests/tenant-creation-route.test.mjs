@@ -30,7 +30,7 @@ const {
 test('production registry adds authenticated tenant creation after the canonical routes', async () => {
   const registry = createRegistry();
   assert.equal(TENANT_CREATION_ROUTE_ID, 'tenant-creation');
-  assert.equal(registry.definitions.length, 54);
+  assert.equal(registry.definitions.length, 55);
   const definition = registry.byId.get(TENANT_CREATION_ROUTE_ID);
   assert.equal(definition.path, '/tenants/new');
   assert.deepEqual(definition.scope, ['global']);
