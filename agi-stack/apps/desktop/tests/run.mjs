@@ -188,6 +188,16 @@ copyFileSync(
   join(desktopRoot, 'src', 'features', 'tenant', 'TenantAnalyticsPage.css'),
   join(compiledTenantDirectory, 'TenantAnalyticsPage.css'),
 );
+copyFileSync(
+  join(
+    desktopRoot,
+    'src',
+    'features',
+    'tenant',
+    'TenantAgentBindingsPage.css',
+  ),
+  join(compiledTenantDirectory, 'TenantAgentBindingsPage.css'),
+);
 
 const compiledProjectSupportDirectory = join(
   compiledRoot,

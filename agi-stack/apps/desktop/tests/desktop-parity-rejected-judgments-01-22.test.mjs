@@ -493,7 +493,7 @@ test("Agent Bindings records tenant-only scope and member-readable testing", () 
     ).sort(),
     ["create", "delete", "set-enabled"],
   );
-  assert.match(capability.judgment_rationale, /tenant-level/iu);
+  assert.match(capability.judgment_rationale, /tenant-(?:level|scoped)/iu);
 });
 
 test("Cloud Providers excludes Local-only routing mutation and discovery", () => {

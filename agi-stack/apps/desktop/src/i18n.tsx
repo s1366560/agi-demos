@@ -61,6 +61,10 @@ import {
   tenantAnalyticsZhCN,
 } from './features/tenant/locales/tenantAnalyticsMessages';
 import {
+  tenantAgentBindingsEnUS,
+  tenantAgentBindingsZhCN,
+} from './features/tenant/locales/tenantAgentBindingsMessages';
+import {
   tenantOverviewEnUS,
   tenantOverviewZhCN,
 } from './features/tenant/locales/tenantOverviewMessages';
@@ -105,6 +109,7 @@ const enUS: Record<string, string> = {
   ...runtimePoolEnUS,
   ...unifiedRuntimesEnUS,
   ...tenantAnalyticsEnUS,
+  ...tenantAgentBindingsEnUS,
   ...tenantOverviewEnUS,
   ...tenantProjectsEnUS,
   ...tenantTasksEnUS,
@@ -3714,6 +3719,7 @@ const zhCN: Record<string, string> = {
   ...runtimePoolZhCN,
   ...unifiedRuntimesZhCN,
   ...tenantAnalyticsZhCN,
+  ...tenantAgentBindingsZhCN,
   ...tenantOverviewZhCN,
   ...tenantProjectsZhCN,
   ...tenantTasksZhCN,

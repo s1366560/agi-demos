@@ -26,6 +26,7 @@ export type DesktopCapabilityName =
   | 'tenant-tenant-projects'
   | 'tenant-tenant-tasks'
   | 'tenant-tenant-analytics'
+  | 'tenant-tenant-agent-bindings'
   | 'tenant-tenant-runtimes'
   | 'tenant-tenant-pool'
   | 'tenant-tenant-instances'
@@ -91,6 +92,7 @@ const CAPABILITY_NAMES: readonly DesktopCapabilityName[] = [
   'tenant-tenant-projects',
   'tenant-tenant-tasks',
   'tenant-tenant-analytics',
+  'tenant-tenant-agent-bindings',
   'tenant-tenant-runtimes',
   'tenant-tenant-pool',
   'tenant-tenant-instances',

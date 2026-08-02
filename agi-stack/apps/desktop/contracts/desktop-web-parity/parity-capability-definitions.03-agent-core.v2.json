@@ -536,15 +536,75 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "NONE",
-          "path": "not_applicable:desktop_native_route_planned",
-          "authority": "none"
+          "method": "GET",
+          "path": "/api/v1/agent/bindings",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/agent/bindings",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/agent/bindings/{binding_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PATCH",
+          "path": "/api/v1/agent/bindings/{binding_id}/enabled",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/agent/bindings/test",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/agent/definitions",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/workspace-context",
+          "authority": "cloud_service"
         },
         {
           "surface": "desktop_local",
-          "method": "NONE",
-          "path": "not_applicable:local_native_authority_planned",
-          "authority": "none"
+          "method": "GET",
+          "path": "/api/v1/agent/bindings",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/agent/bindings",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "DELETE",
+          "path": "/api/v1/agent/bindings/{binding_id}",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "PATCH",
+          "path": "/api/v1/agent/bindings/{binding_id}/enabled",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "POST",
+          "path": "/api/v1/agent/bindings/test",
+          "authority": "sidecar"
         },
         {
           "surface": "native_only",
@@ -574,7 +634,14 @@
         "set-enabled",
         "test"
       ],
-      "cloud_actions": [],
+      "cloud_actions": [
+        "view",
+        "list",
+        "create",
+        "delete",
+        "set-enabled",
+        "test"
+      ],
       "local_actions": [],
       "permission_requirements": [
         {
@@ -604,12 +671,70 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list",
+            "test"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "create",
+            "delete",
+            "set-enabled"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
-      "local_status": "planned",
+      "cloud_status": "implemented",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantAgentBindingsCapability.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantAgentBindingsClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantAgentBindingsHttpClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantAgentBindingsController.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantAgentBindingsRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/TenantAgentBindingsPage.tsx"
+      ],
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "judgment_rationale": "Agent Bindings is a tenant-level contract: tenant members may list bindings and test resolution, while create, delete, and enablement mutations require tenant admin authority. The Workspace Agent binding panel uses a different workspace-member contract and is not an implementation of this API. Neither Desktop mode currently has the canonical route, so both remain planned."
+      "local_reason_code": "local_agent_binding_routing_authority_unavailable",
+      "local_deviation": "Local Desktop keeps the canonical native page and returns a Capability Snapshot v3 unavailable response from the authenticated sidecar. It does not fabricate tenant-level routing or reuse the separate Workspace Agent binding authority.",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantAgentBindingsCapability.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantAgentBindingsClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantAgentBindingsHttpClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantAgentBindingsController.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantAgentBindingsRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/TenantAgentBindingsPage.tsx",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/tenant_agent_bindings.rs"
+      ],
+      "judgment_rationale": "Cloud Desktop now mounts the canonical native Agent Bindings route and consumes the Web list, create, delete, enablement and resolution-test contracts. The shared controller covers loading, empty, ready, stale, conflict, forbidden, unavailable, retry and tenant scope-switch states. Tenant members receive view, list and test authority; owner and admin roles additionally receive create, delete and set-enabled authority from the production workspace-context revision. Local Desktop exposes the same native route but returns a stable authenticated and tenant-scoped unavailable snapshot because no safe local tenant routing authority exists."
     }
   ],
   "source_ownership": {

@@ -312,6 +312,7 @@ import {
   PROJECT_SUPPORT_ROUTE_ID,
   TENANT_OVERVIEW_ROUTE_ID,
   TENANT_ANALYTICS_ROUTE_ID,
+  TENANT_AGENT_BINDINGS_ROUTE_ID,
   TENANT_CLUSTERS_ROUTE_ID,
   TENANT_DEPLOY_ROUTE_ID,
   TENANT_INSTANCE_TEMPLATES_ROUTE_ID,
@@ -335,6 +336,7 @@ import {
   createUnifiedRuntimesRouteBindingForRuntime,
   createTenantOverviewRouteBindingForRuntime,
   createTenantAnalyticsRouteBindingForRuntime,
+  createTenantAgentBindingsRouteBindingForRuntime,
   createTenantProjectsRouteBindingForRuntime,
   createTenantTasksRouteBindingForRuntime,
   createTenantWorkspacesRouteBindingForRuntime,
@@ -367,6 +369,7 @@ import { createRuntimePoolRouteModuleLoader } from './features/runtime-pool/runt
 import { createUnifiedRuntimesRouteModuleLoader } from './features/unified-runtimes/unifiedRuntimesRouteModule';
 import { createTenantOverviewRouteModuleLoader } from './features/tenant/tenantOverviewRouteModule';
 import { createTenantAnalyticsRouteModuleLoader } from './features/tenant/tenantAnalyticsRouteModule';
+import { createTenantAgentBindingsRouteModuleLoader } from './features/tenant/tenantAgentBindingsRouteModule';
 import { createTenantProjectsRouteModuleLoader } from './features/tenant/tenantProjectsRouteModule';
 import { createTenantTasksRouteModuleLoader } from './features/tenant/tenantTasksRouteModule';
 import { createTenantWorkspacesRouteModuleLoader } from './features/tenant/tenantWorkspacesRouteModule';
@@ -2165,6 +2168,14 @@ export function App() {
                   authRef.current.tenants.find(
                     (tenant) => tenant.id === context.tenantId,
                   )?.plan ?? null,
+                ),
+            }),
+          [TENANT_AGENT_BINDINGS_ROUTE_ID]:
+            createTenantAgentBindingsRouteModuleLoader({
+              createBinding: (context) =>
+                createTenantAgentBindingsRouteBindingForRuntime(
+                  configRef.current,
+                  context,
                 ),
             }),
           [TENANT_PROJECTS_ROUTE_ID]:

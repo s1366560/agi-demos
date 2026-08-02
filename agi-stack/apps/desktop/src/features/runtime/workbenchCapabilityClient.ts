@@ -23,6 +23,7 @@ import { createCloudProjectOverviewClient } from '../project/projectOverviewClou
 import { createLocalProjectOverviewClient } from '../project/projectOverviewLocalClient';
 import { projectSupportCapability } from '../project-support/projectSupportCapability';
 import { loadTenantAnalyticsCapability } from '../tenant/tenantAnalyticsCapability';
+import { loadTenantAgentBindingsCapability } from '../tenant/tenantAgentBindingsCapability';
 import { loadTenantOverviewCapability } from '../tenant/tenantOverviewCapability';
 import { loadTenantProjectsCapability } from '../tenant/tenantProjectsCapability';
 import { tenantTasksCapability } from '../tenant/tenantTasksCapability';
@@ -115,6 +116,7 @@ export function createDesktopWorkbenchCapabilityClient(
         projectOverview,
         tenantOverview,
         tenantAnalytics,
+        tenantAgentBindings,
         tenantProjects,
       ] = await Promise.all([
         loadSearchCapability(config, signal),
@@ -123,6 +125,7 @@ export function createDesktopWorkbenchCapabilityClient(
         loadProjectOverviewCapability(config, signal),
         loadTenantOverviewCapability(config, signal),
         loadTenantAnalyticsCapability(config, signal),
+        loadTenantAgentBindingsCapability(config, signal),
         loadTenantProjectsCapability(config, signal),
       ]);
       const projectScope = projectCapabilityScope(config);
@@ -168,6 +171,7 @@ export function createDesktopWorkbenchCapabilityClient(
           'project-support': projectSupportCapability(config),
           'tenant-tenant-overview': tenantOverview,
           'tenant-tenant-analytics': tenantAnalytics,
+          'tenant-tenant-agent-bindings': tenantAgentBindings,
           'tenant-tenant-projects': tenantProjects,
           'tenant-tenant-tasks': tenantTasksCapability(config),
           'tenant-tenant-runtimes': unifiedRuntimesCapability(config),

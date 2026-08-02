@@ -20,6 +20,9 @@ mod sandbox_files_tests;
 mod search;
 #[cfg(test)]
 mod search_tests;
+mod tenant_agent_bindings;
+#[cfg(test)]
+mod tenant_agent_bindings_tests;
 mod tenant_analytics;
 #[cfg(test)]
 mod tenant_analytics_tests;
@@ -42,6 +45,7 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
         .merge(project_overview::router())
         .merge(tenant_overview::router())
         .merge(tenant_analytics::router())
+        .merge(tenant_agent_bindings::router())
         .merge(tenant_projects::router())
         .merge(search::router())
         .merge(workspace_roster::router())

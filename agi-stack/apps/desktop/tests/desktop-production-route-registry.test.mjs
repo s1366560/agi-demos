@@ -22,6 +22,7 @@ const {
   PROJECT_SEARCH_ROUTE_ID,
   PROJECT_SUPPORT_ROUTE_ID,
   TENANT_ANALYTICS_ROUTE_ID,
+  TENANT_AGENT_BINDINGS_ROUTE_ID,
   TENANT_OVERVIEW_ROUTE_ID,
   TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
   TENANT_CLUSTERS_ROUTE_ID,
@@ -212,6 +213,22 @@ function implementedTenantAnalyticsModule(overrides = {}) {
   });
 }
 
+function implementedTenantAgentBindingsModule(overrides = {}) {
+  function TenantAgentBindingsRoute() {
+    return React.createElement('section', null, 'Tenant Agent Bindings route');
+  }
+  return Object.freeze({
+    routeId: TENANT_AGENT_BINDINGS_ROUTE_ID,
+    disposition: 'implemented',
+    availability: 'available',
+    reasonCode: null,
+    capability: TENANT_AGENT_BINDINGS_ROUTE_ID,
+    localPolicy: 'native_equivalent',
+    Surface: TenantAgentBindingsRoute,
+    ...overrides,
+  });
+}
+
 function implementedDeadLetterQueueModule(overrides = {}) {
   function DeadLetterQueueRoute() {
     return React.createElement('section', null, 'Dead Letter Queue route');
@@ -381,6 +398,8 @@ function createRegistry(
   tenantWorkspacesLoader = async () => implementedTenantWorkspacesModule(),
   tenantTasksLoader = async () => implementedTenantTasksModule(),
   tenantAnalyticsLoader = async () => implementedTenantAnalyticsModule(),
+  tenantAgentBindingsLoader = async () =>
+    implementedTenantAgentBindingsModule(),
   deadLetterQueueLoader = async () => implementedDeadLetterQueueModule(),
   runtimePoolLoader = async () => implementedRuntimePoolModule(),
   unifiedRuntimesLoader = async () => implementedUnifiedRuntimesModule(),
@@ -405,6 +424,7 @@ function createRegistry(
       [TENANT_WORKSPACES_ROUTE_ID]: tenantWorkspacesLoader,
       [TENANT_TASKS_ROUTE_ID]: tenantTasksLoader,
       [TENANT_ANALYTICS_ROUTE_ID]: tenantAnalyticsLoader,
+      [TENANT_AGENT_BINDINGS_ROUTE_ID]: tenantAgentBindingsLoader,
       [TENANT_DEAD_LETTER_QUEUE_ROUTE_ID]: deadLetterQueueLoader,
       [TENANT_POOL_ROUTE_ID]: runtimePoolLoader,
       [TENANT_RUNTIMES_ROUTE_ID]: unifiedRuntimesLoader,
@@ -429,6 +449,10 @@ test('production registry requires every implemented project route loader', () =
   assert.equal(TENANT_WORKSPACES_ROUTE_ID, 'tenant-tenant-workspaces');
   assert.equal(TENANT_TASKS_ROUTE_ID, 'tenant-tenant-tasks');
   assert.equal(TENANT_ANALYTICS_ROUTE_ID, 'tenant-tenant-analytics');
+  assert.equal(
+    TENANT_AGENT_BINDINGS_ROUTE_ID,
+    'tenant-tenant-agent-bindings',
+  );
   assert.equal(TENANT_DEAD_LETTER_QUEUE_ROUTE_ID, 'tenant-tenant-dead-letter-queue');
   assert.equal(TENANT_POOL_ROUTE_ID, 'tenant-tenant-pool');
   assert.equal(TENANT_RUNTIMES_ROUTE_ID, 'tenant-tenant-runtimes');
@@ -507,7 +531,7 @@ test('production registry requires every implemented project route loader', () =
   );
 });
 
-test('all 55 production loaders remain lazy and nineteen routes are real modules', async () => {
+test('all 55 production loaders remain lazy and twenty routes are real modules', async () => {
   let projectLoadCount = 0;
   let searchLoadCount = 0;
   let cronJobsLoadCount = 0;
@@ -516,6 +540,7 @@ test('all 55 production loaders remain lazy and nineteen routes are real modules
   let tenantWorkspacesLoadCount = 0;
   let tenantTasksLoadCount = 0;
   let tenantAnalyticsLoadCount = 0;
+  let tenantAgentBindingsLoadCount = 0;
   let deadLetterQueueLoadCount = 0;
   let runtimePoolLoadCount = 0;
   let unifiedRuntimesLoadCount = 0;
@@ -535,6 +560,7 @@ test('all 55 production loaders remain lazy and nineteen routes are real modules
   const tenantWorkspacesModule = implementedTenantWorkspacesModule();
   const tenantTasksModule = implementedTenantTasksModule();
   const tenantAnalyticsModule = implementedTenantAnalyticsModule();
+  const tenantAgentBindingsModule = implementedTenantAgentBindingsModule();
   const deadLetterQueueModule = implementedDeadLetterQueueModule();
   const runtimePoolModule = implementedRuntimePoolModule();
   const unifiedRuntimesModule = implementedUnifiedRuntimesModule();
@@ -578,6 +604,10 @@ test('all 55 production loaders remain lazy and nineteen routes are real modules
     async () => {
       tenantAnalyticsLoadCount += 1;
       return tenantAnalyticsModule;
+    },
+    async () => {
+      tenantAgentBindingsLoadCount += 1;
+      return tenantAgentBindingsModule;
     },
     async () => {
       deadLetterQueueLoadCount += 1;
@@ -634,6 +664,7 @@ test('all 55 production loaders remain lazy and nineteen routes are real modules
   assert.equal(tenantWorkspacesLoadCount, 0);
   assert.equal(tenantTasksLoadCount, 0);
   assert.equal(tenantAnalyticsLoadCount, 0);
+  assert.equal(tenantAgentBindingsLoadCount, 0);
   assert.equal(deadLetterQueueLoadCount, 0);
   assert.equal(runtimePoolLoadCount, 0);
   assert.equal(unifiedRuntimesLoadCount, 0);
@@ -660,6 +691,7 @@ test('all 55 production loaders remain lazy and nineteen routes are real modules
   assert.equal(tenantWorkspacesLoadCount, 1);
   assert.equal(tenantTasksLoadCount, 1);
   assert.equal(tenantAnalyticsLoadCount, 1);
+  assert.equal(tenantAgentBindingsLoadCount, 1);
   assert.equal(deadLetterQueueLoadCount, 1);
   assert.equal(runtimePoolLoadCount, 1);
   assert.equal(unifiedRuntimesLoadCount, 1);
@@ -678,7 +710,7 @@ test('all 55 production loaders remain lazy and nineteen routes are real modules
   const planned = loaded.filter(
     ({ module }) => module.disposition === 'planned',
   );
-  assert.equal(implemented.length, 19);
+  assert.equal(implemented.length, 20);
   assert.deepEqual(
     implemented.map(({ definition }) => definition.id).sort(),
     [
@@ -691,6 +723,7 @@ test('all 55 production loaders remain lazy and nineteen routes are real modules
       TENANT_WORKSPACES_ROUTE_ID,
       TENANT_TASKS_ROUTE_ID,
       TENANT_ANALYTICS_ROUTE_ID,
+      TENANT_AGENT_BINDINGS_ROUTE_ID,
       TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
       TENANT_POOL_ROUTE_ID,
       TENANT_RUNTIMES_ROUTE_ID,
@@ -758,6 +791,13 @@ test('all 55 production loaders remain lazy and nineteen routes are real modules
     tenantAnalyticsModule,
   );
   assert.equal(
+    implemented.find(
+      ({ definition }) =>
+        definition.id === TENANT_AGENT_BINDINGS_ROUTE_ID,
+    ).module,
+    tenantAgentBindingsModule,
+  );
+  assert.equal(
     implemented.find(({ definition }) => definition.id === TENANT_DEAD_LETTER_QUEUE_ROUTE_ID)
       .module,
     deadLetterQueueModule,
@@ -805,7 +845,7 @@ test('all 55 production loaders remain lazy and nineteen routes are real modules
     ).module,
     tenantCreationModule,
   );
-  assert.equal(planned.length, 36);
+  assert.equal(planned.length, 35);
 
   for (const { definition, module } of planned) {
     assert.equal(module.routeId, definition.id);
