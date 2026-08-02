@@ -21,6 +21,9 @@ import { createDeadLetterQueueHttpClient } from '../governance/deadLetterQueueHt
 import type { RuntimePoolRouteBinding } from '../runtime-pool/runtimePoolRouteModule';
 import { createRuntimePoolController } from '../runtime-pool/runtimePoolController';
 import { createRuntimePoolHttpClient } from '../runtime-pool/runtimePoolClient';
+import type { UnifiedRuntimesRouteBinding } from '../unified-runtimes/unifiedRuntimesRouteModule';
+import { createUnifiedRuntimesController } from '../unified-runtimes/unifiedRuntimesController';
+import { createUnifiedRuntimesClient } from '../unified-runtimes/unifiedRuntimesClient';
 import type {
   DesktopCapabilityAvailability,
   DesktopCapabilitySnapshot,
@@ -279,6 +282,33 @@ export function createRuntimePoolRouteBindingForRuntime(
   const client = createRuntimePoolHttpClient(config);
   return Object.freeze({
     controller: createRuntimePoolController({
+      authority: config.mode,
+      client,
+      initialScope: scope,
+    }),
+    scope,
+  });
+}
+
+export function createUnifiedRuntimesRouteBindingForRuntime(
+  config: DesktopRuntimeConfig,
+  context: Readonly<{ tenantId: string }>,
+): UnifiedRuntimesRouteBinding {
+  if (
+    config.tenantId !== context.tenantId ||
+    typeof config.projectId !== 'string' ||
+    !config.projectId.trim()
+  ) {
+    throw new Error('unified_runtimes_runtime_scope_mismatch');
+  }
+  const scope = Object.freeze({
+    authority: config.mode,
+    tenantId: context.tenantId,
+    projectId: config.projectId,
+  });
+  const client = createUnifiedRuntimesClient(config);
+  return Object.freeze({
+    controller: createUnifiedRuntimesController({
       authority: config.mode,
       client,
       initialScope: scope,

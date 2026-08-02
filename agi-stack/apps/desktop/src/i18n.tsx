@@ -13,6 +13,10 @@ import {
   runtimePoolZhCN,
 } from './features/runtime-pool/locales/runtimePoolMessages';
 import {
+  unifiedRuntimesEnUS,
+  unifiedRuntimesZhCN,
+} from './features/unified-runtimes/locales/unifiedRuntimesMessages';
+import {
   nativeUnavailableRouteEnUS,
   nativeUnavailableRouteZhCN,
 } from './features/navigation/locales/nativeUnavailableRouteMessages';
@@ -55,6 +59,7 @@ const enUS: Record<string, string> = {
   ...nativeUnavailableRouteEnUS,
   ...projectOverviewEnUS,
   ...runtimePoolEnUS,
+  ...unifiedRuntimesEnUS,
   ...tenantOverviewEnUS,
   ...tenantProjectsEnUS,
   ...tenantTasksEnUS,
@@ -3654,6 +3659,7 @@ const zhCN: Record<string, string> = {
   ...nativeUnavailableRouteZhCN,
   ...projectOverviewZhCN,
   ...runtimePoolZhCN,
+  ...unifiedRuntimesZhCN,
   ...tenantOverviewZhCN,
   ...tenantProjectsZhCN,
   ...tenantTasksZhCN,

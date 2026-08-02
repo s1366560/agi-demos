@@ -66,8 +66,14 @@
         {
           "surface": "desktop_local",
           "method": "NONE",
-          "path": "not_applicable:local_unified_runtime_inventory_planned",
-          "authority": "none"
+          "path": "native:ipc/local_runtime_status",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/sandbox/capabilities",
+          "authority": "sidecar"
         },
         {
           "surface": "native_only",
@@ -85,8 +91,30 @@
         "view",
         "list",
         "refresh",
+        "toggle-auto-refresh",
+        "filter",
+        "inspect-pool",
+        "inspect-sandbox",
+        "inspect-sidecar",
+        "inspect-sandbox-capabilities"
+      ],
+      "cloud_actions": [
+        "view",
+        "list",
+        "refresh",
+        "toggle-auto-refresh",
+        "filter",
         "inspect-pool",
         "inspect-sandbox"
+      ],
+      "local_actions": [
+        "view",
+        "list",
+        "refresh",
+        "toggle-auto-refresh",
+        "filter",
+        "inspect-sidecar",
+        "inspect-sandbox-capabilities"
       ],
       "permission_requirements": [
         {
@@ -115,16 +143,84 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list",
+            "refresh",
+            "toggle-auto-refresh",
+            "filter",
+            "inspect-pool"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "global_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "inspect-sandbox"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": [
+            "view",
+            "list",
+            "refresh",
+            "toggle-auto-refresh",
+            "filter",
+            "inspect-sidecar",
+            "inspect-sandbox-capabilities"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
       "web_status": "partial",
       "web_reason_code": "global_pool_capacity_not_available_in_tenant_scope",
-      "cloud_status": "planned",
-      "local_status": "planned",
+      "cloud_status": "partial",
+      "cloud_reason_code": "global_pool_capacity_not_available_in_tenant_scope",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesCapability.ts",
+        "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesClient.ts",
+        "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesController.ts",
+        "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/unified-runtimes/UnifiedRuntimesPage.tsx"
+      ],
+      "local_status": "partial",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_unified_runtime_inventory_planned",
-      "local_deviation": "Local Desktop should project the supervised sidecar and local sandboxes instead of inventing Cloud pool resources.",
-      "judgment_rationale": "Unified Runtimes combines tenant-scoped Cloud pool status and instances with tenant-scoped project sandboxes in one tenant route. The pool router now enforces authentication, global administration, tenant scoping, cross-tenant 404 behavior and lifecycle conflicts. Tenant scope intentionally withholds global capacity, so the Web resource cards remain degraded until they render the structured unavailable reason instead of zero values. Desktop currently exposes connection settings and runtime telemetry fragments, not this routed inventory; a single-machine sidecar projection remains meaningful and is planned."
+      "local_reason_code": "local_pool_not_applicable_sidecar_projection",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesCapability.ts",
+        "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesClient.ts",
+        "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesController.ts",
+        "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/unified-runtimes/UnifiedRuntimesPage.tsx"
+      ],
+      "local_deviation": "Local Desktop projects the supervised sidecar and sandbox capability authority while returning local_pool_not_applicable_sidecar_projection for the Cloud pool portion. It does not invent multi-tenant pool instances, capacity, billing, host paths, API endpoints or launch credentials.",
+      "judgment_rationale": "Unified Runtimes combines tenant-scoped Cloud pool status and instances with project sandbox inventory in one native route. Cloud Desktop binds the authenticated pool and sandbox contracts, preserves independent loading, stale, error and retry states, and retains the Web degraded reason for tenant-scoped global capacity. Local Desktop reads only the redacted Electron-owned sidecar status and project sandbox capability contract, explicitly marks Cloud pool resources not applicable and never projects the launch token, API endpoint or host workspace path."
     },
     {
       "id": "tenant-tenant-pool",

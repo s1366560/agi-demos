@@ -294,6 +294,7 @@ import {
   TENANT_OVERVIEW_ROUTE_ID,
   TENANT_POOL_ROUTE_ID,
   TENANT_PROJECTS_ROUTE_ID,
+  TENANT_RUNTIMES_ROUTE_ID,
   TENANT_TASKS_ROUTE_ID,
   TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
   TENANT_WORKSPACES_ROUTE_ID,
@@ -303,6 +304,7 @@ import {
   createDeadLetterQueueRouteBindingForRuntime,
   createProjectOverviewRouteBindingForRuntime,
   createRuntimePoolRouteBindingForRuntime,
+  createUnifiedRuntimesRouteBindingForRuntime,
   createTenantOverviewRouteBindingForRuntime,
   createTenantProjectsRouteBindingForRuntime,
   createTenantTasksRouteBindingForRuntime,
@@ -327,6 +329,7 @@ import {
 import { createProjectOverviewRouteModuleLoader } from './features/project/projectOverviewRouteModule';
 import { createDeadLetterQueueRouteModuleLoader } from './features/governance/deadLetterQueueRouteModule';
 import { createRuntimePoolRouteModuleLoader } from './features/runtime-pool/runtimePoolRouteModule';
+import { createUnifiedRuntimesRouteModuleLoader } from './features/unified-runtimes/unifiedRuntimesRouteModule';
 import { createTenantOverviewRouteModuleLoader } from './features/tenant/tenantOverviewRouteModule';
 import { createTenantProjectsRouteModuleLoader } from './features/tenant/tenantProjectsRouteModule';
 import { createTenantTasksRouteModuleLoader } from './features/tenant/tenantTasksRouteModule';
@@ -2049,6 +2052,14 @@ export function App() {
                 context,
               ),
           }),
+          [TENANT_RUNTIMES_ROUTE_ID]:
+            createUnifiedRuntimesRouteModuleLoader({
+              createBinding: (context) =>
+                createUnifiedRuntimesRouteBindingForRuntime(
+                  configRef.current,
+                  context,
+                ),
+            }),
           [PROJECT_SEARCH_ROUTE_ID]: createProjectSearchRouteModuleLoader({
             createBinding: (_context): ProjectSearchRouteBinding => {
               const current = projectSearchRouteBindingRef.current;

@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 const {
   createProjectOverviewRouteBindingForRuntime,
   createRuntimePoolRouteBindingForRuntime,
+  createUnifiedRuntimesRouteBindingForRuntime,
   desktopRouteBasePermissionsForAuth,
   desktopRoutePermissionsForContext,
   resolveDesktopRouteCapability,
@@ -285,6 +286,54 @@ test('Runtime Pool binding rejects tenant scope drift before client authority', 
         tenantId: 'tenant-other',
       }),
     /runtime_pool_runtime_scope_mismatch/u,
+  );
+});
+
+test('Unified Runtimes binding preserves exact Cloud and Local scope authority', async () => {
+  const cloud = createUnifiedRuntimesRouteBindingForRuntime(
+    runtimeConfig('cloud'),
+    { tenantId },
+  );
+  assert.deepEqual(cloud.scope, {
+    authority: 'cloud',
+    tenantId,
+    projectId,
+  });
+  assert.equal(cloud.controller.getSnapshot().authority, 'cloud');
+
+  const local = createUnifiedRuntimesRouteBindingForRuntime(
+    runtimeConfig('local'),
+    { tenantId },
+  );
+  assert.deepEqual(local.scope, {
+    authority: 'local',
+    tenantId,
+    projectId,
+  });
+  await local.controller.load(local.scope);
+  assert.equal(local.controller.getSnapshot().authority, 'local');
+  assert.equal(
+    local.controller.getSnapshot().poolReasonCode,
+    'local_pool_not_applicable_sidecar_projection',
+  );
+});
+
+test('Unified Runtimes binding rejects tenant and project scope drift', () => {
+  assert.throws(
+    () =>
+      createUnifiedRuntimesRouteBindingForRuntime(
+        runtimeConfig('cloud', { tenantId: 'tenant-other' }),
+        { tenantId },
+      ),
+    /unified_runtimes_runtime_scope_mismatch/u,
+  );
+  assert.throws(
+    () =>
+      createUnifiedRuntimesRouteBindingForRuntime(
+        runtimeConfig('local', { projectId: ' ' }),
+        { tenantId },
+      ),
+    /unified_runtimes_runtime_scope_mismatch/u,
   );
 });
 

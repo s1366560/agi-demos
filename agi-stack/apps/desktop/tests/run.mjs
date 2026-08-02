@@ -150,6 +150,24 @@ copyFileSync(
   join(compiledRuntimePoolDirectory, 'RuntimePoolPage.css'),
 );
 
+const compiledUnifiedRuntimesDirectory = join(
+  compiledRoot,
+  'src',
+  'features',
+  'unified-runtimes',
+);
+mkdirSync(compiledUnifiedRuntimesDirectory, { recursive: true });
+copyFileSync(
+  join(
+    desktopRoot,
+    'src',
+    'features',
+    'unified-runtimes',
+    'UnifiedRuntimesPage.css',
+  ),
+  join(compiledUnifiedRuntimesDirectory, 'UnifiedRuntimesPage.css'),
+);
+
 const testFiles = discoverTestFiles(testsDirectory);
 assertTestInventoryComplete({ testsDirectory, testFiles });
 

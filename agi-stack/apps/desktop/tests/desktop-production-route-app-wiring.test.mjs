@@ -52,6 +52,13 @@ test('App wires the native Runtime Pool loader through the scoped runtime bindin
   );
 });
 
+test('App wires Unified Runtimes through one scoped Cloud or Local binding', () => {
+  assert.match(
+    appSource,
+    /TENANT_RUNTIMES_ROUTE_ID[\s\S]*createUnifiedRuntimesRouteModuleLoader\(\{[\s\S]*createUnifiedRuntimesRouteBindingForRuntime\(\s*configRef\.current,\s*context,?\s*\)/u,
+  );
+});
+
 test('App injects async Cloud or Local permission authority and real capability snapshots', () => {
   assert.match(appSource, /desktopRouteBasePermissionsForAuth\(auth\)/u);
   assert.match(
