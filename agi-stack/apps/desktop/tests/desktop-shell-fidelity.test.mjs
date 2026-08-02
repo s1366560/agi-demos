@@ -516,6 +516,24 @@ test('command palette opens Tenant Tasks through the scoped production route reg
   assert.match(commandItems, /desktopProductionRouteNavigation\.openPath\(tenantTasksPath\)/);
 });
 
+test('command palette opens Project Support through the scoped production route registry', () => {
+  const commandItems =
+    appSource.match(/const commandItems: CommandPaletteItem\[\] = \[[\s\S]*?\n  \];/)?.[0] ?? '';
+
+  assert.match(commandItems, /id: 'project-support'/);
+  assert.match(commandItems, /label: t\('projectSupport\.title'\)/);
+  assert.match(commandItems, /description: t\('projectSupport\.subtitle'\)/);
+  assert.match(
+    commandItems,
+    /desktopProductionRouteRegistry\.byId\.get\(PROJECT_SUPPORT_ROUTE_ID\)/,
+  );
+  assert.match(
+    commandItems,
+    /buildDesktopRoutePath\(projectSupportRoute, \{\s*tenantId: config\.tenantId,\s*projectId: config\.projectId,/,
+  );
+  assert.match(commandItems, /desktopProductionRouteNavigation\.openPath\(projectSupportPath\)/);
+});
+
 test('connection recovery cannot bypass governed model or workspace settings', () => {
   assert.match(runtimeConfigSource, /update\('apiBaseUrl'/);
   assert.match(runtimeConfigSource, /update\('apiKey'/);

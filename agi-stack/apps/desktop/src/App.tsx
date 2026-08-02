@@ -8067,6 +8067,26 @@ export function App() {
       },
     },
     {
+      id: 'project-support',
+      label: t('projectSupport.title'),
+      description: t('projectSupport.subtitle'),
+      icon: <ActivityLogIcon />,
+      disabled:
+        !identityAuthenticated ||
+        !config.tenantId.trim() ||
+        !config.projectId.trim(),
+      onSelect: () => {
+        const projectSupportRoute =
+          desktopProductionRouteRegistry.byId.get(PROJECT_SUPPORT_ROUTE_ID);
+        if (!projectSupportRoute) return;
+        const projectSupportPath = buildDesktopRoutePath(projectSupportRoute, {
+          tenantId: config.tenantId,
+          projectId: config.projectId,
+        });
+        desktopProductionRouteNavigation.openPath(projectSupportPath);
+      },
+    },
+    {
       id: 'settings',
       label: identityAuthenticated
         ? t('settings.title')
