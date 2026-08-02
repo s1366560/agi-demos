@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "checker_version": "2.0.0",
-  "source_revision": "0852a1aa94e02371074c4492f9cb05e2da2e4e09",
+  "source_revision": "0329f0b5007da3dcfef3f375f32bdef6f3a34c26",
   "sources": {
     "canonical_navigation_registry": "web/src/config/navigation.ts#CANONICAL_NAVIGATION_DESTINATIONS",
     "eager_route_entries": "reachable route registration modules#relative imports used by JSX or object routes",
@@ -158,7 +158,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:8f474b4bf44c4b6d6abdbf009d1e5bf56c24db091f8187ca2ecd7abefe5b679b"
+      "sha256": "sha256:bd6d61529bd54e8dad3ca5ec431d3694c5961d331f9f834717c806e1696c9306"
     },
     {
       "source_entry": "web/src/components/agent/QueuedPromptStrip.tsx",
@@ -2294,7 +2294,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:be982734e286cf269d1d6e3b9086cac4557f0293a92f86a880ab557cab0d8940"
+      "sha256": "sha256:77be507956f443602d0735885f877b9e8db185bb45a1eb10f4081822211c5c87"
     },
     {
       "source_entry": "web/src/pages/project/Blackboard.tsx",
@@ -2826,7 +2826,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:7056fd7b8b45ac827f8d824132bec6e9393298186198d948f972269ad775acfc"
+      "sha256": "sha256:5163e268f2e8397e9af4cb51dbc27d29813301a896560ffc58fe9955fb29c9aa"
     },
     {
       "source_entry": "web/src/pages/tenant/UserList.tsx",
@@ -3358,7 +3358,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:5389c71f0817efe2db22f59ce6e7e950f8e3f3f7af48ba1a8fcd0b84ee659876"
+      "sha256": "sha256:b805315a069c8b3abbc4ff53e046ca0a31e4d7848f570d1470185cc5e371a1a3"
     },
     {
       "source_entry": "web/src/services/projectSandboxService.ts",
@@ -3778,7 +3778,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:d82acb325557e3e790796c8d20a38582b995b61c35581f4492755f27fc5ba2f1"
+      "sha256": "sha256:2612c47117046b8519acba8d76493bfd79a28070939f6314e2e3661382177bf1"
     },
     {
       "source_entry": "web/src/stores/project.ts",
