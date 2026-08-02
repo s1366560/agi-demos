@@ -10,6 +10,7 @@ import {
   normalizeAutomationCapabilities,
 } from '../automations/automationModel';
 import { deadLetterQueueCapability } from '../governance/deadLetterQueueCapability';
+import { runtimeClustersCapability } from '../runtime-clusters/runtimeClustersCapability';
 import { runtimeInstancesCapability } from '../runtime-instances/runtimeInstancesCapability';
 import { runtimePoolCapability } from '../runtime-pool/runtimePoolCapability';
 import { unifiedRuntimesCapability } from '../unified-runtimes/unifiedRuntimesCapability';
@@ -158,6 +159,7 @@ export function createDesktopWorkbenchCapabilityClient(
           'tenant-tenant-runtimes': unifiedRuntimesCapability(config),
           'tenant-tenant-pool': runtimePoolCapability(config),
           'tenant-tenant-instances': runtimeInstancesCapability(config),
+          'tenant-tenant-clusters': runtimeClustersCapability(config),
           'tenant-tenant-dead-letter-queue': deadLetterQueueCapability(config),
         },
       };

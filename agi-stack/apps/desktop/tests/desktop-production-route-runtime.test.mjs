@@ -5,6 +5,7 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const {
   createProjectOverviewRouteBindingForRuntime,
+  createRuntimeClustersRouteBindingForRuntime,
   createRuntimeInstancesRouteBindingForRuntime,
   createRuntimePoolRouteBindingForRuntime,
   createUnifiedRuntimesRouteBindingForRuntime,
@@ -313,6 +314,37 @@ test('Runtime Instances binding rejects tenant scope drift before client authori
         tenantId: 'tenant-other',
       }),
     /runtime_instances_runtime_scope_mismatch/u,
+  );
+});
+
+test('Runtime Clusters binding preserves Cloud and Local tenant authority', async () => {
+  const cloud = createRuntimeClustersRouteBindingForRuntime(
+    runtimeConfig('cloud'),
+    { tenantId },
+  );
+  assert.deepEqual(cloud.scope, { authority: 'cloud', tenantId });
+  assert.equal(cloud.controller.getSnapshot().authority, 'cloud');
+
+  const local = createRuntimeClustersRouteBindingForRuntime(
+    runtimeConfig('local'),
+    { tenantId },
+  );
+  assert.deepEqual(local.scope, { authority: 'local', tenantId });
+  await local.controller.load(local.scope);
+  assert.equal(local.controller.getSnapshot().state, 'unavailable');
+  assert.equal(
+    local.controller.getSnapshot().reasonCode,
+    'cloud_cluster_control_not_applicable',
+  );
+});
+
+test('Runtime Clusters binding rejects tenant scope drift before client authority', () => {
+  assert.throws(
+    () =>
+      createRuntimeClustersRouteBindingForRuntime(runtimeConfig('cloud'), {
+        tenantId: 'tenant-other',
+      }),
+    /runtime_clusters_runtime_scope_mismatch/u,
   );
 });
 

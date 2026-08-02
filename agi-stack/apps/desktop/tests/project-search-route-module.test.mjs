@@ -14,6 +14,7 @@ const {
   PROJECT_CRON_JOBS_ROUTE_ID,
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
+  TENANT_CLUSTERS_ROUTE_ID,
   TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
   TENANT_INSTANCES_ROUTE_ID,
   TENANT_POOL_ROUTE_ID,
@@ -68,6 +69,7 @@ test('factory stays lazy and publishes the exact Project Advanced Search route c
       [TENANT_POOL_ROUTE_ID]: implementedRouteLoader(TENANT_POOL_ROUTE_ID),
       [TENANT_RUNTIMES_ROUTE_ID]: implementedRouteLoader(TENANT_RUNTIMES_ROUTE_ID),
       [TENANT_INSTANCES_ROUTE_ID]: implementedRouteLoader(TENANT_INSTANCES_ROUTE_ID),
+      [TENANT_CLUSTERS_ROUTE_ID]: implementedRouteLoader(TENANT_CLUSTERS_ROUTE_ID),
     },
   });
   const module = await registry.byId.get(PROJECT_SEARCH_ROUTE_ID).loader();

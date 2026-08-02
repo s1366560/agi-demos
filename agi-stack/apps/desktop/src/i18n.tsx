@@ -17,6 +17,10 @@ import {
   runtimeInstancesZhCN,
 } from './features/runtime-instances/locales/runtimeInstancesMessages';
 import {
+  runtimeClustersEnUS,
+  runtimeClustersZhCN,
+} from './features/runtime-clusters/locales/runtimeClustersMessages';
+import {
   unifiedRuntimesEnUS,
   unifiedRuntimesZhCN,
 } from './features/unified-runtimes/locales/unifiedRuntimesMessages';
@@ -62,6 +66,7 @@ const enUS: Record<string, string> = {
   ...desktopProductionRouterEnUS,
   ...nativeUnavailableRouteEnUS,
   ...projectOverviewEnUS,
+  ...runtimeClustersEnUS,
   ...runtimeInstancesEnUS,
   ...runtimePoolEnUS,
   ...unifiedRuntimesEnUS,
@@ -3663,6 +3668,7 @@ const zhCN: Record<string, string> = {
   ...desktopProductionRouterZhCN,
   ...nativeUnavailableRouteZhCN,
   ...projectOverviewZhCN,
+  ...runtimeClustersZhCN,
   ...runtimeInstancesZhCN,
   ...runtimePoolZhCN,
   ...unifiedRuntimesZhCN,

@@ -156,6 +156,24 @@ const compiledRuntimeInstancesDirectory = join(
   'features',
   'runtime-instances',
 );
+
+const compiledRuntimeClustersDirectory = join(
+  compiledRoot,
+  'src',
+  'features',
+  'runtime-clusters',
+);
+mkdirSync(compiledRuntimeClustersDirectory, { recursive: true });
+copyFileSync(
+  join(
+    desktopRoot,
+    'src',
+    'features',
+    'runtime-clusters',
+    'RuntimeClustersPage.css',
+  ),
+  join(compiledRuntimeClustersDirectory, 'RuntimeClustersPage.css'),
+);
 mkdirSync(compiledRuntimeInstancesDirectory, { recursive: true });
 copyFileSync(
   join(
