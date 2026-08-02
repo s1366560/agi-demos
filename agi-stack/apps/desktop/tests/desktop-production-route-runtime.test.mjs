@@ -32,7 +32,7 @@ test('permission projection requires authenticated exact catalog membership', ()
   });
   assert.deepEqual(
     [...desktopRoutePermissionsForContext(signedOut, routeContext)],
-    [],
+    ['anonymous'],
   );
 
   const authenticated = authState();

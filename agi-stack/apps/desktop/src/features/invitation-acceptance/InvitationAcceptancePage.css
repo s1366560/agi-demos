@@ -1,0 +1,80 @@
+.invitation-acceptance-page {
+  display: grid;
+  gap: 20px;
+  width: min(520px, calc(100vw - 64px));
+  margin: 56px auto;
+  padding: 32px;
+  border: 1px solid var(--gray-a5);
+  border-radius: 18px;
+  background: var(--color-panel-solid);
+  box-shadow: var(--shadow-4);
+}
+
+.invitation-acceptance-page header,
+.invitation-acceptance-success,
+.invitation-acceptance-error {
+  text-align: center;
+}
+
+.invitation-acceptance-page svg {
+  width: 36px;
+  height: 36px;
+  margin: 0 auto;
+}
+
+.invitation-acceptance-page h1,
+.invitation-acceptance-page p {
+  margin: 0;
+}
+
+.invitation-acceptance-page dl {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--gray-a2);
+}
+
+.invitation-acceptance-page dl div {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.invitation-acceptance-page dt {
+  color: var(--gray-10);
+}
+
+.invitation-acceptance-page dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.invitation-acceptance-warning,
+.invitation-acceptance-error code {
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--amber-a3);
+  color: var(--amber-11);
+}
+
+.invitation-acceptance-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.invitation-acceptance-spinner {
+  width: 28px;
+  height: 28px;
+  margin: 0 auto;
+  border: 2px solid var(--gray-a5);
+  border-top-color: var(--accent-9);
+  border-radius: 50%;
+  animation: invitation-acceptance-spin 0.8s linear infinite;
+}
+
+@keyframes invitation-acceptance-spin {
+  to { transform: rotate(360deg); }
+}

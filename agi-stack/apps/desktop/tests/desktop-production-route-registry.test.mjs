@@ -15,6 +15,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   DEVICE_APPROVAL_ROUTE_ID,
+  INVITATION_ACCEPTANCE_ROUTE_ID,
   TENANT_CREATION_ROUTE_ID,
   PROJECT_CRON_JOBS_ROUTE_ID,
   PROJECT_OVERVIEW_ROUTE_ID,
@@ -321,6 +322,22 @@ function implementedTenantCreationModule(overrides = {}) {
   });
 }
 
+function implementedInvitationAcceptanceModule(overrides = {}) {
+  function InvitationAcceptanceRoute() {
+    return React.createElement('section', null, 'Invitation Acceptance route');
+  }
+  return Object.freeze({
+    routeId: INVITATION_ACCEPTANCE_ROUTE_ID,
+    disposition: 'implemented',
+    availability: 'available',
+    reasonCode: null,
+    capability: INVITATION_ACCEPTANCE_ROUTE_ID,
+    localPolicy: 'cloud_only',
+    Surface: InvitationAcceptanceRoute,
+    ...overrides,
+  });
+}
+
 function createRegistry(
   projectLoader = async () => implementedProjectModule(),
   searchLoader = async () => implementedSearchModule(),
@@ -338,6 +355,8 @@ function createRegistry(
   instanceTemplatesLoader = async () => implementedInstanceTemplatesModule(),
   deviceApprovalLoader = async () => implementedDeviceApprovalModule(),
   tenantCreationLoader = async () => implementedTenantCreationModule(),
+  invitationAcceptanceLoader = async () =>
+    implementedInvitationAcceptanceModule(),
 ) {
   return createDesktopProductionRouteRegistry({
     implementedLoaders: {
@@ -357,6 +376,7 @@ function createRegistry(
       [TENANT_INSTANCE_TEMPLATES_ROUTE_ID]: instanceTemplatesLoader,
       [DEVICE_APPROVAL_ROUTE_ID]: deviceApprovalLoader,
       [TENANT_CREATION_ROUTE_ID]: tenantCreationLoader,
+      [INVITATION_ACCEPTANCE_ROUTE_ID]: invitationAcceptanceLoader,
     },
   });
 }
@@ -447,7 +467,7 @@ test('production registry requires every implemented project route loader', () =
   );
 });
 
-test('all 53 production loaders remain lazy and sixteen routes are real modules', async () => {
+test('all 54 production loaders remain lazy and seventeen routes are real modules', async () => {
   let projectLoadCount = 0;
   let searchLoadCount = 0;
   let cronJobsLoadCount = 0;
@@ -464,6 +484,7 @@ test('all 53 production loaders remain lazy and sixteen routes are real modules'
   let instanceTemplatesLoadCount = 0;
   let deviceApprovalLoadCount = 0;
   let tenantCreationLoadCount = 0;
+  let invitationAcceptanceLoadCount = 0;
   const projectModule = implementedProjectModule();
   const searchModule = implementedSearchModule();
   const cronJobsModule = implementedCronJobsModule();
@@ -480,6 +501,7 @@ test('all 53 production loaders remain lazy and sixteen routes are real modules'
   const instanceTemplatesModule = implementedInstanceTemplatesModule();
   const deviceApprovalModule = implementedDeviceApprovalModule();
   const tenantCreationModule = implementedTenantCreationModule();
+  const invitationAcceptanceModule = implementedInvitationAcceptanceModule();
   const registry = createRegistry(
     async () => {
       projectLoadCount += 1;
@@ -545,9 +567,13 @@ test('all 53 production loaders remain lazy and sixteen routes are real modules'
       tenantCreationLoadCount += 1;
       return tenantCreationModule;
     },
+    async () => {
+      invitationAcceptanceLoadCount += 1;
+      return invitationAcceptanceModule;
+    },
   );
 
-  assert.equal(registry.definitions.length, 53);
+  assert.equal(registry.definitions.length, 54);
   assert.equal(projectLoadCount, 0);
   assert.equal(searchLoadCount, 0);
   assert.equal(cronJobsLoadCount, 0);
@@ -564,6 +590,7 @@ test('all 53 production loaders remain lazy and sixteen routes are real modules'
   assert.equal(instanceTemplatesLoadCount, 0);
   assert.equal(deviceApprovalLoadCount, 0);
   assert.equal(tenantCreationLoadCount, 0);
+  assert.equal(invitationAcceptanceLoadCount, 0);
 
   const loaded = await Promise.all(
     registry.definitions.map(async (definition) => ({
@@ -587,6 +614,7 @@ test('all 53 production loaders remain lazy and sixteen routes are real modules'
   assert.equal(instanceTemplatesLoadCount, 1);
   assert.equal(deviceApprovalLoadCount, 1);
   assert.equal(tenantCreationLoadCount, 1);
+  assert.equal(invitationAcceptanceLoadCount, 1);
 
   const implemented = loaded.filter(
     ({ module }) => module.disposition === 'implemented',
@@ -594,7 +622,7 @@ test('all 53 production loaders remain lazy and sixteen routes are real modules'
   const planned = loaded.filter(
     ({ module }) => module.disposition === 'planned',
   );
-  assert.equal(implemented.length, 16);
+  assert.equal(implemented.length, 17);
   assert.deepEqual(
     implemented.map(({ definition }) => definition.id).sort(),
     [
@@ -614,6 +642,7 @@ test('all 53 production loaders remain lazy and sixteen routes are real modules'
       TENANT_INSTANCE_TEMPLATES_ROUTE_ID,
       DEVICE_APPROVAL_ROUTE_ID,
       TENANT_CREATION_ROUTE_ID,
+      INVITATION_ACCEPTANCE_ROUTE_ID,
     ].sort(),
   );
   assert.equal(

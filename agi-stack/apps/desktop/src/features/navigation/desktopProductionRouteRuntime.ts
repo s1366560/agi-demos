@@ -71,7 +71,10 @@ export function desktopRoutePermissionsForContext(
   context: DesktopRouteContext,
 ): ReadonlySet<string> {
   const permissions = new Set<string>();
-  if (!isIdentityAuthenticated(auth)) return permissions;
+  if (!isIdentityAuthenticated(auth)) {
+    permissions.add('anonymous');
+    return permissions;
+  }
 
   permissions.add('authenticated');
   const tenantId = context.tenantId;

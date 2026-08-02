@@ -12,6 +12,7 @@ const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
   createDesktopProductionRouteRegistry,
   DEVICE_APPROVAL_ROUTE_ID,
+  INVITATION_ACCEPTANCE_ROUTE_ID,
   PROJECT_CRON_JOBS_ROUTE_ID,
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
@@ -65,6 +66,9 @@ test('factory stays lazy and publishes the exact Project Advanced Search route c
       ),
       [TENANT_CREATION_ROUTE_ID]: implementedRouteLoader(
         TENANT_CREATION_ROUTE_ID,
+      ),
+      [INVITATION_ACCEPTANCE_ROUTE_ID]: implementedRouteLoader(
+        INVITATION_ACCEPTANCE_ROUTE_ID,
       ),
       [PROJECT_OVERVIEW_ROUTE_ID]: implementedOverviewLoader(),
       [PROJECT_SEARCH_ROUTE_ID]: loader,

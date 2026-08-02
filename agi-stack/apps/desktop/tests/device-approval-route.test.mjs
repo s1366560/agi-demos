@@ -30,7 +30,7 @@ const {
 test('production registry keeps native device approval beside global native routes', async () => {
   const registry = createRegistry();
   assert.equal(DEVICE_APPROVAL_ROUTE_ID, 'device-approval');
-  assert.equal(registry.definitions.length, 53);
+  assert.equal(registry.definitions.length, 54);
   const definition = registry.byId.get(DEVICE_APPROVAL_ROUTE_ID);
   assert.equal(definition.path, '/device');
   assert.deepEqual(definition.scope, ['global']);

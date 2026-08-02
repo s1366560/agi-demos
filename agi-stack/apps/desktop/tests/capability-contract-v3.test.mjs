@@ -63,6 +63,15 @@ test('DesktopCapabilitySnapshot v3 validates authority fields and preserves the 
         scope: nullScope,
         authority_revision: null,
       },
+      'invitation-acceptance': {
+        availability: 'unavailable',
+        reason_code: 'capability_not_declared',
+        service_version: null,
+        contract_version: null,
+        allowed_actions: [],
+        scope: nullScope,
+        authority_revision: null,
+      },
       'tenant-tenant-overview': {
         availability: 'unavailable',
         reason_code: 'capability_not_declared',

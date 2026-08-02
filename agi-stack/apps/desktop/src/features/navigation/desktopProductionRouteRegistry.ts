@@ -20,6 +20,7 @@ import { createDesktopRouteRegistry } from './desktopRouteRegistry';
 
 export const DEVICE_APPROVAL_ROUTE_ID = 'device-approval' as const;
 export const TENANT_CREATION_ROUTE_ID = 'tenant-creation' as const;
+export const INVITATION_ACCEPTANCE_ROUTE_ID = 'invitation-acceptance' as const;
 export const PROJECT_OVERVIEW_ROUTE_ID = 'project-project-overview' as const;
 export const PROJECT_SEARCH_ROUTE_ID = 'project-project-search' as const;
 export const PROJECT_CRON_JOBS_ROUTE_ID =
@@ -54,11 +55,13 @@ const IMPLEMENTED_ROUTE_IDS = new Set<string>([
   TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
   DEVICE_APPROVAL_ROUTE_ID,
   TENANT_CREATION_ROUTE_ID,
+  INVITATION_ACCEPTANCE_ROUTE_ID,
 ]);
 const PRODUCTION_ROUTE_ID_SET = new Set<string>([
   ...CANONICAL_DESKTOP_ROUTE_IDS,
   DEVICE_APPROVAL_ROUTE_ID,
   TENANT_CREATION_ROUTE_ID,
+  INVITATION_ACCEPTANCE_ROUTE_ID,
 ]);
 
 export type DesktopProductionRouteRegistryOptions = Readonly<{
@@ -111,10 +114,25 @@ export function createDesktopProductionRouteRegistry({
       () => requiredDefinition(registry, TENANT_CREATION_ROUTE_ID),
     ),
   };
+  const invitationAcceptanceDefinition: DesktopRouteDefinition<DesktopRouteModule> = {
+    id: INVITATION_ACCEPTANCE_ROUTE_ID,
+    path: '/invite',
+    scope: ['global'],
+    navGroup: 'identity-entry',
+    capability: INVITATION_ACCEPTANCE_ROUTE_ID,
+    requiredPermission: [['anonymous'], ['authenticated']],
+    localPolicy: 'cloud_only',
+    loader: implementedLoader(
+      INVITATION_ACCEPTANCE_ROUTE_ID,
+      implementedLoaders[INVITATION_ACCEPTANCE_ROUTE_ID],
+      () => requiredDefinition(registry, INVITATION_ACCEPTANCE_ROUTE_ID),
+    ),
+  };
   registry = createDesktopRouteRegistry([
     ...canonicalRegistry.definitions,
     deviceApprovalDefinition,
     tenantCreationDefinition,
+    invitationAcceptanceDefinition,
   ]);
   return registry;
 }
