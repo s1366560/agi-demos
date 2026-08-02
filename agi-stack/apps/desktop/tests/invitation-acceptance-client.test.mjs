@@ -93,3 +93,23 @@ test('acceptance maps authority status and rejects malformed success bodies', as
     (error) => error.reasonCode === 'invitation_acceptance_contract_invalid',
   );
 });
+
+test('acceptance preserves the backend invalid-or-expired semantics for HTTP 400', async () => {
+  const invalidOrExpired = createInvitationAcceptanceClient(cloudConfig, {
+    fetch: async () => new Response(
+      JSON.stringify({ detail: 'Invalid or expired invitation' }),
+      {
+        status: 400,
+        headers: { 'content-type': 'application/json' },
+      },
+    ),
+  });
+
+  await assert.rejects(
+    invalidOrExpired.accept('token'),
+    (error) =>
+      error instanceof InvitationAcceptanceError &&
+      error.status === 400 &&
+      error.reasonCode === 'invitation_token_invalid_or_expired',
+  );
+});

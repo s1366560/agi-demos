@@ -32,6 +32,7 @@ export type DesktopProductionRouterProps = Readonly<
   > & {
     authenticationPassthroughRouteIds?: ReadonlySet<string>;
     children: ReactNode;
+    forceLegacyChildren?: boolean;
     location: DesktopHashLocationPort;
     navigation: DesktopProductionRouterNavigationPort;
   }
@@ -41,6 +42,7 @@ export type DesktopProductionRouterViewProps = Readonly<{
   authenticationPassthroughRouteIds?: ReadonlySet<string>;
   children: ReactNode;
   currentLocation?: string;
+  forceLegacyChildren?: boolean;
   navigation: DesktopProductionRouterNavigationPort;
   retry: () => Promise<void>;
   state: DesktopRouteHostState<DesktopRouteModule>;
@@ -49,6 +51,7 @@ export type DesktopProductionRouterViewProps = Readonly<{
 export function DesktopProductionRouter({
   authenticationPassthroughRouteIds,
   children,
+  forceLegacyChildren,
   location,
   mode,
   navigation,
@@ -88,6 +91,7 @@ export function DesktopProductionRouter({
     <DesktopProductionRouterView
       authenticationPassthroughRouteIds={authenticationPassthroughRouteIds}
       currentLocation={location.readHash()}
+      forceLegacyChildren={forceLegacyChildren}
       navigation={navigation}
       retry={retry}
       state={state}
@@ -101,6 +105,7 @@ export function DesktopProductionRouterView({
   authenticationPassthroughRouteIds,
   children,
   currentLocation = '',
+  forceLegacyChildren = false,
   navigation,
   retry,
   state,
@@ -110,6 +115,7 @@ export function DesktopProductionRouterView({
     state,
     currentLocation,
     authenticationPassthroughRouteIds,
+    forceLegacyChildren,
   );
   const routeId =
     'match' in state
@@ -382,7 +388,9 @@ function productionRouteOwnsState(
   state: DesktopRouteHostState<DesktopRouteModule>,
   currentLocation: string,
   authenticationPassthroughRouteIds?: ReadonlySet<string>,
+  forceLegacyChildren = false,
 ): boolean {
+  if (forceLegacyChildren) return false;
   if (state.status === 'idle') {
     return hasNonEmptyHash(currentLocation);
   }

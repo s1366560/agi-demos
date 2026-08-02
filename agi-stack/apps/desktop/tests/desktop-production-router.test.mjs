@@ -308,6 +308,25 @@ test('authentication-required route can preserve its deep link behind the login 
   assert.doesNotMatch(markup, /desktop-production-route-stage/u);
 });
 
+test('an explicit legacy-child handoff hides a ready native route without clearing its hash', () => {
+  const markup = renderView({
+    state: {
+      status: 'ready',
+      match,
+      capability,
+      module,
+    },
+    forceLegacyChildren: true,
+  });
+
+  assert.match(markup, /data-legacy="true"/u);
+  assert.doesNotMatch(markup, /desktop-production-route-stage/u);
+  assert.doesNotMatch(
+    markup,
+    /class="desktop-production-router-legacy"[^>]*hidden="" inert=""/u,
+  );
+});
+
 test('breadcrumb return and retry actions use only the injected ports', async () => {
   let clearCalls = 0;
   let retryCalls = 0;
@@ -393,7 +412,11 @@ test('router styling and copy remain native, responsive, and bilingual', () => {
   }
 });
 
-function renderView({ state, authenticationPassthroughRouteIds }) {
+function renderView({
+  state,
+  authenticationPassthroughRouteIds,
+  forceLegacyChildren,
+}) {
   return render(
     React.createElement(
       DesktopProductionRouterView,
@@ -403,6 +426,7 @@ function renderView({ state, authenticationPassthroughRouteIds }) {
         retry: async () => {},
         navigation: { clearHash() {} },
         authenticationPassthroughRouteIds,
+        forceLegacyChildren,
       },
       React.createElement(
         'article',

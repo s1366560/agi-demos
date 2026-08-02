@@ -192,3 +192,18 @@ test('anonymous unknown routes are handled natively before the login gate', () =
     /location=\{desktopProductionRouteLocation\}[\s\S]*mode=\{config\.mode\}[\s\S]*navigation=\{desktopProductionRouteNavigation\}/u,
   );
 });
+
+test('invitation sign-in hands the preserved hash to LoginScreen and resets after authentication', () => {
+  assert.match(
+    appSource,
+    /forceLegacyChildren=\{invitationSignInRequested\}/u,
+  );
+  assert.match(
+    appSource,
+    /useEffect\(\(\) => \{[\s\S]*identityAuthenticated[\s\S]*setInvitationSignInRequested\(false\)[\s\S]*\}, \[identityAuthenticated, invitationSignInRequested\]\)/u,
+  );
+  assert.match(
+    appSource,
+    /onRequireSignIn:\s*\(\)\s*=>\s*setInvitationSignInRequested\(true\)/u,
+  );
+});
