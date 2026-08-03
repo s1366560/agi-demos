@@ -263,6 +263,7 @@ import {
   buildSessionDetailViewModel,
   conversationWithAuthoritativeRun,
   mergeConversationListWithCurrentRunAuthority,
+  respondableHitlRequestsForProjection,
   type SessionCapabilityMode,
   type SessionDetailViewModel,
   type SessionRunAction,
@@ -651,7 +652,7 @@ function titlebarRunStateFromStatus(status: string): RunControlState {
   ) {
     return 'paused';
   }
-  if (normalized === 'ready_review' || normalized === 'completed') return 'running';
+  if (normalized === 'ready_review' || normalized === 'completed') return 'stopped';
   if (
     normalized === 'failed' ||
     normalized === 'disconnected' ||
@@ -2843,10 +2844,7 @@ export function App() {
   }, [sessionProjection]);
   const respondableHitlRequestIds = useMemo(
     () =>
-      sessionProjection?.capabilities.canRespondToHitl &&
-      sessionProjection.capabilities.allowedActions.includes('respond_to_hitl')
-        ? sessionProjection.pendingHitl.map((request) => request.id)
-        : [],
+      respondableHitlRequestsForProjection(sessionProjection).map((request) => request.id),
     [sessionProjection],
   );
   const respondableHitlRequestIdSet = useMemo(

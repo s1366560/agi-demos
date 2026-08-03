@@ -14,6 +14,7 @@ const {
   MY_WORK_DISPLAY_GROUPS,
   myWorkDisplayGroupForAuthorityGroup,
   myWorkConversationMatchesScope,
+  myWorkEffectiveGroup,
   myWorkItemKey,
   myWorkRefreshScopeIsCurrent,
   socketEventInvalidatesMyWork,
@@ -382,5 +383,95 @@ test('My Work opens only the exact tenant, project, workspace, and conversation 
       context
     ),
     false
+  );
+});
+
+test('My Work never groups a terminal or stalled run as Running', () => {
+  const staleItems = [
+    {
+      ...items[3],
+      id: 'stale-completed',
+      group: 'running',
+      status: 'completed',
+    },
+    {
+      ...items[3],
+      id: 'stale-failed',
+      group: 'running',
+      status: 'failed',
+    },
+    {
+      ...items[3],
+      id: 'stale-cancelled',
+      group: 'running',
+      status: 'cancelled',
+    },
+    {
+      ...items[3],
+      id: 'stale-ready',
+      group: 'running',
+      status: 'ready_review',
+    },
+    {
+      ...items[3],
+      id: 'live-running',
+      group: 'running',
+      status: 'running',
+    },
+    {
+      ...items[3],
+      id: 'live-paused',
+      group: 'running',
+      status: 'paused',
+    },
+  ];
+
+  assert.equal(myWorkEffectiveGroup(staleItems[0]), 'ready_review');
+  assert.equal(myWorkEffectiveGroup(staleItems[1]), 'needs_input');
+  assert.equal(myWorkEffectiveGroup(staleItems[2]), 'needs_input');
+  assert.equal(myWorkEffectiveGroup(staleItems[3]), 'ready_review');
+  assert.equal(myWorkEffectiveGroup(staleItems[4]), 'running');
+  assert.equal(myWorkEffectiveGroup(staleItems[5]), 'running');
+
+  const grouped = groupMyWorkDisplayItems(staleItems);
+  const running = grouped.find(({ group }) => group === 'running');
+  assert.deepEqual(
+    running?.items.map((item) => item.id),
+    ['live-running', 'live-paused']
+  );
+  assert.deepEqual(countMyWorkDisplayGroups(staleItems), {
+    needs_input: 2,
+    running: 2,
+    ready_review: 2,
+  });
+});
+
+test('My Work never presents a completed run as needing input', () => {
+  const completedInputItem = {
+    ...items[1],
+    id: 'completed-input',
+    group: 'needs_input',
+    status: 'completed',
+  };
+  const completedApprovalItem = {
+    ...items[0],
+    id: 'completed-approval',
+    group: 'needs_approval',
+    status: 'completed',
+  };
+
+  assert.equal(myWorkEffectiveGroup(completedInputItem), 'ready_review');
+  assert.equal(myWorkEffectiveGroup(completedApprovalItem), 'ready_review');
+  assert.deepEqual(
+    filterMyWorkDisplayItems([completedInputItem, completedApprovalItem], 'running').map(
+      (item) => item.id
+    ),
+    []
+  );
+  assert.deepEqual(
+    filterMyWorkDisplayItems([completedInputItem, completedApprovalItem], 'ready_review').map(
+      (item) => item.id
+    ),
+    ['completed-input', 'completed-approval']
   );
 });

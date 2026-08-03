@@ -645,6 +645,10 @@ test('session activity separates authoritative live state from recorded agent re
   assert.doesNotMatch(chatPanelSource, /activitySummary\.evidence \|\| activityEvidence/);
   assert.match(
     sessionWorkspaceSource,
+    /sessionLiveIndicator\(viewModel\.status, liveConnected\)/,
+  );
+  assert.doesNotMatch(
+    sessionWorkspaceSource,
     /liveConnected \? t\('session\.liveConnected'\) : t\('session\.liveReconnecting'\)/,
   );
 });

@@ -54,6 +54,37 @@ export type MyWorkAuthorityPresentation = {
   } | null;
 };
 
+// Statuses in which a run is genuinely still in flight. Anything else
+// (completed/failed/cancelled/ready_review/disconnected/interrupted) must not
+// be presented under the Running group, even if a stale authority record
+// still carries group 'running'.
+const LIVE_RUN_GROUP_STATUSES: ReadonlySet<string> = new Set([
+  'queued',
+  'running',
+  'paused',
+  'needs_input',
+  'needs_approval',
+]);
+
+/**
+ * Effective authority group derived from runtime truth. The backend-supplied
+ * group can lag behind the run status; the display layer never shows a
+ * terminal or stalled run as Running and never shows a completed run as
+ * needing input. When the status is unknown the backend group is trusted,
+ * because the display has no truth to correct it with.
+ */
+export function myWorkEffectiveGroup(
+  item: Pick<ProjectWorkItem, 'group' | 'status'>,
+): MyWorkGroup {
+  const status = item.status?.trim().toLowerCase() ?? '';
+  if (!status) return item.group;
+  if (status === 'completed') return 'ready_review';
+  if (item.group === 'running' && !LIVE_RUN_GROUP_STATUSES.has(status)) {
+    return status === 'ready_review' ? 'ready_review' : 'needs_input';
+  }
+  return item.group;
+}
+
 const myWorkInvalidationEventTypes = new Set([
   'run_status',
   'clarification_asked',
@@ -118,7 +149,7 @@ export function filterMyWorkDisplayItems(
 ): ProjectWorkItem[] {
   return filterMyWorkItems(items, 'all', mode).filter(
     (item) =>
-      group === 'all' || myWorkDisplayGroupForAuthorityGroup(item.group) === group,
+      group === 'all' || myWorkDisplayGroupForAuthorityGroup(myWorkEffectiveGroup(item)) === group,
   );
 }
 
@@ -130,7 +161,7 @@ export function groupMyWorkDisplayItems(
   return MY_WORK_DISPLAY_GROUPS.map((group) => ({
     group,
     items: visibleItems.filter(
-      (item) => myWorkDisplayGroupForAuthorityGroup(item.group) === group,
+      (item) => myWorkDisplayGroupForAuthorityGroup(myWorkEffectiveGroup(item)) === group,
     ),
   }));
 }
@@ -143,7 +174,7 @@ export function countMyWorkDisplayGroups(
     Record<MyWorkDisplayGroup, number>
   >(
     (counts, item) => {
-      counts[myWorkDisplayGroupForAuthorityGroup(item.group)] += 1;
+      counts[myWorkDisplayGroupForAuthorityGroup(myWorkEffectiveGroup(item))] += 1;
       return counts;
     },
     { needs_input: 0, running: 0, ready_review: 0 },

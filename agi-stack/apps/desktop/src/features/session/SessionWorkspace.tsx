@@ -42,6 +42,7 @@ import {
 } from './sessionLayoutModel';
 import type { SessionCanvasControls } from './workspaceReviewPanelModel';
 import {
+  sessionLiveIndicator,
   sessionRecoveryPresentation,
   sessionStatusPresentation,
   type SessionDetailViewModel,
@@ -111,6 +112,7 @@ export function SessionWorkspace({
   const moreActionsSummaryRef = useRef<HTMLElement>(null);
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   const statusPresentation = sessionStatusPresentation(viewModel.status);
+  const liveIndicator = sessionLiveIndicator(viewModel.status, liveConnected);
   const runActions = viewModel.runActions;
   const reattachPresentation = sessionRecoveryPresentation('reconnect');
   const forkPresentation = sessionRecoveryPresentation('fork');
@@ -447,6 +449,7 @@ export function SessionWorkspace({
                   type="button"
                   className="danger"
                   disabled={actionDisabled}
+                  title={t('session.stopRunHint')}
                   onClick={() => {
                     closeMoreActions();
                     onRunAction('cancel');
@@ -578,8 +581,8 @@ export function SessionWorkspace({
                   {t('session.participantCount', { count: viewModel.participantCount })}
                 </small>
               ) : null}
-              <em title={liveError ?? undefined}>
-                {liveConnected ? t('session.liveConnected') : t('session.liveReconnecting')}
+              <em title={liveError ?? undefined} data-live-tone={liveIndicator.tone}>
+                {t(liveIndicator.labelKey)}
               </em>
               {surface === 'conversation' ? (
                 <button

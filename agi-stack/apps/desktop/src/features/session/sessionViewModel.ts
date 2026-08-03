@@ -1,6 +1,7 @@
 import type {
   AgentConversation,
   ConversationTimelineState,
+  DesktopApprovalRequest,
   DesktopRun,
   DesktopRunStatus,
   WorkspaceSummary,
@@ -86,6 +87,58 @@ const runStatuses: ReadonlySet<string> = new Set<DesktopRunStatus>([
   'interrupted',
   'cancelled',
 ]);
+
+// Runs in these statuses will never produce further progress updates.
+const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
+  'completed',
+  'failed',
+  'cancelled',
+]);
+
+export function sessionRunStatusIsTerminal(status: string | null | undefined): boolean {
+  return TERMINAL_RUN_STATUSES.has(status?.trim().toLowerCase() ?? '');
+}
+
+export type SessionLiveIndicator = {
+  labelKey: string;
+  tone: 'live' | 'reconnecting' | 'ended';
+};
+
+/**
+ * Truthful live-updates indicator: a terminal session never claims that live
+ * updates are reconnecting, because no further run updates will arrive.
+ */
+export function sessionLiveIndicator(
+  status: string,
+  liveConnected: boolean,
+): SessionLiveIndicator {
+  if (sessionRunStatusIsTerminal(status)) {
+    return { labelKey: 'session.liveUpdatesEnded', tone: 'ended' };
+  }
+  return liveConnected
+    ? { labelKey: 'session.liveConnected', tone: 'live' }
+    : { labelKey: 'session.liveReconnecting', tone: 'reconnecting' };
+}
+
+/**
+ * HITL requests the runtime can still honor. Capability flags alone are not
+ * sufficient: a terminal run can leave a stale pending HITL record behind,
+ * and responding to it can only fail.
+ */
+export function respondableHitlRequestsForProjection(
+  projection: ConversationSessionProjection | null,
+): DesktopApprovalRequest[] {
+  if (!projection) return [];
+  const { capabilities } = projection;
+  if (
+    !capabilities.canRespondToHitl ||
+    !capabilities.allowedActions.includes('respond_to_hitl')
+  ) {
+    return [];
+  }
+  if (sessionRunStatusIsTerminal(projection.currentRun?.status ?? null)) return [];
+  return projection.pendingHitl;
+}
 
 export type SessionRecoveryPresentation = {
   action: Extract<SessionRunAction, 'reconnect' | 'fork'>;

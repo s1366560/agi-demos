@@ -9,7 +9,10 @@ const {
   buildSessionDetailViewModel,
   conversationWithAuthoritativeRun,
   mergeConversationListWithCurrentRunAuthority,
+  respondableHitlRequestsForProjection,
+  sessionLiveIndicator,
   sessionRecoveryPresentation,
+  sessionRunStatusIsTerminal,
   sessionStatusPresentation,
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/session/sessionViewModel.js'
@@ -544,4 +547,59 @@ test('session recovery choices distinguish reattach authority from a lossy fork'
       'session.forkRecoveryLocalChanges',
     ],
   });
+});
+
+test('terminal session never claims reconnecting live updates', () => {
+  for (const status of ['completed', 'failed', 'cancelled']) {
+    assert.deepEqual(sessionLiveIndicator(status, true), {
+      labelKey: 'session.liveUpdatesEnded',
+      tone: 'ended',
+    });
+    assert.deepEqual(sessionLiveIndicator(status, false), {
+      labelKey: 'session.liveUpdatesEnded',
+      tone: 'ended',
+    });
+  }
+  assert.deepEqual(sessionLiveIndicator('running', true), {
+    labelKey: 'session.liveConnected',
+    tone: 'live',
+  });
+  assert.deepEqual(sessionLiveIndicator('running', false), {
+    labelKey: 'session.liveReconnecting',
+    tone: 'reconnecting',
+  });
+  assert.deepEqual(sessionLiveIndicator('ready_review', false), {
+    labelKey: 'session.liveReconnecting',
+    tone: 'reconnecting',
+  });
+  assert.equal(sessionRunStatusIsTerminal('completed'), true);
+  assert.equal(sessionRunStatusIsTerminal('running'), false);
+  assert.equal(sessionRunStatusIsTerminal(null), false);
+});
+
+test('terminal run leaves no respondable HITL requests', () => {
+  const pendingHitl = [{ id: 'hitl-1' }, { id: 'hitl-2' }];
+  const respondableCapabilities = {
+    ...projection().capabilities,
+    canRespondToHitl: true,
+    allowedActions: ['respond_to_hitl'],
+  };
+  const base = projection({ pendingHitl, capabilities: respondableCapabilities });
+
+  assert.deepEqual(
+    respondableHitlRequestsForProjection(base).map((request) => request.id),
+    ['hitl-1', 'hitl-2']
+  );
+
+  for (const status of ['completed', 'failed', 'cancelled']) {
+    const terminal = projection({
+      pendingHitl,
+      capabilities: respondableCapabilities,
+      currentRun: { ...base.currentRun, status },
+    });
+    assert.deepEqual(respondableHitlRequestsForProjection(terminal), [], status);
+  }
+
+  assert.deepEqual(respondableHitlRequestsForProjection(null), []);
+  assert.deepEqual(respondableHitlRequestsForProjection(projection({ pendingHitl })), []);
 });

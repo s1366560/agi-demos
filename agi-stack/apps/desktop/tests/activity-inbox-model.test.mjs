@@ -222,3 +222,34 @@ test('localStorage read-state store fails closed on corrupt payloads', () => {
   );
   assert.deepEqual(store.load('scope'), { valid: 7 });
 });
+
+test('Activity inbox corrects stale groups with runtime truth', () => {
+  // 已完成会话不得呈现为「需要输入」。
+  assert.equal(
+    activityCategoryForItem({ group: 'needs_input', status: 'completed', required_action: 'provide_input' }),
+    'ready_for_review',
+  );
+  assert.equal(
+    activityCategoryForItem({ group: 'needs_approval', status: 'completed', required_action: 'review_approval' }),
+    'ready_for_review',
+  );
+  // 分组滞后为 running 的已完成运行应进入「待回顾」,而不是被丢弃或显示为进行中。
+  assert.equal(
+    activityCategoryForItem({ group: 'running', status: 'completed', required_action: 'observe' }),
+    'ready_for_review',
+  );
+  assert.equal(
+    activityCategoryForItem({ group: 'running', status: 'ready_review', required_action: 'observe' }),
+    'ready_for_review',
+  );
+  // 失败/取消/中断/断连仍以「需要关注」呈现,即使分组滞后为 needs_input。
+  assert.equal(
+    activityCategoryForItem({ group: 'needs_input', status: 'failed', required_action: 'provide_input' }),
+    'attention',
+  );
+  // 真实进行中的运行仍不进收件箱。
+  assert.equal(
+    activityCategoryForItem({ group: 'running', status: 'paused', required_action: 'observe' }),
+    null,
+  );
+});

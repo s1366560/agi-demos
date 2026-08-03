@@ -12,6 +12,7 @@ import { useI18n } from '../../i18n';
 import type { AgentCapabilityMode, ProjectWorkItem } from '../../types';
 import {
   groupMyWorkDisplayItems,
+  myWorkEffectiveGroup,
   type MyWorkDisplayGroup,
 } from './myWorkModel';
 import './MyWorkQueue.css';
@@ -143,6 +144,7 @@ function InboxCard({
 }) {
   const { t } = useI18n();
   const ModeIcon = item.capability_mode === 'code' ? CodeIcon : ActivityLogIcon;
+  const statusTone = myWorkEffectiveGroup(item);
   const progress =
     typeof item.progress === 'number'
       ? Math.max(0, Math.min(100, item.progress))
@@ -150,7 +152,7 @@ function InboxCard({
   return (
     <button className="my-work-inbox-card" type="button" onClick={onOpen}>
       <header>
-        <i className={`status-${item.group}`} aria-hidden="true" />
+        <i className={`status-${statusTone}`} aria-hidden="true" />
         <ModeIcon />
         <span>{workspaceLabel}</span>
         <time>{formatRelativeTime(item.updated_at || item.created_at, locale)}</time>

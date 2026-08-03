@@ -1,5 +1,5 @@
 import type { ProjectWorkItem } from '../../types';
-import { myWorkItemKey } from '../my-work/myWorkModel';
+import { myWorkEffectiveGroup, myWorkItemKey } from '../my-work/myWorkModel';
 
 // Activity 收件箱的三个聚合分类,展示顺序固定。
 export type ActivityCategory = 'needs_input' | 'ready_for_review' | 'attention';
@@ -49,10 +49,12 @@ export function activityCategoryForItem(
   ) {
     return 'attention';
   }
-  if (item.group === 'needs_input' || item.group === 'needs_approval') {
+  // 以后端分组为基准,但以运行真实状态校正:终态会话不得呈现为待输入/进行中。
+  const group = myWorkEffectiveGroup(item);
+  if (group === 'needs_input' || group === 'needs_approval') {
     return 'needs_input';
   }
-  if (item.group === 'ready_review') {
+  if (group === 'ready_review') {
     return 'ready_for_review';
   }
   // 仍在运行的条目不进收件箱,避免与 My Work 的 Running 分组重复。
