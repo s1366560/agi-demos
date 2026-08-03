@@ -28,6 +28,7 @@ import {
 import { useI18n } from '../../i18n';
 import { socketEventsSince } from '../../hooks/useAgentSocket';
 import { sessionActivitySummary } from '../session/sessionNarrativeModel';
+import { deriveCurrentActivity } from '../session/currentActivityModel';
 import type {
   SessionActivityPresence,
   SessionActivityStructuredEvidence,
@@ -77,6 +78,7 @@ import {
   type MessageDeleteDialogTarget,
 } from './MessageDeleteDialog';
 import { AgentTimeline, TIMELINE_RENDER_STEP } from './ChatTimeline';
+import { CurrentActivityHeadlineBar } from './CurrentActivityHeadline';
 import {
   isImportantTimelineItem,
   isTimelineItemInitiallyExpanded,
@@ -508,6 +510,14 @@ export const ChatPanel = memo(function ChatPanel({
   const timelineDisplayItems = useMemo(
     () => timelineItemsForDisplay(visibleTimelineItems),
     [visibleTimelineItems],
+  );
+  const currentActivity = useMemo(
+    () =>
+      deriveCurrentActivity({
+        items: timelineDisplayItems,
+        presence: activityPresence,
+      }),
+    [timelineDisplayItems, activityPresence],
   );
   const timelineTurns = useMemo(
     () => computeTimelineTurns(timelineDisplayItems),
@@ -1623,6 +1633,12 @@ export const ChatPanel = memo(function ChatPanel({
         <div className="session-stop-response-error" role="alert">
           {stopResponseError}
         </div>
+      ) : null}
+      {currentActivity ? (
+        <CurrentActivityHeadlineBar
+          activity={currentActivity}
+          sessionKey={messageActionConversationId}
+        />
       ) : null}
       <ChatComposer
         key={composerResetKey}
