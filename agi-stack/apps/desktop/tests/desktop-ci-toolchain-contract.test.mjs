@@ -160,6 +160,11 @@ test("Web, Desktop, CI, E2E, and release use one integrity-pinned pnpm toolchain
   assert.equal(desktopPackage.devEngines, undefined);
   assert.equal(desktopPackage.pnpm, undefined);
   assert.equal(desktopPackage.devDependencies["electron-builder"], "26.15.3");
+  assert.equal(
+    desktopPackage.devDependencies.pnpm,
+    PNPM_VERSION,
+    "electron-builder subprocesses must resolve a project-local pinned pnpm",
+  );
   assert.deepEqual(desktopWorkspace.packages, ["."]);
   assert.deepEqual(desktopWorkspace.allowBuilds, {
     "@scarf/scarf": false,
@@ -182,6 +187,13 @@ test("Web, Desktop, CI, E2E, and release use one integrity-pinned pnpm toolchain
     PNPM_VERSION,
   );
   assert.ok(desktopLockDocuments[1].importers["."].dependencies);
+  assert.deepEqual(
+    desktopLockDocuments[1].importers["."].devDependencies.pnpm,
+    {
+      specifier: PNPM_VERSION,
+      version: PNPM_VERSION,
+    },
+  );
   assert.match(
     desktopPackage.scripts["package:electron"],
     /corepack pnpm exec electron-builder/u,
