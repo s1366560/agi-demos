@@ -97,6 +97,15 @@ export type TenantAgentTrace = Readonly<{
   total: number;
 }>;
 
+export type TenantAgentRuntimeInfo = Readonly<{
+  edition: string;
+  features: readonly Readonly<Record<string, unknown>>[];
+  agentRuntimeMode: string;
+  memoryRuntimeMode: string;
+  toolProviderMode: string;
+  failurePersistenceEnabled: boolean;
+}>;
+
 export type TenantAgentDashboardSnapshot = Readonly<{
   scope: TenantAgentDashboardScope;
   authority: TenantAgentDashboardAuthority;
@@ -109,6 +118,7 @@ export type TenantAgentDashboardSnapshot = Readonly<{
   canModify: boolean;
   config: TenantAgentConfig | null;
   hookCatalog: readonly TenantRuntimeHookCatalogEntry[];
+  runtimeInfo: TenantAgentRuntimeInfo | null;
   runs: readonly TenantAgentRun[];
   activeRunCount: number;
 }>;

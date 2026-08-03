@@ -12,6 +12,7 @@ import type {
   TenantAgentDashboardScope,
   TenantAgentDashboardSnapshot,
   TenantAgentEditableConfig,
+  TenantAgentRuntimeInfo,
   TenantAgentRun,
   TenantAgentTrace,
   TenantRuntimeHook,
@@ -38,8 +39,11 @@ export function createTenantAgentDashboardHttpClient(
       requireScope(runtime, scope);
       if (runtime.mode === 'local') return localUnavailable(scope);
       const query = tenantQuery(scope);
-      const [rawConfig, rawPermission, rawRuns, rawActive] = await Promise.all([
-        requestJson(runtime, `/api/v1/agent/config?${query}`, { method: 'GET', signal }),
+      const [rawConfig, rawPermission, rawRuns, rawActive, runtimeInfo] = await Promise.all([
+        requestJson(runtime, `/api/v1/agent/config?${query}`, {
+          method: 'GET',
+          signal,
+        }),
         requestJson(runtime, `/api/v1/agent/config/can-modify?${query}`, {
           method: 'GET',
           signal,
@@ -54,15 +58,15 @@ export function createTenantAgentDashboardHttpClient(
           `/api/v1/agent/trace/runs/tenant/${encodeURIComponent(scope.tenantId)}/active/count`,
           { method: 'GET', signal },
         ),
+        loadOptionalRuntimeInfo(runtime, signal),
       ]);
       const canModify = readCanModify(rawPermission);
       const hookCatalog = canModify
         ? readHookCatalog(
-            await requestJson(
-              runtime,
-              `/api/v1/agent/config/hooks/catalog?${query}`,
-              { method: 'GET', signal },
-            ),
+            await requestJson(runtime, `/api/v1/agent/config/hooks/catalog?${query}`, {
+              method: 'GET',
+              signal,
+            }),
           )
         : Object.freeze<TenantRuntimeHookCatalogEntry[]>([]);
       return projectSnapshot(
@@ -72,6 +76,7 @@ export function createTenantAgentDashboardHttpClient(
         rawActive,
         canModify,
         hookCatalog,
+        runtimeInfo,
       );
     },
     async updateConfig(scope, input, expectedRevision, signal) {
@@ -149,6 +154,23 @@ async function requestJson(
   return payload;
 }
 
+async function loadOptionalRuntimeInfo(
+  config: DesktopRuntimeConfig,
+  signal?: AbortSignal,
+): Promise<TenantAgentRuntimeInfo | null> {
+  try {
+    return readRuntimeInfo(
+      await requestJson(config, '/api/v1/system/info', {
+        method: 'GET',
+        signal,
+      }),
+    );
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return null;
+  }
+}
+
 function projectSnapshot(
   scope: TenantAgentDashboardScope,
   rawConfig: unknown,
@@ -156,6 +178,7 @@ function projectSnapshot(
   rawActive: unknown,
   canModify: boolean,
   hookCatalog: readonly TenantRuntimeHookCatalogEntry[],
+  runtimeInfo: TenantAgentRuntimeInfo | null,
 ): TenantAgentDashboardSnapshot {
   const config = readConfig(rawConfig, scope);
   if (
@@ -193,8 +216,34 @@ function projectSnapshot(
     canModify,
     config,
     hookCatalog,
+    runtimeInfo,
     runs,
     activeRunCount: rawActive.active_count,
+  });
+}
+
+function readRuntimeInfo(raw: unknown): TenantAgentRuntimeInfo {
+  if (
+    !isRecord(raw) ||
+    !isNonempty(raw.edition) ||
+    !Array.isArray(raw.features) ||
+    !raw.features.every(isRecord) ||
+    !isRecord(raw.agent_runtime) ||
+    !isNonempty(raw.agent_runtime.mode) ||
+    !isRecord(raw.memory_runtime) ||
+    !isNonempty(raw.memory_runtime.mode) ||
+    !isNonempty(raw.memory_runtime.tool_provider_mode) ||
+    typeof raw.memory_runtime.failure_persistence_enabled !== 'boolean'
+  ) {
+    throw contractError('cloud_tenant_agent_dashboard_system_info_invalid');
+  }
+  return Object.freeze({
+    edition: raw.edition,
+    features: Object.freeze(raw.features.map((feature) => Object.freeze({ ...feature }))),
+    agentRuntimeMode: raw.agent_runtime.mode,
+    memoryRuntimeMode: raw.memory_runtime.mode,
+    toolProviderMode: raw.memory_runtime.tool_provider_mode,
+    failurePersistenceEnabled: raw.memory_runtime.failure_persistence_enabled,
   });
 }
 
@@ -338,40 +387,42 @@ function readHookCatalog(raw: unknown): readonly TenantRuntimeHookCatalogEntry[]
   if (!isRecord(raw) || !Array.isArray(raw.hooks)) {
     throw contractError('cloud_tenant_agent_dashboard_hook_catalog_invalid');
   }
-  return Object.freeze(raw.hooks.map((entry) => {
-    if (
-      !isRecord(entry) ||
-      typeof entry.plugin_name !== 'string' ||
-      !isNonempty(entry.hook_name) ||
-      !isNullableString(entry.hook_family) ||
-      !isNonempty(entry.display_name) ||
-      typeof entry.description !== 'string' ||
-      !isNullableInteger(entry.default_priority) ||
-      typeof entry.default_enabled !== 'boolean' ||
-      !isNonempty(entry.default_executor_kind) ||
-      !isNullableString(entry.default_source_ref) ||
-      !isNullableString(entry.default_entrypoint) ||
-      !isRecord(entry.default_settings) ||
-      !isRecord(entry.settings_schema)
-    ) {
-      throw contractError('cloud_tenant_agent_dashboard_hook_catalog_invalid');
-    }
-    return Object.freeze({
-      key: `${entry.plugin_name}.${entry.hook_name}`,
-      hookName: entry.hook_name,
-      pluginName: entry.plugin_name,
-      hookFamily: entry.hook_family,
-      displayName: entry.display_name,
-      description: entry.description,
-      defaultPriority: entry.default_priority,
-      defaultEnabled: entry.default_enabled,
-      defaultExecutorKind: entry.default_executor_kind,
-      defaultSourceRef: entry.default_source_ref,
-      defaultEntrypoint: entry.default_entrypoint,
-      defaultSettings: Object.freeze({ ...entry.default_settings }),
-      settingsSchema: Object.freeze({ ...entry.settings_schema }),
-    });
-  }));
+  return Object.freeze(
+    raw.hooks.map((entry) => {
+      if (
+        !isRecord(entry) ||
+        typeof entry.plugin_name !== 'string' ||
+        !isNonempty(entry.hook_name) ||
+        !isNullableString(entry.hook_family) ||
+        !isNonempty(entry.display_name) ||
+        typeof entry.description !== 'string' ||
+        !isNullableInteger(entry.default_priority) ||
+        typeof entry.default_enabled !== 'boolean' ||
+        !isNonempty(entry.default_executor_kind) ||
+        !isNullableString(entry.default_source_ref) ||
+        !isNullableString(entry.default_entrypoint) ||
+        !isRecord(entry.default_settings) ||
+        !isRecord(entry.settings_schema)
+      ) {
+        throw contractError('cloud_tenant_agent_dashboard_hook_catalog_invalid');
+      }
+      return Object.freeze({
+        key: `${entry.plugin_name}.${entry.hook_name}`,
+        hookName: entry.hook_name,
+        pluginName: entry.plugin_name,
+        hookFamily: entry.hook_family,
+        displayName: entry.display_name,
+        description: entry.description,
+        defaultPriority: entry.default_priority,
+        defaultEnabled: entry.default_enabled,
+        defaultExecutorKind: entry.default_executor_kind,
+        defaultSourceRef: entry.default_source_ref,
+        defaultEntrypoint: entry.default_entrypoint,
+        defaultSettings: Object.freeze({ ...entry.default_settings }),
+        settingsSchema: Object.freeze({ ...entry.settings_schema }),
+      });
+    }),
+  );
 }
 
 function updateBody(input: TenantAgentEditableConfig): Readonly<Record<string, unknown>> {
@@ -411,6 +462,7 @@ function localUnavailable(scope: TenantAgentDashboardScope): TenantAgentDashboar
     canModify: false,
     config: null,
     hookCatalog: Object.freeze([]),
+    runtimeInfo: null,
     runs: Object.freeze([]),
     activeRunCount: 0,
   });
@@ -421,11 +473,7 @@ function tenantQuery(scope: TenantAgentDashboardScope): string {
 }
 
 function requireScope(config: DesktopRuntimeConfig, scope: TenantAgentDashboardScope): void {
-  if (
-    scope.authority !== config.mode ||
-    scope.tenantId !== config.tenantId ||
-    !scope.tenantId
-  ) {
+  if (scope.authority !== config.mode || scope.tenantId !== config.tenantId || !scope.tenantId) {
     throw contractError('tenant_agent_dashboard_runtime_scope_mismatch');
   }
 }
@@ -436,7 +484,17 @@ function requireId(value: string, reason: string): void {
 
 function errorMessage(status: number, payload: unknown): string {
   if (isRecord(payload) && typeof payload.detail === 'string') return payload.detail;
+  const reasonCode = structuredReasonCode(payload);
+  if (reasonCode) return reasonCode;
   return `tenant_agent_dashboard_http_${status}`;
+}
+
+function structuredReasonCode(payload: unknown): string | null {
+  if (!isRecord(payload)) return null;
+  if (typeof payload.reason_code === 'string') return payload.reason_code;
+  return isRecord(payload.detail) && typeof payload.detail.reason_code === 'string'
+    ? payload.detail.reason_code
+    : null;
 }
 
 function contractError(reason: string): DesktopApiError {

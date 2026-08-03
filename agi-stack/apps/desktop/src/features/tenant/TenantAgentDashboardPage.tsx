@@ -17,6 +17,8 @@ import type {
   TenantAgentEditableConfig,
   TenantAgentRun,
 } from './tenantAgentDashboardClient';
+import { TenantAgentDashboardHookEditor } from './TenantAgentDashboardHookEditor';
+import { TenantAgentDashboardTraceView } from './TenantAgentDashboardTraceView';
 import './TenantAgentDashboardPage.css';
 
 export function TenantAgentDashboardPage({
@@ -30,11 +32,7 @@ export function TenantAgentDashboardPage({
 }>) {
   const { t } = useI18n();
   const [editing, setEditing] = useState(false);
-  if (
-    model.state === 'loading' ||
-    model.state === 'forbidden' ||
-    model.state === 'unavailable'
-  ) {
+  if (model.state === 'loading' || model.state === 'forbidden' || model.state === 'unavailable') {
     return <DashboardState model={model} onRetry={onRetry} />;
   }
   return (
@@ -73,25 +71,31 @@ export function TenantAgentDashboardPage({
             )}
           </span>
           <code>{model.reasonCode}</code>
+          {model.configConflict ? (
+            <span>
+              {t('tenantAgentDashboard.state.conflictRevisions', {
+                expected: model.configConflict.expectedRevision,
+                authority: model.configConflict.authorityRevision,
+              })}
+            </span>
+          ) : null}
           <Button color="gray" variant="ghost" onClick={onRetry}>
             {t('common.retry')}
           </Button>
         </div>
       ) : null}
       <div className="tenant-agent-dashboard-grid">
-        <ConfigPanel
-          model={model}
-          onEdit={() => setEditing(true)}
-        />
+        <ConfigPanel model={model} onEdit={() => setEditing(true)} />
         <HookCatalog model={model} />
       </div>
       <RunSection model={model} controller={controller} />
       {model.selectedTrace ? (
-        <TraceInspector model={model} controller={controller} />
+        <TenantAgentDashboardTraceView model={model} controller={controller} />
       ) : null}
       {editing && model.config && controller ? (
         <ConfigEditor
           config={model.config}
+          hookCatalog={model.hookCatalog}
           busy={model.busyAction === 'update'}
           onClose={() => setEditing(false)}
           onSave={async (input) => {
@@ -150,6 +154,30 @@ function ConfigPanel({
           label={t('tenantAgentDashboard.config.revision')}
           value={String(config.authorityRevision)}
         />
+        <ConfigValue
+          label={t('tenantAgentDashboard.config.agentRuntime')}
+          value={model.runtimeInfo?.agentRuntimeMode ?? '—'}
+        />
+        <ConfigValue
+          label={t('tenantAgentDashboard.config.memoryRuntime')}
+          value={model.runtimeInfo?.memoryRuntimeMode ?? '—'}
+        />
+        <ConfigValue
+          label={t('tenantAgentDashboard.config.toolProvider')}
+          value={model.runtimeInfo?.toolProviderMode ?? '—'}
+        />
+        <ConfigValue
+          label={t('tenantAgentDashboard.config.failurePersistence')}
+          value={
+            model.runtimeInfo
+              ? t(
+                  model.runtimeInfo.failurePersistenceEnabled
+                    ? 'common.enabled'
+                    : 'common.disabled',
+                )
+              : '—'
+          }
+        />
       </dl>
       <div className="tenant-agent-dashboard-tool-policy">
         <ToolList
@@ -177,9 +205,7 @@ function HookCatalog({ model }: Readonly<{ model: TenantAgentDashboardViewModel 
         <strong>{model.hookCatalog.length}</strong>
       </header>
       {model.hookCatalog.length === 0 ? (
-        <p className="tenant-agent-dashboard-empty-copy">
-          {t('tenantAgentDashboard.hooks.empty')}
-        </p>
+        <p className="tenant-agent-dashboard-empty-copy">{t('tenantAgentDashboard.hooks.empty')}</p>
       ) : (
         <ul className="tenant-agent-dashboard-hook-list">
           {model.hookCatalog.map((hook) => (
@@ -296,49 +322,15 @@ function RunCard({
   );
 }
 
-function TraceInspector({
-  model,
-  controller,
-}: Readonly<{
-  model: TenantAgentDashboardViewModel;
-  controller: TenantAgentDashboardController | null;
-}>) {
-  const { t } = useI18n();
-  const trace = model.selectedTrace;
-  if (!trace) return null;
-  return (
-    <section className="tenant-agent-dashboard-trace">
-      <header>
-        <div>
-          <span>{t('tenantAgentDashboard.trace.eyebrow')}</span>
-          <h2>{t('tenantAgentDashboard.trace.title')}</h2>
-          <code>{trace.traceId ?? trace.conversationId}</code>
-        </div>
-        <Button color="gray" variant="ghost" onClick={() => controller?.clearSelection()}>
-          <Cross2Icon />
-          {t('common.close')}
-        </Button>
-      </header>
-      <ol>
-        {trace.runs.map((run) => (
-          <li key={run.runId}>
-            <strong>{run.subagentName}</strong>
-            <span>{run.status}</span>
-            <p>{run.summary ?? run.task}</p>
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-
 function ConfigEditor({
   config,
+  hookCatalog,
   busy,
   onClose,
   onSave,
 }: Readonly<{
   config: TenantAgentConfig;
+  hookCatalog: TenantAgentDashboardViewModel['hookCatalog'];
   busy: boolean;
   onClose: () => void;
   onSave: (input: TenantAgentEditableConfig) => Promise<void>;
@@ -349,6 +341,7 @@ function ConfigEditor({
     enabledToolsText: config.enabledTools.join(', '),
     disabledToolsText: config.disabledTools.join(', '),
   }));
+  const [hooksValid, setHooksValid] = useState(true);
   const input: TenantAgentEditableConfig = {
     llmModel: draft.llmModel.trim(),
     llmTemperature: draft.llmTemperature,
@@ -434,11 +427,17 @@ function ConfigEditor({
             }
           />
         </div>
+        <TenantAgentDashboardHookEditor
+          configuredHooks={config.runtimeHooks}
+          catalog={hookCatalog}
+          onValidityChange={setHooksValid}
+          onChange={(runtimeHooks) => setDraft((current) => ({ ...current, runtimeHooks }))}
+        />
         <footer>
           <Button type="button" color="gray" variant="soft" onClick={onClose}>
             {t('common.cancel')}
           </Button>
-          <Button type="submit" color="gray" disabled={busy || !input.llmModel}>
+          <Button type="submit" color="gray" disabled={busy || !input.llmModel || !hooksValid}>
             {t('common.save')}
           </Button>
         </footer>
@@ -481,7 +480,9 @@ function ToolList({ title, tools }: Readonly<{ title: string; tools: readonly st
   return (
     <div>
       <strong>{title}</strong>
-      <div>{tools.length ? tools.map((tool) => <code key={tool}>{tool}</code>) : <span>—</span>}</div>
+      <div>
+        {tools.length ? tools.map((tool) => <code key={tool}>{tool}</code>) : <span>—</span>}
+      </div>
     </div>
   );
 }
@@ -515,7 +516,11 @@ function SwitchField({
   label,
   checked,
   onChange,
-}: Readonly<{ label: string; checked: boolean; onChange: (value: boolean) => void }>) {
+}: Readonly<{
+  label: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}>) {
   return (
     <label>
       <span>{label}</span>
@@ -525,5 +530,12 @@ function SwitchField({
 }
 
 function splitTools(value: string): readonly string[] {
-  return [...new Set(value.split(/[\n,]/u).map((tool) => tool.trim()).filter(Boolean))];
+  return [
+    ...new Set(
+      value
+        .split(/[\n,]/u)
+        .map((tool) => tool.trim())
+        .filter(Boolean),
+    ),
+  ];
 }

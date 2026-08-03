@@ -8,9 +8,9 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { Theme } = require('@radix-ui/themes');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
-const { createTenantAgentDashboardRouteModuleLoader } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/tenant/tenantAgentDashboardRouteModule.js'
-);
+const {
+  createTenantAgentDashboardRouteModuleLoader,
+} = require('/tmp/agistack-desktop-test-dist/src/features/tenant/tenantAgentDashboardRouteModule.js');
 
 test('Agent Dashboard loader renders the native config and trace surface', async () => {
   const module = await createTenantAgentDashboardRouteModuleLoader({
@@ -38,6 +38,11 @@ test('Agent Dashboard loader renders the native config and trace surface', async
   assert.match(markup, /gpt-5.6/);
   assert.match(markup, /Researcher/);
   assert.match(markup, /Edit configuration/);
+  assert.match(markup, /Agent runtime/);
+  assert.match(markup, /ray/);
+  assert.match(markup, /120 tokens/);
+  assert.match(markup, /conversation-1/);
+  assert.match(markup, /trace-1/);
   assert.doesNotMatch(markup, /iframe|webview|Open in browser/iu);
 });
 
@@ -56,6 +61,7 @@ function controller() {
         scope: scope(),
         authority: 'cloud',
         reasonCode: null,
+        configConflict: null,
         retryVisible: false,
         busyAction: null,
         allowedActions: [
@@ -91,6 +97,14 @@ function controller() {
           updatedAt: '2026-08-03T00:00:00Z',
         },
         hookCatalog: [],
+        runtimeInfo: {
+          edition: 'enterprise',
+          features: [],
+          agentRuntimeMode: 'ray',
+          memoryRuntimeMode: 'dual',
+          toolProviderMode: 'plugin',
+          failurePersistenceEnabled: true,
+        },
         runs: [
           {
             runId: 'run-1',
@@ -129,8 +143,30 @@ function controller() {
         ],
         activeRunCount: 1,
         filters: { status: null, search: '' },
-        selectedRunId: null,
-        selectedTrace: null,
+        selectedRunId: 'run-1',
+        selectedTrace: {
+          traceId: 'trace-1',
+          conversationId: 'conversation-1',
+          runs: [
+            {
+              runId: 'run-1',
+              conversationId: 'conversation-1',
+              subagentName: 'Researcher',
+              task: 'Audit runtime',
+              status: 'running',
+              createdAt: '2026-08-03T00:00:00Z',
+              startedAt: '2026-08-03T00:00:01Z',
+              endedAt: null,
+              summary: null,
+              error: null,
+              executionTimeMs: null,
+              tokensUsed: 120,
+              traceId: 'trace-1',
+              parentSpanId: null,
+            },
+          ],
+          total: 1,
+        },
       };
     },
     async load() {},

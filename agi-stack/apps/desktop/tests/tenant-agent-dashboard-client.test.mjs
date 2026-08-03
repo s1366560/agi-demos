@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-const { createTenantAgentDashboardHttpClient } = await import(
-  '/tmp/agistack-desktop-test-dist/src/features/tenant/tenantAgentDashboardHttpClient.js'
-);
+const { createTenantAgentDashboardHttpClient } =
+  await import('/tmp/agistack-desktop-test-dist/src/features/tenant/tenantAgentDashboardHttpClient.js');
 
 const originalFetch = globalThis.fetch;
 
@@ -16,6 +15,7 @@ test('Cloud Agent Dashboard loads revisioned config, hooks and tenant traces', a
   globalThis.fetch = async (url, init) => {
     requests.push({ url: String(url), init });
     const path = new URL(String(url)).pathname;
+    if (path === '/api/v1/system/info') return jsonResponse(systemInfo());
     if (path === '/api/v1/agent/config') return jsonResponse(config());
     if (path.endsWith('/can-modify')) return jsonResponse({ can_modify: true });
     if (path.endsWith('/hooks/catalog')) {
@@ -30,14 +30,16 @@ test('Cloud Agent Dashboard loads revisioned config, hooks and tenant traces', a
     throw new Error(`Unexpected request: ${path}`);
   };
 
-  const snapshot = await createTenantAgentDashboardHttpClient(runtimeConfig()).load(
-    scope(),
-  );
+  const snapshot = await createTenantAgentDashboardHttpClient(runtimeConfig()).load(scope());
 
   assert.equal(snapshot.availability, 'available');
   assert.equal(snapshot.authorityRevision, 7);
   assert.equal(snapshot.canModify, true);
   assert.equal(snapshot.config?.llmModel, 'gpt-5.6');
+  assert.equal(snapshot.runtimeInfo?.agentRuntimeMode, 'ray');
+  assert.equal(snapshot.runtimeInfo?.memoryRuntimeMode, 'dual');
+  assert.equal(snapshot.runtimeInfo?.toolProviderMode, 'plugin');
+  assert.equal(snapshot.runtimeInfo?.failurePersistenceEnabled, true);
   assert.equal(snapshot.hookCatalog[0].key, 'audit.before_tool');
   assert.equal(snapshot.runs[0].runId, 'run-1');
   assert.equal(snapshot.activeRunCount, 1);
@@ -54,8 +56,7 @@ test('Cloud Agent Dashboard loads revisioned config, hooks and tenant traces', a
   ]);
   assert.ok(
     requests.every(
-      ({ init }) =>
-        new Headers(init.headers).get('Authorization') === 'Bearer cloud-token',
+      ({ init }) => new Headers(init.headers).get('Authorization') === 'Bearer cloud-token',
     ),
   );
 });
@@ -92,15 +93,11 @@ test('Cloud Agent Dashboard update and trace inspection preserve authority ident
       toolTimeoutSeconds: 90,
       enabledTools: ['read_file'],
       disabledTools: ['terminal'],
-      runtimeHooks: [],
+      runtimeHooks: [runtimeHook()],
     },
     7,
   );
-  const trace = await client.inspectTrace(
-    scope(),
-    'conversation-1',
-    'trace-1',
-  );
+  const trace = await client.inspectTrace(scope(), 'conversation-1', 'trace-1');
 
   assert.equal(updated.authorityRevision, 8);
   assert.equal(trace.runs[0].runId, 'run-1');
@@ -117,7 +114,19 @@ test('Cloud Agent Dashboard update and trace inspection preserve authority ident
     tool_timeout_seconds: 90,
     enabled_tools: ['read_file'],
     disabled_tools: ['terminal'],
-    runtime_hooks: [],
+    runtime_hooks: [
+      {
+        hook_name: 'before_tool',
+        plugin_name: 'audit',
+        hook_family: 'policy',
+        executor_kind: 'plugin',
+        source_ref: 'audit',
+        entrypoint: 'before_tool',
+        enabled: false,
+        priority: 25,
+        settings: { redact: true },
+      },
+    ],
   });
   assert.equal(
     requests[1].url,
@@ -141,6 +150,7 @@ test('Local Agent Dashboard returns stable unavailable authority without network
   assert.equal(snapshot.reasonCode, 'local_agent_dashboard_authority_unavailable');
   assert.deepEqual(snapshot.allowedActions, []);
   assert.equal(snapshot.config, null);
+  assert.equal(snapshot.runtimeInfo, null);
   assert.deepEqual(snapshot.runs, []);
 });
 
@@ -222,6 +232,33 @@ function hookCatalogEntry() {
     default_entrypoint: null,
     default_settings: {},
     settings_schema: {},
+  };
+}
+
+function runtimeHook() {
+  return {
+    hookName: 'before_tool',
+    pluginName: 'audit',
+    hookFamily: 'policy',
+    executorKind: 'plugin',
+    sourceRef: 'audit',
+    entrypoint: 'before_tool',
+    enabled: false,
+    priority: 25,
+    settings: { redact: true },
+  };
+}
+
+function systemInfo() {
+  return {
+    edition: 'enterprise',
+    features: [{ name: 'multi-agent' }],
+    agent_runtime: { mode: 'ray' },
+    memory_runtime: {
+      mode: 'dual',
+      tool_provider_mode: 'plugin',
+      failure_persistence_enabled: true,
+    },
   };
 }
 

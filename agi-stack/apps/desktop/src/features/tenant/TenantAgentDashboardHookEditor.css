@@ -1,0 +1,134 @@
+.tenant-agent-dashboard-hook-editor {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--gray-6);
+}
+
+.tenant-agent-dashboard-hook-editor > header,
+.tenant-agent-dashboard-hook-editor-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tenant-agent-dashboard-hook-editor > header h3 {
+  margin-top: 5px;
+  font-size: 17px;
+}
+
+.tenant-agent-dashboard-hook-editor > header p {
+  max-width: 620px;
+  margin: 8px 0 0;
+  color: var(--gray-10);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.tenant-agent-dashboard-hook-editor-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.tenant-agent-dashboard-hook-editor-card {
+  padding: 14px;
+  border: 1px solid var(--gray-6);
+  border-radius: 14px;
+  background: var(--gray-2);
+}
+
+.tenant-agent-dashboard-hook-editor-card > header > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tenant-agent-dashboard-hook-editor-card > header strong {
+  font-size: 13px;
+}
+
+.tenant-agent-dashboard-hook-editor-card > header code {
+  color: var(--gray-9);
+  font-size: 10px;
+}
+
+.tenant-agent-dashboard-hook-editor-card > header label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--gray-10);
+  font-size: 11px;
+}
+
+.tenant-agent-dashboard-hook-editor-card > p {
+  margin: 8px 0 0;
+  color: var(--gray-10);
+  font-size: 12px;
+}
+
+.tenant-agent-dashboard-hook-editor-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.tenant-agent-dashboard-hook-editor-fields label,
+.tenant-agent-dashboard-hook-settings {
+  display: grid;
+  gap: 6px;
+}
+
+.tenant-agent-dashboard-hook-editor-fields label > span,
+.tenant-agent-dashboard-hook-settings > span {
+  color: var(--gray-10);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.tenant-agent-dashboard-hook-editor-fields select {
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--gray-7);
+  border-radius: 8px;
+  color: var(--gray-12);
+  background: var(--gray-1);
+  font: inherit;
+  font-size: 12px;
+}
+
+.tenant-agent-dashboard-hook-settings {
+  margin-top: 12px;
+}
+
+.tenant-agent-dashboard-hook-settings small {
+  color: var(--gray-9);
+  font-size: 10px;
+}
+
+.tenant-agent-dashboard-hook-errors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.tenant-agent-dashboard-hook-errors code {
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: var(--red-11);
+  background: var(--red-3);
+  font-size: 10px;
+}
+
+@media (max-width: 900px) {
+  .tenant-agent-dashboard-hook-editor-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .tenant-agent-dashboard-hook-editor > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

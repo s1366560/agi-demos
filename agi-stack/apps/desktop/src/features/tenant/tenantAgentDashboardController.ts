@@ -7,6 +7,7 @@ import type {
   TenantAgentDashboardScope,
   TenantAgentDashboardSnapshot,
   TenantAgentEditableConfig,
+  TenantAgentRuntimeInfo,
   TenantAgentRun,
   TenantAgentTrace,
   TenantRuntimeHookCatalogEntry,
@@ -26,11 +27,17 @@ export type TenantAgentDashboardFilters = Readonly<{
   search: string;
 }>;
 
+export type TenantAgentConfigConflict = Readonly<{
+  expectedRevision: number;
+  authorityRevision: number;
+}>;
+
 export type TenantAgentDashboardViewModel = Readonly<{
   state: TenantAgentDashboardViewState;
   scope: TenantAgentDashboardScope;
   authority: TenantAgentDashboardAuthority;
   reasonCode: string | null;
+  configConflict: TenantAgentConfigConflict | null;
   retryVisible: boolean;
   busyAction: 'load' | 'update' | 'trace' | null;
   allowedActions: readonly TenantAgentDashboardAction[];
@@ -38,6 +45,7 @@ export type TenantAgentDashboardViewModel = Readonly<{
   canModify: boolean;
   config: TenantAgentConfig | null;
   hookCatalog: readonly TenantRuntimeHookCatalogEntry[];
+  runtimeInfo: TenantAgentRuntimeInfo | null;
   runs: readonly TenantAgentRun[];
   visibleRuns: readonly TenantAgentRun[];
   activeRunCount: number;
@@ -89,6 +97,7 @@ export function createTenantAgentDashboardController({
       state: hadData ? model.state : 'loading',
       busyAction: 'load',
       reasonCode: null,
+      configConflict: null,
       retryVisible: false,
     });
     try {
@@ -184,10 +193,7 @@ export function createTenantAgentDashboardController({
       });
     },
     async updateConfig(input) {
-      if (
-        !model.allowedActions.includes('update-config') ||
-        model.authorityRevision === null
-      ) {
+      if (!model.allowedActions.includes('update-config') || model.authorityRevision === null) {
         throw new Error('tenant_agent_dashboard_update_forbidden');
       }
       const generation = beginRequest();
@@ -205,6 +211,7 @@ export function createTenantAgentDashboardController({
           state: model.runs.length === 0 ? 'empty' : 'ready',
           busyAction: null,
           reasonCode: null,
+          configConflict: null,
           retryVisible: false,
           config,
           authorityRevision: config.authorityRevision,
@@ -213,12 +220,10 @@ export function createTenantAgentDashboardController({
         if (!isActive(generation)) return;
         publish({
           ...model,
-          state:
-            error instanceof DesktopApiError && error.status === 409
-              ? 'conflict'
-              : 'stale',
+          state: error instanceof DesktopApiError && error.status === 409 ? 'conflict' : 'stale',
           busyAction: null,
           reasonCode: errorReason(error, 'tenant_agent_dashboard_update_unavailable'),
+          configConflict: readConfigConflict(error),
           retryVisible: true,
         });
         throw error;
@@ -262,6 +267,7 @@ function createInitialView(
     scope,
     authority,
     reasonCode: null,
+    configConflict: null,
     retryVisible: false,
     busyAction: null,
     allowedActions: Object.freeze([]),
@@ -269,6 +275,7 @@ function createInitialView(
     canModify: false,
     config: null,
     hookCatalog: Object.freeze([]),
+    runtimeInfo: null,
     runs: Object.freeze([]),
     visibleRuns: Object.freeze([]),
     activeRunCount: 0,
@@ -283,8 +290,7 @@ function projectSnapshot(
   filters: TenantAgentDashboardFilters,
 ): TenantAgentDashboardViewModel {
   const state =
-    snapshot.availability === 'unavailable' ||
-    snapshot.availability === 'not_applicable'
+    snapshot.availability === 'unavailable' || snapshot.availability === 'not_applicable'
       ? 'unavailable'
       : snapshot.runs.length === 0
         ? 'empty'
@@ -294,6 +300,7 @@ function projectSnapshot(
     scope: snapshot.scope,
     authority: snapshot.authority,
     reasonCode: snapshot.reasonCode,
+    configConflict: null,
     retryVisible: state === 'unavailable',
     busyAction: null,
     allowedActions: snapshot.allowedActions,
@@ -301,6 +308,7 @@ function projectSnapshot(
     canModify: snapshot.canModify,
     config: snapshot.config,
     hookCatalog: snapshot.hookCatalog,
+    runtimeInfo: snapshot.runtimeInfo,
     runs: snapshot.runs,
     visibleRuns: filterRuns(snapshot.runs, filters),
     activeRunCount: snapshot.activeRunCount,
@@ -352,23 +360,36 @@ function validateScope(
 }
 
 function validateFilters(filters: TenantAgentDashboardFilters): void {
-  if (
-    (filters.status !== null && !filters.status.trim()) ||
-    typeof filters.search !== 'string'
-  ) {
+  if ((filters.status !== null && !filters.status.trim()) || typeof filters.search !== 'string') {
     throw new Error('tenant_agent_dashboard_filters_invalid');
   }
 }
 
 function errorReason(error: unknown, fallback: string): string {
-  if (
-    error instanceof DesktopApiError &&
-    typeof error.payload === 'object' &&
-    error.payload !== null &&
-    'reason_code' in error.payload &&
-    typeof error.payload.reason_code === 'string'
-  ) {
-    return error.payload.reason_code;
-  }
+  if (!(error instanceof DesktopApiError)) return fallback;
+  const payload = asRecord(error.payload);
+  if (typeof payload?.reason_code === 'string') return payload.reason_code;
+  const detail = asRecord(payload?.detail);
+  if (typeof detail?.reason_code === 'string') return detail.reason_code;
   return fallback;
+}
+
+function readConfigConflict(error: unknown): TenantAgentConfigConflict | null {
+  if (!(error instanceof DesktopApiError) || error.status !== 409) return null;
+  const detail = asRecord(asRecord(error.payload)?.detail);
+  const expectedRevision = detail?.expected_revision;
+  const authorityRevision = detail?.authority_revision;
+  if (!Number.isSafeInteger(expectedRevision) || !Number.isSafeInteger(authorityRevision)) {
+    return null;
+  }
+  return Object.freeze({
+    expectedRevision: Number(expectedRevision),
+    authorityRevision: Number(authorityRevision),
+  });
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }

@@ -4,7 +4,11 @@
   padding: 34px;
   color: var(--gray-12);
   background:
-    radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--desktop-accent) 8%, transparent), transparent 30rem),
+    radial-gradient(
+      circle at 10% 0%,
+      color-mix(in srgb, var(--desktop-accent) 8%, transparent),
+      transparent 30rem
+    ),
     var(--color-panel, var(--gray-1));
 }
 
@@ -105,6 +109,71 @@
 
 .tenant-agent-dashboard-card {
   padding: 20px;
+}
+
+.tenant-agent-dashboard-trace-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.tenant-agent-dashboard-trace-summary span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: var(--gray-10);
+  background: var(--gray-3);
+  font-size: 11px;
+}
+
+.tenant-agent-dashboard-trace-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tenant-agent-dashboard-trace li dl {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0 0;
+}
+
+.tenant-agent-dashboard-trace li dl > div {
+  min-width: 0;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--gray-3);
+}
+
+.tenant-agent-dashboard-trace li dt {
+  color: var(--gray-9);
+  font-size: 10px;
+}
+
+.tenant-agent-dashboard-trace li dd {
+  margin: 4px 0 0;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.tenant-agent-dashboard-trace-result,
+.tenant-agent-dashboard-trace-error {
+  grid-column: 1 / -1;
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.tenant-agent-dashboard-trace-result {
+  color: var(--green-11);
+  background: var(--green-3);
+}
+
+.tenant-agent-dashboard-trace-error {
+  color: var(--red-11);
+  background: var(--red-3);
 }
 
 .tenant-agent-dashboard-card h2,
@@ -297,7 +366,7 @@
 .tenant-agent-dashboard-editor {
   display: grid;
   gap: 16px;
-  width: min(760px, 100%);
+  width: min(980px, 100%);
   max-height: calc(100vh - 48px);
   padding: 22px;
   overflow: auto;
@@ -340,6 +409,10 @@
   .tenant-agent-dashboard-run-list,
   .tenant-agent-dashboard-card dl,
   .tenant-agent-dashboard-tool-policy {
+    grid-template-columns: 1fr;
+  }
+
+  .tenant-agent-dashboard-trace li dl {
     grid-template-columns: 1fr;
   }
 

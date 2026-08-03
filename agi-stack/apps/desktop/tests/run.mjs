@@ -3,19 +3,32 @@ import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { assertTestInventoryComplete, discoverTestFiles } from './testDiscovery.mjs';
+import {
+  assertTestInventoryComplete,
+  discoverTestFiles,
+} from './testDiscovery.mjs';
 
 const testsDirectory = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = dirname(testsDirectory);
 const compiledRoot = '/tmp/agistack-desktop-test-dist';
-const tscEntrypoint = join(desktopRoot, 'node_modules', 'typescript', 'bin', 'tsc');
+const tscEntrypoint = join(
+  desktopRoot,
+  'node_modules',
+  'typescript',
+  'bin',
+  'tsc',
+);
 
 rmSync(compiledRoot, { recursive: true, force: true });
 
-const compile = spawnSync(process.execPath, [tscEntrypoint, '-p', 'tsconfig.test.json'], {
-  cwd: desktopRoot,
-  stdio: 'inherit',
-});
+const compile = spawnSync(
+  process.execPath,
+  [tscEntrypoint, '-p', 'tsconfig.test.json'],
+  {
+    cwd: desktopRoot,
+    stdio: 'inherit',
+  },
+);
 if (compile.status !== 0) process.exit(compile.status ?? 1);
 
 const compiledTaskDirectory = join(compiledRoot, 'src', 'features', 'task');
@@ -29,18 +42,34 @@ copyFileSync(
   join(compiledTaskDirectory, 'NewTaskPlanReview.css'),
 );
 
-const compiledNavigationDirectory = join(compiledRoot, 'src', 'features', 'navigation');
+const compiledNavigationDirectory = join(
+  compiledRoot,
+  'src',
+  'features',
+  'navigation',
+);
 mkdirSync(compiledNavigationDirectory, { recursive: true });
 copyFileSync(
   join(desktopRoot, 'src', 'features', 'navigation', 'AuxiliaryView.css'),
   join(compiledNavigationDirectory, 'AuxiliaryView.css'),
 );
 copyFileSync(
-  join(desktopRoot, 'src', 'features', 'navigation', 'KeyboardShortcutsDialog.css'),
+  join(
+    desktopRoot,
+    'src',
+    'features',
+    'navigation',
+    'KeyboardShortcutsDialog.css',
+  ),
   join(compiledNavigationDirectory, 'KeyboardShortcutsDialog.css'),
 );
 
-const compiledMyWorkDirectory = join(compiledRoot, 'src', 'features', 'my-work');
+const compiledMyWorkDirectory = join(
+  compiledRoot,
+  'src',
+  'features',
+  'my-work',
+);
 mkdirSync(compiledMyWorkDirectory, { recursive: true });
 copyFileSync(
   join(desktopRoot, 'src', 'features', 'my-work', 'MyWorkQueue.css'),
@@ -62,17 +91,16 @@ const compiledAutomationsDirectory = join(
 );
 mkdirSync(compiledAutomationsDirectory, { recursive: true });
 copyFileSync(
-  join(
-    desktopRoot,
-    'src',
-    'features',
-    'automations',
-    'AutomationsPage.css',
-  ),
+  join(desktopRoot, 'src', 'features', 'automations', 'AutomationsPage.css'),
   join(compiledAutomationsDirectory, 'AutomationsPage.css'),
 );
 
-const compiledFeedbackDirectory = join(compiledRoot, 'src', 'features', 'feedback');
+const compiledFeedbackDirectory = join(
+  compiledRoot,
+  'src',
+  'features',
+  'feedback',
+);
 mkdirSync(compiledFeedbackDirectory, { recursive: true });
 copyFileSync(
   join(desktopRoot, 'src', 'features', 'feedback', 'ToastCenter.css'),
@@ -133,7 +161,12 @@ copyFileSync(
   join(compiledInvitationAcceptanceDirectory, 'InvitationAcceptancePage.css'),
 );
 
-const compiledSettingsDirectory = join(compiledRoot, 'src', 'features', 'settings');
+const compiledSettingsDirectory = join(
+  compiledRoot,
+  'src',
+  'features',
+  'settings',
+);
 mkdirSync(compiledSettingsDirectory, { recursive: true });
 copyFileSync(
   join(desktopRoot, 'src', 'features', 'settings', 'SettingsCorePages.css'),
@@ -155,7 +188,12 @@ copyFileSync(
   join(compiledComponentsDirectory, 'ResizeHandle.css'),
 );
 
-const compiledWorkspaceDirectory = join(compiledRoot, 'src', 'features', 'workspace');
+const compiledWorkspaceDirectory = join(
+  compiledRoot,
+  'src',
+  'features',
+  'workspace',
+);
 mkdirSync(compiledWorkspaceDirectory, { recursive: true });
 copyFileSync(
   join(desktopRoot, 'src', 'features', 'workspace', 'WorkspaceDock.css'),
@@ -189,13 +227,7 @@ copyFileSync(
   join(compiledTenantDirectory, 'TenantAnalyticsPage.css'),
 );
 copyFileSync(
-  join(
-    desktopRoot,
-    'src',
-    'features',
-    'tenant',
-    'TenantAgentBindingsPage.css',
-  ),
+  join(desktopRoot, 'src', 'features', 'tenant', 'TenantAgentBindingsPage.css'),
   join(compiledTenantDirectory, 'TenantAgentBindingsPage.css'),
 );
 copyFileSync(
@@ -207,6 +239,16 @@ copyFileSync(
     'TenantAgentDashboardPage.css',
   ),
   join(compiledTenantDirectory, 'TenantAgentDashboardPage.css'),
+);
+copyFileSync(
+  join(
+    desktopRoot,
+    'src',
+    'features',
+    'tenant',
+    'TenantAgentDashboardHookEditor.css',
+  ),
+  join(compiledTenantDirectory, 'TenantAgentDashboardHookEditor.css'),
 );
 
 const compiledProjectSupportDirectory = join(
@@ -227,7 +269,12 @@ copyFileSync(
   join(compiledProjectSupportDirectory, 'ProjectSupportPage.css'),
 );
 
-const compiledGovernanceDirectory = join(compiledRoot, 'src', 'features', 'governance');
+const compiledGovernanceDirectory = join(
+  compiledRoot,
+  'src',
+  'features',
+  'governance',
+);
 mkdirSync(compiledGovernanceDirectory, { recursive: true });
 copyFileSync(
   join(desktopRoot, 'src', 'features', 'governance', 'DeadLetterQueuePage.css'),
