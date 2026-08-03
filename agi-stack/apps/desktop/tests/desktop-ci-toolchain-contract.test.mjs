@@ -176,6 +176,11 @@ test("all JavaScript projects and delivery paths use one integrity-pinned pnpm t
   assert.equal(desktopPackage.devEngines, undefined);
   assert.equal(desktopPackage.pnpm, undefined);
   assert.equal(desktopPackage.devDependencies["electron-builder"], "26.15.3");
+  assert.equal(
+    desktopPackage.devDependencies.pnpm,
+    PNPM_VERSION,
+    "electron-builder subprocesses must resolve a project-local pinned pnpm",
+  );
   assert.deepEqual(desktopWorkspace.packages, ["."]);
   assert.deepEqual(desktopWorkspace.allowBuilds, {
     "@scarf/scarf": false,
@@ -184,6 +189,7 @@ test("all JavaScript projects and delivery paths use one integrity-pinned pnpm t
     "electron-winstaller": false,
     esbuild: true,
   });
+  assert.equal(desktopWorkspace.enableGlobalVirtualStore, false);
   assert.equal(desktopLockDocuments.length, 2);
   assert.equal(
     desktopLockDocuments[0].importers["."].packageManagerDependencies.pnpm
@@ -197,6 +203,13 @@ test("all JavaScript projects and delivery paths use one integrity-pinned pnpm t
     PNPM_VERSION,
   );
   assert.ok(desktopLockDocuments[1].importers["."].dependencies);
+  assert.deepEqual(
+    desktopLockDocuments[1].importers["."].devDependencies.pnpm,
+    {
+      specifier: PNPM_VERSION,
+      version: PNPM_VERSION,
+    },
+  );
   assert.match(
     desktopPackage.scripts["package:electron"],
     /corepack pnpm exec electron-builder/u,

@@ -1829,6 +1829,37 @@ class TenantAgentConfig(Base):
     )
 
 
+class TenantAgentConfigAuthority(Base):
+    """Optimistic-concurrency authority for tenant agent configuration."""
+
+    __tablename__ = "tenant_agent_config_authority"
+
+    tenant_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    authority_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "authority_revision >= 1",
+            name="ck_tenant_agent_config_authority_revision_positive",
+        ),
+    )
+
+
 class Skill(Base):
     """
     Skill entity for the Agent Skill System.

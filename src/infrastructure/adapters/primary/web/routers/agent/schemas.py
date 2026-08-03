@@ -355,8 +355,16 @@ class TenantAgentConfigResponse(BaseModel):
     runtime_hooks: list[RuntimeHookConfigResponse]
     runtime_hook_settings_redacted: bool = False
     multi_agent_enabled: bool = False
+    authority_revision: int = Field(default=1, ge=1)
     created_at: str
     updated_at: str
+
+
+class TenantAgentConfigAuthorityRevisionResponse(BaseModel):
+    """Current optimistic-concurrency authority for tenant agent configuration."""
+
+    tenant_id: str
+    authority_revision: int = Field(ge=1)
 
 
 class UpdateTenantAgentConfigRequest(BaseModel):

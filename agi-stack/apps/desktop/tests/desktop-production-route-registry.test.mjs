@@ -22,6 +22,7 @@ const {
   PROJECT_SEARCH_ROUTE_ID,
   PROJECT_SUPPORT_ROUTE_ID,
   TENANT_ANALYTICS_ROUTE_ID,
+  TENANT_AGENT_DASHBOARD_ROUTE_ID,
   TENANT_AGENT_BINDINGS_ROUTE_ID,
   TENANT_OVERVIEW_ROUTE_ID,
   TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
@@ -229,6 +230,22 @@ function implementedTenantAgentBindingsModule(overrides = {}) {
   });
 }
 
+function implementedTenantAgentDashboardModule(overrides = {}) {
+  function TenantAgentDashboardRoute() {
+    return React.createElement('section', null, 'Tenant Agent Dashboard route');
+  }
+  return Object.freeze({
+    routeId: TENANT_AGENT_DASHBOARD_ROUTE_ID,
+    disposition: 'implemented',
+    availability: 'available',
+    reasonCode: null,
+    capability: TENANT_AGENT_DASHBOARD_ROUTE_ID,
+    localPolicy: 'native_equivalent',
+    Surface: TenantAgentDashboardRoute,
+    ...overrides,
+  });
+}
+
 function implementedDeadLetterQueueModule(overrides = {}) {
   function DeadLetterQueueRoute() {
     return React.createElement('section', null, 'Dead Letter Queue route');
@@ -412,6 +429,8 @@ function createRegistry(
   invitationAcceptanceLoader = async () =>
     implementedInvitationAcceptanceModule(),
   projectSupportLoader = async () => implementedProjectSupportModule(),
+  tenantAgentDashboardLoader = async () =>
+    implementedTenantAgentDashboardModule(),
 ) {
   return createDesktopProductionRouteRegistry({
     implementedLoaders: {
@@ -424,6 +443,7 @@ function createRegistry(
       [TENANT_WORKSPACES_ROUTE_ID]: tenantWorkspacesLoader,
       [TENANT_TASKS_ROUTE_ID]: tenantTasksLoader,
       [TENANT_ANALYTICS_ROUTE_ID]: tenantAnalyticsLoader,
+      [TENANT_AGENT_DASHBOARD_ROUTE_ID]: tenantAgentDashboardLoader,
       [TENANT_AGENT_BINDINGS_ROUTE_ID]: tenantAgentBindingsLoader,
       [TENANT_DEAD_LETTER_QUEUE_ROUTE_ID]: deadLetterQueueLoader,
       [TENANT_POOL_ROUTE_ID]: runtimePoolLoader,
@@ -449,6 +469,10 @@ test('production registry requires every implemented project route loader', () =
   assert.equal(TENANT_WORKSPACES_ROUTE_ID, 'tenant-tenant-workspaces');
   assert.equal(TENANT_TASKS_ROUTE_ID, 'tenant-tenant-tasks');
   assert.equal(TENANT_ANALYTICS_ROUTE_ID, 'tenant-tenant-analytics');
+  assert.equal(
+    TENANT_AGENT_DASHBOARD_ROUTE_ID,
+    'tenant-tenant-agent-configuration',
+  );
   assert.equal(
     TENANT_AGENT_BINDINGS_ROUTE_ID,
     'tenant-tenant-agent-bindings',
@@ -531,7 +555,7 @@ test('production registry requires every implemented project route loader', () =
   );
 });
 
-test('all 55 production loaders remain lazy and twenty routes are real modules', async () => {
+test('all 55 production loaders remain lazy and twenty-one routes are real modules', async () => {
   let projectLoadCount = 0;
   let searchLoadCount = 0;
   let cronJobsLoadCount = 0;
@@ -710,7 +734,7 @@ test('all 55 production loaders remain lazy and twenty routes are real modules',
   const planned = loaded.filter(
     ({ module }) => module.disposition === 'planned',
   );
-  assert.equal(implemented.length, 20);
+  assert.equal(implemented.length, 21);
   assert.deepEqual(
     implemented.map(({ definition }) => definition.id).sort(),
     [
@@ -723,6 +747,7 @@ test('all 55 production loaders remain lazy and twenty routes are real modules',
       TENANT_WORKSPACES_ROUTE_ID,
       TENANT_TASKS_ROUTE_ID,
       TENANT_ANALYTICS_ROUTE_ID,
+      TENANT_AGENT_DASHBOARD_ROUTE_ID,
       TENANT_AGENT_BINDINGS_ROUTE_ID,
       TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
       TENANT_POOL_ROUTE_ID,
@@ -845,7 +870,7 @@ test('all 55 production loaders remain lazy and twenty routes are real modules',
     ).module,
     tenantCreationModule,
   );
-  assert.equal(planned.length, 35);
+  assert.equal(planned.length, 34);
 
   for (const { definition, module } of planned) {
     assert.equal(module.routeId, definition.id);

@@ -314,6 +314,7 @@ import {
   PROJECT_SUPPORT_ROUTE_ID,
   TENANT_OVERVIEW_ROUTE_ID,
   TENANT_ANALYTICS_ROUTE_ID,
+  TENANT_AGENT_DASHBOARD_ROUTE_ID,
   TENANT_AGENT_BINDINGS_ROUTE_ID,
   TENANT_CLUSTERS_ROUTE_ID,
   TENANT_DEPLOY_ROUTE_ID,
@@ -338,6 +339,7 @@ import {
   createUnifiedRuntimesRouteBindingForRuntime,
   createTenantOverviewRouteBindingForRuntime,
   createTenantAnalyticsRouteBindingForRuntime,
+  createTenantAgentDashboardRouteBindingForRuntime,
   createTenantAgentBindingsRouteBindingForRuntime,
   createTenantProjectsRouteBindingForRuntime,
   createTenantTasksRouteBindingForRuntime,
@@ -371,6 +373,7 @@ import { createRuntimePoolRouteModuleLoader } from './features/runtime-pool/runt
 import { createUnifiedRuntimesRouteModuleLoader } from './features/unified-runtimes/unifiedRuntimesRouteModule';
 import { createTenantOverviewRouteModuleLoader } from './features/tenant/tenantOverviewRouteModule';
 import { createTenantAnalyticsRouteModuleLoader } from './features/tenant/tenantAnalyticsRouteModule';
+import { createTenantAgentDashboardRouteModuleLoader } from './features/tenant/tenantAgentDashboardRouteModule';
 import { createTenantAgentBindingsRouteModuleLoader } from './features/tenant/tenantAgentBindingsRouteModule';
 import { createTenantProjectsRouteModuleLoader } from './features/tenant/tenantProjectsRouteModule';
 import { createTenantTasksRouteModuleLoader } from './features/tenant/tenantTasksRouteModule';
@@ -2171,6 +2174,14 @@ export function App() {
                   authRef.current.tenants.find(
                     (tenant) => tenant.id === context.tenantId,
                   )?.plan ?? null,
+                ),
+            }),
+          [TENANT_AGENT_DASHBOARD_ROUTE_ID]:
+            createTenantAgentDashboardRouteModuleLoader({
+              createBinding: (context) =>
+                createTenantAgentDashboardRouteBindingForRuntime(
+                  configRef.current,
+                  context,
                 ),
             }),
           [TENANT_AGENT_BINDINGS_ROUTE_ID]:

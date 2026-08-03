@@ -28,6 +28,7 @@ class TestTenantAgentConfigAPI:
 
         data = response.json()
         assert "tenant_id" in data
+        assert data["authority_revision"] == 1
         assert "config_type" in data
         assert "pattern_learning_enabled" in data
         assert "multi_level_thinking_enabled" in data
@@ -79,7 +80,7 @@ class TestTenantAgentConfigAPI:
         }
 
         response = await authenticated_async_client.put(
-            f"/api/v1/agent/config?tenant_id={test_tenant_db.id}",
+            f"/api/v1/agent/config?tenant_id={test_tenant_db.id}&expected_revision=1",
             json=update_data,
         )
 
@@ -90,6 +91,7 @@ class TestTenantAgentConfigAPI:
         assert data["llm_temperature"] == 0.7
         assert data["pattern_learning_enabled"] is False
         assert data["max_work_plan_steps"] == 15
+        assert data["authority_revision"] == 2
 
     async def test_update_config_as_non_admin_forbidden(
         self,
@@ -109,7 +111,7 @@ class TestTenantAgentConfigAPI:
         }
 
         response = await authenticated_async_client.put(
-            f"/api/v1/agent/config?tenant_id={test_tenant_db.id}",
+            f"/api/v1/agent/config?tenant_id={test_tenant_db.id}&expected_revision=1",
             json=update_data,
         )
 
@@ -131,7 +133,7 @@ class TestTenantAgentConfigAPI:
         }
 
         response = await authenticated_async_client.put(
-            f"/api/v1/agent/config?tenant_id={test_tenant_db.id}",
+            f"/api/v1/agent/config?tenant_id={test_tenant_db.id}&expected_revision=1",
             json=update_data,
         )
 
@@ -148,7 +150,7 @@ class TestTenantAgentConfigAPI:
         }
 
         response = await authenticated_async_client.put(
-            f"/api/v1/agent/config?tenant_id={test_tenant_db.id}",
+            f"/api/v1/agent/config?tenant_id={test_tenant_db.id}&expected_revision=1",
             json=update_data,
         )
 
@@ -167,7 +169,7 @@ class TestTenantAgentConfigAPI:
         }
 
         response1 = await authenticated_async_client.put(
-            f"/api/v1/agent/config?tenant_id={test_tenant_db.id}",
+            f"/api/v1/agent/config?tenant_id={test_tenant_db.id}&expected_revision=1",
             json=update_data,
         )
         assert response1.status_code == 200
@@ -200,7 +202,7 @@ class TestTenantAgentConfigAPI:
         }
 
         await authenticated_async_client.put(
-            f"/api/v1/agent/config?tenant_id={test_tenant_db.id}",
+            f"/api/v1/agent/config?tenant_id={test_tenant_db.id}&expected_revision=1",
             json=update1,
         )
 
@@ -236,6 +238,7 @@ class TestTenantAgentConfigAPI:
         assert "multi_level_thinking_enabled" in data
         assert "max_work_plan_steps" in data
         assert "tool_timeout_seconds" in data
+        assert "authority_revision" in data
 
         # Type checks
         assert isinstance(data["tenant_id"], str)
@@ -246,3 +249,46 @@ class TestTenantAgentConfigAPI:
         assert isinstance(data["multi_level_thinking_enabled"], bool)
         assert isinstance(data["max_work_plan_steps"], int)
         assert data["max_work_plan_steps"] > 0
+        assert isinstance(data["authority_revision"], int)
+
+    async def test_update_requires_expected_revision(
+        self,
+        authenticated_async_client: AsyncClient,
+        test_tenant_db,
+    ):
+        """Reject writes that do not bind to a previously read authority revision."""
+        response = await authenticated_async_client.put(
+            f"/api/v1/agent/config?tenant_id={test_tenant_db.id}",
+            json={"llm_model": "openai/gpt-5.4"},
+        )
+
+        assert response.status_code == 422
+
+    async def test_stale_update_returns_structured_conflict(
+        self,
+        authenticated_async_client: AsyncClient,
+        test_tenant_db,
+    ):
+        """Reject stale writers without overwriting the committed configuration."""
+        first_response = await authenticated_async_client.put(
+            f"/api/v1/agent/config?tenant_id={test_tenant_db.id}&expected_revision=1",
+            json={"llm_model": "openai/gpt-5.4"},
+        )
+        assert first_response.status_code == 200
+
+        stale_response = await authenticated_async_client.put(
+            f"/api/v1/agent/config?tenant_id={test_tenant_db.id}&expected_revision=1",
+            json={"llm_model": "anthropic/claude-sonnet-4.5"},
+        )
+
+        assert stale_response.status_code == 409
+        assert stale_response.json()["detail"] == {
+            "reason_code": "tenant_agent_config_revision_conflict",
+            "expected_revision": 1,
+            "authority_revision": 2,
+        }
+
+        persisted = await authenticated_async_client.get(
+            f"/api/v1/agent/config?tenant_id={test_tenant_db.id}"
+        )
+        assert persisted.json()["llm_model"] == "openai/gpt-5.4"

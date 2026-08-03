@@ -26,6 +26,20 @@ import type {
 // Use centralized HTTP client
 const api = httpClient;
 
+interface TenantAgentConfigAuthorityRevision {
+  tenant_id: string;
+  authority_revision: number;
+}
+
+interface TenantAgentConfigAuthorityWrite {
+  config: TenantAgentConfig;
+  authorityRevision: number;
+}
+
+type TenantAgentConfigResponse = TenantAgentConfig & {
+  authority_revision: number;
+};
+
 /**
  * Error class for tenant agent config API errors
  */
@@ -82,10 +96,40 @@ class TenantAgentConfigService implements ITenantAgentConfigService {
     tenantId: string,
     request: UpdateTenantAgentConfigRequest
   ): Promise<TenantAgentConfig> {
+    const expectedRevision = await this.getAuthorityRevision(tenantId);
+    return (await this.updateConfigWithRevision(tenantId, request, expectedRevision)).config;
+  }
+
+  async getAuthorityRevision(tenantId: string): Promise<number> {
     try {
-      return await api.put<TenantAgentConfig>('/agent/config', request, {
-        params: { tenant_id: tenantId },
+      const response = await api.get<TenantAgentConfigAuthorityRevision>(
+        '/agent/config/authority-revision',
+        {
+          params: { tenant_id: tenantId },
+        }
+      );
+      return response.authority_revision;
+    } catch (error) {
+      this._handleError(error, 'Failed to fetch tenant agent configuration revision');
+    }
+  }
+
+  async updateConfigWithRevision(
+    tenantId: string,
+    request: UpdateTenantAgentConfigRequest,
+    expectedRevision: number
+  ): Promise<TenantAgentConfigAuthorityWrite> {
+    try {
+      const response = await api.put<TenantAgentConfigResponse>('/agent/config', request, {
+        params: {
+          tenant_id: tenantId,
+          expected_revision: expectedRevision,
+        },
       });
+      return {
+        config: response,
+        authorityRevision: response.authority_revision,
+      };
     } catch (error) {
       this._handleError(error, 'Failed to update tenant agent configuration');
     }
@@ -147,6 +191,14 @@ class TenantAgentConfigService implements ITenantAgentConfigService {
 
       if (statusCode === 422) {
         throw new TenantAgentConfigError('Invalid configuration values', 422, detail);
+      }
+
+      if (statusCode === 409) {
+        throw new TenantAgentConfigError(
+          'Tenant agent configuration changed while it was being edited',
+          409,
+          detail
+        );
       }
 
       // Generic error with detail if available
