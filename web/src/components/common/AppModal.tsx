@@ -208,7 +208,7 @@ export const AppModal: React.FC<AppModalProps> = ({
       }}
     >
       <div
-        className="app-modal__backdrop fixed inset-0 bg-[var(--color-overlay-backdrop,#080c12cc)] transition-opacity"
+        className="app-modal__backdrop fixed inset-0 bg-[var(--color-overlay-backdrop,#000000cc)] transition-opacity"
         aria-hidden="true"
       />
       <div
@@ -228,12 +228,12 @@ export const AppModal: React.FC<AppModalProps> = ({
           tabIndex={-1}
           className={
             isSide
-              ? `app-modal__panel app-modal__panel--side relative flex h-full w-full ${SIZE_MAX_WIDTH[size]} flex-col overflow-hidden border-l border-[var(--color-border,#242d3a)] bg-[var(--color-panel,#0d121a)] text-[var(--color-text,#e7edf6)] shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary,#38d6ff)] ${className ?? ''}`
-              : `app-modal__panel relative w-full ${SIZE_MAX_WIDTH[size]} overflow-hidden rounded-lg border border-[var(--color-border,#242d3a)] bg-[var(--color-panel,#0d121a)] text-[var(--color-text,#e7edf6)] shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary,#38d6ff)] ${className ?? ''}`
+              ? `app-modal__panel app-modal__panel--side relative flex h-full w-full ${SIZE_MAX_WIDTH[size]} flex-col overflow-hidden border-l border-[var(--color-border,#2b2b2b)] bg-[var(--color-panel,#121212)] text-[var(--color-text,#ededed)] shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary,#f2f2f2)] ${className ?? ''}`
+              : `app-modal__panel relative w-full ${SIZE_MAX_WIDTH[size]} overflow-hidden rounded-lg border border-[var(--color-border,#2b2b2b)] bg-[var(--color-panel,#121212)] text-[var(--color-text,#ededed)] shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary,#f2f2f2)] ${className ?? ''}`
           }
         >
           {(title || !hideCloseButton || headerActions) && (
-            <div className="app-modal__header flex shrink-0 items-start justify-between gap-4 border-b border-[var(--color-border,#242d3a)] px-6 py-4">
+            <div className="app-modal__header flex shrink-0 items-start justify-between gap-4 border-b border-[var(--color-border,#2b2b2b)] px-6 py-4">
               <div className="min-w-0">
                 {title && (
                   <h2 id={titleId} className="truncate text-lg font-semibold">
@@ -241,7 +241,7 @@ export const AppModal: React.FC<AppModalProps> = ({
                   </h2>
                 )}
                 {description && (
-                  <p id={descId} className="mt-1 text-sm text-[var(--color-muted,#8996a9)]">
+                  <p id={descId} className="mt-1 text-sm text-[var(--color-muted,#9c9c9c)]">
                     {description}
                   </p>
                 )}
@@ -254,7 +254,7 @@ export const AppModal: React.FC<AppModalProps> = ({
                   type="button"
                   onClick={attemptClose}
                   aria-label={t('common.closeDialog', { defaultValue: 'Close dialog' })}
-                  className="app-modal__close -mr-2 -mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[var(--color-muted,#8996a9)] transition-colors hover:bg-[var(--color-panel-2,#111720)] hover:text-[var(--color-text,#e7edf6)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary,#38d6ff)]"
+                  className="app-modal__close -mr-2 -mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[var(--color-muted,#9c9c9c)] transition-colors hover:bg-[var(--color-panel-2,#181818)] hover:text-[var(--color-text,#ededed)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary,#f2f2f2)]"
                 >
                   <X size={18} aria-hidden="true" />
                 </button>
@@ -271,7 +271,7 @@ export const AppModal: React.FC<AppModalProps> = ({
             {children}
           </div>
           {footer && (
-            <div className="app-modal__footer flex shrink-0 items-center justify-end gap-2 border-t border-[var(--color-border,#242d3a)] px-6 py-3">
+            <div className="app-modal__footer flex shrink-0 items-center justify-end gap-2 border-t border-[var(--color-border,#2b2b2b)] px-6 py-3">
               {footer}
             </div>
           )}

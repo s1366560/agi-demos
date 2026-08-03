@@ -90,9 +90,9 @@ const TERMINAL_TOKEN_MAP = {
 const TERMINAL_FALLBACKS: Record<string, string> = {
   background: '#141416',
   foreground: '#e8eaed',
-  cursor: '#1e3fae',
+  cursor: '#ededed',
   cursorAccent: '#141416',
-  selectionBackground: '#3b5fc9',
+  selectionBackground: '#404040',
   black: '#141416',
   red: '#ef4444',
   green: '#10b981',

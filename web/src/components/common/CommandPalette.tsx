@@ -290,7 +290,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
   return createPortal(
     <div
-      className="app-modal__backdrop fixed inset-0 flex items-start justify-center bg-[var(--color-overlay-backdrop,#080c12cc)] px-4 pt-[12vh]"
+      className="app-modal__backdrop fixed inset-0 flex items-start justify-center bg-[var(--color-overlay-backdrop,#000000cc)] px-4 pt-[12vh]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) close();
       }}
@@ -299,10 +299,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         role="dialog"
         aria-modal="true"
         aria-label={t('commandPalette.title', { defaultValue: 'Command palette' })}
-        className="app-modal__panel flex max-h-[70vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-[var(--color-border,#242d3a)] bg-[var(--color-panel,#0d121a)] text-[var(--color-text,#e7edf6)] shadow-2xl"
+        className="app-modal__panel flex max-h-[70vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-[var(--color-border,#2b2b2b)] bg-[var(--color-panel,#121212)] text-[var(--color-text,#ededed)] shadow-2xl"
       >
         {/* Input */}
-        <div className="flex items-center gap-3 border-b border-[var(--color-border,#242d3a)] px-4 py-3 focus-within:ring-1 focus-within:ring-[var(--color-primary,#38d6ff)]">
+        <div className="flex items-center gap-3 border-b border-[var(--color-border,#2b2b2b)] px-4 py-3 focus-within:ring-1 focus-within:ring-[var(--color-primary,#f2f2f2)]">
           <input
             ref={inputRef}
             id={inputId}
@@ -325,11 +325,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             placeholder={t('commandPalette.placeholder', {
               defaultValue: 'Search commands, pages, conversations…',
             })}
-            className="flex-1 bg-transparent text-base text-[var(--color-text,#e7edf6)] placeholder:text-[var(--color-muted,#8996a9)] outline-none"
+            className="flex-1 bg-transparent text-base text-[var(--color-text,#ededed)] placeholder:text-[var(--color-muted,#9c9c9c)] outline-none"
             autoComplete="off"
             spellCheck={false}
           />
-          <kbd className="shrink-0 rounded border border-[var(--color-border,#334154)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-muted,#8996a9)]">
+          <kbd className="shrink-0 rounded border border-[var(--color-border,#404040)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-muted,#9c9c9c)]">
             Esc
           </kbd>
         </div>
@@ -345,7 +345,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           className="flex-1 overflow-y-auto overscroll-contain py-2"
         >
           {filteredItems.length === 0 ? (
-            <div className="px-4 py-8 text-center text-sm text-[var(--color-muted,#8996a9)]">
+            <div className="px-4 py-8 text-center text-sm text-[var(--color-muted,#9c9c9c)]">
               {t('commandPalette.noResults', {
                 defaultValue: 'No results found',
               })}
@@ -353,7 +353,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           ) : (
             grouped.map((group) => (
               <div key={group.group} className="mb-1">
-                <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted,#8996a9)]">
+                <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted,#9c9c9c)]">
                   {group.group}
                 </div>
                 {group.items.map((item) => {
@@ -377,18 +377,18 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                       }}
                       className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors ${
                         isActive
-                          ? 'bg-[var(--color-panel-2,#111720)] text-[var(--color-text,#e7edf6)]'
-                          : 'text-[var(--color-text,#e7edf6)]'
+                          ? 'bg-[var(--color-panel-2,#181818)] text-[var(--color-text,#ededed)]'
+                          : 'text-[var(--color-text,#ededed)]'
                       }`}
                     >
                       {Icon ? (
-                        <Icon className="h-4 w-4 shrink-0 text-[var(--color-muted,#8996a9)]" />
+                        <Icon className="h-4 w-4 shrink-0 text-[var(--color-muted,#9c9c9c)]" />
                       ) : (
                         <span aria-hidden="true" className="h-4 w-4 shrink-0" />
                       )}
                       <span className="flex-1 truncate">{item.label}</span>
                       {item.hint ? (
-                        <span className="shrink-0 text-xs text-[var(--color-muted,#8996a9)]">
+                        <span className="shrink-0 text-xs text-[var(--color-muted,#9c9c9c)]">
                           {item.hint}
                         </span>
                       ) : null}
@@ -401,15 +401,15 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         </div>
 
         {/* Footer hint */}
-        <div className="flex items-center justify-between gap-4 border-t border-[var(--color-border,#242d3a)] px-4 py-2 text-[11px] text-[var(--color-muted,#8996a9)]">
+        <div className="flex items-center justify-between gap-4 border-t border-[var(--color-border,#2b2b2b)] px-4 py-2 text-[11px] text-[var(--color-muted,#9c9c9c)]">
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1">
-              <kbd className="rounded border border-[var(--color-border,#334154)] px-1">↑</kbd>
-              <kbd className="rounded border border-[var(--color-border,#334154)] px-1">↓</kbd>
+              <kbd className="rounded border border-[var(--color-border,#404040)] px-1">↑</kbd>
+              <kbd className="rounded border border-[var(--color-border,#404040)] px-1">↓</kbd>
               {t('commandPalette.hints.navigate', { defaultValue: 'navigate' })}
             </span>
             <span className="flex items-center gap-1">
-              <kbd className="rounded border border-[var(--color-border,#334154)] px-1">↵</kbd>
+              <kbd className="rounded border border-[var(--color-border,#404040)] px-1">↵</kbd>
               {t('commandPalette.hints.select', { defaultValue: 'select' })}
             </span>
           </div>

@@ -157,7 +157,7 @@ function timelineToHtml(timeline: TimelineEvent[], title?: string): string {
           `<div style="margin-bottom: 16px; padding: 12px 16px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;">`
         );
         lines.push(
-          `<div style="font-size: 11px; color: #2563eb; margin-bottom: 4px; font-weight: 600;">Assistant - ${formatTimestamp(event.timestamp)}</div>`
+          `<div style="font-size: 11px; color: #525252; margin-bottom: 4px; font-weight: 600;">Assistant - ${formatTimestamp(event.timestamp)}</div>`
         );
         lines.push(
           `<div style="font-size: 14px; white-space: pre-wrap;">${escapeHtml(event.content)}</div>`

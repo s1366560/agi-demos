@@ -370,15 +370,15 @@ export const TenantOverview: React.FC = () => {
               >
                 <defs>
                   <linearGradient id="tenantMemoryChartGradient" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="#1e3fae" stopOpacity="0.22"></stop>
-                    <stop offset="100%" stopColor="#1e3fae" stopOpacity="0"></stop>
+                    <stop offset="0%" stopColor="#737373" stopOpacity="0.22"></stop>
+                    <stop offset="100%" stopColor="#737373" stopOpacity="0"></stop>
                   </linearGradient>
                 </defs>
                 <path d={chartAreaPath} fill="url(#tenantMemoryChartGradient)"></path>
                 <path
                   d={chartLinePath}
                   fill="none"
-                  stroke="#1e3fae"
+                  stroke="#737373"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth="0.8"
@@ -391,7 +391,7 @@ export const TenantOverview: React.FC = () => {
                       key={`${point.x.toFixed(2)}-${point.y.toFixed(2)}`}
                       cx={point.x}
                       cy={point.y}
-                      fill="#1e3fae"
+                      fill="#737373"
                       r="1.2"
                       vectorEffect="non-scaling-stroke"
                     />

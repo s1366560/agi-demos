@@ -33,14 +33,14 @@ export type HexEdge = TopologyEdge & {
 
 export const HEX_SIZE = 56;
 export const RESERVED_CENTER_KEY = '0,0';
-export const DEFAULT_AGENT_COLOR = 'var(--color-primary-500, #1e3fae)';
+export const DEFAULT_AGENT_COLOR = 'var(--color-primary-500, #525252)';
 export const HUMAN_SEAT_COLOR = 'var(--color-warning, #f59e0b)';
 export const MAX_LAYOUT_RADIUS = 24;
 export const MAX_RENDER_GRID_RADIUS = 26;
 
 export const COLOR_SWATCHS = [
-  'var(--color-primary-500, #1e3fae)',
-  'var(--color-primary-400, #2563eb)',
+  'var(--color-primary-500, #525252)',
+  'var(--color-primary-400, #737373)',
   'var(--color-secondary-400, #7c3aed)',
   'var(--color-info, #0f766e)',
   'var(--color-warning, #d97706)',

@@ -256,12 +256,12 @@ const TaskDashboardInner: React.FC<{
         {
           label: t('tenant.tasks.charts.pending_tasks'),
           data: queueHistory.map((h) => h.count),
-          borderColor: '#2563eb',
+          borderColor: '#525252',
           backgroundColor: (context: ScriptableContext<'line'>) => {
             const ctx = context.chart.ctx;
             const gradient = ctx.createLinearGradient(0, 0, 0, 200);
-            gradient.addColorStop(0, 'rgba(37, 99, 235, 0.2)');
-            gradient.addColorStop(1, 'rgba(37, 99, 235, 0)');
+            gradient.addColorStop(0, 'rgba(120, 120, 120, 0.2)');
+            gradient.addColorStop(1, 'rgba(120, 120, 120, 0)');
             return gradient;
           },
           fill: true,
