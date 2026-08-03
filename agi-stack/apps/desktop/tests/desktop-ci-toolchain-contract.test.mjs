@@ -168,6 +168,7 @@ test("Web, Desktop, CI, E2E, and release use one integrity-pinned pnpm toolchain
     "electron-winstaller": false,
     esbuild: true,
   });
+  assert.equal(desktopWorkspace.enableGlobalVirtualStore, false);
   assert.equal(desktopLockDocuments.length, 2);
   assert.equal(
     desktopLockDocuments[0].importers["."].packageManagerDependencies.pnpm

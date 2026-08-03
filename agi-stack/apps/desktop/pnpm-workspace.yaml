@@ -1,6 +1,8 @@
 packages:
   - .
 
+enableGlobalVirtualStore: false
+
 allowBuilds:
   "@scarf/scarf": false
   core-js: false
