@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -27,9 +27,23 @@ const e2eWorkflow = parse(readRepositoryFile(".github/workflows/e2e.yml"));
 const releaseWorkflow = parse(
   readRepositoryFile(".github/workflows/desktop-release.yml"),
 );
+const rootPackage = JSON.parse(readRepositoryFile("package.json"));
 const webPackage = JSON.parse(readRepositoryFile("web/package.json"));
 const desktopPackage = JSON.parse(readDesktopFile("package.json"));
+const prototypePackage = JSON.parse(
+  readRepositoryFile(
+    "design-prototype/memstack-desktop-agent-mission-control/package.json",
+  ),
+);
+const rootMakefile = readRepositoryFile("Makefile");
+const webDockerfile = readRepositoryFile("web/Dockerfile");
+const rootWorkspace = parse(readRepositoryFile("pnpm-workspace.yaml"));
 const desktopWorkspace = parse(readDesktopFile("pnpm-workspace.yaml"));
+const prototypeWorkspace = parse(
+  readRepositoryFile(
+    "design-prototype/memstack-desktop-agent-mission-control/pnpm-workspace.yaml",
+  ),
+);
 const desktopLockDocuments = parseAllDocuments(
   readDesktopFile("pnpm-lock.yaml"),
 ).map((document) => {
@@ -154,9 +168,11 @@ test("ordinary PR CI runs the complete desktop parity gate", () => {
   assert.equal(uploadEvidence.with["retention-days"], 30);
 });
 
-test("Web, Desktop, CI, E2E, and release use one integrity-pinned pnpm toolchain", () => {
+test("all JavaScript projects and delivery paths use one integrity-pinned pnpm toolchain", () => {
+  assert.equal(rootPackage.packageManager, PACKAGE_MANAGER_DECLARATION);
   assert.equal(webPackage.packageManager, PACKAGE_MANAGER_DECLARATION);
   assert.equal(desktopPackage.packageManager, PACKAGE_MANAGER_DECLARATION);
+  assert.equal(prototypePackage.packageManager, PACKAGE_MANAGER_DECLARATION);
   assert.equal(desktopPackage.devEngines, undefined);
   assert.equal(desktopPackage.pnpm, undefined);
   assert.equal(desktopPackage.devDependencies["electron-builder"], "26.15.3");
@@ -189,6 +205,17 @@ test("Web, Desktop, CI, E2E, and release use one integrity-pinned pnpm toolchain
     desktopPackage.scripts["release:electron"],
     /corepack pnpm exec electron-builder/u,
   );
+  assert.match(rootMakefile, /^PNPM\s+\?=\s+corepack pnpm$/mu);
+  assert.match(
+    rootMakefile,
+    /cd web && \$\(PNPM\) install --frozen-lockfile/u,
+  );
+  assert.doesNotMatch(webDockerfile, /npm install -g pnpm/u);
+  assert.match(
+    webDockerfile,
+    /RUN corepack enable && corepack pnpm install --frozen-lockfile/u,
+  );
+  assert.match(webDockerfile, /RUN corepack pnpm run build/u);
   assert.match(makefile, /^PNPM\s+\?=\s+corepack pnpm$/mu);
 
   assertFrontendToolchain(ciWorkflow.jobs.web);
@@ -251,4 +278,67 @@ test("Web, Desktop, CI, E2E, and release use one integrity-pinned pnpm toolchain
   );
   assert.equal(releaseEvidenceUpload.with["if-no-files-found"], "error");
   assert.equal(releaseEvidenceUpload.with["retention-days"], 90);
+});
+
+test("install roots stay isolated behind pnpm-only lockfiles", () => {
+  const pnpmLockfiles = [
+    "pnpm-lock.yaml",
+    "web/pnpm-lock.yaml",
+    "agi-stack/apps/desktop/pnpm-lock.yaml",
+    "design-prototype/memstack-desktop-agent-mission-control/pnpm-lock.yaml",
+  ];
+  const obsoleteLockfiles = [
+    "package-lock.json",
+    "yarn.lock",
+    "web/package-lock.json",
+    "design-prototype/memstack-desktop-agent-mission-control/package-lock.json",
+  ];
+
+  assert.ok(
+    pnpmLockfiles.every((path) =>
+      existsSync(new URL(path, `file://${repositoryRoot}/`)),
+    ),
+  );
+  assert.ok(
+    obsoleteLockfiles.every(
+      (path) => !existsSync(new URL(path, `file://${repositoryRoot}/`)),
+    ),
+  );
+  assert.equal(rootWorkspace.packages, undefined);
+  assert.deepEqual(rootWorkspace.allowBuilds, {
+    "@ladybugdb/core": true,
+    "@scarf/scarf": false,
+    gitnexus: false,
+    "onnxruntime-node": false,
+    protobufjs: false,
+    sharp: false,
+    "tree-sitter": false,
+    "tree-sitter-c-sharp": false,
+    "tree-sitter-cpp": false,
+    "tree-sitter-go": false,
+    "tree-sitter-java": false,
+    "tree-sitter-javascript": false,
+    "tree-sitter-php": false,
+    "tree-sitter-python": false,
+    "tree-sitter-ruby": false,
+    "tree-sitter-rust": false,
+    "tree-sitter-typescript": false,
+  });
+  assert.equal(prototypeWorkspace.packages, undefined);
+  assert.deepEqual(prototypeWorkspace.allowBuilds, { esbuild: true });
+
+  const rootLock = parse(readRepositoryFile("pnpm-lock.yaml"));
+  const prototypeLock = parse(
+    readRepositoryFile(
+      "design-prototype/memstack-desktop-agent-mission-control/pnpm-lock.yaml",
+    ),
+  );
+  assert.deepEqual(
+    Object.keys(rootLock.importers["."].devDependencies).sort(),
+    Object.keys(rootPackage.devDependencies).sort(),
+  );
+  assert.deepEqual(
+    Object.keys(prototypeLock.importers["."].dependencies).sort(),
+    Object.keys(prototypePackage.dependencies).sort(),
+  );
 });

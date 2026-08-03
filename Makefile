@@ -64,6 +64,7 @@ RERANKER_SHELL_CMD ?= sh docker/reranker/run-shell.sh
 WEB_DEV_CMD ?= node_modules/.bin/vite --host 0.0.0.0 --port 3000
 DEV_STARTUP_TIMEOUT ?= 60
 AGISTACK_DIR ?= agi-stack
+PNPM ?= corepack pnpm
 
 help: ## Show this help message
 	@echo "MemStack Development Commands"
@@ -320,13 +321,13 @@ install-backend: ## Install backend Python dependencies
 
 install-web: ## Install web frontend dependencies
 	@echo " Installing web dependencies..."
-	cd web && pnpm install
+	cd web && $(PNPM) install --frozen-lockfile
 	@echo " Web dependencies installed"
 
 update: ## Update all dependencies
 	@echo " Updating dependencies..."
 	uv lock --upgrade
-	cd web && pnpm update
+	cd web && $(PNPM) update
 	@echo " Dependencies updated"
 
 # =============================================================================
@@ -525,11 +526,11 @@ test-performance: ## Run performance tests only (requires perf infra)
 
 test-web: ## Run web tests
 	@echo " Running web tests..."
-	cd web && pnpm run test
+	cd web && $(PNPM) run test
 
 test-e2e: ## Run end-to-end tests (requires services running)
 	@echo " Running E2E tests..."
-	cd web && pnpm run test:e2e
+	cd web && $(PNPM) run test:e2e
 
 test-coverage: ## Run tests with coverage report
 	@echo " Running tests with coverage..."
@@ -555,7 +556,7 @@ format-backend: ## Format Python code
 
 format-web: ## Format TypeScript code
 	@echo " Formatting TypeScript code..."
-	cd web && pnpm run lint --fix
+	cd web && $(PNPM) run lint --fix
 	@echo " TypeScript code formatted"
 
 lint: lint-backend lint-web ## Lint all code
@@ -578,8 +579,8 @@ guard-refresh-select: ## Check wrapped execute(select(...)) usage
 lint-web: ## Lint TypeScript code
 	@echo " Linting TypeScript code..."
 	node scripts/check-i18n-literals.mjs
-	cd web && pnpm run lint
-	cd web && pnpm run type-check
+	cd web && $(PNPM) run lint
+	cd web && $(PNPM) run type-check
 	@echo " TypeScript code linted"
 
 type-check: type-check-mypy type-check-pyright ## Type check all code
@@ -1119,7 +1120,7 @@ build-backend: ## Build backend for production
 
 build-web: ## Build web frontend for production
 	@echo "  Building web frontend..."
-	cd web && pnpm run build
+	cd web && $(PNPM) run build
 	@echo " Web frontend built"
 
 serve: ## Start production server

@@ -161,9 +161,11 @@ check_prerequisites() {
         missing_tools+=("uv (Python 包管理器)")
     fi
     
-    # 检查 pnpm
-    if ! command -v pnpm &> /dev/null; then
-        missing_tools+=("pnpm (Node.js 包管理器)")
+    # 检查 Corepack；仓库中的 packageManager 声明会选择固定 pnpm 版本
+    if ! command -v corepack &> /dev/null; then
+        missing_tools+=("corepack (pnpm 版本管理器)")
+    elif ! corepack pnpm --version &> /dev/null; then
+        missing_tools+=("pnpm 11.15.1 (由 Corepack 管理)")
     fi
     
     # 检查 docker
@@ -184,7 +186,7 @@ check_prerequisites() {
         echo ""
         echo "安装建议:"
         echo "  uv:    curl -LsSf https://astral.sh/uv/install.sh | sh"
-        echo "  pnpm:  npm install -g pnpm"
+        echo "  pnpm:  安装 Node.js 22 后运行 corepack enable"
         echo "  docker: https://docs.docker.com/get-docker/"
         exit 1
     fi

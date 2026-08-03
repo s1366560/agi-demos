@@ -378,25 +378,25 @@ jobs:
   #     - name: Set up Node
   #       uses: actions/setup-node@v4
   #       with:
-  #         node-version: '20'
+  #         node-version: '22'
   #
-  #     - name: Install pnpm
-  #       run: npm i -g pnpm
+  #     - name: Enable Corepack
+  #       run: corepack enable
   #
   #     - name: Install web deps
   #       working-directory: web
-  #       run: pnpm install
+  #       run: corepack pnpm install --frozen-lockfile
   #
   #     - name: Install Playwright browsers
   #       working-directory: web
-  #       run: pnpm exec playwright install --with-deps
+  #       run: corepack pnpm exec playwright install --with-deps
   #
   #     - name: Run E2E tests
   #       working-directory: web
   #       env:
   #         CI: true
   #         VITE_API_URL: http://localhost:8000
-  #       run: pnpm run test:e2e
+  #       run: corepack pnpm run test:e2e
   #
   #     - name: Upload Playwright report
   #       if: always()

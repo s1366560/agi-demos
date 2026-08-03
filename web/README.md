@@ -26,12 +26,12 @@ managed with the integrity-qualified `pnpm@11.15.1` declaration in `package.json
 
 ```bash
 cd web
-pnpm install
-pnpm run dev
-pnpm run type-check
-pnpm run test
-pnpm run build
-pnpm run test:e2e
+corepack pnpm install
+corepack pnpm run dev
+corepack pnpm run type-check
+corepack pnpm run test
+corepack pnpm run build
+corepack pnpm run test:e2e
 ```
 
 From the repository root:
@@ -122,18 +122,18 @@ shapes, but live chat is handled by the WebSocket service.
 ## Testing
 
 ```bash
-pnpm run type-check
-pnpm run test
-pnpm run test:e2e
-pnpm run build
+corepack pnpm run type-check
+corepack pnpm run test
+corepack pnpm run test:e2e
+corepack pnpm run build
 ```
 
 Use focused tests during iteration:
 
 ```bash
-pnpm run test -- src/test/services/agentService.subagent-events.test.ts
-pnpm run test -- src/test/components/agent/MessageArea.test.tsx
-pnpm run test:e2e -- e2e/agent.spec.ts
+corepack pnpm run test -- src/test/services/agentService.subagent-events.test.ts
+corepack pnpm run test -- src/test/components/agent/MessageArea.test.tsx
+corepack pnpm run test:e2e -- e2e/agent.spec.ts
 ```
 
 ## Troubleshooting

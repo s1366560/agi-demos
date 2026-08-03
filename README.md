@@ -28,7 +28,7 @@ This README is the short operational entry point. Deeper docs start at
 | Agent runtime | ReAct core, Ray actors, Redis streams, LiteLLM, MCP, Playwright/Tavily tools |
 | Data stores | PostgreSQL 16, Redis 7, Neo4j 5.26+, MinIO |
 | Frontend | React 19.2, TypeScript 5.9, Vite 7.3, Ant Design 6.1, Zustand 5, TanStack Query |
-| Tooling | uv, pnpm 10, Ruff, mypy, pyright, pytest, Vitest, Playwright |
+| Tooling | uv, Corepack + pnpm 11.15.1, Ruff, mypy, pyright, pytest, Vitest, Playwright |
 
 Vite 7 requires Node `^20.19.0 || >=22.12.0`; use a matching Node version for web work.
 
@@ -88,8 +88,8 @@ Useful focused commands:
 ```bash
 uv run pytest src/tests/unit/test_memory_service.py -v
 uv run pytest src/tests/unit/test_memory_service.py::TestMemoryService::test_create -v
-cd web && pnpm run type-check
-cd web && pnpm run test
+cd web && corepack pnpm run type-check
+cd web && corepack pnpm run test
 ```
 
 ## Repository Layout
@@ -234,7 +234,7 @@ make test
 ```
 
 For backend changes, prefer targeted pytest runs first, then broader checks. For frontend
-changes, run `cd web && pnpm run type-check` plus targeted Vitest/Playwright checks.
+changes, run `cd web && corepack pnpm run type-check` plus targeted Vitest/Playwright checks.
 
 Commit subjects must follow Conventional Commit syntax. When a body is present, follow the
 Lore trailer protocol documented in [AGENTS.md](AGENTS.md).
