@@ -112,7 +112,8 @@
   font-size: 10px;
 }
 
-.desktop-design-primary-nav small {
+.desktop-design-primary-nav small,
+.desktop-design-footer-nav small {
   display: grid;
   min-width: 18px;
   height: 18px;
@@ -230,13 +231,6 @@
 .desktop-design-footer-nav {
   padding-bottom: 7px;
   border-bottom: 1px solid var(--desktop-border-soft);
-}
-
-.desktop-design-footer-nav i {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--desktop-cyan);
 }
 
 .desktop-design-profile-wrap {

@@ -19,6 +19,7 @@ export type WorkbenchSection =
   | 'search'
   | 'chat'
   | 'board'
+  | 'activity'
   | 'settings';
 
 export type DesktopRuntimeConfig = {

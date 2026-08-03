@@ -282,6 +282,8 @@ import {
   resolveEarlierTimelinePage,
 } from './features/session/sessionTimelinePaginationModel';
 import { MyWorkQueue } from './features/my-work/MyWorkQueue';
+import { ActivityInbox } from './features/activity/ActivityInbox';
+import { useActivityInbox } from './features/activity/useActivityInbox';
 import {
   desktopCapability,
   type DesktopCapabilityView,
@@ -1883,6 +1885,7 @@ export function App() {
   } | null>(null);
   const [activeSection, setActiveSection] = useState<WorkbenchSection>('workspace');
   const activeSectionRef = useRef<WorkbenchSection>('workspace');
+  const switchSectionRef = useRef<(section: WorkbenchSection) => void>(() => {});
   const [sectionBackStack, setSectionBackStack] = useState<WorkbenchSection[]>([]);
   const [sectionForwardStack, setSectionForwardStack] = useState<WorkbenchSection[]>([]);
   const [reviewTab, setReviewTab] = useState<ReviewTab>('overview');
@@ -3307,6 +3310,15 @@ export function App() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
       const key = event.key.toLowerCase();
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.altKey &&
+        (key === 'u' || event.code === 'KeyU')
+      ) {
+        event.preventDefault();
+        switchSectionRef.current('activity');
+        return;
+      }
       if ((event.metaKey || event.ctrlKey) && key === 'k') {
         if (activeSectionRef.current === 'board') {
           const search = document.querySelector<HTMLInputElement>('input[name="my-work-search"]');
@@ -6867,6 +6879,17 @@ export function App() {
     [config.projectId, dataset.workspacesByProject],
   );
   const selectedConversation = scopedConversation;
+  const activityInbox = useActivityInbox({
+    items: dataset.myWork,
+    scopeKey: `${config.tenantId}:${config.projectId}`,
+  });
+  const selectedConversationId = selectedConversation?.id ?? null;
+  // 打开会话即视为已读该会话的收件箱条目(硬验收:每个未读信号都可在应用内消除)。
+  useEffect(() => {
+    if (selectedConversationId) {
+      activityInbox.markConversationRead(selectedConversationId);
+    }
+  }, [selectedConversationId, activityInbox.markConversationRead]);
   const sessionDetailViewModel = useMemo(
     () =>
       selectedConversation
@@ -7874,6 +7897,7 @@ export function App() {
     }
     applySectionSideEffects(section);
   };
+  switchSectionRef.current = switchSection;
 
   const openSettingsEntry = (entry: SettingsEntry) => {
     setSettingsInitialSection(settingsSectionForEntry(entry));
@@ -8373,6 +8397,25 @@ export function App() {
     />
   );
 
+  const renderActivityInbox = () => (
+    <ActivityInbox
+      groups={activityInbox.groups}
+      isEntryRead={activityInbox.isEntryRead}
+      unreadCount={activityInbox.unreadCount}
+      error={dataset.myWorkError}
+      loading={connection === 'loading' || myWorkRefreshing}
+      projectName={selectedProject?.name ?? selectedProject?.id ?? t('overview.none')}
+      workspaceLabels={myWorkWorkspaceLabels}
+      onRefresh={() => void refreshMyWork()}
+      onOpen={(entry) => {
+        activityInbox.markRead(entry.id);
+        void openMyWorkSession(entry.item);
+      }}
+      onMarkRead={activityInbox.markRead}
+      onMarkAllRead={activityInbox.markAllRead}
+    />
+  );
+
   const renderNewThreadComposer = () => {
     const newThreadComposerScopeKey = [
       config.mode,
@@ -8587,6 +8630,7 @@ export function App() {
     if (activeSection === 'workspace') return renderWorkspaceOverview();
     if (activeSection === 'chat') return renderChatPanel();
     if (activeSection === 'board') return renderBoardPanel();
+    if (activeSection === 'activity') return renderActivityInbox();
     if (activeSection === 'automations') return renderAutomationsPage();
     if (activeSection === 'home') return renderNewThreadComposer();
     if (activeSection === 'search') return renderSearchPage();
@@ -8696,11 +8740,13 @@ export function App() {
                 ? 'my-work'
                 : activeSection === 'home' ||
                     activeSection === 'automations' ||
-                    activeSection === 'search'
+                    activeSection === 'search' ||
+                    activeSection === 'activity'
                   ? activeSection
                   : null
             }
             taskCount={dataset.myWork.length}
+            activityUnreadCount={activityInbox.unreadCount}
             tenantName={
               auth.tenants.find((tenant) => tenant.id === config.tenantId)?.name ||
               config.tenantId ||
@@ -8732,7 +8778,7 @@ export function App() {
               if (section === 'my-work') switchSection('board');
               if (section === 'automations') switchSection('automations');
               if (section === 'search') switchSection('search');
-              if (section === 'notifications') openSettingsEntry('sidebar_notifications');
+              if (section === 'activity') switchSection('activity');
             }}
             onToggleWorkspace={toggleWorkspace}
             onRetryProject={() => void refreshRuntime()}

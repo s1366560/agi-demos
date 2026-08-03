@@ -324,6 +324,7 @@ function MissionControlQa() {
           <DesktopSidebar
             activeSection={view === 'my-work' ? 'my-work' : 'home'}
             taskCount={myWorkItems.length}
+            activityUnreadCount={0}
             tenantName="Northstar Labs"
             projectName="Desktop Client"
             user={user}

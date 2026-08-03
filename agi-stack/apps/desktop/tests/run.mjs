@@ -47,6 +47,13 @@ copyFileSync(
   join(compiledMyWorkDirectory, 'MyWorkQueue.css'),
 );
 
+const compiledActivityDirectory = join(compiledRoot, 'src', 'features', 'activity');
+mkdirSync(compiledActivityDirectory, { recursive: true });
+copyFileSync(
+  join(desktopRoot, 'src', 'features', 'activity', 'ActivityInbox.css'),
+  join(compiledActivityDirectory, 'ActivityInbox.css'),
+);
+
 const compiledSearchDirectory = join(compiledRoot, 'src', 'features', 'search');
 mkdirSync(compiledSearchDirectory, { recursive: true });
 copyFileSync(

@@ -229,6 +229,7 @@ function NoProjectEntryQa() {
             activeSection={null}
             mode={mode}
             taskCount={0}
+            activityUnreadCount={0}
             tenantName={tenantName}
             projectName={projectName}
             user={auth.user}

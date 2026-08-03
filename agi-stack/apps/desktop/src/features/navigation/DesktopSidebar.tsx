@@ -23,12 +23,13 @@ import { WorkspaceDock } from '../workspace/WorkspaceDock';
 import type { WorkspaceTreeSelectionMode } from '../workspace/workspaceTreeModel';
 import './DesktopSidebar.css';
 
-type DesktopSidebarSection = 'home' | 'my-work' | 'automations' | 'search' | 'notifications';
+type DesktopSidebarSection = 'home' | 'my-work' | 'automations' | 'search' | 'activity';
 
 type DesktopSidebarProps = {
   activeSection: DesktopSidebarSection | null;
   mode?: 'work' | 'code';
   taskCount: number;
+  activityUnreadCount: number;
   tenantName: string;
   projectName: string;
   user: CurrentUser | null;
@@ -81,6 +82,7 @@ const primaryItems = [
 export function DesktopSidebar({
   activeSection,
   taskCount,
+  activityUnreadCount,
   tenantName,
   projectName,
   user,
@@ -215,11 +217,12 @@ export function DesktopSidebar({
       <div className="desktop-design-sidebar-bottom">
         <nav className="desktop-design-footer-nav">
           <button
-            className={activeSection === 'notifications' ? 'active' : ''}
+            className={activeSection === 'activity' ? 'active' : ''}
             type="button"
-            onClick={() => onNavigate('notifications')}
+            onClick={() => onNavigate('activity')}
           >
-            <BellIcon /> <span>{t('sidebar.notifications')}</span><i />
+            <BellIcon /> <span>{t('sidebar.activity')}</span>
+            {activityUnreadCount > 0 ? <small>{activityUnreadCount}</small> : null}
           </button>
           <button type="button" onClick={onOpenAccountSettings}>
             <GearIcon /> <span>{t('settings.title')}</span>

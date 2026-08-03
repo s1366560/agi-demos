@@ -379,6 +379,7 @@ function WorkspaceExecutionQa() {
           activeSection={null}
           mode={mode}
           taskCount={8}
+          activityUnreadCount={0}
           tenantName="Northstar Labs"
           projectName="Desktop Client"
           user={currentUser}

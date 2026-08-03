@@ -472,11 +472,18 @@ test('notifications never open a standalone workspace review route', () => {
   assert.doesNotMatch(globalStyles, /review-panel-collapsed/);
 });
 
-test('sidebar notifications open the governed notifications settings section', () => {
-  assert.match(sidebarSource, /onNavigate\('notifications'\)/);
+test('sidebar bell opens the real Activity inbox workbench section', () => {
+  assert.match(sidebarSource, /onNavigate\('activity'\)/);
+  assert.doesNotMatch(sidebarSource, /<i \/>/);
+  assert.match(sidebarSource, /activityUnreadCount > 0 \? <small>\{activityUnreadCount\}<\/small> : null/);
   assert.match(
     appSource,
-    /if \(section === 'notifications'\) openSettingsEntry\('sidebar_notifications'\)/,
+    /if \(section === 'activity'\) switchSection\('activity'\)/,
+  );
+  assert.match(appSource, /if \(activeSection === 'activity'\) return renderActivityInbox\(\)/);
+  assert.doesNotMatch(
+    appSource,
+    /section === 'notifications'\) openSettingsEntry\('sidebar_notifications'\)/,
   );
 });
 

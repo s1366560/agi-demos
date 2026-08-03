@@ -22,7 +22,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
 
 // Every entry mirrors a shortcut that is implemented in the shell today:
 // - App.tsx global keydown: Cmd/Ctrl+K and `/` open the command palette,
-//   Escape closes open overlays.
+//   Cmd/Ctrl+Alt+U opens the Activity inbox, Escape closes open overlays.
 // - CommandPalette list: ArrowUp/ArrowDown move, Home/End jump, Enter runs.
 // - ChatPanel composer: Enter sends (Shift+Enter inserts a newline),
 //   Cmd/Ctrl+Enter sends even while run-input delivery options are present,
@@ -33,6 +33,12 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDefinition[] = [
     id: 'command-palette',
     labelKey: 'shortcuts.action.commandPalette',
     chords: { mac: '⌘ K', other: 'Ctrl K' },
+    group: 'navigation',
+  },
+  {
+    id: 'activity-inbox',
+    labelKey: 'shortcuts.action.activityInbox',
+    chords: { mac: '⌘ ⌥ U', other: 'Ctrl Alt U' },
     group: 'navigation',
   },
   {
