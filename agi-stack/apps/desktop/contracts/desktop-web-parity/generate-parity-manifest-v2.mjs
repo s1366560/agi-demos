@@ -712,7 +712,7 @@ function localSurface(definition) {
       "partial",
       "unavailable",
       definition.local_reason_code,
-      "sidecar",
+      definition.local_authority ?? "sidecar",
       [],
       definition.local_deviation,
     );
