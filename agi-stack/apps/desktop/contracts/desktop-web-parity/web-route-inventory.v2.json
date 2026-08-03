@@ -214,7 +214,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:d91d454e476cbf04d2ba8868221a648a7c03274b1fa942e5a2d4f80f2fd3c597"
+      "sha256": "sha256:34a4baf488061a8ef886cc5b60740921a17eeaca1859241a4c8b3ea42f485fe3"
     },
     {
       "source_entry": "web/src/components/agent/TenantAgentConfigView.tsx",
@@ -3106,7 +3106,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:68bb45b19368a0dd21844799ff601ce32fa175d26350c2c5276036664429071b"
+      "sha256": "sha256:03669b84c9ed773a99c05093511c660d2f2683a9e6250319abd5c0d20391622a"
     },
     {
       "source_entry": "web/src/services/agentService.ts",
