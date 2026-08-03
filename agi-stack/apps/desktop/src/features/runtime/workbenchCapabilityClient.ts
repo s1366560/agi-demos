@@ -23,6 +23,7 @@ import { createCloudProjectOverviewClient } from '../project/projectOverviewClou
 import { createLocalProjectOverviewClient } from '../project/projectOverviewLocalClient';
 import { projectSupportCapability } from '../project-support/projectSupportCapability';
 import { loadTenantAnalyticsCapability } from '../tenant/tenantAnalyticsCapability';
+import { loadTenantAgentDashboardCapability } from '../tenant/tenantAgentDashboardCapability';
 import { loadTenantAgentBindingsCapability } from '../tenant/tenantAgentBindingsCapability';
 import { loadTenantOverviewCapability } from '../tenant/tenantOverviewCapability';
 import { loadTenantProjectsCapability } from '../tenant/tenantProjectsCapability';
@@ -116,6 +117,7 @@ export function createDesktopWorkbenchCapabilityClient(
         projectOverview,
         tenantOverview,
         tenantAnalytics,
+        tenantAgentDashboard,
         tenantAgentBindings,
         tenantProjects,
       ] = await Promise.all([
@@ -125,6 +127,7 @@ export function createDesktopWorkbenchCapabilityClient(
         loadProjectOverviewCapability(config, signal),
         loadTenantOverviewCapability(config, signal),
         loadTenantAnalyticsCapability(config, signal),
+        loadTenantAgentDashboardCapability(config, signal),
         loadTenantAgentBindingsCapability(config, signal),
         loadTenantProjectsCapability(config, signal),
       ]);
@@ -171,6 +174,7 @@ export function createDesktopWorkbenchCapabilityClient(
           'project-support': projectSupportCapability(config),
           'tenant-tenant-overview': tenantOverview,
           'tenant-tenant-analytics': tenantAnalytics,
+          'tenant-tenant-agent-configuration': tenantAgentDashboard,
           'tenant-tenant-agent-bindings': tenantAgentBindings,
           'tenant-tenant-projects': tenantProjects,
           'tenant-tenant-tasks': tenantTasksCapability(config),

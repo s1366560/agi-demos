@@ -1,0 +1,350 @@
+.tenant-agent-dashboard,
+.tenant-agent-dashboard-state {
+  min-height: 100%;
+  padding: 34px;
+  color: var(--gray-12);
+  background:
+    radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--desktop-accent) 8%, transparent), transparent 30rem),
+    var(--color-panel, var(--gray-1));
+}
+
+.tenant-agent-dashboard-header,
+.tenant-agent-dashboard-card > header,
+.tenant-agent-dashboard-runs > header,
+.tenant-agent-dashboard-trace > header,
+.tenant-agent-dashboard-editor > header,
+.tenant-agent-dashboard-editor > footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.tenant-agent-dashboard h1,
+.tenant-agent-dashboard h2,
+.tenant-agent-dashboard h3,
+.tenant-agent-dashboard-state h1 {
+  margin: 0;
+  letter-spacing: -0.03em;
+}
+
+.tenant-agent-dashboard-header > div > span,
+.tenant-agent-dashboard-card header span,
+.tenant-agent-dashboard-runs header span,
+.tenant-agent-dashboard-trace header span,
+.tenant-agent-dashboard-editor header span,
+.tenant-agent-dashboard-state > span {
+  color: var(--gray-9);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.tenant-agent-dashboard-header h1,
+.tenant-agent-dashboard-state h1 {
+  margin-top: 8px;
+  font-size: 34px;
+}
+
+.tenant-agent-dashboard-header p,
+.tenant-agent-dashboard-state p {
+  max-width: 760px;
+  margin: 10px 0 0;
+  color: var(--gray-10);
+  line-height: 1.65;
+}
+
+.tenant-agent-dashboard-actions,
+.tenant-agent-dashboard-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tenant-agent-dashboard-actions > span {
+  padding: 8px 12px;
+  border: 1px solid var(--gray-6);
+  border-radius: 999px;
+  color: var(--gray-10);
+  font-size: 12px;
+}
+
+.tenant-agent-dashboard-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 22px;
+  padding: 12px 14px;
+  border: 1px solid var(--amber-7);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--amber-3) 55%, transparent);
+}
+
+.tenant-agent-dashboard-notice code {
+  margin-left: auto;
+  color: var(--gray-10);
+  font-size: 11px;
+}
+
+.tenant-agent-dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr);
+  gap: 18px;
+  margin-top: 26px;
+}
+
+.tenant-agent-dashboard-card,
+.tenant-agent-dashboard-runs,
+.tenant-agent-dashboard-trace {
+  border: 1px solid var(--gray-6);
+  border-radius: 20px;
+  background: var(--gray-2);
+  box-shadow: var(--shadow-4);
+}
+
+.tenant-agent-dashboard-card {
+  padding: 20px;
+}
+
+.tenant-agent-dashboard-card h2,
+.tenant-agent-dashboard-runs h2,
+.tenant-agent-dashboard-trace h2 {
+  margin-top: 5px;
+  font-size: 20px;
+}
+
+.tenant-agent-dashboard-card dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 20px 0 0;
+}
+
+.tenant-agent-dashboard-card dl > div {
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--gray-3);
+}
+
+.tenant-agent-dashboard-card dt {
+  color: var(--gray-9);
+  font-size: 11px;
+}
+
+.tenant-agent-dashboard-card dd {
+  margin: 5px 0 0;
+  font-size: 13px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.tenant-agent-dashboard-tool-policy {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.tenant-agent-dashboard-tool-policy > div {
+  padding: 12px;
+  border: 1px solid var(--gray-6);
+  border-radius: 12px;
+}
+
+.tenant-agent-dashboard-tool-policy strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.tenant-agent-dashboard-tool-policy code {
+  display: inline-block;
+  margin: 2px 4px 2px 0;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: var(--gray-3);
+  font-size: 10px;
+}
+
+.tenant-agent-dashboard-hook-list,
+.tenant-agent-dashboard-trace ol {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tenant-agent-dashboard-hook-list li,
+.tenant-agent-dashboard-trace li {
+  padding: 12px;
+  border: 1px solid var(--gray-6);
+  border-radius: 12px;
+}
+
+.tenant-agent-dashboard-hook-list li > div,
+.tenant-agent-dashboard-trace li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 12px;
+}
+
+.tenant-agent-dashboard-hook-list code,
+.tenant-agent-dashboard-trace code {
+  color: var(--gray-9);
+  font-size: 10px;
+}
+
+.tenant-agent-dashboard-hook-list p,
+.tenant-agent-dashboard-trace p,
+.tenant-agent-dashboard-empty-copy {
+  margin: 6px 0 0;
+  color: var(--gray-10);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.tenant-agent-dashboard-runs,
+.tenant-agent-dashboard-trace {
+  margin-top: 18px;
+  padding: 20px;
+}
+
+.tenant-agent-dashboard-run-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.tenant-agent-dashboard-run {
+  padding: 14px;
+  border: 1px solid var(--gray-6);
+  border-radius: 14px;
+  color: inherit;
+  background: var(--gray-3);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tenant-agent-dashboard-run[data-selected='true'] {
+  border-color: var(--gray-8);
+  background: var(--gray-4);
+}
+
+.tenant-agent-dashboard-run > div,
+.tenant-agent-dashboard-run footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tenant-agent-dashboard-run span {
+  color: var(--gray-9);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.tenant-agent-dashboard-run p {
+  margin: 10px 0;
+  color: var(--gray-10);
+  font-size: 12px;
+}
+
+.tenant-agent-dashboard-run code,
+.tenant-agent-dashboard-run time {
+  color: var(--gray-9);
+  font-size: 10px;
+}
+
+.tenant-agent-dashboard-run-empty {
+  margin-top: 18px;
+  padding: 26px;
+  border: 1px dashed var(--gray-6);
+  border-radius: 14px;
+  text-align: center;
+}
+
+.tenant-agent-dashboard-run-empty p {
+  margin: 7px 0 0;
+  color: var(--gray-10);
+  font-size: 12px;
+}
+
+.tenant-agent-dashboard-state {
+  display: grid;
+  place-content: center;
+  justify-items: start;
+}
+
+.tenant-agent-dashboard-state code {
+  margin: 16px 0;
+  color: var(--gray-9);
+}
+
+.tenant-agent-dashboard-editor-backdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--gray-12) 58%, transparent);
+}
+
+.tenant-agent-dashboard-editor {
+  display: grid;
+  gap: 16px;
+  width: min(760px, 100%);
+  max-height: calc(100vh - 48px);
+  padding: 22px;
+  overflow: auto;
+  border: 1px solid var(--gray-6);
+  border-radius: 20px;
+  background: var(--gray-2);
+  box-shadow: var(--shadow-6);
+}
+
+.tenant-agent-dashboard-editor label,
+.tenant-agent-dashboard-editor-switches label {
+  display: grid;
+  gap: 7px;
+  color: var(--gray-10);
+  font-size: 12px;
+}
+
+.tenant-agent-dashboard-editor-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.tenant-agent-dashboard-editor-switches {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.tenant-agent-dashboard-editor-switches label {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--gray-6);
+  border-radius: 12px;
+}
+
+@media (max-width: 900px) {
+  .tenant-agent-dashboard-grid,
+  .tenant-agent-dashboard-run-list,
+  .tenant-agent-dashboard-card dl,
+  .tenant-agent-dashboard-tool-policy {
+    grid-template-columns: 1fr;
+  }
+
+  .tenant-agent-dashboard-header,
+  .tenant-agent-dashboard-runs > header {
+    flex-direction: column;
+  }
+}
