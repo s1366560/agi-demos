@@ -887,17 +887,34 @@ test("agent ecosystem capabilities do not overstate missing controls or Local au
     "refresh",
     "retry",
   ]);
-  for (const surfaceName of ["desktop_cloud", "desktop_local"]) {
-    assert.equal(
-      configuration.surfaces[surfaceName].implementation_status,
-      "missing",
-    );
-    assert.equal(configuration.surfaces[surfaceName].authority, "none");
-    assert.deepEqual(
-      configuration.surfaces[surfaceName].allowed_actions,
-      [],
-    );
-  }
+  assert.equal(
+    configuration.surfaces.desktop_cloud.implementation_status,
+    "implemented",
+  );
+  assert.equal(configuration.surfaces.desktop_cloud.availability, "available");
+  assert.equal(configuration.surfaces.desktop_cloud.authority, "cloud_service");
+  assert.deepEqual(configuration.surfaces.desktop_cloud.allowed_actions, [
+    "view-config",
+    "update-config",
+    "view-hook-catalog",
+    "list-runs",
+    "filter-runs",
+    "inspect-run",
+    "inspect-trace",
+    "refresh",
+    "retry",
+  ]);
+  assert.equal(
+    configuration.surfaces.desktop_local.implementation_status,
+    "partial",
+  );
+  assert.equal(configuration.surfaces.desktop_local.availability, "unavailable");
+  assert.equal(configuration.surfaces.desktop_local.authority, "none");
+  assert.equal(
+    configuration.surfaces.desktop_local.reason_code,
+    "local_agent_dashboard_authority_unavailable",
+  );
+  assert.deepEqual(configuration.surfaces.desktop_local.allowed_actions, []);
   assert.equal(bindings.surfaces.desktop_cloud.implementation_status, "implemented");
   assert.equal(bindings.surfaces.desktop_cloud.availability, "available");
   assert.equal(bindings.surfaces.desktop_cloud.authority, "cloud_service");

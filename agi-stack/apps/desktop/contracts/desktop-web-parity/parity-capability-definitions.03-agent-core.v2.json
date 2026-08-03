@@ -58,14 +58,50 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "NONE",
-          "path": "not_applicable:desktop_native_route_planned",
-          "authority": "none"
+          "method": "GET",
+          "path": "/api/v1/agent/config",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/agent/config",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/agent/config/hooks/catalog",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/agent/config/can-modify",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/agent/trace/runs/tenant/{tenant_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/agent/trace/runs/tenant/{tenant_id}/active/count",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/agent/trace/runs/{conversation_id}/trace/{trace_id}",
+          "authority": "cloud_service"
         },
         {
           "surface": "desktop_local",
           "method": "NONE",
-          "path": "not_applicable:local_native_authority_planned",
+          "path": "not_applicable:local_agent_dashboard_authority_unavailable",
           "authority": "none"
         },
         {
@@ -103,7 +139,17 @@
         "refresh",
         "retry"
       ],
-      "cloud_actions": [],
+      "cloud_actions": [
+        "view-config",
+        "update-config",
+        "view-hook-catalog",
+        "list-runs",
+        "filter-runs",
+        "inspect-run",
+        "inspect-trace",
+        "refresh",
+        "retry"
+      ],
       "local_actions": [],
       "permission_requirements": [
         {
@@ -148,12 +194,83 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view-config",
+            "list-runs",
+            "filter-runs",
+            "inspect-run",
+            "refresh",
+            "retry"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "update-config",
+            "view-hook-catalog"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "inspect-trace"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member",
+            "conversation_access"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
-      "local_status": "planned",
+      "cloud_status": "implemented",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantAgentDashboardCapability.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantAgentDashboardClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantAgentDashboardHttpClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantAgentDashboardController.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantAgentDashboardRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/TenantAgentDashboardPage.tsx"
+      ],
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "judgment_rationale": "Agent Dashboard combines tenant configuration, runtime hook catalog, modification authority, run summaries, and trace inspection. Tenant members may read the redacted configuration and run summaries, while the runtime hook catalog and configuration mutation require tenant admin authority. Desktop Settings does not implement this contract or a canonical route in either mode, so both native surfaces remain planned."
+      "local_reason_code": "local_agent_dashboard_authority_unavailable",
+      "local_deviation": "Local Desktop keeps the canonical native page and resolves a Capability Snapshot v3 unavailable state in the renderer without issuing a network request. It does not fabricate tenant runtime configuration, hook catalog, run summaries, or trace authority.",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantAgentDashboardCapability.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantAgentDashboardClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantAgentDashboardHttpClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantAgentDashboardController.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantAgentDashboardRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/TenantAgentDashboardPage.tsx"
+      ],
+      "judgment_rationale": "Cloud Desktop now mounts the canonical native Agent Dashboard route and consumes the Web configuration, modification-authority, hook-catalog, tenant-run, active-count, and trace-detail contracts. The controller covers loading, empty, ready, stale, conflict, forbidden, unavailable, retry, filter, trace inspection, and tenant scope-switch states. Configuration updates carry an immutable authority revision and surface 409 conflicts without overwriting server state. Tenant members receive redacted configuration and run inspection authority; tenant admins additionally receive configuration mutation and runtime hook catalog authority. Local Desktop exposes the same native route but resolves the stable local_agent_dashboard_authority_unavailable state before any network access because no safe local tenant runtime or trace authority exists."
     },
     {
       "id": "tenant-tenant-agent-definitions",
