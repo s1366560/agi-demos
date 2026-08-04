@@ -179,7 +179,7 @@ DEFAULT_MODELS: dict[ProviderType, dict[str, str]] = {
     },
     ProviderType.VERTEX: {
         "completion": "gemini-2.5-flash",
-        "completion_medium": "gemini-3-pro-preview",
+        "completion_medium": "gemini-3.1-pro-preview",
         "embedding": "textembedding-gecko",
         "rerank": "gemini-2.5-flash",
     },
