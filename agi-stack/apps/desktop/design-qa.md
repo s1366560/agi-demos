@@ -1517,3 +1517,59 @@ context rail, and composer.
 - Browser authority checks: no raw i18n keys, no raw task payload, no unavailable projection banner.
 
 final result: passed
+
+# Codex/Copilot benchmark roadmap delivery design QA
+
+Date: 2026-08-03
+
+Scope: full implementation of `docs/design/desktop-ux-benchmark-roadmap.md`
+(P0 trust and honesty, P1 control and review loop, P2 polish) in the Electron desktop client.
+
+## Delivered items
+
+- P0-1 Activity inbox: real notification/activity view replacing the fake sidebar bell
+  (hardcoded dot removed); unread badge derived from the inbox model; per-item and bulk
+  mark-read; `Cmd/Ctrl+Alt+U` shortcut; localStorage read-state behind a backend-ready seam.
+- P0-2 Status honesty audit: six misleading-state fixes (terminal-as-running in My Work and
+  Activity inbox, live indicator on terminal sessions, respondable HITL on dead runs, stop
+  button semantics, titlebar run-state mapping); audit matrix in `docs/status-honesty-audit.md`.
+- P0-3 Current-activity headline: live one-line "what is it doing" bar above the composer with
+  elapsed clock and expandable activity group; disappears at run end.
+- P1-1 Queue vs Steer: queued chips with intent toggle, drag reorder, split send control,
+  `steer_message` WS draft with truthful fallback to queued semantics; backend contract in
+  `docs/steer-protocol-draft.md`.
+- P1-2 Approval as conversation: deny-with-feedback steering, parameter preview before Allow,
+  permission presets (default / relaxed=low-risk enum only / full with one-time warning);
+  auto-approvals stay visible with preset markers.
+- P1-3 Run-completion summary card: durable terminal-state card (outcome, changes, artifacts,
+  verification) with every verification claim linked to its evidence canvas; My Work ready
+  group shows outcome rows.
+- P1-4 Changes review canvas: multi-file expand/collapse, expand/collapse all, inline
+  line-anchored comments batched to the agent via the code-range reference pipeline; scope
+  toggle contract gap documented in `docs/changes-review-gaps.md`.
+- P2-1/P2-2 Usage transparency and stalled detection: context-token waterline chip, run
+  duration on the completion card, stalled presentation after 120s without visible activity.
+- P2-3/P2-4 OS notifications and shortcut settings: transition-based system notifications
+  (off / window-not-focused / always) with click-to-focus via a new `focus_main_window` IPC;
+  searchable keyboard-shortcut settings page (text + keypress-combo search, read-only).
+- P2-5 Render performance budget: `docs/render-performance-budget.md` plus
+  `tests/render-performance-budget.test.mjs` enforcing timer/animation whitelists in CI.
+
+## Verification
+
+- Desktop type check (renderer): passed. Electron main/preload type check: passed.
+- Desktop tests: 1992 passed, 1 known parity-gate failure
+  (`desktop-parity-reviewed-additional-web-entries`, uncommitted-file hash binding that
+  resolves on commit), 2 skipped. No functional regressions.
+- Production renderer build (`vite build`): passed in 9.59s.
+
+## Outstanding evidence
+
+- Interactive screenshot evidence (1440x1024 and 1100x800) for the new surfaces requires a
+  live native session (`make -C agi-stack run-desktop`) and remains a manual follow-up:
+  Activity inbox, current-activity headline, steer chips, permission preset control,
+  completion summary card, changes review comments, shortcut settings page.
+- Backend follow-ups: steer turn-boundary injection, deny-feedback wire field, per-run
+  token/cost counters, per-turn change attribution, per-item change stats in My Work payload.
+
+final result: passed (automated gates); native visual pass pending

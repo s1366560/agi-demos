@@ -10,6 +10,9 @@ const {
   createPendingAgentMessageQueue,
   conversationSubscriptionMessages,
   createAgentSocketContextState,
+  agentSteerMessageOutcome,
+  agentSteerSocketMessage,
+  deliverAgentSteerMessage,
   deliverAgentStopSession,
   deliverAgentRunMessage,
   enqueuePendingAgentRunMessage,
@@ -63,6 +66,136 @@ test("a stop request is scoped, immediate, and never enters the reconnect outbox
   ]);
   assert.equal(queue.size, 1);
   assert.equal(deliverAgentStopSession(" ", () => true), false);
+});
+
+test("a steer message sends directly and never enters the reconnect outbox", () => {
+  const sent = [];
+  const accepted = deliverAgentSteerMessage(
+    {
+      conversationId: "  conversation-steer  ",
+      projectId: "project-1",
+      message: "  Focus on the failing test first  ",
+      messageId: "desktop-steer-prompt-1",
+    },
+    (payload) => {
+      sent.push(payload);
+      return true;
+    },
+  );
+  assert.equal(accepted, true);
+  assert.deepEqual(sent, [
+    {
+      type: "steer_message",
+      conversation_id: "conversation-steer",
+      project_id: "project-1",
+      message: "Focus on the failing test first",
+      message_id: "desktop-steer-prompt-1",
+    },
+  ]);
+
+  assert.equal(
+    deliverAgentSteerMessage(
+      {
+        conversationId: "conversation-steer",
+        projectId: "project-1",
+        message: "offline",
+        messageId: "desktop-steer-prompt-2",
+      },
+      () => false,
+    ),
+    false,
+  );
+  assert.equal(
+    agentSteerSocketMessage({
+      conversationId: " ",
+      projectId: "project-1",
+      message: "no conversation",
+      messageId: "desktop-steer-prompt-3",
+    }),
+    null,
+  );
+  assert.equal(
+    agentSteerSocketMessage({
+      conversationId: "conversation-steer",
+      projectId: "project-1",
+      message: "missing id",
+      messageId: "  ",
+    }),
+    null,
+  );
+});
+
+test("steer outcome reads acks, durable echoes, and steer error codes", () => {
+  const messageId = "desktop-steer-prompt-1";
+  assert.equal(
+    agentSteerMessageOutcome(
+      {
+        type: "ack",
+        action: "steer_message",
+        outcome: "accepted",
+        message_id: messageId,
+      },
+      messageId,
+    ),
+    "accepted",
+  );
+  assert.equal(
+    agentSteerMessageOutcome(
+      {
+        type: "ack",
+        action: "steer_message",
+        outcome: "rejected",
+        message_id: messageId,
+      },
+      messageId,
+    ),
+    "rejected",
+  );
+  assert.equal(
+    agentSteerMessageOutcome(
+      { type: "user_message", message_id: messageId },
+      messageId,
+    ),
+    "accepted",
+  );
+  assert.equal(
+    agentSteerMessageOutcome(
+      { type: "error", code: "STEER_UNSUPPORTED", message_id: messageId },
+      messageId,
+    ),
+    "rejected",
+  );
+  assert.equal(
+    agentSteerMessageOutcome(
+      { type: "error", code: "UNKNOWN_MESSAGE_TYPE", message_id: messageId },
+      messageId,
+    ),
+    "rejected",
+  );
+  // A different message id or an unrelated event never resolves the steer.
+  assert.equal(
+    agentSteerMessageOutcome(
+      {
+        type: "ack",
+        action: "steer_message",
+        outcome: "accepted",
+        message_id: "other-message",
+      },
+      messageId,
+    ),
+    null,
+  );
+  assert.equal(
+    agentSteerMessageOutcome({ type: "text_delta", message_id: messageId }, messageId),
+    null,
+  );
+  assert.equal(
+    agentSteerMessageOutcome(
+      { type: "error", code: "STOP_SESSION_FAILED", message_id: messageId },
+      messageId,
+    ),
+    null,
+  );
 });
 
 test("only an authenticated cloud socket may retain a turn for reconnect", () => {

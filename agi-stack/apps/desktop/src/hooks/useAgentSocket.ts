@@ -23,6 +23,12 @@ const TERMINAL_AGENT_MESSAGE_ERROR_CODES = new Set([
   "MESSAGE_ID_CONFLICT",
   "TURN_START_UNCONFIRMED",
 ]);
+const AGENT_STEER_REJECTED_ERROR_CODES = new Set([
+  "INVALID_STEER_MESSAGE",
+  "STEER_NOT_SUPPORTED",
+  "STEER_UNSUPPORTED",
+  "UNKNOWN_MESSAGE_TYPE",
+]);
 
 type AgentEventCursor = {
   conversationId: string;
@@ -42,6 +48,7 @@ type AgentSocketState = {
   error: string | null;
   events: AgentWsEvent[];
   sendAgentMessage: (message: AgentRunMessage) => boolean;
+  sendSteerMessage: (message: AgentSteerMessage) => boolean;
   stopAgentResponse: (conversationId: string) => boolean;
   respondToHitl: (submission: HitlResponseSubmission) => boolean;
 };
@@ -81,6 +88,23 @@ export type AgentStopSocketMessage = {
   type: "stop_session";
   conversation_id: string;
 };
+
+export type AgentSteerMessage = {
+  conversationId: string;
+  projectId: string;
+  message: string;
+  messageId: string;
+};
+
+export type AgentSteerSocketMessage = {
+  type: "steer_message";
+  conversation_id: string;
+  project_id: string;
+  message: string;
+  message_id: string;
+};
+
+export type AgentSteerMessageOutcome = "accepted" | "rejected";
 
 export type PendingAgentMessageQueue = Map<string, AgentRunSocketMessage>;
 
@@ -181,6 +205,66 @@ export function deliverAgentStopSession(
     type: "stop_session",
     conversation_id: normalizedConversationId,
   });
+}
+
+export function agentSteerSocketMessage(
+  message: AgentSteerMessage,
+): AgentSteerSocketMessage | null {
+  const conversationId = message.conversationId.trim();
+  const projectId = message.projectId.trim();
+  const content = message.message.trim();
+  const messageId = message.messageId.trim();
+  if (!conversationId || !projectId || !content || !messageId) return null;
+  return {
+    type: "steer_message",
+    conversation_id: conversationId,
+    project_id: projectId,
+    message: content,
+    message_id: messageId,
+  };
+}
+
+/**
+ * Steer messages are turn-boundary time-sensitive: they are sent directly and
+ * deliberately kept out of the reconnect outbox, because replaying a stale
+ * steer after a reconnect would inject guidance into the wrong turn.
+ */
+export function deliverAgentSteerMessage(
+  message: AgentSteerMessage,
+  send: (message: AgentSteerSocketMessage) => boolean,
+): boolean {
+  const payload = agentSteerSocketMessage(message);
+  if (!payload) return false;
+  return send(payload);
+}
+
+/**
+ * Interpret a socket event as the outcome of a previously sent steer message.
+ * Accepted: an ack for `steer_message` or a durable user message echoing the
+ * steer message id. Rejected: a steer ack with a non-accepted outcome or an
+ * error event carrying a steer-specific code for the same message id.
+ */
+export function agentSteerMessageOutcome(
+  event: unknown,
+  messageId: string,
+): AgentSteerMessageOutcome | null {
+  const normalizedMessageId = messageId.trim();
+  if (!event || typeof event !== "object" || !normalizedMessageId) return null;
+  const payload = event as Record<string, unknown>;
+  const eventType = typeof payload.type === "string" ? payload.type : "";
+  const eventMessageId = nestedStringField(payload, ["message_id", "messageId"]);
+  if (eventMessageId !== normalizedMessageId) return null;
+  if (eventType === "ack" && payload.action === "steer_message") {
+    return nestedStringField(payload, ["outcome"]) === "accepted"
+      ? "accepted"
+      : "rejected";
+  }
+  if (eventType === "user_message") return "accepted";
+  if (eventType === "error") {
+    const code = nestedStringField(payload, ["code"]);
+    if (code && AGENT_STEER_REJECTED_ERROR_CODES.has(code)) return "rejected";
+  }
+  return null;
 }
 
 function enqueuePendingAgentSocketMessage(
@@ -361,6 +445,12 @@ export function useAgentSocket(
   const stopAgentResponse = useCallback(
     (conversationId: string) =>
       deliverAgentStopSession(conversationId, sendSocketMessage),
+    [sendSocketMessage],
+  );
+
+  const sendSteerMessage = useCallback(
+    (message: AgentSteerMessage) =>
+      deliverAgentSteerMessage(message, sendSocketMessage),
     [sendSocketMessage],
   );
 
@@ -604,6 +694,7 @@ export function useAgentSocket(
     error,
     events,
     sendAgentMessage,
+    sendSteerMessage,
     stopAgentResponse,
     respondToHitl,
   };

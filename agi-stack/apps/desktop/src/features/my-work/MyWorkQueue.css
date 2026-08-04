@@ -34,6 +34,12 @@
 .my-work-inbox-card > header time { justify-self: end; color: var(--desktop-gray-1); }
 .my-work-inbox-card > strong { margin: 8px 0 3px; overflow: hidden; color: var(--desktop-text-frost); font-size: 13px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 .my-work-inbox-card > p { display: -webkit-box; margin: 0; overflow: hidden; color: var(--desktop-gray-12); font-size: 10px; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.my-work-inbox-card > p.my-work-inbox-outcome { display: flex; align-items: baseline; gap: 6px; margin: 5px 0 0; overflow: hidden; font-size: 9px; -webkit-line-clamp: 1; }
+.my-work-inbox-outcome strong { flex: 0 0 auto; font-size: 9px; }
+.my-work-inbox-outcome span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.my-work-inbox-outcome.tone-success, .my-work-inbox-outcome.tone-success strong { color: var(--green-9); }
+.my-work-inbox-outcome.tone-danger, .my-work-inbox-outcome.tone-danger strong { color: var(--red-9); }
+.my-work-inbox-outcome.tone-warning, .my-work-inbox-outcome.tone-warning strong { color: var(--amber-9); }
 .my-work-inbox-card > footer { display: grid; grid-template-columns: 90px auto 1fr 13px; align-items: center; gap: 8px; margin-top: auto; padding-top: 8px; color: var(--desktop-gray-5); }
 .my-work-inbox-progress { height: 3px; overflow: hidden; border-radius: 999px; background: var(--desktop-border-2); }
 .my-work-inbox-progress i { display: block; height: 100%; border-radius: inherit; background: var(--desktop-cyan); }
@@ -48,5 +54,6 @@
 .my-work-inbox-state p { margin: 4px 0 0; font-size: 9px; }
 .my-work-inbox .spinning { animation: my-work-spin 900ms linear infinite; }
 @keyframes my-work-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .my-work-inbox .spinning { animation: none; } }
 @media (max-width: 1180px) { .my-work-inbox { padding: 34px 28px 48px; } .my-work-inbox-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 900px) { .my-work-inbox-heading { align-items: stretch; flex-direction: column; } .my-work-inbox-actions label { width: min(100%, 320px); } .my-work-inbox-grid { grid-template-columns: minmax(0, 1fr); } }

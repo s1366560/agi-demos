@@ -180,6 +180,10 @@ copyFileSync(
   join(compiledSettingsDirectory, 'SettingsCorePages.css'),
 );
 copyFileSync(
+  join(desktopRoot, 'src', 'features', 'settings', 'ShortcutSettingsPage.css'),
+  join(compiledSettingsDirectory, 'ShortcutSettingsPage.css'),
+);
+copyFileSync(
   join(desktopRoot, 'src', 'features', 'settings', 'ManagedResourceViews.css'),
   join(compiledSettingsDirectory, 'ManagedResourceViews.css'),
 );

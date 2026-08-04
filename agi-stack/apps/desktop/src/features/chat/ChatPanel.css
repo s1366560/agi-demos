@@ -1050,6 +1050,42 @@
   box-shadow: 0 0 0 2px rgba(var(--desktop-cyan-soft-rgb), 0.2);
 }
 
+.compose-ahead-prompt[draggable='true'] {
+  cursor: grab;
+}
+
+.compose-ahead-prompt .compose-ahead-grip {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+  color: var(--desktop-gray-11);
+}
+
+.compose-ahead-prompt .compose-ahead-intent {
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: rgba(var(--desktop-slate-rgb), 0.08);
+  color: var(--desktop-gray-11);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.compose-ahead-prompt.is-intent-steer .compose-ahead-intent {
+  background: rgba(var(--desktop-cyan-soft-rgb), 0.16);
+  color: var(--desktop-cyan-muted);
+}
+
+.composer-send-split {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.composer-send-split .picker-menu {
+  right: 0;
+  left: auto;
+}
+
 .session-chat-narrative .timeline-working-indicator.timeline-worklog-row {
   display: grid;
   align-items: center;
@@ -1080,6 +1116,16 @@
 @keyframes timeline-working-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline-working-spinner,
+  .conversation-comparison-spin,
+  .conversation-summary-regenerate .is-spinning,
+  .skill-execution-card[data-status='executing'] .skill-execution-icon svg,
+  .skill-tool-chain li[data-status='running'] .skill-tool-step-index svg {
+    animation: none;
   }
 }
 

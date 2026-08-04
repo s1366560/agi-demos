@@ -240,6 +240,13 @@ async function executeDesktopCommand(
       return process.platform === 'darwin'
         ? systemPreferences.askForMediaAccess('microphone')
         : true;
+    case 'focus_main_window':
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+      }
+      return undefined;
     default:
       if (SIDECAR_COMMANDS.has(command)) {
         if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');

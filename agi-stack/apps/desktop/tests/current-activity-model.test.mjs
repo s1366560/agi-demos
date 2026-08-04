@@ -3,7 +3,13 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { deriveCurrentActivity, formatElapsedClock } = require(
+const {
+  deriveCurrentActivity,
+  deriveStalledState,
+  formatElapsedClock,
+  stalledIdleMinutes,
+  STALLED_THRESHOLD_MS,
+} = require(
   '/tmp/agistack-desktop-test-dist/src/features/session/currentActivityModel.js',
 );
 
@@ -204,4 +210,91 @@ test('formats elapsed durations as a ticking clock', () => {
   assert.equal(formatElapsedClock(3_661_000), '1:01:01');
   assert.equal(formatElapsedClock(-5), '');
   assert.equal(formatElapsedClock(Number.NaN), '');
+});
+
+test('headline exposes the freshest visible activity timestamp', () => {
+  const user = userItem({ eventTimeUs: 1_000_000 });
+  const older = toolCall({ eventTimeUs: 2_000_000 });
+  const newer = toolResult(older, { eventTimeUs: 3_000_000 });
+  // Items may arrive out of chronological order; the max event time wins.
+  const headline = deriveCurrentActivity({
+    items: [user, newer, older],
+    presence: 'live',
+  });
+  assert.ok(headline);
+  assert.equal(headline.lastActivityAtMs, 3_000);
+});
+
+test('headline lastActivityAtMs is null with no items', () => {
+  const headline = deriveCurrentActivity({ items: [], presence: 'live' });
+  assert.ok(headline);
+  assert.equal(headline.lastActivityAtMs, null);
+});
+
+test('stalled triggers only once the silence crosses the threshold', () => {
+  const nowMs = 10_000_000;
+  const lastActivityAtMs = nowMs - STALLED_THRESHOLD_MS;
+  const atThreshold = deriveStalledState({ presence: 'live', lastActivityAtMs, nowMs });
+  assert.equal(atThreshold.stalled, true);
+  assert.equal(atThreshold.idleMs, STALLED_THRESHOLD_MS);
+
+  const justBelow = deriveStalledState({
+    presence: 'live',
+    lastActivityAtMs: nowMs - STALLED_THRESHOLD_MS + 1,
+    nowMs,
+  });
+  assert.equal(justBelow.stalled, false);
+});
+
+test('stalled resets automatically when fresh activity arrives', () => {
+  const nowMs = 10_000_000;
+  const resumed = deriveStalledState({
+    presence: 'live',
+    lastActivityAtMs: nowMs - 5_000,
+    nowMs,
+  });
+  assert.equal(resumed.stalled, false);
+  assert.equal(resumed.idleMs, 5_000);
+});
+
+test('stalled is suppressed on terminal (non-live) presence', () => {
+  const nowMs = 10_000_000;
+  const lastActivityAtMs = nowMs - STALLED_THRESHOLD_MS * 10;
+  const state = deriveStalledState({ presence: 'recorded', lastActivityAtMs, nowMs });
+  assert.equal(state.stalled, false);
+  // And a live presence at the same idle gap would be stalled.
+  assert.equal(
+    deriveStalledState({ presence: 'live', lastActivityAtMs, nowMs }).stalled,
+    true,
+  );
+});
+
+test('stalled never triggers without a known last activity timestamp', () => {
+  const state = deriveStalledState({
+    presence: 'live',
+    lastActivityAtMs: null,
+    nowMs: 10_000_000,
+  });
+  assert.equal(state.stalled, false);
+  assert.equal(state.idleMs, 0);
+});
+
+test('stalled threshold is overridable for embedding contexts', () => {
+  const nowMs = 10_000_000;
+  const state = deriveStalledState({
+    presence: 'live',
+    lastActivityAtMs: nowMs - 30_000,
+    nowMs,
+    thresholdMs: 15_000,
+  });
+  assert.equal(state.stalled, true);
+});
+
+test('stalled copy minute count floors and never dips below one', () => {
+  assert.equal(stalledIdleMinutes(0), 1);
+  assert.equal(stalledIdleMinutes(59_999), 1);
+  assert.equal(stalledIdleMinutes(60_000), 1);
+  assert.equal(stalledIdleMinutes(120_000), 2);
+  assert.equal(stalledIdleMinutes(179_999), 2);
+  assert.equal(stalledIdleMinutes(600_000), 10);
 });

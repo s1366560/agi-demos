@@ -45,11 +45,53 @@ export type CurrentActivityHeadline = {
   /** Primary argument/target (file path, command, task), already truncated. */
   detail: string;
   startedAtMs: number | null;
+  /** Freshness of the newest visible timeline item (ms epoch); drives the stalled indicator. */
+  lastActivityAtMs: number | null;
   /** Number of concurrently active subagent groups (0 when none). */
   activeSubagentCount: number;
   /** Recent activity group shown when the headline is expanded, chronological. */
   entries: CurrentActivityEntry[];
 };
+
+/**
+ * Silence window after which a live run is presented as possibly stalled.
+ * This is a deterministic trigger only — the rendered copy stays
+ * informational ("no new activity") and never declares the agent broken,
+ * per the repo's Agent First rule.
+ */
+export const STALLED_THRESHOLD_MS = 120_000;
+
+export type StalledState = {
+  stalled: boolean;
+  /** Milliseconds since the newest visible timeline activity (0 when unknown). */
+  idleMs: number;
+};
+
+/**
+ * Pure stalled derivation. Terminal suppression is structural: a non-live
+ * presence can never be stalled, and any newer timeline item lowers
+ * `lastActivityAtMs`'s idle gap back under the threshold automatically.
+ */
+export function deriveStalledState(args: {
+  presence: SessionActivityPresence;
+  lastActivityAtMs: number | null;
+  nowMs: number;
+  thresholdMs?: number;
+}): StalledState {
+  const thresholdMs = args.thresholdMs ?? STALLED_THRESHOLD_MS;
+  const idleMs =
+    args.lastActivityAtMs === null ? 0 : Math.max(0, args.nowMs - args.lastActivityAtMs);
+  return {
+    stalled:
+      args.presence === 'live' && args.lastActivityAtMs !== null && idleMs >= thresholdMs,
+    idleMs,
+  };
+}
+
+/** Whole minutes surfaced in the stalled copy; never below 1 once stalled. */
+export function stalledIdleMinutes(idleMs: number): number {
+  return Math.max(1, Math.floor(idleMs / 60_000));
+}
 
 const HEADLINE_LABEL_MAX = 80;
 const HEADLINE_DETAIL_MAX = 96;
@@ -101,6 +143,14 @@ export function deriveCurrentActivity(args: {
   const streamingAssistant =
     lastItem && isAssistantItem(lastItem) && lastItem.metadata?.streaming ? lastItem : null;
 
+  let lastActivityAtMs: number | null = null;
+  for (const item of items) {
+    const itemMs = eventTimeMs(item);
+    if (itemMs !== null && (lastActivityAtMs === null || itemMs > lastActivityAtMs)) {
+      lastActivityAtMs = itemMs;
+    }
+  }
+
   const headline = pickHeadline({
     items,
     indexById,
@@ -113,6 +163,7 @@ export function deriveCurrentActivity(args: {
 
   return {
     ...headline,
+    lastActivityAtMs,
     activeSubagentCount: activeSubagents.length,
     entries: buildEntries({
       activeSubagents,
@@ -142,7 +193,7 @@ function pickHeadline(args: {
   streamingThought: AgentTimelineItem | null;
   streamingAssistant: AgentTimelineItem | null;
   lastItem: AgentTimelineItem | null;
-}): Omit<CurrentActivityHeadline, 'activeSubagentCount' | 'entries'> {
+}): Omit<CurrentActivityHeadline, 'activeSubagentCount' | 'entries' | 'lastActivityAtMs'> {
   const { indexById } = args;
 
   const pairIndex = args.lastRunningPair

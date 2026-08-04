@@ -18,6 +18,7 @@ import {
   CodeIcon,
   ColumnsIcon,
   Cross2Icon,
+  DragHandleDots2Icon,
   MixerHorizontalIcon,
   ReloadIcon,
   RocketIcon,
@@ -26,9 +27,10 @@ import {
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
-import { socketEventsSince } from '../../hooks/useAgentSocket';
+import { agentSteerMessageOutcome, socketEventsSince } from '../../hooks/useAgentSocket';
 import { sessionActivitySummary } from '../session/sessionNarrativeModel';
 import { deriveCurrentActivity } from '../session/currentActivityModel';
+import { deriveSessionUsage } from '../session/sessionUsageModel';
 import type {
   SessionActivityPresence,
   SessionActivityStructuredEvidence,
@@ -60,6 +62,10 @@ import {
 } from '../session/sessionRunInputModel';
 import { ComposerControls } from './ComposerControls';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
+import { PermissionPresetControl } from './PermissionPresetControl';
+import type { PermissionPreset } from './permissionPresetModel';
+import { PickerMenu } from './PickerMenu';
+import { useToast } from '../feedback/ToastCenter';
 import type { ComposerModelOption } from './ComposerControls';
 import type { ComposerCatalogClient } from './composerCatalogModel';
 import { ConversationComparison, ConversationComparisonPicker } from './ConversationComparison';
@@ -67,6 +73,9 @@ import type { ConversationComparisonClient } from './ConversationComparison';
 import { ConversationSearch } from './ConversationSearch';
 import { ConversationExportMenu } from './ConversationExportMenu';
 import { ConversationSummaryCard } from './ConversationSummaryCard';
+import { RunCompletionSummaryCard } from './RunCompletionSummaryCard';
+import type { RunCompletionSummary } from '../session/runCompletionSummaryModel';
+import type { SessionCanvasTabId } from '../session/sessionCanvasModel';
 import { PinnedMessages } from './PinnedMessages';
 import { PromptTemplateLibrary } from './PromptTemplateLibrary';
 import {
@@ -100,8 +109,10 @@ import {
   composeAheadQueueStore,
   conversationResponseIsStreaming,
   EMPTY_COMPOSE_AHEAD_QUEUE,
+  readComposeAheadDefaultIntent,
+  writeComposeAheadDefaultIntent,
 } from './composeAheadModel';
-import type { ComposeAheadPrompt } from './composeAheadModel';
+import type { ComposeAheadIntent, ComposeAheadPrompt } from './composeAheadModel';
 import {
   canConfirmMessageDeletion,
   filterHiddenMessages,
@@ -185,6 +196,14 @@ const DEFAULT_TURN_COLLAPSE_RUNTIME = {
 } as const;
 const EMPTY_AGENT_CONTROL_EVENTS: readonly AgentWsEvent[] = [];
 
+export type ChatSteerRequest = {
+  conversationId: string;
+  text: string;
+  messageId: string;
+};
+
+const COMPOSE_AHEAD_STEER_ACK_TIMEOUT_MS = 10_000;
+
 type ChatPanelProps = {
   api: ComposerCatalogClient;
   conversations: readonly AgentConversation[];
@@ -238,10 +257,15 @@ type ChatPanelProps = {
   ) => void;
   onRegenerateConversationSummary?: (conversationId: string) => Promise<void>;
   onStopResponse?: (conversationId: string) => boolean;
+  onSteerResponse?: (request: ChatSteerRequest) => boolean;
   onRefresh: () => void;
   onLoadEarlier: () => void;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
   respondableHitlRequestIds: readonly string[];
+  permissionPreset?: PermissionPreset;
+  permissionPresetFullAccessAcknowledged?: boolean;
+  onPermissionPresetChange?: (preset: PermissionPreset) => void;
+  onAcknowledgeFullAccessWarning?: () => void;
   authorityNotice?: ChatAuthorityNotice;
   onAuthorityAction?: () => void;
   onWorkflowSelect: (target: ChatWorkflowTarget) => void;
@@ -250,6 +274,8 @@ type ChatPanelProps = {
   onModelReset?: () => Promise<void>;
   onOpenMCPAppResult?: (item: AgentTimelineItem) => void;
   onOpenCommands: (trigger?: HTMLElement | null) => void;
+  runCompletionSummary?: RunCompletionSummary | null;
+  onOpenSessionCanvasTab?: (tab: SessionCanvasTabId) => void;
 };
 
 type EarlierTimelineScrollAnchor = {
@@ -366,10 +392,15 @@ export const ChatPanel = memo(function ChatPanel({
   onSend,
   onRegenerateConversationSummary,
   onStopResponse,
+  onSteerResponse,
   onRefresh,
   onLoadEarlier,
   onRespondToHitl,
   respondableHitlRequestIds,
+  permissionPreset,
+  permissionPresetFullAccessAcknowledged = false,
+  onPermissionPresetChange,
+  onAcknowledgeFullAccessWarning,
   authorityNotice,
   onAuthorityAction,
   onWorkflowSelect,
@@ -378,6 +409,8 @@ export const ChatPanel = memo(function ChatPanel({
   onModelReset,
   onOpenMCPAppResult,
   onOpenCommands,
+  runCompletionSummary,
+  onOpenSessionCanvasTab,
 }: ChatPanelProps) {
   const { t } = useI18n();
   const disabled = Boolean(disabledReason);
@@ -518,6 +551,12 @@ export const ChatPanel = memo(function ChatPanel({
         presence: activityPresence,
       }),
     [timelineDisplayItems, activityPresence],
+  );
+  // Context-status events are non-timeline types filtered out of the display
+  // items, so usage derives from the pre-display timeline.
+  const sessionUsage = useMemo(
+    () => deriveSessionUsage(visibleTimelineItems),
+    [visibleTimelineItems],
   );
   const timelineTurns = useMemo(
     () => computeTimelineTurns(timelineDisplayItems),
@@ -1503,6 +1542,12 @@ export const ChatPanel = memo(function ChatPanel({
                 collapsedTurnIds={collapsedTurnIds}
                 onToggleTurn={toggleTimelineTurn}
               />
+              {runCompletionSummary && onOpenSessionCanvasTab ? (
+                <RunCompletionSummaryCard
+                  summary={runCompletionSummary}
+                  onOpenTab={onOpenSessionCanvasTab}
+                />
+              ) : null}
             </>
           ) : visibleWorkspaceMessages.length === 0 ? (
             <SessionEmptyState />
@@ -1638,6 +1683,8 @@ export const ChatPanel = memo(function ChatPanel({
         <CurrentActivityHeadlineBar
           activity={currentActivity}
           sessionKey={messageActionConversationId}
+          presence={activityPresence}
+          usage={sessionUsage}
         />
       ) : null}
       <ChatComposer
@@ -1671,6 +1718,10 @@ export const ChatPanel = memo(function ChatPanel({
         runtimeTargetOptions={runtimeTargetOptions}
         authorityNotice={authorityNotice}
         onAuthorityAction={onAuthorityAction}
+        permissionPreset={permissionPreset}
+        permissionPresetFullAccessAcknowledged={permissionPresetFullAccessAcknowledged}
+        onPermissionPresetChange={onPermissionPresetChange}
+        onAcknowledgeFullAccessWarning={onAcknowledgeFullAccessWarning}
         onRunInputDeliveryChange={onRunInputDeliveryChange}
         onPromoteRunInput={onPromoteRunInput}
         onRemoveReference={onRemoveReference}
@@ -1681,6 +1732,8 @@ export const ChatPanel = memo(function ChatPanel({
         onOpenCommands={onOpenCommands}
         onSend={handleComposerSend}
         onStopResponse={stopResponse}
+        onSteerResponse={onSteerResponse}
+        agentControlEvents={agentControlEvents}
         composeAheadScope={composeAheadScope}
         composeAheadEnabled={composeAheadEnabled}
         responseStreaming={responseStreaming}
@@ -1779,6 +1832,10 @@ type ChatComposerProps = {
   runtimeTargetOptions?: string[];
   authorityNotice?: ChatAuthorityNotice;
   onAuthorityAction?: () => void;
+  permissionPreset?: PermissionPreset;
+  permissionPresetFullAccessAcknowledged?: boolean;
+  onPermissionPresetChange?: (preset: PermissionPreset) => void;
+  onAcknowledgeFullAccessWarning?: () => void;
   onRunInputDeliveryChange: (delivery: RunInputDelivery) => void;
   onPromoteRunInput: (input: DesktopRunInput) => void;
   onRemoveReference: (reference: CodeRangeReference) => void;
@@ -1793,6 +1850,8 @@ type ChatComposerProps = {
     onWorkspaceMessageSaved?: () => void,
   ) => void;
   onStopResponse: () => void;
+  onSteerResponse?: (request: ChatSteerRequest) => boolean;
+  agentControlEvents?: readonly AgentWsEvent[];
   composeAheadScope: string | null;
   composeAheadEnabled: boolean;
   responseStreaming: boolean;
@@ -1833,6 +1892,10 @@ function ChatComposer({
   runtimeTargetOptions,
   authorityNotice,
   onAuthorityAction,
+  permissionPreset,
+  permissionPresetFullAccessAcknowledged = false,
+  onPermissionPresetChange,
+  onAcknowledgeFullAccessWarning,
   onRunInputDeliveryChange,
   onPromoteRunInput,
   onRemoveReference,
@@ -1843,6 +1906,8 @@ function ChatComposer({
   onOpenCommands,
   onSend,
   onStopResponse,
+  onSteerResponse,
+  agentControlEvents = EMPTY_AGENT_CONTROL_EVENTS,
   composeAheadScope,
   composeAheadEnabled,
   responseStreaming,
@@ -1853,8 +1918,11 @@ function ChatComposer({
   voiceCallRuntime,
 }: ChatComposerProps) {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const [input, setInput] = useState(initialInput);
   const [contextItems, setContextItems] = useState<ComposerContextItem[]>([]);
+  const [composeAheadDefaultIntent, setComposeAheadDefaultIntentState] =
+    useState<ComposeAheadIntent>(() => readComposeAheadDefaultIntent());
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const sendingRef = useRef(sending);
   const responseStreamingRef = useRef(responseStreaming);
@@ -1862,6 +1930,13 @@ function ChatComposer({
     timerId: number;
     scope: string;
     promptId: string;
+  } | null>(null);
+  const steerDispatchRef = useRef<{
+    timerId: number;
+    scope: string;
+    promptId: string;
+    messageId: string;
+    eventHead: AgentWsEvent | null;
   } | null>(null);
   sendingRef.current = sending;
   responseStreamingRef.current = responseStreaming;
@@ -1995,6 +2070,7 @@ function ChatComposer({
       composeAheadQueueStore.enqueue(composeAheadScope, {
         text: input,
         contextItems: composeAheadSnapshot.contextItems,
+        intent: composeAheadDefaultIntent,
       });
       setInput('');
       setContextItems([]);
@@ -2015,6 +2091,7 @@ function ChatComposer({
     });
   }, [
     canSendNow,
+    composeAheadDefaultIntent,
     composeAheadQueueEligibility.canQueue,
     composeAheadScope,
     composeAheadSnapshot.contextItems,
@@ -2024,11 +2101,39 @@ function ChatComposer({
     t,
     voice.stop,
   ]);
+  const setComposeAheadDefaultIntent = useCallback((intent: ComposeAheadIntent) => {
+    setComposeAheadDefaultIntentState(intent);
+    writeComposeAheadDefaultIntent(intent);
+  }, []);
+  const handleStopAndSend = useCallback(() => {
+    const content = input.trim();
+    if (!content || disabled || sending) return;
+    voice.stop();
+    onStopResponse();
+    onSend(content, contextItems, () => {
+      setInput('');
+      setContextItems([]);
+    });
+  }, [contextItems, disabled, input, onSend, onStopResponse, sending, voice.stop]);
+  const handleSteerFallback = useCallback(
+    (scope: string, promptId: string) => {
+      if (composeAheadQueueStore.applySteerFallback(scope, promptId)) {
+        showToast('info', t('chat.composeAhead.steerFallback'));
+      }
+    },
+    [showToast, t],
+  );
   useEffect(() => {
     return () => {
       if (dispatchMonitorRef.current) {
         window.clearTimeout(dispatchMonitorRef.current.timerId);
         dispatchMonitorRef.current = null;
+      }
+      if (steerDispatchRef.current) {
+        window.clearTimeout(steerDispatchRef.current.timerId);
+        const orphaned = steerDispatchRef.current;
+        steerDispatchRef.current = null;
+        composeAheadQueueStore.fail(orphaned.scope, orphaned.promptId);
       }
     };
   }, []);
@@ -2084,7 +2189,7 @@ function ChatComposer({
     ) {
       return;
     }
-    const claimed = composeAheadQueueStore.claimHead(composeAheadScope);
+    const claimed = composeAheadQueueStore.claimNext(composeAheadScope, false);
     if (!claimed) return;
     scheduleDispatchMonitor(claimed);
     try {
@@ -2119,6 +2224,93 @@ function ChatComposer({
     responseStreaming,
     sending,
   ]);
+  // Steer dispatch: while the run streams, claim the next steer-intent prompt
+  // and inject it over the socket. Items carrying skill/subagent context are
+  // skipped here and flush normally once the run ends.
+  useEffect(() => {
+    if (
+      !composeAheadEnabled ||
+      !composeAheadScope ||
+      !onSteerResponse ||
+      !responseStreaming ||
+      sending ||
+      disabled ||
+      steerDispatchRef.current
+    ) {
+      return;
+    }
+    const candidate = queuedPrompts.find(
+      (prompt) => prompt.status === 'queued' && prompt.intent === 'steer',
+    );
+    if (!candidate || candidate.contextItems.length > 0) return;
+    const claimed = composeAheadQueueStore.claimNext(composeAheadScope, true);
+    if (!claimed || claimed.id !== candidate.id) return;
+    const messageId = `desktop-steer-${claimed.id}`;
+    const sent = onSteerResponse({
+      conversationId: activeConversationId,
+      text: claimed.text,
+      messageId,
+    });
+    if (!sent) {
+      composeAheadQueueStore.fail(composeAheadScope, claimed.id);
+      return;
+    }
+    const timerId = window.setTimeout(() => {
+      const active = steerDispatchRef.current;
+      if (!active || active.promptId !== claimed.id) return;
+      steerDispatchRef.current = null;
+      handleSteerFallback(composeAheadScope, claimed.id);
+    }, COMPOSE_AHEAD_STEER_ACK_TIMEOUT_MS);
+    steerDispatchRef.current = {
+      timerId,
+      scope: composeAheadScope,
+      promptId: claimed.id,
+      messageId,
+      eventHead: agentControlEvents[0] ?? null,
+    };
+  }, [
+    activeConversationId,
+    agentControlEvents,
+    composeAheadEnabled,
+    composeAheadScope,
+    disabled,
+    handleSteerFallback,
+    onSteerResponse,
+    queuedPrompts,
+    responseStreaming,
+    sending,
+  ]);
+  // Watch the socket stream for the steer outcome: an accepted outcome removes
+  // the chip; a rejection falls back to plain queued behavior with a toast.
+  useEffect(() => {
+    const active = steerDispatchRef.current;
+    if (!active) return;
+    const events = socketEventsSince(agentControlEvents, active.eventHead);
+    if (!events.length) return;
+    active.eventHead = agentControlEvents[0] ?? active.eventHead;
+    for (const event of events) {
+      const outcome = agentSteerMessageOutcome(event, active.messageId);
+      if (!outcome) continue;
+      window.clearTimeout(active.timerId);
+      steerDispatchRef.current = null;
+      if (outcome === 'accepted') {
+        composeAheadQueueStore.accept(active.scope, active.promptId);
+      } else {
+        handleSteerFallback(active.scope, active.promptId);
+      }
+      return;
+    }
+  }, [agentControlEvents, handleSteerFallback]);
+  // If the run ends before the steer is acknowledged, the turn boundary was
+  // missed: demote the item back to queued so the idle flush delivers it.
+  useEffect(() => {
+    if (responseStreaming) return;
+    const active = steerDispatchRef.current;
+    if (!active) return;
+    window.clearTimeout(active.timerId);
+    steerDispatchRef.current = null;
+    handleSteerFallback(active.scope, active.promptId);
+  }, [handleSteerFallback, responseStreaming]);
   const {
     isFileDragging,
     handleFileDragEnter,
@@ -2390,6 +2582,14 @@ function ChatComposer({
                 onModelReset={onModelReset}
               />
             ) : null}
+            {permissionPreset && onPermissionPresetChange && onAcknowledgeFullAccessWarning ? (
+              <PermissionPresetControl
+                preset={permissionPreset}
+                fullAccessAcknowledged={permissionPresetFullAccessAcknowledged}
+                onPresetChange={onPermissionPresetChange}
+                onAcknowledgeFullAccess={onAcknowledgeFullAccessWarning}
+              />
+            ) : null}
           </div>
         ) : null}
         {composerVariant !== 'session' ? (
@@ -2539,15 +2739,67 @@ function ChatComposer({
               <StopIcon />
             </Button>
           ) : null}
+          {composeAheadQueueEligibility.canQueue ? (
+            <div className="composer-send-split">
+              <Button
+                size="2"
+                color="green"
+                className="send-pill"
+                type="submit"
+                aria-label={
+                  composeAheadDefaultIntent === 'steer'
+                    ? t('chat.composeAhead.steerMessage')
+                    : t('chat.composeAhead.queueMessage')
+                }
+                title={
+                  composeAheadDefaultIntent === 'steer'
+                    ? t('chat.composeAhead.steerMessage')
+                    : t('chat.composeAhead.queueMessage')
+                }
+                loading={sending}
+                disabled={!canSubmit}
+              >
+                {composeAheadDefaultIntent === 'steer' ? <RocketIcon /> : <ClockIcon />}
+              </Button>
+              <PickerMenu
+                label={t('chat.composeAhead.sendOptions')}
+                value={composeAheadDefaultIntent}
+                hideLabel
+                disabled={!canSubmit}
+                options={[
+                  {
+                    value: 'queue',
+                    label: t('chat.composeAhead.intent.queue'),
+                    description: t('chat.composeAhead.menu.queueDescription'),
+                  },
+                  {
+                    value: 'steer',
+                    label: t('chat.composeAhead.intent.steer'),
+                    description: t('chat.composeAhead.menu.steerDescription'),
+                  },
+                ]}
+                onChange={(value) =>
+                  setComposeAheadDefaultIntent(value === 'steer' ? 'steer' : 'queue')
+                }
+                footer={
+                  stopResponseAvailable
+                    ? {
+                        label: t('chat.composeAhead.menu.stopAndSend'),
+                        icon: <StopIcon aria-hidden="true" />,
+                        onClick: handleStopAndSend,
+                      }
+                    : undefined
+                }
+              />
+            </div>
+          ) : (
           <Button
             size="2"
             color="green"
             className="send-pill"
             type="submit"
             aria-label={
-              composeAheadQueueEligibility.canQueue
-                ? t('chat.composeAhead.queueMessage')
-                : runInputDelivery === 'steer_now'
+              runInputDelivery === 'steer_now'
                 ? t('session.sendSteering')
                 : runInputDelivery === 'queue_next'
                   ? t('session.sendQueuedInput')
@@ -2566,8 +2818,9 @@ function ChatComposer({
             loading={sending}
             disabled={!canSubmit}
           >
-            {composeAheadQueueEligibility.canQueue ? <ClockIcon /> : <ArrowUpIcon />}
+            <ArrowUpIcon />
           </Button>
+          )}
         </Flex>
         </Flex>
       </div>
@@ -2659,6 +2912,7 @@ const ComposeAheadQueue = memo(function ComposeAheadQueue({
   scope: string | null;
 }) {
   const { t } = useI18n();
+  const dragPromptIdRef = useRef<string | null>(null);
   if (!scope) return null;
   return (
     <section
@@ -2675,18 +2929,76 @@ const ComposeAheadQueue = memo(function ComposeAheadQueue({
           const subagent = prompt.contextItems.find(
             (item) => item.metadata?.execution_slot === 'subagent',
           );
+          const statusKey =
+            prompt.status === 'dispatching' && prompt.intent === 'steer'
+              ? 'chat.composeAhead.status.steering'
+              : `chat.composeAhead.status.${prompt.status}`;
           return (
             <span
-              className={`compose-ahead-prompt is-${prompt.status}`}
+              className={`compose-ahead-prompt is-${prompt.status} is-intent-${prompt.intent}`}
               title={prompt.text}
               key={prompt.id}
+              draggable
+              onDragStart={(event) => {
+                dragPromptIdRef.current = prompt.id;
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', prompt.id);
+              }}
+              onDragOver={(event) => {
+                if (!dragPromptIdRef.current) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'move';
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                const draggedId = dragPromptIdRef.current;
+                dragPromptIdRef.current = null;
+                if (draggedId && draggedId !== prompt.id) {
+                  composeAheadQueueStore.move(scope, draggedId, index);
+                }
+              }}
+              onDragEnd={() => {
+                dragPromptIdRef.current = null;
+              }}
             >
-              <ClockIcon aria-hidden="true" />
+              <DragHandleDots2Icon
+                className="compose-ahead-grip"
+                aria-label={t('chat.composeAhead.reorder', { prompt: prompt.text })}
+              />
+              <em className="compose-ahead-intent">
+                {t(`chat.composeAhead.intent.${prompt.intent}`)}
+              </em>
               <span>{composeAheadPreview(prompt.text)}</span>
               {skill ? <em>/{skill.label}</em> : null}
               {subagent ? <em>@{subagent.label}</em> : null}
-              {index === 0 ? (
-                <small>{t(`chat.composeAhead.status.${prompt.status}`)}</small>
+              {index === 0 ? <small>{t(statusKey)}</small> : null}
+              {prompt.status === 'queued' ? (
+                <button
+                  type="button"
+                  aria-label={
+                    prompt.intent === 'queue'
+                      ? t('chat.composeAhead.steerNow', { prompt: prompt.text })
+                      : t('chat.composeAhead.dequeueToQueue', { prompt: prompt.text })
+                  }
+                  title={
+                    prompt.intent === 'queue'
+                      ? t('chat.composeAhead.steerNow', { prompt: prompt.text })
+                      : t('chat.composeAhead.dequeueToQueue', { prompt: prompt.text })
+                  }
+                  onClick={() =>
+                    composeAheadQueueStore.setIntent(
+                      scope,
+                      prompt.id,
+                      prompt.intent === 'queue' ? 'steer' : 'queue',
+                    )
+                  }
+                >
+                  {prompt.intent === 'queue' ? (
+                    <RocketIcon aria-hidden="true" />
+                  ) : (
+                    <ClockIcon aria-hidden="true" />
+                  )}
+                </button>
               ) : null}
               {prompt.status === 'failed' ? (
                 <button

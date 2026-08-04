@@ -171,6 +171,16 @@ import {
 } from './features/chat/chatTimelineModel';
 import { coalesceStreamingTextEvents } from './features/chat/streamingTextEventModel';
 import { applyHitlResponseStreamEvent } from './features/chat/hitlResponseEventModel';
+import {
+  acknowledgeFullAccessWarning,
+  autoApprovalSubmission,
+  denialSteeringFeedback,
+  permissionPresetScope,
+  readFullAccessWarningAcknowledged,
+  readPermissionPreset,
+  writePermissionPreset,
+  type PermissionPreset,
+} from './features/chat/permissionPresetModel';
 import { applyWorkspaceLifecycleStreamEvent } from './features/chat/workspaceLifecycleEventModel';
 import { applyWorkspaceMessageStreamEvent } from './features/chat/workspaceMessageEventModel';
 import { applyWorkspaceRosterStreamEvent } from './features/chat/workspaceRosterEventModel';
@@ -197,6 +207,8 @@ import {
 } from './features/session/SessionPlanReview';
 import { SessionTerminalCanvas } from './features/session/SessionTerminalCanvas';
 import { SessionWorkspace } from './features/session/SessionWorkspace';
+import { buildRunCompletionSummary } from './features/session/runCompletionSummaryModel';
+import { deriveSessionUsage } from './features/session/sessionUsageModel';
 import { canonicalJsonSha256 } from './features/session/canonicalJsonDigest';
 import {
   artifactDeliveryRequest,
@@ -217,6 +229,18 @@ import {
   snapshotMatchesRun,
   toggleRunInputReference,
 } from './features/session/sessionChangesModel';
+import {
+  addChangeComment,
+  buildChangeCommentsMessage,
+  clearChangeComments,
+  commentsForConversation,
+  referencesForChangeComments,
+  removeChangeComment,
+} from './features/session/sessionChangesReviewModel';
+import type {
+  ChangeReviewComment,
+  ChangeReviewCommentMap,
+} from './features/session/sessionChangesReviewModel';
 import {
   approvalResponseSubmission,
   latestPendingApproval,
@@ -285,6 +309,7 @@ import {
 import { MyWorkQueue } from './features/my-work/MyWorkQueue';
 import { ActivityInbox } from './features/activity/ActivityInbox';
 import { useActivityInbox } from './features/activity/useActivityInbox';
+import { useCompletionNotifications } from './features/activity/useCompletionNotifications';
 import {
   desktopCapability,
   type DesktopCapabilityView,
@@ -1875,6 +1900,9 @@ export function App() {
   const [changeSnapshotLoading, setChangeSnapshotLoading] = useState(false);
   const [changeSnapshotError, setChangeSnapshotError] = useState<string | null>(null);
   const [runInputReferences, setRunInputReferences] = useState<CodeRangeReference[]>([]);
+  // P1-4: pending inline review comments, in-memory per conversation id.
+  const [changeCommentsByConversation, setChangeCommentsByConversation] =
+    useState<ChangeReviewCommentMap>({});
   const [runInputDelivery, setRunInputDelivery] = useState<RunInputDelivery | null>(null);
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([]);
   const [runInputsLoading, setRunInputsLoading] = useState(false);
@@ -1894,6 +1922,7 @@ export function App() {
   const [sectionForwardStack, setSectionForwardStack] = useState<WorkbenchSection[]>([]);
   const [reviewTab, setReviewTab] = useState<ReviewTab>('overview');
   const [reviewPanelOpen, setReviewPanelOpen] = useState(true);
+  const [sessionCanvasRevealNonce, setSessionCanvasRevealNonce] = useState(0);
   const [selectedTaskId, setSelectedTaskId] = useState('');
   const [sandboxBusy, setSandboxBusy] = useState(false);
   const [terminal, setTerminal] = useState<TerminalServiceResponse | null>(null);
@@ -2851,6 +2880,28 @@ export function App() {
     () => new Set(respondableHitlRequestIds),
     [respondableHitlRequestIds],
   );
+  const permissionPresetScopeKey = permissionPresetScope(config.workspaceId, scopedConversationId);
+  const [permissionPreset, setPermissionPreset] = useState<PermissionPreset>('default');
+  const [fullAccessWarningAcknowledged, setFullAccessWarningAcknowledged] = useState(false);
+  useEffect(() => {
+    setPermissionPreset(
+      permissionPresetScopeKey ? readPermissionPreset(permissionPresetScopeKey) : 'default',
+    );
+  }, [permissionPresetScopeKey]);
+  useEffect(() => {
+    setFullAccessWarningAcknowledged(readFullAccessWarningAcknowledged(config.workspaceId));
+  }, [config.workspaceId]);
+  const handlePermissionPresetChange = useCallback(
+    (preset: PermissionPreset) => {
+      if (permissionPresetScopeKey) writePermissionPreset(permissionPresetScopeKey, preset);
+      setPermissionPreset(preset);
+    },
+    [permissionPresetScopeKey],
+  );
+  const handleAcknowledgeFullAccessWarning = useCallback(() => {
+    acknowledgeFullAccessWarning(config.workspaceId);
+    setFullAccessWarningAcknowledged(true);
+  }, [config.workspaceId]);
   const activeDataset = dataset;
   const sessionTasks = useMemo<WorkspaceTask[]>(
     () =>
@@ -3228,6 +3279,41 @@ export function App() {
       t,
     ],
   );
+
+  const presetAutoApprovalAttemptsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    presetAutoApprovalAttemptsRef.current.clear();
+  }, [scopedConversationId]);
+  useEffect(() => {
+    if (!scopedConversationId || permissionPreset === 'default') return;
+    const requests = respondableHitlRequestsForProjection(sessionProjection);
+    for (const request of requests) {
+      const submission = autoApprovalSubmission(request, permissionPreset);
+      if (!submission) continue;
+      const attemptKey = `${request.id}:${request.authority_revision ?? 'unversioned'}`;
+      if (presetAutoApprovalAttemptsRef.current.has(attemptKey)) continue;
+      presetAutoApprovalAttemptsRef.current.add(attemptKey);
+      void respondToHitl(submission)
+        .then(() => {
+          // Truthfulness: fold the resolved-with-preset marker into the local
+          // timeline immediately; the canonical refetch keeps it when the
+          // runtime echoes the response data.
+          setConversationTimeline((current) => ({
+            ...current,
+            items: applyHitlResponseStreamEvent(current.items, {
+              type: 'permission_replied',
+              data: {
+                request_id: request.id,
+                granted: true,
+                auto_approved: true,
+                preset: permissionPreset,
+              },
+            }).items,
+          }));
+        })
+        .catch(() => undefined);
+    }
+  }, [permissionPreset, respondToHitl, scopedConversationId, sessionProjection]);
 
   useEffect(() => {
     const previous = sessionSocketAuthorityRef.current;
@@ -6576,9 +6662,13 @@ export function App() {
     rawContent: string,
     contextItems: ComposerContextItem[],
     onWorkspaceMessageSaved?: () => void,
+    referencesOverride?: CodeRangeReference[],
   ) => {
     const content = rawContent.trim();
     if (!content) return;
+    // Review-panel comment sends carry their own deduplicated anchors; the
+    // composer's selected references otherwise stay the default.
+    const outgoingReferences = referencesOverride ?? runInputReferences;
     const execution = composerAgentExecutionContext(content, contextItems);
     const mentions = execution.mentions;
     const canSendConversationMessage = Boolean(
@@ -6621,7 +6711,7 @@ export function App() {
           revision: currentArtifactRun.revision,
           delivery: effectiveRunInputDeliveryValue,
           content,
-          references: runInputReferences,
+          references: outgoingReferences,
           contextItems,
         });
         if (runInputRequestRef.current?.signature !== signature) {
@@ -6640,11 +6730,11 @@ export function App() {
           messageId: request.messageId,
           idempotencyKey: request.idempotencyKey,
           delivery: effectiveRunInputDeliveryValue,
-          references: runInputReferences,
+          references: outgoingReferences,
           contextItems,
         });
         onWorkspaceMessageSaved?.();
-        setRunInputReferences([]);
+        if (!referencesOverride) setRunInputReferences([]);
         setRunInputs((current) =>
           [...current.filter((input) => input.id !== acknowledgement.input.id), acknowledgement.input]
             .sort((left, right) => left.sequence - right.sequence),
@@ -6749,10 +6839,28 @@ export function App() {
       content: string,
       contextItems: ComposerContextItem[],
       onWorkspaceMessageSaved?: () => void,
+      referencesOverride?: CodeRangeReference[],
     ) => {
-      void sendMessageContentRef.current(content, contextItems, onWorkspaceMessageSaved);
+      void sendMessageContentRef.current(
+        content,
+        contextItems,
+        onWorkspaceMessageSaved,
+        referencesOverride,
+      );
     },
     [],
+  );
+
+  // P1-2 rejection-as-steering: a denial that carries feedback posts the
+  // feedback as a normal user message through the existing send path, so the
+  // agent adapts on its next turn.
+  const respondToHitlWithSteering = useCallback(
+    async (submission: HitlResponseSubmission) => {
+      await respondToHitl(submission);
+      const feedback = denialSteeringFeedback(submission);
+      if (feedback) sendChatMessage(feedback, []);
+    },
+    [respondToHitl, sendChatMessage],
   );
 
   const startTerminal = async () => {
@@ -6892,6 +7000,14 @@ export function App() {
     items: dataset.myWork,
     scopeKey: `${config.tenantId}:${config.projectId}`,
   });
+  // OS 通知点击后经由 ref 跳转,避免 hook 依赖后文才定义的 openMyWorkSession。
+  const openMyWorkSessionRef = useRef<(item: ProjectWorkItem) => void>(() => {});
+  useCompletionNotifications({
+    entries: activityInbox.entries,
+    scopeKey: `${config.tenantId}:${config.projectId}`,
+    hydrated: connection !== 'loading',
+    onOpenEntry: (entry) => openMyWorkSessionRef.current(entry.item),
+  });
   const selectedConversationId = selectedConversation?.id ?? null;
   // 打开会话即视为已读该会话的收件箱条目(硬验收:每个未读信号都可在应用内消除)。
   useEffect(() => {
@@ -6920,6 +7036,42 @@ export function App() {
   );
   const currentArtifactRun = sessionProjection?.currentRun ?? null;
   currentArtifactRunRef.current = currentArtifactRun;
+  const sessionUsageSummary = useMemo(
+    () => deriveSessionUsage(conversationTimeline.items),
+    [conversationTimeline],
+  );
+  const runCompletionSummary = useMemo(
+    () =>
+      sessionDetailViewModel
+        ? buildRunCompletionSummary({
+            status: sessionDetailViewModel.status,
+            capabilityMode: sessionDetailViewModel.capabilityMode,
+            error: sessionDetailViewModel.error,
+            runStartedAt: currentArtifactRun?.started_at ?? null,
+            runCompletedAt: currentArtifactRun?.completed_at ?? null,
+            usage: sessionUsageSummary,
+            changeSnapshot,
+            artifactVersions: displaySessionProjection?.artifactVersions ?? [],
+          })
+        : null,
+    [
+      sessionDetailViewModel,
+      currentArtifactRun,
+      sessionUsageSummary,
+      changeSnapshot,
+      displaySessionProjection,
+    ],
+  );
+  const openSessionCanvasTab = useCallback((tab: SessionCanvasTabId) => {
+    setReviewTab(tab);
+    setReviewPanelOpen(true);
+    // Bump the reveal key so SessionWorkspace surfaces the canvas pane even
+    // when it is currently collapsed to the conversation surface.
+    setSessionCanvasRevealNonce((current) => current + 1);
+  }, []);
+  useEffect(() => {
+    setSessionCanvasRevealNonce(0);
+  }, [scopedConversationId]);
   const sessionActivityStructuredEvidence = useMemo(() => {
     const summary = sessionProjection?.evidenceSummary;
     if (
@@ -8046,6 +8198,50 @@ export function App() {
     setRunInputReferences((current) => toggleRunInputReference(current, reference));
   }, []);
 
+  const handleAddChangeComment = useCallback(
+    (comment: ChangeReviewComment) => {
+      const conversationId = changeSnapshot?.conversation_id;
+      if (!conversationId) return;
+      setChangeCommentsByConversation((current) =>
+        addChangeComment(current, conversationId, comment),
+      );
+    },
+    [changeSnapshot?.conversation_id],
+  );
+
+  const handleRemoveChangeComment = useCallback(
+    (commentId: string) => {
+      const conversationId = changeSnapshot?.conversation_id;
+      if (!conversationId) return;
+      setChangeCommentsByConversation((current) =>
+        removeChangeComment(current, conversationId, commentId),
+      );
+    },
+    [changeSnapshot?.conversation_id],
+  );
+
+  // P1-4: batch every pending inline comment into one agent-bound message.
+  // The text carries quoted anchors (path#L12 / path#L-9) so the agent can
+  // resolve each commented location even where structured references are not
+  // carried on the wire; the deduplicated code-range references ride the
+  // run-input payload exactly like composer's toggled references.
+  const handleSendChangeComments = useCallback(
+    (comments: ChangeReviewComment[]) => {
+      const conversationId = changeSnapshot?.conversation_id;
+      if (!conversationId || comments.length === 0) return;
+      sendChatMessage(
+        buildChangeCommentsMessage(comments),
+        [],
+        undefined,
+        referencesForChangeComments(comments),
+      );
+      setChangeCommentsByConversation((current) =>
+        clearChangeComments(current, conversationId),
+      );
+    },
+    [changeSnapshot?.conversation_id, sendChatMessage],
+  );
+
   const handleChatRefresh = useCallback(() => {
     if (selectedConversation) {
       void loadConversationTimeline(selectedConversation, config.projectId);
@@ -8238,10 +8434,26 @@ export function App() {
       onSend={sendChatMessage}
       onRegenerateConversationSummary={regenerateConversationSummary}
       onStopResponse={socket.stopAgentResponse}
+      onSteerResponse={(request) =>
+        socket.sendSteerMessage({
+          conversationId: request.conversationId,
+          projectId: config.projectId,
+          message: request.text,
+          messageId: request.messageId,
+        })
+      }
       onRefresh={handleChatRefresh}
       onLoadEarlier={loadEarlierTimeline}
-      onRespondToHitl={respondToHitl}
+      onRespondToHitl={respondToHitlWithSteering}
       respondableHitlRequestIds={respondableHitlRequestIds}
+      permissionPreset={selectedConversation ? permissionPreset : undefined}
+      permissionPresetFullAccessAcknowledged={fullAccessWarningAcknowledged}
+      onPermissionPresetChange={
+        selectedConversation ? handlePermissionPresetChange : undefined
+      }
+      onAcknowledgeFullAccessWarning={
+        selectedConversation ? handleAcknowledgeFullAccessWarning : undefined
+      }
       authorityNotice={sessionAuthorityNotice}
       onAuthorityAction={
         sessionProjectionState.status === 'error' ? invalidateSessionAuthority : undefined
@@ -8256,6 +8468,8 @@ export function App() {
       onRuntimeTargetChange={handleChatRuntimeTargetChange}
       onOpenMCPAppResult={openMCPAppResult}
       onOpenCommands={openCommandPalette}
+      runCompletionSummary={selectedConversation ? runCompletionSummary : null}
+      onOpenSessionCanvasTab={openSessionCanvasTab}
     />
   );
 
@@ -8347,6 +8561,7 @@ export function App() {
     }
     selectConversation(item.project_id, workspaceId, conversation, 'chat');
   };
+  openMyWorkSessionRef.current = (item) => void openMyWorkSession(item);
 
   const openAgentSession = async (conversationId: string) => {
     const projectId = config.projectId;
@@ -8566,6 +8781,13 @@ export function App() {
       changeSnapshotLoading={changeSnapshotLoading}
       changeSnapshotError={changeSnapshotError}
       changeReferences={runInputReferences}
+      changeComments={commentsForConversation(
+        changeCommentsByConversation,
+        changeSnapshot?.conversation_id,
+      )}
+      onAddChangeComment={handleAddChangeComment}
+      onRemoveChangeComment={handleRemoveChangeComment}
+      onSendChangeComments={handleSendChangeComments}
       artifactActionPending={artifactActionPending}
       terminal={terminal}
       terminalBinding={terminalBinding}
@@ -8596,7 +8818,7 @@ export function App() {
       }
       currentRunId={sessionDetailViewModel?.runId ?? null}
       sessionViewModel={sessionDetailViewModel}
-      onRespondToHitl={respondToHitl}
+      onRespondToHitl={respondToHitlWithSteering}
       onApprovePlan={approveSessionPlan}
       onResumeTaskListReview={resumeSessionTaskListReview}
       onArtifactAction={handleArtifactAction}
@@ -8862,11 +9084,14 @@ export function App() {
                     setReviewPanelOpen(true);
                   }}
                   canvasRevealKey={
-                    artifactCanvasState.openRevision > 0 || mcpAppCanvasState.openRevision > 0
+                    artifactCanvasState.openRevision > 0 ||
+                    mcpAppCanvasState.openRevision > 0 ||
+                    sessionCanvasRevealNonce > 0
                       ? [
                           scopedConversationId,
                           `artifact:${artifactCanvasState.openRevision}`,
                           `app:${mcpAppCanvasState.openRevision}`,
+                          `canvas:${sessionCanvasRevealNonce}`,
                         ].join(':')
                       : null
                   }
@@ -9109,6 +9334,10 @@ function WorkspaceReviewPanel({
   changeSnapshotLoading,
   changeSnapshotError,
   changeReferences,
+  changeComments,
+  onAddChangeComment,
+  onRemoveChangeComment,
+  onSendChangeComments,
   artifactActionPending,
   terminal,
   terminalBinding,
@@ -9165,6 +9394,10 @@ function WorkspaceReviewPanel({
   changeSnapshotLoading: boolean;
   changeSnapshotError: string | null;
   changeReferences: CodeRangeReference[];
+  changeComments: ChangeReviewComment[];
+  onAddChangeComment: (comment: ChangeReviewComment) => void;
+  onRemoveChangeComment: (commentId: string) => void;
+  onSendChangeComments: (comments: ChangeReviewComment[]) => void;
   artifactActionPending: { versionId: string; action: ArtifactVersionAction } | null;
   terminal: TerminalServiceResponse | null;
   terminalBinding: TerminalBindingState;
@@ -9677,8 +9910,12 @@ function WorkspaceReviewPanel({
             loading={changeSnapshotLoading}
             error={changeSnapshotError}
             references={changeReferences}
+            comments={changeComments}
             onRefresh={onRefreshChanges}
             onToggleReference={onToggleChangeReference}
+            onAddComment={onAddChangeComment}
+            onRemoveComment={onRemoveChangeComment}
+            onSendComments={onSendChangeComments}
             decision={
               reviewDecision.canAct && approvalRequest ? (
                 <ReviewDecisionPanel

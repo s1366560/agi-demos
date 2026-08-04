@@ -398,6 +398,12 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .managed-resource-spin {
+    animation: none;
+  }
+}
+
 .managed-resource-detail-scroll {
   min-height: 0;
   overflow-y: auto;

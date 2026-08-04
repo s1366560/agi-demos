@@ -78,3 +78,9 @@
 @keyframes invitation-acceptance-spin {
   to { transform: rotate(360deg); }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .invitation-acceptance-spinner {
+    animation: none;
+  }
+}

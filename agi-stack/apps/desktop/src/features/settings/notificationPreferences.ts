@@ -2,9 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type NotificationDelivery = 'desktop_and_in_app' | 'desktop' | 'in_app';
 
+// Mirrors the VS Code chat.notifyWindowOn* three-state policy.
+export type CompletionNotificationMode = 'off' | 'window_not_focused' | 'always';
+
 export type NotificationPreferences = Readonly<{
   reviewAlerts: boolean;
   delivery: NotificationDelivery;
+  completionMode: CompletionNotificationMode;
   quietHours: Readonly<{
     enabled: boolean;
     start: string;
@@ -18,6 +22,7 @@ type StoredNotificationPreferences = Readonly<{
   version: 1;
   reviewAlerts: boolean;
   delivery: NotificationDelivery;
+  completionMode: CompletionNotificationMode;
   quietHours: NotificationPreferences['quietHours'];
 }>;
 
@@ -27,6 +32,7 @@ export const NOTIFICATION_PREFERENCES_STORAGE_KEY =
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = Object.freeze({
   reviewAlerts: true,
   delivery: 'desktop_and_in_app',
+  completionMode: 'window_not_focused',
   quietHours: Object.freeze({
     enabled: false,
     start: '22:00',
@@ -38,6 +44,11 @@ const DELIVERY_VALUES = new Set<NotificationDelivery>([
   'desktop_and_in_app',
   'desktop',
   'in_app',
+]);
+const COMPLETION_MODE_VALUES = new Set<CompletionNotificationMode>([
+  'off',
+  'window_not_focused',
+  'always',
 ]);
 const TIME_VALUE_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
@@ -52,6 +63,11 @@ export function parseNotificationPreferences(raw: string | null): NotificationPr
       typeof value.reviewAlerts !== 'boolean' ||
       typeof value.delivery !== 'string' ||
       !DELIVERY_VALUES.has(value.delivery as NotificationDelivery) ||
+      // completionMode arrived after v1 shipped: tolerate its absence, fail
+      // closed on an invalid value.
+      (value.completionMode !== undefined &&
+        (typeof value.completionMode !== 'string' ||
+          !COMPLETION_MODE_VALUES.has(value.completionMode as CompletionNotificationMode))) ||
       !isRecord(value.quietHours) ||
       typeof value.quietHours.enabled !== 'boolean' ||
       typeof value.quietHours.start !== 'string' ||
@@ -64,6 +80,9 @@ export function parseNotificationPreferences(raw: string | null): NotificationPr
     return {
       reviewAlerts: value.reviewAlerts,
       delivery: value.delivery as NotificationDelivery,
+      completionMode:
+        (value.completionMode as CompletionNotificationMode | undefined) ??
+        DEFAULT_NOTIFICATION_PREFERENCES.completionMode,
       quietHours: {
         enabled: value.quietHours.enabled,
         start: value.quietHours.start,
@@ -153,6 +172,7 @@ function cloneNotificationPreferences(
   return {
     reviewAlerts: preferences.reviewAlerts,
     delivery: preferences.delivery,
+    completionMode: preferences.completionMode,
     quietHours: { ...preferences.quietHours },
   };
 }

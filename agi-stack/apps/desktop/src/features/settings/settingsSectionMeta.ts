@@ -5,6 +5,7 @@ import {
   FontStyleIcon,
   GearIcon,
   IdCardIcon,
+  KeyboardIcon,
   MagicWandIcon,
   PersonIcon,
 } from '@radix-ui/react-icons';
@@ -41,6 +42,11 @@ export const settingsSectionMeta = {
     label: 'settings.notifications',
     description: 'settings.notificationsDescription',
     Icon: BellIcon,
+  },
+  shortcuts: {
+    label: 'settings.shortcuts',
+    description: 'settings.shortcutsDescription',
+    Icon: KeyboardIcon,
   },
   models: {
     label: 'settings.models',

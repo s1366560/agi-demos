@@ -8,11 +8,15 @@
 
 .current-activity-headline-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
   align-items: center;
   gap: 8px;
   min-height: 30px;
   padding: 4px 10px;
+}
+
+.current-activity-headline[data-stalled='true'] {
+  border-color: color-mix(in srgb, var(--desktop-amber) 45%, var(--desktop-border-soft));
 }
 
 .current-activity-dot {
@@ -21,6 +25,44 @@
   border-radius: 50%;
   background: var(--desktop-cyan);
   animation: current-activity-pulse 1.2s ease-in-out infinite;
+}
+
+.current-activity-headline[data-stalled='true'] .current-activity-dot {
+  background: var(--desktop-amber);
+}
+
+.current-activity-usage {
+  flex: none;
+  overflow: hidden;
+  color: var(--desktop-muted);
+  font-family: Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.current-activity-stalled {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 10px 5px;
+  border-top: 1px solid var(--desktop-border-amber);
+  color: var(--desktop-amber);
+  font-size: 10px;
+}
+
+.current-activity-stalled-clock {
+  flex: none;
+  font-family: Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.current-activity-stalled-hint {
+  overflow: hidden;
+  color: var(--desktop-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .current-activity-label {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ChevronDownIcon, ChevronRightIcon } from '@radix-ui/react-icons';
 import { Button, Flex, Text, TextArea } from '@radix-ui/themes';
 
 import { useI18n } from '../../i18n';
@@ -20,9 +21,11 @@ import {
   hitlDecisionView,
   hitlEnvVarView,
   hitlRequestExpiry,
+  permissionParameterPreview,
   toggleDecisionSelection,
 } from './hitlResponseCardModel';
 import { hitlResponsePresentation } from './hitlResponseEventModel';
+import { permissionDenialResponseData } from './permissionPresetModel';
 import {
   booleanPayloadField,
   timelineHitlOptions,
@@ -61,6 +64,9 @@ export function HitlResponseCard({
       decisionView.options.length === 0,
   );
   const [saveEnvironmentValues, setSaveEnvironmentValues] = useState(false);
+  const [denyFeedbackOpen, setDenyFeedbackOpen] = useState(false);
+  const [denyFeedback, setDenyFeedback] = useState('');
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -77,6 +83,8 @@ export function HitlResponseCard({
   const question = timelineHitlQuestion(item, t);
   const approvalValidation = approvalRequest ? validateApprovalRequest(approvalRequest) : null;
   const responsePresentation = hitlResponsePresentation(item, hitlType);
+  const parameterPreview =
+    hitlType === 'permission' ? permissionParameterPreview(item) : null;
 
   useEffect(() => {
     if (answered || expiry.state !== 'active') return;
@@ -232,49 +240,107 @@ export function HitlResponseCard({
         </Text>
       ) : null}
 
+      {hitlType === 'permission' && parameterPreview ? (
+        <div className="timeline-approval-params">
+          <button
+            type="button"
+            className="timeline-approval-params-toggle"
+            aria-expanded={detailsExpanded}
+            onClick={() => setDetailsExpanded((current) => !current)}
+          >
+            {detailsExpanded ? (
+              <ChevronDownIcon aria-hidden="true" />
+            ) : (
+              <ChevronRightIcon aria-hidden="true" />
+            )}
+            {t('chat.permissionDetails')}
+          </button>
+          {detailsExpanded ? (
+            <pre className="timeline-approval-params-block">{parameterPreview}</pre>
+          ) : null}
+        </div>
+      ) : null}
+
       {!answered && hitlType === 'permission' ? (
-        <Flex gap="2" wrap="wrap">
-          <Button
-            size="1"
-            color="green"
-            disabled={responseDisabled || !requestId || busy || !approvalValidation?.canApprove}
-            loading={busy}
-            onClick={() => void submit({ action: 'allow', granted: true, scope: 'once' })}
-          >
-            {t('chat.allowOnce')}
-          </Button>
-          <Button
-            size="1"
-            color="green"
-            variant="soft"
-            disabled={
-              responseDisabled ||
-              !requestId ||
-              busy ||
-              !approvalValidation?.canApprove ||
-              !(
-                approvalRequest?.permission?.allow_remember ||
-                approvalRequest?.decision?.action?.name
-              )
-            }
-            onClick={() =>
-              void submit({ action: 'allow_always', granted: true, scope: 'workspace_tool' })
-            }
-          >
-            {t('chat.allowAlways')}
-          </Button>
-          <Button
-            size="1"
-            color="red"
-            variant="soft"
-            disabled={responseDisabled || !requestId || busy}
-            onClick={() =>
-              void submit({ action: 'deny', granted: false, scope: 'once' })
-            }
-          >
-            {t('chat.deny')}
-          </Button>
-        </Flex>
+        <>
+          <Flex gap="2" wrap="wrap">
+            <Button
+              size="1"
+              color="green"
+              disabled={responseDisabled || !requestId || busy || !approvalValidation?.canApprove}
+              loading={busy}
+              onClick={() => void submit({ action: 'allow', granted: true, scope: 'once' })}
+            >
+              {t('chat.allowOnce')}
+            </Button>
+            <Button
+              size="1"
+              color="green"
+              variant="soft"
+              disabled={
+                responseDisabled ||
+                !requestId ||
+                busy ||
+                !approvalValidation?.canApprove ||
+                !(
+                  approvalRequest?.permission?.allow_remember ||
+                  approvalRequest?.decision?.action?.name
+                )
+              }
+              onClick={() =>
+                void submit({ action: 'allow_always', granted: true, scope: 'workspace_tool' })
+              }
+            >
+              {t('chat.allowAlways')}
+            </Button>
+            <Button
+              size="1"
+              color="red"
+              variant="soft"
+              disabled={responseDisabled || !requestId || busy}
+              aria-expanded={denyFeedbackOpen}
+              onClick={() => setDenyFeedbackOpen((current) => !current)}
+            >
+              {t('chat.deny')}
+            </Button>
+          </Flex>
+          {denyFeedbackOpen ? (
+            <div className="timeline-deny-feedback">
+              <TextArea
+                size="1"
+                autoFocus
+                value={denyFeedback}
+                disabled={busy}
+                placeholder={t('chat.denyFeedbackPlaceholder')}
+                onChange={(event) => setDenyFeedback(event.currentTarget.value)}
+              />
+              <Text size="1" color="gray">
+                {t('chat.denyFeedbackHint')}
+              </Text>
+              <Flex gap="2" wrap="wrap">
+                <Button
+                  size="1"
+                  color="red"
+                  disabled={busy || !denyFeedback.trim()}
+                  loading={busy}
+                  onClick={() => void submit(permissionDenialResponseData(denyFeedback))}
+                >
+                  {t('chat.denyWithFeedback')}
+                </Button>
+                <Button
+                  size="1"
+                  color="gray"
+                  variant="soft"
+                  disabled={busy}
+                  loading={busy}
+                  onClick={() => void submit(permissionDenialResponseData())}
+                >
+                  {t('chat.denyWithoutFeedback')}
+                </Button>
+              </Flex>
+            </div>
+          ) : null}
+        </>
       ) : null}
 
       {!answered && hitlType === 'env_var' ? (

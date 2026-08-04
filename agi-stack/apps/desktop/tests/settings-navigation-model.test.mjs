@@ -15,6 +15,7 @@ const labels = {
   general: ['General', 'Language and region'],
   appearance: ['Appearance', 'Theme and density'],
   notifications: ['Notifications', 'Review alerts'],
+  shortcuts: ['Keyboard shortcuts', 'Search by name or keypress'],
   models: ['Models', 'Providers and routing'],
   mcp: ['MCP servers', 'Tool servers and credentials'],
   skills: ['Skills', 'Reusable instructions'],
@@ -26,7 +27,7 @@ const labels = {
 test('settings information architecture matches the approved prototype order', () => {
   assert.deepEqual(SETTINGS_GROUPS, [
     { id: 'account_context', sections: ['account', 'workspace'] },
-    { id: 'preferences', sections: ['general', 'appearance', 'notifications'] },
+    { id: 'preferences', sections: ['general', 'appearance', 'notifications', 'shortcuts'] },
     {
       id: 'ai_resources',
       sections: ['models', 'mcp', 'skills', 'plugins', 'agents', 'subagents'],
@@ -37,6 +38,7 @@ test('settings information architecture matches the approved prototype order', (
 test('settings search only matches localized section labels and descriptions', () => {
   assert.deepEqual(filterSettingsSections('routing', labels), ['models']);
   assert.deepEqual(filterSettingsSections('review', labels), ['notifications']);
+  assert.deepEqual(filterSettingsSections('keypress', labels), ['shortcuts']);
   assert.deepEqual(filterSettingsSections('workspace', labels), ['workspace']);
   assert.deepEqual(filterSettingsSections('missing', labels), []);
 });
@@ -48,6 +50,7 @@ test('empty settings search preserves the full section order', () => {
     'general',
     'appearance',
     'notifications',
+    'shortcuts',
     'models',
     'mcp',
     'skills',

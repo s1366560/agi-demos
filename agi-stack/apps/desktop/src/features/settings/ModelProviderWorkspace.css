@@ -231,6 +231,7 @@
 .model-provider-workspace .spin,
 .provider-dialog .spin { animation: provider-spin 900ms linear infinite; }
 @keyframes provider-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .model-provider-workspace .spin, .provider-dialog .spin { animation: none; } }
 
 .provider-model-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; }
 .provider-model-tools > label { display: flex; width: min(360px, 55%); height: 32px; align-items: center; gap: 6px; padding: 0 8px; color: var(--desktop-gray-6); background: var(--desktop-surface-3); border: 1px solid var(--desktop-border-18); border-radius: 5px; }

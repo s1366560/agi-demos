@@ -530,6 +530,12 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .desktop-search__loading span {
+    animation: none;
+  }
+}
+
 @media (max-width: 760px) {
   .desktop-search {
     padding: 20px 16px 32px;

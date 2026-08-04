@@ -50,6 +50,8 @@ import { buildSessionExecutionGraph } from '../features/session/sessionExecution
 import { buildSessionExecutionInsights } from '../features/session/sessionExecutionInsightsModel';
 import { buildSessionRuntimeInfrastructure } from '../features/session/sessionRuntimeInfrastructureModel';
 import { toggleRunInputReference } from '../features/session/sessionChangesModel';
+import { buildChangeCommentsMessage } from '../features/session/sessionChangesReviewModel';
+import type { ChangeReviewComment } from '../features/session/sessionChangesReviewModel';
 import { I18nProvider } from '../i18n';
 import type {
   AgentConversation,
@@ -2349,6 +2351,8 @@ function SessionSteeringQa() {
         : [];
   const [delivery, setDelivery] = useState<RunInputDelivery>('steer_now');
   const [references, setReferences] = useState<CodeRangeReference[]>([]);
+  const [changeComments, setChangeComments] = useState<ChangeReviewComment[]>([]);
+  const [sentChangeComments, setSentChangeComments] = useState<ChangeReviewComment[]>([]);
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([queuedInput]);
   const [model, setModel] = useState(
     modelOverrideEventsMode ? 'gpt-5.5-mini' : 'gpt-5.5',
@@ -2997,16 +3001,36 @@ function SessionSteeringQa() {
                 }
               />
             ) : (
-              <SessionChangesCanvas
-                snapshot={snapshot}
-                loading={false}
-                error={null}
-                references={references}
-                onRefresh={() => undefined}
-                onToggleReference={(reference) =>
-                  setReferences((current) => toggleRunInputReference(current, reference))
-                }
-              />
+              <>
+                <SessionChangesCanvas
+                  snapshot={snapshot}
+                  loading={false}
+                  error={null}
+                  references={references}
+                  comments={changeComments}
+                  onRefresh={() => undefined}
+                  onToggleReference={(reference) =>
+                    setReferences((current) => toggleRunInputReference(current, reference))
+                  }
+                  onAddComment={(comment) =>
+                    setChangeComments((current) => [...current, comment])
+                  }
+                  onRemoveComment={(commentId) =>
+                    setChangeComments((current) =>
+                      current.filter((comment) => comment.id !== commentId),
+                    )
+                  }
+                  onSendComments={(comments) => {
+                    setSentChangeComments(comments);
+                    setChangeComments([]);
+                  }}
+                />
+                {sentChangeComments.length > 0 ? (
+                  <p data-testid="change-comments-sent">
+                    {buildChangeCommentsMessage(sentChangeComments)}
+                  </p>
+                ) : null}
+              </>
             )}
           </div>
         </main>

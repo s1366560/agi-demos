@@ -23,6 +23,7 @@ const allowedCommands = new Set([
   'local_runtime_status',
   'local_runtime_configure',
   'request_microphone_access',
+  'focus_main_window',
 ]);
 
 async function invokeDesktopCommand<T = unknown>(
@@ -59,6 +60,10 @@ function openWebControlPlane({
   });
 }
 
+function focusMainWindow(): Promise<void> {
+  return invokeDesktopCommand('focus_main_window');
+}
+
 function onSidecarRecovered(listener: () => void): () => void {
   if (typeof listener !== 'function') {
     throw new Error('sidecar recovery listener is invalid');
@@ -76,6 +81,7 @@ contextBridge.exposeInMainWorld(
     captureCurrentDisplay,
     getCapabilities,
     openWebControlPlane,
+    focusMainWindow,
     events: Object.freeze({
       onSidecarRecovered,
     }),

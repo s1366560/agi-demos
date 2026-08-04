@@ -48,6 +48,7 @@ interface Window {
     captureCurrentDisplay?: () => Promise<DesktopDisplayCapture>;
     getCapabilities?: () => Promise<DesktopNativeCapabilitySnapshot>;
     openWebControlPlane?: (request: WebControlPlaneRequest) => Promise<void>;
+    focusMainWindow?: () => Promise<void>;
     core?: {
       invoke?: DesktopInvoke;
     };

@@ -12,6 +12,7 @@ import { useI18n } from '../../i18n';
 import type { AgentCapabilityMode, ProjectWorkItem } from '../../types';
 import {
   groupMyWorkDisplayItems,
+  myWorkCompletionPresentation,
   myWorkEffectiveGroup,
   type MyWorkDisplayGroup,
 } from './myWorkModel';
@@ -145,6 +146,7 @@ function InboxCard({
   const { t } = useI18n();
   const ModeIcon = item.capability_mode === 'code' ? CodeIcon : ActivityLogIcon;
   const statusTone = myWorkEffectiveGroup(item);
+  const completion = myWorkCompletionPresentation(item);
   const progress =
     typeof item.progress === 'number'
       ? Math.max(0, Math.min(100, item.progress))
@@ -159,6 +161,12 @@ function InboxCard({
       </header>
       <strong>{item.title}</strong>
       <p>{item.summary || t(`myWork.action.${item.required_action}`)}</p>
+      {completion ? (
+        <p className={`my-work-inbox-outcome tone-${completion.tone}`}>
+          <strong>{t(completion.outcomeLabelKey)}</strong>
+          {completion.detail ? <span title={completion.detail}>{completion.detail}</span> : null}
+        </p>
+      ) : null}
       <footer>
         <span className={`my-work-inbox-progress ${progress === null ? 'indeterminate' : ''}`}>
           <i style={progress === null ? undefined : { width: `${progress}%` }} />

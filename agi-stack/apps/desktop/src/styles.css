@@ -5149,6 +5149,62 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   display: none;
 }
 
+.timeline-approval-params {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.timeline-approval-params-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--desktop-faint);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.timeline-approval-params-toggle:hover {
+  color: var(--desktop-text);
+}
+
+.timeline-approval-params-block {
+  overflow: auto;
+  max-height: 220px;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid rgba(var(--desktop-slate-rgb), 0.14);
+  border-radius: 6px;
+  background: rgba(var(--desktop-slate-rgb), 0.045);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.timeline-deny-feedback {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgba(var(--desktop-slate-rgb), 0.14);
+  border-radius: 6px;
+  background: rgba(var(--desktop-slate-rgb), 0.045);
+}
+
+.permission-preset-popover button > span {
+  display: grid;
+  gap: 2px;
+}
+
+.permission-preset-popover small {
+  color: var(--desktop-faint);
+  font-size: 10px;
+}
+
 .tool-file-metadata {
   display: grid;
   gap: 6px;

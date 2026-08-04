@@ -8,12 +8,15 @@ import type { AgentTaskSignal } from './agentTaskSignalModel';
 
 export type ComposeAheadPromptStatus = 'queued' | 'dispatching' | 'failed';
 
+export type ComposeAheadIntent = 'queue' | 'steer';
+
 export type ComposeAheadPrompt = Readonly<{
   id: string;
   text: string;
   contextItems: readonly ComposerContextItem[];
   createdAt: number;
   status: ComposeAheadPromptStatus;
+  intent: ComposeAheadIntent;
 }>;
 
 export type ComposeAheadQueueStore = Readonly<{
@@ -21,10 +24,16 @@ export type ComposeAheadQueueStore = Readonly<{
   subscribe: (listener: () => void) => () => void;
   enqueue: (
     scope: string,
-    prompt: Pick<ComposeAheadPrompt, 'text' | 'contextItems'>,
+    prompt: Pick<ComposeAheadPrompt, 'text' | 'contextItems'> & {
+      intent?: ComposeAheadIntent;
+    },
   ) => ComposeAheadPrompt;
   remove: (scope: string, promptId: string) => boolean;
   claimHead: (scope: string) => ComposeAheadPrompt | undefined;
+  claimNext: (scope: string, streaming: boolean) => ComposeAheadPrompt | undefined;
+  setIntent: (scope: string, promptId: string, intent: ComposeAheadIntent) => boolean;
+  move: (scope: string, promptId: string, toIndex: number) => boolean;
+  applySteerFallback: (scope: string, promptId: string) => boolean;
   accept: (scope: string, promptId: string) => boolean;
   fail: (scope: string, promptId: string) => boolean;
   retry: (scope: string, promptId: string) => boolean;
@@ -105,6 +114,7 @@ export function createComposeAheadQueueStore(
         contextItems: Object.freeze(prompt.contextItems.map(cloneContextItem)),
         createdAt: now(),
         status: 'queued',
+        intent: prompt.intent ?? 'queue',
       });
       replaceQueue(scope, [
         ...(queues.get(scope) ?? EMPTY_COMPOSE_AHEAD_QUEUE),
@@ -120,6 +130,37 @@ export function createComposeAheadQueueStore(
       updatePrompt(scope, head.id, () => claimed);
       return claimed;
     },
+    claimNext: (scope, streaming) => {
+      const candidate = nextComposeAheadDispatch(queues.get(scope), streaming);
+      if (!candidate) return undefined;
+      const claimed = Object.freeze({ ...candidate, status: 'dispatching' as const });
+      updatePrompt(scope, candidate.id, () => claimed);
+      return claimed;
+    },
+    setIntent: (scope, promptId, intent) =>
+      updatePrompt(scope, promptId, (prompt) =>
+        prompt.status !== 'dispatching' && prompt.intent !== intent
+          ? Object.freeze({ ...prompt, intent })
+          : prompt,
+      ),
+    move: (scope, promptId, toIndex) => {
+      const current = queues.get(scope);
+      if (!current) return false;
+      const fromIndex = current.findIndex((prompt) => prompt.id === promptId);
+      if (fromIndex < 0) return false;
+      const clampedIndex = Math.min(Math.max(Math.trunc(toIndex), 0), current.length - 1);
+      if (clampedIndex === fromIndex) return false;
+      const next = current.filter((_, index) => index !== fromIndex);
+      next.splice(clampedIndex, 0, current[fromIndex]);
+      replaceQueue(scope, next);
+      return true;
+    },
+    applySteerFallback: (scope, promptId) =>
+      updatePrompt(scope, promptId, (prompt) =>
+        prompt.status === 'dispatching' && prompt.intent === 'steer'
+          ? Object.freeze({ ...prompt, status: 'queued' as const, intent: 'queue' as const })
+          : prompt,
+      ),
     accept: (scope, promptId) => updatePrompt(scope, promptId, () => null),
     fail: (scope, promptId) =>
       updatePrompt(scope, promptId, (prompt) =>
@@ -246,4 +287,64 @@ function cloneContextItem(item: ComposerContextItem): ComposerContextItem {
     ...item,
     ...(item.metadata ? { metadata: { ...item.metadata } } : {}),
   };
+}
+
+/**
+ * Pick the next prompt to dispatch. Steer-intent prompts are prioritized: while
+ * the run is streaming only steer prompts are dispatchable (they are injected at
+ * the next turn boundary); once the run is idle, steer prompts flush before
+ * plain queued prompts, each group in queue order.
+ */
+export function nextComposeAheadDispatch(
+  queue: readonly ComposeAheadPrompt[] | undefined,
+  streaming: boolean,
+): ComposeAheadPrompt | undefined {
+  if (!queue?.length) return undefined;
+  const firstSteer = queue.find(
+    (prompt) => prompt.status === 'queued' && prompt.intent === 'steer',
+  );
+  if (streaming) return firstSteer;
+  return firstSteer ?? queue.find((prompt) => prompt.status === 'queued');
+}
+
+export const COMPOSE_AHEAD_DEFAULT_INTENT_STORAGE_KEY =
+  'agistack.desktop.compose-ahead-default-intent:v1';
+
+type ComposeAheadDefaultIntentStorage = Pick<Storage, 'getItem' | 'setItem'>;
+
+export function parseComposeAheadDefaultIntent(raw: string | null): ComposeAheadIntent {
+  return raw === 'steer' ? 'steer' : 'queue';
+}
+
+export function readComposeAheadDefaultIntent(
+  storage: ComposeAheadDefaultIntentStorage | null = composeAheadBrowserStorage(),
+): ComposeAheadIntent {
+  if (!storage) return 'queue';
+  try {
+    return parseComposeAheadDefaultIntent(
+      storage.getItem(COMPOSE_AHEAD_DEFAULT_INTENT_STORAGE_KEY),
+    );
+  } catch {
+    return 'queue';
+  }
+}
+
+export function writeComposeAheadDefaultIntent(
+  intent: ComposeAheadIntent,
+  storage: ComposeAheadDefaultIntentStorage | null = composeAheadBrowserStorage(),
+): void {
+  if (!storage) return;
+  try {
+    storage.setItem(COMPOSE_AHEAD_DEFAULT_INTENT_STORAGE_KEY, intent);
+  } catch {
+    // The in-memory default remains authoritative when storage is unavailable.
+  }
+}
+
+function composeAheadBrowserStorage(): ComposeAheadDefaultIntentStorage | null {
+  try {
+    return typeof window === 'undefined' ? null : window.localStorage;
+  } catch {
+    return null;
+  }
 }

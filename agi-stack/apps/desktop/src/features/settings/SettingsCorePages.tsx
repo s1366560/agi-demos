@@ -24,6 +24,7 @@ import type {
 } from '../../types';
 import { SettingsState } from './ManagedResourceViews';
 import {
+  type CompletionNotificationMode,
   type NotificationDelivery,
   useNotificationPreferences,
 } from './notificationPreferences';
@@ -697,6 +698,23 @@ function NotificationPreferenceControls() {
       label: t('settings.deliveryInAppOnly'),
     },
   ];
+  const completionModeOptions: Array<{
+    value: CompletionNotificationMode;
+    label: string;
+  }> = [
+    {
+      value: 'off',
+      label: t('settings.completionModeOff'),
+    },
+    {
+      value: 'window_not_focused',
+      label: t('settings.completionModeWindowNotFocused'),
+    },
+    {
+      value: 'always',
+      label: t('settings.completionModeAlways'),
+    },
+  ];
 
   return (
     <section className="settings-panel settings-preference-summary">
@@ -736,6 +754,30 @@ function NotificationPreferenceControls() {
               >
                 {option.label}
                 {preferences.delivery === option.value ? <CheckCircledIcon /> : null}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+        <fieldset className="settings-delivery-options">
+          <legend>{t('settings.completionNotifications')}</legend>
+          <p>{t('settings.completionNotificationsDescription')}</p>
+          <div role="radiogroup" aria-label={t('settings.completionNotificationsGroupLabel')}>
+            {completionModeOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={preferences.completionMode === option.value}
+                className={preferences.completionMode === option.value ? 'active' : ''}
+                onClick={() =>
+                  setPreferences((current) => ({
+                    ...current,
+                    completionMode: option.value,
+                  }))
+                }
+              >
+                {option.label}
+                {preferences.completionMode === option.value ? <CheckCircledIcon /> : null}
               </button>
             ))}
           </div>

@@ -20,6 +20,9 @@ const {
 const { KeyboardShortcutsPanel } = require(
   '/tmp/agistack-desktop-test-dist/src/features/navigation/KeyboardShortcutsDialog.js'
 );
+const { ShortcutSettingsPage } = require(
+  '/tmp/agistack-desktop-test-dist/src/features/settings/ShortcutSettingsPage.js'
+);
 
 const readSource = (path) =>
   readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8');
@@ -202,4 +205,31 @@ test('shortcuts dialog styles use desktop tokens and honor reduced motion', () =
 test('model module stays free of React and hardcoded user copy', () => {
   assert.doesNotMatch(modelSource, /from 'react'/);
   assert.doesNotMatch(modelSource, /label: '/);
+});
+
+function renderShortcutSettingsPage(platform = 'other') {
+  return renderToStaticMarkup(
+    React.createElement(
+      I18nProvider,
+      null,
+      React.createElement(ShortcutSettingsPage, { platform }),
+    ),
+  );
+}
+
+test('shortcut settings page renders the searchable catalog from the shared model', () => {
+  const markup = withStoredLocale('en', () => renderShortcutSettingsPage('other'));
+  assert.match(markup, /Keyboard shortcuts/);
+  assert.match(markup, /Search shortcuts or press a key combination/);
+  assert.match(markup, /Open the command palette/);
+  assert.match(markup, /<kbd class="shortcuts-kbd">Ctrl<\/kbd><kbd class="shortcuts-kbd">K<\/kbd>/);
+  assert.match(markup, /per-user remapping is planned as a follow-up/);
+  assert.ok((markup.match(/shortcuts-row__label/g) ?? []).length >= KEYBOARD_SHORTCUTS.length);
+});
+
+test('shortcut settings page renders localized zh-CN copy', () => {
+  const markup = withStoredLocale('zh-CN', () => renderShortcutSettingsPage('other'));
+  assert.match(markup, /搜索快捷键，或直接按下组合键/);
+  assert.match(markup, /打开命令面板/);
+  assert.match(markup, /快捷键目录/);
 });

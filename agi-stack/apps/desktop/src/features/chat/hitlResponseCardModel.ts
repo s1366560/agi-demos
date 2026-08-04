@@ -224,6 +224,44 @@ export function buildEnvVarResponse(
   return { values: declaredValues, save: save && view.allowSave };
 }
 
+/**
+ * Structured parameter preview for permission cards (P1-2). The backend
+ * emits the tool input under `details` (`{tool, input}`) on the HITL record
+ * and under `metadata.input` on the live `permission_asked` stream event, so
+ * the preview reads whichever shape the timeline item carries. Read-only:
+ * the permission response contract (`granted`/`action`/`scope`/`feedback`)
+ * has no field for edited parameters.
+ */
+export function permissionParameterPreview(item: AgentTimelineItem): string | null {
+  const payload = recordValue(item.payload);
+  if (!payload) return null;
+  const metadata = recordValue(payload.metadata);
+  const details = recordValue(payload.details);
+  const structured =
+    firstRecord(details?.input, metadata?.input, payload.input, payload.arguments) ?? details;
+  if (structured && Object.keys(structured).length > 0) {
+    return formatPreviewValue(structured);
+  }
+  const command = firstString(payload.command, payload.cmd);
+  return command ?? null;
+}
+
+function firstRecord(...values: unknown[]): Record<string, unknown> | null {
+  for (const value of values) {
+    const record = recordValue(value);
+    if (record && Object.keys(record).length > 0) return record;
+  }
+  return null;
+}
+
+function formatPreviewValue(value: Record<string, unknown>): string {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return Object.keys(value).join(', ');
+  }
+}
+
 export function hitlRequestExpiry(
   item: AgentTimelineItem,
   approvalRequest: DesktopApprovalRequest | undefined,

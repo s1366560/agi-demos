@@ -38,6 +38,7 @@ import {
 import { ModelProviderWorkspace } from './ModelProviderWorkspace';
 import { MCPServerSettingsPage } from './MCPServerSettingsPage';
 import { SettingsManagementDialogs } from './SettingsManagementDialogs';
+import { ShortcutSettingsPage } from './ShortcutSettingsPage';
 import { providerManagementAllowed } from './providerManagementModel';
 import {
   AccountSettingsPage,
@@ -394,6 +395,7 @@ export function SettingsWindow({
       general: [t(sectionMeta.general.label), t(sectionMeta.general.description)],
       appearance: [t(sectionMeta.appearance.label), t(sectionMeta.appearance.description)],
       notifications: [t(sectionMeta.notifications.label), t(sectionMeta.notifications.description)],
+      shortcuts: [t(sectionMeta.shortcuts.label), t(sectionMeta.shortcuts.description)],
       models: [t(sectionMeta.models.label), t(sectionMeta.models.description)],
       skills: [t(sectionMeta.skills.label), t(sectionMeta.skills.description)],
       plugins: [t(sectionMeta.plugins.label), t(sectionMeta.plugins.description)],
@@ -601,6 +603,7 @@ export function SettingsWindow({
               {section === 'appearance' || section === 'notifications' ? (
                 <PreferenceSummaryPage section={section} />
               ) : null}
+              {section === 'shortcuts' ? <ShortcutSettingsPage /> : null}
 
               {section === 'connection' ? (
                 <SettingsPage

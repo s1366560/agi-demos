@@ -258,6 +258,7 @@ test('notification preferences use a versioned storage contract with safe defaul
   assert.deepEqual(DEFAULT_NOTIFICATION_PREFERENCES, {
     reviewAlerts: true,
     delivery: 'desktop_and_in_app',
+    completionMode: 'window_not_focused',
     quietHours: {
       enabled: false,
       start: '22:00',
@@ -277,6 +278,7 @@ test('notification preferences use a versioned storage contract with safe defaul
     {
       reviewAlerts: false,
       delivery: 'in_app',
+      completionMode: 'window_not_focused',
       quietHours: { enabled: true, start: '21:30', end: '07:15' },
     }
   );
@@ -311,6 +313,7 @@ test('notification preference persistence reads and writes the complete immutabl
   const next = {
     reviewAlerts: false,
     delivery: 'desktop',
+    completionMode: 'always',
     quietHours: { enabled: true, start: '23:00', end: '06:30' },
   };
 
@@ -359,9 +362,10 @@ test('notification settings render persisted switches, delivery choices, and qui
     assert.equal((markup.match(/role="switch"/g) || []).length, 2);
     assert.ok(markup.includes('aria-checked="false"'));
     assert.ok(markup.includes('role="radiogroup"'));
-    assert.equal((markup.match(/role="radio"/g) || []).length, 3);
+    assert.equal((markup.match(/role="radio"/g) || []).length, 6);
     assert.ok(markup.includes('In-app only'));
-    assert.equal((markup.match(/aria-checked="true"/g) || []).length, 2);
+    assert.ok(markup.includes('When the window is not focused'));
+    assert.equal((markup.match(/aria-checked="true"/g) || []).length, 3);
     assert.match(markup, /type="time"[^>]*value="21:30"/);
     assert.match(markup, /type="time"[^>]*value="07:15"/);
   } finally {

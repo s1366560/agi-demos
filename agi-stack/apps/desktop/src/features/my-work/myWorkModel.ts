@@ -85,6 +85,36 @@ export function myWorkEffectiveGroup(
   return item.group;
 }
 
+export type MyWorkCompletionPresentation = {
+  outcomeLabelKey: string;
+  tone: 'success' | 'danger' | 'warning';
+  detail: string | null;
+};
+
+/**
+ * Mini completion summary for Ready-review queue cards, so the queue stays
+ * scannable without opening each thread. Only present for items whose
+ * effective group is ready_review; detail carries the failure reason when the
+ * run did not complete cleanly.
+ */
+export function myWorkCompletionPresentation(
+  item: Pick<ProjectWorkItem, 'group' | 'status' | 'error'>,
+): MyWorkCompletionPresentation | null {
+  if (myWorkEffectiveGroup(item) !== 'ready_review') return null;
+  const status = item.status?.trim().toLowerCase() ?? '';
+  const detail = item.error?.trim() ? item.error.trim() : null;
+  if (status === 'failed') {
+    return { outcomeLabelKey: 'myWork.status.failed', tone: 'danger', detail };
+  }
+  if (status === 'cancelled' || status === 'interrupted' || status === 'disconnected') {
+    return { outcomeLabelKey: `myWork.status.${status}`, tone: 'warning', detail };
+  }
+  if (status === 'completed') {
+    return { outcomeLabelKey: 'myWork.status.completed', tone: 'success', detail: null };
+  }
+  return { outcomeLabelKey: 'myWork.status.ready_review', tone: 'success', detail: null };
+}
+
 const myWorkInvalidationEventTypes = new Set([
   'run_status',
   'clarification_asked',

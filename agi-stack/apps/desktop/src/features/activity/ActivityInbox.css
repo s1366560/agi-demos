@@ -43,4 +43,5 @@
 .activity-inbox-state p { margin: 4px 0 0; font-size: 9px; }
 .activity-inbox .spinning { animation: activity-inbox-spin 900ms linear infinite; }
 @keyframes activity-inbox-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .activity-inbox .spinning { animation: none; } }
 @media (max-width: 900px) { .activity-inbox { padding: 34px 28px 48px; } .activity-inbox-heading { align-items: stretch; flex-direction: column; } }

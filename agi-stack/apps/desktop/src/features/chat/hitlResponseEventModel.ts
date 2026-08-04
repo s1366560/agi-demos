@@ -117,12 +117,20 @@ export function hitlResponsePresentation(
   }
   if (hitlType === 'permission') {
     const granted = booleanValue(item.granted ?? payload?.granted);
-    return granted === null
-      ? null
-      : {
-          labelKey: 'chat.response.permission',
-          valueKey: granted ? 'chat.response.allowed' : 'chat.response.denied',
-        };
+    if (granted === null) return null;
+    const autoPreset = stringValue(item.autoApprovalPreset);
+    if (granted && autoPreset) {
+      return autoPreset === 'relaxed' || autoPreset === 'full'
+        ? {
+            labelKey: 'chat.response.permissionAuto',
+            valueKey: `chat.permissionPreset.${autoPreset}`,
+          }
+        : { labelKey: 'chat.response.permissionAuto', value: autoPreset };
+    }
+    return {
+      labelKey: 'chat.response.permission',
+      valueKey: granted ? 'chat.response.allowed' : 'chat.response.denied',
+    };
   }
   const value = stringValue(item.actionName ?? item.action_name ?? payload?.action_name);
   return value ? { labelKey: 'chat.response.action', value } : null;
@@ -155,8 +163,18 @@ function applyResponse(
     return { ...item, answered: true, providedVariables: responseVariableNames(data, data) };
   }
   if (responseType === 'permission_replied') {
-    const granted = booleanValue(data.granted);
-    return { ...item, answered: true, ...(granted === null ? {} : { granted }) };
+    const nested = recordValue(data.response_data);
+    const granted = booleanValue(data.granted ?? nested?.granted);
+    const autoPreset =
+      booleanValue(data.auto_approved ?? nested?.auto_approved) === true
+        ? stringValue(data.preset ?? nested?.preset)
+        : null;
+    return {
+      ...item,
+      answered: true,
+      ...(granted === null ? {} : { granted }),
+      ...(autoPreset ? { autoApprovalPreset: autoPreset } : {}),
+    };
   }
   if (responseType === 'a2ui_action_answered') {
     const actionName = stringValue(data.action_name ?? data.actionName);

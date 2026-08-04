@@ -1,0 +1,89 @@
+.settings-shortcuts-panel {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 14px;
+}
+
+.settings-shortcuts-panel > :not(header) {
+  margin-right: 14px;
+  margin-left: 14px;
+}
+
+.settings-shortcuts-panel .shortcuts-group {
+  gap: 6px;
+}
+
+.settings-shortcuts-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-shortcuts-search {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--desktop-border);
+  border-radius: 8px;
+  background: var(--desktop-panel-2);
+  color: var(--desktop-muted);
+}
+
+.settings-shortcuts-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--desktop-text);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.settings-shortcuts-search input::placeholder {
+  color: var(--desktop-faint);
+}
+
+.settings-shortcuts-combo-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid var(--desktop-border);
+  border-radius: 8px;
+  background: var(--desktop-panel-2);
+}
+
+.settings-shortcuts-combo-chip button {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--desktop-muted);
+  cursor: pointer;
+}
+
+.settings-shortcuts-combo-chip button:hover {
+  color: var(--desktop-text);
+}
+
+.settings-shortcuts-hint,
+.settings-shortcuts-note {
+  margin: 0;
+  color: var(--desktop-faint);
+  font-size: 12px;
+}
+
+.settings-shortcuts-empty {
+  margin: 0;
+  padding: 18px 0;
+  color: var(--desktop-muted);
+  font-size: 13px;
+  text-align: center;
+}
