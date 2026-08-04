@@ -192,9 +192,10 @@ test('workspace overview locks the approved prototype geometry', () => {
   assert.match(cssRule('.workspace-design-overview'), /line-height:\s*normal\s*;/);
   assert.match(cssRule('.workspace-design-header'), /max-width:\s*1120px\s*;/);
   assert.match(cssRule('.workspace-design-header'), /align-items:\s*flex-end\s*;/);
+  assert.match(cssRule('.workspace-design-header'), /margin:\s*0\s+auto\s*;/);
   assert.match(cssRule('.workspace-design-header'), /padding:\s*0\s*;/);
   assert.match(cssRule('.workspace-design-content'), /max-width:\s*1120px\s*;/);
-  assert.match(cssRule('.workspace-design-content'), /margin:\s*24px\s+0\s+0\s*;/);
+  assert.match(cssRule('.workspace-design-content'), /margin:\s*24px\s+auto\s+0\s*;/);
   assert.match(cssRule('.workspace-design-content'), /padding:\s*0\s*;/);
   assert.match(cssRule('.workspace-design-title-line h1'), /font-size:\s*28px\s*;/);
   assert.match(cssRule('.workspace-design-title-line h1'), /line-height:\s*normal\s*;/);
