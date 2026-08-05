@@ -132,8 +132,8 @@ describe('MemoryDetail', () => {
     const { container } = renderDetail();
 
     expect((await screen.findAllByText('Memory One')).length).toBeGreaterThan(0);
-    expect(screen.getByText('COMPLETED')).toBeInTheDocument();
-    expect(container).not.toHaveTextContent('>COMPLETED');
+    expect(screen.getAllByText('Completed').length).toBeGreaterThan(0);
+    expect(container).not.toHaveTextContent('COMPLETED');
     expect(screen.getByRole('button', { name: 'Reprocess' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();

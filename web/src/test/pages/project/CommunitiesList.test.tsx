@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { MemoryRouter, useParams } from 'react-router-dom';
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -163,9 +163,13 @@ describe('CommunitiesList - Performance Optimizations', () => {
     });
 
     // Re-render should not cause issues with stable handler references
-    rerender(<CommunitiesList />);
+    rerender(
+      <MemoryRouter>
+        <CommunitiesList />
+      </MemoryRouter>
+    );
     await waitFor(() => {
-      expect(graphService.listCommunities).toHaveBeenCalledTimes(2);
+      expect(graphService.listCommunities).toHaveBeenCalledTimes(1);
     });
     await waitFor(() => {
       expect(screen.queryByTestId('loading-indicator')).not.toBeInTheDocument();

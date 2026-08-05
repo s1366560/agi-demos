@@ -5,20 +5,19 @@
  * RED phase: Tests are written before implementation.
  */
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { memoryAPI } from '../../../services/api';
+import { render, screen, fireEvent, waitFor } from '../../utils';
 
 // Mock react-router-dom
-vi.mock('react-router-dom', () => ({
-  useParams: () => ({ projectId: 'test-project-1' }),
-  Link: ({ children, to, ...props }: any) => (
-    <a href={to} {...props}>
-      {children}
-    </a>
-  ),
-}));
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useParams: () => ({ projectId: 'test-project-1' }),
+  };
+});
 
 // Mock i18n
 vi.mock('react-i18next', () => ({

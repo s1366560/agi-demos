@@ -28,7 +28,7 @@ describe('SubAgentDetailPanel', () => {
 
     // Renders name and truncated ID
     expect(screen.getByText('TestAgent')).toBeInTheDocument();
-    expect(screen.getByText('sub-1234...')).toBeInTheDocument();
+    expect(screen.getByText('sub-1234…')).toBeInTheDocument();
 
     // Renders model name
     expect(screen.getByText('gpt-4')).toBeInTheDocument();

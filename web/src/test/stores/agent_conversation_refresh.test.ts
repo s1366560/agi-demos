@@ -46,11 +46,21 @@ describe('conversation lifecycle refresh', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useConversationsStore.setState(initialState);
-    mockListConversations.mockResolvedValue({
-      items: [conversation('new-conversation', 'project-1')],
-      has_more: false,
-      total: 1,
-    });
+    mockListConversations.mockImplementation(
+      (
+        _projectId: string,
+        _status: unknown,
+        _limit: number,
+        _offset: number,
+        _signal: AbortSignal | undefined,
+        options: { unboundOnly?: boolean } | undefined
+      ) =>
+        Promise.resolve({
+          items: options?.unboundOnly ? [] : [conversation('new-conversation', 'project-1')],
+          has_more: false,
+          total: options?.unboundOnly ? 0 : 1,
+        })
+    );
   });
 
   it('keeps same-project loads cached unless force is requested', async () => {
@@ -196,7 +206,7 @@ describe('conversation lifecycle refresh', () => {
       has_more: boolean;
       total: number;
     }>();
-    mockListConversations.mockReturnValueOnce(response.promise);
+    mockListConversations.mockReturnValue(response.promise);
     let state = {
       activeConversationId: null,
       conversations: [],
@@ -215,7 +225,7 @@ describe('conversation lifecycle refresh', () => {
     const firstLoad = actions.loadConversations('project-1');
     const secondLoad = actions.loadConversations('project-1');
 
-    expect(mockListConversations).toHaveBeenCalledTimes(1);
+    expect(mockListConversations).toHaveBeenCalledTimes(2);
 
     await act(async () => {
       response.resolve({
@@ -226,7 +236,7 @@ describe('conversation lifecycle refresh', () => {
       await Promise.all([firstLoad, secondLoad]);
     });
 
-    expect(mockListConversations).toHaveBeenCalledTimes(1);
+    expect(mockListConversations).toHaveBeenCalledTimes(2);
     expect(set).toHaveBeenCalledTimes(1);
     expect(set).toHaveBeenLastCalledWith({
       conversations: [conversation('new-conversation', 'project-1')],
@@ -242,13 +252,25 @@ describe('conversation lifecycle refresh', () => {
       has_more: boolean;
       total: number;
     }>();
-    mockListConversations
-      .mockReturnValueOnce(staleResponse.promise)
-      .mockResolvedValueOnce({
-        items: [conversation('project-2-conversation', 'project-2')],
-        has_more: false,
-        total: 1,
-      });
+    mockListConversations.mockImplementation(
+      (
+        projectId: string,
+        _status: unknown,
+        _limit: number,
+        _offset: number,
+        _signal: AbortSignal | undefined,
+        options: { unboundOnly?: boolean } | undefined
+      ) => {
+        if (projectId === 'project-1') {
+          return staleResponse.promise;
+        }
+        return Promise.resolve({
+          items: options?.unboundOnly ? [] : [conversation('project-2-conversation', 'project-2')],
+          has_more: false,
+          total: options?.unboundOnly ? 0 : 1,
+        });
+      }
+    );
     let state = {
       activeConversationId: null,
       conversations: [],
@@ -283,7 +305,7 @@ describe('conversation lifecycle refresh', () => {
   });
 
   it('caches an empty project conversation list without refetching', async () => {
-    mockListConversations.mockResolvedValueOnce({
+    mockListConversations.mockResolvedValue({
       items: [],
       has_more: false,
       total: 0,
@@ -308,7 +330,7 @@ describe('conversation lifecycle refresh', () => {
       await actions.loadConversations('project-empty');
     });
 
-    expect(mockListConversations).toHaveBeenCalledTimes(1);
+    expect(mockListConversations).toHaveBeenCalledTimes(2);
     expect(set).toHaveBeenLastCalledWith({
       conversations: [],
       hasMoreConversations: false,
