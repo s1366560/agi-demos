@@ -27,16 +27,18 @@ test("repository binding reads the committed contract from the requested HEAD", 
   const repositoryRoot = fileURLToPath(
     new URL("../../../../", import.meta.url),
   );
+  const contractRelativePath =
+    "agi-stack/apps/desktop/contracts/desktop-web-parity/evidence-run.v1.schema.json";
   const binding = inspectEvidenceRepositoryBinding({
     repositoryRoot,
-    contractRelativePath: "AGENTS.md",
+    contractRelativePath,
   });
   assert.match(binding.headRevision, /^[0-9a-f]{40}$/u);
   assert.equal(binding.contractExistsAtHead, true);
   assert.match(binding.contractSha256, /^[0-9a-f]{64}$/u);
   assert.equal(binding.workingTreeContractSha256, binding.contractSha256);
   assert.equal(binding.contractMatchesWorkingTree, true);
-  assert.equal(binding.contractRelativePath, "AGENTS.md");
+  assert.equal(binding.contractRelativePath, contractRelativePath);
 });
 
 test("repository binding reads committed contracts larger than the default exec buffer", () => {

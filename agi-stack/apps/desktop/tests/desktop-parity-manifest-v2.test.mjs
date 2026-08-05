@@ -858,13 +858,15 @@ test("agent ecosystem capabilities do not overstate missing controls or Local au
   assert.equal(workspace.surfaces.web.implementation_status, "partial");
   assert.equal(
     workspace.surfaces.web.reason_code,
-    "web_subagent_control_handler_missing",
+    "current_head_core_session_required_channel_evidence_incomplete",
   );
   assert.deepEqual(workspace.surfaces.web.allowed_actions, [
     "view",
     "send-message",
     "stop-session",
     "manage-roster",
+    "kill-subagent",
+    "steer-subagent",
   ]);
   assert.deepEqual(workspace.surfaces.desktop_cloud.allowed_actions, [
     "view",
