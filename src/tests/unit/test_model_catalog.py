@@ -288,13 +288,73 @@ class TestModelCatalogService:
         assert meta.context_length == FALLBACK_MODEL_METADATA.context_length
         assert meta.max_output_tokens == FALLBACK_MODEL_METADATA.max_output_tokens
 
-    def test_get_model_or_fallback_strips_prefix(
-        self, catalog: ModelCatalogService
-    ) -> None:
+    def test_get_model_or_fallback_strips_prefix(self, catalog: ModelCatalogService) -> None:
         """get_model_or_fallback strips provider/ prefix."""
         meta = catalog.get_model_or_fallback("acme/test-model-alpha")
         assert meta.name == "test-model-alpha"
         assert meta.context_length == 64000
+
+
+_REASONING_SNAPSHOT = {
+    "_meta": {"version": "1.0.0"},
+    "models": {
+        "acme-reasoner-1": {
+            "name": "acme-reasoner-1",
+            "context_length": 128000,
+            "max_output_tokens": 8192,
+            "capabilities": ["chat"],
+            "supports_streaming": True,
+            "supports_json_mode": False,
+            "provider": "acme",
+            "modalities": ["text"],
+            "reasoning": True,
+            "supports_temperature": False,
+        },
+    },
+}
+
+
+@pytest.fixture()
+def reasoning_catalog(tmp_path: Path) -> ModelCatalogService:
+    """Return a catalog with a reasoning model that rejects temperature."""
+    p = tmp_path / "reasoning_snapshot.json"
+    p.write_text(json.dumps(_REASONING_SNAPSHOT), encoding="utf-8")
+    return ModelCatalogService(snapshot_path=p)
+
+
+@pytest.mark.unit
+class TestCatalogReasoningFlags:
+    """Regression tests for catalog-driven reasoning/temperature flags."""
+
+    def test_model_supports_temperature_bare_name(
+        self, reasoning_catalog: ModelCatalogService
+    ) -> None:
+        assert reasoning_catalog.model_supports_temperature("acme-reasoner-1") is False
+
+    def test_model_supports_temperature_strips_provider_prefix(
+        self, reasoning_catalog: ModelCatalogService
+    ) -> None:
+        """Prefixed variants (e.g. ``acme/acme-reasoner-1``) must resolve."""
+        assert reasoning_catalog.model_supports_temperature("acme/acme-reasoner-1") is False
+
+    def test_model_supports_temperature_unknown_returns_none(
+        self, reasoning_catalog: ModelCatalogService
+    ) -> None:
+        assert reasoning_catalog.model_supports_temperature("no-such-model") is None
+
+    def test_is_reasoning_model_bare_name(self, reasoning_catalog: ModelCatalogService) -> None:
+        assert reasoning_catalog.is_reasoning_model("acme-reasoner-1") is True
+
+    def test_is_reasoning_model_strips_provider_prefix(
+        self, reasoning_catalog: ModelCatalogService
+    ) -> None:
+        assert reasoning_catalog.is_reasoning_model("acme/acme-reasoner-1") is True
+
+    def test_is_reasoning_model_unknown_returns_none(
+        self, reasoning_catalog: ModelCatalogService
+    ) -> None:
+        assert reasoning_catalog.is_reasoning_model("no-such-model") is None
+
 
 # ===========================================================================
 # ModelMetadata new fields tests
@@ -386,6 +446,7 @@ class TestSnapshotStaleness:
         with caplog.at_level(logging.WARNING):
             svc.refresh()
         assert not any("days old" in r.message for r in caplog.records)
+
 
 # ===========================================================================
 # model_registry backward compatibility tests

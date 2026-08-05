@@ -195,9 +195,11 @@ class ModelCatalogService(ModelCatalogPort):
 
         Returns ``True``/``False`` if the model is known, ``None`` if unknown
         (caller should fall back to heuristic detection).
+
+        Uses fuzzy lookup so provider-prefixed variants (e.g.
+        ``azure/gpt-5.6``) resolve to their bare catalog entry.
         """
-        self._ensure_loaded()
-        meta = self._models.get(model_name)
+        meta = self.get_model_fuzzy(model_name)
         if meta is None:
             return None
         return meta.reasoning
@@ -207,9 +209,11 @@ class ModelCatalogService(ModelCatalogPort):
 
         Returns ``True``/``False`` if the model is known, ``None`` if unknown
         (caller should fall back to heuristic detection).
+
+        Uses fuzzy lookup so provider-prefixed variants (e.g.
+        ``azure/gpt-5.6``) resolve to their bare catalog entry.
         """
-        self._ensure_loaded()
-        meta = self._models.get(model_name)
+        meta = self.get_model_fuzzy(model_name)
         if meta is None:
             return None
         return meta.supports_temperature
