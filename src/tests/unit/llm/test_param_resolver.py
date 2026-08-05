@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 from src.domain.llm_providers.models import ModelMetadata
 from src.infrastructure.llm.param_resolver import resolve_llm_params
@@ -342,6 +342,28 @@ class TestCatalogLookup:
         catalog = _mock_catalog(meta)
         resolve_llm_params("openai/gpt-4o", catalog=catalog)
         catalog.get_model_fuzzy.assert_called_once_with("openai/gpt-4o")
+
+    def test_kimi_k3_api_alias_uses_models_dev_parameter_support(self) -> None:
+        meta = _make_metadata(
+            name="kimi-k3",
+            reasoning=True,
+            supports_temperature=False,
+        )
+        catalog = _mock_catalog()
+        catalog.get_model_fuzzy.side_effect = lambda name: (meta if name == "kimi-k3" else None)
+
+        result = resolve_llm_params(
+            "openai/k3",
+            user_overrides={"temperature": 0.2},
+            provider_config={"temperature": 0.7},
+            catalog=catalog,
+        )
+
+        assert "temperature" not in result
+        assert catalog.get_model_fuzzy.call_args_list == [
+            call("openai/k3"),
+            call("kimi-k3"),
+        ]
 
 
 # ------------------------------------------------------------------

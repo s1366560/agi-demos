@@ -41,6 +41,11 @@ _PARAM_SPEC: list[tuple[str, str | None, str | None]] = [
     ("max_tokens", None, None),  # always supported, no default lookup
 ]
 
+# Provider API model names that differ from their models.dev catalog IDs.
+_MODEL_CATALOG_ALIASES: dict[str, str] = {
+    "k3": "kimi-k3",
+}
+
 
 def resolve_llm_params(
     model_name: str,
@@ -109,6 +114,11 @@ def _get_metadata(
     if catalog is None:
         return None
     meta = catalog.get_model_fuzzy(model_name)
+    if meta is None:
+        bare_model_name = model_name.rsplit("/", 1)[-1]
+        catalog_alias = _MODEL_CATALOG_ALIASES.get(bare_model_name)
+        if catalog_alias is not None:
+            meta = catalog.get_model_fuzzy(catalog_alias)
     if meta is None:
         logger.debug("param_resolver: no catalog entry for %r", model_name)
     return meta

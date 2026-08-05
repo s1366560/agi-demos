@@ -596,8 +596,12 @@ class TestLiteLLMClient:
         mock_response.choices = [mock_choice]
 
         with (
-            patch.object(client, "_build_completion_kwargs", wraps=client._build_completion_kwargs) as mock_build,
-            patch.object(client, "_execute_with_resilience", new_callable=AsyncMock) as mock_execute,
+            patch.object(
+                client, "_build_completion_kwargs", wraps=client._build_completion_kwargs
+            ) as mock_build,
+            patch.object(
+                client, "_execute_with_resilience", new_callable=AsyncMock
+            ) as mock_execute,
         ):
             mock_execute.return_value = mock_response
             await client.generate(
@@ -651,7 +655,9 @@ class TestLiteLLMClient:
                 "_build_completion_kwargs",
                 wraps=minimax_client._build_completion_kwargs,
             ) as mock_build,
-            patch.object(minimax_client, "_execute_with_resilience", new_callable=AsyncMock) as mock_execute,
+            patch.object(
+                minimax_client, "_execute_with_resilience", new_callable=AsyncMock
+            ) as mock_execute,
         ):
             mock_execute.return_value = mock_response
             await minimax_client.generate(
@@ -1157,7 +1163,6 @@ class TestLiteLLMClientMandatorySkillProtection:
         assert "</mandatory-skill>" in result
 
 
-
 @pytest.mark.unit
 class TestBuildCompletionKwargsParamResolver:
     """Test _build_completion_kwargs with param_resolver integration."""
@@ -1221,9 +1226,7 @@ class TestBuildCompletionKwargsParamResolver:
     @pytest.fixture
     def client(self, provider_config, llm_config):
         """Create a LiteLLMClient instance."""
-        with patch(
-            "src.infrastructure.llm.litellm.litellm_client.get_encryption_service"
-        ):
+        with patch("src.infrastructure.llm.litellm.litellm_client.get_encryption_service"):
             return LiteLLMClient(
                 config=llm_config,
                 provider_config=provider_config,
@@ -1231,13 +1234,9 @@ class TestBuildCompletionKwargsParamResolver:
             )
 
     @pytest.fixture
-    def client_with_config_overrides(
-        self, provider_config_with_overrides, llm_config
-    ):
+    def client_with_config_overrides(self, provider_config_with_overrides, llm_config):
         """Create a LiteLLMClient with provider config overrides."""
-        with patch(
-            "src.infrastructure.llm.litellm.litellm_client.get_encryption_service"
-        ):
+        with patch("src.infrastructure.llm.litellm.litellm_client.get_encryption_service"):
             return LiteLLMClient(
                 config=llm_config,
                 provider_config=provider_config_with_overrides,
@@ -1245,13 +1244,9 @@ class TestBuildCompletionKwargsParamResolver:
             )
 
     @pytest.fixture
-    def client_no_temp(
-        self, provider_config, llm_config_no_temp
-    ):
+    def client_no_temp(self, provider_config, llm_config_no_temp):
         """Create a LiteLLMClient with temperature=None in LLMConfig."""
-        with patch(
-            "src.infrastructure.llm.litellm.litellm_client.get_encryption_service"
-        ):
+        with patch("src.infrastructure.llm.litellm.litellm_client.get_encryption_service"):
             return LiteLLMClient(
                 config=llm_config_no_temp,
                 provider_config=provider_config,
@@ -1263,9 +1258,7 @@ class TestBuildCompletionKwargsParamResolver:
         self, provider_config_with_overrides, llm_config_no_temp
     ):
         """Create a client with provider config temp override."""
-        with patch(
-            "src.infrastructure.llm.litellm.litellm_client.get_encryption_service"
-        ):
+        with patch("src.infrastructure.llm.litellm.litellm_client.get_encryption_service"):
             return LiteLLMClient(
                 config=llm_config_no_temp,
                 provider_config=provider_config_with_overrides,
@@ -1349,9 +1342,7 @@ class TestBuildCompletionKwargsParamResolver:
         assert "seed" in kwargs
         assert kwargs["seed"] == 42
 
-    def test_provider_config_overrides_temperature(
-        self, client_with_provider_override_temp
-    ):
+    def test_provider_config_overrides_temperature(self, client_with_provider_override_temp):
         """Test that provider_config.config temperature is used."""
         # Arrange
         messages = [{"role": "user", "content": "hello"}]
@@ -1456,9 +1447,7 @@ class TestBuildCompletionKwargsParamResolver:
         assert "stream" in kwargs
         assert kwargs["stream"] is True
 
-    def test_explicit_temperature_overrides_provider_config(
-        self, client_with_config_overrides
-    ):
+    def test_explicit_temperature_overrides_provider_config(self, client_with_config_overrides):
         """Test explicit temp overrides provider_config temp."""
         # Arrange
         messages = [{"role": "user", "content": "hello"}]
@@ -1538,13 +1527,9 @@ class TestBuildCompletionKwargsCatalogIntegration:
         )
 
     @pytest.fixture
-    def client_with_catalog(
-        self, provider_config, llm_config_no_temp, mock_catalog
-    ):
+    def client_with_catalog(self, provider_config, llm_config_no_temp, mock_catalog):
         """LiteLLMClient with a mock catalog injected."""
-        with patch(
-            "src.infrastructure.llm.litellm.litellm_client.get_encryption_service"
-        ):
+        with patch("src.infrastructure.llm.litellm.litellm_client.get_encryption_service"):
             return LiteLLMClient(
                 config=llm_config_no_temp,
                 provider_config=provider_config,
@@ -1555,9 +1540,7 @@ class TestBuildCompletionKwargsCatalogIntegration:
     @pytest.fixture
     def client_no_catalog(self, provider_config, llm_config_no_temp):
         """LiteLLMClient without any catalog."""
-        with patch(
-            "src.infrastructure.llm.litellm.litellm_client.get_encryption_service"
-        ):
+        with patch("src.infrastructure.llm.litellm.litellm_client.get_encryption_service"):
             return LiteLLMClient(
                 config=llm_config_no_temp,
                 provider_config=provider_config,
@@ -1565,9 +1548,7 @@ class TestBuildCompletionKwargsCatalogIntegration:
                 catalog=None,
             )
 
-    def test_catalog_defaults_flow_when_no_override(
-        self, client_with_catalog
-    ):
+    def test_catalog_defaults_flow_when_no_override(self, client_with_catalog):
         """Catalog defaults appear when no user/provider override is set."""
         # Arrange
         messages = [{"role": "user", "content": "hello"}]
@@ -1583,9 +1564,7 @@ class TestBuildCompletionKwargsCatalogIntegration:
         assert "temperature" in kwargs
         assert kwargs["temperature"] == 0.7
 
-    def test_user_override_wins_over_catalog_default(
-        self, client_with_catalog
-    ):
+    def test_user_override_wins_over_catalog_default(self, client_with_catalog):
         """Explicit user param beats catalog default."""
         # Arrange
         messages = [{"role": "user", "content": "hello"}]
@@ -1624,9 +1603,7 @@ class TestBuildCompletionKwargsCatalogIntegration:
             small_model="gpt-4o-mini",
             temperature=None,
         )
-        with patch(
-            "src.infrastructure.llm.litellm.litellm_client.get_encryption_service"
-        ):
+        with patch("src.infrastructure.llm.litellm.litellm_client.get_encryption_service"):
             client = LiteLLMClient(
                 config=llm_config,
                 provider_config=provider_config,
@@ -1646,9 +1623,7 @@ class TestBuildCompletionKwargsCatalogIntegration:
         # Assert — provider 0.8 should win over catalog 0.9
         assert kwargs["top_p"] == 0.8
 
-    def test_catalog_none_means_no_catalog_defaults(
-        self, client_no_catalog
-    ):
+    def test_catalog_none_means_no_catalog_defaults(self, client_no_catalog):
         """Client without catalog still works; resolver returns no defaults."""
         # Arrange
         messages = [{"role": "user", "content": "hello"}]
@@ -1696,9 +1671,7 @@ class TestBuildCompletionKwargsCatalogIntegration:
             small_model="gpt-4o-mini",
             temperature=None,
         )
-        with patch(
-            "src.infrastructure.llm.litellm.litellm_client.get_encryption_service"
-        ):
+        with patch("src.infrastructure.llm.litellm.litellm_client.get_encryption_service"):
             client = LiteLLMClient(
                 config=llm_config,
                 provider_config=provider_config,
@@ -1752,9 +1725,7 @@ class TestBuildCompletionKwargsCatalogIntegration:
             small_model="gpt-4o-mini",
             temperature=None,
         )
-        with patch(
-            "src.infrastructure.llm.litellm.litellm_client.get_encryption_service"
-        ):
+        with patch("src.infrastructure.llm.litellm.litellm_client.get_encryption_service"):
             client = LiteLLMClient(
                 config=llm_config,
                 provider_config=provider_config,
@@ -1774,6 +1745,45 @@ class TestBuildCompletionKwargsCatalogIntegration:
 
         # Assert — should be clamped to 1.0 (max of range)
         assert kwargs["temperature"] == 1.0
+
+    def test_kimi_k3_omits_temperature_from_models_dev_metadata(self):
+        """Kimi's ``k3`` API alias inherits the catalog's unsupported flag."""
+        provider_config = ProviderConfig(
+            id=uuid4(),
+            name="kimi-provider",
+            provider_type=ProviderType.KIMI,
+            api_key_encrypted="encrypted_key",
+            llm_model="k3",
+            llm_small_model="k3",
+            embedding_model=None,
+            config={"temperature": 0.2},
+            is_active=True,
+            is_default=False,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        llm_config = LLMConfig(
+            api_key="test_key",
+            model="k3",
+            small_model="k3",
+            temperature=0.2,
+        )
+        with patch("src.infrastructure.llm.litellm.litellm_client.get_encryption_service"):
+            client = LiteLLMClient(
+                config=llm_config,
+                provider_config=provider_config,
+                cache=False,
+                catalog=ModelCatalogService(),
+            )
+
+        kwargs = client._build_completion_kwargs(
+            model="openai/k3",
+            messages=[{"role": "user", "content": "hello"}],
+            max_tokens=4096,
+        )
+
+        assert kwargs["model"] == "openai/k3"
+        assert "temperature" not in kwargs
 
     def test_create_litellm_client_forwards_catalog(self):
         """Factory function forwards catalog arg to LiteLLMClient."""
@@ -1944,9 +1954,7 @@ class TestVisionCapabilityGating:
 
     # -- _build_completion_kwargs gating tests --------------------
 
-    def test_non_vision_model_with_image_raises_value_error(
-        self, no_vision_catalog: MagicMock
-    ):
+    def test_non_vision_model_with_image_raises_value_error(self, no_vision_catalog: MagicMock):
         """Non-vision model receiving image content raises ValueError."""
         client = self._make_client(catalog=no_vision_catalog)
         with pytest.raises(ValueError, match="Invalid parameter"):
@@ -1956,9 +1964,7 @@ class TestVisionCapabilityGating:
                 max_tokens=1024,
             )
 
-    def test_vision_model_with_image_passes_through(
-        self, vision_catalog: MagicMock
-    ):
+    def test_vision_model_with_image_passes_through(self, vision_catalog: MagicMock):
         """Vision-capable model with image content passes without error."""
         client = self._make_client(catalog=vision_catalog)
         kwargs = client._build_completion_kwargs(
@@ -1981,9 +1987,7 @@ class TestVisionCapabilityGating:
         assert kwargs["model"] == "some-model"
         assert "messages" in kwargs
 
-    def test_no_image_content_with_non_vision_model_passes(
-        self, no_vision_catalog: MagicMock
-    ):
+    def test_no_image_content_with_non_vision_model_passes(self, no_vision_catalog: MagicMock):
         """Text-only messages pass through even for non-vision models."""
         client = self._make_client(catalog=no_vision_catalog)
         kwargs = client._build_completion_kwargs(
@@ -1993,9 +1997,7 @@ class TestVisionCapabilityGating:
         )
         assert kwargs["model"] == "gpt-3.5-turbo"
 
-    def test_vision_gating_error_matches_client_error_detection(
-        self, no_vision_catalog: MagicMock
-    ):
+    def test_vision_gating_error_matches_client_error_detection(self, no_vision_catalog: MagicMock):
         """The ValueError message matches _is_client_error() indicators.
 
         This ensures the circuit breaker is NOT tripped for vision
