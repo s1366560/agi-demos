@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from src.application.services.project_my_work_service import (
+    AgentRunAuthority,
     HITLRequestAuthority,
     ProjectMyWorkAccessDeniedError,
     ProjectMyWorkService,
@@ -21,10 +22,12 @@ class FakeProjectMyWorkReader:
         has_access: bool = True,
         attempts: list[WorkspaceAttemptAuthority] | None = None,
         hitl_requests: list[HITLRequestAuthority] | None = None,
+        runs: list[AgentRunAuthority] | None = None,
     ) -> None:
         self.has_access = has_access
         self.attempts = attempts or []
         self.hitl_requests = hitl_requests or []
+        self.runs = runs or []
 
     async def has_project_access(self, *, project_id: str, user_id: str) -> bool:
         return self.has_access
@@ -45,6 +48,14 @@ class FakeProjectMyWorkReader:
         now: datetime,
     ) -> list[HITLRequestAuthority]:
         return self.hitl_requests
+
+    async def list_agent_runs(
+        self,
+        *,
+        project_id: str,
+        user_id: str,
+    ) -> list[AgentRunAuthority]:
+        return self.runs
 
 
 def attempt(
@@ -95,6 +106,73 @@ def hitl(
         created_at=NOW - timedelta(minutes=1),
         expires_at=expires_at,
     )
+
+
+def agent_run(
+    authority_id: str,
+    conversation_id: str,
+    status: str,
+) -> AgentRunAuthority:
+    return AgentRunAuthority(
+        id=authority_id,
+        tenant_id="tenant-1",
+        conversation_id=conversation_id,
+        workspace_id="workspace-1",
+        project_id="project-1",
+        title=f"Run {authority_id}",
+        status=status,
+        revision=3,
+        permission_profile="workspace_write",
+        environment="sandbox-1",
+        error=None,
+        created_at=NOW - timedelta(minutes=3),
+        updated_at=NOW,
+        completed_at=NOW if status == "ready_review" else None,
+        workspace_name="Workspace",
+        capability_mode="code",
+        summary_state="recorded",
+        summary_reason_code=None,
+        summary_status=status,
+        summary_revision=3,
+        summary_started_at=NOW - timedelta(seconds=1),
+        summary_completed_at=NOW if status == "ready_review" else None,
+        model_breakdown=({"model": "model-a"},),
+        completion_summary="Implemented the requested workflow.",
+        duration_ms=1200,
+        input_tokens=100,
+        output_tokens=50,
+        cost_usd=0.01,
+        artifact_count=2,
+        checks_passed=3,
+        checks_failed=0,
+        files_changed=1,
+        lines_added=10,
+        lines_deleted=2,
+        evidence_references=({"kind": "trace", "value": "trace-1"},),
+    )
+
+
+async def test_agent_run_uses_persisted_summary_and_supersedes_attempt() -> None:
+    reader = FakeProjectMyWorkReader(
+        attempts=[attempt("attempt-1", "conversation-1", "running")],
+        runs=[agent_run("run-1", "conversation-1", "ready_review")],
+    )
+
+    response = await ProjectMyWorkService(reader).list_for_project(
+        project_id="project-1",
+        user_id="user-1",
+        now=NOW,
+    )
+
+    assert response.total == 1
+    item = response.items[0]
+    assert item.authority_kind == "agent_run"
+    assert item.run_id == "run-1"
+    assert item.status == "ready_review"
+    assert item.run_summary is not None
+    assert item.run_summary.completion_summary == "Implemented the requested workflow."
+    assert item.run_summary.input_tokens == 100
+    assert item.run_summary.files_changed == 1
 
 
 async def test_maps_only_supported_latest_attempt_authorities() -> None:

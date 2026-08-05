@@ -17,6 +17,7 @@ const ROUTE_CONTRACT: &str = include_str!("../../../contracts/local-route-parity
 const DESKTOP_CLIENT_SOURCE: &str = concat!(
     include_str!("../../../src/api/client.ts"),
     include_str!("../../../src/api/managedResourcesClient.ts"),
+    include_str!("../../../src/features/agent-authority/localActivityAuthorityClient.ts"),
 );
 const SEARCH_CONTRACT_SOURCE: &str = include_str!("../../../src/api/searchContract.ts");
 const CAPABILITY_CLIENT_SOURCE: &str =

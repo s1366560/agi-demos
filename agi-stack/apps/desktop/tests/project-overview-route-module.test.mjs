@@ -17,6 +17,12 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
+  AGENT_WORKSPACE_ROUTE_ID,
+  createAgentWorkspaceRouteModuleLoader,
+} = require(
+  '/tmp/agistack-desktop-test-dist/src/features/agent-workspace/agentWorkspaceRouteModule.js',
+);
+const {
   buildProjectOverviewPresentation,
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/project/projectOverviewPresentationModel.js'
@@ -86,6 +92,7 @@ test('factory stays lazy and publishes the exact implemented route module contra
 
   const registry = createDesktopProductionRouteRegistry({
     implementedLoaders: {
+      [AGENT_WORKSPACE_ROUTE_ID]: createAgentWorkspaceRouteModuleLoader(),
       [DEVICE_APPROVAL_ROUTE_ID]: implementedRouteLoader(
         DEVICE_APPROVAL_ROUTE_ID,
       ),

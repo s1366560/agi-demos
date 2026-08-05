@@ -241,6 +241,7 @@ function ComposeAheadQa() {
           </header>
           <div className="session-steering-qa-content compose-ahead-qa-content">
             <ChatPanel
+              composeAheadFallbackAllowed
               api={qaApi}
               conversations={[conversation]}
               selectedConversationId={conversation.id}

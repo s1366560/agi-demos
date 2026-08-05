@@ -52,9 +52,11 @@ import { useTenantStore } from '@/stores/tenant';
 import { useWorkspaceStore } from '@/stores/workspace';
 
 import { agentService } from '@/services/agentService';
+import type { RunInputDelivery } from '@/services/runInputService';
 import type { FileMetadata } from '@/services/sandboxUploadService';
 
 import { useProjectBasePath } from '@/hooks/useProjectBasePath';
+import { useRunInputAuthority } from '@/hooks/useRunInputAuthority';
 import { useSandboxAgentHandlers } from '@/hooks/useSandboxDetection';
 
 import { DEFAULT_GENERAL_AGENT_ID } from '@/constants/agent';
@@ -84,6 +86,7 @@ import { LayoutModeSelector } from './layout/LayoutModeSelector';
 import { MessageArea } from './MessageArea';
 import { ProjectAgentStatusBar } from './ProjectAgentStatusBar';
 import { Resizer } from './Resizer';
+import { RunReviewDrawer } from './review/RunReviewDrawer';
 import { SplitPaneLayout } from './SplitPaneLayout';
 import { LAYOUT_BG_CLASSES } from './styles';
 import { deriveTaskProgress } from './tasks/taskProgressDerivation';
@@ -281,6 +284,24 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     const hasEarlier = useHasEarlier();
     const isStreaming = useIsStreaming();
     const error = useAgentError();
+    const runInputAuthority = useRunInputAuthority(activeConversationId, isStreaming);
+    const runInputDeliveryOptions = useMemo(
+      () =>
+        (runInputAuthority.activeRun?.allowed_actions ?? []).filter(
+          (action): action is RunInputDelivery =>
+            action === 'steer_now' || action === 'queue_next'
+        ),
+      [runInputAuthority.activeRun?.allowed_actions]
+    );
+    const [runInputDelivery, setRunInputDelivery] = useState<RunInputDelivery | null>(null);
+
+    useEffect(() => {
+      setRunInputDelivery((current) => {
+        if (current && runInputDeliveryOptions.includes(current)) return current;
+        if (runInputDeliveryOptions.includes('steer_now')) return 'steer_now';
+        return runInputDeliveryOptions[0] ?? null;
+      });
+    }, [runInputDeliveryOptions]);
 
     const conversations = useConversationsStore((state) => state.conversations);
     const currentConversation = useConversationsStore((state) => state.currentConversation);
@@ -920,9 +941,13 @@ ${content}`;
 
     const chatColumn = (
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
-        {headerExtra && (
+        {(headerExtra || runInputAuthority.activeRun) && (
           <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 bg-white dark:bg-slate-900 px-4 py-2 flex items-center gap-2">
             {headerExtra}
+            <RunReviewDrawer
+              run={runInputAuthority.activeRun}
+              latestTurnId={runInputAuthority.activeRun?.turn_id ?? null}
+            />
           </div>
         )}
         {(currentConversation || activeAgentNode?.name) && (
@@ -1001,6 +1026,15 @@ ${content}`;
             isPlanMode={isPlanMode}
             activeAgentId={activeAgentId}
             onAgentSelect={setActiveAgentId}
+            runInputDelivery={runInputDelivery}
+            runInputDeliveryOptions={runInputDeliveryOptions}
+            onRunInputDeliveryChange={setRunInputDelivery}
+            onSubmitRunInput={runInputAuthority.submit}
+            runInputSubmitting={runInputAuthority.submitting}
+            runInputError={runInputAuthority.error}
+            runInputs={runInputAuthority.inputs}
+            promotingRunInputId={runInputAuthority.promotingInputId}
+            onPromoteRunInput={runInputAuthority.promote}
           />
         </div>
       </div>

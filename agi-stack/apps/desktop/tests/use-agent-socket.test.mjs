@@ -12,6 +12,7 @@ const {
   createAgentSocketContextState,
   agentSteerMessageOutcome,
   agentSteerSocketMessage,
+  deliverSubAgentControlCommand,
   deliverAgentSteerMessage,
   deliverAgentStopSession,
   deliverAgentRunMessage,
@@ -25,7 +26,119 @@ const {
   socketEventKey,
   socketEventWindowSince,
   socketEventsSince,
+  subAgentControlReceipt,
+  subAgentControlSocketMessage,
 } = require("/tmp/agistack-desktop-test-dist/src/hooks/useAgentSocket.js");
+
+test("SubAgent control commands are revision-bound and fail closed", () => {
+  const steer = subAgentControlSocketMessage({
+    action: "steer",
+    conversationId: " conversation-1 ",
+    runId: " child-run-1 ",
+    expectedRunRevision: 7,
+    idempotencyKey: " control-1 ",
+    instruction: " Check the failing contract first ",
+  });
+  assert.deepEqual(steer, {
+    type: "steer",
+    conversation_id: "conversation-1",
+    run_id: "child-run-1",
+    expected_run_revision: 7,
+    idempotency_key: "control-1",
+    instruction: "Check the failing contract first",
+  });
+  assert.deepEqual(
+    subAgentControlSocketMessage({
+      action: "kill_run",
+      conversationId: "conversation-1",
+      runId: "child-run-1",
+      expectedRunRevision: 7,
+      idempotencyKey: "control-2",
+      cascade: true,
+    }),
+    {
+      type: "kill_run",
+      conversation_id: "conversation-1",
+      run_id: "child-run-1",
+      expected_run_revision: 7,
+      idempotency_key: "control-2",
+      cascade: true,
+    },
+  );
+  assert.equal(
+    subAgentControlSocketMessage({
+      action: "steer",
+      conversationId: "conversation-1",
+      runId: "child-run-1",
+      expectedRunRevision: 0,
+      idempotencyKey: "control-invalid",
+      instruction: "test",
+    }),
+    null,
+  );
+  assert.equal(
+    subAgentControlSocketMessage({
+      action: "steer",
+      conversationId: "conversation-1",
+      runId: "child-run-1",
+      expectedRunRevision: 7,
+      idempotencyKey: "control-invalid",
+      instruction: " ",
+    }),
+    null,
+  );
+
+  const sent = [];
+  assert.equal(
+    deliverSubAgentControlCommand(
+      {
+        action: "kill_run",
+        conversationId: "conversation-1",
+        runId: "child-run-1",
+        expectedRunRevision: 7,
+        idempotencyKey: "control-3",
+      },
+      (payload) => {
+        sent.push(payload);
+        return true;
+      },
+    ),
+    true,
+  );
+  assert.equal(sent[0].cascade, false);
+});
+
+test("SubAgent control receipts settle only the matching idempotency key", () => {
+  const receipt = {
+    type: "control_command_ack",
+    action: "steer",
+    accepted: false,
+    duplicate: false,
+    reason_code: "run_revision_conflict",
+    conversation_id: "conversation-1",
+    project_id: "project-1",
+    run_id: "child-run-1",
+    run_revision: 8,
+    idempotency_key: "control-1",
+  };
+  assert.deepEqual(subAgentControlReceipt(receipt, "control-1"), {
+    action: "steer",
+    accepted: false,
+    duplicate: false,
+    reasonCode: "run_revision_conflict",
+    conversationId: "conversation-1",
+    projectId: "project-1",
+    runId: "child-run-1",
+    runRevision: 8,
+    idempotencyKey: "control-1",
+    cascade: false,
+  });
+  assert.equal(subAgentControlReceipt(receipt, "control-other"), null);
+  assert.equal(
+    subAgentControlReceipt({ ...receipt, type: "user_message" }, "control-1"),
+    null,
+  );
+});
 
 test("socket event windows surface an evicted cursor boundary for canonical refetch", () => {
   const previous = { type: "old" };
@@ -35,10 +148,13 @@ test("socket event windows surface an evicted cursor boundary for canonical refe
     events: [first, second],
     cursorGap: true,
   });
-  assert.deepEqual(socketEventWindowSince([second, first, previous], previous), {
-    events: [first, second],
-    cursorGap: false,
-  });
+  assert.deepEqual(
+    socketEventWindowSince([second, first, previous], previous),
+    {
+      events: [first, second],
+      cursorGap: false,
+    },
+  );
 });
 
 test("a stop request is scoped, immediate, and never enters the reconnect outbox", () => {
@@ -65,7 +181,10 @@ test("a stop request is scoped, immediate, and never enters the reconnect outbox
     },
   ]);
   assert.equal(queue.size, 1);
-  assert.equal(deliverAgentStopSession(" ", () => true), false);
+  assert.equal(
+    deliverAgentStopSession(" ", () => true),
+    false,
+  );
 });
 
 test("a steer message sends directly and never enters the reconnect outbox", () => {
@@ -186,7 +305,10 @@ test("steer outcome reads acks, durable echoes, and steer error codes", () => {
     null,
   );
   assert.equal(
-    agentSteerMessageOutcome({ type: "text_delta", message_id: messageId }, messageId),
+    agentSteerMessageOutcome(
+      { type: "text_delta", message_id: messageId },
+      messageId,
+    ),
     null,
   );
   assert.equal(
@@ -256,6 +378,50 @@ test("cloud agent turns wait in a bounded deduplicated queue until the socket op
     true,
   );
   assert.equal(queue.size, 0);
+});
+
+test("agent turns carry the selected permission mode through reconnect replay", () => {
+  const queue = createPendingAgentMessageQueue();
+  const sent = [];
+
+  assert.equal(
+    deliverAgentRunMessage(
+      queue,
+      {
+        conversationId: "conversation-permission",
+        projectId: "project-1",
+        message: "Use the selected authorization snapshot",
+        messageId: "message-permission-1",
+        permissionMode: "automatic",
+      },
+      (payload) => {
+        sent.push(payload);
+        return true;
+      },
+      true,
+    ),
+    true,
+  );
+  assert.deepEqual(sent, [
+    {
+      type: "send_message",
+      conversation_id: "conversation-permission",
+      project_id: "project-1",
+      message: "Use the selected authorization snapshot",
+      message_id: "message-permission-1",
+      permission_mode: "automatic",
+    },
+  ]);
+
+  sent.length = 0;
+  assert.equal(
+    flushPendingAgentRunMessages(queue, (payload) => {
+      sent.push(payload);
+      return true;
+    }),
+    1,
+  );
+  assert.equal(sent[0].permission_mode, "automatic");
 });
 
 test("failed socket flush preserves pending cloud turns for the next reconnect", () => {

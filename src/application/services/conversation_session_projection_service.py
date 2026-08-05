@@ -10,6 +10,7 @@ from typing import Any, Literal, Protocol
 
 from src.application.schemas.conversation_session_projection import (
     ConversationSessionProjectionResponse,
+    SessionAgentPlanVersionResponse,
     SessionArtifactRecordResponse,
     SessionCapabilitiesResponse,
     SessionConversationResponse,
@@ -84,7 +85,7 @@ class AgentPlanRunAuthority:
     id: str
     conversation_id: str
     project_id: str
-    plan_version_id: str
+    plan_version_id: str | None
     idempotency_key: str
     message_id: str
     request_message: str
@@ -93,9 +94,21 @@ class AgentPlanRunAuthority:
     permission_profile: PermissionProfile
     environment: dict[str, Any] | None
     created_at: datetime
+    started_at: datetime | None
     updated_at: datetime
     completed_at: datetime | None
     error: str | None
+
+
+@dataclass(frozen=True, kw_only=True)
+class AgentPlanVersionAuthority:
+    id: str
+    conversation_id: str
+    version: int
+    status: Literal["draft", "approved"]
+    tasks: tuple[dict[str, Any], ...]
+    created_at: datetime
+    approved_at: datetime | None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -193,6 +206,7 @@ class ConversationSessionAuthoritySnapshot:
     artifact_records: tuple[ArtifactRecordAuthority, ...]
     tool_executions: ToolExecutionPageAuthority
     runs: tuple[AgentPlanRunAuthority, ...] = ()
+    plan_versions: tuple[AgentPlanVersionAuthority, ...] = ()
 
 
 class ConversationSessionProjectionReader(Protocol):
@@ -244,6 +258,8 @@ class ConversationSessionProjectionService:
         current_attempt = attempts[0] if attempts else None
         runs = [self._run(item) for item in snapshot.runs]
         current_run = runs[0] if runs else None
+        plans = [self._agent_plan_version(item) for item in snapshot.plan_versions]
+        current_plan = plans[0] if plans else None
         can_send_message = not snapshot.has_blocking_hitl
         allowed_actions: list[Literal["send_message", "respond_to_hitl"]] = []
         if can_send_message:
@@ -261,6 +277,8 @@ class ConversationSessionProjectionService:
                 current_attempt=current_attempt,
                 attempt_history=attempts,
             ),
+            current_plan=current_plan,
+            plan_history=plans,
             conversation_tasks=[self._task(item) for item in snapshot.conversation_tasks],
             workspace_plan_context=self._plan(snapshot.workspace_plan_context),
             pending_hitl=[self._hitl(item) for item in snapshot.pending_hitl],
@@ -366,7 +384,7 @@ class ConversationSessionProjectionService:
             revision=source.revision,
             created_at=source.created_at,
             updated_at=source.updated_at,
-            started_at=None,
+            started_at=source.started_at,
             completed_at=source.completed_at,
             last_heartbeat_at=None,
             error=source.error,
@@ -392,6 +410,20 @@ class ConversationSessionProjectionService:
             order_index=source.order_index,
             created_at=source.created_at,
             updated_at=source.updated_at,
+        )
+
+    @staticmethod
+    def _agent_plan_version(
+        source: AgentPlanVersionAuthority,
+    ) -> SessionAgentPlanVersionResponse:
+        return SessionAgentPlanVersionResponse(
+            id=source.id,
+            conversation_id=source.conversation_id,
+            version=source.version,
+            status=source.status,
+            tasks=[dict(task) for task in source.tasks],
+            created_at=source.created_at,
+            approved_at=source.approved_at,
         )
 
     @classmethod
@@ -467,6 +499,7 @@ class ConversationSessionProjectionService:
         conversation = snapshot.conversation
         candidates = [conversation.updated_at or conversation.created_at]
         candidates.extend(run.completed_at or run.updated_at for run in snapshot.runs)
+        candidates.extend(plan.approved_at or plan.created_at for plan in snapshot.plan_versions)
         for attempt in snapshot.attempts:
             candidates.append(attempt.completed_at or attempt.updated_at or attempt.created_at)
         for task in snapshot.conversation_tasks:
@@ -489,6 +522,7 @@ class ConversationSessionProjectionService:
 
 __all__ = [
     "AgentPlanRunAuthority",
+    "AgentPlanVersionAuthority",
     "ArtifactRecordAuthority",
     "ConversationAuthority",
     "ConversationSessionAuthoritySnapshot",

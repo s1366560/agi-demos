@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "checker_version": "2.0.0",
-  "source_revision": "949b5297b564082364379c2ef18bc414ce4e0e84",
+  "source_revision": "fb9c5b7cca2fbdf1b99d8bff1bcf2061278ac705",
   "sources": {
     "canonical_navigation_registry": "web/src/config/navigation.ts#CANONICAL_NAVIGATION_DESTINATIONS",
     "eager_route_entries": "reachable route registration modules#relative imports used by JSX or object routes",
@@ -809,7 +809,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:a8e3343c803b4a7a90246208d9f008823600b1dde2b958cea278356f854a3964"
+      "sha256": "sha256:4bcd6d5f62a6679edc9d3b71834f8ac9600bf7e315dafc2ba5eaed5a52288930"
     },
     {
       "source_entry": "web/src/components/agent/styles.ts",
@@ -1075,7 +1075,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:0e718c71d16c48782c8064b0dc49aa33001f43a9215e694235d4788db883619a"
+      "sha256": "sha256:05865c136277fea93b58a049a84318b714bbcb0b4cfff5d6e302e2a798076815"
     },
     {
       "source_entry": "web/src/components/blackboard/blackboardSurfaceContract.ts",
@@ -1201,14 +1201,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:275315198628240b7e32ce8a8427ff74395980d5071d3d813beb488bf4998844"
+      "sha256": "sha256:af7391b1c219caf4af3ab9f394f0f23edab2eebd196ea61f5a623e3142fe49b8"
     },
     {
       "source_entry": "web/src/components/common/CommandPalette.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:816d5c2cd3c2dc2461698f096561ce70ab42fe387e0805d7be6268026507f456"
+      "sha256": "sha256:46deaed30ca83294c51db033dd66a086ab3b552a6b7998dccc08972ab90d4ae6"
     },
     {
       "source_entry": "web/src/components/common/ErrorBoundary.tsx",
@@ -2777,7 +2777,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:32d2394b82beb375c433f6cf22da493aa180ef2b93add070407bcd26df253836"
+      "sha256": "sha256:863d9a8dcb86c4657c682f3b81f2a0f08667ee624f8435d77380ddad3a28abca"
     },
     {
       "source_entry": "web/src/pages/tenant/TemplateDetail.tsx",
@@ -2805,7 +2805,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:ef3016b1d0bc8cabecb70c62bf9ddbb253bbadef775c937bc5ed237517f19a5e"
+      "sha256": "sha256:cdf3a714495a4d0786f973509f918bb963df9813cb00fc78c05a789f6d422c2f"
     },
     {
       "source_entry": "web/src/pages/tenant/TenantSettings.tsx",
@@ -3995,7 +3995,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:fb21b8733d4ca07f29fedc05c5d4eedd9c3f7542c792dbf5930f36a815eefbfb"
+      "sha256": "sha256:b57faccb1549dab50e033bdd7cb0dd0e8eea7a1e412890e42605a1994ef3dcd3"
     },
     {
       "source_entry": "web/src/utils/featureCheck.ts",

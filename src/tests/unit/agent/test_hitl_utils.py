@@ -207,6 +207,29 @@ def test_restore_persisted_hitl_response_recovers_sealed_env_var_payload(
 
 
 @pytest.mark.unit
+def test_restore_persisted_permission_deny_includes_atomic_feedback() -> None:
+    hitl_request = SimpleNamespace(
+        id="req-permission",
+        request_type=SimpleNamespace(value="permission"),
+        question="Allow this tool?",
+        options=[],
+        context={},
+        metadata={"hitl_type": "permission"},
+        response="deny",
+        response_metadata={"permission_feedback": "Use the read-only path instead."},
+    )
+
+    restored = restore_persisted_hitl_response(hitl_request)
+
+    assert restored == {
+        "action": "deny",
+        "granted": False,
+        "scope": "once",
+        "feedback": "Use the read-only path instead.",
+    }
+
+
+@pytest.mark.unit
 def test_summarize_and_restore_a2ui_action_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

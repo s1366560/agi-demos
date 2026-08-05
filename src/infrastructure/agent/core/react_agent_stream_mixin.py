@@ -142,7 +142,9 @@ def _selected_agent_spawn_limits(
     default_children_per_requester: int,
     default_active_runs_per_lineage: int,
 ) -> dict[str, int]:
-    spawn_policy = getattr(selected_agent, "spawn_policy", None) if selected_agent is not None else None
+    spawn_policy = (
+        getattr(selected_agent, "spawn_policy", None) if selected_agent is not None else None
+    )
     legacy_depth = getattr(selected_agent, "max_spawn_depth", default_depth)
     policy_depth = getattr(spawn_policy, "max_depth", legacy_depth)
     max_depth = min(default_depth, int(policy_depth))
@@ -163,7 +165,9 @@ def _selected_agent_spawn_limits(
     return {
         "max_delegation_depth": max_depth,
         "max_active_runs": max(1, max_active_runs),
-        "max_active_runs_per_lineage": max(1, min(default_active_runs_per_lineage, max_active_runs)),
+        "max_active_runs_per_lineage": max(
+            1, min(default_active_runs_per_lineage, max_active_runs)
+        ),
         "max_children_per_requester": max(1, max_children_per_requester),
     }
 
@@ -172,7 +176,9 @@ def _filter_subagents_for_selected_agent_policy(
     enabled_subagents: list[Any],
     selected_agent: Any | None,
 ) -> list[Any]:
-    spawn_policy = getattr(selected_agent, "spawn_policy", None) if selected_agent is not None else None
+    spawn_policy = (
+        getattr(selected_agent, "spawn_policy", None) if selected_agent is not None else None
+    )
     allowed_subagents = getattr(spawn_policy, "allowed_subagents", None)
     if allowed_subagents is None:
         return enabled_subagents
@@ -1407,6 +1413,7 @@ class StreamMixin:
         tenant_agent_config_data: dict[str, Any] | None = None,
         preferred_language: str | None = None,
         api_auth_token: str | None = None,
+        canonical_run_id: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Stream agent response with ReAct loop.
@@ -1800,6 +1807,7 @@ class StreamMixin:
 
         # Phase 12: Processor creation
         config = self._stream_create_processor_config(self.config, selection_context)
+        config.run_id = canonical_run_id or message_id
         config.api_auth_token = api_auth_token
         config.model = runtime_profile.effective_model
         config.temperature = runtime_profile.effective_temperature

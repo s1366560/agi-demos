@@ -286,6 +286,35 @@ test('cloud workspace attempts remain visible without fabricated desktop runtime
   assert.deepEqual(view.runActions, []);
 });
 
+test('cloud agent plan versions remain visible without a workspace plan context', () => {
+  const currentPlan = {
+    id: 'cloud-plan-version-2',
+    conversation_id: 'conversation-1',
+    version: 2,
+    status: 'draft',
+    tasks: [],
+    created_at: '2026-07-13T00:02:00Z',
+    approved_at: null,
+  };
+  const view = build({
+    projection: projection({
+      schemaVersion: 2,
+      currentPlan,
+      planHistory: [currentPlan],
+      planAuthority: {
+        kind: 'agent_task_list',
+        currentPlan: null,
+        planHistory: [],
+        tasks: [],
+        workspacePlanContext: null,
+      },
+    }),
+  });
+
+  assert.equal(view.hasPlan, true);
+  assert.equal(view.planStatus, 'draft');
+});
+
 test('cloud explore sessions keep their exact runtime mode visible', () => {
   const view = build({
     projection: projection({

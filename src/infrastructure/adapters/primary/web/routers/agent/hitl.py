@@ -107,8 +107,6 @@ def _validate_hitl_response_shape(*, hitl_type: str, response_data: dict[str, An
         action = response_data.get("action")
         granted = response_data.get("granted")
         scope = response_data.get("scope")
-        if action is None and isinstance(granted, bool):
-            return
         expected = {
             "allow": (True, "once"),
             "allow_always": (True, "workspace_tool"),
@@ -123,6 +121,20 @@ def _validate_hitl_response_shape(*, hitl_type: str, response_data: dict[str, An
             raise HTTPException(
                 status_code=400,
                 detail=_("Permission response must not provide a tool name"),
+            )
+        allowed_fields = {"action", "granted", "scope"}
+        if action == "deny":
+            allowed_fields.add("feedback")
+            feedback = response_data.get("feedback")
+            if feedback is not None and not isinstance(feedback, str):
+                raise HTTPException(
+                    status_code=400,
+                    detail=_("Permission deny feedback must be text"),
+                )
+        if set(response_data) - allowed_fields:
+            raise HTTPException(
+                status_code=400,
+                detail=_("Permission response contains unsupported fields"),
             )
         return
 
@@ -407,6 +419,7 @@ def _validate_and_summarize_hitl_response(
     from src.infrastructure.agent.hitl.utils import (
         build_hitl_request_data_from_record,
         resolve_trusted_hitl_type,
+        sanitize_hitl_text,
         summarize_hitl_response,
     )
 
@@ -451,6 +464,13 @@ def _validate_and_summarize_hitl_response(
         stored_hitl_type,
         request.response_data,
     )
+    if stored_hitl_type == "permission" and request.response_data.get("action") == "deny":
+        feedback = sanitize_hitl_text(request.response_data.get("feedback"))
+        if feedback:
+            response_metadata = {
+                **dict(response_metadata or {}),
+                "permission_feedback": feedback,
+            }
     return stored_hitl_type, response_str, response_metadata
 
 

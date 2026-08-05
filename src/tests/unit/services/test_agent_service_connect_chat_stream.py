@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
@@ -715,6 +716,35 @@ async def test_read_delayed_events_starts_near_cursor() -> None:
 
     assert result == []
     assert captured["last_id"] == "110000-0"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_read_delayed_events_respects_max_delay_when_stream_is_idle() -> None:
+    service = _build_service()
+
+    async def _stream_read(*_args, **_kwargs):
+        while True:
+            await asyncio.sleep(1)
+            if False:  # pragma: no cover - keep this an async generator
+                yield {}
+
+    service._event_bus.stream_read = _stream_read
+
+    result = await asyncio.wait_for(
+        service._read_delayed_events(
+            stream_key="agent:events:conv-1",
+            conversation_id="conv-1",
+            message_id="m1",
+            last_event_time_us=120_000_000,
+            last_event_counter=7,
+            max_delay=0.01,
+            idle_timeout=0.005,
+        ),
+        timeout=0.1,
+    )
+
+    assert result == []
 
 
 class _FakeRedisForCacheInvalidation:

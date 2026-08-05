@@ -2,6 +2,7 @@ import type {
   DesktopApprovalRequest,
   HitlResponseSubmission,
   PermissionRequestContext,
+  WorkspacePermissionMode,
 } from '../../types';
 
 /**
@@ -14,11 +15,24 @@ import type {
 
 export type PermissionPreset = 'default' | 'relaxed' | 'full';
 
-export const PERMISSION_PRESETS: readonly PermissionPreset[] = ['default', 'relaxed', 'full'];
+export const PERMISSION_PRESETS: readonly PermissionPreset[] = [
+  'default',
+  'relaxed',
+  'full',
+];
 
-export const PERMISSION_PRESET_STORAGE_PREFIX = 'agistack.desktop.permission-preset:v1';
+export const PERMISSION_PRESET_STORAGE_PREFIX =
+  'agistack.desktop.permission-preset:v1';
 export const FULL_ACCESS_WARNING_STORAGE_PREFIX =
   'agistack.desktop.permission-preset-full-access-warning:v1';
+
+export function permissionModeForPreset(
+  preset: PermissionPreset,
+): WorkspacePermissionMode {
+  if (preset === 'full') return 'full_access';
+  if (preset === 'relaxed') return 'automatic';
+  return 'ask';
+}
 
 type PermissionPresetStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
@@ -30,7 +44,10 @@ export function parsePermissionPreset(raw: string | null): PermissionPreset {
  * Presets persist per conversation+workspace so revisiting a conversation
  * restores the dial the user set for it.
  */
-export function permissionPresetScope(workspaceId: string, conversationId: string): string | null {
+export function permissionPresetScope(
+  workspaceId: string,
+  conversationId: string,
+): string | null {
   const workspace = workspaceId.trim();
   const conversation = conversationId.trim();
   if (!workspace || !conversation) return null;
@@ -43,7 +60,9 @@ export function readPermissionPreset(
 ): PermissionPreset {
   if (!storage) return 'default';
   try {
-    return parsePermissionPreset(storage.getItem(`${PERMISSION_PRESET_STORAGE_PREFIX}:${scope}`));
+    return parsePermissionPreset(
+      storage.getItem(`${PERMISSION_PRESET_STORAGE_PREFIX}:${scope}`),
+    );
   } catch {
     return 'default';
   }
@@ -78,8 +97,9 @@ export function readFullAccessWarningAcknowledged(
   if (!storage) return false;
   try {
     return (
-      storage.getItem(`${FULL_ACCESS_WARNING_STORAGE_PREFIX}:${fullAccessWarningScope(workspaceId)}`) ===
-      'acknowledged'
+      storage.getItem(
+        `${FULL_ACCESS_WARNING_STORAGE_PREFIX}:${fullAccessWarningScope(workspaceId)}`,
+      ) === 'acknowledged'
     );
   } catch {
     return false;
@@ -124,7 +144,9 @@ export function autoApprovalForPermissionRequest(
  * granted flag, exactly like the existing `scope` extra) so the timeline can
  * render a resolved-with-preset marker instead of a silent approval.
  */
-export function autoApprovalResponseData(preset: PermissionPreset): Record<string, unknown> {
+export function autoApprovalResponseData(
+  preset: PermissionPreset,
+): Record<string, unknown> {
   return {
     action: 'allow',
     granted: true,
@@ -138,9 +160,11 @@ export function autoApprovalSubmission(
   request: DesktopApprovalRequest,
   preset: PermissionPreset,
 ): HitlResponseSubmission | null {
-  if (autoApprovalForPermissionRequest(preset, request) !== 'allow') return null;
+  if (autoApprovalForPermissionRequest(preset, request) !== 'allow')
+    return null;
   const revision =
-    typeof request.authority_revision === 'number' && Number.isFinite(request.authority_revision)
+    typeof request.authority_revision === 'number' &&
+    Number.isFinite(request.authority_revision)
       ? request.authority_revision
       : undefined;
   return {
@@ -148,12 +172,19 @@ export function autoApprovalSubmission(
     hitlType: 'permission',
     responseData: autoApprovalResponseData(preset),
     ...(revision === undefined ? {} : { expectedRevision: revision }),
-    idempotencyKey: [request.id, revision ?? 'unversioned', 'preset-auto', preset].join(':'),
+    idempotencyKey: [
+      request.id,
+      revision ?? 'unversioned',
+      'preset-auto',
+      preset,
+    ].join(':'),
   };
 }
 
 /** Denial payload; feedback rides the existing `feedback` response field. */
-export function permissionDenialResponseData(feedback?: string): Record<string, unknown> {
+export function permissionDenialResponseData(
+  feedback?: string,
+): Record<string, unknown> {
   const trimmed = feedback?.trim();
   return {
     action: 'deny',
@@ -161,20 +192,6 @@ export function permissionDenialResponseData(feedback?: string): Record<string, 
     scope: 'once',
     ...(trimmed ? { feedback: trimmed } : {}),
   };
-}
-
-/**
- * Extract the steering text from a denial submission so the caller can post
- * it as a normal user message (rejection as a steering channel).
- */
-export function denialSteeringFeedback(
-  submission: Pick<HitlResponseSubmission, 'responseData'>,
-): string | null {
-  if (submission.responseData.granted !== false) return null;
-  const feedback = submission.responseData.feedback;
-  if (typeof feedback !== 'string') return null;
-  const trimmed = feedback.trim();
-  return trimmed ? trimmed : null;
 }
 
 function browserStorage(): PermissionPresetStorage | null {

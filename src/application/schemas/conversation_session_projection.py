@@ -77,7 +77,7 @@ class SessionPlanRunResponse(_ProjectionModel):
     id: str
     conversation_id: str
     project_id: str
-    plan_version_id: str
+    plan_version_id: str | None
     idempotency_key: str
     message_id: str
     request_message: str
@@ -110,6 +110,16 @@ class SessionConversationTaskResponse(_ProjectionModel):
     order_index: int
     created_at: datetime
     updated_at: datetime | None
+
+
+class SessionAgentPlanVersionResponse(_ProjectionModel):
+    id: str
+    conversation_id: str
+    version: int = Field(ge=1)
+    status: Literal["draft", "approved"]
+    tasks: list[dict[str, Any]]
+    created_at: datetime
+    approved_at: datetime | None
 
 
 class SessionWorkspacePlanNodeResponse(_ProjectionModel):
@@ -203,6 +213,8 @@ class ConversationSessionProjectionResponse(_ProjectionModel):
     authority_id: str
     conversation: SessionConversationResponse
     execution: SessionExecutionResponse
+    current_plan: SessionAgentPlanVersionResponse | None
+    plan_history: list[SessionAgentPlanVersionResponse]
     conversation_tasks: list[SessionConversationTaskResponse]
     workspace_plan_context: SessionWorkspacePlanContextResponse | None
     pending_hitl: list[SessionPendingHITLResponse]

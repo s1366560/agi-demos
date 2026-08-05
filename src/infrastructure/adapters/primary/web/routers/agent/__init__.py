@@ -19,6 +19,7 @@ from . import (
     participants,
     patterns,
     plans,
+    run_authority,
     session_projection,
     subagent_router,
     templates,
@@ -86,6 +87,7 @@ router.include_router(events.router)
 router.include_router(templates.router)
 router.include_router(plans.router)
 router.include_router(plans.approval_router)
+router.include_router(run_authority.router)
 router.include_router(session_projection.router)
 router.include_router(subagent_router.router)
 router.include_router(binding_router.router)

@@ -60,7 +60,7 @@
   padding: 6px 10px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
-  background: rgba(var(--desktop-overlay-3-rgb), 0.92);
+  background: rgba(var(--desktop-surface-33-rgb), 0.92);
   color: var(--desktop-text);
   cursor: pointer;
 }
@@ -125,7 +125,7 @@
   padding: 18px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 8px;
-  background: rgba(var(--desktop-overlay-3-rgb), 0.9);
+  background: rgba(var(--desktop-surface-33-rgb), 0.9);
 }
 
 .workspace-collaboration-state.is-compact {
@@ -199,7 +199,7 @@
   padding: 15px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 8px;
-  background: rgba(var(--desktop-overlay-3-rgb), 0.9);
+  background: rgba(var(--desktop-surface-33-rgb), 0.9);
 }
 
 .workspace-collaboration-collection > h3,
@@ -226,7 +226,7 @@
   padding: 11px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 6px;
-  background: rgba(var(--desktop-overlay-2-rgb), 0.52);
+  background: rgba(var(--desktop-surface-33-rgb), 0.52);
 }
 
 .workspace-collaboration-collection article > div {
@@ -294,7 +294,7 @@
   padding: 11px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 8px;
-  background: rgba(var(--desktop-overlay-3-rgb), 0.72);
+  background: rgba(var(--desktop-surface-33-rgb), 0.72);
 }
 
 .workspace-collaboration-action-grid {
@@ -313,7 +313,7 @@
   padding: 13px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 8px;
-  background: rgba(var(--desktop-overlay-3-rgb), 0.9);
+  background: rgba(var(--desktop-surface-33-rgb), 0.9);
 }
 
 .workspace-collaboration-inline-form {
@@ -366,7 +366,7 @@
   padding: 15px;
   border: 1px solid var(--desktop-border-soft);
   border-radius: 8px;
-  background: rgba(var(--desktop-overlay-3-rgb), 0.9);
+  background: rgba(var(--desktop-surface-33-rgb), 0.9);
 }
 
 .workspace-collaboration-feed > article > header {

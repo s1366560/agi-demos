@@ -11,31 +11,69 @@ import { agentService } from '@/services/agentService';
 interface SubAgentActionsProps {
   subagentId: string;
   conversationId: string;
+  expectedRunRevision: number;
 }
 
-export const SubAgentActions: React.FC<SubAgentActionsProps> = ({ subagentId, conversationId }) => {
+export const SubAgentActions: React.FC<SubAgentActionsProps> = ({
+  subagentId,
+  conversationId,
+  expectedRunRevision,
+}) => {
   const { t } = useTranslation();
   const [showRedirect, setShowRedirect] = useState(false);
   const [instruction, setInstruction] = useState('');
+  const [pendingAction, setPendingAction] = useState<'kill' | 'steer' | null>(null);
 
-  const handleStop = useCallback(() => {
-    const sent = agentService.killSubAgent(conversationId, subagentId);
-    if (!sent) {
-      message.error(t('agent.subagent.stopFailed', 'Failed to stop sub-agent'));
-    }
-  }, [conversationId, subagentId, t]);
-
-  const handleRedirect = useCallback(() => {
-    if (instruction.trim()) {
-      const sent = agentService.steerSubAgent(conversationId, subagentId, instruction.trim());
-      if (!sent) {
-        message.error(t('agent.subagent.steerFailed', 'Failed to send redirect'));
-        return;
+  const handleStop = useCallback(async () => {
+    setPendingAction('kill');
+    try {
+      const ack = await agentService.killSubAgent(conversationId, subagentId, {
+        expectedRunRevision,
+        cascade: false,
+      });
+      if (!ack.accepted) {
+        message.error(
+          t('agent.subagent.stopRejected', {
+            defaultValue: 'Stop request was rejected: {{reason}}',
+            reason: ack.reason_code ?? 'control_command_rejected',
+          })
+        );
       }
-      setInstruction('');
-      setShowRedirect(false);
+    } catch {
+      message.error(t('agent.subagent.stopFailed', 'Failed to stop sub-agent'));
+    } finally {
+      setPendingAction(null);
     }
-  }, [conversationId, subagentId, instruction, t]);
+  }, [conversationId, expectedRunRevision, subagentId, t]);
+
+  const handleRedirect = useCallback(async () => {
+    if (instruction.trim() && pendingAction === null) {
+      setPendingAction('steer');
+      try {
+        const ack = await agentService.steerSubAgent(
+          conversationId,
+          subagentId,
+          instruction.trim(),
+          { expectedRunRevision }
+        );
+        if (!ack.accepted) {
+          message.error(
+            t('agent.subagent.steerRejected', {
+              defaultValue: 'Redirect was rejected: {{reason}}',
+              reason: ack.reason_code ?? 'control_command_rejected',
+            })
+          );
+          return;
+        }
+        setInstruction('');
+        setShowRedirect(false);
+      } catch {
+        message.error(t('agent.subagent.steerFailed', 'Failed to send redirect'));
+      } finally {
+        setPendingAction(null);
+      }
+    }
+  }, [conversationId, expectedRunRevision, subagentId, instruction, pendingAction, t]);
 
   return (
     <div className="mt-2 flex flex-col gap-2 animate-fade-in">
@@ -46,13 +84,16 @@ export const SubAgentActions: React.FC<SubAgentActionsProps> = ({ subagentId, co
             'agent.subagent.stopConfirmDescription',
             'The running sub-agent will be terminated.'
           )}
-          onConfirm={handleStop}
+          onConfirm={() => {
+            void handleStop();
+          }}
           okText={t('agent.subagent.action_stop')}
           cancelText={t('common.cancel', 'Cancel')}
-          okButtonProps={{ danger: true }}
+          okButtonProps={{ danger: true, loading: pendingAction === 'kill' }}
         >
           <button
             type="button"
+            disabled={pendingAction !== null}
             className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
             title={t('agent.subagent.action_stop')}
           >
@@ -62,6 +103,7 @@ export const SubAgentActions: React.FC<SubAgentActionsProps> = ({ subagentId, co
         </Popconfirm>
         <button
           type="button"
+          disabled={pendingAction !== null}
           onClick={() => {
             setShowRedirect(!showRedirect);
           }}
@@ -82,7 +124,7 @@ export const SubAgentActions: React.FC<SubAgentActionsProps> = ({ subagentId, co
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
-                handleRedirect();
+                void handleRedirect();
               }
             }}
             placeholder={t('agent.subagent.redirect_placeholder')}
@@ -91,8 +133,10 @@ export const SubAgentActions: React.FC<SubAgentActionsProps> = ({ subagentId, co
           />
           <button
             type="button"
-            onClick={handleRedirect}
-            disabled={!instruction.trim()}
+            onClick={() => {
+              void handleRedirect();
+            }}
+            disabled={!instruction.trim() || pendingAction !== null}
             aria-label={t('agent.subagent.send_redirect', 'Send redirect')}
             className="inline-flex items-center p-1.5 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-md disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >

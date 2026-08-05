@@ -16,6 +16,7 @@ import { AlertCircle, RefreshCw } from 'lucide-react';
 
 import { LazyEmpty, LazyButton } from '@/components/ui/lazyAntd';
 
+import { ProjectActivityInbox } from '../../components/agent/activity/ProjectActivityInbox';
 import { useBlackboardSSE } from '../../hooks/useBlackboardSSE';
 import { useConversationListAutoRefresh } from '../../hooks/useConversationListAutoRefresh';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
@@ -233,6 +234,13 @@ export const AgentWorkspace: FC = () => {
   const handleCreateProject = useCallback(() => {
     void navigate(tenantId ? `/tenant/${tenantId}/projects/new` : '/tenant/projects/new');
   }, [navigate, tenantId]);
+  const handleOpenActivityConversation = useCallback(
+    (conversationId: string) => {
+      const suffix = navigationQuery ? `?${navigationQuery}` : '';
+      void navigate(`${basePath}/${encodeURIComponent(conversationId)}${suffix}`);
+    },
+    [basePath, navigate, navigationQuery]
+  );
 
   const loadProjectsForTenant = useCallback(async () => {
     if (!tenantId) return;
@@ -521,6 +529,14 @@ export const AgentWorkspace: FC = () => {
             navigationQuery={navigationQuery}
             routeTenantId={tenantId}
             loadConversationList={false}
+            headerExtra={
+              <ProjectActivityInbox
+                tenantId={tenantId ?? 'unknown-tenant'}
+                projectId={effectiveProjectId}
+                principalId={user?.id ?? 'unknown-user'}
+                onOpenConversation={handleOpenActivityConversation}
+              />
+            }
           />
           <ContextDetailPanel />
         </Suspense>

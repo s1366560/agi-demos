@@ -12,6 +12,7 @@ import {
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
+import type { RunChangeScope } from '../agent-authority/agentAuthorityTypes';
 import type {
   ChangeFile,
   ChangeLine,
@@ -61,6 +62,9 @@ type SessionChangesCanvasProps = {
   onRemoveComment: (commentId: string) => void;
   onSendComments: (comments: ChangeReviewComment[]) => void;
   onRefresh: () => void;
+  scope: RunChangeScope;
+  availableScopes: readonly RunChangeScope[];
+  onScopeChange: (scope: RunChangeScope) => void;
 };
 
 export function SessionChangesCanvas({
@@ -75,6 +79,9 @@ export function SessionChangesCanvas({
   onRemoveComment,
   onSendComments,
   onRefresh,
+  scope,
+  availableScopes,
+  onScopeChange,
 }: SessionChangesCanvasProps) {
   const { t } = useI18n();
   const [expandedPaths, setExpandedPaths] = useState<string[]>([]);
@@ -109,7 +116,8 @@ export function SessionChangesCanvas({
   const review: ReviewInteraction = {
     commentsByAnchor,
     draft,
-    onStartComment: (anchorKey, reference) => setDraft({ anchorKey, reference, text: '' }),
+    onStartComment: (anchorKey, reference) =>
+      setDraft({ anchorKey, reference, text: '' }),
     onDraftTextChange: (text) =>
       setDraft((current) => (current ? { ...current, text } : current)),
     onSubmitDraft: () => {
@@ -128,7 +136,10 @@ export function SessionChangesCanvas({
   };
 
   return (
-    <section className="session-changes-canvas" aria-label={t('session.changesTitle')}>
+    <section
+      className="session-changes-canvas"
+      aria-label={t('session.changesTitle')}
+    >
       <header className="session-changes-head">
         <div>
           <span>{t('session.changesKicker')}</span>
@@ -138,42 +149,79 @@ export function SessionChangesCanvas({
           ) : null}
         </div>
         <div className="session-changes-actions">
+          <div
+            className="session-changes-scope"
+            aria-label={t('session.changesScope')}
+          >
+            {(['turn', 'run', 'session'] as const).map((candidate) => (
+              <Button
+                key={candidate}
+                size="1"
+                variant={scope === candidate ? 'solid' : 'soft'}
+                disabled={loading || !availableScopes.includes(candidate)}
+                onClick={() => onScopeChange(candidate)}
+              >
+                {t(`session.changesScope.${candidate}`)}
+              </Button>
+            ))}
+          </div>
           {snapshot?.truncated ? (
             <Badge color="amber" variant="soft">
               {t('session.changesTruncated')}
             </Badge>
           ) : null}
-          <Button size="1" variant="surface" onClick={onRefresh} disabled={loading}>
+          <Button
+            size="1"
+            variant="surface"
+            onClick={onRefresh}
+            disabled={loading}
+          >
             <ReloadIcon />
-            {loading ? t('session.changesRefreshing') : t('session.changesRefresh')}
+            {loading
+              ? t('session.changesRefreshing')
+              : t('session.changesRefresh')}
           </Button>
         </div>
       </header>
 
       {loading && !snapshot ? (
-        <ChangesState title={t('session.changesLoading')} body={t('session.changesLoadingBody')} />
+        <ChangesState
+          title={t('session.changesLoading')}
+          body={t('session.changesLoadingBody')}
+        />
       ) : error ? (
         <ChangesState title={t('session.changesError')} body={error} />
       ) : !snapshot ? (
-        <ChangesState title={t('session.changesUnavailable')} body={t('session.changesUnavailableBody')} />
+        <ChangesState
+          title={t('session.changesUnavailable')}
+          body={t('session.changesUnavailableBody')}
+        />
       ) : snapshot.status !== 'ready' ? (
         <ChangesState
           title={t(`session.changesStatus.${snapshot.status}`)}
           body={t(`session.changesReason.${snapshot.reason ?? 'unknown'}`)}
         />
       ) : snapshot.files.length === 0 ? (
-        <ChangesState title={t('session.noChanges')} body={t('session.noChangesDescription')} />
+        <ChangesState
+          title={t('session.noChanges')}
+          body={t('session.noChangesDescription')}
+        />
       ) : (
         <>
           <div className="session-changes-summary" role="status">
-            <span>{t('session.changedFiles', { count: snapshot.files_changed })}</span>
+            <span>{t(`session.changesScope.${snapshot.scope ?? scope}`)}</span>
+            <span>
+              {t('session.changedFiles', { count: snapshot.files_changed })}
+            </span>
             <strong className="is-addition">+{snapshot.additions}</strong>
             <strong className="is-deletion">−{snapshot.deletions}</strong>
             <span className="session-changes-expand-actions">
               <Button
                 size="1"
                 variant="ghost"
-                onClick={() => setExpandedPaths(expandAllChangeFiles(snapshot.files))}
+                onClick={() =>
+                  setExpandedPaths(expandAllChangeFiles(snapshot.files))
+                }
               >
                 {t('session.expandAllChanges')}
               </Button>
@@ -186,17 +234,41 @@ export function SessionChangesCanvas({
               </Button>
             </span>
             <small>{t('session.changeReferenceHint')}</small>
+            {snapshot.snapshot_revision ? (
+              <small>
+                {t('session.changesSnapshotRevision', {
+                  revision: snapshot.snapshot_revision,
+                })}
+              </small>
+            ) : null}
+            {snapshot.attribution ? (
+              <small>
+                {t('session.changesAttribution', {
+                  attributed: snapshot.attribution.filter(
+                    (entry) => entry.attribution === 'attributed',
+                  ).length,
+                  unattributed: snapshot.attribution.filter(
+                    (entry) => entry.attribution === 'unattributed',
+                  ).length,
+                })}
+              </small>
+            ) : null}
           </div>
           {comments.length > 0 ? (
             <div className="session-change-comments-bar" role="status">
-              <span>{t('session.pendingChangeComments', { count: comments.length })}</span>
+              <span>
+                {t('session.pendingChangeComments', { count: comments.length })}
+              </span>
               <Button size="1" onClick={() => onSendComments(comments)}>
                 <PaperPlaneIcon />
                 {t('session.sendChangeComments')}
               </Button>
             </div>
           ) : null}
-          <div className="session-change-files-list" aria-label={t('session.changedFileTabs')}>
+          <div
+            className="session-change-files-list"
+            aria-label={t('session.changedFileTabs')}
+          >
             {snapshot.files.map((file) => {
               const expanded = expandedPaths.includes(file.path);
               return (
@@ -206,11 +278,15 @@ export function SessionChangesCanvas({
                     className={`session-change-file-toggle ${expanded ? 'is-expanded' : ''}`}
                     aria-expanded={expanded}
                     aria-label={t(
-                      expanded ? 'session.collapseChangeFile' : 'session.expandChangeFile',
+                      expanded
+                        ? 'session.collapseChangeFile'
+                        : 'session.expandChangeFile',
                       { path: file.path },
                     )}
                     onClick={() =>
-                      setExpandedPaths((current) => toggleExpandedChangeFile(current, file.path))
+                      setExpandedPaths((current) =>
+                        toggleExpandedChangeFile(current, file.path),
+                      )
                     }
                   >
                     {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
@@ -235,7 +311,9 @@ export function SessionChangesCanvas({
           </div>
         </>
       )}
-      {decision ? <div className="session-change-decision">{decision}</div> : null}
+      {decision ? (
+        <div className="session-change-decision">{decision}</div>
+      ) : null}
     </section>
   );
 }
@@ -264,12 +342,18 @@ function ChangeFileView({
         <span>{file.status}</span>
       </header>
       {file.hunks.map((hunk, hunkIndex) => (
-        <details open className="session-change-hunk" key={`${hunk.header}-${hunkIndex}`}>
+        <details
+          open
+          className="session-change-hunk"
+          key={`${hunk.header}-${hunkIndex}`}
+        >
           <summary>{hunk.header}</summary>
           <div role="table" aria-label={`${file.path} ${hunk.header}`}>
             {hunk.lines.map((line, lineIndex) => {
               const reference = referenceForChangeLine(snapshot, file, line);
-              const selected = reference ? selectedKeys.has(runInputReferenceKey(reference)) : false;
+              const selected = reference
+                ? selectedKeys.has(runInputReferenceKey(reference))
+                : false;
               return (
                 <ChangeLineRow
                   line={line}
@@ -303,7 +387,9 @@ function ChangeLineRow({
 }) {
   const { t } = useI18n();
   const anchorKey = reference ? runInputReferenceKey(reference) : null;
-  const lineComments = anchorKey ? (review.commentsByAnchor.get(anchorKey) ?? []) : [];
+  const lineComments = anchorKey
+    ? (review.commentsByAnchor.get(anchorKey) ?? [])
+    : [];
   const draftOpen = Boolean(anchorKey && review.draft?.anchorKey === anchorKey);
   return (
     <div className="session-change-line-wrap">
@@ -326,7 +412,11 @@ function ChangeLineRow({
           {line.new_line ?? ''}
         </span>
         <span className="change-marker" aria-hidden="true">
-          {line.kind === 'addition' ? '+' : line.kind === 'deletion' ? '−' : ' '}
+          {line.kind === 'addition'
+            ? '+'
+            : line.kind === 'deletion'
+              ? '−'
+              : ' '}
         </span>
         <code role="cell">{line.text || ' '}</code>
       </button>

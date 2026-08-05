@@ -8,10 +8,10 @@ import {
   autoApprovalForPermissionRequest,
   autoApprovalResponseData,
   autoApprovalSubmission,
-  denialSteeringFeedback,
   fullAccessWarningScope,
   parsePermissionPreset,
   permissionDenialResponseData,
+  permissionModeForPreset,
   permissionPresetScope,
   readFullAccessWarningAcknowledged,
   readPermissionPreset,
@@ -57,6 +57,12 @@ test('parsePermissionPreset only accepts known presets', () => {
   assert.equal(parsePermissionPreset('default'), 'default');
   assert.equal(parsePermissionPreset('bypass'), 'default');
   assert.equal(parsePermissionPreset(null), 'default');
+});
+
+test('permission presets map to canonical run authorization modes', () => {
+  assert.equal(permissionModeForPreset('default'), 'ask');
+  assert.equal(permissionModeForPreset('relaxed'), 'automatic');
+  assert.equal(permissionModeForPreset('full'), 'full_access');
 });
 
 test('preset scope requires both workspace and conversation', () => {
@@ -200,28 +206,6 @@ test('denial payload matches the legacy shape unless feedback is present', () =>
     scope: 'once',
     feedback: 'use Jest instead',
   });
-});
-
-test('denialSteeringFeedback extracts feedback only from denials', () => {
-  assert.equal(
-    denialSteeringFeedback({
-      responseData: { granted: false, feedback: ' do not delete the lockfile ' },
-    }),
-    'do not delete the lockfile',
-  );
-  assert.equal(
-    denialSteeringFeedback({ responseData: { granted: true, feedback: 'ignored' } }),
-    null,
-  );
-  assert.equal(denialSteeringFeedback({ responseData: { granted: false } }), null);
-  assert.equal(
-    denialSteeringFeedback({ responseData: { granted: false, feedback: '   ' } }),
-    null,
-  );
-  assert.equal(
-    denialSteeringFeedback({ responseData: { granted: false, feedback: 42 } }),
-    null,
-  );
 });
 
 test('permission parameter preview reads structured tool input from the payload', () => {

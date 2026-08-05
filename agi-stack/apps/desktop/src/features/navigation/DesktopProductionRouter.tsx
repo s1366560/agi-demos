@@ -1,7 +1,4 @@
-import {
-  type ReactNode,
-  useMemo,
-} from 'react';
+import { type ReactNode, useMemo } from 'react';
 import {
   ChevronRightIcon,
   ExclamationTriangleIcon,
@@ -26,13 +23,11 @@ export type DesktopProductionRouterNavigationPort = Readonly<{
 }>;
 
 export type DesktopProductionRouterProps = Readonly<
-  Omit<
-    DesktopHashRouteHostOptions<DesktopRouteModule>,
-    'location'
-  > & {
+  Omit<DesktopHashRouteHostOptions<DesktopRouteModule>, 'location'> & {
     authenticationPassthroughRouteIds?: ReadonlySet<string>;
     children: ReactNode;
     forceLegacyChildren?: boolean;
+    legacyPassthroughRouteIds?: ReadonlySet<string>;
     location: DesktopHashLocationPort;
     navigation: DesktopProductionRouterNavigationPort;
   }
@@ -43,6 +38,7 @@ export type DesktopProductionRouterViewProps = Readonly<{
   children: ReactNode;
   currentLocation?: string;
   forceLegacyChildren?: boolean;
+  legacyPassthroughRouteIds?: ReadonlySet<string>;
   navigation: DesktopProductionRouterNavigationPort;
   retry: () => Promise<void>;
   state: DesktopRouteHostState<DesktopRouteModule>;
@@ -52,6 +48,7 @@ export function DesktopProductionRouter({
   authenticationPassthroughRouteIds,
   children,
   forceLegacyChildren,
+  legacyPassthroughRouteIds,
   location,
   mode,
   navigation,
@@ -62,9 +59,7 @@ export function DesktopProductionRouter({
   resolveCapability,
   switchScope,
 }: DesktopProductionRouterProps) {
-  const hostOptions = useMemo<
-    DesktopHashRouteHostOptions<DesktopRouteModule>
-  >(
+  const hostOptions = useMemo<DesktopHashRouteHostOptions<DesktopRouteModule>>(
     () => ({
       location,
       mode,
@@ -92,6 +87,7 @@ export function DesktopProductionRouter({
       authenticationPassthroughRouteIds={authenticationPassthroughRouteIds}
       currentLocation={location.readHash()}
       forceLegacyChildren={forceLegacyChildren}
+      legacyPassthroughRouteIds={legacyPassthroughRouteIds}
       navigation={navigation}
       retry={retry}
       state={state}
@@ -106,6 +102,7 @@ export function DesktopProductionRouterView({
   children,
   currentLocation = '',
   forceLegacyChildren = false,
+  legacyPassthroughRouteIds,
   navigation,
   retry,
   state,
@@ -116,11 +113,17 @@ export function DesktopProductionRouterView({
     currentLocation,
     authenticationPassthroughRouteIds,
     forceLegacyChildren,
+    legacyPassthroughRouteIds,
   );
   const routeId =
     'match' in state
       ? state.match.definition.id
       : t('desktopProductionRouter.nativeRoute');
+  const routeContentOwned = Boolean(
+    routeActive &&
+    isLoadedRouteState(state) &&
+    state.module.contentPolicy === 'route_content',
+  );
 
   return (
     <>
@@ -130,13 +133,15 @@ export function DesktopProductionRouterView({
         hidden={routeActive}
         inert={routeActive ? true : undefined}
       >
-        {children}
+        {routeContentOwned ? null : children}
       </section>
       {routeActive ? (
         <section
           className="desktop-production-route-stage"
           data-route-state={state.status}
-          data-route-id={'match' in state ? state.match.definition.id : undefined}
+          data-route-id={
+            'match' in state ? state.match.definition.id : undefined
+          }
           onKeyDown={(event) => {
             handleDesktopProductionRouteBoundaryEscape(
               state.status,
@@ -162,7 +167,11 @@ export function DesktopProductionRouterView({
             <ChevronRightIcon aria-hidden="true" />
             <code>{routeId}</code>
           </nav>
-          {renderActiveRoute(state, retry)}
+          {renderActiveRoute(
+            state,
+            retry,
+            routeContentOwned ? children : undefined,
+          )}
         </section>
       ) : null}
     </>
@@ -182,8 +191,9 @@ type BoundaryDesktopRouteState = Exclude<
 function renderActiveRoute(
   state: DesktopRouteHostState<DesktopRouteModule>,
   retry: () => Promise<void>,
+  content?: ReactNode,
 ) {
-  if (isLoadedRouteState(state)) return renderRouteSurface(state);
+  if (isLoadedRouteState(state)) return renderRouteSurface(state, content);
   return renderBoundary(state, retry);
 }
 
@@ -195,11 +205,16 @@ function isLoadedRouteState(
 
 function renderRouteSurface(
   state: LoadedDesktopRouteState,
+  content?: ReactNode,
 ) {
   const Surface = state.module.Surface;
   return (
     <div className="desktop-production-route-surface">
-      <Surface module={state.module} context={state.match.context} />
+      <Surface
+        module={state.module}
+        context={state.match.context}
+        {...(content === undefined ? {} : { content })}
+      />
     </div>
   );
 }
@@ -246,9 +261,7 @@ function RouteBoundary({
       className="desktop-production-route-boundary"
       role={alert ? 'alert' : 'status'}
       aria-busy={
-        state.status === 'idle' || state.status === 'loading'
-          ? true
-          : undefined
+        state.status === 'idle' || state.status === 'loading' ? true : undefined
       }
     >
       <span
@@ -389,6 +402,7 @@ function productionRouteOwnsState(
   currentLocation: string,
   authenticationPassthroughRouteIds?: ReadonlySet<string>,
   forceLegacyChildren = false,
+  legacyPassthroughRouteIds?: ReadonlySet<string>,
 ): boolean {
   if (forceLegacyChildren) return false;
   if (state.status === 'idle') {
@@ -405,6 +419,12 @@ function productionRouteOwnsState(
   ) {
     return false;
   }
+  if (
+    (state.status === 'ready' || state.status === 'degraded') &&
+    legacyPassthroughRouteIds?.has(state.match.definition.id)
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -414,14 +434,12 @@ export function shouldPassThroughAuthenticationBoundary(
 ): boolean {
   return Boolean(
     state.status === 'forbidden' &&
-      authenticationPassthroughRouteIds?.has(state.match.definition.id) &&
-      state.missingPermissions.includes('authenticated'),
+    authenticationPassthroughRouteIds?.has(state.match.definition.id) &&
+    state.missingPermissions.includes('authenticated'),
   );
 }
 
-function hasNonEmptyHash(
-  location: string,
-): boolean {
+function hasNonEmptyHash(location: string): boolean {
   const trimmed = location.trim();
   if (!trimmed) return false;
   const hashIndex = trimmed.indexOf('#');

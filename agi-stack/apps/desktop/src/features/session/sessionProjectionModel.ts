@@ -137,7 +137,12 @@ function decodeDesktopConversationSessionProjection(
 
   const runsById = new Map(runHistory.map((run) => [run.id, run]));
   const plansById = new Map(planHistory.map((plan) => [plan.id, plan]));
-  if (runHistory.some((run) => !plansById.has(run.plan_version_id))) return null;
+  if (
+    runHistory.some(
+      (run) => run.plan_version_id !== null && !plansById.has(run.plan_version_id),
+    )
+  )
+    return null;
 
   const pendingHitl = readArray(root.pending_hitl, (value) =>
     readHitl(value, scope, runHistory),
@@ -318,7 +323,7 @@ function readRun(value: unknown, scope: SessionProjectionScope): DesktopRun | nu
     !nonEmptyString(run.id) ||
     run.conversation_id !== scope.conversationId ||
     !nonEmptyString(run.project_id) ||
-    !nonEmptyString(run.plan_version_id) ||
+    (run.plan_version_id !== null && !nonEmptyString(run.plan_version_id)) ||
     !nonEmptyString(run.idempotency_key) ||
     !nonEmptyString(run.message_id) ||
     typeof run.request_message !== 'string' ||

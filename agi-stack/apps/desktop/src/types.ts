@@ -10,7 +10,10 @@ export type AuthStatus =
   | 'signed_in'
   | 'manual';
 
-export type CredentialKind = 'cloud_session' | 'manual_api_key' | 'local_session';
+export type CredentialKind =
+  | 'cloud_session'
+  | 'manual_api_key'
+  | 'local_session';
 
 export type WorkbenchSection =
   | 'workspace'
@@ -74,7 +77,12 @@ export function mergeLocalRuntimeStatus(
   };
 }
 
-export type HitlType = 'clarification' | 'decision' | 'env_var' | 'permission' | 'a2ui_action';
+export type HitlType =
+  | 'clarification'
+  | 'decision'
+  | 'env_var'
+  | 'permission'
+  | 'a2ui_action';
 
 export type HitlResponseSubmission = {
   requestId: string;
@@ -236,7 +244,11 @@ export type WorkspaceAgentBinding = {
   updated_at?: string | null;
 };
 
-export type WorkspaceAuthorityStatus = 'unavailable' | 'loading' | 'ready' | 'error';
+export type WorkspaceAuthorityStatus =
+  | 'unavailable'
+  | 'loading'
+  | 'ready'
+  | 'error';
 
 export type WorkspaceAuthorityCollection<T> = {
   status: WorkspaceAuthorityStatus;
@@ -368,7 +380,12 @@ export type TaskSessionWorkspaceCreateInput = {
   name: string;
   description?: string;
   metadata?: Record<string, unknown>;
-  use_case: 'general' | 'programming' | 'conversation' | 'research' | 'operations';
+  use_case:
+    | 'general'
+    | 'programming'
+    | 'conversation'
+    | 'research'
+    | 'operations';
   collaboration_mode:
     | 'single_agent'
     | 'multi_agent_shared'
@@ -384,7 +401,9 @@ export type TaskSessionWorkspaceExistingInput = {
 
 export type CreateTaskSessionRequest = {
   idempotency_key: string;
-  workspace: TaskSessionWorkspaceCreateInput | TaskSessionWorkspaceExistingInput;
+  workspace:
+    | TaskSessionWorkspaceCreateInput
+    | TaskSessionWorkspaceExistingInput;
   conversation: {
     title: string;
     capability_mode: AgentCapabilityMode;
@@ -470,7 +489,10 @@ export type DesktopRunStatus =
   | 'cancelled';
 
 export type DesktopExecutionEnvironmentKind = 'local' | 'worktree';
-export type DesktopPermissionProfile = 'read_only' | 'workspace_write' | 'full_access';
+export type DesktopPermissionProfile =
+  | 'read_only'
+  | 'workspace_write'
+  | 'full_access';
 
 export type DesktopExecutionEnvironment = {
   id: string;
@@ -488,7 +510,7 @@ export type DesktopRun = {
   id: string;
   conversation_id: string;
   project_id: string;
-  plan_version_id: string;
+  plan_version_id: string | null;
   idempotency_key: string;
   message_id: string;
   request_message: string;
@@ -505,7 +527,11 @@ export type DesktopRun = {
   authorization_snapshot: Record<string, unknown>;
 };
 
-export type ChangeSnapshotStatus = 'ready' | 'unattributed' | 'unavailable' | 'failed';
+export type ChangeSnapshotStatus =
+  | 'ready'
+  | 'unattributed'
+  | 'unavailable'
+  | 'failed';
 export type ChangeLineKind = 'context' | 'addition' | 'deletion';
 
 export type ChangeLine = {
@@ -534,6 +560,16 @@ export type ChangeFile = {
   hunks: ChangeHunk[];
 };
 
+export type ChangeAttribution = {
+  file_path: string | null;
+  hunk_id: string | null;
+  attribution: 'attributed' | 'unattributed';
+  turn_id: string | null;
+  event_id: string;
+  event_revision: string;
+  payload: Record<string, unknown>;
+};
+
 export type ChangeSnapshot = {
   id: string;
   run_id: string;
@@ -553,11 +589,20 @@ export type ChangeSnapshot = {
   truncated: boolean;
   captured_at: string;
   files: ChangeFile[];
+  scope?: 'turn' | 'run' | 'session';
+  turn_id?: string | null;
+  snapshot_revision?: string | null;
+  attribution?: ChangeAttribution[];
 };
 
 export type RunInputDelivery = 'steer_now' | 'queue_next';
 export type RunInputStatus =
-  'pending_boundary' | 'queued' | 'applied' | 'ready' | 'blocked' | 'promoted_to_plan';
+  | 'pending_boundary'
+  | 'queued'
+  | 'applied'
+  | 'ready'
+  | 'blocked'
+  | 'promoted_to_plan';
 export type ChangeReferenceSide = 'old' | 'new';
 
 export type CodeRangeReference = {
@@ -599,6 +644,11 @@ export type DesktopRunInput = {
   context_items?: ComposerContextItem[];
   applied_round?: number | null;
   applied_at?: string | null;
+  injected_via?: string | null;
+  dispatch_status?: 'not_required' | 'dispatching' | 'dispatched' | 'failed';
+  dispatch_attempts?: number;
+  dispatch_lease_expires_at?: string | null;
+  dispatch_error_code?: string | null;
   promotion_idempotency_key?: string | null;
   promoted_at?: string | null;
   created_at: string;
@@ -627,8 +677,42 @@ export type PromoteRunInputResponse = {
   source_run: DesktopRun;
 };
 
-export type MyWorkGroup = 'needs_input' | 'needs_approval' | 'running' | 'ready_review';
-export type MyWorkAuthorityKind = 'desktop_run' | 'workspace_attempt' | 'hitl_request';
+export type MyWorkGroup =
+  | 'needs_input'
+  | 'needs_approval'
+  | 'running'
+  | 'ready_review';
+export type MyWorkAuthorityKind =
+  | 'desktop_run'
+  | 'agent_run'
+  | 'workspace_attempt'
+  | 'hitl_request';
+
+export type RunSummary = {
+  run_id: string;
+  tenant_id: string;
+  project_id: string;
+  conversation_id: string;
+  status: string;
+  revision: number;
+  summary_state: 'recorded' | 'partial';
+  reason_code: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_ms: number | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cost_usd: number | null;
+  model_breakdown: ReadonlyArray<Readonly<Record<string, unknown>>>;
+  completion_summary: string | null;
+  artifact_count: number | null;
+  checks_passed: number | null;
+  checks_failed: number | null;
+  files_changed: number | null;
+  lines_added: number | null;
+  lines_deleted: number | null;
+  evidence_references: ReadonlyArray<Readonly<Record<string, unknown>>>;
+};
 
 type ProjectWorkItemBase = {
   id: string;
@@ -656,6 +740,7 @@ type ProjectWorkItemBase = {
   summary?: string | null;
   phase?: string | null;
   progress?: number | null;
+  run_summary?: RunSummary | null;
 };
 
 type DesktopRunWorkItem = ProjectWorkItemBase & {
@@ -664,7 +749,17 @@ type DesktopRunWorkItem = ProjectWorkItemBase & {
   revision: number;
   permission_profile: DesktopPermissionProfile;
   attempt_number: null;
-  environment?: DesktopExecutionEnvironment | null;
+  environment?: DesktopExecutionEnvironment | string | null;
+};
+
+type AgentRunWorkItem = ProjectWorkItemBase & {
+  authority_kind: 'agent_run';
+  run_id: string;
+  revision: number;
+  permission_profile: DesktopPermissionProfile;
+  attempt_number: null;
+  environment?: string | null;
+  run_summary: RunSummary;
 };
 
 type WorkspaceAttemptWorkItem = ProjectWorkItemBase & {
@@ -687,7 +782,11 @@ type HitlRequestWorkItem = ProjectWorkItemBase & {
   last_heartbeat_at?: null;
 };
 
-export type ProjectWorkItem = DesktopRunWorkItem | WorkspaceAttemptWorkItem | HitlRequestWorkItem;
+export type ProjectWorkItem =
+  | DesktopRunWorkItem
+  | AgentRunWorkItem
+  | WorkspaceAttemptWorkItem
+  | HitlRequestWorkItem;
 
 export type ProjectMyWorkResponse = {
   project_id: string;
@@ -773,7 +872,11 @@ export type ReviewRunRequest = {
   feedback?: string;
 };
 
-export type LlmProviderAuthMethod = 'api_key' | 'oauth' | 'environment' | 'none';
+export type LlmProviderAuthMethod =
+  | 'api_key'
+  | 'oauth'
+  | 'environment'
+  | 'none';
 
 export type ManagedLlmProvider = {
   id: string;
@@ -816,7 +919,10 @@ export type LlmProviderMutationInput = {
   environmentVariable?: string;
 };
 
-export type LlmProviderCreateInput = Omit<LlmProviderMutationInput, 'expectedRevision'>;
+export type LlmProviderCreateInput = Omit<
+  LlmProviderMutationInput,
+  'expectedRevision'
+>;
 
 export type LlmProviderProbeInput = {
   name: string;
@@ -835,7 +941,10 @@ export type LlmRouteTarget = {
   model_id: string;
 };
 
-export type LlmProviderRoutingRoles = Record<LlmRoutingRole, LlmRouteTarget | null>;
+export type LlmProviderRoutingRoles = Record<
+  LlmRoutingRole,
+  LlmRouteTarget | null
+>;
 
 export type LlmProviderRoutingPolicy = {
   tenant_id: string;
@@ -876,11 +985,12 @@ export type WorkspaceAgentPolicySelection = {
   permission_mode: WorkspacePermissionMode;
 };
 
-export type WorkspaceAgentPolicyMutationInput = WorkspaceAgentPolicySelection & {
-  projectId: string;
-  workspaceId: string;
-  capabilityMode: AgentCapabilityMode;
-};
+export type WorkspaceAgentPolicyMutationInput =
+  WorkspaceAgentPolicySelection & {
+    projectId: string;
+    workspaceId: string;
+    capabilityMode: AgentCapabilityMode;
+  };
 
 export type LlmProviderRoutingPolicyMutationInput = {
   projectId: string;
@@ -1529,7 +1639,10 @@ export type AgentTimelineItem = {
 };
 
 export type DecisionRiskLevel = 'low' | 'medium' | 'high';
-export type DecisionReversibilityMode = 'reversible' | 'partial' | 'irreversible';
+export type DecisionReversibilityMode =
+  | 'reversible'
+  | 'partial'
+  | 'irreversible';
 
 export type DecisionContext = {
   action: { name: string; label: string };
@@ -1605,7 +1718,12 @@ export type DesktopApprovalRequest = {
   idempotency_key?: string | null;
 };
 
-export type DesktopArtifactStatus = 'draft' | 'ready' | 'approved' | 'delivered' | 'superseded';
+export type DesktopArtifactStatus =
+  | 'draft'
+  | 'ready'
+  | 'approved'
+  | 'delivered'
+  | 'superseded';
 
 export type DesktopArtifactVersion = {
   id: string;
@@ -1681,7 +1799,15 @@ export type ToolDisplayData = {
 };
 
 export type ToolFileMetadata = {
-  operation?: 'read' | 'write' | 'edit' | 'list' | 'search' | 'create' | 'delete' | string;
+  operation?:
+    | 'read'
+    | 'write'
+    | 'edit'
+    | 'list'
+    | 'search'
+    | 'create'
+    | 'delete'
+    | string;
   paths?: ToolFilePathMetadata[];
   diffStat?: { filesChanged?: number; additions?: number; deletions?: number };
   matches?: Array<{ path?: string; lineNumber?: number; preview?: string }>;
@@ -1771,7 +1897,12 @@ export type TerminalServiceResponse = {
   environment?: DesktopExecutionEnvironment | null;
 };
 
-export type TerminalConnectionStatus = 'idle' | 'connecting' | 'connected' | 'closed' | 'error';
+export type TerminalConnectionStatus =
+  | 'idle'
+  | 'connecting'
+  | 'connected'
+  | 'closed'
+  | 'error';
 
 export type AutomationConfig = {
   kind: string;
@@ -1863,7 +1994,9 @@ export type AutomationCreateInput = {
   max_retries?: number;
 };
 
-export type AutomationUpdateInput = Partial<Omit<AutomationCreateInput, 'idempotency_key'>> & {
+export type AutomationUpdateInput = Partial<
+  Omit<AutomationCreateInput, 'idempotency_key'>
+> & {
   idempotency_key: string;
   expected_revision: number;
 };

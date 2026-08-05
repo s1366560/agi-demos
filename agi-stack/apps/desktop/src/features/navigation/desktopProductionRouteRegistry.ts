@@ -23,8 +23,7 @@ export const TENANT_CREATION_ROUTE_ID = 'tenant-creation' as const;
 export const INVITATION_ACCEPTANCE_ROUTE_ID = 'invitation-acceptance' as const;
 export const PROJECT_OVERVIEW_ROUTE_ID = 'project-project-overview' as const;
 export const PROJECT_SEARCH_ROUTE_ID = 'project-project-search' as const;
-export const PROJECT_CRON_JOBS_ROUTE_ID =
-  'project-project-cron-jobs' as const;
+export const PROJECT_CRON_JOBS_ROUTE_ID = 'project-project-cron-jobs' as const;
 export const PROJECT_SUPPORT_ROUTE_ID = 'project-support' as const;
 export const TENANT_OVERVIEW_ROUTE_ID = 'tenant-tenant-overview' as const;
 export const TENANT_PROJECTS_ROUTE_ID = 'tenant-tenant-projects' as const;
@@ -42,9 +41,10 @@ export const TENANT_CLUSTERS_ROUTE_ID = 'tenant-tenant-clusters' as const;
 export const TENANT_DEPLOY_ROUTE_ID = 'tenant-tenant-deploy' as const;
 export const TENANT_INSTANCE_TEMPLATES_ROUTE_ID =
   'tenant-tenant-instance-templates' as const;
-export const TENANT_DEAD_LETTER_QUEUE_ROUTE_ID = 'tenant-tenant-dead-letter-queue' as const;
+export const TENANT_DEAD_LETTER_QUEUE_ROUTE_ID =
+  'tenant-tenant-dead-letter-queue' as const;
 
-const IMPLEMENTED_ROUTE_IDS = new Set<string>([
+export const DESKTOP_IMPLEMENTED_ROUTE_IDS = Object.freeze([
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
   PROJECT_CRON_JOBS_ROUTE_ID,
@@ -66,7 +66,9 @@ const IMPLEMENTED_ROUTE_IDS = new Set<string>([
   TENANT_CREATION_ROUTE_ID,
   INVITATION_ACCEPTANCE_ROUTE_ID,
   PROJECT_SUPPORT_ROUTE_ID,
+  'agent-workspace-tenant-agent-workspace',
 ]);
+const IMPLEMENTED_ROUTE_IDS = new Set<string>(DESKTOP_IMPLEMENTED_ROUTE_IDS);
 const PRODUCTION_ROUTE_ID_SET = new Set<string>([
   ...CANONICAL_DESKTOP_ROUTE_IDS,
   PROJECT_SUPPORT_ROUTE_ID,
@@ -125,20 +127,21 @@ export function createDesktopProductionRouteRegistry({
       () => requiredDefinition(registry, TENANT_CREATION_ROUTE_ID),
     ),
   };
-  const invitationAcceptanceDefinition: DesktopRouteDefinition<DesktopRouteModule> = {
-    id: INVITATION_ACCEPTANCE_ROUTE_ID,
-    path: '/invite',
-    scope: ['global'],
-    navGroup: 'identity-entry',
-    capability: INVITATION_ACCEPTANCE_ROUTE_ID,
-    requiredPermission: [['anonymous'], ['authenticated']],
-    localPolicy: 'cloud_only',
-    loader: implementedLoader(
-      INVITATION_ACCEPTANCE_ROUTE_ID,
-      implementedLoaders[INVITATION_ACCEPTANCE_ROUTE_ID],
-      () => requiredDefinition(registry, INVITATION_ACCEPTANCE_ROUTE_ID),
-    ),
-  };
+  const invitationAcceptanceDefinition: DesktopRouteDefinition<DesktopRouteModule> =
+    {
+      id: INVITATION_ACCEPTANCE_ROUTE_ID,
+      path: '/invite',
+      scope: ['global'],
+      navGroup: 'identity-entry',
+      capability: INVITATION_ACCEPTANCE_ROUTE_ID,
+      requiredPermission: [['anonymous'], ['authenticated']],
+      localPolicy: 'cloud_only',
+      loader: implementedLoader(
+        INVITATION_ACCEPTANCE_ROUTE_ID,
+        implementedLoaders[INVITATION_ACCEPTANCE_ROUTE_ID],
+        () => requiredDefinition(registry, INVITATION_ACCEPTANCE_ROUTE_ID),
+      ),
+    };
   const projectSupportDefinition: DesktopRouteDefinition<DesktopRouteModule> = {
     id: PROJECT_SUPPORT_ROUTE_ID,
     path: '/tenant/:tenantId/project/:projectId/support',
@@ -171,7 +174,9 @@ function assertImplementedLoaders(
       throw new Error(`desktop_production_route_loader_unknown:${routeId}`);
     }
     if (!IMPLEMENTED_ROUTE_IDS.has(routeId)) {
-      throw new Error(`desktop_production_route_loader_not_implemented:${routeId}`);
+      throw new Error(
+        `desktop_production_route_loader_not_implemented:${routeId}`,
+      );
     }
   }
   for (const routeId of IMPLEMENTED_ROUTE_IDS) {

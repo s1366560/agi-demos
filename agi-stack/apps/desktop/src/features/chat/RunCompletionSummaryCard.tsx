@@ -34,7 +34,10 @@ const OUTCOME_ICONS = {
  * section that makes a claim links to the canvas holding the inspectable
  * evidence; sections without data are omitted by the model.
  */
-export function RunCompletionSummaryCard({ summary, onOpenTab }: RunCompletionSummaryCardProps) {
+export function RunCompletionSummaryCard({
+  summary,
+  onOpenTab,
+}: RunCompletionSummaryCardProps) {
   const { t } = useI18n();
   const OutcomeIcon = OUTCOME_ICONS[summary.outcome];
 
@@ -68,7 +71,12 @@ export function RunCompletionSummaryCard({ summary, onOpenTab }: RunCompletionSu
       </header>
 
       <div className="run-completion-body">
-        {summary.durationMs !== null || summary.usage ? (
+        {summary.completionSummary ? (
+          <p className="run-completion-narrative">
+            {summary.completionSummary}
+          </p>
+        ) : null}
+        {summary.durationMs !== null || summary.usage || summary.tokenUsage ? (
           <div className="run-completion-meta">
             {summary.durationMs !== null ? (
               <span>
@@ -85,23 +93,52 @@ export function RunCompletionSummaryCard({ summary, onOpenTab }: RunCompletionSu
                 })}
               </span>
             ) : null}
+            {summary.tokenUsage ? (
+              <span>
+                {t('session.runSummary.totalTokens', {
+                  tokens: formatTokenCount(
+                    (summary.tokenUsage.inputTokens ?? 0) +
+                      (summary.tokenUsage.outputTokens ?? 0),
+                  ),
+                })}
+              </span>
+            ) : null}
+            {summary.tokenUsage?.costUsd !== null &&
+            summary.tokenUsage?.costUsd !== undefined ? (
+              <span>
+                {t('session.runSummary.cost', {
+                  cost: summary.tokenUsage.costUsd.toFixed(4),
+                })}
+              </span>
+            ) : null}
           </div>
         ) : null}
 
         {summary.changes ? (
-          <section className="run-completion-section" aria-label={t('session.canvasChanges')}>
+          <section
+            className="run-completion-section"
+            aria-label={t('session.canvasChanges')}
+          >
             <div className="run-completion-section-head">
               <CodeIcon aria-hidden="true" />
               <strong>{t('session.canvasChanges')}</strong>
             </div>
             <div className="run-completion-changes-stat">
               <span>
-                {t('session.runSummary.filesChanged', { count: summary.changes.filesChanged })}
+                {t('session.runSummary.filesChanged', {
+                  count: summary.changes.filesChanged,
+                })}
               </span>
-              <span className="run-completion-diff additions">+{summary.changes.additions}</span>
-              <span className="run-completion-diff deletions">−{summary.changes.deletions}</span>
+              <span className="run-completion-diff additions">
+                +{summary.changes.additions}
+              </span>
+              <span className="run-completion-diff deletions">
+                −{summary.changes.deletions}
+              </span>
               {summary.changes.truncated ? (
-                <span className="run-completion-truncated">{t('chat.truncated')}</span>
+                <span className="run-completion-truncated">
+                  {t('chat.truncated')}
+                </span>
               ) : null}
             </div>
             {summary.changes.link
@@ -111,12 +148,17 @@ export function RunCompletionSummaryCard({ summary, onOpenTab }: RunCompletionSu
         ) : null}
 
         {summary.artifacts ? (
-          <section className="run-completion-section" aria-label={t('session.canvasArtifacts')}>
+          <section
+            className="run-completion-section"
+            aria-label={t('session.canvasArtifacts')}
+          >
             <div className="run-completion-section-head">
               <ArchiveIcon aria-hidden="true" />
               <strong>{t('session.canvasArtifacts')}</strong>
               <small>
-                {t('session.runSummary.artifactCount', { count: summary.artifacts.totalCount })}
+                {t('session.runSummary.artifactCount', {
+                  count: summary.artifacts.totalCount,
+                })}
               </small>
             </div>
             <ul className="run-completion-artifact-list">
@@ -131,7 +173,9 @@ export function RunCompletionSummaryCard({ summary, onOpenTab }: RunCompletionSu
             {summary.artifacts.totalCount > summary.artifacts.entries.length ? (
               <small className="run-completion-more">
                 {t('session.runSummary.moreArtifacts', {
-                  count: summary.artifacts.totalCount - summary.artifacts.entries.length,
+                  count:
+                    summary.artifacts.totalCount -
+                    summary.artifacts.entries.length,
                 })}
               </small>
             ) : null}
@@ -151,7 +195,13 @@ export function RunCompletionSummaryCard({ summary, onOpenTab }: RunCompletionSu
               <strong>{t(summary.verification.link.labelKey)}</strong>
             </div>
             <div className="run-completion-verification-stat">
-              <span className={summary.verification.failedCount ? 'tone-danger' : 'tone-success'}>
+              <span
+                className={
+                  summary.verification.failedCount
+                    ? 'tone-danger'
+                    : 'tone-success'
+                }
+              >
                 {t('session.runSummary.checksPassed', {
                   passed: summary.verification.passedCount,
                   total: summary.verification.total,
@@ -172,7 +222,10 @@ export function RunCompletionSummaryCard({ summary, onOpenTab }: RunCompletionSu
                 </span>
               ) : null}
             </div>
-            {evidenceLink(summary.verification.link, 'run-completion-link run-completion-evidence')}
+            {evidenceLink(
+              summary.verification.link,
+              'run-completion-link run-completion-evidence',
+            )}
           </section>
         ) : null}
 

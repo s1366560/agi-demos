@@ -19,6 +19,11 @@ const chatPanelSource = readFileSync(
   new URL('../src/features/chat/ChatPanel.tsx', import.meta.url),
   'utf8',
 );
+const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const runInputEligibilitySource = appSource.slice(
+  appSource.indexOf('const runInputDeliveryOptions = useMemo'),
+  appSource.indexOf('const effectiveRunInputDeliveryValue'),
+);
 
 function context(kind, resourceId, executionSlot) {
   return {
@@ -288,6 +293,37 @@ test('Desktop composer exposes an accessible queue without replacing run-input q
   assert.match(chatPanelSource, /composeAheadQueueStore\.retry/);
   assert.match(chatPanelSource, /dispatchMonitorRef/);
   assert.match(chatPanelSource, /window\.clearTimeout\(dispatchMonitorRef\.current\.timerId\)/);
+});
+
+test('canonical Agent Workspace fails closed instead of auto-sending through compose-ahead', () => {
+  assert.match(chatPanelSource, /composeAheadFallbackAllowed = false/);
+  assert.match(
+    chatPanelSource,
+    /Boolean\(composeAheadScope\) &&\s+composeAheadFallbackAllowed &&\s+runInputDeliveryOptions\.length === 0/,
+  );
+  assert.match(appSource, /composeAheadFallbackAllowed=\{false\}/);
+});
+
+test('canonical terminal run authority overrides stale streaming signals', () => {
+  assert.match(chatPanelSource, /canonicalRunStatus\?: DesktopRunStatus \| null/);
+  assert.match(
+    chatPanelSource,
+    /!sessionRunStatusIsTerminal\(canonicalRunStatus\) &&\s+rawResponseStreaming/,
+  );
+  assert.match(
+    appSource,
+    /canonicalRunStatus=\{currentArtifactRun\?\.status \?\? null\}/,
+  );
+});
+
+test('canonical Cloud run inputs are available for every active Agent Workspace mode', () => {
+  assert.doesNotMatch(
+    runInputEligibilitySource,
+    /sessionDetailViewModel\?\.capabilityMode !== 'code'/,
+  );
+  assert.match(runInputEligibilitySource, /currentArtifactRun\.status === 'running'/);
+  assert.match(runInputEligibilitySource, /options\.push\('steer_now'\)/);
+  assert.match(runInputEligibilitySource, /options\.push\('queue_next'\)/);
 });
 
 test('Desktop composer steers through the socket with truthful queued fallback', () => {

@@ -246,6 +246,218 @@ async def test_approve_plan_persists_server_resolved_environment_and_reuses_it_o
 
 
 @pytest.mark.unit
+async def test_execute_approved_plan_propagates_canonical_run_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.infrastructure.adapters.primary.web.routers.agent.plans as plans_router
+
+    run = SimpleNamespace(
+        status="queued",
+        revision=1,
+        updated_at=datetime.now(UTC),
+        completed_at=None,
+        error=None,
+    )
+    session = SimpleNamespace(
+        get=AsyncMock(return_value=run),
+        refresh=AsyncMock(),
+        commit=AsyncMock(),
+        rollback=AsyncMock(),
+    )
+
+    class SessionContext:
+        async def __aenter__(self) -> object:
+            return session
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    received: dict[str, object] = {}
+
+    class Service:
+        async def stream_chat_v2(self, **kwargs: object):
+            received.update(kwargs)
+            yield {"type": "complete"}
+
+    scoped_container = SimpleNamespace(agent_service=lambda _llm: Service())
+    base_container = SimpleNamespace(with_db=lambda _session: scoped_container)
+    monkeypatch.setattr(plans_router, "async_session_factory", SessionContext)
+    monkeypatch.setattr(plans_router, "create_llm_client", AsyncMock(return_value=object()))
+    monkeypatch.setattr(plans_router, "settle_agent_plan_run", AsyncMock())
+    publish_run_status = AsyncMock()
+    monkeypatch.setattr(
+        plans_router,
+        "_publish_plan_run_status",
+        publish_run_status,
+        raising=False,
+    )
+
+    await plans_router._execute_approved_plan(
+        base_container=base_container,
+        run_id="plan-run-1",
+        conversation_id="conversation-1",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        message="Execute",
+        message_id="client-message-1",
+    )
+
+    assert received["execution_message_id"] == "client-message-1"
+    assert received["canonical_run_id"] == "plan-run-1"
+    session.refresh.assert_awaited_once_with(run)
+    publish_run_status.assert_awaited_once_with(
+        base_container=base_container,
+        run=run,
+    )
+    assert run.status == "ready_review"
+    assert run.revision == 2
+
+
+@pytest.mark.unit
+async def test_execute_approved_plan_refreshes_authority_after_stream_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.infrastructure.adapters.primary.web.routers.agent.plans as plans_router
+
+    run = SimpleNamespace(
+        status="queued",
+        revision=1,
+        updated_at=datetime.now(UTC),
+        completed_at=None,
+        error=None,
+    )
+    session = SimpleNamespace(
+        get=AsyncMock(return_value=run),
+        refresh=AsyncMock(),
+        commit=AsyncMock(),
+        rollback=AsyncMock(),
+    )
+
+    class SessionContext:
+        async def __aenter__(self) -> object:
+            return session
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    class Service:
+        async def stream_chat_v2(self, **_kwargs: object):
+            yield {"type": "start"}
+            raise RuntimeError("stream failed")
+
+    scoped_container = SimpleNamespace(agent_service=lambda _llm: Service())
+    base_container = SimpleNamespace(with_db=lambda _session: scoped_container)
+    settle = AsyncMock()
+    monkeypatch.setattr(plans_router, "async_session_factory", SessionContext)
+    monkeypatch.setattr(plans_router, "create_llm_client", AsyncMock(return_value=object()))
+    monkeypatch.setattr(plans_router, "settle_agent_plan_run", settle)
+    publish_run_status = AsyncMock()
+    monkeypatch.setattr(
+        plans_router,
+        "_publish_plan_run_status",
+        publish_run_status,
+        raising=False,
+    )
+
+    await plans_router._execute_approved_plan(
+        base_container=base_container,
+        run_id="plan-run-1",
+        conversation_id="conversation-1",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        message="Execute",
+        message_id="client-message-1",
+    )
+
+    session.rollback.assert_awaited_once()
+    session.refresh.assert_awaited_once_with(run)
+    assert run.status == "failed"
+    assert run.revision == 2
+    settle.assert_awaited_once()
+    publish_run_status.assert_awaited_once_with(
+        base_container=base_container,
+        run=run,
+    )
+
+
+@pytest.mark.unit
+async def test_publish_plan_run_status_persists_and_broadcasts_authority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.infrastructure.adapters.primary.web.routers.agent.plans as plans_router
+
+    published: list[tuple[str, dict[str, Any]]] = []
+
+    class EventBus:
+        def __init__(self, redis_client: object) -> None:
+            assert redis_client is redis
+
+        async def publish_to_stream(
+            self,
+            conversation_id: str,
+            event: dict[str, Any],
+        ) -> str:
+            published.append((conversation_id, event))
+            return "1-0"
+
+    redis = object()
+    manager = SimpleNamespace(broadcast_to_conversation=AsyncMock(return_value=1))
+    monkeypatch.setattr(plans_router, "RedisEventBusAdapter", EventBus, raising=False)
+    monkeypatch.setattr(
+        plans_router,
+        "get_connection_manager",
+        lambda: manager,
+        raising=False,
+    )
+    run = SimpleNamespace(
+        id="plan-run-1",
+        conversation_id="conversation-1",
+        project_id="project-1",
+        plan_version_id="plan-version-1",
+        idempotency_key="plan-approval-1",
+        message_id="message-1",
+        request_message="Execute",
+        status="ready_review",
+        revision=2,
+        created_at=datetime(2026, 8, 4, 12, 0, tzinfo=UTC),
+        updated_at=datetime(2026, 8, 4, 12, 1, tzinfo=UTC),
+        completed_at=datetime(2026, 8, 4, 12, 1, tzinfo=UTC),
+        error=None,
+        permission_profile="read_only",
+        authorization_snapshot={
+            "conversation_id": "conversation-1",
+            "project_id": "project-1",
+            "plan_version_id": "plan-version-1",
+            "permission_profile": "read_only",
+            "environment": None,
+        },
+    )
+
+    await plans_router._publish_plan_run_status(
+        base_container=SimpleNamespace(redis_client=redis),
+        run=run,
+    )
+
+    assert len(published) == 1
+    conversation_id, event = published[0]
+    assert conversation_id == "conversation-1"
+    assert event["type"] == "run_status"
+    assert event["conversation_id"] == "conversation-1"
+    assert event["payload"] == event["data"]
+    assert event["payload"]["id"] == "plan-run-1"
+    assert event["payload"]["status"] == "ready_review"
+    assert event["payload"]["revision"] == 2
+    assert event["payload"]["completed_at"] == "2026-08-04T12:01:00+00:00"
+    assert isinstance(event["event_time_us"], int)
+    manager.broadcast_to_conversation.assert_awaited_once_with(
+        "conversation-1",
+        event,
+    )
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_switch_mode_sanitizes_internal_errors() -> None:
     with pytest.raises(HTTPException) as exc_info:

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
+from src.application.schemas.agent_run_authority import RunSummaryResponse
 from src.application.schemas.project_my_work import (
     MyWorkCapabilityMode,
     MyWorkGroup,
+    MyWorkPermissionProfile,
     MyWorkRequiredAction,
     MyWorkStatus,
     ProjectMyWorkResponse,
@@ -54,6 +56,45 @@ class HITLRequestAuthority:
     plan_tasks: tuple[dict[str, Any], ...] = ()
 
 
+@dataclass(frozen=True, kw_only=True)
+class AgentRunAuthority:
+    id: str
+    tenant_id: str
+    conversation_id: str
+    workspace_id: str | None
+    project_id: str
+    title: str
+    status: str
+    revision: int
+    permission_profile: MyWorkPermissionProfile
+    environment: str | None
+    error: str | None
+    created_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None
+    workspace_name: str | None
+    capability_mode: MyWorkCapabilityMode | None
+    summary_state: Literal["recorded", "partial"]
+    summary_reason_code: str | None
+    summary_status: str | None
+    summary_revision: int | None
+    summary_started_at: datetime | None
+    summary_completed_at: datetime | None
+    model_breakdown: tuple[dict[str, Any], ...]
+    completion_summary: str | None
+    duration_ms: int | None
+    input_tokens: int | None
+    output_tokens: int | None
+    cost_usd: float | None
+    artifact_count: int | None
+    checks_passed: int | None
+    checks_failed: int | None
+    files_changed: int | None
+    lines_added: int | None
+    lines_deleted: int | None
+    evidence_references: tuple[dict[str, Any], ...]
+
+
 class ProjectMyWorkReader(Protocol):
     async def has_project_access(self, *, project_id: str, user_id: str) -> bool: ...
 
@@ -71,6 +112,13 @@ class ProjectMyWorkReader(Protocol):
         user_id: str,
         now: datetime,
     ) -> list[HITLRequestAuthority]: ...
+
+    async def list_agent_runs(
+        self,
+        *,
+        project_id: str,
+        user_id: str,
+    ) -> list[AgentRunAuthority]: ...
 
 
 class ProjectMyWorkService:
@@ -104,6 +152,10 @@ class ProjectMyWorkService:
             user_id=user_id,
             now=observed_at,
         )
+        runs = await self._reader.list_agent_runs(
+            project_id=project_id,
+            user_id=user_id,
+        )
 
         active_hitl_items = [
             (request, item)
@@ -112,16 +164,89 @@ class ProjectMyWorkService:
             if (item := self._hitl_item(request)) is not None
         ]
         hitl_conversation_ids = {request.conversation_id for request, _ in active_hitl_items}
+        run_items = [
+            (run, item)
+            for run in runs
+            if run.conversation_id not in hitl_conversation_ids
+            if (item := self._run_item(run)) is not None
+        ]
+        run_conversation_ids = {run.conversation_id for run, _ in run_items}
 
         items = [
             item
             for attempt in attempts
             if attempt.conversation_id not in hitl_conversation_ids
+            if attempt.conversation_id not in run_conversation_ids
             if (item := self._attempt_item(attempt)) is not None
         ]
+        items.extend(item for _, item in run_items)
         items.extend(item for _, item in active_hitl_items)
         items.sort(key=lambda item: (item.updated_at, item.authority_id), reverse=True)
         return ProjectMyWorkResponse(project_id=project_id, items=items, total=len(items))
+
+    @staticmethod
+    def _run_item(source: AgentRunAuthority) -> ProjectWorkItem | None:
+        if source.status in {"queued", "running"}:
+            group: MyWorkGroup = "running"
+            status: MyWorkStatus = "running"
+            required_action: MyWorkRequiredAction = "observe"
+        elif source.status == "ready_review":
+            group = "ready_review"
+            status = "ready_review"
+            required_action = "review_approval"
+        elif source.status in {"failed", "cancelled"}:
+            group = "ready_review"
+            status = "failed"
+            required_action = "inspect_failure"
+        else:
+            return None
+        return ProjectWorkItem(
+            id=f"agent_run:{source.id}",
+            authority_kind="agent_run",
+            authority_id=source.id,
+            run_id=source.id,
+            conversation_id=source.conversation_id,
+            workspace_id=source.workspace_id,
+            project_id=source.project_id,
+            title=source.title,
+            capability_mode=source.capability_mode,
+            group=group,
+            status=status,
+            required_action=required_action,
+            revision=source.revision,
+            permission_profile=source.permission_profile,
+            environment=source.environment,
+            error=source.error,
+            created_at=source.created_at,
+            updated_at=source.updated_at,
+            workspace_name=source.workspace_name,
+            summary=source.completion_summary,
+            run_summary=RunSummaryResponse(
+                run_id=source.id,
+                tenant_id=source.tenant_id,
+                project_id=source.project_id,
+                conversation_id=source.conversation_id,
+                status=source.summary_status or source.status,
+                revision=source.summary_revision or source.revision,
+                summary_state=source.summary_state,
+                reason_code=source.summary_reason_code,
+                started_at=source.summary_started_at,
+                completed_at=source.summary_completed_at,
+                duration_ms=source.duration_ms,
+                input_tokens=source.input_tokens,
+                output_tokens=source.output_tokens,
+                cost_usd=source.cost_usd,
+                model_breakdown=list(source.model_breakdown),
+                completion_summary=source.completion_summary,
+                artifact_count=source.artifact_count,
+                checks_passed=source.checks_passed,
+                checks_failed=source.checks_failed,
+                files_changed=source.files_changed,
+                lines_added=source.lines_added,
+                lines_deleted=source.lines_deleted,
+                evidence_references=list(source.evidence_references),
+            ),
+        )
 
     @classmethod
     def _attempt_item(cls, source: WorkspaceAttemptAuthority) -> ProjectWorkItem | None:

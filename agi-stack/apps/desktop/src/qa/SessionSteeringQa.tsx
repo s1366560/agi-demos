@@ -124,11 +124,36 @@ const snapshot: ChangeSnapshot = {
           old_start: 41,
           new_start: 41,
           lines: [
-            { kind: 'context', old_line: 41, new_line: 41, text: '  const run = authority.run;' },
-            { kind: 'deletion', old_line: 42, new_line: null, text: '  return send(message);' },
-            { kind: 'addition', old_line: null, new_line: 42, text: '  const input = bindToRevision(message, run.revision);' },
-            { kind: 'addition', old_line: null, new_line: 43, text: '  await ledger.persist(input);' },
-            { kind: 'addition', old_line: null, new_line: 44, text: '  return run.control.deliver(input);' },
+            {
+              kind: 'context',
+              old_line: 41,
+              new_line: 41,
+              text: '  const run = authority.run;',
+            },
+            {
+              kind: 'deletion',
+              old_line: 42,
+              new_line: null,
+              text: '  return send(message);',
+            },
+            {
+              kind: 'addition',
+              old_line: null,
+              new_line: 42,
+              text: '  const input = bindToRevision(message, run.revision);',
+            },
+            {
+              kind: 'addition',
+              old_line: null,
+              new_line: 43,
+              text: '  await ledger.persist(input);',
+            },
+            {
+              kind: 'addition',
+              old_line: null,
+              new_line: 44,
+              text: '  return run.control.deliver(input);',
+            },
             { kind: 'context', old_line: 43, new_line: 45, text: '}' },
           ],
         },
@@ -148,8 +173,18 @@ const snapshot: ChangeSnapshot = {
           old_start: 0,
           new_start: 1,
           lines: [
-            { kind: 'addition', old_line: null, new_line: 1, text: "export const scope = 'run';" },
-            { kind: 'addition', old_line: null, new_line: 2, text: 'export const revision = 7;' },
+            {
+              kind: 'addition',
+              old_line: null,
+              new_line: 1,
+              text: "export const scope = 'run';",
+            },
+            {
+              kind: 'addition',
+              old_line: null,
+              new_line: 2,
+              text: 'export const revision = 7;',
+            },
           ],
         },
       ],
@@ -176,7 +211,11 @@ const queuedInput: DesktopRunInput = {
 
 const qaModelOptions = [
   { value: 'gpt-5.5', modelId: 'gpt-5.5', providerLabel: 'OpenAI production' },
-  { value: 'gpt-5.5-mini', modelId: 'gpt-5.5-mini', providerLabel: 'OpenAI production' },
+  {
+    value: 'gpt-5.5-mini',
+    modelId: 'gpt-5.5-mini',
+    providerLabel: 'OpenAI production',
+  },
   { value: 'glm-5.2', modelId: 'glm-5.2', providerLabel: 'OpenAI-compatible' },
 ];
 
@@ -184,13 +223,15 @@ const messages: WorkspaceMessage[] = [
   {
     id: 'message-1',
     sender_type: 'user',
-    content: 'Implement the authoritative steering path and keep revision conflicts explicit.',
+    content:
+      'Implement the authoritative steering path and keep revision conflicts explicit.',
     created_at: '2026-07-13T12:20:00Z',
   },
   {
     id: 'message-2',
     sender_type: 'agent',
-    content: 'The run is active in an isolated worktree. I am applying the reviewed plan.',
+    content:
+      'The run is active in an isolated worktree. I am applying the reviewed plan.',
     created_at: '2026-07-13T12:21:00Z',
   },
 ];
@@ -232,42 +273,70 @@ const workspaceTaskEvents = [
 const workspaceRosterEvents = [
   {
     type: 'workspace_member_joined',
-    data: { workspace_id: 'workspace-desktop', member: {
-      id: 'member-live', workspace_id: 'workspace-desktop', user_id: 'user-live', role: 'owner',
-    } },
+    data: {
+      workspace_id: 'workspace-desktop',
+      member: {
+        id: 'member-live',
+        workspace_id: 'workspace-desktop',
+        user_id: 'user-live',
+        role: 'owner',
+      },
+    },
   },
   {
     type: 'workspace_agent_bound',
-    data: { workspace_id: 'workspace-desktop', agent: {
-      id: 'binding-live', workspace_id: 'workspace-desktop', agent_id: 'agent-live',
-      display_name: 'Cloud release agent', is_active: true,
-    } },
+    data: {
+      workspace_id: 'workspace-desktop',
+      agent: {
+        id: 'binding-live',
+        workspace_id: 'workspace-desktop',
+        agent_id: 'agent-live',
+        display_name: 'Cloud release agent',
+        is_active: true,
+      },
+    },
   },
 ];
 
 const workspaceLifecycleDataset: RuntimeDataset = {
   workspaces: [
     {
-      id: 'workspace-desktop', tenant_id: 'tenant-desktop', project_id: 'project-desktop',
-      name: 'Workspace Alpha', created_by: 'user-live', is_archived: false,
+      id: 'workspace-desktop',
+      tenant_id: 'tenant-desktop',
+      project_id: 'project-desktop',
+      name: 'Workspace Alpha',
+      created_by: 'user-live',
+      is_archived: false,
       created_at: '2026-07-22T08:00:00Z',
     },
     {
-      id: 'workspace-beta', tenant_id: 'tenant-desktop', project_id: 'project-desktop',
-      name: 'Workspace Beta', created_by: 'user-live', is_archived: false,
+      id: 'workspace-beta',
+      tenant_id: 'tenant-desktop',
+      project_id: 'project-desktop',
+      name: 'Workspace Beta',
+      created_by: 'user-live',
+      is_archived: false,
       created_at: '2026-07-22T08:01:00Z',
     },
   ],
   workspacesByProject: {
     'project-desktop': [
       {
-        id: 'workspace-desktop', tenant_id: 'tenant-desktop', project_id: 'project-desktop',
-        name: 'Workspace Alpha', created_by: 'user-live', is_archived: false,
+        id: 'workspace-desktop',
+        tenant_id: 'tenant-desktop',
+        project_id: 'project-desktop',
+        name: 'Workspace Alpha',
+        created_by: 'user-live',
+        is_archived: false,
         created_at: '2026-07-22T08:00:00Z',
       },
       {
-        id: 'workspace-beta', tenant_id: 'tenant-desktop', project_id: 'project-desktop',
-        name: 'Workspace Beta', created_by: 'user-live', is_archived: false,
+        id: 'workspace-beta',
+        tenant_id: 'tenant-desktop',
+        project_id: 'project-desktop',
+        name: 'Workspace Beta',
+        created_by: 'user-live',
+        is_archived: false,
         created_at: '2026-07-22T08:01:00Z',
       },
     ],
@@ -360,7 +429,8 @@ const earlierTimelineItem: ConversationTimelineState['items'][number] = {
   eventTimeUs: 1_784_282_022_000_000,
   eventCounter: 0,
   role: 'assistant',
-  content: 'I am checking the pipeline fixture ownership before reproducing the race.',
+  content:
+    'I am checking the pipeline fixture ownership before reproducing the race.',
 };
 
 const anchorTimelineItems: ConversationTimelineState['items'] = [
@@ -381,7 +451,8 @@ const concurrentTailItem: ConversationTimelineState['items'][number] = {
   eventTimeUs: 1_784_282_044_000_000,
   eventCounter: 4,
   role: 'assistant',
-  content: 'A concurrent live update arrived while earlier history was loading.',
+  content:
+    'A concurrent live update arrived while earlier history was loading.',
 };
 
 const suggestionTimelineItem: ConversationTimelineState['items'][number] = {
@@ -744,112 +815,114 @@ const executionGraphCanvasTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
-const executionInsightsCanvasTimelineItems: ConversationTimelineState['items'] = [
-  {
-    id: 'insights-release-route',
-    type: 'execution_path_decided',
-    eventTimeUs: 1_784_282_058_000_000,
-    eventCounter: 17,
-    payload: {
-      route_id: 'route-release-verification',
-      trace_id: 'trace-release-verification',
-      path: 'react_loop',
-      confidence: 0.94,
-      reason: 'Release verification requires governed tools and independent evidence.',
-      target: 'workspace-agent',
-      metadata: { domain_lane: 'code' },
+const executionInsightsCanvasTimelineItems: ConversationTimelineState['items'] =
+  [
+    {
+      id: 'insights-release-route',
+      type: 'execution_path_decided',
+      eventTimeUs: 1_784_282_058_000_000,
+      eventCounter: 17,
+      payload: {
+        route_id: 'route-release-verification',
+        trace_id: 'trace-release-verification',
+        path: 'react_loop',
+        confidence: 0.94,
+        reason:
+          'Release verification requires governed tools and independent evidence.',
+        target: 'workspace-agent',
+        metadata: { domain_lane: 'code' },
+      },
     },
-  },
-  {
-    id: 'insights-release-selection',
-    type: 'selection_trace',
-    eventTimeUs: 1_784_282_059_000_000,
-    eventCounter: 18,
-    payload: {
-      route_id: 'route-release-verification',
-      trace_id: 'trace-release-verification',
-      domain_lane: 'code',
-      initial_count: 12,
-      final_count: 4,
-      removed_total: 8,
-      tool_budget: 4,
-      budget_exceeded_stages: ['semantic_ranker'],
-      stages: [
-        {
-          stage: 'capability_filter',
-          before_count: 12,
-          after_count: 7,
-          removed_count: 5,
-          duration_ms: 2.4,
-          explain: { reason: 'Workspace capability boundary' },
-        },
-        {
-          stage: 'semantic_ranker',
-          before_count: 7,
-          after_count: 4,
-          removed_count: 3,
-          duration_ms: 5.8,
-        },
-      ],
+    {
+      id: 'insights-release-selection',
+      type: 'selection_trace',
+      eventTimeUs: 1_784_282_059_000_000,
+      eventCounter: 18,
+      payload: {
+        route_id: 'route-release-verification',
+        trace_id: 'trace-release-verification',
+        domain_lane: 'code',
+        initial_count: 12,
+        final_count: 4,
+        removed_total: 8,
+        tool_budget: 4,
+        budget_exceeded_stages: ['semantic_ranker'],
+        stages: [
+          {
+            stage: 'capability_filter',
+            before_count: 12,
+            after_count: 7,
+            removed_count: 5,
+            duration_ms: 2.4,
+            explain: { reason: 'Workspace capability boundary' },
+          },
+          {
+            stage: 'semantic_ranker',
+            before_count: 7,
+            after_count: 4,
+            removed_count: 3,
+            duration_ms: 5.8,
+          },
+        ],
+      },
     },
-  },
-  {
-    id: 'insights-release-policy',
-    type: 'policy_filtered',
-    eventTimeUs: 1_784_282_060_000_000,
-    eventCounter: 19,
-    payload: {
-      route_id: 'route-release-verification',
-      trace_id: 'trace-release-verification',
-      domain_lane: 'code',
-      removed_total: 3,
-      stage_count: 2,
-      tool_budget: 4,
-      budget_exceeded_stages: ['semantic_ranker'],
+    {
+      id: 'insights-release-policy',
+      type: 'policy_filtered',
+      eventTimeUs: 1_784_282_060_000_000,
+      eventCounter: 19,
+      payload: {
+        route_id: 'route-release-verification',
+        trace_id: 'trace-release-verification',
+        domain_lane: 'code',
+        removed_total: 3,
+        stage_count: 2,
+        tool_budget: 4,
+        budget_exceeded_stages: ['semantic_ranker'],
+      },
     },
-  },
-  {
-    id: 'insights-release-toolset',
-    type: 'toolset_changed',
-    eventTimeUs: 1_784_282_061_000_000,
-    eventCounter: 20,
-    payload: {
-      trace_id: 'trace-release-verification',
-      source: 'plugin_manager',
-      action: 'install',
-      plugin_name: 'github',
-      refresh_status: 'success',
-      refreshed_tool_count: 3,
-      mutation_fingerprint: 'sha256:release-verification',
+    {
+      id: 'insights-release-toolset',
+      type: 'toolset_changed',
+      eventTimeUs: 1_784_282_061_000_000,
+      eventCounter: 20,
+      payload: {
+        trace_id: 'trace-release-verification',
+        source: 'plugin_manager',
+        action: 'install',
+        plugin_name: 'github',
+        refresh_status: 'success',
+        refreshed_tool_count: 3,
+        mutation_fingerprint: 'sha256:release-verification',
+      },
     },
-  },
-  {
-    id: 'insights-release-tools-updated',
-    type: 'tools_updated',
-    eventTimeUs: 1_784_282_062_000_000,
-    eventCounter: 21,
-    payload: {
-      project_id: 'project-release',
-      server_name: 'release-tools',
-      tool_names: ['mcp__release__verify', 'mcp__release__publish'],
-      requires_refresh: true,
+    {
+      id: 'insights-release-tools-updated',
+      type: 'tools_updated',
+      eventTimeUs: 1_784_282_062_000_000,
+      eventCounter: 21,
+      payload: {
+        project_id: 'project-release',
+        server_name: 'release-tools',
+        tool_names: ['mcp__release__verify', 'mcp__release__publish'],
+        requires_refresh: true,
+      },
     },
-  },
-  {
-    id: 'insights-release-registry-settled',
-    type: 'toolset_changed',
-    eventTimeUs: 1_784_282_063_000_000,
-    eventCounter: 22,
-    payload: {
-      project_id: 'project-release',
-      server_name: 'release-tools',
-      source: 'register_mcp_server',
-      tool_names: ['mcp__release__verify', 'mcp__release__publish'],
-      refresh_status: 'success',
-      refreshed_tool_count: 2,
+    {
+      id: 'insights-release-registry-settled',
+      type: 'toolset_changed',
+      eventTimeUs: 1_784_282_063_000_000,
+      eventCounter: 22,
+      payload: {
+        project_id: 'project-release',
+        server_name: 'release-tools',
+        source: 'register_mcp_server',
+        tool_names: ['mcp__release__verify', 'mcp__release__publish'],
+        refresh_status: 'success',
+        refreshed_tool_count: 2,
+      },
     },
-  },
-];
+  ];
 
 const contextWindowCanvasTimelineItems: ConversationTimelineState['items'] = [
   {
@@ -1212,7 +1285,8 @@ const httpServiceTimelineItems: ConversationTimelineState['items'] = [
       service_name: 'Vite preview',
       source_type: 'sandbox_internal',
       service_url: 'http://172.17.0.2:5173',
-      proxy_url: '/api/v1/projects/project-1/sandbox/http-services/service-preview-1/proxy/',
+      proxy_url:
+        '/api/v1/projects/project-1/sandbox/http-services/service-preview-1/proxy/',
       auto_open: true,
     },
   },
@@ -1227,7 +1301,8 @@ const httpServiceTimelineItems: ConversationTimelineState['items'] = [
       service_name: 'Vite preview',
       source_type: 'sandbox_internal',
       service_url: 'http://172.17.0.2:4173',
-      proxy_url: '/api/v1/projects/project-1/sandbox/http-services/service-preview-1/proxy/',
+      proxy_url:
+        '/api/v1/projects/project-1/sandbox/http-services/service-preview-1/proxy/',
       status: 'running',
     },
   },
@@ -1292,7 +1367,8 @@ const conversationTerminalTimelineItems: ConversationTimelineState['items'] = [
     payload: {
       conversation_id: 'conversation-release-1',
       actor_agent_id: 'coordinator',
-      summary: 'Release verification completed with all requested checks passing',
+      summary:
+        'Release verification completed with all requested checks passing',
       artifacts: ['release-report', 'verification-log'],
     },
   },
@@ -1372,7 +1448,9 @@ const hitlResponseTimelineItems: ConversationTimelineState['items'] = [
     eventCounter: 24,
     requestId: 'env-deployment-token',
     question: 'Provide the deployment credential.',
-    fields: [{ name: 'DEPLOY_TOKEN', label: 'Deployment token', required: true }],
+    fields: [
+      { name: 'DEPLOY_TOKEN', label: 'Deployment token', required: true },
+    ],
   },
   {
     id: 'permission-release-command',
@@ -1406,7 +1484,10 @@ const hitlResponseEvents = [
   },
   {
     type: 'env_var_provided',
-    data: { request_id: 'env-deployment-token', saved_variables: ['DEPLOY_TOKEN'] },
+    data: {
+      request_id: 'env-deployment-token',
+      saved_variables: ['DEPLOY_TOKEN'],
+    },
   },
   {
     type: 'permission_replied',
@@ -1414,7 +1495,10 @@ const hitlResponseEvents = [
   },
   {
     type: 'a2ui_action_answered',
-    data: { request_id: 'a2ui-approve-release', action_name: 'approve_release' },
+    data: {
+      request_id: 'a2ui-approve-release',
+      action_name: 'approve_release',
+    },
   },
 ];
 
@@ -1465,14 +1549,18 @@ const elicitationResponseEvent = {
 };
 
 const a2uiCanvasComponents = [
-  JSON.stringify({ beginRendering: { surfaceId: 'release-surface', root: 'release-root' } }),
+  JSON.stringify({
+    beginRendering: { surfaceId: 'release-surface', root: 'release-root' },
+  }),
   JSON.stringify({
     surfaceUpdate: {
       surfaceId: 'release-surface',
       components: [
         {
           id: 'release-root',
-          component: { Column: { children: { explicitList: ['approve-button'] } } },
+          component: {
+            Column: { children: { explicitList: ['approve-button'] } },
+          },
         },
         {
           id: 'approve-button',
@@ -1492,7 +1580,9 @@ const a2uiCanvasComponents = [
         },
         {
           id: 'approve-label',
-          component: { Text: { text: { literalString: 'Approve verified release' } } },
+          component: {
+            Text: { text: { literalString: 'Approve verified release' } },
+          },
         },
       ],
     },
@@ -1528,7 +1618,10 @@ const a2uiCanvasTimelineItems: ConversationTimelineState['items'] = [
       block_id: 'release-approval',
       authority_revision: 7,
       allowed_actions: [
-        { source_component_id: 'approve-button', action_name: 'approve_release' },
+        {
+          source_component_id: 'approve-button',
+          action_name: 'approve_release',
+        },
       ],
     },
   },
@@ -1627,7 +1720,13 @@ const taskUiStateTimelineItems: ConversationTimelineState['items'] = [
     eventTimeUs: 1_784_282_066_000_000,
     eventCounter: 29,
     payload: {
-      tasks: [{ id: 'release-task', content: 'task-list-sentinel', status: 'pending' }],
+      tasks: [
+        {
+          id: 'release-task',
+          content: 'task-list-sentinel',
+          status: 'pending',
+        },
+      ],
     },
   },
   {
@@ -1636,7 +1735,11 @@ const taskUiStateTimelineItems: ConversationTimelineState['items'] = [
     eventTimeUs: 1_784_282_066_500_000,
     eventCounter: 30,
     payload: {
-      task: { id: 'release-task', content: 'task-update-sentinel', status: 'running' },
+      task: {
+        id: 'release-task',
+        content: 'task-update-sentinel',
+        status: 'running',
+      },
     },
   },
   {
@@ -1952,82 +2055,83 @@ const agentAuditTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
-const workspaceOrchestrationTimelineItems: ConversationTimelineState['items'] = [
-  {
-    id: 'workspace-goal-materialized-release',
-    type: 'workspace_goal_materialized',
-    eventTimeUs: 1_784_282_081_000_000,
-    eventCounter: 55,
-    payload: {
-      workspace_id: 'workspace-desktop',
-      goal_id: 'goal-release',
-      goal_description: 'Validate and publish the release.',
+const workspaceOrchestrationTimelineItems: ConversationTimelineState['items'] =
+  [
+    {
+      id: 'workspace-goal-materialized-release',
+      type: 'workspace_goal_materialized',
+      eventTimeUs: 1_784_282_081_000_000,
+      eventCounter: 55,
+      payload: {
+        workspace_id: 'workspace-desktop',
+        goal_id: 'goal-release',
+        goal_description: 'Validate and publish the release.',
+      },
     },
-  },
-  {
-    id: 'workspace-decomposition-release',
-    type: 'workspace_decomposition_complete',
-    eventTimeUs: 1_784_282_081_500_000,
-    eventCounter: 56,
-    payload: {
-      workspace_id: 'workspace-desktop',
-      goal_id: 'goal-release',
-      subtask_ids: ['task-security-review', 'task-docs', 'task-publish'],
-      subtask_count: 3,
+    {
+      id: 'workspace-decomposition-release',
+      type: 'workspace_decomposition_complete',
+      eventTimeUs: 1_784_282_081_500_000,
+      eventCounter: 56,
+      payload: {
+        workspace_id: 'workspace-desktop',
+        goal_id: 'goal-release',
+        subtask_ids: ['task-security-review', 'task-docs', 'task-publish'],
+        subtask_count: 3,
+      },
     },
-  },
-  {
-    id: 'workspace-worker-dispatched-release',
-    type: 'workspace_worker_dispatched',
-    eventTimeUs: 1_784_282_082_000_000,
-    eventCounter: 57,
-    payload: {
-      workspace_id: 'workspace-desktop',
-      task_id: 'task-security-review',
-      worker_agent_id: 'agent-security',
-      attempt_id: 'attempt-1',
+    {
+      id: 'workspace-worker-dispatched-release',
+      type: 'workspace_worker_dispatched',
+      eventTimeUs: 1_784_282_082_000_000,
+      eventCounter: 57,
+      payload: {
+        workspace_id: 'workspace-desktop',
+        task_id: 'task-security-review',
+        worker_agent_id: 'agent-security',
+        attempt_id: 'attempt-1',
+      },
     },
-  },
-  {
-    id: 'workspace-worker-report-release',
-    type: 'workspace_worker_report_submitted',
-    eventTimeUs: 1_784_282_082_500_000,
-    eventCounter: 58,
-    payload: {
-      workspace_id: 'workspace-desktop',
-      task_id: 'task-security-review',
-      attempt_id: 'attempt-1',
-      worker_agent_id: 'agent-security',
-      status: 'completed',
+    {
+      id: 'workspace-worker-report-release',
+      type: 'workspace_worker_report_submitted',
+      eventTimeUs: 1_784_282_082_500_000,
+      eventCounter: 58,
+      payload: {
+        workspace_id: 'workspace-desktop',
+        task_id: 'task-security-review',
+        attempt_id: 'attempt-1',
+        worker_agent_id: 'agent-security',
+        status: 'completed',
+      },
     },
-  },
-  {
-    id: 'workspace-adjudication-release',
-    type: 'workspace_adjudication_complete',
-    eventTimeUs: 1_784_282_083_000_000,
-    eventCounter: 59,
-    payload: {
-      workspace_id: 'workspace-desktop',
-      task_id: 'task-security-review',
-      attempt_id: 'attempt-1',
-      verdict: 'accepted',
-      next_task_id: 'task-docs',
+    {
+      id: 'workspace-adjudication-release',
+      type: 'workspace_adjudication_complete',
+      eventTimeUs: 1_784_282_083_000_000,
+      eventCounter: 59,
+      payload: {
+        workspace_id: 'workspace-desktop',
+        task_id: 'task-security-review',
+        attempt_id: 'attempt-1',
+        verdict: 'accepted',
+        next_task_id: 'task-docs',
+      },
     },
-  },
-  {
-    id: 'workspace-goal-completed-release',
-    type: 'workspace_goal_completed',
-    eventTimeUs: 1_784_282_083_500_000,
-    eventCounter: 60,
-    payload: {
-      workspace_id: 'workspace-desktop',
-      goal_id: 'goal-release',
-      final_status: 'completed',
-      completed_subtask_count: 3,
-      total_subtask_count: 3,
+    {
+      id: 'workspace-goal-completed-release',
+      type: 'workspace_goal_completed',
+      eventTimeUs: 1_784_282_083_500_000,
+      eventCounter: 60,
+      payload: {
+        workspace_id: 'workspace-desktop',
+        goal_id: 'goal-release',
+        final_status: 'completed',
+        completed_subtask_count: 3,
+        total_subtask_count: 3,
+      },
     },
-  },
-];
+  ];
 
 const taskRecoveryTimelineItems: ConversationTimelineState['items'] = [
   {
@@ -2122,7 +2226,8 @@ const artifactCanvasOpenEvents = [
     data: {
       artifact_id: 'artifact-release-notes',
       title: 'release-notes.md',
-      content: '# Cloud session release notes\n\nPreparing the verified rollout summary…',
+      content:
+        '# Cloud session release notes\n\nPreparing the verified rollout summary…',
       content_type: 'markdown',
       language: 'markdown',
     },
@@ -2132,7 +2237,8 @@ const artifactCanvasOpenEvents = [
     data: {
       artifact_id: 'artifact-checklist',
       title: 'deployment-checklist.txt',
-      content: '[x] Authenticated workspace\n[x] Model selected\n[ ] Final rollout verification',
+      content:
+        '[x] Authenticated workspace\n[x] Model selected\n[ ] Final rollout verification',
       content_type: 'code',
       language: 'text',
     },
@@ -2301,46 +2407,66 @@ function SessionSteeringQa() {
   const skillEventsMode = searchParams.get('skill-events') === '1';
   const subagentEventsMode = searchParams.get('subagent-events') === '1';
   const multiAgentCanvasMode = searchParams.get('multi-agent-canvas') === '1';
-  const executionGraphCanvasMode = searchParams.get('execution-graph-canvas') === '1';
-  const executionInsightsCanvasMode = searchParams.get('execution-insights-canvas') === '1';
-  const contextWindowCanvasMode = searchParams.get('context-window-canvas') === '1';
+  const executionGraphCanvasMode =
+    searchParams.get('execution-graph-canvas') === '1';
+  const executionInsightsCanvasMode =
+    searchParams.get('execution-insights-canvas') === '1';
+  const contextWindowCanvasMode =
+    searchParams.get('context-window-canvas') === '1';
   const runtimeInfrastructureCanvasMode =
     searchParams.get('runtime-infrastructure-canvas') === '1';
   const memoryEventsMode = searchParams.get('memory-events') === '1';
-  const modelOverrideEventsMode = searchParams.get('model-override-events') === '1';
+  const modelOverrideEventsMode =
+    searchParams.get('model-override-events') === '1';
   const llmRuntimeEventsMode = searchParams.get('llm-runtime-events') === '1';
   const runtimeEventsMode = searchParams.get('runtime-events') === '1';
   const httpServiceEventsMode = searchParams.get('http-service-events') === '1';
   const doomLoopEventsMode = searchParams.get('doom-loop-events') === '1';
   const terminalEventsMode = searchParams.get('terminal-events') === '1';
-  const agentDefinitionEventsMode = searchParams.get('agent-definition-events') === '1';
-  const hitlResponseEventsMode = searchParams.get('hitl-response-events') === '1';
+  const agentDefinitionEventsMode =
+    searchParams.get('agent-definition-events') === '1';
+  const hitlResponseEventsMode =
+    searchParams.get('hitl-response-events') === '1';
   const elicitationEventsMode = searchParams.get('elicitation-events') === '1';
   const a2uiCanvasEventsMode = searchParams.get('a2ui-canvas-events') === '1';
-  const a2uiCanvasDeletedEventsMode = searchParams.get('a2ui-canvas-deleted') === '1';
+  const a2uiCanvasDeletedEventsMode =
+    searchParams.get('a2ui-canvas-deleted') === '1';
   const a2uiCanvasIncrementalEventsMode =
     searchParams.get('a2ui-canvas-incremental') === '1';
-  const planUiStateEventsMode = searchParams.get('plan-ui-state-events') === '1';
-  const taskUiStateEventsMode = searchParams.get('task-ui-state-events') === '1';
-  const internalUiStateEventsMode = searchParams.get('internal-ui-state-events') === '1';
-  const channelInboundMessageMode = searchParams.get('channel-inbound-message') === '1';
+  const planUiStateEventsMode =
+    searchParams.get('plan-ui-state-events') === '1';
+  const taskUiStateEventsMode =
+    searchParams.get('task-ui-state-events') === '1';
+  const internalUiStateEventsMode =
+    searchParams.get('internal-ui-state-events') === '1';
+  const channelInboundMessageMode =
+    searchParams.get('channel-inbound-message') === '1';
   const toolsUpdatedEventMode = searchParams.get('tools-updated-event') === '1';
-  const contextCompactedEventMode = searchParams.get('context-compacted-event') === '1';
-  const sessionLifecycleEventsMode = searchParams.get('session-lifecycle-events') === '1';
+  const contextCompactedEventMode =
+    searchParams.get('context-compacted-event') === '1';
+  const sessionLifecycleEventsMode =
+    searchParams.get('session-lifecycle-events') === '1';
   const participantEventsMode = searchParams.get('participant-events') === '1';
   const agentTaskEventsMode = searchParams.get('agent-task-events') === '1';
-  const agentGovernanceEventsMode = searchParams.get('agent-governance-events') === '1';
+  const agentGovernanceEventsMode =
+    searchParams.get('agent-governance-events') === '1';
   const agentAuditEventsMode = searchParams.get('agent-audit-events') === '1';
   const workspaceOrchestrationEventsMode =
     searchParams.get('workspace-orchestration-events') === '1';
-  const taskRecoveryEventsMode = searchParams.get('task-recovery-events') === '1';
+  const taskRecoveryEventsMode =
+    searchParams.get('task-recovery-events') === '1';
   const toolProgressEventMode = searchParams.get('tool-progress-event') === '1';
-  const workspaceMessageEventMode = searchParams.get('workspace-message-event') === '1';
-  const workspaceTaskEventMode = searchParams.get('workspace-task-event') === '1';
-  const workspaceRosterEventMode = searchParams.get('workspace-roster-event') === '1';
-  const workspaceLifecycleEventMode = searchParams.get('workspace-lifecycle-event') === '1';
+  const workspaceMessageEventMode =
+    searchParams.get('workspace-message-event') === '1';
+  const workspaceTaskEventMode =
+    searchParams.get('workspace-task-event') === '1';
+  const workspaceRosterEventMode =
+    searchParams.get('workspace-roster-event') === '1';
+  const workspaceLifecycleEventMode =
+    searchParams.get('workspace-lifecycle-event') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
-  const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
+  const artifactCanvasEventsMode =
+    searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
   const a2uiCanvasSourceEvents = a2uiCanvasDeletedEventsMode
     ? a2uiCanvasDeletedTimelineItems
@@ -2351,25 +2477,41 @@ function SessionSteeringQa() {
         : [];
   const [delivery, setDelivery] = useState<RunInputDelivery>('steer_now');
   const [references, setReferences] = useState<CodeRangeReference[]>([]);
-  const [changeComments, setChangeComments] = useState<ChangeReviewComment[]>([]);
-  const [sentChangeComments, setSentChangeComments] = useState<ChangeReviewComment[]>([]);
+  const [changeComments, setChangeComments] = useState<ChangeReviewComment[]>(
+    [],
+  );
+  const [sentChangeComments, setSentChangeComments] = useState<
+    ChangeReviewComment[]
+  >([]);
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([queuedInput]);
   const [model, setModel] = useState(
     modelOverrideEventsMode ? 'gpt-5.5-mini' : 'gpt-5.5',
   );
   const [qaMessages, setQaMessages] = useState(messages);
   const [qaTasks, setQaTasks] = useState<WorkspaceTask[]>([]);
-  const [qaMembers, setQaMembers] = useState<WorkspaceAuthorityCollection<WorkspaceMemberSummary>>({
-    status: 'ready', items: [], error: null,
+  const [qaMembers, setQaMembers] = useState<
+    WorkspaceAuthorityCollection<WorkspaceMemberSummary>
+  >({
+    status: 'ready',
+    items: [],
+    error: null,
   });
-  const [qaAgents, setQaAgents] = useState<WorkspaceAuthorityCollection<WorkspaceAgentBinding>>({
-    status: 'ready', items: [], error: null,
+  const [qaAgents, setQaAgents] = useState<
+    WorkspaceAuthorityCollection<WorkspaceAgentBinding>
+  >({
+    status: 'ready',
+    items: [],
+    error: null,
   });
-  const [qaWorkspaceLifecycleSummary, setQaWorkspaceLifecycleSummary] = useState('pending');
+  const [qaWorkspaceLifecycleSummary, setQaWorkspaceLifecycleSummary] =
+    useState('pending');
   const [switchingModel, setSwitchingModel] = useState(false);
   const [artifactCanvas, setArtifactCanvas] = useState(() =>
     artifactCanvasEventsMode || a2uiCanvasSourceEvents.length > 0
-      ? [...artifactCanvasOpenEvents.filter(() => artifactCanvasEventsMode), ...a2uiCanvasSourceEvents].reduce(
+      ? [
+          ...artifactCanvasOpenEvents.filter(() => artifactCanvasEventsMode),
+          ...a2uiCanvasSourceEvents,
+        ].reduce(
           (state, event) => applyArtifactCanvasStreamEvent(state, event).state,
           emptyArtifactCanvasState(),
         )
@@ -2377,17 +2519,25 @@ function SessionSteeringQa() {
   );
   const [mcpAppCanvas, setMCPAppCanvas] = useState(() =>
     mcpAppEventsMode
-      ? applyMCPAppCanvasStreamEvent(emptyMCPAppCanvasState(), mcpAppResultEvent).state
+      ? applyMCPAppCanvasStreamEvent(
+          emptyMCPAppCanvasState(),
+          mcpAppResultEvent,
+        ).state
       : emptyMCPAppCanvasState(),
   );
   const openQaMCPAppResult = useCallback((item: AgentTimelineItem) => {
-    setMCPAppCanvas((current) => applyMCPAppCanvasStreamEvent(current, item).state);
+    setMCPAppCanvas(
+      (current) => applyMCPAppCanvasStreamEvent(current, item).state,
+    );
   }, []);
   const [mcpAppHostMessage, setMCPAppHostMessage] = useState('');
   const [a2uiCanvasResponse, setA2UICanvasResponse] = useState('');
   const [openedAgentSession, setOpenedAgentSession] = useState('');
   const sessionAgentTree = useMemo(
-    () => buildSessionAgentTree(multiAgentCanvasMode ? multiAgentCanvasTimelineItems : []),
+    () =>
+      buildSessionAgentTree(
+        multiAgentCanvasMode ? multiAgentCanvasTimelineItems : [],
+      ),
     [multiAgentCanvasMode],
   );
   const sessionExecutionGraph = useMemo(
@@ -2433,9 +2583,13 @@ function SessionSteeringQa() {
     }),
     [],
   );
-  const [qaConversations, setQaConversations] = useState<AgentConversation[]>(() => [
-    titleEventsMode ? qaConversation : { ...qaConversation, title: 'Session interaction redesign' },
-  ]);
+  const [qaConversations, setQaConversations] = useState<AgentConversation[]>(
+    () => [
+      titleEventsMode
+        ? qaConversation
+        : { ...qaConversation, title: 'Session interaction redesign' },
+    ],
+  );
   const [historyAttempt, setHistoryAttempt] = useState(0);
   const [timeline, setTimeline] = useState<ConversationTimelineState>(() => {
     const items =
@@ -2449,95 +2603,166 @@ function SessionSteeringQa() {
               ? [...timelineState.items, ...multiAgentCanvasTimelineItems]
               : executionGraphCanvasMode
                 ? [...timelineState.items, ...executionGraphCanvasTimelineItems]
-              : executionInsightsCanvasMode
-                ? [...timelineState.items, ...executionInsightsCanvasTimelineItems]
-              : contextWindowCanvasMode
-                ? [...timelineState.items, ...contextWindowCanvasTimelineItems]
-              : runtimeInfrastructureCanvasMode
-                ? [
-                    ...timelineState.items,
-                    ...runtimeInfrastructureTimelineItems,
-                    ...httpServiceTimelineItems,
-                  ]
-            : mcpAppEventsMode
-              ? [...timelineState.items, ...mcpAppTimelineItems]
-              : subagentEventsMode
-                ? [...timelineState.items, ...subagentTimelineItems]
-                : memoryEventsMode
-                  ? [...timelineState.items, ...memoryTimelineItems]
-              : modelOverrideEventsMode
-                ? [...timelineState.items, ...modelOverrideTimelineItems]
-            : llmRuntimeEventsMode
-            ? [...timelineState.items, ...llmRuntimeTimelineItems]
-            : runtimeEventsMode
-              ? [...timelineState.items, ...runtimeInfrastructureTimelineItems]
-              : httpServiceEventsMode
-                ? [...timelineState.items, ...httpServiceTimelineItems]
-                : doomLoopEventsMode
-                  ? [...timelineState.items, ...doomLoopTimelineItems]
-                  : terminalEventsMode
-                    ? [...timelineState.items, ...conversationTerminalTimelineItems]
-                    : agentDefinitionEventsMode
-                      ? [...timelineState.items, ...agentDefinitionTimelineItems]
-                      : hitlResponseEventsMode
-                        ? [...timelineState.items, ...hitlResponseTimelineItems]
-                        : elicitationEventsMode
-                          ? [...timelineState.items, ...elicitationTimelineItems]
-                          : a2uiCanvasDeletedEventsMode
-                          ? [...timelineState.items, ...a2uiCanvasDeletedTimelineItems]
-                          : a2uiCanvasIncrementalEventsMode
-                            ? [...timelineState.items, ...a2uiCanvasIncrementalTimelineItems]
-                            : planUiStateEventsMode
-                              ? [...timelineState.items, ...planUiStateTimelineItems]
-                              : taskUiStateEventsMode
-                                ? [...timelineState.items, ...taskUiStateTimelineItems]
-                                : internalUiStateEventsMode
-                                  ? [...timelineState.items, ...internalUiStateTimelineItems]
-                                  : channelInboundMessageMode
-                                    ? [...timelineState.items, ...channelInboundMessageTimelineItems]
-                                    : toolsUpdatedEventMode
-                                      ? [...timelineState.items, ...toolsUpdatedTimelineItems]
-                                      : contextCompactedEventMode
-                                        ? [...timelineState.items, ...contextCompactedTimelineItems]
-                                        : sessionLifecycleEventsMode
-                                          ? [...timelineState.items, ...sessionLifecycleTimelineItems]
-                                          : participantEventsMode
-                                            ? [...timelineState.items, ...participantTimelineItems]
-                                            : agentTaskEventsMode
-                                              ? [...timelineState.items, ...agentTaskTimelineItems]
-                                              : agentGovernanceEventsMode
+                : executionInsightsCanvasMode
+                  ? [
+                      ...timelineState.items,
+                      ...executionInsightsCanvasTimelineItems,
+                    ]
+                  : contextWindowCanvasMode
+                    ? [
+                        ...timelineState.items,
+                        ...contextWindowCanvasTimelineItems,
+                      ]
+                    : runtimeInfrastructureCanvasMode
+                      ? [
+                          ...timelineState.items,
+                          ...runtimeInfrastructureTimelineItems,
+                          ...httpServiceTimelineItems,
+                        ]
+                      : mcpAppEventsMode
+                        ? [...timelineState.items, ...mcpAppTimelineItems]
+                        : subagentEventsMode
+                          ? [...timelineState.items, ...subagentTimelineItems]
+                          : memoryEventsMode
+                            ? [...timelineState.items, ...memoryTimelineItems]
+                            : modelOverrideEventsMode
+                              ? [
+                                  ...timelineState.items,
+                                  ...modelOverrideTimelineItems,
+                                ]
+                              : llmRuntimeEventsMode
+                                ? [
+                                    ...timelineState.items,
+                                    ...llmRuntimeTimelineItems,
+                                  ]
+                                : runtimeEventsMode
+                                  ? [
+                                      ...timelineState.items,
+                                      ...runtimeInfrastructureTimelineItems,
+                                    ]
+                                  : httpServiceEventsMode
+                                    ? [
+                                        ...timelineState.items,
+                                        ...httpServiceTimelineItems,
+                                      ]
+                                    : doomLoopEventsMode
+                                      ? [
+                                          ...timelineState.items,
+                                          ...doomLoopTimelineItems,
+                                        ]
+                                      : terminalEventsMode
+                                        ? [
+                                            ...timelineState.items,
+                                            ...conversationTerminalTimelineItems,
+                                          ]
+                                        : agentDefinitionEventsMode
+                                          ? [
+                                              ...timelineState.items,
+                                              ...agentDefinitionTimelineItems,
+                                            ]
+                                          : hitlResponseEventsMode
+                                            ? [
+                                                ...timelineState.items,
+                                                ...hitlResponseTimelineItems,
+                                              ]
+                                            : elicitationEventsMode
+                                              ? [
+                                                  ...timelineState.items,
+                                                  ...elicitationTimelineItems,
+                                                ]
+                                              : a2uiCanvasDeletedEventsMode
                                                 ? [
                                                     ...timelineState.items,
-                                                    ...agentGovernanceTimelineItems,
+                                                    ...a2uiCanvasDeletedTimelineItems,
                                                   ]
-                                                : agentAuditEventsMode
+                                                : a2uiCanvasIncrementalEventsMode
                                                   ? [
                                                       ...timelineState.items,
-                                                      ...agentAuditTimelineItems,
+                                                      ...a2uiCanvasIncrementalTimelineItems,
                                                     ]
-                                                  : workspaceOrchestrationEventsMode
+                                                  : planUiStateEventsMode
                                                     ? [
                                                         ...timelineState.items,
-                                                        ...workspaceOrchestrationTimelineItems,
+                                                        ...planUiStateTimelineItems,
                                                       ]
-                                                    : taskRecoveryEventsMode
+                                                    : taskUiStateEventsMode
                                                       ? [
                                                           ...timelineState.items,
-                                                          ...taskRecoveryTimelineItems,
+                                                          ...taskUiStateTimelineItems,
                                                         ]
-                                                      : toolProgressEventMode
+                                                      : internalUiStateEventsMode
                                                         ? [
                                                             ...timelineState.items,
-                                                            ...toolProgressTimelineItems,
+                                                            ...internalUiStateTimelineItems,
                                                           ]
-                          : a2uiCanvasEventsMode
-                            ? [...timelineState.items, ...a2uiCanvasTimelineItems]
-                            : timelineState.items;
+                                                        : channelInboundMessageMode
+                                                          ? [
+                                                              ...timelineState.items,
+                                                              ...channelInboundMessageTimelineItems,
+                                                            ]
+                                                          : toolsUpdatedEventMode
+                                                            ? [
+                                                                ...timelineState.items,
+                                                                ...toolsUpdatedTimelineItems,
+                                                              ]
+                                                            : contextCompactedEventMode
+                                                              ? [
+                                                                  ...timelineState.items,
+                                                                  ...contextCompactedTimelineItems,
+                                                                ]
+                                                              : sessionLifecycleEventsMode
+                                                                ? [
+                                                                    ...timelineState.items,
+                                                                    ...sessionLifecycleTimelineItems,
+                                                                  ]
+                                                                : participantEventsMode
+                                                                  ? [
+                                                                      ...timelineState.items,
+                                                                      ...participantTimelineItems,
+                                                                    ]
+                                                                  : agentTaskEventsMode
+                                                                    ? [
+                                                                        ...timelineState.items,
+                                                                        ...agentTaskTimelineItems,
+                                                                      ]
+                                                                    : agentGovernanceEventsMode
+                                                                      ? [
+                                                                          ...timelineState.items,
+                                                                          ...agentGovernanceTimelineItems,
+                                                                        ]
+                                                                      : agentAuditEventsMode
+                                                                        ? [
+                                                                            ...timelineState.items,
+                                                                            ...agentAuditTimelineItems,
+                                                                          ]
+                                                                        : workspaceOrchestrationEventsMode
+                                                                          ? [
+                                                                              ...timelineState.items,
+                                                                              ...workspaceOrchestrationTimelineItems,
+                                                                            ]
+                                                                          : taskRecoveryEventsMode
+                                                                            ? [
+                                                                                ...timelineState.items,
+                                                                                ...taskRecoveryTimelineItems,
+                                                                              ]
+                                                                            : toolProgressEventMode
+                                                                              ? [
+                                                                                  ...timelineState.items,
+                                                                                  ...toolProgressTimelineItems,
+                                                                                ]
+                                                                              : a2uiCanvasEventsMode
+                                                                                ? [
+                                                                                    ...timelineState.items,
+                                                                                    ...a2uiCanvasTimelineItems,
+                                                                                  ]
+                                                                                : timelineState.items;
     return {
       ...timelineState,
       items,
       hasMore:
-        historyMode === 'pagination' || historyMode === 'error' || historyMode === 'anchor',
+        historyMode === 'pagination' ||
+        historyMode === 'error' ||
+        historyMode === 'anchor',
       firstCursor: {
         timeUs: items[0]?.eventTimeUs ?? 0,
         counter: items[0]?.eventCounter ?? 0,
@@ -2583,7 +2808,10 @@ function SessionSteeringQa() {
       let agents = qaAgents;
       for (const event of workspaceRosterEvents) {
         ({ members, agents } = applyWorkspaceRosterStreamEvent(
-          members, agents, event, 'workspace-desktop',
+          members,
+          agents,
+          event,
+          'workspace-desktop',
         ));
       }
       setQaMembers(members);
@@ -2606,7 +2834,9 @@ function SessionSteeringQa() {
         current = result.dataset;
         nextWorkspaceId = result.nextWorkspaceId;
       }
-      const nextWorkspace = current.workspaces.find(({ id }) => id === nextWorkspaceId);
+      const nextWorkspace = current.workspaces.find(
+        ({ id }) => id === nextWorkspaceId,
+      );
       setQaWorkspaceLifecycleSummary(
         `Workspaces ${current.workspaces.length} · Next ${nextWorkspace?.name ?? 'none'} · ` +
           `Cleared ${current.workspaceMembers.status === 'unavailable' ? 'yes' : 'no'}`,
@@ -2621,7 +2851,8 @@ function SessionSteeringQa() {
       setQaTasks((current) =>
         workspaceTaskEvents.reduce(
           (tasks, event) =>
-            applyWorkspaceTaskStreamEvent(tasks, event, 'workspace-desktop').tasks,
+            applyWorkspaceTaskStreamEvent(tasks, event, 'workspace-desktop')
+              .tasks,
           current,
         ),
       );
@@ -2632,12 +2863,13 @@ function SessionSteeringQa() {
   useEffect(() => {
     if (!workspaceMessageEventMode) return;
     const timer = window.setTimeout(() => {
-      setQaMessages((current) =>
-        applyWorkspaceMessageStreamEvent(
-          current,
-          workspaceMessageCreatedEvent,
-          'workspace-desktop',
-        ).messages,
+      setQaMessages(
+        (current) =>
+          applyWorkspaceMessageStreamEvent(
+            current,
+            workspaceMessageCreatedEvent,
+            'workspace-desktop',
+          ).messages,
       );
     }, 600);
     return () => window.clearTimeout(timer);
@@ -2677,12 +2909,13 @@ function SessionSteeringQa() {
       const titleEvent = readConversationTitleStreamEvent(titleGeneratedEvent);
       const update = titleEvent.update;
       if (!update) return;
-      setQaConversations((current) =>
-        applyConversationTitleUpdate(
-          null,
-          { 'workspace-desktop': current },
-          update,
-        ).conversationsByWorkspace['workspace-desktop'] ?? current,
+      setQaConversations(
+        (current) =>
+          applyConversationTitleUpdate(
+            null,
+            { 'workspace-desktop': current },
+            update,
+          ).conversationsByWorkspace['workspace-desktop'] ?? current,
       );
     }, 1800);
     return () => window.clearTimeout(timer);
@@ -2691,15 +2924,17 @@ function SessionSteeringQa() {
   useEffect(() => {
     if (!artifactCanvasEventsMode) return;
     const timer = window.setTimeout(() => {
-      setArtifactCanvas((current) =>
-        applyArtifactCanvasStreamEvent(current, {
-          type: 'artifact_update',
-          data: {
-            artifact_id: 'artifact-release-notes',
-            content: '\n\nCloud session release notes verified for Desktop Canvas.',
-            append: true,
-          },
-        }).state,
+      setArtifactCanvas(
+        (current) =>
+          applyArtifactCanvasStreamEvent(current, {
+            type: 'artifact_update',
+            data: {
+              artifact_id: 'artifact-release-notes',
+              content:
+                '\n\nCloud session release notes verified for Desktop Canvas.',
+              append: true,
+            },
+          }).state,
       );
     }, 1800);
     return () => window.clearTimeout(timer);
@@ -2708,7 +2943,11 @@ function SessionSteeringQa() {
   const qaConversationTitle = qaConversations[0]?.title ?? 'Conversation';
 
   const loadEarlierHistory = () => {
-    setTimeline((current) => ({ ...current, loadingEarlier: true, error: null }));
+    setTimeline((current) => ({
+      ...current,
+      loadingEarlier: true,
+      error: null,
+    }));
     if (historyMode === 'anchor') {
       window.setTimeout(() => {
         setTimeline((current) => ({
@@ -2719,38 +2958,46 @@ function SessionSteeringQa() {
         }));
       }, 1000);
     }
-    window.setTimeout(() => {
-      if (historyMode === 'error' && historyAttempt === 0) {
-        setHistoryAttempt(1);
+    window.setTimeout(
+      () => {
+        if (historyMode === 'error' && historyAttempt === 0) {
+          setHistoryAttempt(1);
+          setTimeline((current) => ({
+            ...current,
+            loadingEarlier: false,
+            error:
+              'Earlier history could not be loaded. Retry without losing this page.',
+            hasMore: false,
+          }));
+          return;
+        }
         setTimeline((current) => ({
           ...current,
+          items: current.items.some(
+            (item) => item.id === earlierTimelineItem.id,
+          )
+            ? current.items
+            : [earlierTimelineItem, ...current.items],
           loadingEarlier: false,
-          error: 'Earlier history could not be loaded. Retry without losing this page.',
+          error: null,
           hasMore: false,
+          firstCursor: {
+            timeUs: earlierTimelineItem.eventTimeUs ?? 0,
+            counter: earlierTimelineItem.eventCounter ?? 0,
+          },
         }));
-        return;
-      }
-      setTimeline((current) => ({
-        ...current,
-        items: current.items.some((item) => item.id === earlierTimelineItem.id)
-          ? current.items
-          : [earlierTimelineItem, ...current.items],
-        loadingEarlier: false,
-        error: null,
-        hasMore: false,
-        firstCursor: {
-          timeUs: earlierTimelineItem.eventTimeUs ?? 0,
-          counter: earlierTimelineItem.eventCounter ?? 0,
-        },
-      }));
-    }, historyMode === 'anchor' ? 2000 : 180);
+      },
+      historyMode === 'anchor' ? 2000 : 180,
+    );
   };
 
   const sendQaMessage = (content: string) => {
     if (!suggestionsMode) return;
     setTimeline((current) => {
-      const eventTimeUs = (current.items[current.items.length - 1]?.eventTimeUs ?? 0) + 1_000_000;
-      const eventCounter = (current.items[current.items.length - 1]?.eventCounter ?? 0) + 1;
+      const eventTimeUs =
+        (current.items[current.items.length - 1]?.eventTimeUs ?? 0) + 1_000_000;
+      const eventCounter =
+        (current.items[current.items.length - 1]?.eventCounter ?? 0) + 1;
       const nextItem: ConversationTimelineState['items'][number] = {
         id: `suggestion-user-message-${eventCounter}`,
         type: 'user_message',
@@ -2768,23 +3015,42 @@ function SessionSteeringQa() {
   };
 
   return (
-    <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+    <Theme
+      appearance="dark"
+      accentColor="cyan"
+      grayColor="slate"
+      radius="medium"
+      scaling="95%"
+    >
       <div className="session-steering-qa-shell">
         <aside className="session-steering-qa-rail">
-          <div className="session-steering-qa-brand"><CubeIcon /><strong>MemStack</strong></div>
-          <button type="button"><PlusIcon /> New task</button>
+          <div className="session-steering-qa-brand">
+            <CubeIcon />
+            <strong>MemStack</strong>
+          </div>
+          <button type="button">
+            <PlusIcon /> New task
+          </button>
           <nav>
-            <button type="button"><HomeIcon /> Home</button>
-            <button type="button"><GridIcon /> My work</button>
+            <button type="button">
+              <HomeIcon /> Home
+            </button>
+            <button type="button">
+              <GridIcon /> My work
+            </button>
           </nav>
           <section>
             <span>WORKSPACE</span>
-            <button type="button"><CubeIcon /> Desktop Client</button>
+            <button type="button">
+              <CubeIcon /> Desktop Client
+            </button>
             <button type="button" className="selected">
               <ChatBubbleIcon /> {qaConversationTitle}
             </button>
           </section>
-          <button type="button"><GearIcon /> Settings</button>
+          <button type="button">
+            <GearIcon /> Settings
+          </button>
         </aside>
         <main>
           <header className="session-steering-qa-titlebar">
@@ -2796,9 +3062,18 @@ function SessionSteeringQa() {
               </span>
             </div>
             <dl>
-              <div><dt>Environment</dt><dd>Worktree</dd></div>
-              <div><dt>Branch</dt><dd>agistack/desktop-session-42</dd></div>
-              <div><dt>Run</dt><dd>run-desk · r7</dd></div>
+              <div>
+                <dt>Environment</dt>
+                <dd>Worktree</dd>
+              </div>
+              <div>
+                <dt>Branch</dt>
+                <dd>agistack/desktop-session-42</dd>
+              </div>
+              <div>
+                <dt>Run</dt>
+                <dd>run-desk · r7</dd>
+              </div>
             </dl>
           </header>
           <div className="session-steering-qa-content">
@@ -2806,7 +3081,9 @@ function SessionSteeringQa() {
               api={qaApi}
               conversations={qaConversations}
               selectedConversationId={
-                workspaceMessageEventMode ? null : 'conversation-desktop-session'
+                workspaceMessageEventMode
+                  ? null
+                  : 'conversation-desktop-session'
               }
               messages={qaMessages}
               timelineState={workspaceMessageEventMode ? null : timeline}
@@ -2817,7 +3094,9 @@ function SessionSteeringQa() {
               composerVariant="session"
               composerResetKey="qa-session-steering"
               initialInput={
-                suggestionsMode ? '' : 'Keep the public API stable and add the missing revision test.'
+                suggestionsMode
+                  ? ''
+                  : 'Keep the public API stable and add the missing revision test.'
               }
               activityPresence={
                 suggestionsMode ||
@@ -2897,7 +3176,9 @@ function SessionSteeringQa() {
                 )
               }
               onRemoveReference={(reference) =>
-                setReferences((current) => toggleRunInputReference(current, reference))
+                setReferences((current) =>
+                  toggleRunInputReference(current, reference),
+                )
               }
               onSend={sendQaMessage}
               onRefresh={() => undefined}
@@ -2914,7 +3195,9 @@ function SessionSteeringQa() {
                 modelOverrideEventsMode
                   ? async () => {
                       setSwitchingModel(true);
-                      await new Promise((resolve) => window.setTimeout(resolve, 180));
+                      await new Promise((resolve) =>
+                        window.setTimeout(resolve, 180),
+                      );
                       setModel('gpt-5.5');
                       setSwitchingModel(false);
                     }
@@ -2934,19 +3217,26 @@ function SessionSteeringQa() {
             ) : null}
             {workspaceRosterEventMode ? (
               <p data-testid="workspace-roster-stream">
-                Members {qaMembers.items.length} · Agents {qaAgents.items.length} ·{' '}
+                Members {qaMembers.items.length} · Agents{' '}
+                {qaAgents.items.length} ·{' '}
                 {qaMembers.items[0]?.role ?? 'pending'}
               </p>
             ) : null}
             {workspaceLifecycleEventMode ? (
-              <p data-testid="workspace-lifecycle-stream">{qaWorkspaceLifecycleSummary}</p>
+              <p data-testid="workspace-lifecycle-stream">
+                {qaWorkspaceLifecycleSummary}
+              </p>
             ) : null}
             {runtimeInfrastructureCanvasMode ? (
-              <SessionRuntimeInfrastructureCanvas model={sessionRuntimeInfrastructure} />
+              <SessionRuntimeInfrastructureCanvas
+                model={sessionRuntimeInfrastructure}
+              />
             ) : contextWindowCanvasMode ? (
               <SessionContextWindowCanvas model={sessionContextWindow} />
             ) : executionInsightsCanvasMode ? (
-              <SessionExecutionInsightsCanvas model={sessionExecutionInsights} />
+              <SessionExecutionInsightsCanvas
+                model={sessionExecutionInsights}
+              />
             ) : executionGraphCanvasMode ? (
               <>
                 <SessionExecutionGraphCanvas
@@ -2976,10 +3266,14 @@ function SessionSteeringQa() {
                   sandboxProxyUrl="http://127.0.0.1:8000/static/sandbox_proxy.html"
                   onSendMessage={(message) => setMCPAppHostMessage(message)}
                   onSelect={(tabId) =>
-                    setMCPAppCanvas((current) => selectMCPAppCanvasTab(current, tabId))
+                    setMCPAppCanvas((current) =>
+                      selectMCPAppCanvasTab(current, tabId),
+                    )
                   }
                   onClose={(tabId) =>
-                    setMCPAppCanvas((current) => closeMCPAppCanvasTab(current, tabId))
+                    setMCPAppCanvas((current) =>
+                      closeMCPAppCanvasTab(current, tabId),
+                    )
                   }
                 />
                 {mcpAppHostMessage ? (
@@ -2997,7 +3291,9 @@ function SessionSteeringQa() {
                   await respondToQaA2UI(submission);
                 }}
                 onSelect={(artifactId) =>
-                  setArtifactCanvas((current) => selectArtifactCanvasTab(current, artifactId))
+                  setArtifactCanvas((current) =>
+                    selectArtifactCanvasTab(current, artifactId),
+                  )
                 }
               />
             ) : (
@@ -3008,9 +3304,14 @@ function SessionSteeringQa() {
                   error={null}
                   references={references}
                   comments={changeComments}
+                  scope="run"
+                  availableScopes={['run']}
+                  onScopeChange={() => undefined}
                   onRefresh={() => undefined}
                   onToggleReference={(reference) =>
-                    setReferences((current) => toggleRunInputReference(current, reference))
+                    setReferences((current) =>
+                      toggleRunInputReference(current, reference),
+                    )
                   }
                   onAddComment={(comment) =>
                     setChangeComments((current) => [...current, comment])

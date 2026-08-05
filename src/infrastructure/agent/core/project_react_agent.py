@@ -482,6 +482,7 @@ class ProjectReActAgent:
         from src.infrastructure.agent.state.agent_worker_state import (
             get_or_create_agent_session,
         )
+        from src.infrastructure.agent.subagent.control_channel import RedisControlChannel
         from src.infrastructure.llm.model_registry import (
             clamp_max_tokens as _clamp_max_tokens,
             get_model_context_window,
@@ -498,6 +499,9 @@ class ProjectReActAgent:
                 "__override_max_tokens": _reasoning_cfg.override_max_tokens,
             }
 
+        control_channel = (
+            RedisControlChannel(redis_client) if redis_client is not None else None
+        )
         processor_config = ProcessorConfig(
             model=provider_config.llm_model,
             api_key="",
@@ -508,6 +512,7 @@ class ProjectReActAgent:
             llm_client=llm_client,
             provider_options=_provider_opts,
             message_bus=self._message_bus,
+            control_channel=control_channel,
         )
 
         self._artifact_service = artifact_service
@@ -613,6 +618,8 @@ class ProjectReActAgent:
             _cached_system_prompt_manager=self._session_context.system_prompt_manager,
             _cached_subagent_router=self._session_context.subagent_router,
             workspace_manager=workspace_manager,
+            message_bus=self._message_bus,
+            control_channel=control_channel,
         )
 
     def _build_context_window_config(
@@ -895,6 +902,7 @@ class ProjectReActAgent:
         tenant_agent_config_data: dict[str, Any] | None = None,
         preferred_language: str | None = None,
         api_auth_token: str | None = None,
+        canonical_run_id: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Execute a chat request using the project agent.
@@ -962,6 +970,7 @@ class ProjectReActAgent:
                 tenant_id=effective_tenant_id,
                 conversation_context=conversation_context or [],
                 message_id=message_id,
+                canonical_run_id=canonical_run_id,
                 abort_signal=abort_signal,
                 attachment_metadata=file_metadata,
                 forced_skill_name=forced_skill_name,

@@ -43,6 +43,13 @@ def _serialize_message(msg: ControlMessage) -> dict[str, str]:
         "sender_id": msg.sender_id,
         "timestamp": msg.timestamp.isoformat(),
         "cascade": str(msg.cascade),
+        "run_input_id": msg.run_input_id,
+        "delivery_mode": msg.delivery_mode,
+        "run_revision": str(msg.run_revision) if msg.run_revision is not None else "",
+        "message_id": msg.message_id,
+        "idempotency_key": msg.idempotency_key,
+        "target_agent_id": msg.target_agent_id,
+        "target_agent_name": msg.target_agent_name,
     }
 
 
@@ -53,6 +60,7 @@ def _deserialize_message(data: Mapping[Any, Any]) -> ControlMessage:
         val = v.decode() if isinstance(v, bytes) else v
         raw[key] = val
 
+    run_revision_raw = raw.get("run_revision", "")
     return ControlMessage(
         run_id=raw["run_id"],
         message_type=ControlMessageType(raw["message_type"]),
@@ -62,6 +70,13 @@ def _deserialize_message(data: Mapping[Any, Any]) -> ControlMessage:
         if "timestamp" in raw
         else datetime.now(UTC),
         cascade=raw.get("cascade", "False").lower() == "true",
+        run_input_id=raw.get("run_input_id", ""),
+        delivery_mode=raw.get("delivery_mode", ""),
+        run_revision=int(run_revision_raw) if run_revision_raw else None,
+        message_id=raw.get("message_id", ""),
+        idempotency_key=raw.get("idempotency_key", ""),
+        target_agent_id=raw.get("target_agent_id", ""),
+        target_agent_name=raw.get("target_agent_name", ""),
     )
 
 
@@ -101,6 +116,10 @@ class RedisControlChannel:
                     payload=payload.get("reason", ""),
                     sender_id=payload.get("sender_id", ""),
                     cascade=payload.get("cascade", False),
+                    run_revision=payload.get("run_revision"),
+                    idempotency_key=payload.get("idempotency_key", ""),
+                    target_agent_id=payload.get("target_agent_id", ""),
+                    target_agent_name=payload.get("target_agent_name", ""),
                 )
 
             stream = _stream_key(run_id)
@@ -128,6 +147,10 @@ class RedisControlChannel:
                         payload=payload.get("reason", ""),
                         sender_id=payload.get("sender_id", ""),
                         cascade=payload.get("cascade", False),
+                        run_revision=payload.get("run_revision"),
+                        idempotency_key=payload.get("idempotency_key", ""),
+                        target_agent_id=payload.get("target_agent_id", ""),
+                        target_agent_name=payload.get("target_agent_name", ""),
                     )
                 )
                 await self._redis.delete(_kill_key(run_id))
@@ -167,6 +190,10 @@ class RedisControlChannel:
                 "sender_id": message.sender_id,
                 "cascade": message.cascade,
                 "timestamp": message.timestamp.isoformat(),
+                "run_revision": message.run_revision,
+                "idempotency_key": message.idempotency_key,
+                "target_agent_id": message.target_agent_id,
+                "target_agent_name": message.target_agent_name,
             }
         )
         await self._redis.set(

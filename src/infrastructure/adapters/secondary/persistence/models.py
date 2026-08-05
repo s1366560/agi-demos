@@ -2548,6 +2548,345 @@ class AgentPlanRunModel(Base):
     __table_args__ = (Index("ix_agent_plan_runs_conversation", "conversation_id", "created_at"),)
 
 
+class AgentRunAuthorityModel(Base):
+    """Canonical authority shared by ordinary chat and approved-plan runs."""
+
+    __tablename__ = "agent_run_authorities"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id: Mapped[str] = mapped_column(
+        String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    conversation_id: Mapped[str] = mapped_column(
+        String, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
+    )
+    run_kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    plan_run_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("agent_plan_runs.id", ondelete="CASCADE"),
+        nullable=True,
+        unique=True,
+    )
+    plan_version_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("agent_plan_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    message_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    request_message: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="queued", nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    permission_profile: Mapped[str] = mapped_column(String(30), nullable=False)
+    authorization_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id",
+            "idempotency_key",
+            name="uq_agent_run_authorities_conversation_idempotency",
+        ),
+        Index(
+            "ix_agent_run_authorities_scope_status",
+            "tenant_id",
+            "project_id",
+            "conversation_id",
+            "status",
+            "created_at",
+        ),
+        CheckConstraint(
+            "run_kind IN ('chat', 'plan')",
+            name="ck_agent_run_authorities_kind",
+        ),
+        CheckConstraint(
+            "permission_profile IN ('read_only', 'workspace_write', 'full_access')",
+            name="ck_agent_run_authorities_permission_profile",
+        ),
+        CheckConstraint(
+            "revision >= 1",
+            name="ck_agent_run_authorities_revision_positive",
+        ),
+    )
+
+
+class AgentRunInputModel(Base):
+    """Durable Queue/Steer input accepted against one canonical run revision."""
+
+    __tablename__ = "agent_run_inputs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    project_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    conversation_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    run_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("agent_run_authorities.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    actor_user_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    expected_run_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    message_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    delivery: Mapped[str] = mapped_column(String(20), nullable=False)
+    references_json: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON,
+        default=list,
+        nullable=False,
+    )
+    context_items_json: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON,
+        default=list,
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    queue_position: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    applied_round: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    injected_via: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    dispatch_status: Mapped[str] = mapped_column(
+        String(20),
+        default="not_required",
+        nullable=False,
+    )
+    dispatch_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    dispatch_lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    dispatch_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    promoted_run_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("agent_plan_runs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    promotion_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    promoted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "idempotency_key",
+            name="uq_agent_run_inputs_run_idempotency",
+        ),
+        UniqueConstraint(
+            "run_id",
+            "message_id",
+            name="uq_agent_run_inputs_run_message",
+        ),
+        Index(
+            "ix_agent_run_inputs_scope_status",
+            "tenant_id",
+            "project_id",
+            "conversation_id",
+            "run_id",
+            "status",
+        ),
+        CheckConstraint(
+            "expected_run_revision >= 1",
+            name="ck_agent_run_inputs_expected_revision_positive",
+        ),
+        CheckConstraint(
+            "delivery IN ('steer_now', 'queue_next')",
+            name="ck_agent_run_inputs_delivery",
+        ),
+        CheckConstraint(
+            "status IN "
+            "('pending_boundary', 'queued', 'applied', 'ready', 'blocked', "
+            "'promoted_to_plan')",
+            name="ck_agent_run_inputs_status",
+        ),
+        CheckConstraint(
+            "dispatch_status IN ('not_required', 'dispatching', 'dispatched', 'failed')",
+            name="ck_agent_run_inputs_dispatch_status",
+        ),
+        CheckConstraint(
+            "dispatch_attempts >= 0",
+            name="ck_agent_run_inputs_dispatch_attempts_nonnegative",
+        ),
+    )
+
+
+class AgentRunSummaryModel(Base):
+    """Persisted per-run usage, completion and evidence projection."""
+
+    __tablename__ = "agent_run_summaries"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    project_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    conversation_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    run_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("agent_run_authorities.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    summary_state: Mapped[str] = mapped_column(String(30), nullable=False)
+    reason_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    input_tokens: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    model_breakdown_json: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON,
+        default=list,
+        nullable=False,
+    )
+    completion_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    artifact_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    checks_passed: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    checks_failed: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    files_changed: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    lines_added: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    lines_deleted: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    evidence_references_json: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON,
+        default=list,
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_agent_run_summaries_scope",
+            "tenant_id",
+            "project_id",
+            "conversation_id",
+            "run_id",
+        ),
+        CheckConstraint("revision >= 1", name="ck_agent_run_summaries_revision_positive"),
+        CheckConstraint(
+            "summary_state IN ('recorded', 'partial')",
+            name="ck_agent_run_summaries_state",
+        ),
+    )
+
+
+class ActivityReadReceiptModel(Base):
+    """Server-authoritative read receipt for a project Activity entry."""
+
+    __tablename__ = "activity_read_receipts"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    project_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    entry_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    entry_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    read_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "project_id",
+            "user_id",
+            "entry_id",
+            name="uq_activity_read_receipts_scope_entry",
+        ),
+        Index(
+            "ix_activity_read_receipts_scope_revision",
+            "tenant_id",
+            "project_id",
+            "user_id",
+            "revision",
+        ),
+        CheckConstraint(
+            "entry_revision >= 0",
+            name="ck_activity_read_receipts_entry_revision",
+        ),
+        CheckConstraint("revision >= 1", name="ck_activity_read_receipts_revision_positive"),
+    )
+
+
 class MCPAppModel(Base):
     """
     MCP App persistence model.

@@ -7,6 +7,9 @@ from fastapi import status
 from sqlalchemy import delete, select
 
 from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentPlanRunModel,
+    AgentPlanVersionModel,
+    AgentRunSummaryModel,
     Conversation,
     HITLRequest,
     User,
@@ -17,6 +20,187 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     WorkspaceTaskModel,
     WorkspaceTaskSessionAttemptModel,
 )
+
+
+async def test_my_work_embeds_authoritative_agent_run_summary(
+    authenticated_async_client,
+    test_db,
+    test_project_db,
+    test_user,
+) -> None:
+    now = datetime.now(UTC)
+    workspace = WorkspaceModel(
+        id="my-work-run-workspace",
+        tenant_id=test_project_db.tenant_id,
+        project_id=test_project_db.id,
+        name="Agent run workspace",
+        created_by=test_user.id,
+        metadata_json={"capability_mode": "code"},
+    )
+    membership = WorkspaceMemberModel(
+        id="my-work-run-member",
+        workspace_id=workspace.id,
+        user_id=test_user.id,
+        role="owner",
+        invited_by=test_user.id,
+    )
+    conversation = Conversation(
+        id="my-work-run-conversation",
+        project_id=test_project_db.id,
+        tenant_id=test_project_db.tenant_id,
+        user_id=test_user.id,
+        title="Agent run",
+        status="active",
+        agent_config={"capability_mode": "code"},
+        message_count=0,
+        workspace_id=workspace.id,
+    )
+    plan = AgentPlanVersionModel(
+        id="my-work-run-plan",
+        conversation_id=conversation.id,
+        version=1,
+        status="approved",
+        tasks_json=[],
+        approved_at=now,
+    )
+    run = AgentPlanRunModel(
+        id="my-work-agent-run",
+        conversation_id=conversation.id,
+        project_id=test_project_db.id,
+        plan_version_id=plan.id,
+        idempotency_key="my-work-run-start",
+        message_id="my-work-run-message",
+        request_message="Implement",
+        status="ready_review",
+        revision=2,
+        permission_profile="workspace_write",
+        authorization_snapshot={"environment": {"id": "sandbox-1"}},
+        created_at=now - timedelta(seconds=2),
+        updated_at=now,
+        completed_at=now,
+    )
+    summary = AgentRunSummaryModel(
+        id="my-work-run-summary",
+        tenant_id=test_project_db.tenant_id,
+        project_id=test_project_db.id,
+        conversation_id=conversation.id,
+        run_id=run.id,
+        status=run.status,
+        revision=run.revision,
+        summary_state="recorded",
+        reason_code=None,
+        started_at=now - timedelta(seconds=2),
+        completed_at=now,
+        duration_ms=2000,
+        input_tokens=10,
+        output_tokens=5,
+        cost_usd=0.01,
+        model_breakdown_json=[{"model": "model-a"}],
+        completion_summary="Completed",
+        artifact_count=1,
+        checks_passed=2,
+        checks_failed=0,
+        files_changed=1,
+        lines_added=3,
+        lines_deleted=1,
+        evidence_references_json=[{"kind": "trace", "value": "trace-1"}],
+        created_at=now,
+        updated_at=now,
+    )
+    test_db.add_all([workspace, membership, conversation, plan, run, summary])
+    await test_db.commit()
+
+    response = await authenticated_async_client.get(
+        f"/api/v1/projects/{test_project_db.id}/my-work"
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    item = response.json()["items"][0]
+    assert item["id"] == f"agent_run:{run.id}"
+    assert item["status"] == "ready_review"
+    assert item["run_summary"] == {
+        "run_id": run.id,
+        "tenant_id": test_project_db.tenant_id,
+        "project_id": test_project_db.id,
+        "conversation_id": conversation.id,
+        "status": "ready_review",
+        "revision": 2,
+        "summary_state": "recorded",
+        "reason_code": None,
+        "started_at": (now - timedelta(seconds=2)).isoformat().replace("+00:00", "Z"),
+        "completed_at": now.isoformat().replace("+00:00", "Z"),
+        "duration_ms": 2000,
+        "input_tokens": 10,
+        "output_tokens": 5,
+        "cost_usd": 0.01,
+        "model_breakdown": [{"model": "model-a"}],
+        "completion_summary": "Completed",
+        "artifact_count": 1,
+        "checks_passed": 2,
+        "checks_failed": 0,
+        "files_changed": 1,
+        "lines_added": 3,
+        "lines_deleted": 1,
+        "evidence_references": [{"kind": "trace", "value": "trace-1"}],
+    }
+
+
+async def test_my_work_includes_unbound_agent_workspace_run(
+    authenticated_async_client,
+    test_db,
+    test_project_db,
+    test_user,
+) -> None:
+    now = datetime.now(UTC)
+    conversation = Conversation(
+        id="my-work-unbound-conversation",
+        project_id=test_project_db.id,
+        tenant_id=test_project_db.tenant_id,
+        user_id=test_user.id,
+        title="Unbound Agent Workspace run",
+        status="active",
+        agent_config={"capability_mode": "work"},
+        message_count=1,
+        workspace_id=None,
+    )
+    plan = AgentPlanVersionModel(
+        id="my-work-unbound-plan",
+        conversation_id=conversation.id,
+        version=1,
+        status="approved",
+        tasks_json=[],
+        approved_at=now,
+    )
+    run = AgentPlanRunModel(
+        id="my-work-unbound-run",
+        conversation_id=conversation.id,
+        project_id=test_project_db.id,
+        plan_version_id=plan.id,
+        idempotency_key="my-work-unbound-start",
+        message_id="my-work-unbound-message",
+        request_message="Implement",
+        status="ready_review",
+        revision=2,
+        permission_profile="read_only",
+        authorization_snapshot={"environment": None},
+        created_at=now - timedelta(seconds=2),
+        updated_at=now,
+        completed_at=now,
+    )
+    test_db.add_all([conversation, plan, run])
+    await test_db.commit()
+
+    response = await authenticated_async_client.get(
+        f"/api/v1/projects/{test_project_db.id}/my-work"
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    item = next(item for item in response.json()["items"] if item["authority_id"] == run.id)
+    assert item["workspace_id"] is None
+    assert item["workspace_name"] is None
+    assert item["status"] == "ready_review"
+    assert item["run_summary"]["summary_state"] == "partial"
+    assert item["run_summary"]["reason_code"] == "summary_not_recorded"
 
 
 async def test_my_work_requires_project_and_tenant_membership(

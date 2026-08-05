@@ -38,11 +38,11 @@ test('Code conversation canvas exposes only the approved session surfaces', () =
   assert.deepEqual(sessionCanvasTabs('code').secondary, []);
 });
 
-test('Work conversation canvas exposes artifact, source, and verification surfaces', () => {
+test('Work conversation canvas also exposes authoritative scoped Changes', () => {
   const tabs = sessionCanvasTabs('work');
   assert.deepEqual(
     tabs.primary.map((tab) => tab.id),
-    ['overview', 'plan', 'artifacts', 'sources', 'verification']
+    ['overview', 'plan', 'changes', 'artifacts', 'sources', 'verification']
   );
   assert.deepEqual(tabs.secondary, []);
   assert.equal(tabs.primary.some((tab) => tab.id === 'terminal'), false);

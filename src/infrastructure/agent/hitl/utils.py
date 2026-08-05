@@ -288,6 +288,15 @@ def _restore_summary_hitl_response(
         normalized_response = response_summary.strip().lower()
         if normalized_response in {"true", "false"}:
             restored_response = {"granted": normalized_response == "true"}
+        elif normalized_response == "deny":
+            restored_response = {
+                "action": "deny",
+                "granted": False,
+                "scope": "once",
+            }
+            feedback = response_metadata.get("permission_feedback")
+            if isinstance(feedback, str) and feedback.strip():
+                restored_response["feedback"] = feedback.strip()
         else:
             restored_response = {"action": response_summary}
     elif hitl_type == "a2ui_action":

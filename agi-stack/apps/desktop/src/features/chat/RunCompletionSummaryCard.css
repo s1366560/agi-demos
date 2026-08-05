@@ -8,7 +8,11 @@
   border: 1px solid rgba(var(--desktop-cyan-dim-rgb), 0.28);
   border-radius: 10px;
   background:
-    linear-gradient(135deg, rgba(var(--desktop-surface-cyan-8-rgb), 0.2), rgba(var(--desktop-surface-34-rgb), 0.92)),
+    linear-gradient(
+      135deg,
+      rgba(var(--desktop-surface-cyan-8-rgb), 0.2),
+      rgba(var(--desktop-surface-34-rgb), 0.92)
+    ),
     var(--desktop-surface-21);
   color: var(--desktop-muted);
   box-shadow: 0 12px 30px rgba(var(--desktop-black-rgb), 0.14);
@@ -98,6 +102,16 @@
 .run-completion-body {
   display: grid;
   gap: 0;
+}
+
+.run-completion-narrative {
+  margin: 0;
+  padding: 10px 13px;
+  border-bottom: 1px solid rgba(var(--desktop-cyan-dim-rgb), 0.16);
+  color: var(--desktop-text-soft);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
 }
 
 .run-completion-meta {

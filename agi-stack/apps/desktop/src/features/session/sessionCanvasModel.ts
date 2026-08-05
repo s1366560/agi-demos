@@ -78,7 +78,14 @@ export function sessionCanvasTabs(mode: SessionCapabilityMode): SessionCanvasTab
   }
   if (mode === 'work') {
     return {
-      primary: [tabs.overview, tabs.plan, tabs.artifacts, tabs.sources, tabs.verification],
+      primary: [
+        tabs.overview,
+        tabs.plan,
+        tabs.changes,
+        tabs.artifacts,
+        tabs.sources,
+        tabs.verification,
+      ],
       secondary: [],
     };
   }

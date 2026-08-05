@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.conversation_session_projection_service import (
     AgentPlanRunAuthority,
+    AgentPlanVersionAuthority,
     ArtifactRecordAuthority,
     CapabilityMode,
     ConversationAuthority,
@@ -29,8 +30,8 @@ from src.application.services.hitl_response_contract import HITL_PENDING_AUTHORI
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.artifact_model import ArtifactModel
 from src.infrastructure.adapters.secondary.persistence.models import (
-    AgentPlanRunModel,
     AgentPlanVersionModel,
+    AgentRunAuthorityModel,
     AgentTaskModel,
     Conversation,
     HITLRequest,
@@ -85,6 +86,7 @@ class SqlConversationSessionProjectionReader:
         if conversation is None:
             return None
         runs = await self._load_runs(conversation)
+        plan_versions = await self._load_agent_plan_versions(conversation)
         attempts = await self._load_attempts(conversation)
         tasks = await self._load_conversation_tasks(conversation.id)
         plan = await self._load_workspace_plan_context(conversation)
@@ -108,6 +110,7 @@ class SqlConversationSessionProjectionReader:
             artifact_records=artifact_records,
             tool_executions=tool_executions,
             runs=runs,
+            plan_versions=plan_versions,
         )
 
     async def _load_conversation(
@@ -266,20 +269,14 @@ class SqlConversationSessionProjectionReader:
     ) -> tuple[AgentPlanRunAuthority, ...]:
         result = await self._db.execute(
             refresh_select_statement(
-                select(AgentPlanRunModel)
+                select(AgentRunAuthorityModel)
                 .where(
-                    AgentPlanRunModel.conversation_id == conversation.id,
-                    AgentPlanRunModel.project_id == conversation.project_id,
-                    exists(
-                        select(AgentPlanVersionModel.id).where(
-                            AgentPlanVersionModel.id == AgentPlanRunModel.plan_version_id,
-                            AgentPlanVersionModel.conversation_id == conversation.id,
-                        )
-                    ),
+                    AgentRunAuthorityModel.conversation_id == conversation.id,
+                    AgentRunAuthorityModel.project_id == conversation.project_id,
                 )
                 .order_by(
-                    AgentPlanRunModel.created_at.desc(),
-                    AgentPlanRunModel.id.desc(),
+                    AgentRunAuthorityModel.created_at.desc(),
+                    AgentRunAuthorityModel.id.desc(),
                 )
             )
         )
@@ -299,12 +296,40 @@ class SqlConversationSessionProjectionReader:
                     permission_profile=self._run_permission_profile(item.permission_profile),
                     environment=self._run_environment(item.authorization_snapshot),
                     created_at=item.created_at,
+                    started_at=item.started_at,
                     updated_at=item.updated_at,
                     completed_at=item.completed_at,
                     error=item.error,
                 )
             )
         return tuple(runs)
+
+    async def _load_agent_plan_versions(
+        self, conversation: ConversationAuthority
+    ) -> tuple[AgentPlanVersionAuthority, ...]:
+        result = await self._db.execute(
+            refresh_select_statement(
+                select(AgentPlanVersionModel)
+                .where(AgentPlanVersionModel.conversation_id == conversation.id)
+                .order_by(
+                    AgentPlanVersionModel.version.desc(),
+                    AgentPlanVersionModel.created_at.desc(),
+                    AgentPlanVersionModel.id.desc(),
+                )
+            )
+        )
+        return tuple(
+            AgentPlanVersionAuthority(
+                id=item.id,
+                conversation_id=item.conversation_id,
+                version=item.version,
+                status=cast(Literal["draft", "approved"], item.status),
+                tasks=tuple(dict(task) for task in item.tasks_json),
+                created_at=item.created_at,
+                approved_at=item.approved_at,
+            )
+            for item in result.scalars().all()
+        )
 
     async def _load_conversation_tasks(
         self, conversation_id: str

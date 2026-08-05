@@ -17,6 +17,10 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.chat_handler imp
     SendMessageHandler,
     StopSessionHandler,
 )
+from src.infrastructure.adapters.primary.web.websocket.handlers.control_handler import (
+    KillRunHandler,
+    SteerSubAgentHandler,
+)
 from src.infrastructure.adapters.primary.web.websocket.handlers.hitl_handler import (
     A2UIActionRespondHandler,
     ClarificationRespondHandler,
@@ -56,26 +60,22 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.workspace_handle
 )
 
 __all__ = [
-    # HITL
     "A2UIActionRespondHandler",
     "ClarificationRespondHandler",
     "DecisionRespondHandler",
     "EnvVarRespondHandler",
+    "KillRunHandler",
     "PermissionRespondHandler",
     "RestartAgentHandler",
-    # Chat
     "SendMessageHandler",
     "StartAgentHandler",
+    "SteerSubAgentHandler",
     "StopAgentHandler",
     "StopSessionHandler",
-    # Subscription
     "SubscribeHandler",
-    # Lifecycle
     "SubscribeLifecycleStateHandler",
     "SubscribeProjectEventsHandler",
-    # Sandbox
     "SubscribeSandboxHandler",
-    # Status
     "SubscribeStatusHandler",
     "SubscribeWorkspaceHandler",
     "UnsubscribeHandler",
@@ -85,7 +85,6 @@ __all__ = [
     "UnsubscribeStatusHandler",
     "UnsubscribeWorkspaceHandler",
     "WebSocketMessageHandler",
-    # Workspace Presence
     "WorkspaceHeartbeatHandler",
     "WorkspacePresenceJoinHandler",
     "WorkspacePresenceLeaveHandler",

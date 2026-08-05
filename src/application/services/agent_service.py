@@ -293,6 +293,7 @@ class AgentService(AgentServicePort):
         mentions: list[str] | None = None,
         api_auth_token: str | None = None,
         execution_message_id: str | None = None,
+        canonical_run_id: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Stream agent response using Ray Actors.
@@ -428,6 +429,7 @@ class AgentService(AgentServicePort):
                 agent_id=agent_id,
                 preferred_language=preferred_language,
                 api_auth_token=api_auth_token,
+                canonical_run_id=canonical_run_id,
             )
             logger.info(
                 f"[AgentService] Started actor {actor_id} for conversation {conversation_id}"
@@ -467,6 +469,7 @@ class AgentService(AgentServicePort):
         model_override: str | None = None,
         preferred_language: str | None = None,
         api_auth_token: str | None = None,
+        canonical_run_id: str | None = None,
     ) -> str:
         """Start agent execution via Ray Actor, with local fallback."""
         return await self._runtime.start_chat_actor(
@@ -485,6 +488,7 @@ class AgentService(AgentServicePort):
             model_override=model_override,
             preferred_language=preferred_language,
             api_auth_token=api_auth_token,
+            canonical_run_id=canonical_run_id,
         )
 
     async def _get_stream_events(
@@ -831,9 +835,27 @@ class AgentService(AgentServicePort):
         delayed_stream_start_id = stream_start_id_from_cursor(last_event_time_us)
         try:
             assert self._event_bus is not None
-            async for delayed_message in self._event_bus.stream_read(
-                stream_key, last_id=delayed_stream_start_id, count=100, block_ms=200
-            ):
+            delayed_stream = self._event_bus.stream_read(
+                stream_key,
+                last_id=delayed_stream_start_id,
+                count=100,
+                block_ms=200,
+            ).__aiter__()
+            while True:
+                current_time = time_module.time()
+                wait_seconds = min(
+                    max_delay - (current_time - delayed_start),
+                    idle_timeout - (current_time - last_activity_time),
+                )
+                if wait_seconds <= 0:
+                    break
+                try:
+                    delayed_message = await asyncio.wait_for(
+                        anext(delayed_stream),
+                        timeout=wait_seconds,
+                    )
+                except (TimeoutError, StopAsyncIteration):
+                    break
                 current_time = time_module.time()
 
                 delayed_event = delayed_message.get("data", {})
@@ -883,15 +905,6 @@ class AgentService(AgentServicePort):
                         last_event_counter = delayed_counter
                     last_activity_time = current_time
 
-                # Timeout check: exit if max_delay exceeded or idle for too long
-                if current_time - delayed_start > max_delay:
-                    break
-                if current_time - last_activity_time > idle_timeout:
-                    logger.debug(
-                        f"[AgentService] Idle timeout reached ({idle_timeout}s), "
-                        f"exiting delayed event read loop"
-                    )
-                    break
         except Exception as delay_err:
             logger.warning(f"[AgentService] Error reading delayed events: {delay_err}")
         return result

@@ -162,6 +162,26 @@ function validCloudProjection() {
     updated_at: '2026-07-14T00:01:00Z',
     completed_at: null,
   };
+  const currentPlan = {
+    id: 'cloud-plan-version-2',
+    conversation_id: 'conversation-1',
+    version: 2,
+    status: 'draft',
+    tasks: [
+      {
+        id: 'cloud-plan-task-1',
+        conversation_id: 'conversation-1',
+        content: 'Project the promoted planning turn',
+        status: 'pending',
+        priority: 'high',
+        order_index: 0,
+        created_at: '2026-07-14T00:00:30Z',
+        updated_at: '2026-07-14T00:00:45Z',
+      },
+    ],
+    created_at: '2026-07-14T00:00:30Z',
+    approved_at: null,
+  };
   return {
     schema_version: 2,
     projection_kind: 'workspace_session',
@@ -194,6 +214,8 @@ function validCloudProjection() {
       current_attempt: attempt,
       attempt_history: [attempt],
     },
+    current_plan: currentPlan,
+    plan_history: [currentPlan],
     conversation_tasks: [
       {
         id: 'cloud-task-1',
@@ -288,6 +310,34 @@ function validCloudProjection() {
     updated_at: '2026-07-14T00:01:00Z',
   };
 }
+
+test('desktop session projection accepts a canonical root chat run without a plan version', () => {
+  const projection = validProjection();
+  projection.current_run.plan_version_id = null;
+  projection.current_plan = null;
+  projection.plan_history = [];
+  projection.tasks = [];
+
+  const decoded = decodeSignedProjection(projection);
+
+  assert.ok(decoded);
+  assert.equal(decoded.currentRun?.id, 'run-1');
+  assert.equal(decoded.currentRun?.plan_version_id, null);
+  assert.equal(decoded.currentPlan, null);
+});
+
+test('cloud session projection exposes the authoritative agent plan version', () => {
+  const projection = validCloudProjection();
+
+  const decoded = decodeConversationSessionProjection(projection, 'conversation-1');
+
+  assert.ok(decoded);
+  assert.equal(decoded.currentPlan?.id, 'cloud-plan-version-2');
+  assert.equal(decoded.currentPlan?.version, 2);
+  assert.equal(decoded.currentPlan?.status, 'draft');
+  assert.equal(decoded.currentPlan?.tasks[0]?.id, 'cloud-plan-task-1');
+  assert.deepEqual(decoded.planHistory, [decoded.currentPlan]);
+});
 
 function validDecisionContext() {
   return {
@@ -393,7 +443,7 @@ test('session projection decoder accepts a scoped cloud workspace authority with
   assert.equal(projection?.executionAuthority.currentAttempt?.attemptNumber, 2);
   assert.equal(projection?.currentRun, null);
   assert.equal(projection?.planAuthority.kind, 'agent_task_list');
-  assert.equal(projection?.currentPlan, null);
+  assert.equal(projection?.currentPlan?.id, 'cloud-plan-version-2');
   assert.equal(projection?.tasks[0]?.id, 'cloud-task-1');
   assert.equal(projection?.pendingHitl[0]?.kind, 'decision');
   assert.equal(projection?.pendingHitl[0]?.prompt, 'Continue with the scoped change?');
@@ -410,7 +460,7 @@ test('cloud session projection decodes the persisted current run and exact envir
     id: 'run-cloud-1',
     conversation_id: 'conversation-1',
     project_id: 'project-1',
-    plan_version_id: 'plan-version-1',
+    plan_version_id: payload.current_plan.id,
     idempotency_key: 'approval-1',
     message_id: 'message-1',
     request_message: 'Implement the approved plan',
@@ -437,7 +487,7 @@ test('cloud session projection decodes the persisted current run and exact envir
     authorization_snapshot: {
       conversation_id: 'conversation-1',
       project_id: 'project-1',
-      plan_version_id: 'plan-version-1',
+      plan_version_id: payload.current_plan.id,
       permission_profile: 'full_access',
       environment: {
         id: 'sandbox-cloud-1',
@@ -1024,6 +1074,38 @@ test('session authority invalidation accepts exact workspace plan events and rej
   assert.equal(
     socketEventInvalidatesSessionProjectionForScope(
       { event_type: 'error', conversation_id: 'conversation-2' },
+      scope,
+    ),
+    false,
+  );
+});
+
+test('send message authority ack invalidates only its exact conversation projection', () => {
+  const scope = {
+    conversationId: 'conversation-1',
+    workspaceId: 'workspace-1',
+  };
+  const ack = {
+    type: 'ack',
+    action: 'send_message',
+    conversation_id: 'conversation-1',
+    execution_message_id: 'run-1',
+    run_id: 'run-1',
+    run_revision: 1,
+  };
+
+  assert.equal(socketEventInvalidatesSessionProjection(ack), true);
+  assert.equal(socketEventInvalidatesSessionProjectionForScope(ack, scope), true);
+  assert.equal(
+    socketEventInvalidatesSessionProjectionForScope(
+      { ...ack, conversation_id: 'conversation-2' },
+      scope,
+    ),
+    false,
+  );
+  assert.equal(
+    socketEventInvalidatesSessionProjectionForScope(
+      { ...ack, action: 'subscribe_status' },
       scope,
     ),
     false,

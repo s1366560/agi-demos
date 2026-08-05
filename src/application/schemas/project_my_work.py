@@ -5,10 +5,12 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-MyWorkAuthorityKind = Literal["desktop_run", "workspace_attempt", "hitl_request"]
+from src.application.schemas.agent_run_authority import RunSummaryResponse
+
+MyWorkAuthorityKind = Literal["desktop_run", "agent_run", "workspace_attempt", "hitl_request"]
 MyWorkCapabilityMode = Literal["work", "code"]
 MyWorkGroup = Literal["needs_input", "needs_approval", "running", "ready_review"]
-MyWorkStatus = Literal["running", "failed", "needs_input", "needs_approval"]
+MyWorkStatus = Literal["running", "ready_review", "failed", "needs_input", "needs_approval"]
 MyWorkRequiredAction = Literal[
     "provide_input",
     "review_approval",
@@ -26,7 +28,7 @@ class ProjectWorkItem(BaseModel):
     authority_id: str
     run_id: str | None = None
     conversation_id: str
-    workspace_id: str
+    workspace_id: str | None
     project_id: str
     title: str
     capability_mode: MyWorkCapabilityMode | None = None
@@ -45,6 +47,7 @@ class ProjectWorkItem(BaseModel):
     summary: str | None = None
     phase: str | None = None
     progress: int | None = None
+    run_summary: RunSummaryResponse | None = None
 
 
 class ProjectMyWorkResponse(BaseModel):

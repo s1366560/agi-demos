@@ -34,6 +34,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserProject,
     UserTenant,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
+    ensure_chat_run_authority,
+)
 from src.infrastructure.i18n import gettext as _
 
 if TYPE_CHECKING:
@@ -47,10 +50,45 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _CLIENT_MESSAGE_ID_MAX_LENGTH = 255
+_PERMISSION_MODES = frozenset({"ask", "automatic", "full_access"})
 
 
 def _client_message_id_extra(message_id: str | None) -> dict[str, str] | None:
     return {"message_id": message_id} if message_id is not None else None
+
+
+async def _validated_client_message_controls(
+    context: MessageContext,
+    *,
+    message: dict[str, Any],
+    conversation_id: object,
+) -> tuple[str | None, str | None] | None:
+    message_id = message.get("message_id")
+    if message_id is not None and (
+        not isinstance(message_id, str)
+        or not message_id.strip()
+        or len(message_id) > _CLIENT_MESSAGE_ID_MAX_LENGTH
+    ):
+        await context.send_error(
+            _("message_id must be a non-empty string of at most 255 characters"),
+            code="INVALID_MESSAGE_ID",
+            conversation_id=(conversation_id if isinstance(conversation_id, str) else None),
+        )
+        return None
+    client_message_id = message_id if isinstance(message_id, str) else None
+
+    permission_mode = message.get("permission_mode")
+    if permission_mode is not None and (
+        not isinstance(permission_mode, str) or permission_mode not in _PERMISSION_MODES
+    ):
+        await context.send_error(
+            _("permission_mode must be ask, automatic, or full_access"),
+            code="INVALID_PERMISSION_MODE",
+            conversation_id=(conversation_id if isinstance(conversation_id, str) else None),
+            extra=_client_message_id_extra(client_message_id),
+        )
+        return None
+    return client_message_id, permission_mode
 
 
 class _RayCancelMethod(Protocol):
@@ -213,7 +251,6 @@ class SendMessageHandler(WebSocketMessageHandler):
         """Handle send_message: Start agent execution."""
         conversation_id = message.get("conversation_id")
         user_message = message.get("message")
-        message_id = message.get("message_id")
         project_id = message.get("project_id")
         preferred_language = message.get("preferred_language")
         attachment_ids = message.get("attachment_ids")
@@ -229,18 +266,15 @@ class SendMessageHandler(WebSocketMessageHandler):
             else None
         )
 
-        if message_id is not None and (
-            not isinstance(message_id, str)
-            or not message_id.strip()
-            or len(message_id) > _CLIENT_MESSAGE_ID_MAX_LENGTH
-        ):
-            await context.send_error(
-                _("message_id must be a non-empty string of at most 255 characters"),
-                code="INVALID_MESSAGE_ID",
+        if (
+            controls := await _validated_client_message_controls(
+                context,
+                message=message,
                 conversation_id=conversation_id,
             )
+        ) is None:
             return
-        client_message_id = message_id if isinstance(message_id, str) else None
+        client_message_id, permission_mode = controls
         if not all([conversation_id, user_message, project_id]):
             await context.send_error(
                 "Missing required fields: conversation_id, message, project_id",
@@ -271,6 +305,7 @@ class SendMessageHandler(WebSocketMessageHandler):
             "image_attachments": image_attachments,
             "mentions": mentions,
             "message": user_message,
+            "permission_mode": permission_mode,
             "preferred_language": preferred_language,
             "project_id": project_id,
         }
@@ -314,11 +349,31 @@ class SendMessageHandler(WebSocketMessageHandler):
             if admission is None:
                 return
 
+            execution_message_id = (
+                admission.turn.execution_message_id
+                if admission.turn is not None
+                else str(uuid.uuid4())
+            )
+            run = await ensure_chat_run_authority(
+                context.db,
+                conversation=conversation,
+                run_id=execution_message_id,
+                request_message=user_message,
+                client_message_id=client_message_id,
+                app_model_context=app_model_context,
+                permission_mode=permission_mode,
+            )
+
             # Auto-subscribe this session to this conversation
             await context.connection_manager.subscribe(context.session_id, conversation_id)
 
             # Send acknowledgment
-            ack_fields: dict[str, Any] = {"conversation_id": conversation_id}
+            ack_fields: dict[str, Any] = {
+                "conversation_id": conversation_id,
+                "execution_message_id": execution_message_id,
+                "run_id": run.id,
+                "run_revision": run.revision,
+            }
             if client_message_id is not None:
                 ack_fields["message_id"] = client_message_id
                 assert admission.turn is not None
@@ -349,11 +404,7 @@ class SendMessageHandler(WebSocketMessageHandler):
                         mentions=mentions,
                         client_message_id=client_message_id,
                         client_payload_hash=admission.payload_hash,
-                        execution_message_id=(
-                            admission.turn.execution_message_id
-                            if admission.turn is not None
-                            else None
-                        ),
+                        execution_message_id=(execution_message_id),
                     )
                 )
                 context.connection_manager.add_bridge_task(
@@ -641,7 +692,7 @@ async def _admit_client_turn(
                 conversation_id=conversation_id,
                 execution_message_id=turn.execution_message_id,
             )
-            await context.db.rollback()
+            await context.db.commit()
             if not materialized:
                 await _send_unconfirmed_client_turn(
                     context,
@@ -651,7 +702,7 @@ async def _admit_client_turn(
                 )
                 return None
         elif turn is not None:
-            await context.db.rollback()
+            await context.db.commit()
 
     if turn is None or turn.status == AgentClientTurnStatus.ACCEPTED:
         pending_hitl = await _pending_hitl_requests(
@@ -668,7 +719,7 @@ async def _admit_client_turn(
             )
             return None
         if turn is not None:
-            await context.db.rollback()
+            await context.db.commit()
 
     if repository is not None and turn is None:
         assert message_id is not None

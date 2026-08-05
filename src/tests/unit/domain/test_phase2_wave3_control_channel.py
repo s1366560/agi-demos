@@ -142,6 +142,31 @@ class TestHelperFunctions:
         assert restored.sender_id == original.sender_id
         assert restored.cascade == original.cascade
 
+    def test_canonical_run_input_metadata_round_trip(self) -> None:
+        original = ControlMessage(
+            run_id="run-4",
+            message_type=ControlMessageType.STEER,
+            payload="Use the focused regression suite.",
+            sender_id="user-1",
+            run_input_id="input-1",
+            delivery_mode="steer_now",
+            run_revision=7,
+            message_id="message-1",
+            idempotency_key="input-key-1",
+            target_agent_id="agent-1",
+            target_agent_name="Researcher",
+        )
+
+        restored = _deserialize_message(_serialize_message(original))
+
+        assert restored.run_input_id == "input-1"
+        assert restored.delivery_mode == "steer_now"
+        assert restored.run_revision == 7
+        assert restored.message_id == "message-1"
+        assert restored.idempotency_key == "input-key-1"
+        assert restored.target_agent_id == "agent-1"
+        assert restored.target_agent_name == "Researcher"
+
 
 def _make_channel() -> tuple[RedisControlChannel, AsyncMock]:
     mock_redis = AsyncMock()
@@ -159,6 +184,10 @@ class TestSendControl:
             payload="timeout",
             sender_id="parent",
             cascade=True,
+            run_revision=7,
+            idempotency_key="kill-key-1",
+            target_agent_id="agent-1",
+            target_agent_name="Researcher",
         )
         result = await channel.send_control(msg)
         assert result is True
@@ -169,6 +198,9 @@ class TestSendControl:
         assert stored["reason"] == "timeout"
         assert stored["sender_id"] == "parent"
         assert stored["cascade"] is True
+        assert stored["run_revision"] == 7
+        assert stored["idempotency_key"] == "kill-key-1"
+        assert stored["target_agent_id"] == "agent-1"
         assert call_args[1]["ex"] == 600
 
     async def test_send_steer_appends_to_stream(self) -> None:
@@ -284,7 +316,15 @@ class TestConsumeControl:
     async def test_consumes_kill_and_stream_messages(self) -> None:
         channel, redis = _make_channel()
         redis.get.return_value = json.dumps(
-            {"reason": "stop", "sender_id": "p1", "cascade": False}
+            {
+                "reason": "stop",
+                "sender_id": "p1",
+                "cascade": False,
+                "run_revision": 7,
+                "idempotency_key": "kill-key-1",
+                "target_agent_id": "agent-1",
+                "target_agent_name": "Researcher",
+            }
         ).encode()
         redis.xrange.return_value = [
             (
@@ -304,6 +344,9 @@ class TestConsumeControl:
         types = {m.message_type for m in messages}
         assert ControlMessageType.KILL in types
         assert ControlMessageType.STEER in types
+        kill = next(m for m in messages if m.message_type == ControlMessageType.KILL)
+        assert kill.run_revision == 7
+        assert kill.target_agent_id == "agent-1"
         redis.delete.assert_awaited_once_with("agent:control:kill:r1")
         redis.xdel.assert_awaited_once()
 

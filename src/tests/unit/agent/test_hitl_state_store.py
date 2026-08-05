@@ -142,6 +142,23 @@ class TestHITLAgentState:
         assert restored.messages == original.messages
         assert restored.automation_run_id == "msg-round"
 
+    def test_roundtrip_preserves_canonical_run_authority(self):
+        original = HITLAgentState(
+            conversation_id="conv-plan",
+            message_id="client-message",
+            canonical_run_id="plan-run",
+            tenant_id="tenant-plan",
+            project_id="project-plan",
+            hitl_request_id="permission-plan",
+            hitl_type="permission",
+            hitl_request_data={"action": "write"},
+        )
+
+        restored = HITLAgentState.from_dict(original.to_dict())
+
+        assert restored.message_id == "client-message"
+        assert restored.canonical_run_id == "plan-run"
+
     def test_state_with_pending_tool_call_id(self):
         """Test state with pending_tool_call_id field."""
         state = HITLAgentState(

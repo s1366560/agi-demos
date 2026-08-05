@@ -26,11 +26,21 @@ from src.infrastructure.adapters.primary.web.metrics import agent_metrics
 from src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus import (
     RedisAgentMessageBusAdapter,
 )
+from src.infrastructure.adapters.secondary.persistence.agent_run_settlement import (
+    apply_run_input_applied_projection,
+    settle_agent_run,
+)
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-from src.infrastructure.adapters.secondary.persistence.models import AgentExecutionEvent
+from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentExecutionEvent,
+    AgentRunAuthorityModel,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
     _sanitize_event_data_for_postgres,
     apply_conversation_event_projection_delta,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
+    mark_agent_run_running,
 )
 from src.infrastructure.agent.actor.state.running_state import (
     clear_agent_running,
@@ -51,6 +61,62 @@ from src.infrastructure.agent.subagent.announce_service import AnnounceService
 
 logger = logging.getLogger(__name__)
 _background_tasks: set[asyncio.Task[Any]] = set()
+
+
+async def _mark_root_run_authority_running(
+    *,
+    tenant_id: str,
+    project_id: str,
+    conversation_id: str,
+    run_id: str,
+) -> None:
+    async with async_session_factory() as session:
+        await mark_agent_run_running(
+            session,
+            run_id=run_id,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            conversation_id=conversation_id,
+        )
+
+
+async def _settle_root_run_authority(
+    *,
+    tenant_id: str,
+    project_id: str,
+    conversation_id: str,
+    run_id: str,
+    outcome: str,
+    error: str | None = None,
+) -> None:
+    """Settle only a scoped root-chat authority; plan runs use their plan owner."""
+
+    async with async_session_factory() as session:
+        run = await session.get(AgentRunAuthorityModel, run_id)
+        if (
+            run is None
+            or run.run_kind != "chat"
+            or run.tenant_id != tenant_id
+            or run.project_id != project_id
+            or run.conversation_id != conversation_id
+        ):
+            return
+        completed_at = datetime.now(UTC)
+        run.status = {
+            "success": "completed",
+            "cancelled": "cancelled",
+        }.get(outcome, "failed")
+        run.completed_at = completed_at
+        run.updated_at = completed_at
+        run.error = error
+        await settle_agent_run(
+            session,
+            run=run,
+            started_at=run.started_at or run.created_at,
+            succeeded=outcome == "success",
+            completed_at=completed_at,
+        )
+        await session.commit()
 
 
 async def _run_session_lifecycle(project_id: str) -> None:
@@ -931,7 +997,7 @@ async def _load_persisted_agent_config(conversation_id: str) -> dict[str, Any] |
     return None
 
 
-async def execute_project_chat(
+async def execute_project_chat(  # noqa: PLR0915
     agent: ProjectReActAgent,
     request: ProjectChatRequest,
     abort_signal: asyncio.Event | None = None,
@@ -947,7 +1013,14 @@ async def execute_project_chat(
         message_id=request.message_id,
         automation_run_id=request.automation_run_id,
     )
+    run_authority_id = request.canonical_run_id or request.message_id
 
+    await _mark_root_run_authority_running(
+        tenant_id=agent.config.tenant_id,
+        project_id=agent.config.project_id,
+        conversation_id=request.conversation_id,
+        run_id=run_authority_id,
+    )
     await set_agent_running(request.conversation_id, request.message_id)
     await _project_automation_runtime_running(automation_identity)
 
@@ -989,6 +1062,7 @@ async def execute_project_chat(
             tenant_agent_config_data=request.tenant_agent_config,
             preferred_language=request.preferred_language,
             api_auth_token=request.api_auth_token,
+            canonical_run_id=run_authority_id,
         ):
             evt_time_us, evt_counter = time_gen.next()
             event["event_time_us"] = evt_time_us
@@ -1085,6 +1159,14 @@ async def execute_project_chat(
             state=ss,
             start_time=start_time,
         )
+        await _settle_root_run_authority(
+            tenant_id=agent.config.tenant_id,
+            project_id=agent.config.project_id,
+            conversation_id=request.conversation_id,
+            run_id=run_authority_id,
+            outcome="failed" if ss.is_error else "success",
+            error=ss.error_message,
+        )
 
         return ProjectChatResult(
             conversation_id=request.conversation_id,
@@ -1105,6 +1187,13 @@ async def execute_project_chat(
             state=ss,
             start_time=start_time,
         )
+        await _settle_root_run_authority(
+            tenant_id=agent.config.tenant_id,
+            project_id=agent.config.project_id,
+            conversation_id=request.conversation_id,
+            run_id=run_authority_id,
+            outcome="cancelled",
+        )
         raise
     except Exception as e:
         await _project_automation_stream_terminal(
@@ -1113,7 +1202,7 @@ async def execute_project_chat(
             state=ss,
             start_time=start_time,
         )
-        return await _handle_chat_error(
+        result = await _handle_chat_error(
             e,
             ss.events,
             ss.persisted_count,
@@ -1124,6 +1213,15 @@ async def execute_project_chat(
             agent_id=request.agent_id,
             parent_session_id=request.parent_session_id,
         )
+        await _settle_root_run_authority(
+            tenant_id=agent.config.tenant_id,
+            project_id=agent.config.project_id,
+            conversation_id=request.conversation_id,
+            run_id=run_authority_id,
+            outcome="failed",
+            error=str(e),
+        )
+        return result
     finally:
         await clear_agent_running(request.conversation_id, request.message_id)
 
@@ -1166,6 +1264,7 @@ async def handle_hitl_pending(
         user_id=request.user_id,
         correlation_id=request.correlation_id,
         automation_run_id=request.automation_run_id,
+        canonical_run_id=request.canonical_run_id,
         agent_id=request.agent_id,
         parent_session_id=request.parent_session_id,
         step_count=getattr(agent, "_step_count", 0),
@@ -1276,6 +1375,13 @@ async def continue_project_chat(  # noqa: PLR0915
         message_id=state.message_id,
         automation_run_id=state.automation_run_id,
     )
+    run_authority_id = state.canonical_run_id or state.message_id
+    await _mark_root_run_authority_running(
+        tenant_id=state.tenant_id,
+        project_id=state.project_id,
+        conversation_id=state.conversation_id,
+        run_id=run_authority_id,
+    )
     await set_agent_running(state.conversation_id, state.message_id)
     await _project_automation_runtime_running(automation_identity)
 
@@ -1289,6 +1395,7 @@ async def continue_project_chat(  # noqa: PLR0915
             conversation_context=conversation_context,
             tenant_id=state.tenant_id,
             message_id=state.message_id,
+            canonical_run_id=run_authority_id,
         ):
             evt_time_us, evt_counter = time_gen.next()
             event["event_time_us"] = evt_time_us
@@ -1383,6 +1490,14 @@ async def continue_project_chat(  # noqa: PLR0915
             state=ss,
             start_time=start_time,
         )
+        await _settle_root_run_authority(
+            tenant_id=state.tenant_id,
+            project_id=state.project_id,
+            conversation_id=state.conversation_id,
+            run_id=run_authority_id,
+            outcome="failed" if ss.is_error else "success",
+            error=ss.error_message,
+        )
 
         return ProjectChatResult(
             conversation_id=state.conversation_id,
@@ -1403,6 +1518,13 @@ async def continue_project_chat(  # noqa: PLR0915
             state=ss,
             start_time=start_time,
         )
+        await _settle_root_run_authority(
+            tenant_id=state.tenant_id,
+            project_id=state.project_id,
+            conversation_id=state.conversation_id,
+            run_id=run_authority_id,
+            outcome="cancelled",
+        )
         raise
     except Exception as e:
         await _project_automation_stream_terminal(
@@ -1411,7 +1533,7 @@ async def continue_project_chat(  # noqa: PLR0915
             state=ss,
             start_time=start_time,
         )
-        return await _handle_chat_error(
+        result = await _handle_chat_error(
             e,
             ss.events,
             ss.persisted_count,
@@ -1423,6 +1545,15 @@ async def continue_project_chat(  # noqa: PLR0915
             agent_id=state.agent_id,
             parent_session_id=state.parent_session_id,
         )
+        await _settle_root_run_authority(
+            tenant_id=state.tenant_id,
+            project_id=state.project_id,
+            conversation_id=state.conversation_id,
+            run_id=run_authority_id,
+            outcome="failed",
+            error=str(e),
+        )
+        return result
     finally:
         await clear_agent_running(state.conversation_id, state.message_id)
 
@@ -1533,6 +1664,11 @@ async def _persist_events(
                 inserted_event_type, inserted_event_time = inserted_row
                 if inserted_event_type in _MESSAGE_EVENT_TYPES:
                     inserted_message_count += 1
+                if inserted_event_type == "run_input_applied":
+                    await apply_run_input_applied_projection(
+                        session,
+                        event_data=persistable_event.event_data,
+                    )
                 latest_event_time_us = max(latest_event_time_us, int(inserted_event_time))
 
             await apply_conversation_event_projection_delta(

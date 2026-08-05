@@ -2,6 +2,9 @@ use axum::extract::OriginalUri;
 
 use super::*;
 
+mod activity_read_state;
+#[cfg(test)]
+mod activity_read_state_tests;
 mod artifact_content;
 #[cfg(test)]
 mod artifact_content_tests;
@@ -41,6 +44,7 @@ const LOCAL_ROUTE_CONTRACT_VERSION: &str = "desktop-local-route-parity-v1";
 pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
     Router::new()
         .merge(artifact_content::router())
+        .merge(activity_read_state::router())
         .merge(mcp_apps::router())
         .merge(project_overview::router())
         .merge(tenant_overview::router())

@@ -272,9 +272,10 @@ export function buildSessionDetailViewModel({
   const desktopEvidence = projection?.schemaVersion === 1 ? projection.evidenceSummary : null;
   const cloudEvidence = projection?.schemaVersion === 2 ? projection.cloudEvidenceSummary : null;
   const planStatus = projection
-    ? projection.planAuthority.kind === 'desktop_plan_version'
-      ? projection.currentPlan?.status ?? null
-      : projection.planAuthority.workspacePlanContext?.status ?? null
+    ? (projection.currentPlan?.status ??
+      (projection.planAuthority.kind === 'agent_task_list'
+        ? projection.planAuthority.workspacePlanContext?.status ?? null
+        : null))
     : null;
   const failedDesktopActivityCount =
     projection?.activityAuthority.kind === 'desktop_tool_invocations'
@@ -318,9 +319,9 @@ export function buildSessionDetailViewModel({
     taskCount: projection?.tasks.length ?? 0,
     eventCount: timeline.items.length,
     hasPlan:
-      projection?.planAuthority.kind === 'desktop_plan_version'
-        ? projection.currentPlan !== null
-        : projection?.planAuthority.workspacePlanContext !== null && projection !== null,
+      projection?.currentPlan !== null ||
+      (projection?.planAuthority.kind === 'agent_task_list' &&
+        projection.planAuthority.workspacePlanContext !== null),
     planStatus,
     artifactCount:
       desktopEvidence?.artifactVersionCount ?? cloudEvidence?.artifactRecordCount ?? null,

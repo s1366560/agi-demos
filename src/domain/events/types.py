@@ -207,6 +207,7 @@ class AgentEventType(str, Enum):
     # Control events (used by event bus)
     # =========================================================================
     CANCELLED = "cancelled"
+    RUN_INPUT_APPLIED = "run_input_applied"
 
     # =========================================================================
     # Task list events (agent todo tracking)

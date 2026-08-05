@@ -17,10 +17,17 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.chat_handler imp
     SendMessageHandler,
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
+    Conversation,
     Project,
     User,
     UserProject,
     UserTenant,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_agent_client_turn_repository import (
+    SqlAgentClientTurnRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
+    ensure_chat_run_authority,
 )
 
 pytestmark = pytest.mark.unit
@@ -54,6 +61,9 @@ class _ScalarResult:
 class _AuthorizedScopeDb:
     async def execute(self, *_args: Any, **_kwargs: Any) -> _ScalarResult:
         return _ScalarResult("project-1")
+
+    async def commit(self) -> None:
+        return None
 
     async def rollback(self) -> None:
         return None
@@ -218,8 +228,24 @@ def successful_chat_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
         fake_stream_agent_to_websocket_with_fresh_session,
     )
 
+    async def fake_ensure_chat_run_authority(_db: object, **kwargs: Any) -> Any:
+        return SimpleNamespace(
+            id=kwargs["run_id"],
+            revision=1,
+        )
 
-def _message(*, message_id: str | None = None) -> dict[str, Any]:
+    monkeypatch.setattr(
+        chat_handler,
+        "ensure_chat_run_authority",
+        fake_ensure_chat_run_authority,
+    )
+
+
+def _message(
+    *,
+    message_id: str | None = None,
+    permission_mode: str | None = None,
+) -> dict[str, Any]:
     message: dict[str, Any] = {
         "conversation_id": "conversation-1",
         "message": "Plan the requested change",
@@ -228,10 +254,12 @@ def _message(*, message_id: str | None = None) -> dict[str, Any]:
     }
     if message_id is not None:
         message["message_id"] = message_id
+    if permission_mode is not None:
+        message["permission_mode"] = permission_mode
     return message
 
 
-def _message_payload_hash() -> str:
+def _message_payload_hash(*, permission_mode: str | None = None) -> str:
     return canonical_agent_client_turn_payload_hash(
         {
             "agent_id": None,
@@ -242,6 +270,7 @@ def _message_payload_hash() -> str:
             "image_attachments": None,
             "mentions": None,
             "message": "Plan the requested change",
+            "permission_mode": permission_mode,
             "preferred_language": "en-US",
             "project_id": "project-1",
         }
@@ -276,8 +305,59 @@ async def test_send_message_ack_echoes_optional_message_id(
     assert acknowledgment["conversation_id"] == "conversation-1"
     if message_id is None:
         assert "message_id" not in acknowledgment
+        assert isinstance(acknowledgment["run_id"], str)
+        assert acknowledgment["run_id"]
     else:
         assert acknowledgment["message_id"] == message_id
+        assert acknowledgment["run_id"] == message_id
+    assert acknowledgment["run_revision"] == 1
+
+
+async def test_send_message_passes_permission_mode_to_run_authority(
+    successful_chat_dependencies: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    async def capture_run_authority(_db: object, **kwargs: Any) -> Any:
+        captured.update(kwargs)
+        return SimpleNamespace(id=kwargs["run_id"], revision=1)
+
+    monkeypatch.setattr(
+        chat_handler,
+        "ensure_chat_run_authority",
+        capture_run_authority,
+    )
+    context = _MessageContext()
+
+    await SendMessageHandler().handle(
+        context,
+        _message(
+            message_id="desktop-turn-permission-mode",
+            permission_mode="automatic",
+        ),
+    )  # type: ignore[arg-type]
+    await asyncio.gather(*context.connection_manager.tasks)
+
+    assert captured["permission_mode"] == "automatic"
+    assert context.sent[0]["action"] == "send_message"
+
+
+async def test_send_message_rejects_unknown_permission_mode_before_ack() -> None:
+    context = _MessageContext()
+
+    await SendMessageHandler().handle(
+        context,
+        _message(
+            message_id="desktop-turn-invalid-permission-mode",
+            permission_mode="unrestricted",
+        ),
+    )  # type: ignore[arg-type]
+
+    assert context.connection_manager.subscriptions == []
+    assert context.connection_manager.tasks == []
+    _assert_error_message_id(context, "desktop-turn-invalid-permission-mode")
+    _assert_error_code(context, "INVALID_PERMISSION_MODE")
 
 
 async def test_started_duplicate_replays_authoritative_ack_without_new_task(
@@ -309,6 +389,8 @@ async def test_started_duplicate_replays_authoritative_ack_without_new_task(
             "replayed": True,
             "turn_status": "started",
             "execution_message_id": "desktop-turn-started",
+            "run_id": "desktop-turn-started",
+            "run_revision": 1,
         }
     ]
 
@@ -364,6 +446,147 @@ async def test_accepted_replay_still_respects_pending_hitl(
     assert context.sent[0]["type"] == "error"
     assert context.sent[0]["data"]["code"] == "HITL_PENDING"
     _assert_error_message_id(context, "desktop-turn-accepted")
+
+
+async def test_accepted_replay_preserves_loaded_conversation_authority(
+    successful_chat_dependencies: None,
+    monkeypatch: pytest.MonkeyPatch,
+    test_db: AsyncSession,
+    test_user: User,
+    test_project_db: Project,
+) -> None:
+    import src.infrastructure.adapters.secondary.persistence.sql_agent_client_turn_repository as turns
+
+    conversation = Conversation(
+        id="conversation-accepted-replay",
+        project_id=test_project_db.id,
+        tenant_id=test_project_db.tenant_id,
+        user_id=test_user.id,
+        title="Accepted replay",
+        status="active",
+        agent_config={},
+        meta={},
+        message_count=0,
+        current_mode="build",
+        merge_strategy="result_only",
+        participant_agents=[],
+    )
+    test_db.add(conversation)
+    await test_db.commit()
+
+    execution_payload = {
+        "agent_id": None,
+        "app_model_context": None,
+        "attachment_ids": None,
+        "file_metadata": None,
+        "forced_skill_name": None,
+        "image_attachments": None,
+        "mentions": None,
+        "message": "Resume the accepted turn",
+        "preferred_language": "en-US",
+        "project_id": test_project_db.id,
+    }
+    payload_hash = canonical_agent_client_turn_payload_hash(execution_payload)
+    repository = SqlAgentClientTurnRepository(test_db)
+    await repository.claim_and_commit(
+        conversation_id=conversation.id,
+        client_message_id="desktop-turn-accepted-replay",
+        payload_hash=payload_hash,
+    )
+    monkeypatch.setattr(turns, "SqlAgentClientTurnRepository", SqlAgentClientTurnRepository)
+
+    context = _MessageContext(
+        conversation=conversation,
+        db=test_db,
+        user_id=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+
+    admission = await chat_handler._admit_client_turn(
+        context,  # type: ignore[arg-type]
+        conversation_id=conversation.id,
+        project_id=test_project_db.id,
+        message_id="desktop-turn-accepted-replay",
+        execution_payload=execution_payload,
+    )
+
+    assert admission is not None
+    assert admission.should_start is True
+    assert conversation.project_id == test_project_db.id
+
+
+async def test_existing_chat_run_authority_remains_readable_after_replay(
+    test_db: AsyncSession,
+    test_user: User,
+    test_project_db: Project,
+) -> None:
+    conversation = Conversation(
+        id="conversation-run-authority-replay",
+        project_id=test_project_db.id,
+        tenant_id=test_project_db.tenant_id,
+        user_id=test_user.id,
+        title="Run authority replay",
+        status="active",
+        agent_config={},
+        meta={},
+        message_count=0,
+        current_mode="build",
+        merge_strategy="result_only",
+        participant_agents=[],
+    )
+    test_db.add(conversation)
+    await test_db.commit()
+    arguments = {
+        "conversation": conversation,
+        "run_id": "chat-run-authority-replay",
+        "request_message": "Resume the accepted turn",
+        "client_message_id": "desktop-turn-run-authority-replay",
+        "app_model_context": None,
+    }
+    await ensure_chat_run_authority(test_db, **arguments)
+
+    replay = await ensure_chat_run_authority(test_db, **arguments)
+
+    assert replay.id == "chat-run-authority-replay"
+    assert replay.revision == 1
+
+
+async def test_chat_run_authority_persists_requested_permission_snapshot(
+    test_db: AsyncSession,
+    test_user: User,
+    test_project_db: Project,
+) -> None:
+    conversation = Conversation(
+        id="conversation-run-authority-permission",
+        project_id=test_project_db.id,
+        tenant_id=test_project_db.tenant_id,
+        user_id=test_user.id,
+        title="Run authority permission",
+        status="active",
+        agent_config={},
+        meta={},
+        message_count=0,
+        current_mode="build",
+        merge_strategy="result_only",
+        participant_agents=[],
+    )
+    test_db.add(conversation)
+    await test_db.commit()
+
+    run = await ensure_chat_run_authority(
+        test_db,
+        conversation=conversation,
+        run_id="chat-run-authority-permission",
+        request_message="Use relaxed authorization",
+        client_message_id="desktop-turn-run-authority-permission",
+        app_model_context=None,
+        permission_mode="automatic",
+    )
+
+    assert run.permission_profile == "workspace_write"
+    assert run.authorization_snapshot["effective_permission_mode"] == "automatic"
+    assert run.authorization_snapshot["requested_permission_mode"] == "automatic"
+    assert run.authorization_snapshot["policy"]["permission_mode"] == "ask"
 
 
 async def test_missing_conversation_error_echoes_valid_message_id(

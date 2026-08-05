@@ -17,9 +17,14 @@ import {
 } from 'lucide-react';
 
 import { useAgentV3Store } from '@/stores/agentV3';
-import { usePendingPromptStore, usePendingPrompts } from '@/stores/pendingPromptStore';
 import { useVoiceCallStore } from '@/stores/voiceCallStore';
 
+import { attachmentService, type AttachmentResponse } from '@/services/attachmentService';
+import type {
+  AgentRunInput,
+  RunInputContextItem,
+  RunInputDelivery,
+} from '@/services/runInputService';
 import type { FileMetadata } from '@/services/sandboxUploadService';
 
 import { useFrameCapture } from '@/hooks/rtc/useFrameCapture';
@@ -41,7 +46,6 @@ import { useMentionDetection } from './hooks/useMentionDetection';
 import { useSlashCommand } from './hooks/useSlashCommand';
 import { InputToolbar } from './InputToolbar';
 import { MentionPicker } from './MentionPicker';
-import { QueuedPromptStrip } from './QueuedPromptStrip';
 import { SlashCommandDropdown } from './SlashCommandDropdown';
 
 interface InputBarProps {
@@ -62,6 +66,21 @@ interface InputBarProps {
   isPlanMode?: boolean | undefined;
   activeAgentId?: string | undefined;
   onAgentSelect?: ((agentId: string) => void) | undefined;
+  runInputDelivery?: RunInputDelivery | null | undefined;
+  runInputDeliveryOptions?: RunInputDelivery[] | undefined;
+  onRunInputDeliveryChange?: ((delivery: RunInputDelivery) => void) | undefined;
+  onSubmitRunInput?:
+    | ((
+        content: string,
+        delivery: RunInputDelivery,
+        context: { contextItems: RunInputContextItem[] }
+      ) => Promise<boolean>)
+    | undefined;
+  runInputSubmitting?: boolean | undefined;
+  runInputError?: string | null | undefined;
+  runInputs?: AgentRunInput[] | undefined;
+  promotingRunInputId?: string | null | undefined;
+  onPromoteRunInput?: ((inputId: string) => Promise<boolean>) | undefined;
   ref?: React.Ref<HTMLTextAreaElement>;
 }
 
@@ -97,6 +116,15 @@ export const InputBar = memo<InputBarProps>(
     isPlanMode,
     activeAgentId,
     onAgentSelect,
+    runInputDelivery,
+    runInputDeliveryOptions = [],
+    onRunInputDeliveryChange,
+    onSubmitRunInput,
+    runInputSubmitting = false,
+    runInputError,
+    runInputs = [],
+    promotingRunInputId,
+    onPromoteRunInput,
     ref,
   }) => {
     const { t } = useTranslation();
@@ -114,6 +142,7 @@ export const InputBar = memo<InputBarProps>(
     );
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const runInputAttachmentUploadsRef = useRef(new Map<string, Promise<AttachmentResponse>>());
     const contentRef = useRef(content);
     useEffect(() => {
       contentRef.current = content;
@@ -195,6 +224,19 @@ export const InputBar = memo<InputBarProps>(
       maxSizeMB: 100,
     });
 
+    const handleRemoveAttachment = useCallback(
+      (attachmentId: string) => {
+        runInputAttachmentUploadsRef.current.delete(attachmentId);
+        removeAttachment(attachmentId);
+      },
+      [removeAttachment]
+    );
+
+    const clearAttachments = useCallback(() => {
+      runInputAttachmentUploadsRef.current.clear();
+      clearAll();
+    }, [clearAll]);
+
     const uploadedAttachments = attachments.filter(
       (a) => a.status === 'uploaded' && a.fileMetadata
     );
@@ -206,13 +248,15 @@ export const InputBar = memo<InputBarProps>(
       (content.trim().length > 0 || uploadedAttachments.length > 0) &&
       pendingCount === 0;
 
-    // Pending-prompt queue: while streaming, Enter queues the message instead
-    // of sending. The head of the queue auto-dispatches once streaming ends.
-    const queueConvId = activeConversationId ?? conversationId ?? null;
-    const queue = usePendingPrompts(queueConvId ?? undefined);
-    const enqueuePrompt = usePendingPromptStore((s) => s.enqueue);
-    const shiftPrompt = usePendingPromptStore((s) => s.shift);
-    const canQueue = isStreaming && !disabled && content.trim().length > 0 && Boolean(queueConvId);
+    const canSubmitRunInput =
+      isStreaming &&
+      !disabled &&
+      !runInputSubmitting &&
+      content.trim().length > 0 &&
+      runInputDelivery !== null &&
+      runInputDelivery !== undefined &&
+      runInputDeliveryOptions.includes(runInputDelivery) &&
+      onSubmitRunInput !== undefined;
 
     const clearInputContent = useCallback(() => {
       setContent('');
@@ -278,25 +322,91 @@ export const InputBar = memo<InputBarProps>(
     }, []);
 
     // --- Send ---
-    const handleSend = useCallback(() => {
-      // Streaming + text in the box → queue instead of sending. File
-      // attachments are not supported in the queue (v1); they stay in the
-      // composer until the next manual send.
-      if (
-        isStreaming &&
-        !disabled &&
-        queueConvId &&
-        content.trim().length > 0 &&
-        uploadedAttachments.length === 0
-      ) {
-        enqueuePrompt(queueConvId, {
-          text: content.trim(),
-          skillName: selectedSkill?.name,
-          subAgentName: selectedSubAgent || undefined,
+    const handleSend = useCallback(async () => {
+      if (canSubmitRunInput) {
+        const contextItems: RunInputContextItem[] = [];
+        if (uploadedAttachments.length > 0) {
+          const targetConversationId = conversationId ?? activeConversationId;
+          if (!projectId || !targetConversationId) {
+            void message.error(
+              t('agent.inputBar.runInputAttachmentContextRequired', {
+                defaultValue: 'Open a project conversation before attaching run input files.',
+              })
+            );
+            return;
+          }
+          try {
+            const uploaded = await Promise.all(
+              uploadedAttachments.map(async (attachment) => {
+                let upload = runInputAttachmentUploadsRef.current.get(attachment.id);
+                if (!upload) {
+                  upload = attachmentService.upload(
+                    targetConversationId,
+                    projectId,
+                    attachment.file,
+                    'both'
+                  );
+                  runInputAttachmentUploadsRef.current.set(attachment.id, upload);
+                }
+                try {
+                  return await upload;
+                } catch (error) {
+                  runInputAttachmentUploadsRef.current.delete(attachment.id);
+                  throw error;
+                }
+              })
+            );
+            contextItems.push(
+              ...uploaded.map((attachment) => ({
+                kind: 'attachment' as const,
+                resource_id: attachment.id,
+                label: attachment.filename,
+                metadata: {
+                  mime_type: attachment.mime_type,
+                  size_bytes: attachment.size_bytes,
+                  status: attachment.status,
+                },
+              }))
+            );
+          } catch (error) {
+            const detail =
+              error instanceof Error
+                ? error.message
+                : t('agent.inputBar.runInputAttachmentUploadUnknown', {
+                    defaultValue: 'Unknown upload error',
+                  });
+            void message.error(
+              t('agent.inputBar.runInputAttachmentUploadFailed', {
+                defaultValue: 'Could not attach files to the run input: {{detail}}',
+                detail,
+              })
+            );
+            return;
+          }
+        }
+        if (selectedSkill) {
+          contextItems.push({
+            kind: 'skill',
+            resource_id: selectedSkill.name,
+            label: selectedSkill.name,
+          });
+        }
+        if (isSharedMode && selectedSubAgent) {
+          contextItems.push({
+            kind: 'agent',
+            resource_id: selectedSubAgent,
+            label: selectedSubAgent,
+          });
+        }
+        const accepted = await onSubmitRunInput(content.trim(), runInputDelivery, {
+          contextItems,
         });
-        clearInputContent();
-        resetSlash();
-        resetMention();
+        if (accepted) {
+          clearInputContent();
+          resetSlash();
+          resetMention();
+          clearAttachments();
+        }
         return;
       }
       if (
@@ -329,7 +439,7 @@ export const InputBar = memo<InputBarProps>(
       clearInputContent();
       resetSlash();
       resetMention();
-      clearAll();
+      clearAttachments();
     }, [
       content,
       uploadedAttachments,
@@ -337,7 +447,7 @@ export const InputBar = memo<InputBarProps>(
       disabled,
       pendingCount,
       onSend,
-      clearAll,
+      clearAttachments,
       selectedSkill,
       selectedSubAgent,
       isSharedMode,
@@ -346,17 +456,14 @@ export const InputBar = memo<InputBarProps>(
       resetSlash,
       resetMention,
       clearInputContent,
-      queueConvId,
-      enqueuePrompt,
+      canSubmitRunInput,
+      runInputDelivery,
+      onSubmitRunInput,
+      conversationId,
+      activeConversationId,
+      projectId,
+      t,
     ]);
-
-    // Auto-dispatch the head of the queue when streaming ends.
-    useEffect(() => {
-      if (isStreaming || disabled || !queueConvId || queue.length === 0) return;
-      const head = shiftPrompt(queueConvId);
-      if (!head) return;
-      onSend(head.text, undefined, head.skillName, head.subAgentName, undefined);
-    }, [isStreaming, disabled, queueConvId, queue.length, shiftPrompt, onSend]);
 
     // --- Template select ---
     const handleTemplateSelect = useCallback((prompt: string) => {
@@ -376,13 +483,20 @@ export const InputBar = memo<InputBarProps>(
           !e.shiftKey &&
           !e.nativeEvent.isComposing &&
           !disabled &&
-          (!isStreaming || canQueue)
+          (!isStreaming || canSubmitRunInput)
         ) {
           e.preventDefault();
-          handleSend();
+          void handleSend();
         }
       },
-      [handleMentionKeyDown, handleSlashKeyDown, handleSend, disabled, isStreaming, canQueue]
+      [
+        handleMentionKeyDown,
+        handleSlashKeyDown,
+        handleSend,
+        disabled,
+        isStreaming,
+        canSubmitRunInput,
+      ]
     );
 
     // --- Input ---
@@ -451,7 +565,10 @@ export const InputBar = memo<InputBarProps>(
           // Negative feedback: pasting files when the model cannot take them
           // must not be silently swallowed.
           void message.warning(
-            t('agent.inputBar.attachNotSupported', 'Current model does not support file attachments')
+            t(
+              'agent.inputBar.attachNotSupported',
+              'Current model does not support file attachments'
+            )
           );
         }
       },
@@ -464,7 +581,10 @@ export const InputBar = memo<InputBarProps>(
       (e: React.DragEvent) => {
         if (!disabled && !capabilities.supportsAttachment && e.dataTransfer.files.length > 0) {
           void message.warning(
-            t('agent.inputBar.attachNotSupported', 'Current model does not support file attachments')
+            t(
+              'agent.inputBar.attachNotSupported',
+              'Current model does not support file attachments'
+            )
           );
         }
         handleDrop(e);
@@ -556,7 +676,7 @@ export const InputBar = memo<InputBarProps>(
                   <AttachmentChip
                     key={file.id}
                     file={file}
-                    onRemove={removeAttachment}
+                    onRemove={handleRemoveAttachment}
                     onRetry={retryAttachment}
                   />
                 ))}
@@ -564,13 +684,79 @@ export const InputBar = memo<InputBarProps>(
             </div>
           )}
 
-          {/* Queued prompts (compose-ahead while streaming) */}
-          <div className="flex-shrink-0">
-            <QueuedPromptStrip
-              conversationId={queueConvId ?? undefined}
-              isStreaming={isStreaming}
-            />
-          </div>
+          {isStreaming && (
+            <div
+              className="flex flex-shrink-0 flex-wrap items-center gap-1.5 px-3 pt-2 sm:px-4"
+              data-testid="run-input-delivery"
+            >
+              <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+                {t('agent.runInput.delivery', { defaultValue: 'Delivery' })}
+              </span>
+              {runInputDeliveryOptions.map((delivery) => (
+                <button
+                  key={delivery}
+                  type="button"
+                  onClick={() => onRunInputDeliveryChange?.(delivery)}
+                  disabled={runInputSubmitting}
+                  aria-pressed={runInputDelivery === delivery}
+                  className={`rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
+                    runInputDelivery === delivery
+                      ? 'border-primary/50 bg-primary/10 text-primary'
+                      : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400'
+                  }`}
+                >
+                  {delivery === 'steer_now'
+                    ? t('agent.runInput.steerNow', { defaultValue: 'Steer now' })
+                    : t('agent.runInput.queueNext', { defaultValue: 'Queue next' })}
+                </button>
+              ))}
+              {runInputError && (
+                <span className="text-[11px] text-red-600 dark:text-red-400" role="status">
+                  {t('agent.runInput.failed', {
+                    defaultValue: 'Not accepted. Your draft was kept.',
+                  })}
+                </span>
+              )}
+            </div>
+          )}
+
+          {runInputs.length > 0 && (
+            <div
+              className="flex flex-shrink-0 flex-col gap-1 px-3 pt-2 sm:px-4"
+              data-testid="run-input-receipts"
+            >
+              {runInputs.map((input) => (
+                <div
+                  key={input.id}
+                  className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                >
+                  <span className="min-w-0 flex-1 truncate">{input.content}</span>
+                  <span className="shrink-0 text-slate-400">
+                    {input.dispatch_status === 'failed'
+                      ? t('agent.runInput.dispatchFailed', {
+                          defaultValue: 'Delivery failed: {{reason}}',
+                          reason: input.dispatch_error_code ?? 'control_dispatch_failed',
+                        })
+                      : t(`agent.runInput.status.${input.status}`, {
+                          defaultValue: input.status,
+                        })}
+                  </span>
+                  {input.status === 'ready' && onPromoteRunInput && (
+                    <button
+                      type="button"
+                      disabled={promotingRunInputId !== null && promotingRunInputId !== undefined}
+                      onClick={() => {
+                        void onPromoteRunInput(input.id);
+                      }}
+                      className="shrink-0 rounded border border-primary/40 px-1.5 py-0.5 text-primary hover:bg-primary/10 disabled:opacity-40"
+                    >
+                      {t('agent.runInput.promote', { defaultValue: 'Start next plan' })}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Text Area */}
           <div
@@ -741,7 +927,9 @@ export const InputBar = memo<InputBarProps>(
             activeAgentId={activeAgentId}
             charCount={charCount}
             canSend={canSend}
-            handleSend={handleSend}
+            handleSend={() => {
+              void handleSend();
+            }}
             onAbort={onAbort}
           />
 

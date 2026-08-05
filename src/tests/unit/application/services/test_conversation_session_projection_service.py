@@ -7,6 +7,7 @@ import pytest
 
 from src.application.services.conversation_session_projection_service import (
     AgentPlanRunAuthority,
+    AgentPlanVersionAuthority,
     ArtifactRecordAuthority,
     ConversationAuthority,
     ConversationSessionAuthoritySnapshot,
@@ -123,9 +124,33 @@ def plan_run() -> AgentPlanRunAuthority:
             "created_at": (NOW - timedelta(minutes=5)).isoformat(),
         },
         created_at=NOW - timedelta(minutes=5),
+        started_at=NOW - timedelta(minutes=4),
         updated_at=NOW,
         completed_at=None,
         error=None,
+    )
+
+
+def plan_version() -> AgentPlanVersionAuthority:
+    return AgentPlanVersionAuthority(
+        id="plan-version-1",
+        conversation_id="conversation-1",
+        version=2,
+        status="draft",
+        tasks=(
+            {
+                "id": "plan-task-1",
+                "conversation_id": "conversation-1",
+                "content": "Implement the authoritative plan projection",
+                "status": "pending",
+                "priority": "high",
+                "order_index": 0,
+                "created_at": (NOW - timedelta(minutes=2)).isoformat(),
+                "updated_at": (NOW - timedelta(minutes=1)).isoformat(),
+            },
+        ),
+        created_at=NOW - timedelta(minutes=2),
+        approved_at=None,
     )
 
 
@@ -211,6 +236,7 @@ def snapshot() -> ConversationSessionAuthoritySnapshot:
             total=3,
             failed_total=1,
         ),
+        plan_versions=(plan_version(),),
     )
 
 
@@ -248,6 +274,12 @@ async def test_builds_discriminated_workspace_session_without_desktop_authority(
     assert linked_node.id == "node-1"
     assert linked_node.plan_id == "plan-1"
     assert linked_node.progress == {"percent": 50}
+    assert projection.current_plan == projection.plan_history[0]
+    assert projection.current_plan is not None
+    assert projection.current_plan.id == "plan-version-1"
+    assert projection.current_plan.version == 2
+    assert projection.current_plan.status == "draft"
+    assert projection.current_plan.tasks[0]["id"] == "plan-task-1"
     assert projection.pending_hitl[0].request_type == "permission"
     assert projection.pending_hitl[0].question == "Allow the reviewed operation?"
     assert projection.pending_hitl[0].metadata == {"hitl_type": "permission"}
@@ -276,7 +308,6 @@ async def test_builds_discriminated_workspace_session_without_desktop_authority(
         "run_id",
         "permission_profile",
         "environment",
-        "plan_version",
         "artifact_version",
         "tool_input",
         "tool_output",

@@ -14,6 +14,15 @@ from src.infrastructure.agent.actor import execution
 from src.infrastructure.agent.actor.types import ProjectChatRequest
 
 
+@pytest.fixture(autouse=True)
+def root_run_authority_mocks(monkeypatch: pytest.MonkeyPatch) -> tuple[AsyncMock, AsyncMock]:
+    mark = AsyncMock()
+    settle = AsyncMock()
+    monkeypatch.setattr(execution, "_mark_root_run_authority_running", mark)
+    monkeypatch.setattr(execution, "_settle_root_run_authority", settle)
+    return mark, settle
+
+
 class _FakeAgent:
     def __init__(self) -> None:
         self.config = SimpleNamespace(project_id="proj-1", tenant_id="tenant-1")
@@ -208,7 +217,9 @@ async def test_resolve_chat_runtime_overrides_keeps_non_workspace_overrides() ->
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_execute_project_chat_passes_abort_signal() -> None:
+async def test_execute_project_chat_passes_abort_signal(
+    root_run_authority_mocks: tuple[AsyncMock, AsyncMock],
+) -> None:
     """execute_project_chat should forward abort_signal into agent.execute_chat."""
     agent = _FakeAgent()
     request = ProjectChatRequest(
@@ -241,7 +252,71 @@ async def test_execute_project_chat_passes_abort_signal() -> None:
     assert result.is_error is False
     assert agent.execute_chat_kwargs is not None
     assert agent.execute_chat_kwargs["abort_signal"] is abort_signal
+    mark, settle = root_run_authority_mocks
+    mark.assert_awaited_once_with(
+        tenant_id="tenant-1",
+        project_id="proj-1",
+        conversation_id="conv-1",
+        run_id="msg-1",
+    )
+    settle.assert_awaited_once_with(
+        tenant_id="tenant-1",
+        project_id="proj-1",
+        conversation_id="conv-1",
+        run_id="msg-1",
+        outcome="success",
+        error=None,
+    )
     assert agent.execute_chat_kwargs["preferred_language"] == "zh-CN"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_execute_project_chat_uses_canonical_run_authority_identity(
+    root_run_authority_mocks: tuple[AsyncMock, AsyncMock],
+) -> None:
+    """Plan executions keep client message identity separate from run authority identity."""
+    agent = _FakeAgent()
+    request = ProjectChatRequest(
+        conversation_id="conv-plan-1",
+        message_id="client-message-1",
+        canonical_run_id="plan-run-1",
+        user_message="execute approved plan",
+        user_id="user-1",
+        conversation_context=[],
+    )
+
+    with (
+        patch.object(execution, "set_agent_running", new=AsyncMock()),
+        patch.object(execution, "clear_agent_running", new=AsyncMock()),
+        patch.object(execution, "_get_last_db_event_time", new=AsyncMock(return_value=(0, 0))),
+        patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=object())),
+        patch.object(execution, "_publish_event_to_stream", new=AsyncMock()),
+        patch.object(execution, "_persist_events", new=AsyncMock()),
+        patch.object(execution, "_load_persisted_agent_config", new=AsyncMock(return_value=None)),
+        patch.object(execution.agent_metrics, "increment"),
+        patch.object(execution.agent_metrics, "observe"),
+    ):
+        result = await execution.execute_project_chat(agent=agent, request=request)
+
+    assert result.message_id == "client-message-1"
+    assert agent.execute_chat_kwargs is not None
+    assert agent.execute_chat_kwargs["canonical_run_id"] == "plan-run-1"
+    mark, settle = root_run_authority_mocks
+    mark.assert_awaited_once_with(
+        tenant_id="tenant-1",
+        project_id="proj-1",
+        conversation_id="conv-plan-1",
+        run_id="plan-run-1",
+    )
+    settle.assert_awaited_once_with(
+        tenant_id="tenant-1",
+        project_id="proj-1",
+        conversation_id="conv-plan-1",
+        run_id="plan-run-1",
+        outcome="success",
+        error=None,
+    )
 
 
 @pytest.mark.unit
@@ -900,9 +975,47 @@ async def test_handle_hitl_pending_preserves_child_session_metadata() -> None:
             hitl_exception=hitl_exception,
         )
 
-    assert result.hitl_pending is True
+        assert result.hitl_pending is True
     assert captured_state["state"].agent_id == "child-agent"
     assert captured_state["state"].parent_session_id == "parent-conv"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_handle_hitl_pending_persists_canonical_run_authority() -> None:
+    agent = SimpleNamespace(
+        config=SimpleNamespace(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            agent_mode="default",
+        )
+    )
+    request = ProjectChatRequest(
+        conversation_id="conv-plan",
+        message_id="client-message",
+        canonical_run_id="plan-run",
+        user_message="Continue after permission",
+        user_id="user-1",
+    )
+    pending = HITLPendingException(
+        request_id="permission-1",
+        conversation_id="conv-plan",
+        hitl_type=HITLType.PERMISSION,
+        request_data={"action": "write"},
+    )
+    state_store = SimpleNamespace(save_state=AsyncMock(return_value="state-key"))
+
+    with (
+        patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=object())),
+        patch.object(execution, "HITLStateStore", return_value=state_store),
+        patch.object(execution, "save_hitl_snapshot", new=AsyncMock()),
+        patch.object(execution, "_project_automation_runtime_waiting_human", new=AsyncMock()),
+    ):
+        await execution.handle_hitl_pending(agent, request, pending)
+
+    saved_state = state_store.save_state.await_args.args[0]
+    assert saved_state.message_id == "client-message"
+    assert saved_state.canonical_run_id == "plan-run"
 
 
 @pytest.mark.unit
@@ -1217,6 +1330,62 @@ async def test_persist_events_keeps_prefixed_correlation_id() -> None:
 
     insert_stmt = session.execute.await_args_list[1].args[0]
     assert insert_stmt.compile().params["correlation_id"] == correlation_id
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_persist_events_projects_run_input_application_after_insert() -> None:
+    """A durable timeline insert should update the matching run-input in one transaction."""
+    session = MagicMock()
+    existing_result = MagicMock()
+    existing_result.scalars.return_value.all.return_value = []
+    insert_result = MagicMock()
+    insert_result.one_or_none.return_value = ("run_input_applied", 123)
+    session.execute = AsyncMock(side_effect=[existing_result, insert_result, MagicMock()])
+
+    begin_ctx = AsyncMock()
+    begin_ctx.__aenter__.return_value = None
+    begin_ctx.__aexit__.return_value = None
+    session.begin.return_value = begin_ctx
+    session_ctx = AsyncMock()
+    session_ctx.__aenter__.return_value = session
+    session_ctx.__aexit__.return_value = None
+    projection = AsyncMock()
+    event_data = {
+        "run_input_id": "input-1",
+        "run_id": "run-1",
+        "run_revision": 4,
+        "message_id": "message-1",
+        "idempotency_key": "input-key-1",
+        "delivery_mode": "steer_now",
+        "applied_round": 3,
+        "applied_at": "2026-08-04T01:00:00+00:00",
+        "injected_via": "control_channel_observe_boundary",
+    }
+
+    with (
+        patch.object(execution, "async_session_factory", return_value=session_ctx),
+        patch.object(
+            execution,
+            "apply_run_input_applied_projection",
+            new=projection,
+            create=True,
+        ),
+    ):
+        await execution._persist_events(
+            conversation_id="conv-1",
+            message_id="message-1",
+            events=[
+                {
+                    "type": "run_input_applied",
+                    "data": event_data,
+                    "event_time_us": 123,
+                    "event_counter": 0,
+                }
+            ],
+        )
+
+    projection.assert_awaited_once_with(session, event_data=event_data)
 
 
 class _DeltaStreamingAgent(_FakeAgent):

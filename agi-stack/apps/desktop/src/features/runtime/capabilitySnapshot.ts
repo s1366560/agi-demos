@@ -22,8 +22,10 @@ export type DesktopCapabilityName =
   | 'device-approval'
   | 'tenant-creation'
   | 'invitation-acceptance'
+  | 'agent-workspace-tenant-agent-workspace'
   | 'tenant-tenant-overview'
   | 'tenant-tenant-projects'
+  | 'tenant-tenant-workspaces'
   | 'tenant-tenant-tasks'
   | 'tenant-tenant-analytics'
   | 'tenant-tenant-agent-configuration'
@@ -81,32 +83,35 @@ export type DesktopCapabilitySnapshot = {
   capabilities: Record<DesktopCapabilityName, DesktopCapabilityAvailability>;
 };
 
-const CAPABILITY_NAMES: readonly DesktopCapabilityName[] = [
-  'automation_run',
-  'search',
-  'workspace_collaboration',
-  'sandbox_isolation',
-  'device-approval',
-  'tenant-creation',
-  'invitation-acceptance',
-  'tenant-tenant-overview',
-  'tenant-tenant-projects',
-  'tenant-tenant-tasks',
-  'tenant-tenant-analytics',
-  'tenant-tenant-agent-configuration',
-  'tenant-tenant-agent-bindings',
-  'tenant-tenant-runtimes',
-  'tenant-tenant-pool',
-  'tenant-tenant-instances',
-  'tenant-tenant-clusters',
-  'tenant-tenant-deploy',
-  'tenant-tenant-instance-templates',
-  'tenant-tenant-dead-letter-queue',
-  'project-project-overview',
-  'project-project-search',
-  'project-project-cron-jobs',
-  'project-support',
-];
+export const DESKTOP_CAPABILITY_NAMES: readonly DesktopCapabilityName[] =
+  Object.freeze([
+    'automation_run',
+    'search',
+    'workspace_collaboration',
+    'sandbox_isolation',
+    'device-approval',
+    'tenant-creation',
+    'invitation-acceptance',
+    'agent-workspace-tenant-agent-workspace',
+    'tenant-tenant-overview',
+    'tenant-tenant-projects',
+    'tenant-tenant-workspaces',
+    'tenant-tenant-tasks',
+    'tenant-tenant-analytics',
+    'tenant-tenant-agent-configuration',
+    'tenant-tenant-agent-bindings',
+    'tenant-tenant-runtimes',
+    'tenant-tenant-pool',
+    'tenant-tenant-instances',
+    'tenant-tenant-clusters',
+    'tenant-tenant-deploy',
+    'tenant-tenant-instance-templates',
+    'tenant-tenant-dead-letter-queue',
+    'project-project-overview',
+    'project-project-search',
+    'project-project-cron-jobs',
+    'project-support',
+  ]);
 
 const CURRENT_CAPABILITY_CONTRACT_MINIMUMS = [
   DESKTOP_MINIMUM_CONTRACT_VERSION,
@@ -138,8 +143,7 @@ const CAPABILITY_SCOPE_KEYS = [
   'instance_id',
 ] as const;
 
-const STABLE_ACTION_ID_PATTERN =
-  /^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$/;
+const STABLE_ACTION_ID_PATTERN = /^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$/;
 
 export function parseDesktopCapabilitySnapshot(
   input: unknown,
@@ -158,7 +162,7 @@ export function parseDesktopCapabilitySnapshot(
     DesktopCapabilityName,
     DesktopCapabilityAvailability
   >;
-  for (const capabilityName of CAPABILITY_NAMES) {
+  for (const capabilityName of DESKTOP_CAPABILITY_NAMES) {
     if (!Object.hasOwn(input.capabilities, capabilityName)) {
       capabilities[capabilityName] = unavailableCapability(
         'capability_not_declared',
@@ -186,8 +190,8 @@ export function desktopCapability(
   const capability =
     snapshot === null
       ? unavailableCapability('capability_snapshot_unavailable')
-      : snapshot.capabilities[capabilityName as DesktopCapabilityName] ??
-        unavailableCapability('capability_not_declared');
+      : (snapshot.capabilities[capabilityName as DesktopCapabilityName] ??
+        unavailableCapability('capability_not_declared'));
   return {
     ...capability,
     status: capability.availability,
@@ -197,7 +201,9 @@ export function desktopCapability(
   };
 }
 
-function readAvailability(input: unknown): DesktopCapabilityAvailability | null {
+function readAvailability(
+  input: unknown,
+): DesktopCapabilityAvailability | null {
   if (
     !isExactRecord(input, CAPABILITY_ENTRY_KEYS) ||
     !isCapabilityStatus(input.availability) ||
@@ -280,9 +286,7 @@ function isAvailabilityStateValid(
   reasonCode: unknown,
   serviceVersion: string | null,
   contractVersion: string | null,
-  compatibleMinimums: readonly string[] = [
-    DESKTOP_MINIMUM_CONTRACT_VERSION,
-  ],
+  compatibleMinimums: readonly string[] = [DESKTOP_MINIMUM_CONTRACT_VERSION],
 ): reasonCode is string | null {
   if (availability === 'available' || availability === 'degraded') {
     const contract = {
@@ -291,7 +295,8 @@ function isAvailabilityStateValid(
     };
     const compatible = compatibleMinimums.some(
       (minimumContractVersion) =>
-        negotiateCapabilityContract(contract, minimumContractVersion).compatible,
+        negotiateCapabilityContract(contract, minimumContractVersion)
+          .compatible,
     );
     if (!compatible) return false;
   }
@@ -364,9 +369,7 @@ function readAllowedActions(input: unknown): string[] | null {
 function isAuthorityRevision(input: unknown): input is number | null {
   return (
     input === null ||
-    (typeof input === 'number' &&
-      Number.isSafeInteger(input) &&
-      input >= 0)
+    (typeof input === 'number' && Number.isSafeInteger(input) && input >= 0)
   );
 }
 
@@ -377,7 +380,9 @@ function isCapabilityScope(input: unknown): input is DesktopCapabilityScope {
   );
 }
 
-function copyCapabilityScope(scope: DesktopCapabilityScope): DesktopCapabilityScope {
+function copyCapabilityScope(
+  scope: DesktopCapabilityScope,
+): DesktopCapabilityScope {
   return {
     tenant_id: scope.tenant_id,
     project_id: scope.project_id,
@@ -395,8 +400,7 @@ function isNullableScopeIdentifier(input: unknown): input is string | null {
 
 function isStableReasonCode(input: unknown): input is string {
   return (
-    typeof input === 'string' &&
-    /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/.test(input)
+    typeof input === 'string' && /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/.test(input)
   );
 }
 
@@ -408,7 +412,7 @@ function isCapabilityRecord(
     input !== null &&
     !Array.isArray(input) &&
     Object.keys(input).every((key) =>
-      CAPABILITY_NAMES.includes(key as DesktopCapabilityName),
+      DESKTOP_CAPABILITY_NAMES.includes(key as DesktopCapabilityName),
     )
   );
 }
@@ -417,8 +421,12 @@ function isExactRecord(
   input: unknown,
   expectedKeys: readonly string[],
 ): input is Record<string, unknown> {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) return false;
+  if (typeof input !== 'object' || input === null || Array.isArray(input))
+    return false;
   const keys = Object.keys(input).sort();
   const expected = [...expectedKeys].sort();
-  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+  return (
+    keys.length === expected.length &&
+    keys.every((key, index) => key === expected[index])
+  );
 }

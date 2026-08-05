@@ -66,7 +66,23 @@ import {
   saveNativeTrustedSession,
   type NativeTrustedSession,
 } from './api/trustedSession';
-import { ResizeHandle, useResizablePanelWidth } from './components/ResizeHandle';
+import {
+  ResizeHandle,
+  useResizablePanelWidth,
+} from './components/ResizeHandle';
+import {
+  AGENT_WORKSPACE_ROUTE_ID,
+  createAgentWorkspaceRouteModuleLoader,
+} from './features/agent-workspace/agentWorkspaceRouteModule';
+import { createDesktopAgentAuthorityAdapter } from './features/agent-authority/cloudAgentAuthorityClient';
+import type {
+  CloudAgentAuthorityScope,
+  RunChangeScope,
+} from './features/agent-authority/agentAuthorityTypes';
+import {
+  desktopChangeSnapshotFromCloud,
+  desktopRunInputFromCloud,
+} from './features/agent-authority/agentAuthorityProjection';
 import {
   findWorkspaceProject,
   isCurrentContextRevision,
@@ -128,6 +144,7 @@ import {
   type AgentTaskSignalStatus,
   type ChatWorkflowTarget,
 } from './features/chat/ChatPanel';
+import { resolveSubAgentControlAuthority } from './features/chat/subagentControlAuthorityModel';
 import {
   protocolClientMessageId,
   protocolStreamMessageId,
@@ -174,7 +191,7 @@ import { applyHitlResponseStreamEvent } from './features/chat/hitlResponseEventM
 import {
   acknowledgeFullAccessWarning,
   autoApprovalSubmission,
-  denialSteeringFeedback,
+  permissionModeForPreset,
   permissionPresetScope,
   readFullAccessWarningAcknowledged,
   readPermissionPreset,
@@ -282,6 +299,7 @@ import {
   terminalSessionMatchesRun,
   type TerminalBindingState,
 } from './features/session/sessionTerminalModel';
+import { resolveSessionComposerDispatch } from './features/session/sessionComposerDispatchModel';
 import {
   authoritativeRunsFromSocketEvents,
   buildSessionDetailViewModel,
@@ -425,7 +443,10 @@ import {
   settingsSectionForEntry,
   type SettingsEntry,
 } from './features/settings/settingsEntryRouting';
-import { SettingsWindow, type SettingsSection } from './features/settings/SettingsWindow';
+import {
+  SettingsWindow,
+  type SettingsSection,
+} from './features/settings/SettingsWindow';
 import { latestAgentDefinitionEvent } from './features/settings/agentDefinitionEventModel';
 import { useWorkspaceAgentPolicy } from './features/settings/useWorkspaceAgentPolicy';
 import { useWorkspaceRuntimeProvider } from './features/settings/useWorkspaceRuntimeProvider';
@@ -556,6 +577,7 @@ import type {
   RuntimeMode,
   RuntimeNodeLoadState,
   RuntimeDataset,
+  RunSummary,
   RunInputDelivery,
   TerminalServiceResponse,
   WorkbenchSection,
@@ -568,9 +590,8 @@ import type {
 import { DEFAULT_CONFIG, mergeLocalRuntimeStatus } from './types';
 
 const LazyAutomationsPage = lazy(async () => {
-  const { AutomationsPage } = await import(
-    './features/automations/AutomationsPage'
-  );
+  const { AutomationsPage } =
+    await import('./features/automations/AutomationsPage');
   return { default: AutomationsPage };
 });
 
@@ -634,7 +655,12 @@ const runControlLabels: Record<RunControlState, string> = {
   paused: 'Paused',
   stopped: 'Stopped',
 };
-const runControlStates = new Set<RunControlState>(['planning', 'running', 'paused', 'stopped']);
+const runControlStates = new Set<RunControlState>([
+  'planning',
+  'running',
+  'paused',
+  'stopped',
+]);
 function isRunControlState(value: string): value is RunControlState {
   return runControlStates.has(value as RunControlState);
 }
@@ -642,7 +668,11 @@ function isRunControlState(value: string): value is RunControlState {
 function runToneFromStatus(status: string): RunDotTone {
   const normalized = status.trim().toLowerCase();
   if (isRunControlState(normalized)) return normalized;
-  if (normalized === 'completed' || normalized === 'complete' || normalized === 'done') {
+  if (
+    normalized === 'completed' ||
+    normalized === 'complete' ||
+    normalized === 'done'
+  ) {
     return 'completed';
   }
   if (normalized === 'failed' || normalized === 'error') return 'failed';
@@ -654,14 +684,21 @@ function runLabelFromStatus(status: string): string {
   const normalized = status.trim().toLowerCase();
   if (isRunControlState(normalized)) return runControlLabels[normalized];
   if (normalized === 'active') return 'Running';
-  if (normalized === 'completed' || normalized === 'complete' || normalized === 'done') {
+  if (
+    normalized === 'completed' ||
+    normalized === 'complete' ||
+    normalized === 'done'
+  ) {
     return 'Completed';
   }
   if (normalized === 'failed' || normalized === 'error') return 'Failed';
   return status;
 }
 
-function runStatusLabel(state: RunControlState | undefined, fallback: string): string {
+function runStatusLabel(
+  state: RunControlState | undefined,
+  fallback: string,
+): string {
   return state ? runControlLabels[state] : runLabelFromStatus(fallback);
 }
 
@@ -677,7 +714,8 @@ function titlebarRunStateFromStatus(status: string): RunControlState {
   ) {
     return 'paused';
   }
-  if (normalized === 'ready_review' || normalized === 'completed') return 'stopped';
+  if (normalized === 'ready_review' || normalized === 'completed')
+    return 'stopped';
   if (
     normalized === 'failed' ||
     normalized === 'disconnected' ||
@@ -707,7 +745,9 @@ function titlebarRunLabelFromStatus(
     disconnected: 'session.statusDisconnected',
     cancelled: 'session.statusCancelled',
   };
-  return labels[normalized] ? translate(labels[normalized]) : runLabelFromStatus(status);
+  return labels[normalized]
+    ? translate(labels[normalized])
+    : runLabelFromStatus(status);
 }
 
 type RuntimeTarget = 'local' | 'staging';
@@ -720,7 +760,12 @@ const titlebarRuntimeTargetLabels: Record<RuntimeTarget, string> = {
   staging: 'Remote staging',
 };
 const runtimeTargetComposerOptions = Object.values(runtimeTargetLabels);
-type RuntimeHealthState = 'healthy' | 'starting' | 'waiting' | 'offline' | 'error';
+type RuntimeHealthState =
+  | 'healthy'
+  | 'starting'
+  | 'waiting'
+  | 'offline'
+  | 'error';
 const runtimeHealthLabels: Record<RuntimeHealthState, string> = {
   healthy: 'Healthy',
   starting: 'Starting',
@@ -728,7 +773,10 @@ const runtimeHealthLabels: Record<RuntimeHealthState, string> = {
   offline: 'Offline',
   error: 'Error',
 };
-const runtimeHealthBadgeColors: Record<RuntimeHealthState, 'gray' | 'blue' | 'green' | 'red'> = {
+const runtimeHealthBadgeColors: Record<
+  RuntimeHealthState,
+  'gray' | 'blue' | 'green' | 'red'
+> = {
   healthy: 'green',
   starting: 'blue',
   waiting: 'gray',
@@ -755,7 +803,12 @@ type ReviewTab =
   | 'insights'
   | 'context'
   | 'runtime';
-type WorkspaceArtifactKind = 'Files' | 'Patches' | 'Reports' | 'Logs' | 'Events';
+type WorkspaceArtifactKind =
+  | 'Files'
+  | 'Patches'
+  | 'Reports'
+  | 'Logs'
+  | 'Events';
 type WorkspaceArtifact = {
   id: string;
   name: string;
@@ -794,7 +847,9 @@ type AgentConversationSession = {
   conversation: AgentConversation;
 };
 
-function agentConversationSelectionIdentity(session: AgentConversationSession | null) {
+function agentConversationSelectionIdentity(
+  session: AgentConversationSession | null,
+) {
   return session
     ? { scopeKey: session.scopeKey, conversationId: session.conversation.id }
     : null;
@@ -808,7 +863,7 @@ function detectNativeDesktopShell(): boolean {
   if (typeof window === 'undefined') return false;
   return Boolean(
     runsInElectronShell() ||
-      document.documentElement.hasAttribute('data-desktop-window'),
+    document.documentElement.hasAttribute('data-desktop-window'),
   );
 }
 
@@ -821,30 +876,34 @@ function localRuntimeSidecarConfig(config: DesktopRuntimeConfig) {
 function isEditableEventTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable) return true;
-  return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
+  return Boolean(
+    target.closest('input, textarea, select, [contenteditable="true"]'),
+  );
 }
 
 function agentConversationScopeKey(config: DesktopRuntimeConfig): string {
   return agentConversationScopeKeyFor(config.projectId, config.workspaceId);
 }
 
-function agentConversationScopeKeyFor(projectId: string, workspaceId: string): string {
+function agentConversationScopeKeyFor(
+  projectId: string,
+  workspaceId: string,
+): string {
   return `${projectId.trim()}::${workspaceId.trim()}`;
 }
 
-const SESSION_RUN_ACTION_LABEL_KEY: Readonly<Record<SessionRunAction, string>> = {
-  pause: 'session.pauseRun',
-  resume: 'session.resumeRun',
-  cancel: 'session.cancelAction',
-  reconnect: 'session.reconnectRun',
-  fork: 'session.forkRecovery',
-  request_changes: 'session.requestChanges',
-  approve: 'session.approveRun',
-};
+const SESSION_RUN_ACTION_LABEL_KEY: Readonly<Record<SessionRunAction, string>> =
+  {
+    pause: 'session.pauseRun',
+    resume: 'session.resumeRun',
+    cancel: 'session.cancelAction',
+    reconnect: 'session.reconnectRun',
+    fork: 'session.forkRecovery',
+    request_changes: 'session.requestChanges',
+    approve: 'session.approveRun',
+  };
 
-function agentTaskUpdateFromSocketEvent(
-  event: unknown,
-): null | {
+function agentTaskUpdateFromSocketEvent(event: unknown): null | {
   conversationId: string;
   messageId?: string;
   executionMessageId?: string;
@@ -857,7 +916,10 @@ function agentTaskUpdateFromSocketEvent(
   const conversationId = readStringField(payload, 'conversation_id');
   if (!conversationId) return null;
 
-  const type = readStringField(payload, 'type') ?? readStringField(payload, 'event_type') ?? 'event';
+  const type =
+    readStringField(payload, 'type') ??
+    readStringField(payload, 'event_type') ??
+    'event';
   const action = readStringField(payload, 'action');
   const eventType = action ? `${type}:${action}` : type;
   const messageId = socketMessageId(payload);
@@ -920,7 +982,10 @@ function agentTaskUpdateFromSocketEvent(
     };
   }
 
-  if (type.toLowerCase().includes('error') || action?.toLowerCase().includes('error')) {
+  if (
+    type.toLowerCase().includes('error') ||
+    action?.toLowerCase().includes('error')
+  ) {
     const errorDetail = socketErrorDetail(payload);
     return {
       conversationId,
@@ -936,7 +1001,9 @@ function agentTaskUpdateFromSocketEvent(
   return null;
 }
 
-function socketErrorDetail(payload: Record<string, unknown>): string | undefined {
+function socketErrorDetail(
+  payload: Record<string, unknown>,
+): string | undefined {
   const direct =
     readStringField(payload, 'detail') ??
     readStringField(payload, 'message') ??
@@ -944,7 +1011,14 @@ function socketErrorDetail(payload: Record<string, unknown>): string | undefined
     readStringField(payload, 'reason');
   if (direct) return direct;
 
-  for (const key of ['payload', 'data', 'error', 'detail', 'message', 'reason']) {
+  for (const key of [
+    'payload',
+    'data',
+    'error',
+    'detail',
+    'message',
+    'reason',
+  ]) {
     const nested = payload[key];
     if (nested && typeof nested === 'object') {
       const nestedDetail = socketErrorDetail(nested as Record<string, unknown>);
@@ -959,12 +1033,18 @@ function socketMessageId(payload: Record<string, unknown>): string | undefined {
   return protocolClientMessageId(payload);
 }
 
-function readStringField(payload: Record<string, unknown>, key: string): string | undefined {
+function readStringField(
+  payload: Record<string, unknown>,
+  key: string,
+): string | undefined {
   const value = payload[key];
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
-function readTextField(payload: Record<string, unknown>, key: string): string | undefined {
+function readTextField(
+  payload: Record<string, unknown>,
+  key: string,
+): string | undefined {
   const value = payload[key];
   return typeof value === 'string' ? value : undefined;
 }
@@ -976,13 +1056,17 @@ function mergeTimelineItems(
   return mergeConversationTimelineItems(existing, incoming);
 }
 
-function timelineCursorFromFirst(items: AgentTimelineItem[]): ConversationTimelineState['firstCursor'] {
+function timelineCursorFromFirst(
+  items: AgentTimelineItem[],
+): ConversationTimelineState['firstCursor'] {
   const first = items[0];
   if (!first) return null;
   return { timeUs: first.eventTimeUs, counter: first.eventCounter };
 }
 
-function timelineCursorFromLast(items: AgentTimelineItem[]): ConversationTimelineState['lastCursor'] {
+function timelineCursorFromLast(
+  items: AgentTimelineItem[],
+): ConversationTimelineState['lastCursor'] {
   const last = items[items.length - 1];
   if (!last) return null;
   return { timeUs: last.eventTimeUs, counter: last.eventCounter };
@@ -1006,7 +1090,9 @@ function optimisticUserTimelineItem(
     content,
     metadata: {
       optimistic: true,
-      ...(forcedSkillName?.trim() ? { forcedSkillName: forcedSkillName.trim() } : {}),
+      ...(forcedSkillName?.trim()
+        ? { forcedSkillName: forcedSkillName.trim() }
+        : {}),
       ...(fileMetadata?.length ? { fileMetadata: [...fileMetadata] } : {}),
     },
   };
@@ -1015,9 +1101,15 @@ function optimisticUserTimelineItem(
 function timelineItemFromSocketEvent(event: unknown): AgentTimelineItem | null {
   if (!event || typeof event !== 'object') return null;
   const payload = event as Record<string, unknown>;
-  const type = readStringField(payload, 'type') ?? readStringField(payload, 'event_type');
-  if (!type || shouldSkipLiveTimelineEvent(type, readStringField(payload, 'action'))) return null;
-  const data = objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
+  const type =
+    readStringField(payload, 'type') ?? readStringField(payload, 'event_type');
+  if (
+    !type ||
+    shouldSkipLiveTimelineEvent(type, readStringField(payload, 'action'))
+  )
+    return null;
+  const data =
+    objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
   const nowMs = Date.now();
   const eventTimeUs =
     numberField(payload, 'time_us') ??
@@ -1059,15 +1151,26 @@ function timelineItemFromSocketEvent(event: unknown): AgentTimelineItem | null {
       readStringField(payload, 'message') ??
       '';
   } else if (type === 'thought') {
-    item.content = readStringField(data, 'thought') ?? readStringField(data, 'content') ?? '';
+    item.content =
+      readStringField(data, 'thought') ??
+      readStringField(data, 'content') ??
+      '';
   } else if (type === 'act' || type === 'act_delta') {
     item.type = 'act';
-    item.toolName = readStringField(data, 'tool_name') ?? readStringField(data, 'toolName') ?? '';
-    item.toolInput = data.tool_input ?? data.toolInput ?? data.accumulated_arguments ?? {};
+    item.toolName =
+      readStringField(data, 'tool_name') ??
+      readStringField(data, 'toolName') ??
+      '';
+    item.toolInput =
+      data.tool_input ?? data.toolInput ?? data.accumulated_arguments ?? {};
   } else if (type === 'observe') {
-    item.toolName = readStringField(data, 'tool_name') ?? readStringField(data, 'toolName') ?? '';
+    item.toolName =
+      readStringField(data, 'tool_name') ??
+      readStringField(data, 'toolName') ??
+      '';
     item.toolInput = data.tool_input ?? data.toolInput;
-    item.toolOutput = data.observation ?? data.tool_output ?? data.toolOutput ?? '';
+    item.toolOutput =
+      data.observation ?? data.tool_output ?? data.toolOutput ?? '';
     item.error = readStringField(data, 'error');
     item.isError = Boolean(data.is_error ?? data.isError ?? item.error);
   } else if (type === 'error') {
@@ -1078,8 +1181,10 @@ function timelineItemFromSocketEvent(event: unknown): AgentTimelineItem | null {
 
   const display = objectField(data, 'display');
   if (display) item.display = display as AgentTimelineItem['display'];
-  const fileMetadata = objectField(data, 'fileMetadata') ?? objectField(data, 'file_metadata');
-  if (fileMetadata) item.fileMetadata = fileMetadata as AgentTimelineItem['fileMetadata'];
+  const fileMetadata =
+    objectField(data, 'fileMetadata') ?? objectField(data, 'file_metadata');
+  if (fileMetadata)
+    item.fileMetadata = fileMetadata as AgentTimelineItem['fileMetadata'];
   const metadata = objectField(data, 'metadata');
   if (metadata) item.metadata = metadata;
 
@@ -1092,18 +1197,24 @@ function mergeLiveTimelineEvent(
 ): AgentTimelineItem[] {
   if (!event || typeof event !== 'object') return existing;
   const payload = event as Record<string, unknown>;
-  const type = readStringField(payload, 'type') ?? readStringField(payload, 'event_type');
+  const type =
+    readStringField(payload, 'type') ?? readStringField(payload, 'event_type');
   if (type === 'ack' && readStringField(payload, 'action') === 'send_message') {
     const clientMessageId = socketMessageId(payload);
     const executionMessageId =
       readStringField(payload, 'execution_message_id') ??
       readStringField(payload, 'executionMessageId');
     return clientMessageId && executionMessageId
-      ? mergeAgentSendAcknowledgement(existing, clientMessageId, executionMessageId)
+      ? mergeAgentSendAcknowledgement(
+          existing,
+          clientMessageId,
+          executionMessageId,
+        )
       : existing;
   }
   if (type === 'cost_update') {
-    const data = objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
+    const data =
+      objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
     return mergeCostUpdateEvent(existing, data);
   }
   if (type === 'text_start' || type === 'text_delta' || type === 'text_end') {
@@ -1112,7 +1223,8 @@ function mergeLiveTimelineEvent(
   if (type === 'assistant_message') {
     const item = timelineItemFromSocketEvent(event);
     if (!item) return existing;
-    const data = objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
+    const data =
+      objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
     const messageId =
       item.message_id ??
       eventScopedStreamMessageId(
@@ -1132,7 +1244,8 @@ function mergeLiveTimelineEvent(
     });
   }
   if (type === 'complete') {
-    const data = objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
+    const data =
+      objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
     const nowMs = Date.now();
     const eventTimeUs =
       numberField(payload, 'time_us') ??
@@ -1145,9 +1258,13 @@ function mergeLiveTimelineEvent(
       numberField(payload, 'eventCounter') ??
       0;
     const executionSummary =
-      objectField(data, 'execution_summary') ?? objectField(data, 'executionSummary');
-    const traceUrl = readStringField(data, 'trace_url') ?? readStringField(data, 'traceUrl');
-    const artifacts = Array.isArray(data.artifacts) ? data.artifacts : undefined;
+      objectField(data, 'execution_summary') ??
+      objectField(data, 'executionSummary');
+    const traceUrl =
+      readStringField(data, 'trace_url') ?? readStringField(data, 'traceUrl');
+    const artifacts = Array.isArray(data.artifacts)
+      ? data.artifacts
+      : undefined;
     const metadata = {
       ...(traceUrl ? { traceUrl } : {}),
       ...(executionSummary ? { executionSummary } : {}),
@@ -1173,8 +1290,13 @@ function mergeLiveTimelineEvent(
       artifacts,
     });
   }
-  if (type === 'thought_start' || type === 'thought_delta' || type === 'thought') {
-    const data = objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
+  if (
+    type === 'thought_start' ||
+    type === 'thought_delta' ||
+    type === 'thought'
+  ) {
+    const data =
+      objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
     const nowMs = Date.now();
     const eventTimeUs =
       numberField(payload, 'time_us') ??
@@ -1201,7 +1323,12 @@ function mergeLiveTimelineEvent(
         eventCounter,
       );
     return mergeThoughtStreamChunk(existing, {
-      kind: type === 'thought_start' ? 'start' : type === 'thought_delta' ? 'delta' : 'complete',
+      kind:
+        type === 'thought_start'
+          ? 'start'
+          : type === 'thought_delta'
+            ? 'delta'
+            : 'complete',
       messageId,
       content,
       eventTimeUs,
@@ -1212,14 +1339,20 @@ function mergeLiveTimelineEvent(
   const titleEvent = readConversationTitleStreamEvent(event);
   if (titleEvent.handled) return existing;
   const artifactCanvasResult = applyArtifactCanvasStreamEvent(emptyArtifactCanvasState(), event);
-  if (artifactCanvasResult.handled && type !== 'canvas_updated') return existing;
+  if (artifactCanvasResult.handled && type !== 'canvas_updated')
+    return existing;
   const hitlResponse = applyHitlResponseStreamEvent(existing, event);
   if (hitlResponse.handled) return hitlResponse.items;
   const timeline = existing;
   const item = timelineItemFromSocketEvent(event);
   if (
     item &&
-    ['artifact_created', 'artifact_ready', 'artifact_error', 'artifacts_batch'].includes(item.type)
+    [
+      'artifact_created',
+      'artifact_ready',
+      'artifact_error',
+      'artifacts_batch',
+    ].includes(item.type)
   ) {
     return mergeArtifactStreamItem(timeline, item);
   }
@@ -1238,7 +1371,8 @@ function mergeStreamingTextEvent(
   payload: Record<string, unknown>,
   type: 'text_start' | 'text_delta' | 'text_end',
 ): AgentTimelineItem[] {
-  const data = objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
+  const data =
+    objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
   const nowMs = Date.now();
   const eventTimeUs =
     numberField(payload, 'time_us') ??
@@ -1262,13 +1396,18 @@ function mergeStreamingTextEvent(
     );
   const content =
     (type === 'text_end'
-      ? readTextField(data, 'full_text') ?? readTextField(data, 'fullText')
+      ? (readTextField(data, 'full_text') ?? readTextField(data, 'fullText'))
       : readTextField(data, 'delta')) ??
     readTextField(data, 'text') ??
     readTextField(data, 'content') ??
     '';
   return mergeAssistantTextStreamChunk(existing, {
-    kind: type === 'text_start' ? 'start' : type === 'text_delta' ? 'delta' : 'complete',
+    kind:
+      type === 'text_start'
+        ? 'start'
+        : type === 'text_delta'
+          ? 'delta'
+          : 'complete',
     messageId,
     content,
     eventTimeUs,
@@ -1277,18 +1416,26 @@ function mergeStreamingTextEvent(
   });
 }
 
-function streamingMessageId(payload: Record<string, unknown>): string | undefined {
+function streamingMessageId(
+  payload: Record<string, unknown>,
+): string | undefined {
   return protocolStreamMessageId(payload);
 }
 
-function objectField(payload: Record<string, unknown>, key: string): Record<string, unknown> | null {
+function objectField(
+  payload: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> | null {
   const value = payload[key];
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
 }
 
-function numberField(payload: Record<string, unknown>, key: string): number | null {
+function numberField(
+  payload: Record<string, unknown>,
+  key: string,
+): number | null {
   const value = payload[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
@@ -1327,8 +1474,14 @@ function buildReviewDecisionSummary(
     })),
     checks: decision
       ? [
-          { label: 'Target', value: `${decision.target.kind} · ${decision.target.id}` },
-          { label: 'Scope', value: `${decision.scope.kind} · ${decision.scope.ids.length}` },
+          {
+            label: 'Target',
+            value: `${decision.target.kind} · ${decision.target.id}`,
+          },
+          {
+            label: 'Scope',
+            value: `${decision.scope.kind} · ${decision.scope.ids.length}`,
+          },
           {
             label: 'Reversibility',
             value: decision.reversibility.mode,
@@ -1349,7 +1502,9 @@ function buildWorkspaceArtifacts(
 ): WorkspaceArtifact[] {
   const artifacts = [
     ...timelineItems.flatMap((item) => artifactsFromTimelineItem(item)),
-    ...socketEvents.flatMap((event, index) => artifactsFromSocketEvent(event, index)),
+    ...socketEvents.flatMap((event, index) =>
+      artifactsFromSocketEvent(event, index),
+    ),
     ...artifactsFromPlan(plan),
   ];
   const byKey = new Map<string, WorkspaceArtifact>();
@@ -1372,7 +1527,8 @@ function shouldReplaceWorkspaceArtifact(
   existing: WorkspaceArtifact,
   candidate: WorkspaceArtifact,
 ): boolean {
-  const statusDelta = artifactStatusRank(candidate.status) - artifactStatusRank(existing.status);
+  const statusDelta =
+    artifactStatusRank(candidate.status) - artifactStatusRank(existing.status);
   if (statusDelta !== 0) return statusDelta > 0;
   return candidate.sortTime >= existing.sortTime;
 }
@@ -1390,7 +1546,8 @@ function artifactStatusRank(status: string): number {
 function workspaceArtifactIdentity(artifact: WorkspaceArtifact): string {
   const artifactId = artifactIdFromRaw(artifact.raw);
   if (artifactId) return `${artifact.kind}:id:${artifactId}`;
-  if (artifact.source.startsWith('artifact_')) return `${artifact.kind}:name:${artifact.name}`;
+  if (artifact.source.startsWith('artifact_'))
+    return `${artifact.kind}:name:${artifact.name}`;
   return `${artifact.kind}:${artifact.path || artifact.name || artifact.id}`;
 }
 
@@ -1398,7 +1555,9 @@ function artifactIdFromRaw(value: unknown, depth = 0): string | undefined {
   if (depth > 4) return undefined;
   const record = asRecordValue(value);
   if (!record) return undefined;
-  const direct = readStringField(record, 'artifact_id') ?? readStringField(record, 'artifactId');
+  const direct =
+    readStringField(record, 'artifact_id') ??
+    readStringField(record, 'artifactId');
   if (direct) return direct;
   for (const key of ['payload', 'data', 'artifact']) {
     const nested = artifactIdFromRaw(record[key], depth + 1);
@@ -1407,12 +1566,19 @@ function artifactIdFromRaw(value: unknown, depth = 0): string | undefined {
   return undefined;
 }
 
-function artifactsFromTimelineItem(item: AgentTimelineItem): WorkspaceArtifact[] {
+function artifactsFromTimelineItem(
+  item: AgentTimelineItem,
+): WorkspaceArtifact[] {
   const metadata = artifactFileMetadata(item);
-  const operation = readStringField(metadata ?? {}, 'operation') ?? item.toolName ?? item.type;
+  const operation =
+    readStringField(metadata ?? {}, 'operation') ?? item.toolName ?? item.type;
   const paths = arrayField(metadata ?? {}, 'paths').filter(isRecordValue);
-  const isArtifactEvent = item.type.startsWith('artifact_') || Boolean(item.filename || item.artifactId);
-  const writesFiles = ['write', 'edit', 'patch', 'export_artifact'].includes(operation);
+  const isArtifactEvent =
+    item.type.startsWith('artifact_') ||
+    Boolean(item.filename || item.artifactId);
+  const writesFiles = ['write', 'edit', 'patch', 'export_artifact'].includes(
+    operation,
+  );
 
   if (paths.length && (isArtifactEvent || writesFiles || item.toolName)) {
     return paths.map((path, index) =>
@@ -1430,10 +1596,18 @@ function artifactsFromTimelineItem(item: AgentTimelineItem): WorkspaceArtifact[]
 
   if (!isArtifactEvent && !writesFiles) return [];
 
-  const filename = item.filename ?? readStringField(asRecordValue(item.payload) ?? {}, 'filename');
-  const artifactId = item.artifactId ?? readStringField(asRecordValue(item.payload) ?? {}, 'artifact_id');
+  const filename =
+    item.filename ??
+    readStringField(asRecordValue(item.payload) ?? {}, 'filename');
+  const artifactId =
+    item.artifactId ??
+    readStringField(asRecordValue(item.payload) ?? {}, 'artifact_id');
   const name = filename || artifactId || item.toolName || item.type;
-  const path = artifactPathFromRecord(asRecordValue(item.payload)) || filename || artifactId || '';
+  const path =
+    artifactPathFromRecord(asRecordValue(item.payload)) ||
+    filename ||
+    artifactId ||
+    '';
   return [
     makeWorkspaceArtifact({
       id: item.id,
@@ -1451,7 +1625,10 @@ function artifactsFromTimelineItem(item: AgentTimelineItem): WorkspaceArtifact[]
   ];
 }
 
-function artifactsFromSocketEvent(event: unknown, index: number): WorkspaceArtifact[] {
+function artifactsFromSocketEvent(
+  event: unknown,
+  index: number,
+): WorkspaceArtifact[] {
   const item = timelineItemFromSocketEvent(event);
   if (item) {
     const timelineArtifacts = artifactsFromTimelineItem(item);
@@ -1467,7 +1644,8 @@ function artifactsFromSocketEvent(event: unknown, index: number): WorkspaceArtif
     readStringField(payload, 'name') ??
     readStringField(payload, 'artifact_id') ??
     type;
-  const eventTimeUs = numberField(record, 'time_us') ?? numberField(record, 'event_time_us');
+  const eventTimeUs =
+    numberField(record, 'time_us') ?? numberField(record, 'event_time_us');
   const timestamp = numberField(record, 'timestamp');
   const path = artifactPathFromRecord(payload);
   return [
@@ -1493,11 +1671,14 @@ function artifactsFromSocketEvent(event: unknown, index: number): WorkspaceArtif
 function socketArtifactCandidate(
   record: Record<string, unknown>,
 ): { type: string; payload: Record<string, unknown> } | null {
-  const topType = readStringField(record, 'type') ?? readStringField(record, 'event_type') ?? 'event';
-  const topPayload = objectField(record, 'payload') ?? objectField(record, 'data') ?? record;
-  const candidates: Array<{ type: string; payload: Record<string, unknown> }> = [
-    { type: topType, payload: topPayload },
-  ];
+  const topType =
+    readStringField(record, 'type') ??
+    readStringField(record, 'event_type') ??
+    'event';
+  const topPayload =
+    objectField(record, 'payload') ?? objectField(record, 'data') ?? record;
+  const candidates: Array<{ type: string; payload: Record<string, unknown> }> =
+    [{ type: topType, payload: topPayload }];
   const payloadType = readStringField(topPayload, 'type');
   if (payloadType) {
     candidates.push({
@@ -1506,7 +1687,9 @@ function socketArtifactCandidate(
     });
   }
   const nestedData = objectField(topPayload, 'data');
-  const nestedDataType = nestedData ? readStringField(nestedData, 'type') : undefined;
+  const nestedDataType = nestedData
+    ? readStringField(nestedData, 'type')
+    : undefined;
   if (nestedData && nestedDataType) {
     candidates.push({
       type: nestedDataType,
@@ -1514,7 +1697,9 @@ function socketArtifactCandidate(
     });
   }
   const nestedPayload = objectField(topPayload, 'payload');
-  const nestedPayloadType = nestedPayload ? readStringField(nestedPayload, 'type') : undefined;
+  const nestedPayloadType = nestedPayload
+    ? readStringField(nestedPayload, 'type')
+    : undefined;
   if (nestedPayload && nestedPayloadType) {
     candidates.push({
       type: nestedPayloadType,
@@ -1529,17 +1714,25 @@ function socketArtifactCandidate(
       const hasArtifactId = Boolean(readStringField(payload, 'artifact_id'));
       const hasFileSignal = Boolean(
         readStringField(payload, 'filename') ??
-          readStringField(payload, 'relativePath') ??
-          readStringField(payload, 'relative_path') ??
-          readStringField(payload, 'path'),
+        readStringField(payload, 'relativePath') ??
+        readStringField(payload, 'relative_path') ??
+        readStringField(payload, 'path'),
       );
-      return typeHasArtifact || hasArtifactId || (hasFileSignal && normalizedType.includes('file'));
+      return (
+        typeHasArtifact ||
+        hasArtifactId ||
+        (hasFileSignal && normalizedType.includes('file'))
+      );
     }) ?? null
   );
 }
 
-function socketArtifactStatus(type: string, payload: Record<string, unknown>): string {
-  const direct = readStringField(payload, 'status') ?? readStringField(payload, 'state');
+function socketArtifactStatus(
+  type: string,
+  payload: Record<string, unknown>,
+): string {
+  const direct =
+    readStringField(payload, 'status') ?? readStringField(payload, 'state');
   if (direct) return direct;
   if (type === 'artifact_ready') return 'ready';
   if (type === 'artifact_created') return 'created';
@@ -1551,14 +1744,21 @@ function artifactsFromPlan(plan: PlanSnapshot | null): WorkspaceArtifact[] {
   const index = plan.artifact_index ?? plan.artifacts;
   if (!index) return [];
   if (Array.isArray(index)) {
-    return index.flatMap((entry, position) => artifactFromPlanEntry(entry, String(position)));
+    return index.flatMap((entry, position) =>
+      artifactFromPlanEntry(entry, String(position)),
+    );
   }
   const record = asRecordValue(index);
   if (!record) return [];
-  return Object.entries(record).flatMap(([key, value]) => artifactFromPlanEntry(value, key));
+  return Object.entries(record).flatMap(([key, value]) =>
+    artifactFromPlanEntry(value, key),
+  );
 }
 
-function artifactFromPlanEntry(entry: unknown, key: string): WorkspaceArtifact[] {
+function artifactFromPlanEntry(
+  entry: unknown,
+  key: string,
+): WorkspaceArtifact[] {
   const record = asRecordValue(entry);
   const name =
     (record &&
@@ -1572,12 +1772,17 @@ function artifactFromPlanEntry(entry: unknown, key: string): WorkspaceArtifact[]
       id: `plan-artifact-${key}`,
       name,
       path,
-      kind: artifactKind(name, record ? readStringField(record, 'type') : undefined),
+      kind: artifactKind(
+        name,
+        record ? readStringField(record, 'type') : undefined,
+      ),
       source: 'plan',
-      status: record ? readStringField(record, 'status') ?? 'indexed' : 'indexed',
+      status: record
+        ? (readStringField(record, 'status') ?? 'indexed')
+        : 'indexed',
       sortTime: Date.now() - 1,
       size: record ? artifactSize(record) : '',
-      diff: record ? readStringField(record, 'diff') ?? '' : '',
+      diff: record ? (readStringField(record, 'diff') ?? '') : '',
       preview: record ? compactArtifactValue(record) : String(entry),
       raw: entry,
     }),
@@ -1639,25 +1844,40 @@ function makeWorkspaceArtifact(
   };
 }
 
-function artifactFileMetadata(item: AgentTimelineItem): Record<string, unknown> | null {
+function artifactFileMetadata(
+  item: AgentTimelineItem,
+): Record<string, unknown> | null {
   const direct = asRecordValue(item.fileMetadata);
   if (direct) return direct;
   const output = asRecordValue(item.toolOutput);
   if (!output) return null;
-  return objectField(output, 'fileMetadata') ?? objectField(output, 'file_metadata');
+  return (
+    objectField(output, 'fileMetadata') ?? objectField(output, 'file_metadata')
+  );
 }
 
 function artifactKind(name: string, hint?: string): WorkspaceArtifactKind {
   const value = `${name} ${hint ?? ''}`.toLowerCase();
-  if (value.includes('patch') || value.endsWith('.diff') || value.endsWith('.patch')) return 'Patches';
-  if (value.includes('report') || value.endsWith('.md') || value.endsWith('.pdf')) return 'Reports';
+  if (
+    value.includes('patch') ||
+    value.endsWith('.diff') ||
+    value.endsWith('.patch')
+  )
+    return 'Patches';
+  if (
+    value.includes('report') ||
+    value.endsWith('.md') ||
+    value.endsWith('.pdf')
+  )
+    return 'Reports';
   if (value.includes('log') || value.endsWith('.log')) return 'Logs';
   if (value.includes('event') || value.includes('artifact_')) return 'Events';
   return 'Files';
 }
 
 function artifactStatus(item: AgentTimelineItem): string {
-  if (item.isError || item.error || item.type === 'artifact_error') return 'error';
+  if (item.isError || item.error || item.type === 'artifact_error')
+    return 'error';
   if (item.type === 'artifact_ready') return 'ready';
   if (item.type === 'artifact_created') return 'created';
   if (item.type === 'observe') return 'observed';
@@ -1666,7 +1886,9 @@ function artifactStatus(item: AgentTimelineItem): string {
 }
 
 function artifactSortTime(item: AgentTimelineItem): number {
-  return item.eventTimeUs ? Math.floor(item.eventTimeUs / 1000) : normalizeTimestamp(item.timestamp);
+  return item.eventTimeUs
+    ? Math.floor(item.eventTimeUs / 1000)
+    : normalizeTimestamp(item.timestamp);
 }
 
 function pathStatus(path: Record<string, unknown>, fallback: string): string {
@@ -1676,7 +1898,9 @@ function pathStatus(path: Record<string, unknown>, fallback: string): string {
   return fallback;
 }
 
-function artifactPathFromRecord(record: Record<string, unknown> | null): string {
+function artifactPathFromRecord(
+  record: Record<string, unknown> | null,
+): string {
   if (!record) return '';
   return (
     readStringField(record, 'path') ??
@@ -1700,9 +1924,13 @@ function artifactSize(record: Record<string, unknown> | null): string {
 }
 
 function diffStatLabel(metadata: Record<string, unknown> | null): string {
-  const diffStat = metadata ? objectField(metadata, 'diffStat') ?? objectField(metadata, 'diff_stat') : null;
+  const diffStat = metadata
+    ? (objectField(metadata, 'diffStat') ?? objectField(metadata, 'diff_stat'))
+    : null;
   if (!diffStat) return '';
-  const files = numberField(diffStat, 'filesChanged') ?? numberField(diffStat, 'files_changed');
+  const files =
+    numberField(diffStat, 'filesChanged') ??
+    numberField(diffStat, 'files_changed');
   const additions = numberField(diffStat, 'additions');
   const deletions = numberField(diffStat, 'deletions');
   const parts = [];
@@ -1712,10 +1940,15 @@ function diffStatLabel(metadata: Record<string, unknown> | null): string {
   return parts.join(' / ');
 }
 
-function pathDiffStatLabel(path: Record<string, unknown>, fallback: string): string {
-  const direct = readStringField(path, 'diff') ?? readStringField(path, 'diffStatLabel');
+function pathDiffStatLabel(
+  path: Record<string, unknown>,
+  fallback: string,
+): string {
+  const direct =
+    readStringField(path, 'diff') ?? readStringField(path, 'diffStatLabel');
   if (direct) return direct;
-  const diffStat = objectField(path, 'diffStat') ?? objectField(path, 'diff_stat');
+  const diffStat =
+    objectField(path, 'diffStat') ?? objectField(path, 'diff_stat');
   if (!diffStat) return fallback;
   const additions = numberField(diffStat, 'additions');
   const deletions = numberField(diffStat, 'deletions');
@@ -1729,10 +1962,13 @@ function timelineArtifactPreview(item: AgentTimelineItem): string {
   if (item.error) return item.error;
   if (item.content) return item.content;
   const display = asRecordValue(item.display);
-  const summary = display ? readStringField(display, 'summary') ?? readStringField(display, 'title') : undefined;
+  const summary = display
+    ? (readStringField(display, 'summary') ?? readStringField(display, 'title'))
+    : undefined;
   if (summary) return summary;
   if (item.payload !== undefined) return compactArtifactValue(item.payload);
-  if (item.toolOutput !== undefined) return compactArtifactValue(item.toolOutput);
+  if (item.toolOutput !== undefined)
+    return compactArtifactValue(item.toolOutput);
   return item.toolName || item.type;
 }
 
@@ -1791,7 +2027,10 @@ function isRecordValue(value: unknown): value is Record<string, unknown> {
   return Boolean(asRecordValue(value));
 }
 
-function waitForAbortableDelay(delayMs: number, signal: AbortSignal): Promise<boolean> {
+function waitForAbortableDelay(
+  delayMs: number,
+  signal: AbortSignal,
+): Promise<boolean> {
   return new Promise((resolve) => {
     if (signal.aborted) {
       resolve(false);
@@ -1827,7 +2066,6 @@ const AUTHENTICATION_PASSTHROUGH_ROUTE_IDS: ReadonlySet<string> = new Set([
   DEVICE_APPROVAL_ROUTE_ID,
   INVITATION_ACCEPTANCE_ROUTE_ID,
 ]);
-
 export function App() {
   const runsInNativeDesktop = detectNativeDesktopShell();
   const { t } = useI18n();
@@ -1838,16 +2076,20 @@ export function App() {
   );
   const [auth, setAuth] = useState<AuthState>(emptyAuthState);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
-  const [invitationSignInRequested, setInvitationSignInRequested] = useState(false);
+  const [invitationSignInRequested, setInvitationSignInRequested] =
+    useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [workspaceCreateOpen, setWorkspaceCreateOpen] = useState(false);
   const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(false);
-  const [newTaskPreferredWorkspaceId, setNewTaskPreferredWorkspaceId] = useState('');
+  const [newTaskPreferredWorkspaceId, setNewTaskPreferredWorkspaceId] =
+    useState('');
   const [newTaskResumeDraft, setNewTaskResumeDraft] =
     useState<NewTaskResumeDraft | null>(null);
-  const [preferredTaskMode, setPreferredTaskMode] = useState<'work' | 'code'>('work');
+  const [preferredTaskMode, setPreferredTaskMode] = useState<'work' | 'code'>(
+    'work',
+  );
   const [newThreadScope, setNewThreadScope] = useState({
     projectId: '',
     workspaceId: '',
@@ -1855,7 +2097,8 @@ export function App() {
   const [newThreadCreating, setNewThreadCreating] = useState(false);
   const [newThreadError, setNewThreadError] = useState<string | null>(null);
   const [settingsWindowOpen, setSettingsWindowOpen] = useState(false);
-  const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('account');
+  const [settingsInitialSection, setSettingsInitialSection] =
+    useState<SettingsSection>('account');
   const [commandQuery, setCommandQuery] = useState('');
   const commandInputRef = useRef<HTMLInputElement>(null);
   const commandPaletteTriggerRef = useRef<HTMLElement | null>(null);
@@ -1870,17 +2113,26 @@ export function App() {
   const [runActionsMenuOpen, setRunActionsMenuOpen] = useState(false);
   const runActionsButtonRef = useRef<HTMLButtonElement>(null);
   const runActionsMenuRef = useRef<HTMLDivElement>(null);
-  const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState<Set<string>>(() => new Set());
+  const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  const [workspaceSso, setWorkspaceSso] = useState<WorkspaceSsoPresentation | null>(null);
+  const [workspaceSso, setWorkspaceSso] =
+    useState<WorkspaceSsoPresentation | null>(null);
   const [dataset, setDataset] = useState<RuntimeDataset>(emptyDataset);
-  const [workspaceLiveActivity, setWorkspaceLiveActivity] = useState<WorkspaceLiveActivity[]>([]);
+  const [workspaceLiveActivity, setWorkspaceLiveActivity] = useState<
+    WorkspaceLiveActivity[]
+  >([]);
   const [connection, setConnection] = useState<ConnectionState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<string>('never');
-  const [localRuntimeStatus, setLocalRuntimeStatus] = useState<LocalRuntimeStatus | null>(null);
-  const [runtimeProjectionRefreshRevision, setRuntimeProjectionRefreshRevision] = useState(0);
+  const [localRuntimeStatus, setLocalRuntimeStatus] =
+    useState<LocalRuntimeStatus | null>(null);
+  const [
+    runtimeProjectionRefreshRevision,
+    setRuntimeProjectionRefreshRevision,
+  ] = useState(0);
   const [conversationModelMutation, setConversationModelMutation] = useState({
     scopeKey: '',
     switching: false,
@@ -1890,42 +2142,67 @@ export function App() {
     baseEventRevision: null as string | null,
   });
   const [selectedSidebarRunId, setSelectedSidebarRunId] = useState('');
-  const [runStateById, setRunStateById] = useState<Record<string, RunControlState>>({});
-  const [runControlState, setRunControlState] = useState<RunControlState>('running');
+  const [runStateById, setRunStateById] = useState<
+    Record<string, RunControlState>
+  >({});
+  const [runControlState, setRunControlState] =
+    useState<RunControlState>('running');
   const [runtimeTarget, setRuntimeTarget] = useState<RuntimeTarget>('local');
   const [runLiveMode, setRunLiveMode] = useState(true);
   const [myWorkRefreshing, setMyWorkRefreshing] = useState(false);
   const [sending, setSending] = useState(false);
-  const [changeSnapshot, setChangeSnapshot] = useState<ChangeSnapshot | null>(null);
+  const [changeSnapshot, setChangeSnapshot] = useState<ChangeSnapshot | null>(
+    null,
+  );
+  const [changeScope, setChangeScope] = useState<RunChangeScope>('run');
+  const [authoritativeRunSummary, setAuthoritativeRunSummary] =
+    useState<RunSummary | null>(null);
   const [changeSnapshotLoading, setChangeSnapshotLoading] = useState(false);
-  const [changeSnapshotError, setChangeSnapshotError] = useState<string | null>(null);
-  const [runInputReferences, setRunInputReferences] = useState<CodeRangeReference[]>([]);
+  const [changeSnapshotError, setChangeSnapshotError] = useState<string | null>(
+    null,
+  );
+  const [runInputReferences, setRunInputReferences] = useState<
+    CodeRangeReference[]
+  >([]);
   // P1-4: pending inline review comments, in-memory per conversation id.
   const [changeCommentsByConversation, setChangeCommentsByConversation] =
     useState<ChangeReviewCommentMap>({});
-  const [runInputDelivery, setRunInputDelivery] = useState<RunInputDelivery | null>(null);
+  const [runInputDelivery, setRunInputDelivery] =
+    useState<RunInputDelivery | null>(null);
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([]);
   const [runInputsLoading, setRunInputsLoading] = useState(false);
   const [runInputsError, setRunInputsError] = useState<string | null>(null);
-  const [promotingRunInputId, setPromotingRunInputId] = useState<string | null>(null);
+  const [promotingRunInputId, setPromotingRunInputId] = useState<string | null>(
+    null,
+  );
   const [sessionRunActionPending, setSessionRunActionPending] =
     useState<SessionRunAction | null>(null);
-  const [sessionPlanApprovalPending, setSessionPlanApprovalPending] = useState(false);
+  const [sessionPlanApprovalPending, setSessionPlanApprovalPending] =
+    useState(false);
   const [artifactActionPending, setArtifactActionPending] = useState<{
     versionId: string;
     action: ArtifactVersionAction;
   } | null>(null);
-  const [activeSection, setActiveSection] = useState<WorkbenchSection>('workspace');
+  const [activeSection, setActiveSection] =
+    useState<WorkbenchSection>('workspace');
   const activeSectionRef = useRef<WorkbenchSection>('workspace');
-  const switchSectionRef = useRef<(section: WorkbenchSection) => void>(() => {});
-  const [sectionBackStack, setSectionBackStack] = useState<WorkbenchSection[]>([]);
-  const [sectionForwardStack, setSectionForwardStack] = useState<WorkbenchSection[]>([]);
+  const switchSectionRef = useRef<(section: WorkbenchSection) => void>(
+    () => {},
+  );
+  const [sectionBackStack, setSectionBackStack] = useState<WorkbenchSection[]>(
+    [],
+  );
+  const [sectionForwardStack, setSectionForwardStack] = useState<
+    WorkbenchSection[]
+  >([]);
   const [reviewTab, setReviewTab] = useState<ReviewTab>('overview');
   const [reviewPanelOpen, setReviewPanelOpen] = useState(true);
   const [sessionCanvasRevealNonce, setSessionCanvasRevealNonce] = useState(0);
   const [selectedTaskId, setSelectedTaskId] = useState('');
   const [sandboxBusy, setSandboxBusy] = useState(false);
-  const [terminal, setTerminal] = useState<TerminalServiceResponse | null>(null);
+  const [terminal, setTerminal] = useState<TerminalServiceResponse | null>(
+    null,
+  );
   const [terminalV2, setTerminalV2] = useState<TerminalSessionV2 | null>(null);
   const [agentConversationSession, setAgentConversationSession] =
     useState<AgentConversationSession | null>(null);
@@ -1934,16 +2211,20 @@ export function App() {
     useState<SessionProjectionLoadState>(emptySessionProjectionState);
   const [sessionDisplayProjection, setSessionDisplayProjection] =
     useState<ConversationSessionProjection | null>(null);
-  const [sessionProjectionRefreshRevision, setSessionProjectionRefreshRevision] = useState(0);
+  const [
+    sessionProjectionRefreshRevision,
+    setSessionProjectionRefreshRevision,
+  ] = useState(0);
   const [conversationTimeline, setConversationTimeline] =
     useState<ConversationTimelineState>(emptyConversationTimeline);
-  const [artifactCanvasState, setArtifactCanvasState] = useState<LiveArtifactCanvasState>(() =>
-    emptyArtifactCanvasState(),
+  const [artifactCanvasState, setArtifactCanvasState] =
+    useState<LiveArtifactCanvasState>(() => emptyArtifactCanvasState());
+  const [mcpAppCanvasState, setMCPAppCanvasState] = useState<MCPAppCanvasState>(
+    () => emptyMCPAppCanvasState(),
   );
-  const [mcpAppCanvasState, setMCPAppCanvasState] = useState<MCPAppCanvasState>(() =>
-    emptyMCPAppCanvasState(),
+  const [agentTaskSignals, setAgentTaskSignals] = useState<AgentTaskSignal[]>(
+    [],
   );
-  const [agentTaskSignals, setAgentTaskSignals] = useState<AgentTaskSignal[]>([]);
   const [
     workspaceCollaborationAuthorityInvalidation,
     setWorkspaceCollaborationAuthorityInvalidation,
@@ -2002,13 +2283,19 @@ export function App() {
   const sidecarRecoveryRefreshGenerationRef = useRef<number | null>(null);
   const conversationModelMutationRequestRef = useRef(0);
   const conversationSummaryMutationRequestRef = useRef(0);
-  const activeRuntimeConversationRequestsRef = useRef(new Map<string, number>());
-  const workspaceConversationRequestGenerationsRef = useRef(new Map<string, number>());
+  const activeRuntimeConversationRequestsRef = useRef(
+    new Map<string, number>(),
+  );
+  const workspaceConversationRequestGenerationsRef = useRef(
+    new Map<string, number>(),
+  );
   const configScopeEpochRef = useRef(0);
   const workspaceExpansionScopeRef = useRef('');
   const localResumeAttemptRef = useRef('');
   const authAttemptRevisionRef = useRef(0);
-  const pendingPasswordChangeRef = useRef<PendingPasswordChangeAttempt | null>(null);
+  const pendingPasswordChangeRef = useRef<PendingPasswordChangeAttempt | null>(
+    null,
+  );
   const deviceAuthAttemptIdRef = useRef(0);
   const deviceAuthAttemptRef = useRef<{
     attemptId: number;
@@ -2034,31 +2321,28 @@ export function App() {
   const terminalRunScopeKeyRef = useRef('');
   const workbenchRef = useRef<HTMLElement>(null);
   const productionRouteRefreshRef = useRef<
-    ((
-      nextConfig: DesktopRuntimeConfig,
-      projects: ProjectSummary[],
-    ) => Promise<boolean>) | null
+    | ((
+        nextConfig: DesktopRuntimeConfig,
+        projects: ProjectSummary[],
+      ) => Promise<boolean>)
+    | null
   >(null);
-  const projectSearchRouteBindingRef = useRef<
-    Readonly<{
-      api: DesktopApiClient;
-      config: DesktopRuntimeConfig;
-      project: ProjectSummary | null;
-      capability: DesktopCapabilityView;
-      capabilityLoading: boolean;
-      onRetryCapability: () => void;
-    }> | null
-  >(null);
-  const projectCronJobsRouteBindingRef = useRef<
-    Readonly<{
-      api: DesktopAutomationApi;
-      config: DesktopRuntimeConfig;
-      project: ProjectSummary | null;
-      runCapability: DesktopCapabilityView;
-      onOpenProjectSettings: () => void;
-      onOpenConnection: () => void;
-    }> | null
-  >(null);
+  const projectSearchRouteBindingRef = useRef<Readonly<{
+    api: DesktopApiClient;
+    config: DesktopRuntimeConfig;
+    project: ProjectSummary | null;
+    capability: DesktopCapabilityView;
+    capabilityLoading: boolean;
+    onRetryCapability: () => void;
+  }> | null>(null);
+  const projectCronJobsRouteBindingRef = useRef<Readonly<{
+    api: DesktopAutomationApi;
+    config: DesktopRuntimeConfig;
+    project: ProjectSummary | null;
+    runCapability: DesktopCapabilityView;
+    onOpenProjectSettings: () => void;
+    onOpenConnection: () => void;
+  }> | null>(null);
   const desktopProductionRouteLocation = useMemo(
     () => createBrowserDesktopHashLocationPort(),
     [],
@@ -2079,62 +2363,56 @@ export function App() {
     () =>
       createDesktopProductionRouteRegistry({
         implementedLoaders: {
-          [DEVICE_APPROVAL_ROUTE_ID]:
-            createDeviceApprovalRouteModuleLoader({
-              createBinding: () => {
-                const currentConfig = configRef.current;
-                return Object.freeze({
-                  client: createDeviceApprovalClient(currentConfig),
-                  accountLabel: authRef.current.user?.email ?? '',
-                  initialCode: readDeviceApprovalCodeFromHash(
-                    desktopProductionRouteLocation.readHash(),
-                  ),
-                  onNavigateBack:
-                    desktopProductionRouteNavigation.clearHash,
-                });
-              },
-            }),
-          [TENANT_CREATION_ROUTE_ID]:
-            createTenantCreationRouteModuleLoader({
-              createBinding: () => {
-                const currentConfig = configRef.current;
-                return Object.freeze({
-                  client: createTenantCreationClient(currentConfig),
-                  onCreated: async (created, signal) => {
-                    setAuth((current) => ({
-                      ...current,
-                      tenants: [
-                        ...upsertCreatedTenant(current.tenants, created),
-                      ],
-                    }));
-                    try {
-                      const authoritativeTenants =
-                        await new DesktopApiClient(
-                          currentConfig,
-                        ).listTenants(signal);
-                      if (signal.aborted) {
-                        return Object.freeze({
-                          catalogRefreshed: false,
-                        });
-                      }
-                      setAuth((current) => ({
-                        ...current,
-                        tenants: authoritativeTenants,
-                      }));
-                      return Object.freeze({
-                        catalogRefreshed: true,
-                      });
-                    } catch {
+          [AGENT_WORKSPACE_ROUTE_ID]: createAgentWorkspaceRouteModuleLoader(),
+          [DEVICE_APPROVAL_ROUTE_ID]: createDeviceApprovalRouteModuleLoader({
+            createBinding: () => {
+              const currentConfig = configRef.current;
+              return Object.freeze({
+                client: createDeviceApprovalClient(currentConfig),
+                accountLabel: authRef.current.user?.email ?? '',
+                initialCode: readDeviceApprovalCodeFromHash(
+                  desktopProductionRouteLocation.readHash(),
+                ),
+                onNavigateBack: desktopProductionRouteNavigation.clearHash,
+              });
+            },
+          }),
+          [TENANT_CREATION_ROUTE_ID]: createTenantCreationRouteModuleLoader({
+            createBinding: () => {
+              const currentConfig = configRef.current;
+              return Object.freeze({
+                client: createTenantCreationClient(currentConfig),
+                onCreated: async (created, signal) => {
+                  setAuth((current) => ({
+                    ...current,
+                    tenants: [...upsertCreatedTenant(current.tenants, created)],
+                  }));
+                  try {
+                    const authoritativeTenants = await new DesktopApiClient(
+                      currentConfig,
+                    ).listTenants(signal);
+                    if (signal.aborted) {
                       return Object.freeze({
                         catalogRefreshed: false,
                       });
                     }
-                  },
-                  onNavigateBack:
-                    desktopProductionRouteNavigation.clearHash,
-                });
-              },
-            }),
+                    setAuth((current) => ({
+                      ...current,
+                      tenants: authoritativeTenants,
+                    }));
+                    return Object.freeze({
+                      catalogRefreshed: true,
+                    });
+                  } catch {
+                    return Object.freeze({
+                      catalogRefreshed: false,
+                    });
+                  }
+                },
+                onNavigateBack: desktopProductionRouteNavigation.clearHash,
+              });
+            },
+          }),
           [INVITATION_ACCEPTANCE_ROUTE_ID]:
             createInvitationAcceptanceRouteModuleLoader({
               createBinding: () => {
@@ -2152,8 +2430,7 @@ export function App() {
                   token: readInvitationTokenFromHash(
                     desktopProductionRouteLocation.readHash(),
                   ),
-                  authenticated: () =>
-                    isIdentityAuthenticated(authRef.current),
+                  authenticated: () => isIdentityAuthenticated(authRef.current),
                   accountEmail: () => authRef.current.user?.email ?? '',
                   onRequireSignIn: () => setInvitationSignInRequested(true),
                   onAccepted: async (invitation, signal) => {
@@ -2182,30 +2459,27 @@ export function App() {
                       // Acceptance remains authoritative even if catalog refresh is stale.
                     }
                   },
-                  onNavigateHome:
-                    desktopProductionRouteNavigation.clearHash,
+                  onNavigateHome: desktopProductionRouteNavigation.clearHash,
                 });
               },
             }),
-          [TENANT_OVERVIEW_ROUTE_ID]:
-            createTenantOverviewRouteModuleLoader({
-              createBinding: (context) =>
-                createTenantOverviewRouteBindingForRuntime(
-                  configRef.current,
-                  context,
-                ),
-            }),
-          [TENANT_ANALYTICS_ROUTE_ID]:
-            createTenantAnalyticsRouteModuleLoader({
-              createBinding: (context) =>
-                createTenantAnalyticsRouteBindingForRuntime(
-                  configRef.current,
-                  context,
-                  authRef.current.tenants.find(
-                    (tenant) => tenant.id === context.tenantId,
-                  )?.plan ?? null,
-                ),
-            }),
+          [TENANT_OVERVIEW_ROUTE_ID]: createTenantOverviewRouteModuleLoader({
+            createBinding: (context) =>
+              createTenantOverviewRouteBindingForRuntime(
+                configRef.current,
+                context,
+              ),
+          }),
+          [TENANT_ANALYTICS_ROUTE_ID]: createTenantAnalyticsRouteModuleLoader({
+            createBinding: (context) =>
+              createTenantAnalyticsRouteBindingForRuntime(
+                configRef.current,
+                context,
+                authRef.current.tenants.find(
+                  (tenant) => tenant.id === context.tenantId,
+                )?.plan ?? null,
+              ),
+          }),
           [TENANT_AGENT_DASHBOARD_ROUTE_ID]:
             createTenantAgentDashboardRouteModuleLoader({
               createBinding: (context) =>
@@ -2222,22 +2496,22 @@ export function App() {
                   context,
                 ),
             }),
-          [TENANT_PROJECTS_ROUTE_ID]:
-            createTenantProjectsRouteModuleLoader({
-              createBinding: (context) =>
-                createTenantProjectsRouteBindingForRuntime(
-                  configRef.current,
-                  context,
-                ),
-            }),
-          [TENANT_WORKSPACES_ROUTE_ID]:
-            createTenantWorkspacesRouteModuleLoader({
+          [TENANT_PROJECTS_ROUTE_ID]: createTenantProjectsRouteModuleLoader({
+            createBinding: (context) =>
+              createTenantProjectsRouteBindingForRuntime(
+                configRef.current,
+                context,
+              ),
+          }),
+          [TENANT_WORKSPACES_ROUTE_ID]: createTenantWorkspacesRouteModuleLoader(
+            {
               createBinding: (context) =>
                 createTenantWorkspacesRouteBindingForRuntime(
                   configRef.current,
                   context,
                 ),
-            }),
+            },
+          ),
           [TENANT_TASKS_ROUTE_ID]: createTenantTasksRouteModuleLoader({
             createBinding: (context) =>
               createTenantTasksRouteBindingForRuntime(
@@ -2252,23 +2526,21 @@ export function App() {
                   configRef.current,
                   context,
                 ),
+            }),
+          [PROJECT_OVERVIEW_ROUTE_ID]: createProjectOverviewRouteModuleLoader({
+            createBinding: (context) =>
+              createProjectOverviewRouteBindingForRuntime(
+                configRef.current,
+                context,
+              ),
           }),
-          [PROJECT_OVERVIEW_ROUTE_ID]:
-            createProjectOverviewRouteModuleLoader({
-              createBinding: (context) =>
-                createProjectOverviewRouteBindingForRuntime(
-                  configRef.current,
-                  context,
-                ),
-            }),
-          [PROJECT_SUPPORT_ROUTE_ID]:
-            createProjectSupportRouteModuleLoader({
-              createBinding: (context) =>
-                createProjectSupportRouteBindingForRuntime(
-                  configRef.current,
-                  context,
-                ),
-            }),
+          [PROJECT_SUPPORT_ROUTE_ID]: createProjectSupportRouteModuleLoader({
+            createBinding: (context) =>
+              createProjectSupportRouteBindingForRuntime(
+                configRef.current,
+                context,
+              ),
+          }),
           [TENANT_POOL_ROUTE_ID]: createRuntimePoolRouteModuleLoader({
             createBinding: (context) =>
               createRuntimePoolRouteBindingForRuntime(
@@ -2276,30 +2548,27 @@ export function App() {
                 context,
               ),
           }),
-          [TENANT_INSTANCES_ROUTE_ID]:
-            createRuntimeInstancesRouteModuleLoader({
-              createBinding: (context) =>
-                createRuntimeInstancesRouteBindingForRuntime(
-                  configRef.current,
-                  context,
-                ),
-            }),
-          [TENANT_CLUSTERS_ROUTE_ID]:
-            createRuntimeClustersRouteModuleLoader({
-              createBinding: (context) =>
-                createRuntimeClustersRouteBindingForRuntime(
-                  configRef.current,
-                  context,
-                ),
-            }),
-          [TENANT_DEPLOY_ROUTE_ID]:
-            createRuntimeDeploymentsRouteModuleLoader({
-              createBinding: (context) =>
-                createRuntimeDeploymentsRouteBindingForRuntime(
-                  configRef.current,
-                  context,
-                ),
-            }),
+          [TENANT_INSTANCES_ROUTE_ID]: createRuntimeInstancesRouteModuleLoader({
+            createBinding: (context) =>
+              createRuntimeInstancesRouteBindingForRuntime(
+                configRef.current,
+                context,
+              ),
+          }),
+          [TENANT_CLUSTERS_ROUTE_ID]: createRuntimeClustersRouteModuleLoader({
+            createBinding: (context) =>
+              createRuntimeClustersRouteBindingForRuntime(
+                configRef.current,
+                context,
+              ),
+          }),
+          [TENANT_DEPLOY_ROUTE_ID]: createRuntimeDeploymentsRouteModuleLoader({
+            createBinding: (context) =>
+              createRuntimeDeploymentsRouteBindingForRuntime(
+                configRef.current,
+                context,
+              ),
+          }),
           [TENANT_INSTANCE_TEMPLATES_ROUTE_ID]:
             createInstanceTemplatesRouteModuleLoader({
               createBinding: (context) =>
@@ -2308,14 +2577,13 @@ export function App() {
                   context,
                 ),
             }),
-          [TENANT_RUNTIMES_ROUTE_ID]:
-            createUnifiedRuntimesRouteModuleLoader({
-              createBinding: (context) =>
-                createUnifiedRuntimesRouteBindingForRuntime(
-                  configRef.current,
-                  context,
-                ),
-            }),
+          [TENANT_RUNTIMES_ROUTE_ID]: createUnifiedRuntimesRouteModuleLoader({
+            createBinding: (context) =>
+              createUnifiedRuntimesRouteBindingForRuntime(
+                configRef.current,
+                context,
+              ),
+          }),
           [PROJECT_SEARCH_ROUTE_ID]: createProjectSearchRouteModuleLoader({
             createBinding: (_context): ProjectSearchRouteBinding => {
               const current = projectSearchRouteBindingRef.current;
@@ -2336,34 +2604,33 @@ export function App() {
               });
             },
           }),
-          [PROJECT_CRON_JOBS_ROUTE_ID]:
-            createProjectCronJobsRouteModuleLoader({
-              createBinding: (_context): ProjectCronJobsRouteBinding => {
-                const current = projectCronJobsRouteBindingRef.current;
-                const currentConfig = current?.config ?? configRef.current;
-                return Object.freeze({
-                  api:
-                    current?.api ??
-                    createDesktopAutomationApi(
-                      new DesktopApiClient(currentConfig),
-                      currentConfig,
-                    ),
-                  scope: Object.freeze({
-                    tenantId: currentConfig.tenantId,
-                    projectId: currentConfig.projectId,
-                  }),
-                  projectName:
-                    current?.project?.name ?? current?.project?.id ?? null,
-                  runCapability:
-                    current?.runCapability ??
-                    desktopCapability(null, 'automation_run'),
-                  onOpenProjectSettings:
-                    current?.onOpenProjectSettings ?? (() => undefined),
-                  onOpenConnection:
-                    current?.onOpenConnection ?? (() => undefined),
-                });
-              },
-            }),
+          [PROJECT_CRON_JOBS_ROUTE_ID]: createProjectCronJobsRouteModuleLoader({
+            createBinding: (_context): ProjectCronJobsRouteBinding => {
+              const current = projectCronJobsRouteBindingRef.current;
+              const currentConfig = current?.config ?? configRef.current;
+              return Object.freeze({
+                api:
+                  current?.api ??
+                  createDesktopAutomationApi(
+                    new DesktopApiClient(currentConfig),
+                    currentConfig,
+                  ),
+                scope: Object.freeze({
+                  tenantId: currentConfig.tenantId,
+                  projectId: currentConfig.projectId,
+                }),
+                projectName:
+                  current?.project?.name ?? current?.project?.id ?? null,
+                runCapability:
+                  current?.runCapability ??
+                  desktopCapability(null, 'automation_run'),
+                onOpenProjectSettings:
+                  current?.onOpenProjectSettings ?? (() => undefined),
+                onOpenConnection:
+                  current?.onOpenConnection ?? (() => undefined),
+              });
+            },
+          }),
         },
       }),
     [],
@@ -2399,30 +2666,36 @@ export function App() {
     [],
   );
 
-  const updateDataset = useCallback((updater: (current: RuntimeDataset) => RuntimeDataset) => {
-    setDataset((current) => {
-      const nextDataset = updater(current);
-      datasetRef.current = nextDataset;
-      return nextDataset;
-    });
-  }, []);
+  const updateDataset = useCallback(
+    (updater: (current: RuntimeDataset) => RuntimeDataset) => {
+      setDataset((current) => {
+        const nextDataset = updater(current);
+        datasetRef.current = nextDataset;
+        return nextDataset;
+      });
+    },
+    [],
+  );
 
-  const commitRuntimeConfig = useCallback((nextConfig: DesktopRuntimeConfig) => {
-    const previousConfig = configRef.current;
-    if (!isSameDesktopProjectRequestScope(previousConfig, nextConfig)) {
-      runtimeRefreshRequestRef.current += 1;
-      activeRuntimeConversationRequestsRef.current = new Map();
-      workspaceConversationRequestGenerationsRef.current = new Map();
-    }
-    if (!isSameDesktopRequestScope(previousConfig, nextConfig)) {
-      configScopeEpochRef.current += 1;
-      updateDataset((current) =>
-        beginDesktopRuntimeScopeTransition(current, previousConfig, nextConfig),
-      );
-    }
-    configRef.current = nextConfig;
-    setConfig(nextConfig);
-  }, [updateDataset]);
+  const commitRuntimeConfig = useCallback(
+    (nextConfig: DesktopRuntimeConfig) => {
+      const previousConfig = configRef.current;
+      if (!isSameDesktopProjectRequestScope(previousConfig, nextConfig)) {
+        runtimeRefreshRequestRef.current += 1;
+        activeRuntimeConversationRequestsRef.current = new Map();
+        workspaceConversationRequestGenerationsRef.current = new Map();
+      }
+      if (!isSameDesktopRequestScope(previousConfig, nextConfig)) {
+        configScopeEpochRef.current += 1;
+        updateDataset((current) =>
+          beginDesktopRuntimeScopeTransition(current, previousConfig, nextConfig),
+        );
+      }
+      configRef.current = nextConfig;
+      setConfig(nextConfig);
+    },
+    [updateDataset],
+  );
 
   const identityAuthenticated = isIdentityAuthenticated(auth);
   authRef.current = auth;
@@ -2452,7 +2725,9 @@ export function App() {
   );
   const sandboxRuntime = useSandboxRuntimeSurface(
     config,
-    showRuntimeConfig && connection === 'ready' && Boolean(config.projectId.trim()),
+    showRuntimeConfig &&
+      connection === 'ready' &&
+      Boolean(config.projectId.trim()),
   );
   const chatComposerApi = useMemo(
     () => (config.workspaceId.trim() ? api : unboundComposerCatalogClient(api)),
@@ -2519,6 +2794,28 @@ export function App() {
     settingsWindowOpen ||
     shortcutsDialogOpen;
   const localRuntimeMode = config.mode === 'local' && runsInNativeDesktop;
+  const activityAuthorityAdapter = useMemo(
+    () => createDesktopAgentAuthorityAdapter(config),
+    [config],
+  );
+  const activityAuthorityScope = useMemo<
+    CloudAgentAuthorityScope | undefined
+  >(() => {
+    if (
+      config.mode !== 'cloud' ||
+      !auth.user?.user_id ||
+      config.tenantId.trim().length === 0 ||
+      config.projectId.trim().length === 0
+    ) {
+      return undefined;
+    }
+    return Object.freeze({
+      authority: 'cloud',
+      principalId: auth.user.user_id,
+      tenantId: config.tenantId,
+      projectId: config.projectId,
+    });
+  }, [auth.user?.user_id, config.mode, config.projectId, config.tenantId]);
   const localRuntimeAuthorityReady = isCurrentLocalRuntimeAuthority(
     config,
     localRuntimeStatus,
@@ -2569,7 +2866,10 @@ export function App() {
     },
     [config, desktopCapabilityState.snapshot],
   );
-  const searchCapability = desktopCapability(desktopCapabilityState.snapshot, 'search');
+  const searchCapability = desktopCapability(
+    desktopCapabilityState.snapshot,
+    'search',
+  );
   const projectSearchCapability = desktopCapability(
     desktopCapabilityState.snapshot,
     PROJECT_SEARCH_ROUTE_ID,
@@ -2614,7 +2914,9 @@ export function App() {
     ],
   );
   const runtimeModelRole: LlmRoutingRole =
-    scopedConversation?.agent_config?.capability_mode === 'code' ? 'coding' : 'default';
+    scopedConversation?.agent_config?.capability_mode === 'code'
+      ? 'coding'
+      : 'default';
   const {
     provider: runtimeProvider,
     modelOptions: runtimeModelOptions,
@@ -2627,11 +2929,13 @@ export function App() {
     identityAuthenticated &&
       showRuntimeConfig &&
       connection === 'ready' &&
-      (config.mode === 'cloud' || (localRuntimeMode && localRuntimeAuthorityReady)),
+      (config.mode === 'cloud' ||
+        (localRuntimeMode && localRuntimeAuthorityReady)),
     runtimeProjectionRefreshRevision,
     runtimeModelRole,
   );
-  const newThreadWorkspaces = dataset.workspacesByProject[config.projectId] ?? [];
+  const newThreadWorkspaces =
+    dataset.workspacesByProject[config.projectId] ?? [];
   const configuredNewThreadWorkspaceId = newThreadWorkspaces.some(
     (workspace) => workspace.id === config.workspaceId,
   )
@@ -2640,7 +2944,9 @@ export function App() {
   const newThreadWorkspaceId =
     newThreadScope.projectId === config.projectId &&
     (!newThreadScope.workspaceId ||
-      newThreadWorkspaces.some((workspace) => workspace.id === newThreadScope.workspaceId))
+      newThreadWorkspaces.some(
+        (workspace) => workspace.id === newThreadScope.workspaceId,
+      ))
       ? newThreadScope.workspaceId
       : configuredNewThreadWorkspaceId;
   const newThreadRuntimeConfig = useMemo(
@@ -2660,22 +2966,28 @@ export function App() {
     identityAuthenticated && showRuntimeConfig && connection === 'ready',
   );
   const canManageWorkspacePolicy = useMemo(() => {
-    if (auth.user?.roles.some((role) => role === 'admin' || role === 'owner')) return true;
+    if (auth.user?.roles.some((role) => role === 'admin' || role === 'owner'))
+      return true;
     const membership = workspaceAgentPolicy.members.find(
       (member) =>
-        member.workspace_id === newThreadWorkspaceId && member.user_id === auth.user?.user_id,
+        member.workspace_id === newThreadWorkspaceId &&
+        member.user_id === auth.user?.user_id,
     );
     return membership?.role === 'manager' || membership?.role === 'owner';
   }, [auth.user, newThreadWorkspaceId, workspaceAgentPolicy.members]);
 
   const syncLocalRuntimeConfig = useCallback(
     async (nextConfig: DesktopRuntimeConfig): Promise<DesktopRuntimeConfig> => {
-      if (!runsInNativeDesktop || nextConfig.mode !== 'local') return nextConfig;
+      if (!runsInNativeDesktop || nextConfig.mode !== 'local')
+        return nextConfig;
       const invoke = window.__MEMSTACK_DESKTOP__?.core?.invoke;
       if (!invoke) return nextConfig;
-      const status = await invoke<LocalRuntimeStatus>('local_runtime_configure', {
-        config: localRuntimeSidecarConfig(nextConfig),
-      });
+      const status = await invoke<LocalRuntimeStatus>(
+        'local_runtime_configure',
+        {
+          config: localRuntimeSidecarConfig(nextConfig),
+        },
+      );
       setLocalRuntimeStatus(status);
       return mergeLocalRuntimeStatus(nextConfig, status);
     },
@@ -2759,7 +3071,11 @@ export function App() {
         controller.signal,
       )
       .then((payload) => {
-        if (controller.signal.aborted || sessionProjectionRequestRef.current !== requestId) return;
+        if (
+          controller.signal.aborted ||
+          sessionProjectionRequestRef.current !== requestId
+        )
+          return;
         // A schema_version 1 snapshot_revision is the canonical digest of the payload,
         // so an unchanged revision means the already-decoded projection still holds;
         // skip the canonicalize + SHA-256 + validate pass entirely in that case.
@@ -2808,7 +3124,11 @@ export function App() {
         );
       })
       .catch((caught) => {
-        if (controller.signal.aborted || sessionProjectionRequestRef.current !== requestId) return;
+        if (
+          controller.signal.aborted ||
+          sessionProjectionRequestRef.current !== requestId
+        )
+          return;
         setSessionProjectionState({
           status: 'error',
           conversationId: scopedConversationId,
@@ -2836,7 +3156,8 @@ export function App() {
       ? sessionDisplayProjection
       : null;
   const sessionTaskListPlanRecovery = useMemo(() => {
-    if (sessionProjection?.planAuthority.kind !== 'agent_task_list') return null;
+    if (sessionProjection?.planAuthority.kind !== 'agent_task_list')
+      return null;
     const tasks = normalizeSessionTaskListPlan(
       sessionProjection.tasks,
       sessionProjection.conversation.id,
@@ -2873,27 +3194,39 @@ export function App() {
   }, [sessionProjection]);
   const respondableHitlRequestIds = useMemo(
     () =>
-      respondableHitlRequestsForProjection(sessionProjection).map((request) => request.id),
+      respondableHitlRequestsForProjection(sessionProjection).map(
+        (request) => request.id,
+      ),
     [sessionProjection],
   );
   const respondableHitlRequestIdSet = useMemo(
     () => new Set(respondableHitlRequestIds),
     [respondableHitlRequestIds],
   );
-  const permissionPresetScopeKey = permissionPresetScope(config.workspaceId, scopedConversationId);
-  const [permissionPreset, setPermissionPreset] = useState<PermissionPreset>('default');
-  const [fullAccessWarningAcknowledged, setFullAccessWarningAcknowledged] = useState(false);
+  const permissionPresetScopeKey = permissionPresetScope(
+    config.workspaceId,
+    scopedConversationId,
+  );
+  const [permissionPreset, setPermissionPreset] =
+    useState<PermissionPreset>('default');
+  const [fullAccessWarningAcknowledged, setFullAccessWarningAcknowledged] =
+    useState(false);
   useEffect(() => {
     setPermissionPreset(
-      permissionPresetScopeKey ? readPermissionPreset(permissionPresetScopeKey) : 'default',
+      permissionPresetScopeKey
+        ? readPermissionPreset(permissionPresetScopeKey)
+        : 'default',
     );
   }, [permissionPresetScopeKey]);
   useEffect(() => {
-    setFullAccessWarningAcknowledged(readFullAccessWarningAcknowledged(config.workspaceId));
+    setFullAccessWarningAcknowledged(
+      readFullAccessWarningAcknowledged(config.workspaceId),
+    );
   }, [config.workspaceId]);
   const handlePermissionPresetChange = useCallback(
     (preset: PermissionPreset) => {
-      if (permissionPresetScopeKey) writePermissionPreset(permissionPresetScopeKey, preset);
+      if (permissionPresetScopeKey)
+        writePermissionPreset(permissionPresetScopeKey, preset);
       setPermissionPreset(preset);
     },
     [permissionPresetScopeKey],
@@ -2906,7 +3239,8 @@ export function App() {
   const sessionTasks = useMemo<WorkspaceTask[]>(
     () =>
       displaySessionProjection?.tasks.map((task) => {
-        const content = typeof task.content === 'string' ? task.content : undefined;
+        const content =
+          typeof task.content === 'string' ? task.content : undefined;
         return {
           id: task.id,
           conversation_id: displaySessionProjection.conversation.id,
@@ -2914,11 +3248,14 @@ export function App() {
           description: content,
           status: typeof task.status === 'string' ? task.status : undefined,
           priority:
-            typeof task.priority === 'string' || typeof task.priority === 'number'
+            typeof task.priority === 'string' ||
+            typeof task.priority === 'number'
               ? task.priority
               : undefined,
-          created_at: typeof task.created_at === 'string' ? task.created_at : undefined,
-          updated_at: typeof task.updated_at === 'string' ? task.updated_at : undefined,
+          created_at:
+            typeof task.created_at === 'string' ? task.created_at : undefined,
+          updated_at:
+            typeof task.updated_at === 'string' ? task.updated_at : undefined,
           plan_version_id: displaySessionProjection.currentPlan?.id,
           plan_version: displaySessionProjection.currentPlan?.version,
           plan_status: displaySessionProjection.currentPlan?.status,
@@ -2936,13 +3273,18 @@ export function App() {
     return {
       conversation_id: displaySessionProjection.conversation.id,
       project_id: displaySessionProjection.conversation.project_id,
-      workspace_id: displaySessionProjection.conversation.workspace_id ?? undefined,
+      workspace_id:
+        displaySessionProjection.conversation.workspace_id ?? undefined,
       plan: displaySessionProjection.currentPlan
         ? { ...displaySessionProjection.currentPlan }
         : null,
-      plan_history: displaySessionProjection.planHistory.map((plan) => ({ ...plan })),
+      plan_history: displaySessionProjection.planHistory.map((plan) => ({
+        ...plan,
+      })),
       run_health: displaySessionProjection.runHistory,
-      pending_hitl: displaySessionProjection.pendingHitl.map((request) => ({ ...request })),
+      pending_hitl: displaySessionProjection.pendingHitl.map((request) => ({
+        ...request,
+      })),
       delivery: displaySessionProjection.artifactDeliveries,
       artifact_index: displaySessionProjection.artifactVersions,
     };
@@ -2981,7 +3323,8 @@ export function App() {
               {
                 conversationId: scopedConversation.id,
                 workspaceId:
-                  scopedConversation.workspace_id ?? (config.workspaceId.trim() || null),
+                  scopedConversation.workspace_id ??
+                  (config.workspaceId.trim() || null),
               },
               false,
             ),
@@ -2998,13 +3341,22 @@ export function App() {
             workspaceEventInputs,
             sessionDataset.plan,
           ),
-    [conversationTimeline.items, scopedConversation, sessionDataset.plan, workspaceEventInputs],
+    [
+      conversationTimeline.items,
+      scopedConversation,
+      sessionDataset.plan,
+      workspaceEventInputs,
+    ],
   );
-  const chatWorkflowCounts = useMemo<Partial<Record<ChatWorkflowTarget, number | string>>>(
+  const chatWorkflowCounts = useMemo<
+    Partial<Record<ChatWorkflowTarget, number | string>>
+  >(
     () => ({
       plan: sessionDataset.plan ? 'ready' : 'idle',
       background: workspaceEventInputs.length,
-      artifacts: displaySessionProjection?.artifactVersions.length ?? workspaceArtifacts.length,
+      artifacts:
+        displaySessionProjection?.artifactVersions.length ??
+        workspaceArtifacts.length,
     }),
     [
       sessionDataset.plan,
@@ -3021,12 +3373,16 @@ export function App() {
         content: patch.content ?? existing?.content ?? '',
         status: patch.status ?? existing?.status ?? 'queued',
         detail: patch.detail ?? existing?.detail ?? '',
-        createdAt: patch.createdAt ?? existing?.createdAt ?? new Date().toISOString(),
+        createdAt:
+          patch.createdAt ?? existing?.createdAt ?? new Date().toISOString(),
         conversationId: patch.conversationId ?? existing?.conversationId,
         messageId: patch.messageId ?? existing?.messageId,
         eventType: patch.eventType ?? existing?.eventType,
       };
-      return [...current.filter((signal) => signal.id !== patch.id), next].slice(-8);
+      return [
+        ...current.filter((signal) => signal.id !== patch.id),
+        next,
+      ].slice(-8);
     });
   }, []);
 
@@ -3052,7 +3408,9 @@ export function App() {
       if (
         !shouldClearConversationSelectionAfterRefresh(
           selectionAtRequest,
-          agentConversationSelectionIdentity(agentConversationSessionRef.current),
+          agentConversationSelectionIdentity(
+            agentConversationSessionRef.current,
+          ),
           refreshedScopeKey,
           conversations,
         )
@@ -3097,16 +3455,22 @@ export function App() {
       });
       try {
         const client = new DesktopApiClient(requestConfig);
-        const response = await client.getConversationMessages(conversation.id, projectId, {
-          limit: 50,
-        });
+        const response = await client.getConversationMessages(
+          conversation.id,
+          projectId,
+          {
+            limit: 50,
+          },
+        );
         if (!requestIsCurrent()) return;
         const responseItems = response.timeline ?? [];
-        const restoredArtifactCanvas = replayArtifactCanvasEvents(responseItems);
+        const restoredArtifactCanvas =
+          replayArtifactCanvasEvents(responseItems);
         artifactCanvasStateRef.current = restoredArtifactCanvas;
         setArtifactCanvasState(restoredArtifactCanvas);
         setConversationTimeline((current) => {
-          if (!requestIsCurrent() || current.conversationId !== conversation.id) return current;
+          if (!requestIsCurrent() || current.conversationId !== conversation.id)
+            return current;
           const items =
             current.conversationId === conversation.id
               ? mergeTimelineItems(responseItems, current.items)
@@ -3125,11 +3489,18 @@ export function App() {
             firstCursor:
               typeof response.first_time_us === 'number' &&
               typeof response.first_counter === 'number'
-                ? { timeUs: response.first_time_us, counter: response.first_counter }
+                ? {
+                    timeUs: response.first_time_us,
+                    counter: response.first_counter,
+                  }
                 : timelineCursorFromFirst(items),
             lastCursor:
-              typeof response.last_time_us === 'number' && typeof response.last_counter === 'number'
-                ? { timeUs: response.last_time_us, counter: response.last_counter }
+              typeof response.last_time_us === 'number' &&
+              typeof response.last_counter === 'number'
+                ? {
+                    timeUs: response.last_time_us,
+                    counter: response.last_counter,
+                  }
                 : timelineCursorFromLast(items),
           };
         });
@@ -3170,14 +3541,22 @@ export function App() {
         : current,
     );
     try {
-      const response = await api.getConversationMessages(conversation.id, config.projectId, {
-        limit: 50,
-        beforeTimeUs: cursor.timeUs,
-        beforeCounter: cursor.counter,
-      });
+      const response = await api.getConversationMessages(
+        conversation.id,
+        config.projectId,
+        {
+          limit: 50,
+          beforeTimeUs: cursor.timeUs,
+          beforeCounter: cursor.counter,
+        },
+      );
       setConversationTimeline((current) => {
-        if (!requestIsCurrent() || current.conversationId !== conversation.id) return current;
-        const items = mergeTimelineItems(response.timeline ?? [], current.items);
+        if (!requestIsCurrent() || current.conversationId !== conversation.id)
+          return current;
+        const items = mergeTimelineItems(
+          response.timeline ?? [],
+          current.items,
+        );
         const pageResolution = resolveEarlierTimelinePage({
           requestedCursor: cursor,
           previousItemCount: current.items.length,
@@ -3186,14 +3565,20 @@ export function App() {
           responseHasMore: Boolean(response.has_more),
         });
         if (pageResolution.kind === 'stalled') {
-          return failEarlierTimelinePage(current, t('session.earlierHistoryNoProgress'));
+          return failEarlierTimelinePage(
+            current,
+            t('session.earlierHistoryNoProgress'),
+          );
         }
         return {
           ...current,
           items,
-          approvalRequests: response.approval_requests ?? current.approvalRequests,
-          artifactVersions: response.artifact_versions ?? current.artifactVersions,
-          artifactDeliveries: response.artifact_deliveries ?? current.artifactDeliveries,
+          approvalRequests:
+            response.approval_requests ?? current.approvalRequests,
+          artifactVersions:
+            response.artifact_versions ?? current.artifactVersions,
+          artifactDeliveries:
+            response.artifact_deliveries ?? current.artifactDeliveries,
           toolInvocations: response.tool_invocations ?? current.toolInvocations,
           loadingEarlier: false,
           error: null,
@@ -3313,7 +3698,12 @@ export function App() {
         })
         .catch(() => undefined);
     }
-  }, [permissionPreset, respondToHitl, scopedConversationId, sessionProjection]);
+  }, [
+    permissionPreset,
+    respondToHitl,
+    scopedConversationId,
+    sessionProjection,
+  ]);
 
   useEffect(() => {
     const previous = sessionSocketAuthorityRef.current;
@@ -3363,12 +3753,18 @@ export function App() {
       document.removeEventListener('visibilitychange', recoverVisibleAuthority);
       if (refreshFrame !== null) window.cancelAnimationFrame(refreshFrame);
     };
-  }, [invalidateSessionAuthority, loadConversationTimeline, scopedConversationId]);
+  }, [
+    invalidateSessionAuthority,
+    loadConversationTimeline,
+    scopedConversationId,
+  ]);
 
   const openCommandPalette = useCallback((trigger?: HTMLElement | null) => {
     commandPaletteTriggerRef.current =
       trigger ??
-      (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+      (document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null);
     setRunActionsMenuOpen(false);
     setSessionMenuOpen(false);
     setShortcutsDialogOpen(false);
@@ -3396,7 +3792,9 @@ export function App() {
       return loginRestoreTargetRef.current;
     }
     return (
-      document.querySelector<HTMLElement>('[aria-label="Open command palette"]') ??
+      document.querySelector<HTMLElement>(
+        '[aria-label="Open command palette"]',
+      ) ??
       document.querySelector<HTMLElement>('[aria-label="Sign in to agi-stack"]')
     );
   }, []);
@@ -3416,7 +3814,9 @@ export function App() {
       }
       if ((event.metaKey || event.ctrlKey) && key === 'k') {
         if (activeSectionRef.current === 'board') {
-          const search = document.querySelector<HTMLInputElement>('input[name="my-work-search"]');
+          const search = document.querySelector<HTMLInputElement>(
+            'input[name="my-work-search"]',
+          );
           if (search) {
             event.preventDefault();
             search.focus();
@@ -3534,7 +3934,10 @@ export function App() {
   }, [commandPaletteOpen]);
 
   useEffect(() => {
-    const events = socketEventsSince(socket.events, agentTaskEventsHeadRef.current);
+    const events = socketEventsSince(
+      socket.events,
+      agentTaskEventsHeadRef.current,
+    );
     agentTaskEventsHeadRef.current = socket.events[0] ?? null;
     for (const event of events) {
       const update = agentTaskUpdateFromSocketEvent(event);
@@ -3602,7 +4005,10 @@ export function App() {
       let nextMCPAppCanvas = mcpAppCanvasStateRef.current;
       let openedMCPApp = false;
       for (const event of timelineEvents) {
-        const result = applyArtifactCanvasStreamEvent(nextArtifactCanvas, event);
+        const result = applyArtifactCanvasStreamEvent(
+          nextArtifactCanvas,
+          event,
+        );
         if (result.handled) {
           nextArtifactCanvas = result.state;
           if (result.action) lastArtifactAction = result.action;
@@ -3712,20 +4118,30 @@ export function App() {
       setWorkspaceLiveActivity([]);
       return;
     }
-    const events = socketEventsSince(socket.events, workspaceActivityEventsHeadRef.current);
+    const events = socketEventsSince(
+      socket.events,
+      workspaceActivityEventsHeadRef.current,
+    );
     workspaceActivityEventsHeadRef.current = socket.events[0] ?? null;
     if (!workspaceId || !events.length) return;
     setWorkspaceLiveActivity((current) => {
       let activities = current;
       for (const event of events) {
-        activities = applyWorkspaceActivityStreamEvent(activities, event, workspaceId).activities;
+        activities = applyWorkspaceActivityStreamEvent(
+          activities,
+          event,
+          workspaceId,
+        ).activities;
       }
       return activities;
     });
   }, [config.workspaceId, socket.events]);
 
   useEffect(() => {
-    const events = socketEventsSince(socket.events, workspaceRosterEventsHeadRef.current);
+    const events = socketEventsSince(
+      socket.events,
+      workspaceRosterEventsHeadRef.current,
+    );
     workspaceRosterEventsHeadRef.current = socket.events[0] ?? null;
     const workspaceId = config.workspaceId.trim();
     if (!workspaceId || !events.length) return;
@@ -3733,18 +4149,27 @@ export function App() {
       let members = current.workspaceMembers;
       let agents = current.workspaceAgents;
       for (const event of events) {
-        const result = applyWorkspaceRosterStreamEvent(members, agents, event, workspaceId);
+        const result = applyWorkspaceRosterStreamEvent(
+          members,
+          agents,
+          event,
+          workspaceId,
+        );
         members = result.members;
         agents = result.agents;
       }
-      return members === current.workspaceMembers && agents === current.workspaceAgents
+      return members === current.workspaceMembers &&
+        agents === current.workspaceAgents
         ? current
         : { ...current, workspaceMembers: members, workspaceAgents: agents };
     });
   }, [config.workspaceId, socket.events, updateDataset]);
 
   useEffect(() => {
-    const events = socketEventsSince(socket.events, workspaceTaskEventsHeadRef.current);
+    const events = socketEventsSince(
+      socket.events,
+      workspaceTaskEventsHeadRef.current,
+    );
     workspaceTaskEventsHeadRef.current = socket.events[0] ?? null;
     const workspaceId = config.workspaceId.trim();
     if (!workspaceId || !events.length) return;
@@ -3765,21 +4190,28 @@ export function App() {
     updateDataset((current) => {
       let messages = current.messages;
       for (const event of events) {
-        messages = applyWorkspaceMessageStreamEvent(messages, event, workspaceId).messages;
+        messages = applyWorkspaceMessageStreamEvent(
+          messages,
+          event,
+          workspaceId,
+        ).messages;
       }
       return messages === current.messages ? current : { ...current, messages };
     });
   }, [config.workspaceId, socket.events, updateDataset]);
 
   useEffect(() => {
-    const events = socketEventsSince(socket.events, conversationMetadataEventsHeadRef.current);
+    const events = socketEventsSince(
+      socket.events,
+      conversationMetadataEventsHeadRef.current,
+    );
     conversationMetadataEventsHeadRef.current = socket.events[0] ?? null;
     for (const event of events) {
       const titleEvent = readConversationTitleStreamEvent(event);
       const update = titleEvent.update;
       if (!update) continue;
-      setAgentConversationSession((current) =>
-        applyConversationTitleUpdate(current, {}, update).session,
+      setAgentConversationSession(
+        (current) => applyConversationTitleUpdate(current, {}, update).session,
       );
       updateDataset((current) => {
         const conversationsByWorkspace = applyConversationTitleUpdate(
@@ -3795,31 +4227,48 @@ export function App() {
   }, [socket.events, updateDataset]);
 
   useEffect(() => {
-    const events = socketEventsSince(socket.events, authoritativeRunEventsHeadRef.current);
+    const events = socketEventsSince(
+      socket.events,
+      authoritativeRunEventsHeadRef.current,
+    );
     authoritativeRunEventsHeadRef.current = socket.events[0] ?? null;
     if (!authoritativeRunsFromSocketEvents(events).length) return;
     const runs = authoritativeRunsFromSocketEvents(socket.events);
     if (!runs.length) return;
     setAgentConversationSession((current) => {
       if (!current) return current;
-      const run = runs.find((candidate) => candidate.conversation_id === current.conversation.id);
+      const run = runs.find(
+        (candidate) => candidate.conversation_id === current.conversation.id,
+      );
       if (!run) return current;
-      const conversation = conversationWithAuthoritativeRun(current.conversation, run);
-      return conversation === current.conversation ? current : { ...current, conversation };
+      const conversation = conversationWithAuthoritativeRun(
+        current.conversation,
+        run,
+      );
+      return conversation === current.conversation
+        ? current
+        : { ...current, conversation };
     });
     setDataset((current) => {
       let changed = false;
       const conversationsByWorkspace = Object.fromEntries(
-        Object.entries(current.conversationsByWorkspace).map(([workspaceId, conversations]) => [
-          workspaceId,
-          conversations.map((conversation) => {
-            const run = runs.find((candidate) => candidate.conversation_id === conversation.id);
-            if (!run) return conversation;
-            const updated = conversationWithAuthoritativeRun(conversation, run);
-            changed ||= updated !== conversation;
-            return updated;
-          }),
-        ]),
+        Object.entries(current.conversationsByWorkspace).map(
+          ([workspaceId, conversations]) => [
+            workspaceId,
+            conversations.map((conversation) => {
+              const run = runs.find(
+                (candidate) => candidate.conversation_id === conversation.id,
+              );
+              if (!run) return conversation;
+              const updated = conversationWithAuthoritativeRun(
+                conversation,
+                run,
+              );
+              changed ||= updated !== conversation;
+              return updated;
+            }),
+          ],
+        ),
       );
       return changed ? { ...current, conversationsByWorkspace } : current;
     });
@@ -3841,22 +4290,22 @@ export function App() {
     ? 'Sign in or use a manual API key before connecting.'
     : !showRuntimeConfig
       ? 'Select an account and project before connecting.'
-    : !config.apiBaseUrl.trim()
-      ? 'Local runtime URL is not ready yet.'
-    : !config.apiKey.trim()
-      ? 'An authenticated session is required before connecting.'
-      : !config.tenantId.trim() || !config.projectId.trim()
-        ? 'Select an account and project before connecting.'
-        : null;
+      : !config.apiBaseUrl.trim()
+        ? 'Local runtime URL is not ready yet.'
+        : !config.apiKey.trim()
+          ? 'An authenticated session is required before connecting.'
+          : !config.tenantId.trim() || !config.projectId.trim()
+            ? 'Select an account and project before connecting.'
+            : null;
   const workspaceDisabledReason = !identityAuthenticated
     ? 'Sign in or use a manual API key before loading workspaces.'
     : !showRuntimeConfig
       ? 'Select an account and project before loading workspaces.'
-    : !config.apiKey.trim()
-      ? 'An authenticated session is required before loading workspaces.'
-      : !config.tenantId.trim() || !config.projectId.trim()
-        ? 'Select an account and project before loading workspaces.'
-        : null;
+      : !config.apiKey.trim()
+        ? 'An authenticated session is required before loading workspaces.'
+        : !config.tenantId.trim() || !config.projectId.trim()
+          ? 'Select an account and project before loading workspaces.'
+          : null;
   const newTaskWorkspaces = dataset.workspacesByProject[config.projectId] ?? [];
   const newTaskWorkspaceAuthority = resolveNewTaskWorkspaceAuthority(
     dataset.nodeState.projects[config.projectId],
@@ -3882,13 +4331,13 @@ export function App() {
     ? 'Sign in or enter an API key before sending messages.'
     : !showRuntimeConfig
       ? 'Select an account and project before chatting.'
-    : !config.apiKey.trim()
-      ? 'An authenticated session is required before sending messages.'
-      : !config.tenantId.trim() || !config.projectId.trim()
-        ? 'Select an account and project before chatting.'
-      : connection !== 'ready'
-        ? t('task.liveConnectionRequired')
-        : null;
+      : !config.apiKey.trim()
+        ? 'An authenticated session is required before sending messages.'
+        : !config.tenantId.trim() || !config.projectId.trim()
+          ? 'Select an account and project before chatting.'
+          : connection !== 'ready'
+            ? t('task.liveConnectionRequired')
+            : null;
 
   useEffect(() => {
     if (!activeDataset.tasks.length) {
@@ -3948,28 +4397,37 @@ export function App() {
   };
 
   const refreshRuntime = useCallback(
-    async (nextConfig: DesktopRuntimeConfig = config, projectOverride?: ProjectSummary[]) => {
+    async (
+      nextConfig: DesktopRuntimeConfig = config,
+      projectOverride?: ProjectSummary[],
+    ) => {
       const refreshRequestGeneration = runtimeRefreshRequestRef.current + 1;
       runtimeRefreshRequestRef.current = refreshRequestGeneration;
       const expectedContextRevision = contextRevisionRef.current;
       const expectedScopeEpoch = configScopeEpochRef.current;
       const contextIsCurrent = () =>
-        isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) &&
+        isCurrentContextRevision(
+          expectedContextRevision,
+          contextRevisionRef.current,
+        ) &&
         expectedScopeEpoch === configScopeEpochRef.current &&
         refreshRequestGeneration === runtimeRefreshRequestRef.current;
       setConnection('loading');
       setError(null);
       let refreshProjectId = nextConfig.projectId.trim();
-      let conversationRequestGenerations = supersedeWorkspaceConversationRequests(
-        workspaceConversationRequestGenerationsRef.current,
-        activeRuntimeConversationRequestsRef.current,
-      );
-      activeRuntimeConversationRequestsRef.current = conversationRequestGenerations;
+      let conversationRequestGenerations =
+        supersedeWorkspaceConversationRequests(
+          workspaceConversationRequestGenerationsRef.current,
+          activeRuntimeConversationRequestsRef.current,
+        );
+      activeRuntimeConversationRequestsRef.current =
+        conversationRequestGenerations;
       try {
         const runtimeConfig = await syncLocalRuntimeConfig(nextConfig);
         if (!contextIsCurrent()) return false;
         const availableProjects =
-          projectOverride ?? resolveSidebarProjects(runtimeConfig, auth.status, auth.projects);
+          projectOverride ??
+          resolveSidebarProjects(runtimeConfig, auth.status, auth.projects);
         const requestedTenantId = runtimeConfig.tenantId.trim();
         const requestedProjectId = runtimeConfig.projectId.trim();
         if (
@@ -3989,7 +4447,8 @@ export function App() {
         const resolvedProjectId = resolvedProject.id;
         refreshProjectId = resolvedProjectId;
         const expansionScope = `${resolvedProject.tenant_id}\u0000${resolvedProjectId}`;
-        const expandSelectedWorkspace = workspaceExpansionScopeRef.current !== expansionScope;
+        const expandSelectedWorkspace =
+          workspaceExpansionScopeRef.current !== expansionScope;
         const projects = [resolvedProject];
         const loadingNodeState: RuntimeNodeLoadState = {
           projects: Object.fromEntries(
@@ -4004,7 +4463,10 @@ export function App() {
         updateDataset((current) => ({
           ...current,
           nodeState: {
-            projects: { ...current.nodeState.projects, ...loadingNodeState.projects },
+            projects: {
+              ...current.nodeState.projects,
+              ...loadingNodeState.projects,
+            },
             workspaces: current.nodeState.workspaces,
           },
         }));
@@ -4019,10 +4481,17 @@ export function App() {
               workspaceId: '',
             });
             try {
-              const workspaces = await client.listWorkspacesForProject(project.id, projectTenantId);
+              const workspaces = await client.listWorkspacesForProject(
+                project.id,
+                projectTenantId,
+              );
               return { project, workspaces, error: null };
             } catch (caught) {
-              return { project, workspaces: [] as WorkspaceSummary[], error: formatError(caught) };
+              return {
+                project,
+                workspaces: [] as WorkspaceSummary[],
+                error: formatError(caught),
+              };
             }
           }),
         );
@@ -4035,7 +4504,10 @@ export function App() {
         }
 
         const workspacesByProject = Object.fromEntries(
-          workspaceResults.map((result) => [result.project.id, result.workspaces]),
+          workspaceResults.map((result) => [
+            result.project.id,
+            result.workspaces,
+          ]),
         );
         const projectNodeState = Object.fromEntries(
           workspaceResults.map((result) => [
@@ -4043,7 +4515,9 @@ export function App() {
             { loading: false, error: result.error },
           ]),
         );
-        const workspaces = workspaceResults.flatMap((result) => result.workspaces);
+        const workspaces = workspaceResults.flatMap(
+          (result) => result.workspaces,
+        );
         const projectWorkspaces = workspacesByProject[resolvedProjectId] ?? [];
         const workspaceId = resolveRuntimeWorkspaceId(
           runtimeConfig.workspaceId,
@@ -4063,8 +4537,11 @@ export function App() {
           nextExpandedWorkspaceIds,
         );
         const conversationLoadTargetIds = new Set(conversationLoadTargets);
-        const supersededRefreshWorkspaceIds = [...conversationRequestGenerations.keys()].filter(
-          (targetWorkspaceId) => !conversationLoadTargetIds.has(targetWorkspaceId),
+        const supersededRefreshWorkspaceIds = [
+          ...conversationRequestGenerations.keys(),
+        ].filter(
+          (targetWorkspaceId) =>
+            !conversationLoadTargetIds.has(targetWorkspaceId),
         );
         conversationRequestGenerations = new Map(
           conversationLoadTargets.map((targetWorkspaceId) => [
@@ -4075,7 +4552,8 @@ export function App() {
             ),
           ]),
         );
-        activeRuntimeConversationRequestsRef.current = conversationRequestGenerations;
+        activeRuntimeConversationRequestsRef.current =
+          conversationRequestGenerations;
         const resolvedConfig = {
           ...runtimeConfig,
           tenantId: resolvedProject.tenant_id,
@@ -4087,14 +4565,23 @@ export function App() {
         updateDataset((current) => {
           const workspaceNodeState = { ...current.nodeState.workspaces };
           for (const targetWorkspaceId of supersededRefreshWorkspaceIds) {
-            if ((current.conversationsByWorkspace[targetWorkspaceId] ?? []).length > 0) {
-              workspaceNodeState[targetWorkspaceId] = { loading: false, error: null };
+            if (
+              (current.conversationsByWorkspace[targetWorkspaceId] ?? [])
+                .length > 0
+            ) {
+              workspaceNodeState[targetWorkspaceId] = {
+                loading: false,
+                error: null,
+              };
             } else {
               delete workspaceNodeState[targetWorkspaceId];
             }
           }
           for (const targetWorkspaceId of conversationLoadTargets) {
-            workspaceNodeState[targetWorkspaceId] = { loading: true, error: null };
+            workspaceNodeState[targetWorkspaceId] = {
+              loading: true,
+              error: null,
+            };
           }
           return {
             ...current,
@@ -4115,8 +4602,10 @@ export function App() {
         );
         const conversationResultsPromise = Promise.all(
           conversationLoadTargets.map(async (targetWorkspaceId) => {
-            const requestGeneration = conversationRequestGenerations.get(targetWorkspaceId);
-            const isUnboundGroup = targetWorkspaceId === UNBOUND_CONVERSATIONS_KEY;
+            const requestGeneration =
+              conversationRequestGenerations.get(targetWorkspaceId);
+            const isUnboundGroup =
+              targetWorkspaceId === UNBOUND_CONVERSATIONS_KEY;
             const client = new DesktopApiClient({
               ...resolvedConfig,
               workspaceId: isUnboundGroup ? '' : targetWorkspaceId,
@@ -4161,10 +4650,14 @@ export function App() {
             : Promise.resolve(null),
           workspaceId
             ? resolveWorkspaceAuthority(scopedClient.listWorkspaceMembers())
-            : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceMemberSummary>()),
+            : Promise.resolve(
+                unavailableWorkspaceAuthority<WorkspaceMemberSummary>(),
+              ),
           workspaceId
             ? resolveWorkspaceAuthority(scopedClient.listWorkspaceAgents())
-            : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceAgentBinding>()),
+            : Promise.resolve(
+                unavailableWorkspaceAuthority<WorkspaceAgentBinding>(),
+              ),
           resolvedProjectId
             ? scopedClient
                 .listMyWork(resolvedProjectId)
@@ -4196,18 +4689,23 @@ export function App() {
         updateDataset((current) => {
           const conversationsByWorkspace = {
             ...Object.fromEntries(
-              Object.entries(current.conversationsByWorkspace).filter(([targetWorkspaceId]) =>
-                validConversationGroupIds.has(targetWorkspaceId),
+              Object.entries(current.conversationsByWorkspace).filter(
+                ([targetWorkspaceId]) =>
+                  validConversationGroupIds.has(targetWorkspaceId),
               ),
             ),
             ...Object.fromEntries(
               currentConversationResults.map((result) => {
-                const currentRows = current.conversationsByWorkspace[result.workspaceId] ?? [];
+                const currentRows =
+                  current.conversationsByWorkspace[result.workspaceId] ?? [];
                 return [
                   result.workspaceId,
                   reconcileWorkspaceConversationRowsAfterRefresh(
                     currentRows,
-                    mergeConversationListWithCurrentRunAuthority(result.conversations, currentRows),
+                    mergeConversationListWithCurrentRunAuthority(
+                      result.conversations,
+                      currentRows,
+                    ),
                     result.error,
                   ),
                 ];
@@ -4216,8 +4714,9 @@ export function App() {
           };
           const workspaceNodeState = {
             ...Object.fromEntries(
-              Object.entries(current.nodeState.workspaces).filter(([targetWorkspaceId]) =>
-                validConversationGroupIds.has(targetWorkspaceId),
+              Object.entries(current.nodeState.workspaces).filter(
+                ([targetWorkspaceId]) =>
+                  validConversationGroupIds.has(targetWorkspaceId),
               ),
             ),
             ...Object.fromEntries(
@@ -4231,7 +4730,10 @@ export function App() {
             workspaces,
             workspacesByProject,
             conversationsByWorkspace,
-            nodeState: { projects: projectNodeState, workspaces: workspaceNodeState },
+            nodeState: {
+              projects: projectNodeState,
+              workspaces: workspaceNodeState,
+            },
             messages,
             tasks,
             plan,
@@ -4249,7 +4751,9 @@ export function App() {
             selectionAtRequest,
             agentConversationScopeKeyFor(
               resolvedProjectId,
-              result.workspaceId === UNBOUND_CONVERSATIONS_KEY ? '' : result.workspaceId,
+              result.workspaceId === UNBOUND_CONVERSATIONS_KEY
+                ? ''
+                : result.workspaceId,
             ),
             result.conversations,
           );
@@ -4267,14 +4771,25 @@ export function App() {
           activeRuntimeConversationRequestsRef.current = new Map();
         }
         setConnection('ready');
-        setLastSync(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        setLastSync(
+          new Date().toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+        );
         return true;
       } catch (caught) {
         if (!contextIsCurrent()) return false;
-        const connectionError = formatConnectionError(caught, nextConfig.apiBaseUrl);
+        const connectionError = formatConnectionError(
+          caught,
+          nextConfig.apiBaseUrl,
+        );
         updateDataset((current) => {
           const failedWorkspaceNodeState = { ...current.nodeState.workspaces };
-          for (const [workspaceId, generation] of conversationRequestGenerations) {
+          for (const [
+            workspaceId,
+            generation,
+          ] of conversationRequestGenerations) {
             if (
               isCurrentWorkspaceConversationRequest(
                 workspaceConversationRequestGenerationsRef.current,
@@ -4371,10 +4886,7 @@ export function App() {
           if (signal.aborted) {
             throw signal.reason ?? new DOMException('Aborted', 'AbortError');
           }
-          await productionRouteRefreshRef.current?.(
-            nextConfig,
-            [...projects],
-          );
+          await productionRouteRefreshRef.current?.(nextConfig, [...projects]);
           if (signal.aborted) {
             throw signal.reason ?? new DOMException('Aborted', 'AbortError');
           }
@@ -4414,7 +4926,10 @@ export function App() {
   }, [localRuntimeMode, refreshRuntime]);
 
   useEffect(() => {
-    const events = socketEventsSince(socket.events, workspaceLifecycleEventsHeadRef.current);
+    const events = socketEventsSince(
+      socket.events,
+      workspaceLifecycleEventsHeadRef.current,
+    );
     workspaceLifecycleEventsHeadRef.current = socket.events[0] ?? null;
     const runtimeConfig = configRef.current;
     const scope = {
@@ -4429,7 +4944,11 @@ export function App() {
     let activeWorkspaceDeleted = false;
     let nextWorkspaceId = scope.workspaceId;
     for (const event of events) {
-      const result = applyWorkspaceLifecycleStreamEvent(nextDataset, event, scope);
+      const result = applyWorkspaceLifecycleStreamEvent(
+        nextDataset,
+        event,
+        scope,
+      );
       nextDataset = result.dataset;
       if (result.activeWorkspaceDeleted) {
         activeWorkspaceDeleted = true;
@@ -4468,179 +4987,213 @@ export function App() {
     updateDataset,
   ]);
 
-  const loadWorkspaceConversations = useCallback(async (workspaceId: string) => {
-    const requestConfig = configRef.current;
-    const projectId = requestConfig.projectId.trim();
-    const tenantId = requestConfig.tenantId.trim();
-    const currentDataset = datasetRef.current;
-    const isUnboundGroup = workspaceId === UNBOUND_CONVERSATIONS_KEY;
-    const workspaceExists =
-      isUnboundGroup ||
-      (currentDataset.workspacesByProject[projectId] ?? []).some(
-        (workspace) => workspace.id === workspaceId,
+  const loadWorkspaceConversations = useCallback(
+    async (workspaceId: string) => {
+      const requestConfig = configRef.current;
+      const projectId = requestConfig.projectId.trim();
+      const tenantId = requestConfig.tenantId.trim();
+      const currentDataset = datasetRef.current;
+      const isUnboundGroup = workspaceId === UNBOUND_CONVERSATIONS_KEY;
+      const workspaceExists =
+        isUnboundGroup ||
+        (currentDataset.workspacesByProject[projectId] ?? []).some(
+          (workspace) => workspace.id === workspaceId,
+        );
+      if (!tenantId || !projectId || !workspaceExists) return;
+      if (
+        !shouldLoadWorkspaceConversations(
+          currentDataset.nodeState.workspaces[workspaceId],
+        )
+      ) {
+        return;
+      }
+      const selectionAtRequest = agentConversationSelectionIdentity(
+        agentConversationSessionRef.current,
       );
-    if (!tenantId || !projectId || !workspaceExists) return;
-    if (!shouldLoadWorkspaceConversations(currentDataset.nodeState.workspaces[workspaceId])) {
-      return;
-    }
-    const selectionAtRequest = agentConversationSelectionIdentity(
-      agentConversationSessionRef.current,
-    );
 
-    const requestGeneration = beginWorkspaceConversationRequest(
-      workspaceConversationRequestGenerationsRef.current,
-      workspaceId,
-    );
-    const expectedContextRevision = contextRevisionRef.current;
-    const requestIsCurrent = () =>
-      isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) &&
-      isSameDesktopProjectRequestScope(requestConfig, configRef.current) &&
-      isCurrentWorkspaceConversationRequest(
+      const requestGeneration = beginWorkspaceConversationRequest(
         workspaceConversationRequestGenerationsRef.current,
         workspaceId,
-        requestGeneration,
       );
-    updateDataset((current) => ({
-      ...current,
-      nodeState: {
-        ...current.nodeState,
-        workspaces: {
-          ...current.nodeState.workspaces,
-          [workspaceId]: { loading: true, error: null },
+      const expectedContextRevision = contextRevisionRef.current;
+      const requestIsCurrent = () =>
+        isCurrentContextRevision(
+          expectedContextRevision,
+          contextRevisionRef.current,
+        ) &&
+        isSameDesktopProjectRequestScope(requestConfig, configRef.current) &&
+        isCurrentWorkspaceConversationRequest(
+          workspaceConversationRequestGenerationsRef.current,
+          workspaceId,
+          requestGeneration,
+        );
+      updateDataset((current) => ({
+        ...current,
+        nodeState: {
+          ...current.nodeState,
+          workspaces: {
+            ...current.nodeState.workspaces,
+            [workspaceId]: { loading: true, error: null },
+          },
         },
-      },
-    }));
+      }));
 
-    try {
-      const client = new DesktopApiClient({
-        ...requestConfig,
-        workspaceId: isUnboundGroup ? '' : workspaceId,
-      });
-      const response = await client.listConversations(
-        projectId,
-        {
+      try {
+        const client = new DesktopApiClient({
+          ...requestConfig,
+          workspaceId: isUnboundGroup ? '' : workspaceId,
+        });
+        const response = await client.listConversations(projectId, {
           workspaceId: isUnboundGroup ? null : workspaceId,
           unboundOnly: isUnboundGroup,
-        },
-      );
-      const refreshedConversations = response.items;
-      if (!requestIsCurrent()) return;
-      updateDataset((current) => {
-        if (
-          !requestIsCurrent() ||
-          (!isUnboundGroup &&
-            !(current.workspacesByProject[projectId] ?? []).some(
-              (workspace) => workspace.id === workspaceId,
-            ))
-        ) {
-          return current;
-        }
-        const nextDataset: RuntimeDataset = {
-          ...current,
-          conversationsByWorkspace: {
-            ...current.conversationsByWorkspace,
-            [workspaceId]: mergeConversationListWithCurrentRunAuthority(
-              refreshedConversations,
-              current.conversationsByWorkspace[workspaceId] ?? [],
-            ),
-          },
-          nodeState: {
-            ...current.nodeState,
-            workspaces: {
-              ...current.nodeState.workspaces,
-              [workspaceId]: { loading: false, error: null },
+        });
+        const refreshedConversations = response.items;
+        if (!requestIsCurrent()) return;
+        updateDataset((current) => {
+          if (
+            !requestIsCurrent() ||
+            (!isUnboundGroup &&
+              !(current.workspacesByProject[projectId] ?? []).some(
+                (workspace) => workspace.id === workspaceId,
+              ))
+          ) {
+            return current;
+          }
+          const nextDataset: RuntimeDataset = {
+            ...current,
+            conversationsByWorkspace: {
+              ...current.conversationsByWorkspace,
+              [workspaceId]: mergeConversationListWithCurrentRunAuthority(
+                refreshedConversations,
+                current.conversationsByWorkspace[workspaceId] ?? [],
+              ),
             },
-          },
-        };
-        return nextDataset;
-      });
-      clearMissingConversationSelection(
-        selectionAtRequest,
-        agentConversationScopeKeyFor(projectId, isUnboundGroup ? '' : workspaceId),
-        refreshedConversations,
-      );
-    } catch (caught) {
-      if (!requestIsCurrent()) return;
-      updateDataset((current) => {
-        if (
-          !requestIsCurrent() ||
-          (!isUnboundGroup &&
-            !(current.workspacesByProject[projectId] ?? []).some(
-              (workspace) => workspace.id === workspaceId,
-            ))
-        ) {
-          return current;
-        }
-        const nextDataset: RuntimeDataset = {
-          ...current,
-          nodeState: {
-            ...current.nodeState,
-            workspaces: {
-              ...current.nodeState.workspaces,
-              [workspaceId]: { loading: false, error: formatError(caught) },
+            nodeState: {
+              ...current.nodeState,
+              workspaces: {
+                ...current.nodeState.workspaces,
+                [workspaceId]: { loading: false, error: null },
+              },
             },
-          },
-        };
-        return nextDataset;
-      });
-    }
-  }, [clearMissingConversationSelection, updateDataset]);
+          };
+          return nextDataset;
+        });
+        clearMissingConversationSelection(
+          selectionAtRequest,
+          agentConversationScopeKeyFor(
+            projectId,
+            isUnboundGroup ? '' : workspaceId,
+          ),
+          refreshedConversations,
+        );
+      } catch (caught) {
+        if (!requestIsCurrent()) return;
+        updateDataset((current) => {
+          if (
+            !requestIsCurrent() ||
+            (!isUnboundGroup &&
+              !(current.workspacesByProject[projectId] ?? []).some(
+                (workspace) => workspace.id === workspaceId,
+              ))
+          ) {
+            return current;
+          }
+          const nextDataset: RuntimeDataset = {
+            ...current,
+            nodeState: {
+              ...current.nodeState,
+              workspaces: {
+                ...current.nodeState.workspaces,
+                [workspaceId]: { loading: false, error: formatError(caught) },
+              },
+            },
+          };
+          return nextDataset;
+        });
+      }
+    },
+    [clearMissingConversationSelection, updateDataset],
+  );
 
-  const refreshMyWork = useCallback(async (scheduledScope?: MyWorkRefreshScope) => {
-    const projectId = config.projectId.trim();
-    if (!projectId) return;
-    const expectedScope = scheduledScope ?? {
-      contextRevision: contextRevisionRef.current,
-      scopeEpoch: configScopeEpochRef.current,
-    };
-    const scopeIsCurrent = () =>
-      myWorkRefreshScopeIsCurrent(expectedScope, {
+  const refreshMyWork = useCallback(
+    async (scheduledScope?: MyWorkRefreshScope) => {
+      const projectId = config.projectId.trim();
+      if (!projectId) return;
+      const expectedScope = scheduledScope ?? {
         contextRevision: contextRevisionRef.current,
         scopeEpoch: configScopeEpochRef.current,
-      });
-    if (!scopeIsCurrent()) return;
-    const requestId = myWorkRequestRef.current + 1;
-    myWorkRequestRef.current = requestId;
-    myWorkAbortRef.current?.abort();
-    const controller = new AbortController();
-    myWorkAbortRef.current = controller;
-    setMyWorkRefreshing(true);
-    try {
-      const response = await api.listMyWork(projectId, controller.signal);
-      if (
-        controller.signal.aborted ||
-        myWorkRequestRef.current !== requestId ||
-        !scopeIsCurrent()
-      ) {
-        return;
+      };
+      const scopeIsCurrent = () =>
+        myWorkRefreshScopeIsCurrent(expectedScope, {
+          contextRevision: contextRevisionRef.current,
+          scopeEpoch: configScopeEpochRef.current,
+        });
+      if (!scopeIsCurrent()) return;
+      const requestId = myWorkRequestRef.current + 1;
+      myWorkRequestRef.current = requestId;
+      myWorkAbortRef.current?.abort();
+      const controller = new AbortController();
+      myWorkAbortRef.current = controller;
+      setMyWorkRefreshing(true);
+      try {
+        const response =
+          config.mode === 'cloud'
+            ? activityAuthorityAdapter.client && activityAuthorityScope
+              ? await activityAuthorityAdapter.client.listMyWork(
+                  activityAuthorityScope,
+                  {
+                    signal: controller.signal,
+                  },
+                )
+              : (() => {
+                  throw new Error('cloud_my_work_authority_scope_unavailable');
+                })()
+            : await api.listMyWork(projectId, controller.signal);
+        if (
+          controller.signal.aborted ||
+          myWorkRequestRef.current !== requestId ||
+          !scopeIsCurrent()
+        ) {
+          return;
+        }
+        setDataset((current) => ({
+          ...current,
+          myWork: response.items,
+          myWorkError: null,
+        }));
+      } catch (caught) {
+        if (
+          controller.signal.aborted ||
+          myWorkRequestRef.current !== requestId ||
+          !scopeIsCurrent()
+        ) {
+          return;
+        }
+        setDataset((current) => ({
+          ...current,
+          myWorkError: formatError(caught),
+        }));
+      } finally {
+        if (myWorkRequestRef.current === requestId) {
+          myWorkAbortRef.current = null;
+          setMyWorkRefreshing(false);
+        }
       }
-      setDataset((current) => ({
-        ...current,
-        myWork: response.items,
-        myWorkError: null,
-      }));
-    } catch (caught) {
-      if (
-        controller.signal.aborted ||
-        myWorkRequestRef.current !== requestId ||
-        !scopeIsCurrent()
-      ) {
-        return;
-      }
-      setDataset((current) => ({
-        ...current,
-        myWorkError: formatError(caught),
-      }));
-    } finally {
-      if (myWorkRequestRef.current === requestId) {
-        myWorkAbortRef.current = null;
-        setMyWorkRefreshing(false);
-      }
-    }
-  }, [api, config.projectId]);
+    },
+    [
+      activityAuthorityAdapter,
+      activityAuthorityScope,
+      api,
+      config.mode,
+      config.projectId,
+    ],
+  );
 
   useEffect(() => {
-    const events = socketEventsSince(socket.events, myWorkEventsHeadRef.current);
+    const events = socketEventsSince(
+      socket.events,
+      myWorkEventsHeadRef.current,
+    );
     myWorkEventsHeadRef.current = socket.events[0] ?? null;
     if (!events.some((event) => socketEventInvalidatesMyWork(event))) return;
     if (myWorkRefreshTimerRef.current !== null) {
@@ -4672,7 +5225,11 @@ export function App() {
     runtimeConfig: DesktopRuntimeConfig,
     authAttemptRevision: number,
   ): Promise<boolean> => {
-    const tokenConfig = { ...runtimeConfig, apiKey: outcome.access_token, workspaceId: '' };
+    const tokenConfig = {
+      ...runtimeConfig,
+      apiKey: outcome.access_token,
+      workspaceId: '',
+    };
     const identityClient = new DesktopApiClient(tokenConfig);
     const [user, tenants, authoritativeContextResponse] = await Promise.all([
       identityClient.currentUser(),
@@ -4707,7 +5264,12 @@ export function App() {
       setLoginPassword('');
       setDataset(emptyDataset);
       setConnection('idle');
-      setLastSync(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      setLastSync(
+        new Date().toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+      );
       applySectionSideEffects('workspace');
       setSettingsInitialSection('workspace');
       setSettingsWindowOpen(true);
@@ -4729,7 +5291,13 @@ export function App() {
       preferredProjectId,
     );
     const projectId = preferredProject?.id ?? '';
-    if (!workspaceContextMatchesSelection(authoritativeContext, tenantId, projectId)) {
+    if (
+      !workspaceContextMatchesSelection(
+        authoritativeContext,
+        tenantId,
+        projectId,
+      )
+    ) {
       throw new Error(t('login.authoritativeProjectUnavailable'));
     }
     const context = authoritativeContext;
@@ -4761,7 +5329,12 @@ export function App() {
     } else {
       setDataset(emptyDataset);
       setConnection('idle');
-      setLastSync(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      setLastSync(
+        new Date().toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+      );
       applySectionSideEffects('workspace');
       setSettingsInitialSection('workspace');
       setSettingsWindowOpen(true);
@@ -4777,9 +5350,9 @@ export function App() {
     const current = deviceAuthAttemptRef.current;
     return Boolean(
       current?.attemptId === attemptId &&
-        current.authRevision === authRevision &&
-        authAttemptRevisionRef.current === authRevision &&
-        !controller.signal.aborted,
+      current.authRevision === authRevision &&
+      authAttemptRevisionRef.current === authRevision &&
+      !controller.signal.aborted,
     );
   };
 
@@ -4795,7 +5368,10 @@ export function App() {
   ): Promise<void> => {
     if (!accessToken) return;
     try {
-      await new DesktopApiClient({ ...runtimeConfig, apiKey: accessToken }).signOut();
+      await new DesktopApiClient({
+        ...runtimeConfig,
+        apiKey: accessToken,
+      }).signOut();
     } catch {
       // Best effort only. Device-grant cancellation below independently retries revocation.
     }
@@ -4809,7 +5385,10 @@ export function App() {
     const cancelController = new AbortController();
     const timeoutId = window.setTimeout(() => cancelController.abort(), 3_000);
     try {
-      const cancelClient = new DesktopApiClient({ ...runtimeConfig, apiKey: '' });
+      const cancelClient = new DesktopApiClient({
+        ...runtimeConfig,
+        apiKey: '',
+      });
       await cancelClient.cancelDeviceCode(deviceCode, cancelController.signal);
     } catch {
       // Best effort only. Pending grants expire, and an issued bearer is revoked separately above.
@@ -4855,14 +5434,20 @@ export function App() {
           throw error;
         }
       }
-      if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, current.controller)) return;
+      if (
+        !deviceAuthAttemptIsCurrent(attemptId, authRevision, current.controller)
+      )
+        return;
       setWorkspaceSso((presentation) =>
         presentation?.authorizationUrl === authorizationUrl
           ? { ...presentation, openError: null }
           : presentation,
       );
     } catch {
-      if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, current.controller)) return;
+      if (
+        !deviceAuthAttemptIsCurrent(attemptId, authRevision, current.controller)
+      )
+        return;
       setWorkspaceSso((presentation) =>
         presentation?.authorizationUrl === authorizationUrl
           ? { ...presentation, openError: t('login.deviceOpenFailed') }
@@ -4870,7 +5455,8 @@ export function App() {
       );
     } finally {
       const activeAttempt = deviceAuthAttemptRef.current;
-      if (activeAttempt?.attemptId === attemptId) activeAttempt.openInFlight = false;
+      if (activeAttempt?.attemptId === attemptId)
+        activeAttempt.openInFlight = false;
     }
   };
 
@@ -4936,13 +5522,15 @@ export function App() {
         } catch {
           throw new WorkspaceSsoFlowError('credential_store');
         }
-        if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) return;
+        if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller))
+          return;
       }
 
       const loginClient = new DesktopApiClient({ ...runtimeConfig, apiKey: '' });
       const deviceAuthorization = await loginClient.createDeviceCode(controller.signal);
       issuedDeviceCode = deviceAuthorization.device_code;
-      if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) return;
+      if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller))
+        return;
 
       const authorizationUrl = resolveDeviceAuthorizationUrl(
         runtimeConfig.deviceAuthorizationBaseUrl,
@@ -4970,7 +5558,9 @@ export function App() {
         authRevision,
       );
 
-      let intervalSeconds = normalizeDeviceAuthorizationInterval(deviceAuthorization.interval);
+      let intervalSeconds = normalizeDeviceAuthorizationInterval(
+        deviceAuthorization.interval,
+      );
       while (deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) {
         const remainingMs = deadline - Date.now();
         if (remainingMs <= 0) {
@@ -4980,7 +5570,11 @@ export function App() {
           Math.min(remainingMs, intervalSeconds * 1000),
           controller.signal,
         );
-        if (!waited || !deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) return;
+        if (
+          !waited ||
+          !deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)
+        )
+          return;
 
         try {
           const token = await loginClient.pollDeviceToken(
@@ -4988,7 +5582,8 @@ export function App() {
             controller.signal,
           );
           issuedAccessToken = token.access_token;
-          if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) return;
+          if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller))
+            return;
           setWorkspaceSso(null);
 
           const hydrated = await hydrateCloudSession(
@@ -5000,7 +5595,11 @@ export function App() {
             runtimeConfig,
             authRevision,
           );
-          if (!hydrated || !deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) return;
+          if (
+            !hydrated ||
+            !deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)
+          )
+            return;
 
           let persistenceWarning: string | null = null;
           let persistedNativeSession = false;
@@ -5036,10 +5635,13 @@ export function App() {
           if (persistenceWarning) setError(persistenceWarning);
           return;
         } catch (caught) {
-          if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) return;
+          if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller))
+            return;
           const deviceError = classifyDeviceTokenError(caught);
           if (deviceError?.code === 'authorization_pending') {
-            intervalSeconds = normalizeDeviceAuthorizationInterval(deviceError.interval);
+            intervalSeconds = normalizeDeviceAuthorizationInterval(
+              deviceError.interval,
+            );
             continue;
           }
           if (deviceError?.code === 'expired_token') {
@@ -5049,11 +5651,14 @@ export function App() {
         }
       }
     } catch (caught) {
-      if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) return;
+      if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller))
+        return;
       if (caught instanceof WorkspaceSsoFlowError && caught.code === 'expired') {
         keepExpiredPresentation = true;
         setWorkspaceSso((presentation) =>
-          presentation ? { ...presentation, expiresAt: Date.now(), openError: null } : presentation,
+          presentation
+            ? { ...presentation, expiresAt: Date.now(), openError: null }
+            : presentation,
         );
         setAuth(emptyAuthState);
         setConnection('idle');
@@ -5063,7 +5668,8 @@ export function App() {
       const message =
         caught instanceof WorkspaceSsoFlowError && caught.code === 'invalid_url'
           ? t('login.deviceInvalidUrl')
-          : caught instanceof WorkspaceSsoFlowError && caught.code === 'credential_store'
+          : caught instanceof WorkspaceSsoFlowError &&
+              caught.code === 'credential_store'
             ? t('login.credentialStoreUnavailable')
             : t('login.workspaceSsoFailed');
       setAuth({ ...emptyAuthState, error: message });
@@ -5178,7 +5784,8 @@ export function App() {
     const pending = pendingPasswordChangeRef.current;
     if (
       !pending ||
-      (auth.status !== 'password_change_required' && auth.status !== 'changing_password') ||
+      (auth.status !== 'password_change_required' &&
+        auth.status !== 'changing_password') ||
       authAttemptRevisionRef.current !== pending.authRevision
     ) {
       return;
@@ -5269,7 +5876,10 @@ export function App() {
         setError(message);
         return;
       }
-      const message = formatLoginError(caught, pending.runtimeConfig.apiBaseUrl);
+      const message = formatLoginError(
+        caught,
+        pending.runtimeConfig.apiBaseUrl,
+      );
       setAuth(passwordChangeGateAuthState(false, message));
       setConnection('idle');
       setError(null);
@@ -5393,7 +6003,11 @@ export function App() {
         }
         if (authAttemptRevisionRef.current !== authAttemptRevision) return;
       }
-      const hydrated = await hydrateLocalSession(outcome, config, authAttemptRevision);
+      const hydrated = await hydrateLocalSession(
+        outcome,
+        config,
+        authAttemptRevision,
+      );
       if (!hydrated) return;
       applySectionSideEffects('workspace');
       if (persistenceWarning) setError(persistenceWarning);
@@ -5430,7 +6044,10 @@ export function App() {
             projectId: transportSafeConfig.projectId.trim() || 'local-project',
           }
         : transportSafeConfig;
-    const requestScopeChanged = !isSameDesktopRequestScope(previousConfig, resolvedConfig);
+    const requestScopeChanged = !isSameDesktopRequestScope(
+      previousConfig,
+      resolvedConfig,
+    );
     if (previousConfig.mode !== resolvedConfig.mode) {
       writeLoginModePreference(resolvedConfig.mode);
     }
@@ -5493,7 +6110,10 @@ export function App() {
             .catch(() => false)
         : Promise.resolve(false),
       hasCredentialBroker
-        ? (config.mode === 'local' ? clearLocalTrustedSession() : clearNativeTrustedSession())
+        ? (config.mode === 'local'
+            ? clearLocalTrustedSession()
+            : clearNativeTrustedSession()
+          )
             .then(() => true)
             .catch(() => false)
         : Promise.resolve(true),
@@ -5514,7 +6134,11 @@ export function App() {
         : null;
     localResumeAttemptRef.current = `${config.mode}|${config.apiBaseUrl}|${config.localApiToken}`;
     contextRevisionRef.current += 1;
-    setAuth(persistenceWarning ? { ...emptyAuthState, error: persistenceWarning } : emptyAuthState);
+    setAuth(
+      persistenceWarning
+        ? { ...emptyAuthState, error: persistenceWarning }
+        : emptyAuthState,
+    );
     setLoginModalOpen(false);
     commitRuntimeConfig({
       ...DEFAULT_CONFIG,
@@ -5532,7 +6156,10 @@ export function App() {
     setError(persistenceWarning);
   };
 
-  const selectWorkspace = (workspaceId: string, projectId = config.projectId) => {
+  const selectWorkspace = (
+    workspaceId: string,
+    projectId = config.projectId,
+  ) => {
     const project =
       sidebarProjects.find((item) => item.id === projectId) ??
       auth.projects.find((item) => item.id === projectId);
@@ -5591,7 +6218,9 @@ export function App() {
       ...current,
       workspaces: [
         created,
-        ...current.workspaces.filter((candidate) => candidate.id !== created.id),
+        ...current.workspaces.filter(
+          (candidate) => candidate.id !== created.id,
+        ),
       ],
       workspacesByProject: mergeWorkspaceIntoProjectCatalog(
         current.workspacesByProject,
@@ -5756,9 +6385,7 @@ export function App() {
     signal: AbortSignal,
   ): Promise<void> => {
     assertWorkspaceMemberMutationScope(submittedScope);
-    await workspaceMemberClient(
-      submittedScope,
-    ).removeWorkspaceMemberForProject(
+    await workspaceMemberClient(submittedScope).removeWorkspaceMemberForProject(
       submittedScope.projectId,
       submittedScope.workspaceId,
       userId,
@@ -5945,7 +6572,10 @@ export function App() {
       agentConversationSessionRef.current = nextSession;
       setAgentConversationSession(nextSession);
     } catch (caught) {
-      showToast('error', t('toast.conversationRenameError', { detail: formatError(caught) }));
+      showToast(
+        'error',
+        t('toast.conversationRenameError', { detail: formatError(caught) }),
+      );
       throw caught;
     }
   };
@@ -5969,7 +6599,8 @@ export function App() {
       currentSession.conversation.id !== requiredConversationId ||
       currentSession.conversation.tenant_id !== requestConfig.tenantId ||
       currentSession.conversation.project_id !== requestConfig.projectId ||
-      (currentSession.conversation.workspace_id?.trim() ?? '') !== normalizedWorkspaceId
+      (currentSession.conversation.workspace_id?.trim() ?? '') !==
+        normalizedWorkspaceId
     ) {
       throw new Error('Invalid conversation summary scope');
     }
@@ -6055,7 +6686,10 @@ export function App() {
         selectWorkspace(normalizedWorkspaceId, projectId);
       }
     } catch (caught) {
-      showToast('error', t('toast.conversationDeleteError', { detail: formatError(caught) }));
+      showToast(
+        'error',
+        t('toast.conversationDeleteError', { detail: formatError(caught) }),
+      );
       throw caught;
     }
   };
@@ -6126,7 +6760,10 @@ export function App() {
       return;
     }
     setNewThreadError(null);
-    setNewThreadScope({ projectId: config.projectId, workspaceId: nextWorkspaceId });
+    setNewThreadScope({
+      projectId: config.projectId,
+      workspaceId: nextWorkspaceId,
+    });
   };
 
   const resumeSessionTaskListReview = () => {
@@ -6139,7 +6776,8 @@ export function App() {
       return;
     }
     const conversation = projection.conversation;
-    const workspaceId = conversation.workspace_id?.trim() || config.workspaceId.trim();
+    const workspaceId =
+      conversation.workspace_id?.trim() || config.workspaceId.trim();
     const workspace = (
       dataset.workspacesByProject[conversation.project_id] ?? dataset.workspaces
     ).find((item) => item.id === workspaceId);
@@ -6180,14 +6818,17 @@ export function App() {
     const { workspace, conversation, config: sessionConfig } = session;
     setDataset((current) => ({
       ...current,
-      workspaces: [workspace, ...current.workspaces.filter((item) => item.id !== workspace.id)],
+      workspaces: [
+        workspace,
+        ...current.workspaces.filter((item) => item.id !== workspace.id),
+      ],
       workspacesByProject: {
         ...current.workspacesByProject,
         [sessionConfig.projectId]: [
           workspace,
-          ...(current.workspacesByProject[sessionConfig.projectId] ?? []).filter(
-            (item) => item.id !== workspace.id,
-          ),
+          ...(
+            current.workspacesByProject[sessionConfig.projectId] ?? []
+          ).filter((item) => item.id !== workspace.id),
         ],
       },
       conversationsByWorkspace: {
@@ -6213,7 +6854,10 @@ export function App() {
     persistNewTaskSession(session);
     commitRuntimeConfig(sessionConfig);
     setAgentConversationSession({
-      scopeKey: agentConversationScopeKeyFor(sessionConfig.projectId, workspace.id),
+      scopeKey: agentConversationScopeKeyFor(
+        sessionConfig.projectId,
+        workspace.id,
+      ),
       conversation,
     });
     setExpandedWorkspaceIds((current) => new Set([...current, workspace.id]));
@@ -6237,9 +6881,9 @@ export function App() {
         ...current.conversationsByWorkspace,
         [UNBOUND_CONVERSATIONS_KEY]: [
           conversation,
-          ...(current.conversationsByWorkspace[UNBOUND_CONVERSATIONS_KEY] ?? []).filter(
-            (item) => item.id !== conversation.id,
-          ),
+          ...(
+            current.conversationsByWorkspace[UNBOUND_CONVERSATIONS_KEY] ?? []
+          ).filter((item) => item.id !== conversation.id),
         ],
       },
     }));
@@ -6249,26 +6893,32 @@ export function App() {
       conversation,
     });
     applySectionSideEffects('chat');
-    void loadConversationTimeline(conversation, threadConfig.projectId, threadConfig);
+    void loadConversationTimeline(
+      conversation,
+      threadConfig.projectId,
+      threadConfig,
+    );
   };
 
   const runNewTaskAgentTurn = async (
     input: NewTaskAgentTurnInput,
     delivery: { deferUntilNextConnection?: boolean } = {},
   ): Promise<NewTaskAgentTurnOutcome> => {
-    const acknowledgment = new Promise<NewTaskAgentTurnOutcome>((resolve, reject) => {
-      const timeoutId = window.setTimeout(() => {
-        pendingNewTaskAgentTurnsRef.current.delete(input.messageId);
-        resolve('unknown_outcome');
-      }, 10_000);
-      pendingNewTaskAgentTurnsRef.current.set(input.messageId, {
-        conversationId: input.conversationId,
-        messageId: input.messageId,
-        timeoutId,
-        resolve,
-        reject,
-      });
-    });
+    const acknowledgment = new Promise<NewTaskAgentTurnOutcome>(
+      (resolve, reject) => {
+        const timeoutId = window.setTimeout(() => {
+          pendingNewTaskAgentTurnsRef.current.delete(input.messageId);
+          resolve('unknown_outcome');
+        }, 10_000);
+        pendingNewTaskAgentTurnsRef.current.set(input.messageId, {
+          conversationId: input.conversationId,
+          messageId: input.messageId,
+          timeoutId,
+          resolve,
+          reject,
+        });
+      },
+    );
     const clearPendingAgentTurn = () => {
       const pending = pendingNewTaskAgentTurnsRef.current.get(input.messageId);
       if (!pending) return;
@@ -6320,17 +6970,25 @@ export function App() {
     let activatedConfig: DesktopRuntimeConfig | null = null;
     let activatedScopeEpoch: number | null = null;
     const requestScopeIsCurrent = () =>
-      isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) &&
+      isCurrentContextRevision(
+        expectedContextRevision,
+        contextRevisionRef.current,
+      ) &&
       expectedScopeEpoch === configScopeEpochRef.current &&
       isSameDesktopRequestScope(requestConfig, configRef.current);
     const activatedScopeIsCurrent = () =>
       activatedConfig !== null &&
       activatedScopeEpoch !== null &&
-      isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) &&
+      isCurrentContextRevision(
+        expectedContextRevision,
+        contextRevisionRef.current,
+      ) &&
       activatedScopeEpoch === configScopeEpochRef.current &&
       isSameDesktopRequestScope(activatedConfig, configRef.current);
     const creationScopeIsCurrent = () =>
-      activatedConfig === null ? requestScopeIsCurrent() : activatedScopeIsCurrent();
+      activatedConfig === null
+        ? requestScopeIsCurrent()
+        : activatedScopeIsCurrent();
 
     if (!workspaceId) {
       if (threadConfig.mode === 'cloud' && connection !== 'ready') {
@@ -6360,7 +7018,10 @@ export function App() {
         activatedConfig = threadConfig;
         activatedScopeEpoch = configScopeEpochRef.current;
         activatedConversation = conversation;
-        const execution = composerAgentExecutionContext(input.prompt, input.contextItems);
+        const execution = composerAgentExecutionContext(
+          input.prompt,
+          input.contextItems,
+        );
         firstMessageId = `desktop-thread-${crypto.randomUUID()}`;
         firstSignalId = `agent-task-${firstMessageId}`;
         upsertAgentTaskSignal({
@@ -6531,24 +7192,35 @@ export function App() {
       );
     } catch (caught) {
       if (!creationScopeIsCurrent()) return;
-      setNewThreadError(caught instanceof Error ? caught.message : String(caught));
+      setNewThreadError(
+        caught instanceof Error ? caught.message : String(caught),
+      );
     } finally {
       setNewThreadCreating(false);
     }
   };
 
-  const ensureAgentConversation = async (firstMessage: string): Promise<AgentConversation> => {
+  const ensureAgentConversation = async (
+    firstMessage: string,
+  ): Promise<AgentConversation> => {
     const scopeKey = agentConversationScopeKey(config);
     if (
       agentConversationSession?.scopeKey === scopeKey &&
-      agentConversationSession.conversation.project_id === config.projectId.trim()
+      agentConversationSession.conversation.project_id ===
+        config.projectId.trim()
     ) {
       return agentConversationSession.conversation;
     }
 
-    const workspace = dataset.workspaces.find((item) => item.id === config.workspaceId.trim());
-    const workspaceLabel = workspace?.name || workspace?.title || 'Desktop workspace';
-    const titleSource = firstMessage.length > 42 ? `${firstMessage.slice(0, 39)}...` : firstMessage;
+    const workspace = dataset.workspaces.find(
+      (item) => item.id === config.workspaceId.trim(),
+    );
+    const workspaceLabel =
+      workspace?.name || workspace?.title || 'Desktop workspace';
+    const titleSource =
+      firstMessage.length > 42
+        ? `${firstMessage.slice(0, 39)}...`
+        : firstMessage;
     const created = await api.createAgentConversation(
       `${workspaceLabel}: ${titleSource}`,
       config.projectId,
@@ -6571,9 +7243,9 @@ export function App() {
         ...current.conversationsByWorkspace,
         [conversationGroupKey]: [
           conversation,
-          ...(current.conversationsByWorkspace[conversationGroupKey] ?? []).filter(
-            (item) => item.id !== conversation.id,
-          ),
+          ...(
+            current.conversationsByWorkspace[conversationGroupKey] ?? []
+          ).filter((item) => item.id !== conversation.id),
         ],
       },
     }));
@@ -6606,6 +7278,7 @@ export function App() {
       mentions: execution.mentions,
       fileMetadata: execution.fileMetadata,
       appModelContext: execution.appModelContext,
+      permissionMode: permissionModeForPreset(permissionPreset),
     });
     setConversationTimeline((current) => {
       if (current.conversationId !== conversation.id) return current;
@@ -6673,15 +7346,33 @@ export function App() {
     const mentions = execution.mentions;
     const canSendConversationMessage = Boolean(
       sessionProjection?.capabilities.canSendMessage &&
-        sessionProjection.capabilities.allowedActions.includes('send_message'),
+      sessionProjection.capabilities.allowedActions.includes('send_message'),
     );
     const canSendRunInput = Boolean(
-      localRuntimeMode &&
-        currentArtifactRun &&
-        selectedConversation?.id === currentArtifactRun.conversation_id &&
-        effectiveRunInputDeliveryValue,
+      (localRuntimeMode ||
+        (config.mode === 'cloud' &&
+          activityAuthorityAdapter.client !== null &&
+          activityAuthorityAdapter.allowedActions.includes(
+            'create_run_input',
+          ) &&
+          activityAuthorityScope !== undefined)) &&
+      currentArtifactRun &&
+      selectedConversation?.id === currentArtifactRun.conversation_id &&
+      (currentArtifactRun.status === 'queued' ||
+        currentArtifactRun.status === 'running'),
     );
-    if (selectedConversation && !canSendConversationMessage && !canSendRunInput) {
+    const composerDispatch = resolveSessionComposerDispatch({
+      requestedDelivery: runInputDelivery,
+      availableDeliveries: runInputDeliveryOptions,
+      hasActiveRun: Boolean(
+        currentArtifactRun &&
+          (currentArtifactRun.status === 'queued' ||
+            currentArtifactRun.status === 'running'),
+      ),
+      canSendConversationMessage,
+      canSendRunInput,
+    });
+    if (selectedConversation && composerDispatch.kind === 'blocked') {
       setError(t('session.authorityActionUnavailable'));
       return;
     }
@@ -6702,21 +7393,20 @@ export function App() {
       createdAt: new Date().toISOString(),
     });
     try {
-      const sendsRunInput = Boolean(
-        canSendRunInput && currentArtifactRun && effectiveRunInputDeliveryValue,
-      );
-      if (sendsRunInput && currentArtifactRun && effectiveRunInputDeliveryValue) {
+      if (composerDispatch.kind === 'run_input' && currentArtifactRun) {
+        const requestedDelivery = composerDispatch.delivery;
         const signature = JSON.stringify({
           runId: currentArtifactRun.id,
           revision: currentArtifactRun.revision,
-          delivery: effectiveRunInputDeliveryValue,
+          delivery: requestedDelivery,
           content,
           references: outgoingReferences,
           contextItems,
         });
         if (runInputRequestRef.current?.signature !== signature) {
           const requestId =
-            globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            globalThis.crypto?.randomUUID?.() ??
+            `${Date.now()}-${Math.random().toString(36).slice(2)}`;
           runInputRequestRef.current = {
             signature,
             messageId: `desktop-run-input-${requestId}`,
@@ -6724,37 +7414,87 @@ export function App() {
           };
         }
         const request = runInputRequestRef.current;
-        const acknowledgement = await api.createRunInput(currentArtifactRun.id, {
-          expectedRunRevision: currentArtifactRun.revision,
-          message: content,
-          messageId: request.messageId,
-          idempotencyKey: request.idempotencyKey,
-          delivery: effectiveRunInputDeliveryValue,
-          references: outgoingReferences,
-          contextItems,
-        });
+        let acknowledgementInput: DesktopRunInput;
+        let acknowledgementConversationId: string;
+        let acknowledgementMessageId: string;
+        let acknowledgementDeliveryMode: RunInputDelivery;
+        let acknowledgementQueuePosition: number | null | undefined;
+        if (config.mode === 'cloud') {
+          if (!activityAuthorityAdapter.client || !activityAuthorityScope) {
+            throw new Error('cloud_run_input_authority_scope_unavailable');
+          }
+          const acknowledgement =
+            await activityAuthorityAdapter.client.createRunInput(
+              activityAuthorityScope,
+              currentArtifactRun.id,
+              {
+                expected_run_revision: currentArtifactRun.revision,
+                message: content,
+                message_id: request.messageId,
+                idempotency_key: request.idempotencyKey,
+                delivery: requestedDelivery,
+                references: outgoingReferences.map((reference) => ({
+                  ...reference,
+                })),
+                context_items: contextItems.map((item) => ({
+                  ...item,
+                  metadata: item.metadata ? { ...item.metadata } : null,
+                })),
+              },
+            );
+          acknowledgementInput = desktopRunInputFromCloud(
+            acknowledgement.input,
+          );
+          acknowledgementConversationId = acknowledgement.conversation_id;
+          acknowledgementMessageId = acknowledgement.message_id;
+          acknowledgementDeliveryMode = acknowledgement.delivery_mode;
+          acknowledgementQueuePosition = acknowledgement.queue_position;
+        } else {
+          const acknowledgement = await api.createRunInput(
+            currentArtifactRun.id,
+            {
+              expectedRunRevision: currentArtifactRun.revision,
+              message: content,
+              messageId: request.messageId,
+              idempotencyKey: request.idempotencyKey,
+              delivery: requestedDelivery,
+              references: outgoingReferences,
+              contextItems,
+            },
+          );
+          acknowledgementInput = acknowledgement.input;
+          acknowledgementConversationId = acknowledgement.conversation_id;
+          acknowledgementMessageId = acknowledgement.message_id;
+          acknowledgementDeliveryMode = acknowledgement.delivery_mode;
+          acknowledgementQueuePosition = acknowledgement.queue_position;
+        }
         onWorkspaceMessageSaved?.();
         if (!referencesOverride) setRunInputReferences([]);
         setRunInputs((current) =>
-          [...current.filter((input) => input.id !== acknowledgement.input.id), acknowledgement.input]
-            .sort((left, right) => left.sequence - right.sequence),
+          [
+            ...current.filter((input) => input.id !== acknowledgementInput.id),
+            acknowledgementInput,
+          ].sort((left, right) => left.sequence - right.sequence),
         );
         runInputRequestRef.current = null;
         upsertAgentTaskSignal({
           id: signalId,
-          conversationId: acknowledgement.conversation_id,
-          messageId: acknowledgement.message_id,
+          conversationId: acknowledgementConversationId,
+          messageId: acknowledgementMessageId,
           status: 'acknowledged',
           detail:
-            acknowledgement.delivery_mode === 'steer_now'
+            acknowledgementDeliveryMode === 'steer_now'
               ? t('session.steeringAccepted')
               : t('session.queueAccepted', {
-                  position: acknowledgement.queue_position ?? '—',
+                  position: acknowledgementQueuePosition ?? '—',
                 }),
         });
         invalidateSessionAuthority();
         if (selectedConversation) {
-          await loadConversationTimeline(selectedConversation, config.projectId);
+          await loadConversationTimeline(
+            selectedConversation,
+            config.projectId,
+          );
         }
         return;
       }
@@ -6771,8 +7511,16 @@ export function App() {
         onWorkspaceMessageSaved?.();
         return;
       }
-      const saved = await api.sendMessage(content, undefined, contextItems, mentions);
-      setDataset((current) => ({ ...current, messages: [...current.messages, saved] }));
+      const saved = await api.sendMessage(
+        content,
+        undefined,
+        contextItems,
+        mentions,
+      );
+      setDataset((current) => ({
+        ...current,
+        messages: [...current.messages, saved],
+      }));
       onWorkspaceMessageSaved?.();
       upsertAgentTaskSignal({
         id: signalId,
@@ -6786,7 +7534,9 @@ export function App() {
           id: signalId,
           messageId: saved.id,
           status: 'acknowledged',
-          detail: t('chat.workspaceMentionsRouted', { count: saved.mentions?.length ?? 0 }),
+          detail: t('chat.workspaceMentionsRouted', {
+            count: saved.mentions?.length ?? 0,
+          }),
         });
       } else if (config.projectId.trim()) {
         try {
@@ -6851,16 +7601,13 @@ export function App() {
     [],
   );
 
-  // P1-2 rejection-as-steering: a denial that carries feedback posts the
-  // feedback as a normal user message through the existing send path, so the
-  // agent adapts on its next turn.
+  // Permission deny feedback is part of the canonical HITL response. The
+  // backend persists and restores it atomically into the resumed Agent context.
   const respondToHitlWithSteering = useCallback(
     async (submission: HitlResponseSubmission) => {
       await respondToHitl(submission);
-      const feedback = denialSteeringFeedback(submission);
-      if (feedback) sendChatMessage(feedback, []);
     },
-    [respondToHitl, sendChatMessage],
+    [respondToHitl],
   );
 
   const startTerminal = async () => {
@@ -6926,7 +7673,10 @@ export function App() {
         throw new Error(t('session.terminalCapabilityUnavailable'));
       }
       await api.seedProxyAuthCookie();
-      const response = await api.startTerminal(sourceRun.id, sourceRun.revision);
+      const response = await api.startTerminal(
+        sourceRun.id,
+        sourceRun.revision,
+      );
       if (terminalStartGenerationRef.current !== requestGeneration) return;
       if (!terminalSessionMatchesRun(response, currentArtifactRunRef.current)) {
         throw new Error(t('session.terminalAuthorityMismatch'));
@@ -6952,7 +7702,9 @@ export function App() {
   const paneStageClassName =
     activeSection === 'board'
       ? 'pane-stage single-stage my-work-stage'
-      : activeSection === 'home' || activeSection === 'automations' || activeSection === 'search'
+      : activeSection === 'home' ||
+          activeSection === 'automations' ||
+          activeSection === 'search'
         ? 'pane-stage single-stage auxiliary-stage'
         : 'pane-stage single-stage';
   const configuredProject = useMemo(
@@ -6964,7 +7716,10 @@ export function App() {
     return configuredProject ? [configuredProject] : [];
   }, [auth.projects, auth.status, configuredProject]);
   const selectedWorkspace = useMemo(
-    () => dataset.workspaces.find((workspace) => workspace.id === config.workspaceId) ?? null,
+    () =>
+      dataset.workspaces.find(
+        (workspace) => workspace.id === config.workspaceId,
+      ) ?? null,
     [config.workspaceId, dataset.workspaces],
   );
   const selectedProject = useMemo(
@@ -6974,7 +7729,10 @@ export function App() {
       null,
     [auth.projects, config.projectId, sidebarProjects],
   );
-  const myWorkCounts = useMemo(() => countMyWorkGroups(dataset.myWork), [dataset.myWork]);
+  const myWorkCounts = useMemo(
+    () => countMyWorkGroups(dataset.myWork),
+    [dataset.myWork],
+  );
   const myWorkMetricStatus =
     connection === 'loading' || myWorkRefreshing
       ? 'loading'
@@ -6988,10 +7746,9 @@ export function App() {
   const myWorkWorkspaceLabels = useMemo(
     () =>
       Object.fromEntries(
-        (dataset.workspacesByProject[config.projectId] ?? []).map((workspace) => [
-          workspace.id,
-          workspaceLabel(workspace),
-        ]),
+        (dataset.workspacesByProject[config.projectId] ?? []).map(
+          (workspace) => [workspace.id, workspaceLabel(workspace)],
+        ),
       ),
     [config.projectId, dataset.workspacesByProject],
   );
@@ -6999,9 +7756,13 @@ export function App() {
   const activityInbox = useActivityInbox({
     items: dataset.myWork,
     scopeKey: `${config.tenantId}:${config.projectId}`,
+    authorityAdapter: activityAuthorityAdapter,
+    authorityScope: activityAuthorityScope,
   });
   // OS 通知点击后经由 ref 跳转,避免 hook 依赖后文才定义的 openMyWorkSession。
-  const openMyWorkSessionRef = useRef<(item: ProjectWorkItem) => void>(() => {});
+  const openMyWorkSessionRef = useRef<(item: ProjectWorkItem) => void>(
+    () => {},
+  );
   useCompletionNotifications({
     entries: activityInbox.entries,
     scopeKey: `${config.tenantId}:${config.projectId}`,
@@ -7036,26 +7797,70 @@ export function App() {
   );
   const currentArtifactRun = sessionProjection?.currentRun ?? null;
   currentArtifactRunRef.current = currentArtifactRun;
+  const subAgentControlAuthority = useMemo(
+    () =>
+      resolveSubAgentControlAuthority(
+        config.mode,
+        selectedConversation ?? null,
+        currentArtifactRun,
+      ),
+    [config.mode, currentArtifactRun, selectedConversation],
+  );
+  useEffect(() => {
+    let active = true;
+    if (
+      config.mode !== 'cloud' ||
+      !activityAuthorityAdapter.client ||
+      !activityAuthorityScope ||
+      !currentArtifactRun
+    ) {
+      setAuthoritativeRunSummary(null);
+      return () => {
+        active = false;
+      };
+    }
+    setAuthoritativeRunSummary(null);
+    void activityAuthorityAdapter.client
+      .getRunSummary(activityAuthorityScope, currentArtifactRun.id)
+      .then((summary) => {
+        if (active) setAuthoritativeRunSummary(summary);
+      })
+      .catch(() => {
+        if (active) setAuthoritativeRunSummary(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    activityAuthorityAdapter,
+    activityAuthorityScope,
+    config.mode,
+    currentArtifactRun,
+  ]);
   const sessionUsageSummary = useMemo(
     () => deriveSessionUsage(conversationTimeline.items),
     [conversationTimeline],
   );
   const runCompletionSummary = useMemo(
     () =>
-      sessionDetailViewModel
+      sessionDetailViewModel &&
+      (config.mode !== 'cloud' || authoritativeRunSummary)
         ? buildRunCompletionSummary({
             status: sessionDetailViewModel.status,
             capabilityMode: sessionDetailViewModel.capabilityMode,
             error: sessionDetailViewModel.error,
             runStartedAt: currentArtifactRun?.started_at ?? null,
             runCompletedAt: currentArtifactRun?.completed_at ?? null,
-            usage: sessionUsageSummary,
+            usage: config.mode === 'cloud' ? null : sessionUsageSummary,
             changeSnapshot,
             artifactVersions: displaySessionProjection?.artifactVersions ?? [],
+            authoritySummary: authoritativeRunSummary,
           })
         : null,
     [
       sessionDetailViewModel,
+      authoritativeRunSummary,
+      config.mode,
       currentArtifactRun,
       sessionUsageSummary,
       changeSnapshot,
@@ -7100,7 +7905,10 @@ export function App() {
     setTerminal(null);
     setTerminalV2(null);
   }, [currentTerminalRunScopeKey]);
-  const terminalMatchesCurrentRun = terminalSessionMatchesRun(terminal, currentArtifactRun);
+  const terminalMatchesCurrentRun = terminalSessionMatchesRun(
+    terminal,
+    currentArtifactRun,
+  );
   const terminalUrl = useMemo(() => {
     if (!terminalMatchesCurrentRun || !terminal?.session_id) return null;
     try {
@@ -7141,7 +7949,8 @@ export function App() {
     terminalRecovery,
   );
   const terminalBinding = useMemo(
-    () => terminalBindingState(terminal, currentArtifactRun, terminalProxy.status),
+    () =>
+      terminalBindingState(terminal, currentArtifactRun, terminalProxy.status),
     [currentArtifactRun, terminal, terminalProxy.status],
   );
   const terminalInteractiveCapability = useMemo(
@@ -7151,26 +7960,48 @@ export function App() {
       ),
     [terminalMatchesCurrentRun, terminalProxy.connected],
   );
-  const runInputDeliveryOptions = useMemo(
-    () => {
-      if (!localRuntimeMode || sessionDetailViewModel?.capabilityMode !== 'code') return [];
-      const options: RunInputDelivery[] = [];
+  const runInputDeliveryOptions = useMemo(() => {
+    if (!currentArtifactRun) return [];
+    const options: RunInputDelivery[] = [];
+    if (config.mode === 'cloud') {
       if (
-        sessionProjection?.capabilities.canSteerNow &&
-        sessionProjection.capabilities.allowedActions.includes('steer_now')
+        !activityAuthorityAdapter.client ||
+        !activityAuthorityScope ||
+        !activityAuthorityAdapter.allowedActions.includes('create_run_input')
       ) {
-        options.push('steer_now');
+        return options;
       }
+      if (currentArtifactRun.status === 'running') options.push('steer_now');
       if (
-        sessionProjection?.capabilities.canQueueNext &&
-        sessionProjection.capabilities.allowedActions.includes('queue_next')
+        currentArtifactRun.status === 'queued' ||
+        currentArtifactRun.status === 'running'
       ) {
         options.push('queue_next');
       }
       return options;
-    },
-    [localRuntimeMode, sessionDetailViewModel?.capabilityMode, sessionProjection?.capabilities],
-  );
+    }
+    if (!localRuntimeMode) return options;
+    if (
+      sessionProjection?.capabilities.canSteerNow &&
+      sessionProjection.capabilities.allowedActions.includes('steer_now')
+    ) {
+      options.push('steer_now');
+    }
+    if (
+      sessionProjection?.capabilities.canQueueNext &&
+      sessionProjection.capabilities.allowedActions.includes('queue_next')
+    ) {
+      options.push('queue_next');
+    }
+    return options;
+  }, [
+    activityAuthorityAdapter,
+    activityAuthorityScope,
+    config.mode,
+    currentArtifactRun,
+    localRuntimeMode,
+    sessionProjection?.capabilities,
+  ]);
   const effectiveRunInputDeliveryValue = effectiveRunInputDelivery(
     runInputDelivery,
     runInputDeliveryOptions,
@@ -7178,19 +8009,23 @@ export function App() {
   const sessionChatDisabledReason =
     chatDisabledReason ??
     (selectedConversation
-      ? sessionProjectionState.status === 'idle' || sessionProjectionState.status === 'loading'
+      ? sessionProjectionState.status === 'idle' ||
+        sessionProjectionState.status === 'loading'
         ? t('session.authorityLoading')
         : sessionProjectionState.status === 'error'
           ? t('session.authorityError')
           : !(
                 sessionProjection?.capabilities.canSendMessage &&
-                sessionProjection.capabilities.allowedActions.includes('send_message')
+                sessionProjection.capabilities.allowedActions.includes(
+                  'send_message',
+                )
               ) && !runInputDeliveryOptions.length
             ? t('session.composerBlockedByRunState')
             : null
       : null);
   const sessionAuthorityNotice = useMemo(() => {
-    if (!selectedConversation || sessionProjectionState.status === 'ready') return null;
+    if (!selectedConversation || sessionProjectionState.status === 'ready')
+      return null;
     if (
       sessionProjectionState.status === 'idle' ||
       sessionProjectionState.status === 'loading'
@@ -7209,7 +8044,7 @@ export function App() {
     };
   }, [selectedConversation, sessionProjectionState.status, t]);
   const loadRunChanges = useCallback(async () => {
-    if (!currentArtifactRun || sessionDetailViewModel?.capabilityMode !== 'code') {
+    if (!currentArtifactRun) {
       setChangeSnapshot(null);
       setChangeSnapshotError(null);
       setChangeSnapshotLoading(false);
@@ -7218,7 +8053,35 @@ export function App() {
     setChangeSnapshotLoading(true);
     setChangeSnapshotError(null);
     try {
-      const snapshot = await api.getRunChanges(currentArtifactRun.id, currentArtifactRun.revision);
+      const snapshot =
+        config.mode === 'cloud'
+          ? activityAuthorityAdapter.client && activityAuthorityScope
+            ? desktopChangeSnapshotFromCloud(
+                await activityAuthorityAdapter.client.getRunChanges(
+                  activityAuthorityScope,
+                  currentArtifactRun.id,
+                  {
+                    scope: changeScope,
+                    expected_revision: currentArtifactRun.revision,
+                    ...(changeScope === 'turn'
+                      ? { turn_id: currentArtifactRun.message_id }
+                      : {}),
+                  },
+                ),
+              )
+            : (() => {
+                throw new Error(
+                  'cloud_run_changes_authority_scope_unavailable',
+                );
+              })()
+          : changeScope === 'run'
+            ? await api.getRunChanges(
+                currentArtifactRun.id,
+                currentArtifactRun.revision,
+              )
+            : (() => {
+                throw new Error('local_run_changes_scope_unavailable');
+              })();
       setChangeSnapshot(snapshot);
       setRunInputReferences((current) =>
         current.filter(
@@ -7232,13 +8095,38 @@ export function App() {
     } finally {
       setChangeSnapshotLoading(false);
     }
-  }, [api, config.apiBaseUrl, currentArtifactRun, sessionDetailViewModel?.capabilityMode]);
+  }, [
+    activityAuthorityAdapter,
+    activityAuthorityScope,
+    api,
+    config.apiBaseUrl,
+    config.mode,
+    changeScope,
+    currentArtifactRun,
+  ]);
+  const availableChangeScopes = useMemo<readonly RunChangeScope[]>(
+    () =>
+      config.mode === 'cloud'
+        ? currentArtifactRun?.message_id
+          ? ['turn', 'run', 'session']
+          : ['run', 'session']
+        : ['run'],
+    [config.mode, currentArtifactRun?.message_id],
+  );
+  useEffect(() => {
+    if (!availableChangeScopes.includes(changeScope)) setChangeScope('run');
+  }, [availableChangeScopes, changeScope]);
   useEffect(() => {
     void loadRunChanges();
   }, [loadRunChanges]);
   useEffect(() => {
     let active = true;
-    if (!localRuntimeMode || !currentArtifactRun) {
+    if (
+      !currentArtifactRun ||
+      (config.mode === 'local' && !localRuntimeMode) ||
+      (config.mode === 'cloud' &&
+        (!activityAuthorityAdapter.client || !activityAuthorityScope))
+    ) {
       setRunInputs([]);
       setRunInputsLoading(false);
       setRunInputsError(null);
@@ -7248,13 +8136,28 @@ export function App() {
     }
     setRunInputsLoading(true);
     setRunInputsError(null);
-    void api
-      .listRunInputs(currentArtifactRun.id)
-      .then((response) => {
-        if (active) setRunInputs(response.inputs);
+    const requestRunInputs = async (): Promise<DesktopRunInput[]> => {
+      if (
+        config.mode === 'cloud' &&
+        activityAuthorityAdapter.client &&
+        activityAuthorityScope
+      ) {
+        const response = await activityAuthorityAdapter.client.listRunInputs(
+          activityAuthorityScope,
+          currentArtifactRun.id,
+        );
+        return response.inputs.map(desktopRunInputFromCloud);
+      }
+      const response = await api.listRunInputs(currentArtifactRun.id);
+      return response.inputs;
+    };
+    void requestRunInputs()
+      .then((inputs) => {
+        if (active) setRunInputs(inputs);
       })
       .catch((caught) => {
-        if (active) setRunInputsError(formatConnectionError(caught, config.apiBaseUrl));
+        if (active)
+          setRunInputsError(formatConnectionError(caught, config.apiBaseUrl));
       })
       .finally(() => {
         if (active) setRunInputsLoading(false);
@@ -7262,7 +8165,15 @@ export function App() {
     return () => {
       active = false;
     };
-  }, [api, config.apiBaseUrl, currentArtifactRun, localRuntimeMode]);
+  }, [
+    activityAuthorityAdapter,
+    activityAuthorityScope,
+    api,
+    config.apiBaseUrl,
+    config.mode,
+    currentArtifactRun,
+    localRuntimeMode,
+  ]);
   useEffect(() => {
     setRunInputDelivery((current) =>
       current && runInputDeliveryOptions.includes(current)
@@ -7292,6 +8203,36 @@ export function App() {
       setPromotingRunInputId(input.id);
       setError(null);
       try {
+        if (config.mode === 'cloud') {
+          if (!activityAuthorityAdapter.client || !activityAuthorityScope) {
+            throw new Error('cloud_run_input_authority_scope_unavailable');
+          }
+          const outcome = await activityAuthorityAdapter.client.promoteRunInput(
+            activityAuthorityScope,
+            currentArtifactRun.id,
+            input.id,
+            {
+              expected_source_run_revision: currentArtifactRun.revision,
+              idempotency_key: `desktop-run-input-promotion:${input.id}`,
+            },
+          );
+          setRunInputs((current) =>
+            current.map((candidate) =>
+              candidate.id === outcome.input.id
+                ? desktopRunInputFromCloud(outcome.input)
+                : candidate,
+            ),
+          );
+          invalidateSessionAuthority();
+          setReviewTab('plan');
+          if (selectedConversation) {
+            await loadConversationTimeline(
+              selectedConversation,
+              config.projectId,
+            );
+          }
+          return;
+        }
         const outcome = await api.promoteRunInput(
           input.id,
           currentArtifactRun.revision,
@@ -7333,11 +8274,15 @@ export function App() {
     },
     [
       api,
+      activityAuthorityAdapter,
+      activityAuthorityScope,
       config.apiBaseUrl,
+      config.mode,
       config.projectId,
       currentArtifactRun,
       invalidateSessionAuthority,
       loadConversationTimeline,
+      selectedConversation,
       t,
     ],
   );
@@ -7349,34 +8294,49 @@ export function App() {
     : runControlLabel;
   const applyAuthoritativeRun = useCallback((run: DesktopRun) => {
     setAgentConversationSession((current) => {
-      if (!current || current.conversation.id !== run.conversation_id) return current;
-      const conversation = conversationWithAuthoritativeRun(current.conversation, run);
-      return conversation === current.conversation ? current : { ...current, conversation };
+      if (!current || current.conversation.id !== run.conversation_id)
+        return current;
+      const conversation = conversationWithAuthoritativeRun(
+        current.conversation,
+        run,
+      );
+      return conversation === current.conversation
+        ? current
+        : { ...current, conversation };
     });
     setDataset((current) => {
       let changed = false;
       const conversationsByWorkspace = Object.fromEntries(
-        Object.entries(current.conversationsByWorkspace).map(([workspaceId, conversations]) => [
-          workspaceId,
-          conversations.map((conversation) => {
-            if (conversation.id !== run.conversation_id) return conversation;
-            const updated = conversationWithAuthoritativeRun(conversation, run);
-            changed ||= updated !== conversation;
-            return updated;
-          }),
-        ]),
+        Object.entries(current.conversationsByWorkspace).map(
+          ([workspaceId, conversations]) => [
+            workspaceId,
+            conversations.map((conversation) => {
+              if (conversation.id !== run.conversation_id) return conversation;
+              const updated = conversationWithAuthoritativeRun(
+                conversation,
+                run,
+              );
+              changed ||= updated !== conversation;
+              return updated;
+            }),
+          ],
+        ),
       );
       return changed ? { ...current, conversationsByWorkspace } : current;
     });
   }, []);
   const approveSessionPlan = useCallback(
-    async (plan: SessionProjectionPlan, selection: SessionPlanApprovalSelection) => {
+    async (
+      plan: SessionProjectionPlan,
+      selection: SessionPlanApprovalSelection,
+    ) => {
       const authoritativeProjection = sessionProjection;
       const authoritativePlan = authoritativeProjection?.currentPlan ?? null;
       const capabilities = authoritativeProjection?.capabilities ?? null;
       const conversation = authoritativeProjection?.conversation ?? null;
       if (
-        authoritativeProjection?.planAuthority.kind !== 'desktop_plan_version' ||
+        authoritativeProjection?.planAuthority.kind !==
+          'desktop_plan_version' ||
         !authoritativePlan ||
         authoritativePlan.id !== plan.id ||
         authoritativePlan.version !== plan.version ||
@@ -7416,7 +8376,8 @@ export function App() {
           outcome.conversation,
           outcome.run,
         );
-        const workspaceId = nextConversation.workspace_id ?? config.workspaceId.trim();
+        const workspaceId =
+          nextConversation.workspace_id ?? config.workspaceId.trim();
         if (workspaceId) {
           selectConversation(
             nextConversation.project_id,
@@ -7431,7 +8392,10 @@ export function App() {
               : current,
           );
           applySectionSideEffects('chat');
-          void loadConversationTimeline(nextConversation, nextConversation.project_id);
+          void loadConversationTimeline(
+            nextConversation,
+            nextConversation.project_id,
+          );
         }
         applyAuthoritativeRun(outcome.run);
         invalidateSessionAuthority();
@@ -7477,13 +8441,14 @@ export function App() {
                     revision,
                     `desktop-recovery-fork:${runId}:${revision}`,
                   )
-              : action === 'cancel'
-                ? await api.cancelRun(runId, revision)
-                : await api.reviewRun(runId, {
-                    action: action === 'approve' ? 'approve' : 'request_changes',
-                    expectedRevision: revision,
-                    ...(feedback ? { feedback } : {}),
-                  });
+                : action === 'cancel'
+                  ? await api.cancelRun(runId, revision)
+                  : await api.reviewRun(runId, {
+                      action:
+                        action === 'approve' ? 'approve' : 'request_changes',
+                      expectedRevision: revision,
+                      ...(feedback ? { feedback } : {}),
+                    });
         applyAuthoritativeRun(outcome.run);
         invalidateSessionAuthority();
         showToast(
@@ -7496,7 +8461,14 @@ export function App() {
         setSessionRunActionPending(null);
       }
     },
-    [api, applyAuthoritativeRun, invalidateSessionAuthority, sessionDetailViewModel, showToast, t],
+    [
+      api,
+      applyAuthoritativeRun,
+      invalidateSessionAuthority,
+      sessionDetailViewModel,
+      showToast,
+      t,
+    ],
   );
   const handleArtifactAction = useCallback(
     async (
@@ -7506,21 +8478,26 @@ export function App() {
     ) => {
       const capabilities = sessionProjection?.capabilities;
       const authoritativeVersion = selectedConversation
-        ? sessionProjection?.artifactVersions.find((candidate) => candidate.id === version.id)
+        ? sessionProjection?.artifactVersions.find(
+            (candidate) => candidate.id === version.id,
+          )
         : version;
       const actionAllowed =
         Boolean(authoritativeVersion) &&
         authoritativeVersion?.revision === version.revision &&
-        artifactVersionActions(authoritativeVersion, currentArtifactRun).includes(action) &&
+        artifactVersionActions(
+          authoritativeVersion,
+          currentArtifactRun,
+        ).includes(action) &&
         (!selectedConversation ||
           (action === 'deliver'
             ? Boolean(
                 capabilities?.canDeliverArtifacts &&
-                  capabilities.allowedActions.includes('deliver_artifact'),
+                capabilities.allowedActions.includes('deliver_artifact'),
               )
             : Boolean(
                 capabilities?.canReviewArtifacts &&
-                  capabilities.allowedActions.includes('review_artifact'),
+                capabilities.allowedActions.includes('review_artifact'),
               )));
       if (!actionAllowed || !authoritativeVersion) {
         setError(t('session.authorityActionUnavailable'));
@@ -7534,11 +8511,17 @@ export function App() {
             authoritativeVersion.id,
             artifactDeliveryRequest(authoritativeVersion),
           );
-          if (!outcome.accepted) throw new Error(t('session.authorityActionUnavailable'));
+          if (!outcome.accepted)
+            throw new Error(t('session.authorityActionUnavailable'));
         } else {
           const outcome = await api.reviewArtifactVersion(
             authoritativeVersion.id,
-            artifactReviewRequest(authoritativeVersion, action, currentArtifactRun, feedback),
+            artifactReviewRequest(
+              authoritativeVersion,
+              action,
+              currentArtifactRun,
+              feedback,
+            ),
           );
           if (outcome.run) applyAuthoritativeRun(outcome.run);
         }
@@ -7575,7 +8558,7 @@ export function App() {
       : 'Not connected';
   const authStatusLabel =
     auth.status === 'signed_in'
-      ? auth.user?.email ?? 'signed in'
+      ? (auth.user?.email ?? 'signed in')
       : auth.status === 'manual'
         ? 'manual API key'
         : 'signed out';
@@ -7601,7 +8584,11 @@ export function App() {
       conversationTimeline.conversationId === scopedConversationId
         ? latestConversationRuntimeModelEvent(conversationTimeline.items)
         : null,
-    [conversationTimeline.conversationId, conversationTimeline.items, scopedConversationId],
+    [
+      conversationTimeline.conversationId,
+      conversationTimeline.items,
+      scopedConversationId,
+    ],
   );
   const chatModelScopeKey = scopedConversation
     ? `${agentConversationScopeKey(config)}\u0000${scopedConversation.id}`
@@ -7609,7 +8596,8 @@ export function App() {
   const currentConversationModelMutation =
     conversationModelMutation.scopeKey === chatModelScopeKey &&
     conversationModelMutation.hasOverride &&
-    conversationModelMutation.baseEventRevision === (conversationModelEvent?.revision ?? null)
+    conversationModelMutation.baseEventRevision ===
+      (conversationModelEvent?.revision ?? null)
       ? conversationModelMutation
       : null;
   const chatRuntimeModelSelection = conversationRuntimeModelSelection(
@@ -7654,7 +8642,8 @@ export function App() {
         const activeSession = agentConversationSessionRef.current;
         if (
           conversationModelMutationRequestRef.current !== requestId ||
-          activeSession?.scopeKey !== agentConversationScopeKey(configRef.current) ||
+          activeSession?.scopeKey !==
+            agentConversationScopeKey(configRef.current) ||
           activeSession.conversation.id !== conversation.id
         ) {
           return;
@@ -7671,9 +8660,11 @@ export function App() {
           return next;
         });
         updateDataset((current) => {
-          const workspaceId = updated.workspace_id?.trim() || config.workspaceId.trim();
+          const workspaceId =
+            updated.workspace_id?.trim() || config.workspaceId.trim();
           const conversations = current.conversationsByWorkspace[workspaceId];
-          if (!conversations?.some((candidate) => candidate.id === updated.id)) return current;
+          if (!conversations?.some((candidate) => candidate.id === updated.id))
+            return current;
           return {
             ...current,
             conversationsByWorkspace: {
@@ -7706,7 +8697,8 @@ export function App() {
         }
         throw caught instanceof Error ? caught : new Error(message);
       }
-    }, [
+    },
+    [
       api,
       chatModelScopeKey,
       config.apiBaseUrl,
@@ -7721,10 +8713,19 @@ export function App() {
   const selectChatRuntimeModel = useCallback(
     async (value: string): Promise<void> => {
       if (!scopedConversation) return selectRuntimeModel(value);
-      const option = runtimeModelOptions.find((candidate) => candidate.value === value);
+      const option = runtimeModelOptions.find(
+        (candidate) => candidate.value === value,
+      );
       if (!option) throw new Error(t('chat.selectedModelUnavailable'));
       return persistChatRuntimeModelOverride(option.modelId);
-    }, [persistChatRuntimeModelOverride, runtimeModelOptions, scopedConversation, selectRuntimeModel, t],
+    },
+    [
+      persistChatRuntimeModelOverride,
+      runtimeModelOptions,
+      scopedConversation,
+      selectRuntimeModel,
+      t,
+    ],
   );
   const resetChatRuntimeModel = useCallback(
     async (): Promise<void> => persistChatRuntimeModelOverride(null),
@@ -7751,12 +8752,16 @@ export function App() {
     },
     {
       label: 'Tools',
-      value: localRuntimeMode ? String(localRuntimeStatus?.tool_count ?? 'unavailable') : 'server',
+      value: localRuntimeMode
+        ? String(localRuntimeStatus?.tool_count ?? 'unavailable')
+        : 'server',
     },
     {
       label: 'Root',
       value: localRuntimeMode
-        ? localRuntimeStatus?.workspace_root || config.workspaceRoot || 'not configured'
+        ? localRuntimeStatus?.workspace_root ||
+          config.workspaceRoot ||
+          'not configured'
         : config.projectId || 'not selected',
     },
   ];
@@ -7764,16 +8769,24 @@ export function App() {
     if (!showRuntimeConfig) return [];
 
     const workspaceProjectIds = new Map<string, string>();
-    Object.entries(dataset.workspacesByProject).forEach(([projectId, workspaces]) => {
-      workspaces.forEach((workspace) => workspaceProjectIds.set(workspace.id, projectId));
-    });
-    const workspaceById = new Map(dataset.workspaces.map((workspace) => [workspace.id, workspace]));
+    Object.entries(dataset.workspacesByProject).forEach(
+      ([projectId, workspaces]) => {
+        workspaces.forEach((workspace) =>
+          workspaceProjectIds.set(workspace.id, projectId),
+        );
+      },
+    );
+    const workspaceById = new Map(
+      dataset.workspaces.map((workspace) => [workspace.id, workspace]),
+    );
     const conversationItems = Object.entries(dataset.conversationsByWorkspace)
       .flatMap(([workspaceId, conversations]) =>
         conversations.map((conversation) => {
           const workspace = workspaceById.get(workspaceId);
           const projectId =
-            conversation.project_id || workspaceProjectIds.get(workspaceId) || config.projectId;
+            conversation.project_id ||
+            workspaceProjectIds.get(workspaceId) ||
+            config.projectId;
           const updatedAt = conversation.updated_at ?? conversation.created_at;
           return {
             id: `conversation:${conversation.id}`,
@@ -7804,7 +8817,9 @@ export function App() {
           time: formatRunTime(updatedAt),
           sortTime: timestampFromIso(updatedAt),
           projectId:
-            workspace.project_id || workspaceProjectIds.get(workspace.id) || config.projectId,
+            workspace.project_id ||
+            workspaceProjectIds.get(workspace.id) ||
+            config.projectId,
           workspaceId: workspace.id,
         };
       })
@@ -7850,9 +8865,10 @@ export function App() {
     showRuntimeConfig,
   ]);
   const activeSidebarRunId =
-    selectedSidebarRunId && sidebarRunItems.some((item) => item.id === selectedSidebarRunId)
+    selectedSidebarRunId &&
+    sidebarRunItems.some((item) => item.id === selectedSidebarRunId)
       ? selectedSidebarRunId
-      : sidebarRunItems[0]?.id ?? '';
+      : (sidebarRunItems[0]?.id ?? '');
   const activeSidebarRun =
     sidebarRunItems.find((item) => item.id === activeSidebarRunId) ?? null;
   const titlebarPrimaryLabel =
@@ -7860,7 +8876,7 @@ export function App() {
       ? t('myWork.title')
       : showRuntimeConfig && activeSection === 'automations'
         ? t('automations.title')
-      : `Session: ${sessionTitle}`;
+        : `Session: ${sessionTitle}`;
   const titlebarRunTimeLabel = activeSidebarRun?.time ?? lastSync;
   useEffect(() => {
     if (!showRuntimeConfig) {
@@ -7892,12 +8908,18 @@ export function App() {
   const selectSidebarRun = (item: SidebarRunItem) => {
     setSelectedSidebarRunId(item.id);
     setRunControlState(
-      runStateById[item.id] ?? (item.id === activeSidebarRunId ? runControlState : 'running'),
+      runStateById[item.id] ??
+        (item.id === activeSidebarRunId ? runControlState : 'running'),
     );
     setRunLiveMode(true);
 
     if (item.conversation && item.workspaceId) {
-      selectConversation(item.projectId, item.workspaceId, item.conversation, 'board');
+      selectConversation(
+        item.projectId,
+        item.workspaceId,
+        item.conversation,
+        'board',
+      );
       return;
     }
 
@@ -7946,7 +8968,11 @@ export function App() {
           return;
         }
 
-        setAuth((current) => ({ ...current, status: 'signing_in', error: null }));
+        setAuth((current) => ({
+          ...current,
+          status: 'signing_in',
+          error: null,
+        }));
         setConnection('loading');
         setError(null);
 
@@ -7979,7 +9005,10 @@ export function App() {
           return;
         }
 
-        if (trustedSession.runtime_mode !== 'local' || !localRuntimeAuthorityReady) {
+        if (
+          trustedSession.runtime_mode !== 'local' ||
+          !localRuntimeAuthorityReady
+        ) {
           localResumeAttemptRef.current = '';
           setAuth(emptyAuthState);
           setConnection('idle');
@@ -7989,7 +9018,9 @@ export function App() {
         // The native local runtime uses an ephemeral port after each launch. Bind recovery to the
         // exact live endpoint and launch capability reported by the sidecar, then rotate the record.
         const bootstrapClient = new DesktopApiClient({ ...config, apiKey: '' });
-        const outcome = await bootstrapClient.resumeLocalSession(trustedSession.credential);
+        const outcome = await bootstrapClient.resumeLocalSession(
+          trustedSession.credential,
+        );
         if (
           localResumeAttemptRef.current !== attemptKey ||
           authAttemptRevisionRef.current !== authAttemptRevision
@@ -8012,7 +9043,11 @@ export function App() {
           expires_at: outcome.session.expires_at ?? null,
         });
         if (authAttemptRevisionRef.current !== authAttemptRevision) return;
-        const hydrated = await hydrateLocalSession(outcome, config, authAttemptRevision);
+        const hydrated = await hydrateLocalSession(
+          outcome,
+          config,
+          authAttemptRevision,
+        );
         if (!hydrated) return;
         applySectionSideEffects('workspace');
       } catch (caught) {
@@ -8073,7 +9108,8 @@ export function App() {
     }
     openSettingsEntry('workspace_overview');
   };
-  const openProfileWorkspaceSettings = () => openSettingsEntry('profile_workspace_switch');
+  const openProfileWorkspaceSettings = () =>
+    openSettingsEntry('profile_workspace_switch');
 
   const openConnectionSettings = () => {
     if (!identityAuthenticated) {
@@ -8107,8 +9143,14 @@ export function App() {
     });
     const listedProjects = await contextClient.listProjects(tenantId);
     if (!requestIsCurrent()) return;
-    const scopedProjects = listedProjects.filter((project) => project.tenant_id === tenantId);
-    const selectedProject = findWorkspaceProject(scopedProjects, tenantId, projectId);
+    const scopedProjects = listedProjects.filter(
+      (project) => project.tenant_id === tenantId,
+    );
+    const selectedProject = findWorkspaceProject(
+      scopedProjects,
+      tenantId,
+      projectId,
+    );
     if (!selectedProject) {
       throw new Error(t('settings.selectedProjectUnavailable'));
     }
@@ -8120,7 +9162,9 @@ export function App() {
       currentContext = currentContextResponse.context;
     }
     let nextContext = currentContext;
-    if (!workspaceContextMatchesSelection(currentContext, tenantId, projectId)) {
+    if (
+      !workspaceContextMatchesSelection(currentContext, tenantId, projectId)
+    ) {
       const nextContextResponse = await contextClient.switchWorkspaceContext(
         tenantId,
         projectId,
@@ -8134,11 +9178,20 @@ export function App() {
       throw new Error(t('settings.contextResponseMismatch'));
     }
     if (!requestIsCurrent()) return;
-    const nextConfig = { ...requestConfig, tenantId, projectId, workspaceId: '' };
+    const nextConfig = {
+      ...requestConfig,
+      tenantId,
+      projectId,
+      workspaceId: '',
+    };
     contextRevisionRef.current = nextContext.revision;
     resetProjectScopedState();
     commitRuntimeConfig(nextConfig);
-    setAuth((current) => ({ ...current, context: nextContext, projects: scopedProjects }));
+    setAuth((current) => ({
+      ...current,
+      context: nextContext,
+      projects: scopedProjects,
+    }));
     applySectionSideEffects('workspace');
     await refreshRuntime(nextConfig, [selectedProject]);
   };
@@ -8148,7 +9201,9 @@ export function App() {
     if (!previousSection) return;
     const leavingSection = activeSectionRef.current;
     setSectionBackStack(sectionBackStack.slice(0, -1));
-    setSectionForwardStack([leavingSection, ...sectionForwardStack].slice(0, 24));
+    setSectionForwardStack(
+      [leavingSection, ...sectionForwardStack].slice(0, 24),
+    );
     applySectionSideEffects(previousSection);
   };
 
@@ -8186,7 +9241,10 @@ export function App() {
   }, []);
 
   const openMCPAppResult = useCallback((item: AgentTimelineItem) => {
-    const result = applyMCPAppCanvasStreamEvent(mcpAppCanvasStateRef.current, item);
+    const result = applyMCPAppCanvasStreamEvent(
+      mcpAppCanvasStateRef.current,
+      item,
+    );
     if (!result.handled || result.action !== 'open') return;
     mcpAppCanvasStateRef.current = result.state;
     setMCPAppCanvasState(result.state);
@@ -8194,9 +9252,14 @@ export function App() {
     setReviewPanelOpen(true);
   }, []);
 
-  const handleChatRemoveReference = useCallback((reference: CodeRangeReference) => {
-    setRunInputReferences((current) => toggleRunInputReference(current, reference));
-  }, []);
+  const handleChatRemoveReference = useCallback(
+    (reference: CodeRangeReference) => {
+      setRunInputReferences((current) =>
+        toggleRunInputReference(current, reference),
+      );
+    },
+    [],
+  );
 
   const handleAddChangeComment = useCallback(
     (comment: ChangeReviewComment) => {
@@ -8258,7 +9321,9 @@ export function App() {
   ]);
 
   const handleChatRuntimeTargetChange = useCallback((value: string) => {
-    setRuntimeTarget(value === runtimeTargetLabels.staging ? 'staging' : 'local');
+    setRuntimeTarget(
+      value === runtimeTargetLabels.staging ? 'staging' : 'local',
+    );
   }, []);
 
   const showShortcutsDefinition = shortcutById('show-shortcuts');
@@ -8297,8 +9362,7 @@ export function App() {
       icon: <ActivityLogIcon />,
       disabled: !identityAuthenticated || !config.tenantId.trim(),
       onSelect: () => {
-        const tenantTasksRoute =
-          desktopProductionRouteRegistry.byId.get(TENANT_TASKS_ROUTE_ID);
+        const tenantTasksRoute = desktopProductionRouteRegistry.byId.get(TENANT_TASKS_ROUTE_ID);
         if (!tenantTasksRoute) return;
         const tenantTasksPath = buildDesktopRoutePath(tenantTasksRoute, {
           tenantId: config.tenantId,
@@ -8316,8 +9380,7 @@ export function App() {
         !config.tenantId.trim() ||
         !config.projectId.trim(),
       onSelect: () => {
-        const projectSupportRoute =
-          desktopProductionRouteRegistry.byId.get(PROJECT_SUPPORT_ROUTE_ID);
+        const projectSupportRoute = desktopProductionRouteRegistry.byId.get(PROJECT_SUPPORT_ROUTE_ID);
         if (!projectSupportRoute) return;
         const projectSupportPath = buildDesktopRoutePath(projectSupportRoute, {
           tenantId: config.tenantId,
@@ -8335,7 +9398,9 @@ export function App() {
         ? t('commandPalette.settingsDescription')
         : t('commandPalette.apiKeyDescription'),
       icon: <GearIcon />,
-      onSelect: identityAuthenticated ? openSidebarSettings : openConnectionSettings,
+      onSelect: identityAuthenticated
+        ? openSidebarSettings
+        : openConnectionSettings,
     },
     {
       id: 'sign-in',
@@ -8345,7 +9410,7 @@ export function App() {
           : t('login.signInTitle'),
       description:
         auth.status === 'signed_in'
-          ? auth.user?.email ?? t('commandPalette.accountDescription')
+          ? (auth.user?.email ?? t('commandPalette.accountDescription'))
           : t('commandPalette.signInDescription'),
       icon: <RocketIcon />,
       onSelect: () => {
@@ -8353,7 +9418,8 @@ export function App() {
           openSidebarSettings();
           return;
         }
-        loginRestoreTargetRef.current = commandPaletteTriggerRef.current?.isConnected
+        loginRestoreTargetRef.current = commandPaletteTriggerRef.current
+          ?.isConnected
           ? commandPaletteTriggerRef.current
           : getLoginRestoreTarget();
         setLoginModalOpen(true);
@@ -8362,7 +9428,8 @@ export function App() {
     {
       id: 'refresh-runtime',
       label: t('commandPalette.refreshWorkspace'),
-      description: runtimeDisabledReason ?? t('commandPalette.refreshDescription'),
+      description:
+        runtimeDisabledReason ?? t('commandPalette.refreshDescription'),
       icon: <RocketIcon />,
       disabled: Boolean(runtimeDisabledReason) || connection === 'loading',
       onSelect: () => void refreshRuntime(),
@@ -8379,7 +9446,9 @@ export function App() {
   const normalizedCommandQuery = commandQuery.trim().toLowerCase();
   const filteredCommandItems = normalizedCommandQuery
     ? commandItems.filter((item) =>
-        `${item.label} ${item.description}`.toLowerCase().includes(normalizedCommandQuery),
+        `${item.label} ${item.description}`
+          .toLowerCase()
+          .includes(normalizedCommandQuery),
       )
     : commandItems;
 
@@ -8392,7 +9461,10 @@ export function App() {
       timelineState={selectedConversation ? sessionTimeline : null}
       agentTaskSignals={agentTaskSignals}
       workflowCounts={chatWorkflowCounts}
-      sessionTitle={selectedConversation?.title ?? workspaceLabel(selectedWorkspace ?? undefined)}
+      sessionTitle={
+        selectedConversation?.title ??
+        workspaceLabel(selectedWorkspace ?? undefined)
+      }
       scopeLabel={
         selectedConversation
           ? `Agent session / ${workspaceLabel(selectedWorkspace ?? undefined)}`
@@ -8420,6 +9492,8 @@ export function App() {
       modelError={chatRuntimeModelError}
       runtimeTargetLabel={runtimeTargetLabels[runtimeTarget]}
       runtimeTargetOptions={runtimeTargetComposerOptions}
+      composeAheadFallbackAllowed={false}
+      canonicalRunStatus={currentArtifactRun?.status ?? null}
       runInputDelivery={effectiveRunInputDeliveryValue}
       runInputDeliveryOptions={runInputDeliveryOptions}
       runInputs={runInputs}
@@ -8442,6 +9516,8 @@ export function App() {
           messageId: request.messageId,
         })
       }
+      subAgentControlAuthority={subAgentControlAuthority}
+      onSubAgentControl={socket.sendSubAgentControl}
       onRefresh={handleChatRefresh}
       onLoadEarlier={loadEarlierTimeline}
       onRespondToHitl={respondToHitlWithSteering}
@@ -8456,7 +9532,9 @@ export function App() {
       }
       authorityNotice={sessionAuthorityNotice}
       onAuthorityAction={
-        sessionProjectionState.status === 'error' ? invalidateSessionAuthority : undefined
+        sessionProjectionState.status === 'error'
+          ? invalidateSessionAuthority
+          : undefined
       }
       onWorkflowSelect={selectChatWorkflowTarget}
       onModelChange={selectChatRuntimeModel}
@@ -8480,12 +9558,15 @@ export function App() {
           workspace={selectedWorkspace}
           project={selectedProject}
           tenantName={
-            auth.tenants.find((tenant) => tenant.id === config.tenantId)?.name ||
+            auth.tenants.find((tenant) => tenant.id === config.tenantId)
+              ?.name ||
             config.tenantId ||
             t('settings.noTenantSelected')
           }
           workspaceAuthority={newTaskWorkspaceAuthority}
-          conversations={dataset.conversationsByWorkspace[config.workspaceId] ?? []}
+          conversations={
+            dataset.conversationsByWorkspace[config.workspaceId] ?? []
+          }
           members={dataset.workspaceMembers}
           agents={dataset.workspaceAgents}
           plan={activeDataset.plan}
@@ -8502,7 +9583,12 @@ export function App() {
               setError(t('myWork.sessionUnavailable'));
               return;
             }
-            selectConversation(config.projectId, config.workspaceId, conversation, 'chat');
+            selectConversation(
+              config.projectId,
+              config.workspaceId,
+              conversation,
+              'chat',
+            );
           }}
           onOpenSettings={openWorkspaceSettings}
         />
@@ -8519,22 +9605,33 @@ export function App() {
 
   const openMyWorkSession = async (item: ProjectWorkItem) => {
     const workspaceId = item.workspace_id ?? '';
+    const conversationGroupKey = workspaceId || UNBOUND_CONVERSATIONS_KEY;
     const expectedContextRevision = contextRevisionRef.current;
     const expectedScopeEpoch = configScopeEpochRef.current;
-    let conversation = (dataset.conversationsByWorkspace[workspaceId] ?? []).find(
-      (candidate) => candidate.id === item.conversation_id,
-    );
-    if (!workspaceId || item.project_id !== config.projectId) {
+    let conversation = (
+      dataset.conversationsByWorkspace[conversationGroupKey] ?? []
+    ).find((candidate) => candidate.id === item.conversation_id);
+    if (item.project_id !== config.projectId) {
       setError(t('myWork.sessionUnavailable'));
       return;
     }
     if (!conversation) {
       try {
-        const response = await api.listConversations(item.project_id, workspaceId);
-        conversation = response.items.find((candidate) => candidate.id === item.conversation_id);
+        const response = await api.listConversations(
+          item.project_id,
+          workspaceId
+            ? workspaceId
+            : { workspaceId: null, unboundOnly: true },
+        );
+        conversation = response.items.find(
+          (candidate) => candidate.id === item.conversation_id,
+        );
       } catch (caught) {
         if (
-          !isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) ||
+          !isCurrentContextRevision(
+            expectedContextRevision,
+            contextRevisionRef.current,
+          ) ||
           expectedScopeEpoch !== configScopeEpochRef.current
         ) {
           return;
@@ -8544,7 +9641,10 @@ export function App() {
       }
     }
     if (
-      !isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) ||
+      !isCurrentContextRevision(
+        expectedContextRevision,
+        contextRevisionRef.current,
+      ) ||
       expectedScopeEpoch !== configScopeEpochRef.current
     ) {
       return;
@@ -8572,16 +9672,21 @@ export function App() {
       setError(t('myWork.sessionUnavailable'));
       return;
     }
-    let conversation = (dataset.conversationsByWorkspace[workspaceId] ?? []).find(
-      (candidate) => candidate.id === conversationId,
-    );
+    let conversation = (
+      dataset.conversationsByWorkspace[workspaceId] ?? []
+    ).find((candidate) => candidate.id === conversationId);
     if (!conversation) {
       try {
         const response = await api.listConversations(projectId, workspaceId);
-        conversation = response.items.find((candidate) => candidate.id === conversationId);
+        conversation = response.items.find(
+          (candidate) => candidate.id === conversationId,
+        );
       } catch (caught) {
         if (
-          !isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) ||
+          !isCurrentContextRevision(
+            expectedContextRevision,
+            contextRevisionRef.current,
+          ) ||
           expectedScopeEpoch !== configScopeEpochRef.current
         ) {
           return;
@@ -8591,7 +9696,10 @@ export function App() {
       }
     }
     if (
-      !isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) ||
+      !isCurrentContextRevision(
+        expectedContextRevision,
+        contextRevisionRef.current,
+      ) ||
       expectedScopeEpoch !== configScopeEpochRef.current
     ) {
       return;
@@ -8614,7 +9722,9 @@ export function App() {
       error={dataset.myWorkError}
       loading={connection === 'loading' || myWorkRefreshing}
       mode={preferredTaskMode}
-      projectName={selectedProject?.name ?? selectedProject?.id ?? t('overview.none')}
+      projectName={
+        selectedProject?.name ?? selectedProject?.id ?? t('overview.none')
+      }
       workspaceLabels={myWorkWorkspaceLabels}
       onRefresh={() => void refreshMyWork()}
       onOpenSession={(item) => void openMyWorkSession(item)}
@@ -8628,7 +9738,9 @@ export function App() {
       unreadCount={activityInbox.unreadCount}
       error={dataset.myWorkError}
       loading={connection === 'loading' || myWorkRefreshing}
-      projectName={selectedProject?.name ?? selectedProject?.id ?? t('overview.none')}
+      projectName={
+        selectedProject?.name ?? selectedProject?.id ?? t('overview.none')
+      }
       workspaceLabels={myWorkWorkspaceLabels}
       onRefresh={() => void refreshMyWork()}
       onOpen={(entry) => {
@@ -8649,7 +9761,8 @@ export function App() {
       auth.user?.user_id ?? '',
     ].join('\u0000');
     const workspace =
-      newThreadWorkspaces.find((item) => item.id === newThreadWorkspaceId) ?? null;
+      newThreadWorkspaces.find((item) => item.id === newThreadWorkspaceId) ??
+      null;
     const workspaceModelOptions =
       preferredTaskMode === 'code'
         ? workspaceAgentPolicy.codeModelOptions
@@ -8662,11 +9775,13 @@ export function App() {
     );
     const modelUnavailable = Boolean(
       newThreadWorkspaceId &&
-        workspaceAgentPolicy.policy &&
-        workspaceModelOptions.length === 0,
+      workspaceAgentPolicy.policy &&
+      workspaceModelOptions.length === 0,
     );
     const unboundTransportUnavailable =
-      !newThreadWorkspaceId && config.mode === 'cloud' && connection !== 'ready';
+      !newThreadWorkspaceId &&
+      config.mode === 'cloud' &&
+      connection !== 'ready';
     return (
       <NewThreadComposer
         key={newThreadComposerScopeKey}
@@ -8682,10 +9797,13 @@ export function App() {
         mode={preferredTaskMode}
         policy={workspaceAgentPolicy.policy}
         modelOptions={modelOptions}
-        canManagePolicy={canManageWorkspacePolicy && !workspaceAgentPolicy.compatibilityMode}
+        canManagePolicy={
+          canManageWorkspacePolicy && !workspaceAgentPolicy.compatibilityMode
+        }
         loadingPolicy={workspaceAgentPolicy.loading}
         compatibilityMode={
-          Boolean(newThreadWorkspaceId) && workspaceAgentPolicy.compatibilityMode
+          Boolean(newThreadWorkspaceId) &&
+          workspaceAgentPolicy.compatibilityMode
         }
         disabledReason={
           newTaskDisabledReason ??
@@ -8760,7 +9878,9 @@ export function App() {
     </Suspense>
   );
 
-  const renderWorkspaceReviewPanel = (sessionControls?: SessionCanvasControls) => (
+  const renderWorkspaceReviewPanel = (
+    sessionControls?: SessionCanvasControls,
+  ) => (
     <WorkspaceReviewPanel
       activeTab={reviewTab}
       socketEvents={workspaceEventInputs}
@@ -8780,6 +9900,8 @@ export function App() {
       changeSnapshot={changeSnapshot}
       changeSnapshotLoading={changeSnapshotLoading}
       changeSnapshotError={changeSnapshotError}
+      changeScope={changeScope}
+      availableChangeScopes={availableChangeScopes}
       changeReferences={runInputReferences}
       changeComments={commentsForConversation(
         changeCommentsByConversation,
@@ -8814,7 +9936,9 @@ export function App() {
       sessionDataAvailable={displaySessionProjection !== null}
       authorityNotice={sessionAuthorityNotice}
       onAuthorityAction={
-        sessionProjectionState.status === 'error' ? invalidateSessionAuthority : undefined
+        sessionProjectionState.status === 'error'
+          ? invalidateSessionAuthority
+          : undefined
       }
       currentRunId={sessionDetailViewModel?.runId ?? null}
       sessionViewModel={sessionDetailViewModel}
@@ -8847,10 +9971,15 @@ export function App() {
       onTerminalInput={terminalProxy.sendInput}
       onTerminalResize={terminalProxy.resize}
       onRefreshChanges={() => void loadRunChanges()}
+      onChangeScope={setChangeScope}
       onToggleChangeReference={(reference) =>
-        setRunInputReferences((current) => toggleRunInputReference(current, reference))
+        setRunInputReferences((current) =>
+          toggleRunInputReference(current, reference),
+        )
       }
-      onOpenAgentSession={(conversationId) => void openAgentSession(conversationId)}
+      onOpenAgentSession={(conversationId) =>
+        void openAgentSession(conversationId)
+      }
       onTabChange={setReviewTab}
       sessionControls={sessionControls}
     />
@@ -8905,9 +10034,7 @@ export function App() {
         scaling="95%"
       >
         <DesktopProductionRouter
-          authenticationPassthroughRouteIds={
-            authenticationPassthroughRouteIds
-          }
+          authenticationPassthroughRouteIds={authenticationPassthroughRouteIds}
           forceLegacyChildren={invitationSignInRequested}
           location={desktopProductionRouteLocation}
           mode={config.mode}
@@ -8915,9 +10042,7 @@ export function App() {
           permissions={productionRouteBasePermissions}
           registry={desktopProductionRouteRegistry}
           resolveCapability={resolveProductionRouteCapability}
-          resolvePermissionSnapshot={
-            resolveProductionRoutePermissionSnapshot
-          }
+          resolvePermissionSnapshot={resolveProductionRoutePermissionSnapshot}
           switchScope={switchProductionRouteScope}
         >
           <LoginScreen
@@ -8932,7 +10057,9 @@ export function App() {
             onPasswordChange={setLoginPassword}
             onEmailLogin={(trustedDevice) => void login(trustedDevice)}
             onLocalSession={(trustedDevice) => void loginLocalSession(trustedDevice)}
-            onWorkspaceSso={(trustedDevice) => void loginWithWorkspaceSso(trustedDevice)}
+            onWorkspaceSso={(trustedDevice) =>
+              void loginWithWorkspaceSso(trustedDevice)
+            }
             workspaceSso={workspaceSso}
             onOpenWorkspaceSso={openCurrentWorkspaceSso}
             onCancelWorkspaceSso={cancelWorkspaceSso}
@@ -8963,7 +10090,6 @@ export function App() {
           } as CSSProperties
         }
       >
-
         <section className="desktop-body">
           <DesktopSidebar
             activeSection={
@@ -8979,12 +10105,15 @@ export function App() {
             taskCount={dataset.myWork.length}
             activityUnreadCount={activityInbox.unreadCount}
             tenantName={
-              auth.tenants.find((tenant) => tenant.id === config.tenantId)?.name ||
+              auth.tenants.find((tenant) => tenant.id === config.tenantId)
+                ?.name ||
               config.tenantId ||
               t('settings.noTenantSelected')
             }
             projectName={
-              selectedProject?.name ?? selectedProject?.id ?? t('settings.noProjectSelected')
+              selectedProject?.name ??
+              selectedProject?.id ??
+              t('settings.noProjectSelected')
             }
             user={auth.user}
             workspaces={dataset.workspacesByProject[config.projectId] ?? []}
@@ -9014,7 +10143,9 @@ export function App() {
             onToggleWorkspace={toggleWorkspace}
             onRetryProject={() => void refreshRuntime()}
             onRetryWorkspace={(workspaceId) => void loadWorkspaceConversations(workspaceId)}
-            onSelectWorkspace={(projectId, workspaceId) => selectWorkspace(workspaceId, projectId)}
+            onSelectWorkspace={(projectId, workspaceId) =>
+              selectWorkspace(workspaceId, projectId)
+            }
             onSelectConversation={selectConversation}
             onRenameConversation={renameConversation}
             onDeleteConversation={deleteConversation}
@@ -9055,7 +10186,11 @@ export function App() {
               switchScope={switchProductionRouteScope}
             >
               {error ? (
-                <div className="workbench-error" role="alert" aria-live="polite">
+                <div
+                  className="workbench-error"
+                  role="alert"
+                  aria-live="polite"
+                >
                   <span>{error}</span>
                   {connection === 'error' && showRuntimeConfig ? (
                     <button
@@ -9073,7 +10208,11 @@ export function App() {
               {activeSection === 'chat' && sessionDetailViewModel ? (
                 <SessionWorkspace
                   viewModel={sessionDetailViewModel}
-                  thread={<section className={paneStageClassName}>{renderWorkbench()}</section>}
+                  thread={
+                    <section className={paneStageClassName}>
+                      {renderWorkbench()}
+                    </section>
+                  }
                   canvas={
                     showReviewPanel
                       ? (controls) => renderWorkspaceReviewPanel(controls)
@@ -9134,7 +10273,9 @@ export function App() {
                 />
               ) : (
                 <section className="workbench-layout">
-                  <section className={paneStageClassName}>{renderWorkbench()}</section>
+                  <section className={paneStageClassName}>
+                    {renderWorkbench()}
+                  </section>
                 </section>
               )}
             </DesktopProductionRouter>
@@ -9164,7 +10305,9 @@ export function App() {
           workspaceAuthority={newTaskWorkspaceAuthority}
           resumeDraft={newTaskResumeDraft}
           preferredWorkspaceId={newTaskPreferredWorkspaceId}
-          preferredKind={preferredTaskMode === 'code' ? 'programming' : 'general'}
+          preferredKind={
+            preferredTaskMode === 'code' ? 'programming' : 'general'
+          }
           disabledReason={newTaskDisabledReason}
           onClose={() => {
             setNewTaskOpen(false);
@@ -9183,7 +10326,9 @@ export function App() {
         <WorkspaceCreateDialog
           open={workspaceCreateOpen}
           projectName={
-            selectedProject?.name ?? selectedProject?.id ?? t('settings.noProjectSelected')
+            selectedProject?.name ??
+            selectedProject?.id ??
+            t('settings.noProjectSelected')
           }
           scope={{
             tenantId: config.tenantId,
@@ -9282,7 +10427,9 @@ function formatLoginError(error: unknown, apiBaseUrl: string): string {
   return formatConnectionError(error, apiBaseUrl);
 }
 
-function workspaceLabel(workspace: { id: string; name?: string; title?: string } | undefined): string {
+function workspaceLabel(
+  workspace: { id: string; name?: string; title?: string } | undefined,
+): string {
   return workspace?.name ?? workspace?.title ?? workspace?.id ?? 'No workspace';
 }
 
@@ -9294,7 +10441,9 @@ function desktopMCPAppSandboxProxyUrl(apiBaseUrl: string): string {
   }
 }
 
-function projectSummaryFromConfig(config: DesktopRuntimeConfig): ProjectSummary | null {
+function projectSummaryFromConfig(
+  config: DesktopRuntimeConfig,
+): ProjectSummary | null {
   const projectId = config.projectId.trim();
   if (!projectId) return null;
   return {
@@ -9333,6 +10482,8 @@ function WorkspaceReviewPanel({
   changeSnapshot,
   changeSnapshotLoading,
   changeSnapshotError,
+  changeScope,
+  availableChangeScopes,
   changeReferences,
   changeComments,
   onAddChangeComment,
@@ -9370,6 +10521,7 @@ function WorkspaceReviewPanel({
   onTerminalInput,
   onTerminalResize,
   onRefreshChanges,
+  onChangeScope,
   onToggleChangeReference,
   onOpenAgentSession,
   onTabChange,
@@ -9393,12 +10545,17 @@ function WorkspaceReviewPanel({
   changeSnapshot: ChangeSnapshot | null;
   changeSnapshotLoading: boolean;
   changeSnapshotError: string | null;
+  changeScope: RunChangeScope;
+  availableChangeScopes: readonly RunChangeScope[];
   changeReferences: CodeRangeReference[];
   changeComments: ChangeReviewComment[];
   onAddChangeComment: (comment: ChangeReviewComment) => void;
   onRemoveChangeComment: (commentId: string) => void;
   onSendChangeComments: (comments: ChangeReviewComment[]) => void;
-  artifactActionPending: { versionId: string; action: ArtifactVersionAction } | null;
+  artifactActionPending: {
+    versionId: string;
+    action: ArtifactVersionAction;
+  } | null;
   terminal: TerminalServiceResponse | null;
   terminalBinding: TerminalBindingState;
   terminalError: string | null;
@@ -9442,27 +10599,42 @@ function WorkspaceReviewPanel({
   onTerminalInput: (data: string) => boolean | void;
   onTerminalResize: (cols: number, rows: number) => void;
   onRefreshChanges: () => void;
+  onChangeScope: (scope: RunChangeScope) => void;
   onToggleChangeReference: (reference: CodeRangeReference) => void;
   onOpenAgentSession: (conversationId: string) => void;
   onTabChange: (tab: ReviewTab) => void;
   sessionControls?: SessionCanvasControls;
 }) {
   const { t } = useI18n();
-  const [focusedArtifactVersionId, setFocusedArtifactVersionId] = useState<string | null>(null);
+  const [focusedArtifactVersionId, setFocusedArtifactVersionId] = useState<
+    string | null
+  >(null);
   const sessionTabListRef = useRef<HTMLElement>(null);
   const invocationLedger = useMemo(
     () =>
-      buildSessionInvocationLedger(timelineItems, {
-        runId: sessionViewModel?.runId,
-        revision: sessionViewModel?.runRevision,
-      }, toolInvocations),
-    [sessionViewModel?.runId, sessionViewModel?.runRevision, timelineItems, toolInvocations],
+      buildSessionInvocationLedger(
+        timelineItems,
+        {
+          runId: sessionViewModel?.runId,
+          revision: sessionViewModel?.runRevision,
+        },
+        toolInvocations,
+      ),
+    [
+      sessionViewModel?.runId,
+      sessionViewModel?.runRevision,
+      timelineItems,
+      toolInvocations,
+    ],
   );
   const invocationSummary = useMemo(
     () => sessionInvocationLedgerSummary(invocationLedger),
     [invocationLedger],
   );
-  const sessionAgentTree = useMemo(() => buildSessionAgentTree(timelineItems), [timelineItems]);
+  const sessionAgentTree = useMemo(
+    () => buildSessionAgentTree(timelineItems),
+    [timelineItems],
+  );
   const sessionExecutionGraph = useMemo(
     () => buildSessionExecutionGraph(timelineItems),
     [timelineItems],
@@ -9513,13 +10685,17 @@ function WorkspaceReviewPanel({
     () => buildReviewDecisionSummary(approvalRequest),
     [approvalRequest],
   );
-  const configuredCanvasTabs = useMemo(() => sessionCanvasTabs(capabilityMode), [capabilityMode]);
+  const configuredCanvasTabs = useMemo(
+    () => sessionCanvasTabs(capabilityMode),
+    [capabilityMode],
+  );
   const chrome = workspaceReviewPanelChrome(Boolean(sessionControls));
   const tabValue = (tab: ReviewTab): string | undefined => {
     if (tab === 'changes' && changeSnapshot?.status === 'ready') {
       return `+${changeSnapshot.additions} / −${changeSnapshot.deletions}`;
     }
-    if (tab === 'activity' && invocationSummary.total) return `${invocationSummary.total}`;
+    if (tab === 'activity' && invocationSummary.total)
+      return `${invocationSummary.total}`;
     if (tab === 'checks' || tab === 'verification') {
       const failed = checkEvidence.rows.filter((row) => {
         const status = row.status?.toLowerCase();
@@ -9527,16 +10703,21 @@ function WorkspaceReviewPanel({
       }).length;
       if (failed) return `${failed} ${t('session.failedShort')}`;
       if (checkEvidence.rows.length) return `${checkEvidence.rows.length}`;
-      return checkEvidence.missing.length ? t('session.evidence.missing') : undefined;
+      return checkEvidence.missing.length
+        ? t('session.evidence.missing')
+        : undefined;
     }
     if (tab === 'artifacts') {
       const artifactIds = new Set([
-        ...currentArtifactVersions(artifactVersions).map((version) => version.artifact_id),
+        ...currentArtifactVersions(artifactVersions).map(
+          (version) => version.artifact_id,
+        ),
         ...artifactCanvas.tabs.map((tab) => tab.id),
       ]);
       if (artifactIds.size) return `${artifactIds.size}`;
     }
-    if (tab === 'apps' && mcpAppCanvas.tabs.length) return `${mcpAppCanvas.tabs.length}`;
+    if (tab === 'apps' && mcpAppCanvas.tabs.length)
+      return `${mcpAppCanvas.tabs.length}`;
     if (tab === 'agents' && sessionAgentTree.summary.total) {
       return `${sessionAgentTree.summary.total}`;
     }
@@ -9554,7 +10735,9 @@ function WorkspaceReviewPanel({
     }
     if (tab === 'sources') {
       if (sourceEvidence.rows.length) return `${sourceEvidence.rows.length}`;
-      return sourceEvidence.missing.length ? t('session.evidence.missing') : undefined;
+      return sourceEvidence.missing.length
+        ? t('session.evidence.missing')
+        : undefined;
     }
     return undefined;
   };
@@ -9635,7 +10818,9 @@ function WorkspaceReviewPanel({
     tab: ReviewTab,
   ) => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-    const currentIndex = reviewTabs.findIndex((candidate) => candidate.tab === tab);
+    const currentIndex = reviewTabs.findIndex(
+      (candidate) => candidate.tab === tab,
+    );
     if (currentIndex < 0 || reviewTabs.length < 2) return;
     event.preventDefault();
     const nextIndex =
@@ -9643,7 +10828,9 @@ function WorkspaceReviewPanel({
         ? 0
         : event.key === 'End'
           ? reviewTabs.length - 1
-          : (currentIndex + (event.key === 'ArrowLeft' ? -1 : 1) + reviewTabs.length) %
+          : (currentIndex +
+              (event.key === 'ArrowLeft' ? -1 : 1) +
+              reviewTabs.length) %
             reviewTabs.length;
     const nextTab = reviewTabs[nextIndex];
     selectTab(nextTab.tab);
@@ -9653,13 +10840,16 @@ function WorkspaceReviewPanel({
   };
   useEffect(() => {
     const availableTabs = new Set<ReviewTab>(
-      [...configuredCanvasTabs.primary, ...configuredCanvasTabs.secondary].map((tab) => tab.id),
+      [...configuredCanvasTabs.primary, ...configuredCanvasTabs.secondary].map(
+        (tab) => tab.id,
+      ),
     );
     if (mcpAppCanvas.tabs.length) availableTabs.add('apps');
     if (sessionExecutionGraph.activeRun) availableTabs.add('graph');
     if (sessionExecutionInsights.activeTrace) availableTabs.add('insights');
     if (sessionContextWindow.current) availableTabs.add('context');
-    if (sessionRuntimeInfrastructure.events.length) availableTabs.add('runtime');
+    if (sessionRuntimeInfrastructure.events.length)
+      availableTabs.add('runtime');
     if (sessionAgentTree.summary.total) availableTabs.add('agents');
     if (activeTab === 'background' && availableTabs.has('activity')) {
       onTabChange('activity');
@@ -9741,7 +10931,11 @@ function WorkspaceReviewPanel({
                   )
                 }
               >
-                {sessionControls.layout === 'focus' ? <ColumnsIcon /> : <EnterFullScreenIcon />}
+                {sessionControls.layout === 'focus' ? (
+                  <ColumnsIcon />
+                ) : (
+                  <EnterFullScreenIcon />
+                )}
               </IconButton>
             </Tooltip>
             <Tooltip content={t('session.closeCanvas')}>
@@ -9778,7 +10972,12 @@ function WorkspaceReviewPanel({
               <small>{authorityNotice.description}</small>
             </span>
             {authorityNotice.actionLabel && onAuthorityAction ? (
-              <Button type="button" size="1" variant="soft" onClick={onAuthorityAction}>
+              <Button
+                type="button"
+                size="1"
+                variant="soft"
+                onClick={onAuthorityAction}
+              >
                 {authorityNotice.actionLabel}
               </Button>
             ) : null}
@@ -9786,22 +10985,35 @@ function WorkspaceReviewPanel({
         ) : null}
 
         {activeTab === 'overview' ? (
-          <section className="session-overview-canvas" aria-label={t('session.canvasOverview')}>
+          <section
+            className="session-overview-canvas"
+            aria-label={t('session.canvasOverview')}
+          >
             <header>
               <span>{t('session.overviewKicker')}</span>
-              <h2>{sessionViewModel?.title ?? t('session.workspaceOverview')}</h2>
+              <h2>
+                {sessionViewModel?.title ?? t('session.workspaceOverview')}
+              </h2>
               <p>{t('session.overviewDescription')}</p>
             </header>
             <div className="session-overview-metrics">
               <article>
                 <span>{t('session.overviewStatus')}</span>
-                <strong>{sessionViewModel?.status ?? t('session.notAvailable')}</strong>
-                <small>{sessionViewModel?.executionMode ?? t('session.notAvailable')}</small>
+                <strong>
+                  {sessionViewModel?.status ?? t('session.notAvailable')}
+                </strong>
+                <small>
+                  {sessionViewModel?.executionMode ?? t('session.notAvailable')}
+                </small>
               </article>
               <article>
                 <span>{t('session.overviewStage')}</span>
-                <strong>{sessionViewModel?.stage ?? t('session.notAvailable')}</strong>
-                <small>{sessionViewModel?.elapsedLabel ?? t('session.notAvailable')}</small>
+                <strong>
+                  {sessionViewModel?.stage ?? t('session.notAvailable')}
+                </strong>
+                <small>
+                  {sessionViewModel?.elapsedLabel ?? t('session.notAvailable')}
+                </small>
               </article>
               <article>
                 <span>{t('session.overviewEvidence')}</span>
@@ -9813,7 +11025,9 @@ function WorkspaceReviewPanel({
                     events: socketEvents.length,
                   })}
                 </strong>
-                <small>{sessionViewModel?.usageLabel ?? t('session.notAvailable')}</small>
+                <small>
+                  {sessionViewModel?.usageLabel ?? t('session.notAvailable')}
+                </small>
               </article>
             </div>
             <div className="session-overview-jump-grid">
@@ -9857,7 +11071,9 @@ function WorkspaceReviewPanel({
               <button
                 type="button"
                 onClick={() =>
-                  selectTab(capabilityMode === 'code' ? 'checks' : 'verification')
+                  selectTab(
+                    capabilityMode === 'code' ? 'checks' : 'verification',
+                  )
                 }
               >
                 <CheckCircledIcon />
@@ -9882,15 +11098,23 @@ function WorkspaceReviewPanel({
             <dl className="session-overview-facts">
               <div>
                 <dt>{t('session.overviewEnvironment')}</dt>
-                <dd>{sessionViewModel?.environmentLabel ?? t('session.notAvailable')}</dd>
+                <dd>
+                  {sessionViewModel?.environmentLabel ??
+                    t('session.notAvailable')}
+                </dd>
               </div>
               <div>
                 <dt>{t('session.overviewModel')}</dt>
-                <dd>{sessionViewModel?.modelLabel ?? t('session.notAvailable')}</dd>
+                <dd>
+                  {sessionViewModel?.modelLabel ?? t('session.notAvailable')}
+                </dd>
               </div>
               <div>
                 <dt>{t('session.overviewPermission')}</dt>
-                <dd>{sessionViewModel?.permissionLabel ?? t('session.notAvailable')}</dd>
+                <dd>
+                  {sessionViewModel?.permissionLabel ??
+                    t('session.notAvailable')}
+                </dd>
               </div>
               <div>
                 <dt>{t('session.overviewRun')}</dt>
@@ -9912,6 +11136,9 @@ function WorkspaceReviewPanel({
             references={changeReferences}
             comments={changeComments}
             onRefresh={onRefreshChanges}
+            scope={changeScope}
+            availableScopes={availableChangeScopes}
+            onScopeChange={onChangeScope}
             onToggleReference={onToggleChangeReference}
             onAddComment={onAddChangeComment}
             onRemoveComment={onRemoveChangeComment}
@@ -9960,12 +11187,15 @@ function WorkspaceReviewPanel({
               <ReviewEmpty
                 icon={<ActivityLogIcon />}
                 title={
-                  sessionDataAvailable ? t('session.noPlan') : t('session.notAvailable')
+                  sessionDataAvailable
+                    ? t('session.noPlan')
+                    : t('session.notAvailable')
                 }
                 body={
                   sessionDataAvailable
                     ? t('session.noPlanDescription')
-                    : (authorityNotice?.description ?? t('session.authorityErrorDescription'))
+                    : (authorityNotice?.description ??
+                      t('session.authorityErrorDescription'))
                 }
               />
             )}
@@ -9977,7 +11207,10 @@ function WorkspaceReviewPanel({
         ) : null}
 
         {activeTab === 'agents' ? (
-          <SessionAgentsCanvas model={sessionAgentTree} onOpenSession={onOpenAgentSession} />
+          <SessionAgentsCanvas
+            model={sessionAgentTree}
+            onOpenSession={onOpenAgentSession}
+          />
         ) : null}
 
         {activeTab === 'graph' ? (
@@ -9996,7 +11229,9 @@ function WorkspaceReviewPanel({
         ) : null}
 
         {activeTab === 'runtime' ? (
-          <SessionRuntimeInfrastructureCanvas model={sessionRuntimeInfrastructure} />
+          <SessionRuntimeInfrastructureCanvas
+            model={sessionRuntimeInfrastructure}
+          />
         ) : null}
 
         {activeTab === 'apps' ? (
@@ -10122,15 +11357,24 @@ function ArtifactLifecyclePanel({
   ) => Promise<void>;
 }) {
   const { t } = useI18n();
-  const currentVersions = useMemo(() => currentArtifactVersions(versions), [versions]);
-  const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
-  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const currentVersions = useMemo(
+    () => currentArtifactVersions(versions),
+    [versions],
+  );
+  const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(
+    null,
+  );
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(
+    null,
+  );
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedback, setFeedback] = useState('');
 
   useEffect(() => {
     if (!focusVersionId) return;
-    const focusedVersion = versions.find((version) => version.id === focusVersionId);
+    const focusedVersion = versions.find(
+      (version) => version.id === focusVersionId,
+    );
     if (!focusedVersion) return;
     setSelectedArtifactId(focusedVersion.artifact_id);
     setSelectedVersionId(focusedVersion.id);
@@ -10142,7 +11386,10 @@ function ArtifactLifecyclePanel({
       setSelectedVersionId(null);
       return;
     }
-    if (!selectedArtifactId || !currentVersions.some((item) => item.artifact_id === selectedArtifactId)) {
+    if (
+      !selectedArtifactId ||
+      !currentVersions.some((item) => item.artifact_id === selectedArtifactId)
+    ) {
       setSelectedArtifactId(currentVersions[0].artifact_id);
       setSelectedVersionId(currentVersions[0].id);
     }
@@ -10165,17 +11412,19 @@ function ArtifactLifecyclePanel({
           ? true
           : capabilities === null
             ? false
-          : action === 'deliver'
-            ? capabilities.canDeliverArtifacts &&
-              capabilities.allowedActions.includes('deliver_artifact')
-            : capabilities.canReviewArtifacts &&
-              capabilities.allowedActions.includes('review_artifact'),
+            : action === 'deliver'
+              ? capabilities.canDeliverArtifacts &&
+                capabilities.allowedActions.includes('deliver_artifact')
+              : capabilities.canReviewArtifacts &&
+                capabilities.allowedActions.includes('review_artifact'),
       )
     : [];
   const delivery = selectedVersion
     ? deliveryForArtifactVersion(deliveries, selectedVersion.id)
     : null;
-  const isPending = Boolean(selectedVersion && pending?.versionId === selectedVersion.id);
+  const isPending = Boolean(
+    selectedVersion && pending?.versionId === selectedVersion.id,
+  );
 
   useEffect(() => {
     if (!selectedVersion) return;
@@ -10201,14 +11450,21 @@ function ArtifactLifecyclePanel({
 
   if (!versions.length) {
     return (
-      <section className="artifact-lifecycle artifact-lifecycle-empty" aria-label={t('artifact.title')}>
+      <section
+        className="artifact-lifecycle artifact-lifecycle-empty"
+        aria-label={t('artifact.title')}
+      >
         <ReviewEmpty
           icon={<ArchiveIcon />}
           title={t('artifact.emptyTitle')}
           body={t('artifact.emptyDescription')}
         />
         {unversionedEvidenceCount ? (
-          <p>{t('artifact.unversionedEvidence', { count: unversionedEvidenceCount })}</p>
+          <p>
+            {t('artifact.unversionedEvidence', {
+              count: unversionedEvidenceCount,
+            })}
+          </p>
         ) : null}
       </section>
     );
@@ -10228,11 +11484,16 @@ function ArtifactLifecyclePanel({
       </header>
 
       <div className="artifact-lifecycle-layout">
-        <nav className="artifact-lifecycle-list" aria-label={t('artifact.currentVersions')}>
+        <nav
+          className="artifact-lifecycle-list"
+          aria-label={t('artifact.currentVersions')}
+        >
           {currentVersions.map((version) => (
             <button
               type="button"
-              className={version.artifact_id === selectedArtifactId ? 'selected' : ''}
+              className={
+                version.artifact_id === selectedArtifactId ? 'selected' : ''
+              }
               aria-pressed={version.artifact_id === selectedArtifactId}
               key={version.artifact_id}
               onClick={() => {
@@ -10270,30 +11531,41 @@ function ArtifactLifecyclePanel({
                 >
                   {artifactVersions.map((version) => (
                     <option value={version.id} key={version.id}>
-                      v{version.version} · {t(`artifact.status.${version.status}`)}
+                      v{version.version} ·{' '}
+                      {t(`artifact.status.${version.status}`)}
                     </option>
                   ))}
                 </select>
               </label>
             </header>
 
-            <div className="artifact-status-track" aria-label={t('artifact.lifecycle')}>
-              {(['ready', 'approved', 'delivered'] as const).map((status, index) => {
-                const reached = artifactStatusReached(selectedVersion.status, status);
-                return (
-                  <span className={reached ? 'reached' : ''} key={status}>
-                    {reached ? <CheckCircledIcon /> : <ClockIcon />}
-                    <small>0{index + 1}</small>
-                    <strong>{t(`artifact.status.${status}`)}</strong>
-                  </span>
-                );
-              })}
+            <div
+              className="artifact-status-track"
+              aria-label={t('artifact.lifecycle')}
+            >
+              {(['ready', 'approved', 'delivered'] as const).map(
+                (status, index) => {
+                  const reached = artifactStatusReached(
+                    selectedVersion.status,
+                    status,
+                  );
+                  return (
+                    <span className={reached ? 'reached' : ''} key={status}>
+                      {reached ? <CheckCircledIcon /> : <ClockIcon />}
+                      <small>0{index + 1}</small>
+                      <strong>{t(`artifact.status.${status}`)}</strong>
+                    </span>
+                  );
+                },
+              )}
             </div>
 
             <dl className="artifact-version-facts">
               <div>
                 <dt>{t('artifact.location')}</dt>
-                <dd title={selectedVersion.path}>{selectedVersion.relative_path}</dd>
+                <dd title={selectedVersion.path}>
+                  {selectedVersion.relative_path}
+                </dd>
               </div>
               <div>
                 <dt>{t('artifact.type')}</dt>
@@ -10346,13 +11618,19 @@ function ArtifactLifecyclePanel({
                 onSubmit={(event) => {
                   event.preventDefault();
                   if (!feedback.trim()) return;
-                  void onAction(selectedVersion, 'request_changes', feedback.trim()).then(() => {
+                  void onAction(
+                    selectedVersion,
+                    'request_changes',
+                    feedback.trim(),
+                  ).then(() => {
                     setFeedbackOpen(false);
                     setFeedback('');
                   });
                 }}
               >
-                <label htmlFor="artifact-review-feedback">{t('artifact.feedbackLabel')}</label>
+                <label htmlFor="artifact-review-feedback">
+                  {t('artifact.feedbackLabel')}
+                </label>
                 <textarea
                   id="artifact-review-feedback"
                   value={feedback}
@@ -10360,11 +11638,20 @@ function ArtifactLifecyclePanel({
                   onChange={(event) => setFeedback(event.target.value)}
                 />
                 <div>
-                  <Button type="button" variant="ghost" onClick={() => setFeedbackOpen(false)}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setFeedbackOpen(false)}
+                  >
                     {t('session.cancelAction')}
                   </Button>
-                  <Button type="submit" disabled={!feedback.trim() || isPending}>
-                    {isPending ? t('artifact.submitting') : t('artifact.sendChanges')}
+                  <Button
+                    type="submit"
+                    disabled={!feedback.trim() || isPending}
+                  >
+                    {isPending
+                      ? t('artifact.submitting')
+                      : t('artifact.sendChanges')}
                   </Button>
                 </div>
               </form>
@@ -10419,7 +11706,9 @@ function ArtifactLifecyclePanel({
 
       {unversionedEvidenceCount ? (
         <p className="artifact-unversioned-note">
-          {t('artifact.unversionedEvidence', { count: unversionedEvidenceCount })}
+          {t('artifact.unversionedEvidence', {
+            count: unversionedEvidenceCount,
+          })}
         </p>
       ) : null}
     </section>
@@ -10427,7 +11716,8 @@ function ArtifactLifecyclePanel({
 }
 
 function artifactDeliveryReceiptPath(receipt: unknown): string {
-  if (receipt === null || typeof receipt !== 'object' || Array.isArray(receipt)) return '';
+  if (receipt === null || typeof receipt !== 'object' || Array.isArray(receipt))
+    return '';
   const value = receipt as Record<string, unknown>;
   const path = value.relative_path ?? value.path;
   return typeof path === 'string' ? path : '';
@@ -10450,12 +11740,14 @@ function ArtifactEvidenceSection({
           {items.map((item, index) => {
             const record = asRecordValue(item);
             const label = record
-              ? readStringField(record, 'label') ??
+              ? (readStringField(record, 'label') ??
                 readStringField(record, 'id') ??
                 readStringField(record, 'kind') ??
-                compactArtifactValue(record)
+                compactArtifactValue(record))
               : compactArtifactValue(item);
-            const status = record ? readStringField(record, 'status') : undefined;
+            const status = record
+              ? readStringField(record, 'status')
+              : undefined;
             return (
               <li key={`${label}-${index}`}>
                 <CheckCircledIcon />
@@ -10478,7 +11770,13 @@ function artifactStatusReached(
   current: DesktopArtifactVersion['status'],
   target: 'ready' | 'approved' | 'delivered',
 ): boolean {
-  const order = { draft: 0, ready: 1, approved: 2, delivered: 3, superseded: 0 };
+  const order = {
+    draft: 0,
+    ready: 1,
+    approved: 2,
+    delivered: 3,
+    superseded: 0,
+  };
   return order[current] >= order[target];
 }
 
@@ -10506,12 +11804,18 @@ function ReviewDecisionPanel({
 }) {
   const { t } = useI18n();
   const [feedback, setFeedback] = useState('');
-  const [submitting, setSubmitting] = useState<'approve' | 'request_changes' | null>(null);
+  const [submitting, setSubmitting] = useState<
+    'approve' | 'request_changes' | null
+  >(null);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const validation = validateApprovalRequest(request);
   const decision = request.decision;
   const statusColor =
-    summary.risk === 'High' ? 'red' : summary.risk === 'Medium' ? 'amber' : 'gray';
+    summary.risk === 'High'
+      ? 'red'
+      : summary.risk === 'Medium'
+        ? 'amber'
+        : 'gray';
 
   const submit = async (action: 'approve' | 'request_changes') => {
     if (!canRespond || submitting) return;
@@ -10522,7 +11826,9 @@ function ReviewDecisionPanel({
     try {
       await onRespond(approvalResponseSubmission(request, action, feedback));
     } catch (caught) {
-      setSubmissionError(caught instanceof Error ? caught.message : t('approval.submitFailed'));
+      setSubmissionError(
+        caught instanceof Error ? caught.message : t('approval.submitFailed'),
+      );
     } finally {
       setSubmitting(null);
     }
@@ -10558,11 +11864,16 @@ function ReviewDecisionPanel({
           {request.prompt}
         </Text>
 
-        <div className="decision-risk-strip" aria-label={t('approval.reviewSummary')}>
+        <div
+          className="decision-risk-strip"
+          aria-label={t('approval.reviewSummary')}
+        >
           <div>
             <ActivityLogIcon />
             <span>{t('approval.action')}</span>
-            <strong>{decision?.action.name ?? t('approval.notProvided')}</strong>
+            <strong>
+              {decision?.action.name ?? t('approval.notProvided')}
+            </strong>
           </div>
           <div>
             <FileTextIcon />
@@ -10576,7 +11887,9 @@ function ReviewDecisionPanel({
           <div>
             <ExclamationTriangleIcon />
             <span>{t('approval.agentRisk')}</span>
-            <strong className={`risk-${summary.risk.toLowerCase()}`}>{summary.risk}</strong>
+            <strong className={`risk-${summary.risk.toLowerCase()}`}>
+              {summary.risk}
+            </strong>
           </div>
         </div>
 
@@ -10599,18 +11912,27 @@ function ReviewDecisionPanel({
 
         <div className="decision-section">
           <strong>{t('approval.riskScope')}</strong>
-          <div className="decision-context-grid" aria-label={t('approval.riskScope')}>
+          <div
+            className="decision-context-grid"
+            aria-label={t('approval.riskScope')}
+          >
             <div>
               <span>{t('approval.riskRationale')}</span>
-              <strong>{decision?.risk.rationale ?? t('approval.notProvided')}</strong>
+              <strong>
+                {decision?.risk.rationale ?? t('approval.notProvided')}
+              </strong>
             </div>
             <div>
               <span>{t('approval.reversibility')}</span>
-              <strong>{decision?.reversibility.mode ?? t('approval.notProvided')}</strong>
+              <strong>
+                {decision?.reversibility.mode ?? t('approval.notProvided')}
+              </strong>
             </div>
             <div>
               <span>{t('approval.recovery')}</span>
-              <strong>{decision?.reversibility.recovery ?? t('approval.notProvided')}</strong>
+              <strong>
+                {decision?.reversibility.recovery ?? t('approval.notProvided')}
+              </strong>
             </div>
             <div>
               <span>{t('approval.scope')}</span>
@@ -10656,7 +11978,9 @@ function ReviewDecisionPanel({
           </Heading>
           {!validation.complete ? (
             <Text as="p" size="1" color="red">
-              {t('approval.incomplete', { fields: validation.missing.join(', ') })}
+              {t('approval.incomplete', {
+                fields: validation.missing.join(', '),
+              })}
             </Text>
           ) : null}
           {!canRespond ? (
@@ -10668,13 +11992,17 @@ function ReviewDecisionPanel({
         <button
           className="decision-approve-button"
           type="button"
-          disabled={!canRespond || !validation.canApprove || Boolean(submitting)}
+          disabled={
+            !canRespond || !validation.canApprove || Boolean(submitting)
+          }
           onClick={() => void submit('approve')}
         >
           <CheckCircledIcon />
           <span>
             <strong>
-              {submitting === 'approve' ? t('approval.submitting') : t('approval.approve')}
+              {submitting === 'approve'
+                ? t('approval.submitting')
+                : t('approval.approve')}
             </strong>
             <small>{t('approval.approveDescription')}</small>
           </span>
@@ -10704,7 +12032,9 @@ function ReviewDecisionPanel({
             <small>{t('approval.requestChangesDescription')}</small>
           </span>
         </button>
-        {submissionError ? <p className="decision-submit-error">{submissionError}</p> : null}
+        {submissionError ? (
+          <p className="decision-submit-error">{submissionError}</p>
+        ) : null}
         <small>{t('approval.authoritativeNotice')}</small>
       </section>
     </div>
@@ -10752,10 +12082,16 @@ function CommandPalette({
 }) {
   const { t } = useI18n();
   const paletteRef = useRef<HTMLElement>(null);
-  const enabledItems = useMemo(() => items.filter((item) => !item.disabled), [items]);
+  const enabledItems = useMemo(
+    () => items.filter((item) => !item.disabled),
+    [items],
+  );
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
-  const activeItem = enabledItems.find((item) => item.id === activeItemId) ?? enabledItems[0];
-  const activeOptionId = activeItem ? `command-option-${activeItem.id}` : undefined;
+  const activeItem =
+    enabledItems.find((item) => item.id === activeItemId) ?? enabledItems[0];
+  const activeOptionId = activeItem
+    ? `command-option-${activeItem.id}`
+    : undefined;
 
   useEffect(() => {
     setActiveItemId((current) => {
@@ -10768,7 +12104,9 @@ function CommandPalette({
 
   useEffect(() => {
     if (!activeOptionId) return;
-    document.getElementById(activeOptionId)?.scrollIntoView({ block: 'nearest' });
+    document
+      .getElementById(activeOptionId)
+      ?.scrollIntoView({ block: 'nearest' });
   }, [activeOptionId]);
 
   useEffect(() => {
@@ -10792,16 +12130,22 @@ function CommandPalette({
   const moveActiveItem = (delta: number) => {
     setActiveItemId((current) => {
       if (enabledItems.length === 0) return null;
-      const currentIndex = enabledItems.findIndex((item) => item.id === current);
-      const startIndex = currentIndex === -1 ? (delta > 0 ? -1 : 0) : currentIndex;
-      const nextIndex = (startIndex + delta + enabledItems.length) % enabledItems.length;
+      const currentIndex = enabledItems.findIndex(
+        (item) => item.id === current,
+      );
+      const startIndex =
+        currentIndex === -1 ? (delta > 0 ? -1 : 0) : currentIndex;
+      const nextIndex =
+        (startIndex + delta + enabledItems.length) % enabledItems.length;
       return enabledItems[nextIndex].id;
     });
   };
 
   const containTabFocus = (event: ReactKeyboardEvent<HTMLElement>) => {
     if (event.defaultPrevented || event.key !== 'Tab') return;
-    const focusableElements = getCommandPaletteFocusableElements(paletteRef.current);
+    const focusableElements = getCommandPaletteFocusableElements(
+      paletteRef.current,
+    );
     if (!focusableElements.length) return;
     const firstElement = focusableElements[0];
     const lastElement = focusableElements[focusableElements.length - 1];
@@ -10851,7 +12195,10 @@ function CommandPalette({
                 event.preventDefault();
                 setActiveItemId(enabledItems[0].id);
               }
-              if (event.key === 'End' && enabledItems[enabledItems.length - 1]) {
+              if (
+                event.key === 'End' &&
+                enabledItems[enabledItems.length - 1]
+              ) {
                 event.preventDefault();
                 setActiveItemId(enabledItems[enabledItems.length - 1].id);
               }
@@ -10911,7 +12258,9 @@ function CommandPalette({
   );
 }
 
-function getCommandPaletteFocusableElements(container: HTMLElement | null): HTMLElement[] {
+function getCommandPaletteFocusableElements(
+  container: HTMLElement | null,
+): HTMLElement[] {
   if (!container) return [];
   const selectors = [
     'button:not(:disabled)',

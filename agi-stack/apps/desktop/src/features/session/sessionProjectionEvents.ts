@@ -5,6 +5,7 @@ const sessionAuthorityEventTypes = new Set([
   'observe',
   'run_status',
   'run_input_queued',
+  'run_input_applied',
   'run_input_promoted',
   'recovery_forked',
   'review_decision',
@@ -39,8 +40,15 @@ const sessionAuthorityEventTypes = new Set([
 ]);
 const workspaceOnlyAuthorityEventTypes = new Set(['workspace_plan_updated']);
 
-export function socketEventInvalidatesSessionProjection(event: unknown): boolean {
-  return eventTypes(event).some((eventType) => sessionAuthorityEventTypes.has(eventType));
+export function socketEventInvalidatesSessionProjection(
+  event: unknown,
+): boolean {
+  return (
+    hasSendMessageAuthorityAck(event) ||
+    eventTypes(event).some((eventType) =>
+      sessionAuthorityEventTypes.has(eventType),
+    )
+  );
 }
 
 export function socketEventInvalidatesSessionProjectionForScope(
@@ -48,12 +56,38 @@ export function socketEventInvalidatesSessionProjectionForScope(
   scope: { conversationId: string; workspaceId: string | null },
 ): boolean {
   const types = eventTypes(event);
-  if (!types.some((eventType) => sessionAuthorityEventTypes.has(eventType))) return false;
+  const sendMessageAck = hasSendMessageAuthorityAck(event);
+  if (
+    !sendMessageAck &&
+    !types.some((eventType) => sessionAuthorityEventTypes.has(eventType))
+  )
+    return false;
   return socketEventMatchesSessionScope(
     event,
     scope,
     types.some((eventType) => workspaceOnlyAuthorityEventTypes.has(eventType)),
   );
+}
+
+function hasSendMessageAuthorityAck(event: unknown): boolean {
+  const root = recordValue(event);
+  if (!root) return false;
+  const queue = [root];
+  const seen = new Set<Record<string, unknown>>();
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current || seen.has(current)) continue;
+    seen.add(current);
+    const eventType =
+      nonEmptyString(current.event_type) ?? nonEmptyString(current.type);
+    if (eventType === 'ack' && nonEmptyString(current.action) === 'send_message')
+      return true;
+    for (const key of ['payload', 'data']) {
+      const nested = recordValue(current[key]);
+      if (nested) queue.push(nested);
+    }
+  }
+  return false;
 }
 
 function eventTypes(event: unknown): string[] {
@@ -66,7 +100,8 @@ function eventTypes(event: unknown): string[] {
     const current = queue.shift();
     if (!current || seen.has(current)) continue;
     seen.add(current);
-    const eventType = nonEmptyString(current.event_type) ?? nonEmptyString(current.type);
+    const eventType =
+      nonEmptyString(current.event_type) ?? nonEmptyString(current.type);
     if (eventType) types.add(eventType);
     for (const key of ['payload', 'data']) {
       const nested = recordValue(current[key]);

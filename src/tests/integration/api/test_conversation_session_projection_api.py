@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi import status
 from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.secondary.persistence.artifact_model import ArtifactModel
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -21,6 +22,20 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     WorkspaceTaskModel,
     WorkspaceTaskSessionAttemptModel,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
+    ensure_plan_run_authority,
+)
+
+
+async def _commit_plan_run_authority(
+    db: AsyncSession,
+    *,
+    plan_run: AgentPlanRunModel,
+    tenant_id: str,
+) -> None:
+    await db.flush()
+    await ensure_plan_run_authority(db, run=plan_run, tenant_id=tenant_id)
+    await db.commit()
 
 
 def _assert_current_run(
@@ -49,6 +64,24 @@ def _assert_current_run(
         "plan_version_id": plan_version_id,
         "permission_profile": "full_access",
         "environment": current_run["environment"],
+    }
+
+
+def _assert_agent_plan_projection(
+    payload: dict[str, Any],
+    *,
+    plan: AgentPlanVersionModel,
+    conversation_id: str,
+) -> None:
+    assert payload["current_plan"] == payload["plan_history"][0]
+    assert payload["current_plan"] == {
+        "id": plan.id,
+        "conversation_id": conversation_id,
+        "version": plan.version,
+        "status": plan.status,
+        "tasks": plan.tasks_json,
+        "created_at": plan.created_at.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z"),
+        "approved_at": plan.approved_at.isoformat().replace("+00:00", "Z"),
     }
 
 
@@ -297,7 +330,11 @@ async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtim
             artifact_outside_workspace_scope,
         ]
     )
-    await test_db.commit()
+    await _commit_plan_run_authority(
+        test_db,
+        plan_run=plan_run,
+        tenant_id=test_project_db.tenant_id,
+    )
 
     response = await authenticated_async_client.get(
         f"/api/v1/agent/conversations/{conversation.id}/session",
@@ -325,6 +362,11 @@ async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtim
         plan_version_id=approved_plan.id,
     )
     assert payload["conversation_tasks"][0]["id"] == checklist.id
+    _assert_agent_plan_projection(
+        payload,
+        plan=approved_plan,
+        conversation_id=conversation.id,
+    )
     assert payload["workspace_plan_context"]["id"] == plan.id
     assert payload["workspace_plan_context"]["linked_nodes"][0] == {
         "id": linked_node.id,

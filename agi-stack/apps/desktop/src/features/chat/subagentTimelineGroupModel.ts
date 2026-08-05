@@ -19,6 +19,7 @@ export type SubAgentTimelineGroup = {
   itemIds: string[];
   items: AgentTimelineItem[];
   mode: SubAgentTimelineGroupMode;
+  runId: string;
   subagentId: string;
   subagentName: string;
   status: SubAgentTimelineGroupStatus;
@@ -104,7 +105,8 @@ export function groupSubAgentTimelineItems(
 
   for (let index = 0; index < items.length; index += 1) {
     const first = items[index];
-    if (!first || claimedIndexes.has(index) || !isSubAgentGroupingEvent(first)) continue;
+    if (!first || claimedIndexes.has(index) || !isSubAgentGroupingEvent(first))
+      continue;
 
     const groupedIndexes = [index];
     const groupedItems = [first];
@@ -126,7 +128,12 @@ export function groupSubAgentTimelineItems(
     }
 
     if (!groupedItems.some((item) => terminalEventTypes.has(item.type))) {
-      const terminalIndex = findMatchingTerminalIndex(items, cursor, groupedItems, claimedIndexes);
+      const terminalIndex = findMatchingTerminalIndex(
+        items,
+        cursor,
+        groupedItems,
+        claimedIndexes,
+      );
       if (terminalIndex !== null) {
         groupedIndexes.push(terminalIndex);
         groupedItems.push(items[terminalIndex] as AgentTimelineItem);
@@ -139,7 +146,9 @@ export function groupSubAgentTimelineItems(
 
   return {
     groups,
-    claimedItemIds: items.flatMap((item, index) => (claimedIndexes.has(index) ? [item.id] : [])),
+    claimedItemIds: items.flatMap((item, index) =>
+      claimedIndexes.has(index) ? [item.id] : [],
+    ),
   };
 }
 
@@ -150,7 +159,8 @@ function findMatchingTerminalIndex(
   claimedIndexes: ReadonlySet<number>,
 ): number | null {
   const identity = groupIdentity(groupedItems);
-  if (!identity.id && !identity.name && !identity.route) return null;
+  if (!identity.runId && !identity.agentId && !identity.name && !identity.route)
+    return null;
   for (let index = startIndex; index < items.length; index += 1) {
     const candidate = items[index];
     if (
@@ -173,49 +183,95 @@ function compatibleSubAgentEvent(
   if (!first || groupMode(first) !== groupMode(candidate)) return false;
   const known = groupIdentity(items);
   const incoming = eventIdentity(candidate);
-  if (known.id && incoming.id) return known.id === incoming.id;
+  if (known.runId && incoming.runId) return known.runId === incoming.runId;
+  if (known.agentId && incoming.agentId)
+    return known.agentId === incoming.agentId;
   if (known.name && incoming.name) return known.name === incoming.name;
   if (known.route && incoming.route) return known.route === incoming.route;
-  return !known.id && !known.name && !known.route && !incoming.id && !incoming.name && !incoming.route;
+  return (
+    !known.runId &&
+    !known.agentId &&
+    !known.name &&
+    !known.route &&
+    !incoming.runId &&
+    !incoming.agentId &&
+    !incoming.name &&
+    !incoming.route
+  );
 }
 
 function groupIdentity(items: readonly AgentTimelineItem[]): SubAgentIdentity {
-  const identity: SubAgentIdentity = { id: '', name: '', route: '' };
+  const identity: SubAgentIdentity = {
+    runId: '',
+    agentId: '',
+    name: '',
+    route: '',
+  };
   for (const item of items) {
     const candidate = eventIdentity(item);
-    identity.id ||= candidate.id;
+    identity.runId ||= candidate.runId;
+    identity.agentId ||= candidate.agentId;
     identity.name ||= candidate.name;
     identity.route ||= candidate.route;
   }
   return identity;
 }
 
-type SubAgentIdentity = { id: string; name: string; route: string };
+type SubAgentIdentity = {
+  runId: string;
+  agentId: string;
+  name: string;
+  route: string;
+};
 
 function eventIdentity(item: AgentTimelineItem): SubAgentIdentity {
   if (item.type === 'subagent_delegation') {
     return {
-      id: eventString(item, ['to_subagent_id', 'toSubagentId']),
+      runId: eventString(item, [
+        'run_id',
+        'runId',
+        'execution_id',
+        'executionId',
+      ]),
+      agentId: eventString(item, ['to_subagent_id', 'toSubagentId']),
       name: eventString(item, ['to_subagent_name', 'toSubagentName']),
       route: eventString(item, ['conversation_id', 'conversationId']),
     };
   }
   if (item.type === 'subagent_announce_sent') {
     return {
-      id: eventString(item, ['agent_id', 'agentId']),
+      runId: eventString(item, [
+        'run_id',
+        'runId',
+        'execution_id',
+        'executionId',
+      ]),
+      agentId: eventString(item, ['agent_id', 'agentId']),
       name: eventString(item, ['agent_name', 'agentName']),
       route: eventString(item, ['session_id', 'sessionId']),
     };
   }
   if (item.type === 'subagent_announce_received') {
     return {
-      id: eventString(item, ['from_agent_id', 'fromAgentId']),
+      runId: eventString(item, [
+        'run_id',
+        'runId',
+        'execution_id',
+        'executionId',
+      ]),
+      agentId: eventString(item, ['from_agent_id', 'fromAgentId']),
       name: eventString(item, ['from_agent_name', 'fromAgentName']),
       route: eventString(item, ['session_id', 'sessionId']),
     };
   }
   return {
-    id: eventString(item, ['subagent_id', 'subagentId', 'run_id', 'runId']),
+    runId: eventString(item, [
+      'run_id',
+      'runId',
+      'execution_id',
+      'executionId',
+    ]),
+    agentId: eventString(item, ['subagent_id', 'subagentId']),
     name: eventString(item, ['subagent_name', 'subagentName']),
     route: eventString(item, [
       'route_id',
@@ -228,7 +284,9 @@ function eventIdentity(item: AgentTimelineItem): SubAgentIdentity {
   };
 }
 
-function buildSubAgentTimelineGroup(items: AgentTimelineItem[]): SubAgentTimelineGroup {
+function buildSubAgentTimelineGroup(
+  items: AgentTimelineItem[],
+): SubAgentTimelineGroup {
   const first = items[0] as AgentTimelineItem;
   const last = items[items.length - 1] as AgentTimelineItem;
   const identity = groupIdentity(items);
@@ -245,14 +303,26 @@ function buildSubAgentTimelineGroup(items: AgentTimelineItem[]): SubAgentTimelin
   let toolCallsCount: number | null = null;
 
   for (const item of items) {
-    task = latestString(task, eventString(item, ['task', 'task_description', 'taskDescription']));
+    task = latestString(
+      task,
+      eventString(item, ['task', 'task_description', 'taskDescription']),
+    );
     if (item.type === 'subagent_steered') {
       task = latestString(task, eventString(item, ['instruction']));
     }
-    reason = latestString(reason, eventString(item, ['reason', 'match_reason', 'matchReason']));
+    reason = latestString(
+      reason,
+      eventString(item, ['reason', 'match_reason', 'matchReason']),
+    );
     summary = latestString(
       summary,
-      eventString(item, ['summary', 'final_content', 'finalContent', 'result_preview', 'resultPreview']),
+      eventString(item, [
+        'summary',
+        'final_content',
+        'finalContent',
+        'result_preview',
+        'resultPreview',
+      ]),
     );
     error = latestString(
       error,
@@ -267,10 +337,18 @@ function buildSubAgentTimelineGroup(items: AgentTimelineItem[]): SubAgentTimelin
       ]),
     );
     confidence = latestNumber(confidence, eventNumber(item, ['confidence']));
-    tokensUsed = latestNumber(tokensUsed, eventNumber(item, ['tokens_used', 'tokensUsed']));
+    tokensUsed = latestNumber(
+      tokensUsed,
+      eventNumber(item, ['tokens_used', 'tokensUsed']),
+    );
     executionTimeMs = latestNumber(
       executionTimeMs,
-      eventNumber(item, ['execution_time_ms', 'executionTimeMs', 'total_time_ms', 'totalTimeMs']),
+      eventNumber(item, [
+        'execution_time_ms',
+        'executionTimeMs',
+        'total_time_ms',
+        'totalTimeMs',
+      ]),
     );
     progress = latestNumber(progress, eventNumber(item, ['progress']));
     statusMessage = latestString(
@@ -291,9 +369,12 @@ function buildSubAgentTimelineGroup(items: AgentTimelineItem[]): SubAgentTimelin
     itemIds: items.map((item) => item.id),
     items,
     mode: groupMode(first),
-    subagentId: identity.id,
+    runId: identity.runId,
+    subagentId: identity.agentId,
     subagentName:
-      identity.name || eventString(first, ['chain_name', 'chainName']) || identity.id,
+      identity.name ||
+      eventString(first, ['chain_name', 'chainName']) ||
+      identity.agentId,
     status,
     task,
     reason,
@@ -307,13 +388,16 @@ function buildSubAgentTimelineGroup(items: AgentTimelineItem[]): SubAgentTimelin
     toolCallsCount,
     phases: {
       routed: items.some(
-        (item) => item.type === 'subagent_routed' || item.type === 'subagent_delegation',
+        (item) =>
+          item.type === 'subagent_routed' ||
+          item.type === 'subagent_delegation',
       ),
       started: items.some((item) => startedEventTypes.has(item.type)),
       executing: items.some((item) => executingEventTypes.has(item.type)),
       ended: items.some(
         (item) =>
-          terminalEventTypes.has(item.type) || item.type === 'subagent_announce_received',
+          terminalEventTypes.has(item.type) ||
+          item.type === 'subagent_announce_received',
       ),
     },
   };
@@ -354,7 +438,8 @@ function subAgentStatus(
     return eventBoolean(item, ['success']) === false ? 'error' : 'success';
   }
   const explicitStatus = eventString(item, ['status']).toLowerCase();
-  if (explicitStatus === 'completed' || explicitStatus === 'success') return 'success';
+  if (explicitStatus === 'completed' || explicitStatus === 'success')
+    return 'success';
   if (explicitStatus === 'failed' || explicitStatus === 'error') return 'error';
   return current;
 }
@@ -390,7 +475,10 @@ function eventString(item: AgentTimelineItem, keys: readonly string[]): string {
   return '';
 }
 
-function eventNumber(item: AgentTimelineItem, keys: readonly string[]): number | null {
+function eventNumber(
+  item: AgentTimelineItem,
+  keys: readonly string[],
+): number | null {
   for (const record of eventRecords(item)) {
     for (const key of keys) {
       const value = record[key];
@@ -400,7 +488,10 @@ function eventNumber(item: AgentTimelineItem, keys: readonly string[]): number |
   return null;
 }
 
-function eventBoolean(item: AgentTimelineItem, keys: readonly string[]): boolean | null {
+function eventBoolean(
+  item: AgentTimelineItem,
+  keys: readonly string[],
+): boolean | null {
   for (const record of eventRecords(item)) {
     for (const key of keys) {
       const value = record[key];
@@ -414,7 +505,10 @@ function latestString(current: string, next: string): string {
   return next || current;
 }
 
-function latestNumber(current: number | null, next: number | null): number | null {
+function latestNumber(
+  current: number | null,
+  next: number | null,
+): number | null {
   return next ?? current;
 }
 

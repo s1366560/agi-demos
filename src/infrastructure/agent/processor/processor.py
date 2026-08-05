@@ -26,6 +26,7 @@ import time
 import uuid
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, ClassVar, Optional, Protocol, cast, runtime_checkable
 
@@ -46,6 +47,7 @@ from src.domain.events.agent_events import (
     AgentObserveEvent,
     AgentPermissionAskedEvent,
     AgentRetryEvent,
+    AgentRunInputAppliedEvent,
     AgentStartEvent,
     AgentStatusEvent,
     AgentSuggestionsEvent,
@@ -55,6 +57,8 @@ from src.domain.events.agent_events import (
     AgentThoughtDeltaEvent,
     AgentThoughtEvent,
     AgentThoughtStartEvent,
+    SubAgentKilledEvent,
+    SubAgentSteeredEvent,
 )
 
 if TYPE_CHECKING:
@@ -1632,6 +1636,14 @@ class SessionProcessor:
                     )
                     if self._abort_event is not None:
                         self._abort_event.set()
+                    if msg.target_agent_id:
+                        events.append(
+                            SubAgentKilledEvent(
+                                subagent_id=msg.target_agent_id,
+                                subagent_name=msg.target_agent_name or msg.target_agent_id,
+                                kill_reason="user_cancel",
+                            )
+                        )
                     events.append(AgentErrorEvent(message=reason, code="KILLED"))
                     return events
 
@@ -1643,6 +1655,32 @@ class SessionProcessor:
                         self._run_id,
                         msg.payload[:120],
                     )
+                    if msg.target_agent_id:
+                        events.append(
+                            SubAgentSteeredEvent(
+                                subagent_id=msg.target_agent_id,
+                                subagent_name=msg.target_agent_name or msg.target_agent_id,
+                                instruction=msg.payload,
+                            )
+                        )
+                    if (
+                        msg.run_input_id
+                        and msg.delivery_mode == "steer_now"
+                        and msg.run_revision is not None
+                        and msg.message_id
+                        and msg.idempotency_key
+                    ):
+                        events.append(
+                            AgentRunInputAppliedEvent(
+                                run_input_id=msg.run_input_id,
+                                run_id=self._run_id,
+                                run_revision=msg.run_revision,
+                                message_id=msg.message_id,
+                                idempotency_key=msg.idempotency_key,
+                                applied_round=self._step_count,
+                                applied_at=datetime.now(UTC).isoformat(),
+                            )
+                        )
 
                 if msg.message_type == ControlMessageType.PAUSE:
                     logger.info("Control PAUSE received for run %s", self._run_id)

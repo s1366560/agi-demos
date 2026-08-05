@@ -7,7 +7,7 @@ Note: AgentEventType is imported from types.py (Single Source of Truth).
 """
 
 import time
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -49,6 +49,7 @@ __all__ = [
     "AgentPlanSuggestedEvent",
     "AgentPolicyFilteredEvent",
     "AgentProgressDeclaredEvent",
+    "AgentRunInputAppliedEvent",
     "AgentSelectionTraceEvent",
     "AgentSpawnedEvent",
     "AgentStoppedEvent",
@@ -183,6 +184,23 @@ class AgentErrorEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.ERROR
     message: str
     code: str | None = None
+
+
+class AgentRunInputAppliedEvent(AgentDomainEvent):
+    """Event: a persisted canonical run input reached an Observe boundary."""
+
+    event_type: AgentEventType = AgentEventType.RUN_INPUT_APPLIED
+    run_input_id: str
+    run_id: str
+    run_revision: int
+    message_id: str
+    idempotency_key: str
+    delivery_mode: Literal["steer_now"] = "steer_now"
+    applied_round: int
+    applied_at: str
+    injected_via: Literal["control_channel_observe_boundary"] = (
+        "control_channel_observe_boundary"
+    )
 
 
 # === Thinking Events ===

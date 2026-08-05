@@ -122,10 +122,12 @@ def get_message_router() -> MessageRouter:
             ClarificationRespondHandler,
             DecisionRespondHandler,
             EnvVarRespondHandler,
+            KillRunHandler,
             PermissionRespondHandler,
             RestartAgentHandler,
             SendMessageHandler,
             StartAgentHandler,
+            SteerSubAgentHandler,
             StopAgentHandler,
             StopSessionHandler,
             SubscribeHandler,
@@ -151,6 +153,8 @@ def get_message_router() -> MessageRouter:
                 # Chat
                 SendMessageHandler(),
                 StopSessionHandler(),
+                KillRunHandler(),
+                SteerSubAgentHandler(),
                 # Subscription
                 SubscribeHandler(),
                 UnsubscribeHandler(),

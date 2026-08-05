@@ -1,5 +1,9 @@
 import type { ProjectWorkItem } from '../../types';
-import { myWorkEffectiveGroup, myWorkItemKey } from '../my-work/myWorkModel';
+import {
+  myWorkEffectiveGroup,
+  myWorkItemKey,
+  myWorkItemSummary,
+} from '../my-work/myWorkModel';
 
 // Activity 收件箱的三个聚合分类,展示顺序固定。
 export type ActivityCategory = 'needs_input' | 'ready_for_review' | 'attention';
@@ -61,7 +65,9 @@ export function activityCategoryForItem(
   return null;
 }
 
-export function activityEntryForItem(item: ProjectWorkItem): ActivityInboxEntry | null {
+export function activityEntryForItem(
+  item: ProjectWorkItem,
+): ActivityInboxEntry | null {
   const category = activityCategoryForItem(item);
   if (!category) return null;
   const timestamp = item.updated_at || item.created_at;
@@ -74,20 +80,24 @@ export function activityEntryForItem(item: ProjectWorkItem): ActivityInboxEntry 
     category,
     timestamp,
     timestampMs: Number.isFinite(parsed) ? parsed : 0,
-    subtitle: item.summary ?? null,
+    subtitle: myWorkItemSummary(item),
     actionKey: `myWork.action.${item.required_action}`,
     statusKey: `myWork.status.${item.status}`,
   };
 }
 
-export function buildActivityInboxEntries(items: ProjectWorkItem[]): ActivityInboxEntry[] {
+export function buildActivityInboxEntries(
+  items: ProjectWorkItem[],
+): ActivityInboxEntry[] {
   return items
     .map(activityEntryForItem)
     .filter((entry): entry is ActivityInboxEntry => entry !== null)
     .sort((left, right) => right.timestampMs - left.timestampMs);
 }
 
-export function groupActivityEntries(entries: ActivityInboxEntry[]): ActivityInboxGroup[] {
+export function groupActivityEntries(
+  entries: ActivityInboxEntry[],
+): ActivityInboxGroup[] {
   return ACTIVITY_CATEGORIES.map((category) => ({
     category,
     entries: entries.filter((entry) => entry.category === category),

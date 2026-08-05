@@ -6,6 +6,7 @@ import type {
   AgentWsEvent,
   DesktopRuntimeConfig,
   HitlResponseSubmission,
+  WorkspacePermissionMode,
 } from "../types";
 
 const HEARTBEAT_INTERVAL_MS = 20_000;
@@ -14,6 +15,7 @@ const STALE_CONNECTION_MS = 60_000;
 const MAX_SOCKET_EVENTS = 200;
 const MAX_EVENT_KEYS = 400;
 const MAX_PENDING_AGENT_MESSAGES = 100;
+const SUBAGENT_CONTROL_ACK_TIMEOUT_MS = 10_000;
 const TERMINAL_AGENT_MESSAGE_ERROR_CODES = new Set([
   "CONVERSATION_ACCESS_DENIED",
   "CONVERSATION_NOT_FOUND",
@@ -49,6 +51,9 @@ type AgentSocketState = {
   events: AgentWsEvent[];
   sendAgentMessage: (message: AgentRunMessage) => boolean;
   sendSteerMessage: (message: AgentSteerMessage) => boolean;
+  sendSubAgentControl: (
+    command: SubAgentControlCommand,
+  ) => Promise<SubAgentControlReceipt>;
   stopAgentResponse: (conversationId: string) => boolean;
   respondToHitl: (submission: HitlResponseSubmission) => boolean;
 };
@@ -69,6 +74,7 @@ export type AgentRunMessage = {
   mentions?: string[];
   fileMetadata?: AgentInputFileMetadata[];
   appModelContext?: Record<string, unknown>;
+  permissionMode?: WorkspacePermissionMode;
 };
 
 export type AgentRunSocketMessage = {
@@ -82,6 +88,7 @@ export type AgentRunSocketMessage = {
   mentions?: string[];
   file_metadata?: AgentInputFileMetadata[];
   app_model_context?: Record<string, unknown>;
+  permission_mode?: WorkspacePermissionMode;
 };
 
 export type AgentStopSocketMessage = {
@@ -105,6 +112,47 @@ export type AgentSteerSocketMessage = {
 };
 
 export type AgentSteerMessageOutcome = "accepted" | "rejected";
+
+export type SubAgentControlAction = "steer" | "kill_run";
+
+export type SubAgentControlCommand = {
+  action: SubAgentControlAction;
+  conversationId: string;
+  runId: string;
+  expectedRunRevision: number;
+  idempotencyKey: string;
+  instruction?: string;
+  cascade?: boolean;
+};
+
+export type SubAgentControlSocketMessage = {
+  type: SubAgentControlAction;
+  conversation_id: string;
+  run_id: string;
+  expected_run_revision: number;
+  idempotency_key: string;
+  instruction?: string;
+  cascade?: boolean;
+};
+
+export type SubAgentControlReceipt = {
+  action: SubAgentControlAction;
+  accepted: boolean;
+  duplicate: boolean;
+  reasonCode: string | null;
+  conversationId: string;
+  projectId: string | null;
+  runId: string;
+  runRevision: number | null;
+  idempotencyKey: string;
+  cascade: boolean;
+};
+
+type PendingSubAgentControl = {
+  command: SubAgentControlCommand;
+  resolve: (receipt: SubAgentControlReceipt) => void;
+  timeout: ReturnType<typeof setTimeout>;
+};
 
 export type PendingAgentMessageQueue = Map<string, AgentRunSocketMessage>;
 
@@ -161,6 +209,7 @@ function agentRunSocketMessage(
   const mentions = message.mentions
     ?.map((mention) => mention.trim())
     .filter(Boolean);
+  const permissionMode = message.permissionMode;
   return {
     type: "send_message",
     conversation_id: conversationId,
@@ -176,6 +225,7 @@ function agentRunSocketMessage(
     ...(message.appModelContext && Object.keys(message.appModelContext).length
       ? { app_model_context: message.appModelContext }
       : {}),
+    ...(permissionMode ? { permission_mode: permissionMode } : {}),
   };
 }
 
@@ -252,7 +302,10 @@ export function agentSteerMessageOutcome(
   if (!event || typeof event !== "object" || !normalizedMessageId) return null;
   const payload = event as Record<string, unknown>;
   const eventType = typeof payload.type === "string" ? payload.type : "";
-  const eventMessageId = nestedStringField(payload, ["message_id", "messageId"]);
+  const eventMessageId = nestedStringField(payload, [
+    "message_id",
+    "messageId",
+  ]);
   if (eventMessageId !== normalizedMessageId) return null;
   if (eventType === "ack" && payload.action === "steer_message") {
     return nestedStringField(payload, ["outcome"]) === "accepted"
@@ -265,6 +318,105 @@ export function agentSteerMessageOutcome(
     if (code && AGENT_STEER_REJECTED_ERROR_CODES.has(code)) return "rejected";
   }
   return null;
+}
+
+export function subAgentControlSocketMessage(
+  command: SubAgentControlCommand,
+): SubAgentControlSocketMessage | null {
+  const conversationId = command.conversationId.trim();
+  const runId = command.runId.trim();
+  const idempotencyKey = command.idempotencyKey.trim();
+  if (
+    !conversationId ||
+    !runId ||
+    !idempotencyKey ||
+    !Number.isInteger(command.expectedRunRevision) ||
+    command.expectedRunRevision < 1
+  ) {
+    return null;
+  }
+  if (command.action === "steer") {
+    const instruction = command.instruction?.trim() ?? "";
+    if (!instruction) return null;
+    return {
+      type: "steer",
+      conversation_id: conversationId,
+      run_id: runId,
+      expected_run_revision: command.expectedRunRevision,
+      idempotency_key: idempotencyKey,
+      instruction,
+    };
+  }
+  return {
+    type: "kill_run",
+    conversation_id: conversationId,
+    run_id: runId,
+    expected_run_revision: command.expectedRunRevision,
+    idempotency_key: idempotencyKey,
+    cascade: command.cascade === true,
+  };
+}
+
+export function deliverSubAgentControlCommand(
+  command: SubAgentControlCommand,
+  send: (message: SubAgentControlSocketMessage) => boolean,
+): boolean {
+  const payload = subAgentControlSocketMessage(command);
+  return payload ? send(payload) : false;
+}
+
+export function subAgentControlReceipt(
+  event: unknown,
+  idempotencyKey: string,
+): SubAgentControlReceipt | null {
+  const normalizedKey = idempotencyKey.trim();
+  if (!event || typeof event !== "object" || !normalizedKey) return null;
+  const payload = event as Record<string, unknown>;
+  if (payload.type !== "control_command_ack") return null;
+  const eventKey = nestedStringField(payload, [
+    "idempotency_key",
+    "idempotencyKey",
+  ]);
+  if (eventKey !== normalizedKey) return null;
+  const action = nestedStringField(payload, ["action"]);
+  if (action !== "steer" && action !== "kill_run") return null;
+  const conversationId = nestedStringField(payload, [
+    "conversation_id",
+    "conversationId",
+  ]);
+  const runId = nestedStringField(payload, ["run_id", "runId"]);
+  if (!conversationId || !runId || typeof payload.accepted !== "boolean")
+    return null;
+  return {
+    action,
+    accepted: payload.accepted,
+    duplicate: payload.duplicate === true,
+    reasonCode: nestedStringField(payload, ["reason_code", "reasonCode"]),
+    conversationId,
+    projectId: nestedStringField(payload, ["project_id", "projectId"]),
+    runId,
+    runRevision: nestedNumberField(payload, ["run_revision", "runRevision"]),
+    idempotencyKey: eventKey,
+    cascade: payload.cascade === true,
+  };
+}
+
+function localSubAgentControlRejection(
+  command: SubAgentControlCommand,
+  reasonCode: string,
+): SubAgentControlReceipt {
+  return {
+    action: command.action,
+    accepted: false,
+    duplicate: false,
+    reasonCode,
+    conversationId: command.conversationId.trim(),
+    projectId: null,
+    runId: command.runId.trim(),
+    runRevision: null,
+    idempotencyKey: command.idempotencyKey.trim(),
+    cascade: command.cascade === true,
+  };
 }
 
 function enqueuePendingAgentSocketMessage(
@@ -327,6 +479,9 @@ export function useAgentSocket(
   const socketRef = useRef<WebSocket | null>(null);
   const contextStateRef = useRef(createAgentSocketContextState());
   const pendingAgentMessagesRef = useRef(createPendingAgentMessageQueue());
+  const pendingSubAgentControlsRef = useRef(
+    new Map<string, PendingSubAgentControl>(),
+  );
   const pendingEventsRef = useRef<AgentWsEvent[]>([]);
   const eventsFlushCancelRef = useRef<(() => void) | null>(null);
   const pendingAgentQueueScopeKey = pendingAgentRunQueueScopeKey(
@@ -451,6 +606,52 @@ export function useAgentSocket(
   const sendSteerMessage = useCallback(
     (message: AgentSteerMessage) =>
       deliverAgentSteerMessage(message, sendSocketMessage),
+    [sendSocketMessage],
+  );
+
+  const sendSubAgentControl = useCallback(
+    (command: SubAgentControlCommand): Promise<SubAgentControlReceipt> => {
+      const payload = subAgentControlSocketMessage(command);
+      if (!payload) {
+        return Promise.resolve(
+          localSubAgentControlRejection(command, "invalid_control_command"),
+        );
+      }
+      const existing = pendingSubAgentControlsRef.current.get(
+        payload.idempotency_key,
+      );
+      if (existing) {
+        return Promise.resolve(
+          localSubAgentControlRejection(
+            command,
+            "control_dispatch_in_progress",
+          ),
+        );
+      }
+      return new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          pendingSubAgentControlsRef.current.delete(payload.idempotency_key);
+          resolve(
+            localSubAgentControlRejection(command, "control_ack_timeout"),
+          );
+        }, SUBAGENT_CONTROL_ACK_TIMEOUT_MS);
+        pendingSubAgentControlsRef.current.set(payload.idempotency_key, {
+          command,
+          resolve,
+          timeout,
+        });
+        if (!sendSocketMessage(payload)) {
+          clearTimeout(timeout);
+          pendingSubAgentControlsRef.current.delete(payload.idempotency_key);
+          resolve(
+            localSubAgentControlRejection(
+              command,
+              "control_socket_unavailable",
+            ),
+          );
+        }
+      });
+    },
     [sendSocketMessage],
   );
 
@@ -613,6 +814,20 @@ export function useAgentSocket(
         if (disposed || socketRef.current !== socket) return;
         lastMessageAt = Date.now();
         const event = parseEvent(message.data);
+        const controlReceiptKey = nestedStringField(event, [
+          "idempotency_key",
+          "idempotencyKey",
+        ]);
+        if (controlReceiptKey) {
+          const pendingControl =
+            pendingSubAgentControlsRef.current.get(controlReceiptKey);
+          const receipt = subAgentControlReceipt(event, controlReceiptKey);
+          if (pendingControl && receipt) {
+            clearTimeout(pendingControl.timeout);
+            pendingSubAgentControlsRef.current.delete(controlReceiptKey);
+            pendingControl.resolve(receipt);
+          }
+        }
         confirmPendingAgentRunMessageReceipt(
           pendingAgentMessagesRef.current,
           event,
@@ -669,6 +884,16 @@ export function useAgentSocket(
       eventsFlushCancelRef.current?.();
       eventsFlushCancelRef.current = null;
       pendingEventsRef.current = [];
+      for (const pendingControl of pendingSubAgentControlsRef.current.values()) {
+        clearTimeout(pendingControl.timeout);
+        pendingControl.resolve(
+          localSubAgentControlRejection(
+            pendingControl.command,
+            "control_connection_closed",
+          ),
+        );
+      }
+      pendingSubAgentControlsRef.current.clear();
       const socket = socketRef.current;
       socketRef.current = null;
       if (socket) {
@@ -695,9 +920,28 @@ export function useAgentSocket(
     events,
     sendAgentMessage,
     sendSteerMessage,
+    sendSubAgentControl,
     stopAgentResponse,
     respondToHitl,
   };
+}
+
+function nestedNumberField(
+  payload: Record<string, unknown>,
+  keys: readonly string[],
+): number | null {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  for (const key of ["message", "payload", "data"]) {
+    const nested = payload[key];
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+      const value = nestedNumberField(nested as Record<string, unknown>, keys);
+      if (value !== null) return value;
+    }
+  }
+  return null;
 }
 
 function nestedStringField(
@@ -866,7 +1110,8 @@ export function socketEventWindowSince<T>(
   previousHead: T | null,
 ): { events: T[]; cursorGap: boolean } {
   if (!events.length) return { events: [], cursorGap: previousHead !== null };
-  const boundaryIndex = previousHead === null ? -1 : events.indexOf(previousHead);
+  const boundaryIndex =
+    previousHead === null ? -1 : events.indexOf(previousHead);
   return {
     events: events
       .slice(0, boundaryIndex < 0 ? events.length : boundaryIndex)

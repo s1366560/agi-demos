@@ -38,6 +38,9 @@ import type {
   PendingHITLResponse,
   SubscribeOptions,
   ListConversationsRequestOptions,
+  KillSubAgentOptions,
+  SubAgentControlOptions,
+  ControlCommandAck,
 } from '../types/agent';
 
 function generateSessionId(): string {
@@ -45,6 +48,10 @@ function generateSessionId(): string {
     return crypto.randomUUID();
   }
   return `${String(Date.now())}-${Math.random().toString(36).substring(2, 15)}`;
+}
+
+function generateProtocolId(prefix: string): string {
+  return `${prefix}-${generateSessionId()}`;
 }
 
 const SILENT_AGENT_EVENT_TYPES = new Set<string>([
@@ -135,6 +142,14 @@ class AgentServiceImpl implements AgentService {
     string,
     { resolve: () => void; reject: (error: Error) => void; timeout: ReturnType<typeof setTimeout> }
   > = new Map();
+  private pendingControlAcks: Map<
+    string,
+    {
+      resolve: (ack: ControlCommandAck) => void;
+      reject: (error: Error) => void;
+      timeout: ReturnType<typeof setTimeout>;
+    }
+  > = new Map();
 
   constructor() {
     this.wsConnection = new WebSocketConnection({
@@ -218,6 +233,41 @@ class AgentServiceImpl implements AgentService {
     this.pendingSendAcks.delete(conversationId);
   }
 
+  private waitForControlAck(idempotencyKey: string): Promise<ControlCommandAck> {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingControlAcks.delete(idempotencyKey);
+        reject(new Error('Timed out waiting for control command acknowledgment'));
+      }, SEND_ACK_TIMEOUT_MS);
+      this.pendingControlAcks.set(idempotencyKey, { resolve, reject, timeout });
+    });
+  }
+
+  private rejectControlAck(idempotencyKey: string, error: Error): void {
+    const pending = this.pendingControlAcks.get(idempotencyKey);
+    if (!pending) return;
+    clearTimeout(pending.timeout);
+    this.pendingControlAcks.delete(idempotencyKey);
+    pending.reject(error);
+  }
+
+  private resolveControlAck(message: ServerMessage): void {
+    const candidate = message as ServerMessage & Partial<ControlCommandAck>;
+    if (
+      typeof candidate.idempotency_key !== 'string' ||
+      (candidate.action !== 'kill_run' && candidate.action !== 'steer') ||
+      typeof candidate.accepted !== 'boolean' ||
+      typeof candidate.duplicate !== 'boolean'
+    ) {
+      return;
+    }
+    const pending = this.pendingControlAcks.get(candidate.idempotency_key);
+    if (!pending) return;
+    clearTimeout(pending.timeout);
+    this.pendingControlAcks.delete(candidate.idempotency_key);
+    pending.resolve(candidate as ControlCommandAck);
+  }
+
   private handleMessage(message: ServerMessage): void {
     const { type, conversation_id, data } = message;
 
@@ -235,6 +285,11 @@ class AgentServiceImpl implements AgentService {
 
     if (type === 'ack') {
       this.resolveSendAck(message);
+      return;
+    }
+
+    if (type === 'control_command_ack') {
+      this.resolveControlAck(message);
       return;
     }
 
@@ -611,29 +666,49 @@ class AgentServiceImpl implements AgentService {
     return sent;
   }
 
-  killSubAgent(conversationId: string, subagentId: string): boolean {
+  killSubAgent(
+    conversationId: string,
+    subagentId: string,
+    options: KillSubAgentOptions
+  ): Promise<ControlCommandAck> {
+    const idempotencyKey = options.idempotencyKey ?? generateProtocolId('subagent-kill');
+    const ack = this.waitForControlAck(idempotencyKey);
     const sent = this.send({
       type: 'kill_run',
       conversation_id: conversationId,
       run_id: subagentId,
+      expected_run_revision: options.expectedRunRevision,
+      idempotency_key: idempotencyKey,
+      cascade: options.cascade,
     });
     if (!sent) {
       logger.warn('[AgentWS] Failed to send kill_run signal - WebSocket not connected');
+      this.rejectControlAck(idempotencyKey, new Error('WebSocket not connected'));
     }
-    return sent;
+    return ack;
   }
 
-  steerSubAgent(conversationId: string, subagentId: string, instruction: string): boolean {
+  steerSubAgent(
+    conversationId: string,
+    subagentId: string,
+    instruction: string,
+    options: SubAgentControlOptions
+  ): Promise<ControlCommandAck> {
+    const idempotencyKey = options.idempotencyKey ?? generateProtocolId('subagent-steer');
+    const ack = this.waitForControlAck(idempotencyKey);
     const sent = this.send({
       type: 'steer',
       conversation_id: conversationId,
       run_id: subagentId,
       instruction,
+      expected_run_revision: options.expectedRunRevision,
+      idempotency_key: idempotencyKey,
     });
     if (!sent) {
       logger.warn('[AgentWS] Failed to send steer signal - WebSocket not connected');
+      this.rejectControlAck(idempotencyKey, new Error('WebSocket not connected'));
     }
-    return sent;
+    return ack;
   }
 
   async chat(request: ChatRequest, handler: AgentStreamHandler): Promise<void> {

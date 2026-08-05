@@ -260,4 +260,101 @@ describe('agentService - WebSocket Token Handling', () => {
       }
     });
   });
+
+  describe('SubAgent control commands', () => {
+    it('resolves kill_run only after the matching structured acknowledgement', async () => {
+      const sendSpy = vi
+        .spyOn(agentService as any, 'send')
+        .mockImplementation((payload: Record<string, unknown>) => {
+          queueMicrotask(() => {
+            (agentService as any).handleMessage({
+              type: 'control_command_ack',
+              action: 'kill_run',
+              accepted: true,
+              duplicate: false,
+              reason_code: null,
+              conversation_id: payload.conversation_id,
+              project_id: 'project-1',
+              run_id: payload.run_id,
+              run_revision: payload.expected_run_revision,
+              idempotency_key: payload.idempotency_key,
+              cascade: payload.cascade,
+            });
+          });
+          return true;
+        });
+
+      try {
+        await expect(
+          agentService.killSubAgent('conv-1', 'run-1', {
+            expectedRunRevision: 7,
+            idempotencyKey: 'kill-idempotency-1',
+            cascade: true,
+          })
+        ).resolves.toEqual(
+          expect.objectContaining({
+            accepted: true,
+            idempotency_key: 'kill-idempotency-1',
+            run_revision: 7,
+          })
+        );
+        expect(sendSpy).toHaveBeenCalledWith({
+          type: 'kill_run',
+          conversation_id: 'conv-1',
+          run_id: 'run-1',
+          expected_run_revision: 7,
+          idempotency_key: 'kill-idempotency-1',
+          cascade: true,
+        });
+      } finally {
+        sendSpy.mockRestore();
+      }
+    });
+
+    it('preserves a structured steer rejection for the caller', async () => {
+      const sendSpy = vi
+        .spyOn(agentService as any, 'send')
+        .mockImplementation((payload: Record<string, unknown>) => {
+          queueMicrotask(() => {
+            (agentService as any).handleMessage({
+              type: 'control_command_ack',
+              action: 'steer',
+              accepted: false,
+              duplicate: false,
+              reason_code: 'run_revision_conflict',
+              conversation_id: payload.conversation_id,
+              project_id: 'project-1',
+              run_id: payload.run_id,
+              run_revision: 9,
+              idempotency_key: payload.idempotency_key,
+            });
+          });
+          return true;
+        });
+
+      try {
+        await expect(
+          agentService.steerSubAgent('conv-1', 'run-1', 'Use the focused tests', {
+            expectedRunRevision: 8,
+          })
+        ).resolves.toEqual(
+          expect.objectContaining({
+            accepted: false,
+            reason_code: 'run_revision_conflict',
+            run_revision: 9,
+          })
+        );
+        expect(sendSpy).toHaveBeenCalledWith({
+          type: 'steer',
+          conversation_id: 'conv-1',
+          run_id: 'run-1',
+          instruction: 'Use the focused tests',
+          expected_run_revision: 8,
+          idempotency_key: 'subagent-steer-test-session-id',
+        });
+      } finally {
+        sendSpy.mockRestore();
+      }
+    });
+  });
 });

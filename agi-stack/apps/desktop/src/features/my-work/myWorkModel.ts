@@ -15,11 +15,8 @@ export const MY_WORK_GROUPS: MyWorkGroup[] = [
 export type MyWorkModeFilter = 'all' | AgentCapabilityMode;
 export type MyWorkDisplayGroup = 'needs_input' | 'running' | 'ready_review';
 
-export const MY_WORK_DISPLAY_GROUPS: readonly MyWorkDisplayGroup[] = Object.freeze([
-  'needs_input',
-  'running',
-  'ready_review',
-]);
+export const MY_WORK_DISPLAY_GROUPS: readonly MyWorkDisplayGroup[] =
+  Object.freeze(['needs_input', 'running', 'ready_review']);
 
 export const MY_WORK_DISPLAY_GROUP_BY_AUTHORITY_GROUP: Readonly<
   Record<MyWorkGroup, MyWorkDisplayGroup>
@@ -106,13 +103,38 @@ export function myWorkCompletionPresentation(
   if (status === 'failed') {
     return { outcomeLabelKey: 'myWork.status.failed', tone: 'danger', detail };
   }
-  if (status === 'cancelled' || status === 'interrupted' || status === 'disconnected') {
-    return { outcomeLabelKey: `myWork.status.${status}`, tone: 'warning', detail };
+  if (
+    status === 'cancelled' ||
+    status === 'interrupted' ||
+    status === 'disconnected'
+  ) {
+    return {
+      outcomeLabelKey: `myWork.status.${status}`,
+      tone: 'warning',
+      detail,
+    };
   }
   if (status === 'completed') {
-    return { outcomeLabelKey: 'myWork.status.completed', tone: 'success', detail: null };
+    return {
+      outcomeLabelKey: 'myWork.status.completed',
+      tone: 'success',
+      detail: null,
+    };
   }
-  return { outcomeLabelKey: 'myWork.status.ready_review', tone: 'success', detail: null };
+  return {
+    outcomeLabelKey: 'myWork.status.ready_review',
+    tone: 'success',
+    detail: null,
+  };
+}
+
+export function myWorkItemSummary(
+  item: Pick<ProjectWorkItem, 'summary' | 'run_summary'>,
+): string | null {
+  const completionSummary = item.run_summary?.completion_summary?.trim();
+  if (completionSummary) return completionSummary;
+  const legacySummary = item.summary?.trim();
+  return legacySummary || null;
 }
 
 const myWorkInvalidationEventTypes = new Set([
@@ -148,7 +170,11 @@ export function myWorkItemMatchesMode(
   item: Pick<ProjectWorkItem, 'capability_mode'>,
   mode: MyWorkModeFilter,
 ): boolean {
-  return mode === 'all' || item.capability_mode === null || item.capability_mode === mode;
+  return (
+    mode === 'all' ||
+    item.capability_mode === null ||
+    item.capability_mode === mode
+  );
 }
 
 export function filterMyWorkItems(
@@ -163,7 +189,8 @@ export function filterMyWorkItems(
     .filter((item) => myWorkItemMatchesMode(item, mode))
     .filter(
       (item) =>
-        !normalizedQuery || item.title.toLocaleLowerCase().includes(normalizedQuery),
+        !normalizedQuery ||
+        item.title.toLocaleLowerCase().includes(normalizedQuery),
     )
     .sort(
       (left, right) =>
@@ -179,7 +206,8 @@ export function filterMyWorkDisplayItems(
 ): ProjectWorkItem[] {
   return filterMyWorkItems(items, 'all', mode).filter(
     (item) =>
-      group === 'all' || myWorkDisplayGroupForAuthorityGroup(myWorkEffectiveGroup(item)) === group,
+      group === 'all' ||
+      myWorkDisplayGroupForAuthorityGroup(myWorkEffectiveGroup(item)) === group,
   );
 }
 
@@ -191,7 +219,9 @@ export function groupMyWorkDisplayItems(
   return MY_WORK_DISPLAY_GROUPS.map((group) => ({
     group,
     items: visibleItems.filter(
-      (item) => myWorkDisplayGroupForAuthorityGroup(myWorkEffectiveGroup(item)) === group,
+      (item) =>
+        myWorkDisplayGroupForAuthorityGroup(myWorkEffectiveGroup(item)) ===
+        group,
     ),
   }));
 }
@@ -204,7 +234,8 @@ export function countMyWorkDisplayGroups(
     Record<MyWorkDisplayGroup, number>
   >(
     (counts, item) => {
-      counts[myWorkDisplayGroupForAuthorityGroup(myWorkEffectiveGroup(item))] += 1;
+      counts[myWorkDisplayGroupForAuthorityGroup(myWorkEffectiveGroup(item))] +=
+        1;
       return counts;
     },
     { needs_input: 0, running: 0, ready_review: 0 },
@@ -227,15 +258,18 @@ export function describeMyWorkAuthority(
   const authorityKind: string = item.authority_kind;
   const identifier = item.authority_id;
 
-  if (authorityKind === 'desktop_run') {
+  if (authorityKind === 'desktop_run' || authorityKind === 'agent_run') {
     return {
-      sourceKey: 'myWork.authorityKind.desktop_run',
-      descriptionKey: 'myWork.authorityDescription.desktop_run',
+      sourceKey: `myWork.authorityKind.${authorityKind}`,
+      descriptionKey: `myWork.authorityDescription.${authorityKind}`,
       identifier,
       sequence:
         item.revision === null
           ? null
-          : { labelKey: 'myWork.runRevisionLabel', value: String(item.revision) },
+          : {
+              labelKey: 'myWork.runRevisionLabel',
+              value: String(item.revision),
+            },
       runtime: {
         runId: item.run_id,
         revision: item.revision,
@@ -254,7 +288,10 @@ export function describeMyWorkAuthority(
       sequence:
         item.attempt_number === null
           ? null
-          : { labelKey: 'myWork.attemptNumber', value: String(item.attempt_number) },
+          : {
+              labelKey: 'myWork.attemptNumber',
+              value: String(item.attempt_number),
+            },
       runtime: null,
     };
   }
@@ -278,7 +315,9 @@ export function describeMyWorkAuthority(
   };
 }
 
-export function countMyWorkGroups(items: ProjectWorkItem[]): Record<MyWorkGroup, number> {
+export function countMyWorkGroups(
+  items: ProjectWorkItem[],
+): Record<MyWorkGroup, number> {
   return MY_WORK_GROUPS.reduce<Record<MyWorkGroup, number>>(
     (counts, group) => {
       counts[group] = items.filter((item) => item.group === group).length;
@@ -328,12 +367,12 @@ export function myWorkConversationMatchesScope(
   conversation: AgentConversation,
   context: { tenantId: string; projectId: string },
 ): boolean {
+  const itemWorkspaceId = item.workspace_id ?? null;
   return (
-    Boolean(item.workspace_id) &&
     item.project_id === context.projectId &&
     conversation.id === item.conversation_id &&
     conversation.tenant_id === context.tenantId &&
     conversation.project_id === context.projectId &&
-    conversation.workspace_id === item.workspace_id
+    conversation.workspace_id === itemWorkspaceId
   );
 }

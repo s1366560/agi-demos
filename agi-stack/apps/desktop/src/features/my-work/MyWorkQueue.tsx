@@ -14,6 +14,7 @@ import {
   groupMyWorkDisplayItems,
   myWorkCompletionPresentation,
   myWorkEffectiveGroup,
+  myWorkItemSummary,
   type MyWorkDisplayGroup,
 } from './myWorkModel';
 import './MyWorkQueue.css';
@@ -46,14 +47,21 @@ export function MyWorkQueue({
   onOpenSession,
 }: MyWorkQueueProps) {
   const { locale, t } = useI18n();
-  const groups = useMemo(() => groupMyWorkDisplayItems(items, mode), [items, mode]);
+  const groups = useMemo(
+    () => groupMyWorkDisplayItems(items, mode),
+    [items, mode],
+  );
   const visibleItemCount = useMemo(
     () => groups.reduce((count, group) => count + group.items.length, 0),
     [groups],
   );
 
   return (
-    <main className="my-work-inbox" aria-busy={loading} aria-label={t('myWork.title')}>
+    <main
+      className="my-work-inbox"
+      aria-busy={loading}
+      aria-label={t('myWork.title')}
+    >
       <header className="my-work-inbox-heading">
         <div>
           <span>{t('myWork.eyebrow')}</span>
@@ -83,9 +91,7 @@ export function MyWorkQueue({
           <CheckCircledIcon />
           <div>
             <strong>{t('myWork.empty')}</strong>
-            <p>
-              {t('myWork.emptyDescription')}
-            </p>
+            <p>{t('myWork.emptyDescription')}</p>
           </div>
         </section>
       ) : null}
@@ -111,7 +117,9 @@ export function MyWorkQueue({
                         projectName={projectName}
                         workspaceLabel={
                           item.workspace_name ??
-                          (item.workspace_id ? workspaceLabels[item.workspace_id] : null) ??
+                          (item.workspace_id
+                            ? workspaceLabels[item.workspace_id]
+                            : null) ??
                           projectName
                         }
                         onOpen={() => onOpenSession(item)}
@@ -119,7 +127,9 @@ export function MyWorkQueue({
                     ))}
                   </div>
                 ) : (
-                  <p className="my-work-inbox-empty">{t('myWork.groupEmpty')}</p>
+                  <p className="my-work-inbox-empty">
+                    {t('myWork.groupEmpty')}
+                  </p>
                 )}
               </section>
             );
@@ -157,19 +167,29 @@ function InboxCard({
         <i className={`status-${statusTone}`} aria-hidden="true" />
         <ModeIcon />
         <span>{workspaceLabel}</span>
-        <time>{formatRelativeTime(item.updated_at || item.created_at, locale)}</time>
+        <time>
+          {formatRelativeTime(item.updated_at || item.created_at, locale)}
+        </time>
       </header>
       <strong>{item.title}</strong>
-      <p>{item.summary || t(`myWork.action.${item.required_action}`)}</p>
+      <p>
+        {myWorkItemSummary(item) || t(`myWork.action.${item.required_action}`)}
+      </p>
       {completion ? (
         <p className={`my-work-inbox-outcome tone-${completion.tone}`}>
           <strong>{t(completion.outcomeLabelKey)}</strong>
-          {completion.detail ? <span title={completion.detail}>{completion.detail}</span> : null}
+          {completion.detail ? (
+            <span title={completion.detail}>{completion.detail}</span>
+          ) : null}
         </p>
       ) : null}
       <footer>
-        <span className={`my-work-inbox-progress ${progress === null ? 'indeterminate' : ''}`}>
-          <i style={progress === null ? undefined : { width: `${progress}%` }} />
+        <span
+          className={`my-work-inbox-progress ${progress === null ? 'indeterminate' : ''}`}
+        >
+          <i
+            style={progress === null ? undefined : { width: `${progress}%` }}
+          />
         </span>
         <small>{item.phase || t(`myWork.status.${item.status}`)}</small>
         <em>{projectName}</em>

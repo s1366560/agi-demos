@@ -24,8 +24,14 @@ import type {
   DesktopApprovalRequest,
   HitlResponseSubmission,
 } from '../../types';
-import { buildSessionNarrative, timelineGroupOpen } from '../session/sessionNarrativeModel';
-import type { SessionActivityPresence, SessionNarrativeNode } from '../session/sessionNarrativeModel';
+import {
+  buildSessionNarrative,
+  timelineGroupOpen,
+} from '../session/sessionNarrativeModel';
+import type {
+  SessionActivityPresence,
+  SessionNarrativeNode,
+} from '../session/sessionNarrativeModel';
 import { resolveA2UIActionView } from './a2uiAction';
 import type { A2UIActionView } from './a2uiAction';
 import {
@@ -45,10 +51,18 @@ import {
   toolCallPairStatus,
   toolCallPresentationKind,
 } from './chatTimelineModel';
-import type { ToolCallPair, ToolCallPresentationKind } from './chatTimelineModel';
+import type {
+  ToolCallPair,
+  ToolCallPresentationKind,
+} from './chatTimelineModel';
 import { agentLifecyclePresentation } from './agentLifecyclePresentationModel';
 import { groupSubAgentTimelineItems } from './subagentTimelineGroupModel';
 import type { SubAgentTimelineGroup } from './subagentTimelineGroupModel';
+import type { SubAgentControlAuthority } from './subagentControlAuthorityModel';
+import type {
+  SubAgentControlCommand,
+  SubAgentControlReceipt,
+} from '../../hooks/useAgentSocket';
 import {
   formatTimelineTime,
   isImportantTimelineItem,
@@ -87,6 +101,7 @@ import type { SkillTimelineGroup } from './skillTimelineGroupModel';
 import { ThoughtTimelineCard } from './ThoughtTimelineCard';
 import type { TimelineTurn } from './timelineTurnCollapseModel';
 import { WorkPlanTimelineCard } from './WorkPlanTimelineCard';
+import { SubAgentControlPanel } from './SubAgentControlPanel';
 import {
   MarkdownContent,
   NarrativeMessageFrame,
@@ -169,6 +184,8 @@ export function AgentTimeline({
   turns = EMPTY_TIMELINE_TURNS,
   collapsedTurnIds = EMPTY_COLLAPSED_TURN_IDS,
   onToggleTurn = () => undefined,
+  subAgentControlAuthority,
+  onSubAgentControl,
 }: {
   state: ConversationTimelineState;
   expandedItems: Record<string, boolean>;
@@ -185,32 +202,51 @@ export function AgentTimeline({
   onEditMessage?: (item: AgentTimelineItem) => void;
   onDeleteMessage?: (item: AgentTimelineItem, returnFocus: HTMLElement) => void;
   onRetryMessage?: (item: AgentTimelineItem) => void;
-  onSaveTemplateMessage?: (item: AgentTimelineItem, returnFocus: HTMLElement) => void;
+  onSaveTemplateMessage?: (
+    item: AgentTimelineItem,
+    returnFocus: HTMLElement,
+  ) => void;
   pinnedMessageIds?: readonly string[];
   onPinMessage?: (item: AgentTimelineItem) => void;
   retryDisabled?: boolean;
   turns?: readonly TimelineTurn[];
   collapsedTurnIds?: readonly string[];
   onToggleTurn?: (turnId: string) => void;
+  subAgentControlAuthority?: SubAgentControlAuthority;
+  onSubAgentControl?: (
+    command: SubAgentControlCommand,
+  ) => Promise<SubAgentControlReceipt>;
 }) {
   const { t } = useI18n();
   const respondableHitlRequestIdSet = useMemo(
     () => new Set(respondableHitlRequestIds),
     [respondableHitlRequestIds],
   );
-  const pinnedMessageIdSet = useMemo(() => new Set(pinnedMessageIds), [pinnedMessageIds]);
+  const pinnedMessageIdSet = useMemo(
+    () => new Set(pinnedMessageIds),
+    [pinnedMessageIds],
+  );
   const a2uiActionViews = useMemo(
     () =>
       new Map(
         state.items
           .filter((item) => timelineHitlType(item) === 'a2ui_action')
-          .map((item) => [item.id, resolveA2UIActionView(item, state.items)] as const),
+          .map(
+            (item) =>
+              [item.id, resolveA2UIActionView(item, state.items)] as const,
+          ),
       ),
     [state.items],
   );
-  const displayItems = useMemo(() => timelineItemsForDisplay(state.items), [state.items]);
+  const displayItems = useMemo(
+    () => timelineItemsForDisplay(state.items),
+    [state.items],
+  );
   const narrative = useMemo(
-    () => annotateTimelineGroups(groupNarrativeActivity(buildSessionNarrative(displayItems))),
+    () =>
+      annotateTimelineGroups(
+        groupNarrativeActivity(buildSessionNarrative(displayItems)),
+      ),
     [displayItems],
   );
   const lastToolGroupIndex = useMemo(() => {
@@ -220,7 +256,12 @@ export function AgentTimeline({
     return -1;
   }, [narrative]);
   const renderWindow = useMemo(
-    () => resolveTimelineRenderWindow(narrative, displayItems.length, earlierRenderAllowance),
+    () =>
+      resolveTimelineRenderWindow(
+        narrative,
+        displayItems.length,
+        earlierRenderAllowance,
+      ),
     [narrative, displayItems.length, earlierRenderAllowance],
   );
   const collapsedTurnIdSet = useMemo(
@@ -232,10 +273,17 @@ export function AgentTimeline({
     [turns],
   );
   const turnCollapsePresentation = useMemo(
-    () => timelineTurnCollapsePresentation(narrative, turns, renderWindow.startIndex),
+    () =>
+      timelineTurnCollapsePresentation(
+        narrative,
+        turns,
+        renderWindow.startIndex,
+      ),
     [narrative, renderWindow.startIndex, turns],
   );
-  const [expandedGroupItems, setExpandedGroupItems] = useState<Record<string, boolean>>({});
+  const [expandedGroupItems, setExpandedGroupItems] = useState<
+    Record<string, boolean>
+  >({});
   const showWorkingIndicator = shouldShowAgentWorkingIndicator({
     items: displayItems,
     presence: activityPresence,
@@ -277,7 +325,10 @@ export function AgentTimeline({
   let lastRenderedDayKey = '';
 
   const timeline = (
-    <div className="agent-timeline" aria-label={t('session.conversationTimeline')}>
+    <div
+      className="agent-timeline"
+      aria-label={t('session.conversationTimeline')}
+    >
       {state.error ? (
         <div className="timeline-error" role="alert" aria-live="assertive">
           <Text size="2" color="red">
@@ -291,7 +342,11 @@ export function AgentTimeline({
             onClick={state.items.length ? onLoadEarlier : onRetry}
           >
             <ReloadIcon aria-hidden="true" />
-            {t(state.items.length ? 'session.retryEarlierHistory' : 'session.retryHistory')}
+            {t(
+              state.items.length
+                ? 'session.retryEarlierHistory'
+                : 'session.retryHistory',
+            )}
           </Button>
         </div>
       ) : null}
@@ -343,12 +398,16 @@ export function AgentTimeline({
           if (
             responseCollapsed &&
             responseTurnId &&
-            turnCollapsePresentation.firstVisibleNodeIndex.get(responseTurnId) !== index
+            turnCollapsePresentation.firstVisibleNodeIndex.get(
+              responseTurnId,
+            ) !== index
           ) {
             return null;
           }
           const nodeTimeUs =
-            node.kind === 'item' ? node.item.eventTimeUs : node.items[0]?.eventTimeUs;
+            node.kind === 'item'
+              ? node.item.eventTimeUs
+              : node.items[0]?.eventTimeUs;
           const dayKey = timelineDayKey(nodeTimeUs);
           const dayDivider =
             dayKey && dayKey !== lastRenderedDayKey && nodeTimeUs ? (
@@ -356,11 +415,15 @@ export function AgentTimeline({
             ) : null;
           if (dayKey) lastRenderedDayKey = dayKey;
           if (responseCollapsed && responseTurnId) {
-            const turn = turns.find((candidate) => candidate.id === responseTurnId);
+            const turn = turns.find(
+              (candidate) => candidate.id === responseTurnId,
+            );
             const regionId = timelineTurnResponseRegionId(responseTurnId);
             const controlId = timelineTurnControlId(responseTurnId);
             const count =
-              turnCollapsePresentation.responsePresentationCounts.get(responseTurnId) ?? 0;
+              turnCollapsePresentation.responsePresentationCounts.get(
+                responseTurnId,
+              ) ?? 0;
             const membersJson = JSON.stringify(turn?.responseItemIds ?? []);
             return (
               <Fragment key={`collapsed-turn:${responseTurnId}`}>
@@ -397,7 +460,9 @@ export function AgentTimeline({
           }
           const responseRegionMarker =
             responseTurnId &&
-            turnCollapsePresentation.firstVisibleNodeIndex.get(responseTurnId) === index ? (
+            turnCollapsePresentation.firstVisibleNodeIndex.get(
+              responseTurnId,
+            ) === index ? (
               <span
                 id={timelineTurnResponseRegionId(responseTurnId)}
                 className="timeline-turn-response-anchor"
@@ -423,7 +488,8 @@ export function AgentTimeline({
             const open = timelineGroupOpen(
               node.items,
               expandedGroupItems,
-              node.group.status === 'running' || node.group.status === 'steered',
+              node.group.status === 'running' ||
+                node.group.status === 'steered',
             );
             return (
               <Fragment key={groupId}>
@@ -434,6 +500,8 @@ export function AgentTimeline({
                   expanded={open}
                   onToggle={() => setGroupOpen(node.items, !open)}
                   anchorId={groupId}
+                  controlAuthority={subAgentControlAuthority}
+                  onControl={onSubAgentControl}
                 />
               </Fragment>
             );
@@ -443,7 +511,8 @@ export function AgentTimeline({
             const open = timelineGroupOpen(
               node.items,
               expandedGroupItems,
-              node.group.status === 'matched' || node.group.status === 'executing',
+              node.group.status === 'matched' ||
+                node.group.status === 'executing',
             );
             return (
               <Fragment key={groupId}>
@@ -492,18 +561,30 @@ export function AgentTimeline({
                   data-timeline-anchor-id={groupId}
                   data-timeline-anchor-members={node.membersJson}
                   open={open}
-                  onToggle={(event) => setGroupOpen(node.items, event.currentTarget.open)}
+                  onToggle={(event) =>
+                    setGroupOpen(node.items, event.currentTarget.open)
+                  }
                 >
                   <summary>
-                    <span className="timeline-debug-group-icon" aria-hidden="true">
+                    <span
+                      className="timeline-debug-group-icon"
+                      aria-hidden="true"
+                    >
                       <ActivityLogIcon />
                     </span>
                     <span>
                       <strong>{t('session.runActivity')}</strong>
-                      <small>{t('session.runActivityCount', { count: node.items.length })}</small>
+                      <small>
+                        {t('session.runActivityCount', {
+                          count: node.items.length,
+                        })}
+                      </small>
                     </span>
                     <em>{t('session.inspect')}</em>
-                    <ChevronRightIcon className="timeline-debug-group-chevron" aria-hidden="true" />
+                    <ChevronRightIcon
+                      className="timeline-debug-group-chevron"
+                      aria-hidden="true"
+                    />
                   </summary>
                   <div className="timeline-debug-group-items">
                     {node.items.map((item) => (
@@ -551,10 +632,17 @@ export function AgentTimeline({
                     </span>
                     <span>
                       <strong>{t('session.toolActivity')}</strong>
-                      <small>{t('session.toolActivityCount', { count: node.toolCount })}</small>
+                      <small>
+                        {t('session.toolActivityCount', {
+                          count: node.toolCount,
+                        })}
+                      </small>
                     </span>
                     <em>{t(`session.toolStatus.${node.status}`)}</em>
-                    <ChevronRightIcon className="timeline-tool-group-chevron" aria-hidden />
+                    <ChevronRightIcon
+                      className="timeline-tool-group-chevron"
+                      aria-hidden
+                    />
                   </summary>
                   <div className="timeline-tool-group-items">
                     <AggregatedSourcesCard items={node.items} />
@@ -586,7 +674,9 @@ export function AgentTimeline({
           const requestId = timelineHitlRequestId(item);
           const turn = turnByUserItemId.get(item.id);
           const turnResponseCount = turn
-            ? turnCollapsePresentation.responsePresentationCounts.get(turn.id) ?? 0
+            ? (turnCollapsePresentation.responsePresentationCounts.get(
+                turn.id,
+              ) ?? 0)
             : 0;
           const collapsed = Boolean(turn && collapsedTurnIdSet.has(turn.id));
           const regionId = turn ? timelineTurnResponseRegionId(turn.id) : '';
@@ -622,12 +712,18 @@ export function AgentTimeline({
                   className="timeline-turn-collapse-control"
                   aria-expanded={!collapsed}
                   aria-controls={regionId}
-                  aria-label={t(collapsed ? 'session.expandTurn' : 'session.collapseTurn', {
-                    count: turnResponseCount,
-                  })}
-                  title={t(collapsed ? 'session.expandTurn' : 'session.collapseTurn', {
-                    count: turnResponseCount,
-                  })}
+                  aria-label={t(
+                    collapsed ? 'session.expandTurn' : 'session.collapseTurn',
+                    {
+                      count: turnResponseCount,
+                    },
+                  )}
+                  title={t(
+                    collapsed ? 'session.expandTurn' : 'session.collapseTurn',
+                    {
+                      count: turnResponseCount,
+                    },
+                  )}
                   onClick={() => onToggleTurn(turn.id)}
                 >
                   {collapsed ? (
@@ -636,7 +732,11 @@ export function AgentTimeline({
                     <ChevronDownIcon aria-hidden="true" />
                   )}
                   <span>
-                    {t(collapsed ? 'session.expandTurnShort' : 'session.collapseTurnShort')}
+                    {t(
+                      collapsed
+                        ? 'session.expandTurnShort'
+                        : 'session.collapseTurnShort',
+                    )}
                   </span>
                 </button>
               ) : null}
@@ -644,9 +744,7 @@ export function AgentTimeline({
           );
         })
       )}
-      {showWorkingIndicator ? (
-        <TimelineWorkingRow items={state.items} />
-      ) : null}
+      {showWorkingIndicator ? <TimelineWorkingRow items={state.items} /> : null}
     </div>
   );
   return (
@@ -682,7 +780,9 @@ function TimelineWorkingRow({ items }: { items: AgentTimelineItem[] }) {
     return () => window.clearInterval(timer);
   }, [startedAtUs]);
   const duration = startedAtUs
-    ? formatToolCallDuration(Math.max(0, nowMs - Math.floor(startedAtUs / 1_000)))
+    ? formatToolCallDuration(
+        Math.max(0, nowMs - Math.floor(startedAtUs / 1_000)),
+      )
     : '';
   return (
     <div
@@ -719,10 +819,17 @@ function ToolCallPairView({
       ? pair.call.toolName || t('chat.toolCall')
       : t(`session.toolKind.${presentationKind}`));
   const rawSummary = timelineSummary(primary, 'tool', t);
-  const summary = stripRedundantToolPrefix(rawSummary, title, pair.call.toolName);
+  const summary = stripRedundantToolPrefix(
+    rawSummary,
+    title,
+    pair.call.toolName,
+  );
   const durationMs = toolCallPairDurationMs(pair);
-  const hasDetails = timelineHasDetails(pair.call, 'tool') || Boolean(pair.result);
-  const memberIds = pair.result ? [pair.call.id, pair.result.id] : [pair.call.id];
+  const hasDetails =
+    timelineHasDetails(pair.call, 'tool') || Boolean(pair.result);
+  const memberIds = pair.result
+    ? [pair.call.id, pair.result.id]
+    : [pair.call.id];
   return (
     <article
       className={`timeline-worklog-row kind-${presentationKind} message timeline-row timeline-item tool tool-call status-${status} ${
@@ -747,7 +854,10 @@ function ToolCallPairView({
       )}
       <div className="timeline-row-main">
         <div className="timeline-row-line">
-          <span className={`timeline-row-icon tool-call-icon is-${status}`} aria-hidden="true">
+          <span
+            className={`timeline-row-icon tool-call-icon is-${status}`}
+            aria-hidden="true"
+          >
             <TimelineToolIcon kind={presentationKind} status={status} />
           </span>
           <span className="timeline-row-title">{title}</span>
@@ -763,13 +873,19 @@ function ToolCallPairView({
           </span>
         ) : null}
         {status === 'running' ? (
-          <span className="timeline-status waiting">{t('chat.status.running')}</span>
+          <span className="timeline-status waiting">
+            {t('chat.status.running')}
+          </span>
         ) : null}
         {status === 'failed' ? (
-          <span className="timeline-status error">{t('chat.status.error')}</span>
+          <span className="timeline-status error">
+            {t('chat.status.error')}
+          </span>
         ) : null}
         {durationMs !== null ? (
-          <span className="timeline-pair-duration">{formatToolCallDuration(durationMs)}</span>
+          <span className="timeline-pair-duration">
+            {formatToolCallDuration(durationMs)}
+          </span>
         ) : null}
         <span>{formatTimelineTime(primary)}</span>
       </div>
@@ -809,9 +925,12 @@ function stripRedundantToolPrefix(
 
 function ToolCallPairBody({ pair }: { pair: ToolCallPair }) {
   const { t } = useI18n();
-  const display = timelineToolDisplay(pair.call) ?? timelineToolDisplay(pair.result ?? pair.call);
+  const display =
+    timelineToolDisplay(pair.call) ??
+    timelineToolDisplay(pair.result ?? pair.call);
   const fileMetadata =
-    timelineFileMetadata(pair.result ?? pair.call) ?? timelineFileMetadata(pair.call);
+    timelineFileMetadata(pair.result ?? pair.call) ??
+    timelineFileMetadata(pair.call);
   const input = pair.call.toolInput;
   const output = pair.result?.toolOutput ?? pair.result?.payload;
   return (
@@ -823,7 +942,10 @@ function ToolCallPairBody({ pair }: { pair: ToolCallPair }) {
       ) : null}
       {fileMetadata ? <ToolFileMetadataView metadata={fileMetadata} /> : null}
       {display?.details !== undefined ? (
-        <TimelinePayloadBlock label={t('chat.displayDetails')} value={display.details} />
+        <TimelinePayloadBlock
+          label={t('chat.displayDetails')}
+          value={display.details}
+        />
       ) : null}
       {input !== undefined ? (
         <TimelinePayloadBlock label={t('chat.input')} value={input} />
@@ -832,7 +954,10 @@ function ToolCallPairBody({ pair }: { pair: ToolCallPair }) {
         <TimelinePayloadBlock label={t('chat.output')} value={output} />
       ) : null}
       {pair.call.payload !== undefined ? (
-        <TimelinePayloadBlock label={t('chat.payload')} value={pair.call.payload} />
+        <TimelinePayloadBlock
+          label={t('chat.payload')}
+          value={pair.call.payload}
+        />
       ) : null}
       {pair.result?.error ? (
         <Text size="1" color="red">
@@ -843,7 +968,13 @@ function ToolCallPairBody({ pair }: { pair: ToolCallPair }) {
   );
 }
 
-function TimelinePayloadBlock({ label, value }: { label: string; value: unknown }) {
+function TimelinePayloadBlock({
+  label,
+  value,
+}: {
+  label: string;
+  value: unknown;
+}) {
   const payload = detectPayloadLanguage(value);
   return (
     <div className="timeline-detail-block">
@@ -886,23 +1017,44 @@ function TimelineItemView({
   onEditMessage?: (item: AgentTimelineItem) => void;
   onDeleteMessage?: (item: AgentTimelineItem, returnFocus: HTMLElement) => void;
   onRetryMessage?: (item: AgentTimelineItem) => void;
-  onSaveTemplateMessage?: (item: AgentTimelineItem, returnFocus: HTMLElement) => void;
+  onSaveTemplateMessage?: (
+    item: AgentTimelineItem,
+    returnFocus: HTMLElement,
+  ) => void;
   isPinned?: boolean;
   onPinMessage?: (item: AgentTimelineItem) => void;
   retryDisabled?: boolean;
 }) {
   const { t } = useI18n();
   const kind = timelineKind(item);
-  const lineCount = useMemo(() => timelineDetailLineCount(item, kind), [item, kind]);
-  const summary = useMemo(() => timelineSummary(item, kind, t), [item, kind, t]);
+  const lineCount = useMemo(
+    () => timelineDetailLineCount(item, kind),
+    [item, kind],
+  );
+  const summary = useMemo(
+    () => timelineSummary(item, kind, t),
+    [item, kind, t],
+  );
   if (kind === 'artifact') {
     return <ArtifactTimelineCard item={item} />;
   }
   if (item.type === 'thought') {
-    return <ThoughtTimelineCard item={item} expanded={expanded} onToggle={onToggle} />;
+    return (
+      <ThoughtTimelineCard
+        item={item}
+        expanded={expanded}
+        onToggle={onToggle}
+      />
+    );
   }
   if (item.type === 'work_plan' || item.type === 'task_list_updated') {
-    return <WorkPlanTimelineCard item={item} expanded={expanded} onToggle={onToggle} />;
+    return (
+      <WorkPlanTimelineCard
+        item={item}
+        expanded={expanded}
+        onToggle={onToggle}
+      />
+    );
   }
   if (kind === 'user' || kind === 'agent') {
     return (
@@ -977,12 +1129,8 @@ function TimelineItemView({
         <button
           type="button"
           className="timeline-row-toggle"
-          aria-label={t(expanded ? 'chat.collapseItem' : 'chat.expandItem', {
-            item: timelineTitle(item, t),
-          })}
-          title={t(expanded ? 'chat.collapseItem' : 'chat.expandItem', {
-            item: timelineTitle(item, t),
-          })}
+          aria-label={t(expanded ? 'chat.collapseItem' : 'chat.expandItem', { item: timelineTitle(item, t), })}
+          title={t(expanded ? 'chat.collapseItem' : 'chat.expandItem', { item: timelineTitle(item, t), })}
           aria-expanded={expanded}
           onClick={onToggle}
         >
@@ -1016,7 +1164,9 @@ function TimelineItemView({
             {status.localized ? t(status.label) : status.label}
           </span>
         ) : null}
-        {lineCount > 1 ? <span>{t('chat.lineCount', { count: lineCount })}</span> : null}
+        {lineCount > 1 ? (
+          <span>{t('chat.lineCount', { count: lineCount })}</span>
+        ) : null}
         <span>{formatTimelineTime(item)}</span>
       </div>
     </article>
@@ -1055,7 +1205,8 @@ function TimelineItemBody({
 
   const lifecycle = agentLifecyclePresentation(item);
   if (lifecycle?.family === 'elicitation') {
-    const answered = item.type === 'elicitation_answered' || item.answered === true;
+    const answered =
+      item.type === 'elicitation_answered' || item.answered === true;
     const requestId = timelineHitlRequestId(item);
     return (
       <div className="timeline-details">
@@ -1066,7 +1217,9 @@ function TimelineItemBody({
         ) : null}
         <div className="agent-run-meta">
           <span>
-            {t(answered ? 'chat.status.answered' : 'chat.status.waitingForInput')}
+            {t(
+              answered ? 'chat.status.answered' : 'chat.status.waitingForInput',
+            )}
           </span>
           {requestId ? <span>{requestId}</span> : null}
         </div>
@@ -1086,16 +1239,28 @@ function TimelineItemBody({
         ) : null}
         {fileMetadata ? <ToolFileMetadataView metadata={fileMetadata} /> : null}
         {display?.details !== undefined ? (
-          <TimelinePayloadBlock label={t('chat.displayDetails')} value={display.details} />
+          <TimelinePayloadBlock
+            label={t('chat.displayDetails')}
+            value={display.details}
+          />
         ) : null}
         {item.toolInput !== undefined ? (
-          <TimelinePayloadBlock label={t('chat.input')} value={item.toolInput} />
+          <TimelinePayloadBlock
+            label={t('chat.input')}
+            value={item.toolInput}
+          />
         ) : null}
         {item.toolOutput !== undefined ? (
-          <TimelinePayloadBlock label={t('chat.output')} value={item.toolOutput} />
+          <TimelinePayloadBlock
+            label={t('chat.output')}
+            value={item.toolOutput}
+          />
         ) : null}
         {item.payload !== undefined ? (
-          <TimelinePayloadBlock label={t('chat.payload')} value={item.payload} />
+          <TimelinePayloadBlock
+            label={t('chat.payload')}
+            value={item.payload}
+          />
         ) : null}
       </div>
     );
@@ -1108,7 +1273,13 @@ function TimelineItemBody({
           {item.question}
         </Text>
         <div className="agent-run-meta">
-          <span>{t(item.answered ? 'chat.status.answered' : 'chat.status.waitingForInput')}</span>
+          <span>
+            {t(
+              item.answered
+                ? 'chat.status.answered'
+                : 'chat.status.waitingForInput',
+            )}
+          </span>
           {item.requestId ? <span>{item.requestId}</span> : null}
         </div>
       </div>
@@ -1119,7 +1290,12 @@ function TimelineItemBody({
     return (
       <div className="timeline-details">
         {item.content ? (
-          <Text as="p" size="2" className="timeline-detail-summary" color="gray">
+          <Text
+            as="p"
+            size="2"
+            className="timeline-detail-summary"
+            color="gray"
+          >
             {item.content}
           </Text>
         ) : null}
@@ -1133,7 +1309,12 @@ function TimelineItemBody({
       ? (item.content ?? '')
       : item.content || timelinePayloadPreview(item);
   if (item.type === 'thought') {
-    return <MarkdownContent content={content} className="transcript-content thought-content" />;
+    return (
+      <MarkdownContent
+        content={content}
+        className="transcript-content thought-content"
+      />
+    );
   }
   if (kind === 'user' || kind === 'agent') {
     return (
@@ -1142,7 +1323,10 @@ function TimelineItemBody({
         <MarkdownContent content={content} className="transcript-content" />
         {kind === 'agent' ? <AssistantDuplicateDisclosure item={item} /> : null}
         {kind === 'agent' ? (
-          <AssistantArtifactReferences artifacts={item.artifacts} metadata={item.metadata} />
+          <AssistantArtifactReferences
+            artifacts={item.artifacts}
+            metadata={item.metadata}
+          />
         ) : null}
         {kind === 'user' ? (
           <>
@@ -1175,7 +1359,9 @@ function AssistantDuplicateDisclosure({ item }: { item: AgentTimelineItem }) {
       <summary>
         <span>
           <UpdateIcon aria-hidden="true" />
-          <strong>{t('chat.duplicateAssistantReplies', { count: originals.length })}</strong>
+          <strong>
+            {t('chat.duplicateAssistantReplies', { count: originals.length })}
+          </strong>
         </span>
         <span>
           {t('chat.duplicateAssistantRepliesAudit')}
@@ -1187,7 +1373,9 @@ function AssistantDuplicateDisclosure({ item }: { item: AgentTimelineItem }) {
           const source = assistantDuplicateSourceLabel(original);
           return (
             <li key={original.id}>
-              <span>{t('chat.duplicateAssistantReply', { index: index + 1 })}</span>
+              <span>
+                {t('chat.duplicateAssistantReply', { index: index + 1 })}
+              </span>
               <code>{original.message_id || original.id}</code>
               <time>{formatTimelineTime(original)}</time>
               {source ? <small>{source}</small> : null}
@@ -1203,7 +1391,9 @@ function assistantDuplicateSourceLabel(item: AgentTimelineItem): string {
   const payload = isTimelineRecord(item.payload) ? item.payload : null;
   const payloadMetadata =
     payload && isTimelineRecord(payload.metadata) ? payload.metadata : null;
-  const records = [item.metadata, payload, payloadMetadata].filter(isTimelineRecord);
+  const records = [item.metadata, payload, payloadMetadata].filter(
+    isTimelineRecord,
+  );
   const keys = [
     'agent_id',
     'agentId',
@@ -1233,7 +1423,10 @@ function AssistantExecutionSummary({ item }: { item: AgentTimelineItem }) {
   const costTracking = assistantCostTracking(item);
   const pills: Array<{ label: string; value: string }> = [];
   if (summary.stepCount > 0) {
-    pills.push({ label: t('chat.summary.steps'), value: String(summary.stepCount) });
+    pills.push({
+      label: t('chat.summary.steps'),
+      value: String(summary.stepCount),
+    });
   }
   if (summary.tasks && summary.tasks.total > 0) {
     pills.push({
@@ -1251,14 +1444,26 @@ function AssistantExecutionSummary({ item }: { item: AgentTimelineItem }) {
     pills.push({ label: t('chat.summary.artifacts'), value: String(summary.artifactCount) });
   }
   if (summary.callCount > 0) {
-    pills.push({ label: t('chat.summary.calls'), value: String(summary.callCount) });
+    pills.push({
+      label: t('chat.summary.calls'),
+      value: String(summary.callCount),
+    });
   }
   if (summary.totalTokens > 0) {
-    pills.push({ label: t('chat.summary.tokens'), value: String(summary.totalTokens) });
+    pills.push({
+      label: t('chat.summary.tokens'),
+      value: String(summary.totalTokens),
+    });
   }
   if (costTracking) {
-    pills.push({ label: t('chat.input'), value: String(costTracking.inputTokens) });
-    pills.push({ label: t('chat.output'), value: String(costTracking.outputTokens) });
+    pills.push({
+      label: t('chat.input'),
+      value: String(costTracking.inputTokens),
+    });
+    pills.push({
+      label: t('chat.output'),
+      value: String(costTracking.outputTokens),
+    });
     if (costTracking.reasoningTokens > 0) {
       pills.push({
         label: t('session.activityReasoning'),
@@ -1267,10 +1472,16 @@ function AssistantExecutionSummary({ item }: { item: AgentTimelineItem }) {
     }
   }
   if (summary.totalCost > 0) {
-    pills.push({ label: t('chat.summary.cost'), value: summary.totalCostFormatted });
+    pills.push({
+      label: t('chat.summary.cost'),
+      value: summary.totalCostFormatted,
+    });
   }
   return (
-    <div className="assistant-execution-summary" aria-label={t('chat.executionSummary')}>
+    <div
+      className="assistant-execution-summary"
+      aria-label={t('chat.executionSummary')}
+    >
       {pills.map((pill) => (
         <span key={pill.label}>
           <small>{pill.label}</small>
@@ -1286,14 +1497,21 @@ function SubAgentGroupView({
   expanded,
   onToggle,
   anchorId,
+  controlAuthority,
+  onControl,
 }: {
   group: SubAgentTimelineGroup;
   expanded: boolean;
   onToggle: () => void;
   anchorId: string;
+  controlAuthority?: SubAgentControlAuthority;
+  onControl?: (
+    command: SubAgentControlCommand,
+  ) => Promise<SubAgentControlReceipt>;
 }) {
   const { t } = useI18n();
-  const displayName = group.subagentName || group.subagentId || t('chat.subagentUnnamed');
+  const displayName =
+    group.subagentName || group.subagentId || t('chat.subagentUnnamed');
   const title =
     group.mode === 'parallel'
       ? t('chat.parallel')
@@ -1322,7 +1540,9 @@ function SubAgentGroupView({
         type="button"
         className="subagent-group-header"
         aria-expanded={expanded}
-        aria-label={t(expanded ? 'chat.collapseItem' : 'chat.expandItem', { item: title })}
+        aria-label={t(expanded ? 'chat.collapseItem' : 'chat.expandItem', {
+          item: title,
+        })}
         onClick={onToggle}
       >
         <span className="subagent-group-chevron" aria-hidden="true">
@@ -1339,11 +1559,17 @@ function SubAgentGroupView({
         </span>
         <span className="subagent-group-copy">
           <strong>{title}</strong>
-          <small>{t('chat.subagentLifecycleCount', { count: group.items.length })}</small>
+          <small>
+            {t('chat.subagentLifecycleCount', { count: group.items.length })}
+          </small>
         </span>
         <span className="subagent-group-metrics">
           {group.confidence !== null ? (
-            <span>{t('chat.percentCount', { count: Math.round(group.confidence * 100) })}</span>
+            <span>
+              {t('chat.percentCount', {
+                count: Math.round(group.confidence * 100),
+              })}
+            </span>
           ) : null}
           {group.tokensUsed !== null && group.tokensUsed > 0 ? (
             <span>{t('chat.tokensCount', { count: group.tokensUsed })}</span>
@@ -1365,12 +1591,18 @@ function SubAgentGroupView({
           aria-valuemax={100}
           aria-valuenow={group.progress ?? undefined}
         >
-          <span className="subagent-progress-bar" style={{ width: `${group.progress}%` }} />
+          <span
+            className="subagent-progress-bar"
+            style={{ width: `${group.progress}%` }}
+          />
         </div>
       ) : null}
       {expanded ? (
         <div className="subagent-group-body">
-          <div className="subagent-phase-list" aria-label={t('chat.subagentLifecycle')}>
+          <div
+            className="subagent-phase-list"
+            aria-label={t('chat.subagentLifecycle')}
+          >
             {phaseEntries.map(([phase, active]) => (
               <span className={active ? 'is-active' : undefined} key={phase}>
                 {t(`chat.subagentPhase.${phase}`)}
@@ -1381,16 +1613,38 @@ function SubAgentGroupView({
             <p className="subagent-live-status">{group.statusMessage}</p>
           ) : null}
           <SubAgentDetail label={t('chat.task')} value={group.task} />
-          <SubAgentDetail label={t('chat.subagentReason')} value={group.reason} />
-          <SubAgentDetail label={t('chat.subagentResult')} value={group.summary} emphasis />
-          <SubAgentDetail label={t('chat.subagentFailure')} value={group.error} error />
+          <SubAgentDetail
+            label={t('chat.subagentReason')}
+            value={group.reason}
+          />
+          <SubAgentDetail
+            label={t('chat.subagentResult')}
+            value={group.summary}
+            emphasis
+          />
+          <SubAgentDetail
+            label={t('chat.subagentFailure')}
+            value={group.error}
+            error
+          />
           {group.toolCallsCount !== null && group.toolCallsCount > 0 ? (
             <div className="subagent-group-facts">
-              <span>{t('chat.callsCount', { count: group.toolCallsCount })}</span>
+              <span>
+                {t('chat.callsCount', { count: group.toolCallsCount })}
+              </span>
               {group.tokensUsed !== null && group.tokensUsed > 0 ? (
-                <span>{t('chat.tokensCount', { count: group.tokensUsed })}</span>
+                <span>
+                  {t('chat.tokensCount', { count: group.tokensUsed })}
+                </span>
               ) : null}
             </div>
+          ) : null}
+          {controlAuthority && onControl ? (
+            <SubAgentControlPanel
+              group={group}
+              authority={controlAuthority}
+              onControl={onControl}
+            />
           ) : null}
         </div>
       ) : null}
@@ -1420,16 +1674,23 @@ function SubAgentDetail({
   );
 }
 
-function subAgentStatusTone(status: SubAgentTimelineGroup['status']): 'ok' | 'error' | 'waiting' {
+function subAgentStatusTone(
+  status: SubAgentTimelineGroup['status'],
+): 'ok' | 'error' | 'waiting' {
   if (status === 'success') return 'ok';
-  if (status === 'error' || status === 'killed' || status === 'depth_limited') return 'error';
+  if (status === 'error' || status === 'killed' || status === 'depth_limited')
+    return 'error';
   return 'waiting';
 }
 
-function groupNarrativeActivity(narrative: SessionNarrativeNode[]): TimelinePresentationNode[] {
+function groupNarrativeActivity(
+  narrative: SessionNarrativeNode[],
+): TimelinePresentationNode[] {
   const grouped: TimelinePresentationNode[] = [];
   let activityItems: AgentTimelineItem[] = [];
-  const itemNodes = narrative.flatMap((node) => (node.kind === 'item' ? [node.item] : []));
+  const itemNodes = narrative.flatMap((node) =>
+    node.kind === 'item' ? [node.item] : [],
+  );
   const subagentGrouping = groupSubAgentTimelineItems(itemNodes);
   const subagentGroupsByStartItem = new Map(
     subagentGrouping.groups.map((group) => [group.startItemId, group]),
@@ -1519,8 +1780,7 @@ function groupNarrativeActivity(narrative: SessionNarrativeNode[]): TimelinePres
     }
     if (
       node.kind === 'item' &&
-      (node.item.type === 'work_plan' ||
-        node.item.type === 'task_list_updated')
+      (node.item.type === 'work_plan' || node.item.type === 'task_list_updated')
     ) {
       flushActivityItems();
       grouped.push(node);
@@ -1538,13 +1798,19 @@ function groupNarrativeActivity(narrative: SessionNarrativeNode[]): TimelinePres
   return grouped;
 }
 
-function annotateTimelineGroups(nodes: TimelinePresentationNode[]): AnnotatedTimelineNode[] {
+function annotateTimelineGroups(
+  nodes: TimelinePresentationNode[],
+): AnnotatedTimelineNode[] {
   const annotated: AnnotatedTimelineNode[] = new Array(nodes.length);
   let ordinalsAfterItem: Record<string, number> = {};
   let lastItemId: string | null = null;
   let leadingGroups: Array<{ node: TimelineGroupNode; index: number }> = [];
 
-  const annotateGroup = (node: TimelineGroupNode, index: number, groupId: string) => {
+  const annotateGroup = (
+    node: TimelineGroupNode,
+    index: number,
+    groupId: string,
+  ) => {
     annotated[index] = {
       ...node,
       groupId,
@@ -1554,7 +1820,11 @@ function annotateTimelineGroups(nodes: TimelinePresentationNode[]): AnnotatedTim
 
   const resolveLeadingGroups = (nextItemId: string | null) => {
     const ordinalsBeforeItem: Record<string, number> = {};
-    for (let position = leadingGroups.length - 1; position >= 0; position -= 1) {
+    for (
+      let position = leadingGroups.length - 1;
+      position >= 0;
+      position -= 1
+    ) {
       const { node, index } = leadingGroups[position];
       const ordinal = ordinalsBeforeItem[node.kind] ?? 0;
       annotateGroup(
@@ -1590,9 +1860,13 @@ function annotateTimelineGroups(nodes: TimelinePresentationNode[]): AnnotatedTim
   return annotated;
 }
 
-function timelineGroupIdentity(narrative: AnnotatedTimelineNode[], index: number): string {
+function timelineGroupIdentity(
+  narrative: AnnotatedTimelineNode[],
+  index: number,
+): string {
   const node = narrative[index];
-  if (!node || node.kind === 'item') return node?.id ?? `timeline-node:${index}`;
+  if (!node || node.kind === 'item')
+    return node?.id ?? `timeline-node:${index}`;
   return node.groupId;
 }
 
@@ -1607,15 +1881,22 @@ function timelineTurnCollapsePresentation(
 } {
   const responseTurnByItemId = new Map<string, string>();
   turns.forEach((turn) => {
-    turn.responseItemIds.forEach((itemId) => responseTurnByItemId.set(itemId, turn.id));
+    turn.responseItemIds.forEach((itemId) =>
+      responseTurnByItemId.set(itemId, turn.id),
+    );
   });
   const responsePresentationCounts = new Map<string, number>();
   const firstVisibleNodeIndex = new Map<string, number>();
   const nodeTurnIds = narrative.map((node, index) => {
     const memberIds = timelineNodeMemberIds(node);
-    const turnId = memberIds.length ? responseTurnByItemId.get(memberIds[0]) : undefined;
+    const turnId = memberIds.length
+      ? responseTurnByItemId.get(memberIds[0])
+      : undefined;
     const sharedTurn =
-      turnId && memberIds.every((memberId) => responseTurnByItemId.get(memberId) === turnId)
+      turnId &&
+      memberIds.every(
+        (memberId) => responseTurnByItemId.get(memberId) === turnId,
+      )
         ? turnId
         : null;
     if (!sharedTurn) return null;
@@ -1632,7 +1913,9 @@ function timelineTurnCollapsePresentation(
 }
 
 function timelineNodeMemberIds(node: AnnotatedTimelineNode): string[] {
-  return node.kind === 'item' ? [node.item.id] : node.items.map((item) => item.id);
+  return node.kind === 'item'
+    ? [node.item.id]
+    : node.items.map((item) => item.id);
 }
 
 function timelineTurnResponseRegionId(turnId: string): string {
@@ -1648,7 +1931,8 @@ function resolveTimelineRenderWindow(
   itemCount: number,
   earlierAllowance: number,
 ): { startIndex: number; hiddenCount: number } {
-  if (itemCount <= TIMELINE_RENDER_THRESHOLD) return { startIndex: 0, hiddenCount: 0 };
+  if (itemCount <= TIMELINE_RENDER_THRESHOLD)
+    return { startIndex: 0, hiddenCount: 0 };
   const budget = TIMELINE_RENDER_WINDOW + earlierAllowance;
   if (budget >= itemCount) return { startIndex: 0, hiddenCount: 0 };
   let coveredItems = 0;

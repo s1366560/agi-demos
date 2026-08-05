@@ -8,7 +8,15 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
-import { Badge, Button, Flex, Heading, ScrollArea, Text, TextArea } from '@radix-ui/themes';
+import {
+  Badge,
+  Button,
+  Flex,
+  Heading,
+  ScrollArea,
+  Text,
+  TextArea,
+} from '@radix-ui/themes';
 import {
   ActivityLogIcon,
   ArrowTopRightIcon,
@@ -27,7 +35,15 @@ import {
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
-import { agentSteerMessageOutcome, socketEventsSince } from '../../hooks/useAgentSocket';
+import {
+  agentSteerMessageOutcome,
+  socketEventsSince,
+} from '../../hooks/useAgentSocket';
+import type {
+  SubAgentControlCommand,
+  SubAgentControlReceipt,
+} from '../../hooks/useAgentSocket';
+import type { SubAgentControlAuthority } from './subagentControlAuthorityModel';
 import { sessionActivitySummary } from '../session/sessionNarrativeModel';
 import { deriveCurrentActivity } from '../session/currentActivityModel';
 import { deriveSessionUsage } from '../session/sessionUsageModel';
@@ -50,6 +66,7 @@ import type {
   HitlResponseSubmission,
   CodeRangeReference,
   DesktopRunInput,
+  DesktopRunStatus,
   DesktopRuntimeConfig,
   RunInputDelivery,
   RuntimeMode,
@@ -68,7 +85,10 @@ import { PickerMenu } from './PickerMenu';
 import { useToast } from '../feedback/ToastCenter';
 import type { ComposerModelOption } from './ComposerControls';
 import type { ComposerCatalogClient } from './composerCatalogModel';
-import { ConversationComparison, ConversationComparisonPicker } from './ConversationComparison';
+import {
+  ConversationComparison,
+  ConversationComparisonPicker,
+} from './ConversationComparison';
 import type { ConversationComparisonClient } from './ConversationComparison';
 import { ConversationSearch } from './ConversationSearch';
 import { ConversationExportMenu } from './ConversationExportMenu';
@@ -76,6 +96,7 @@ import { ConversationSummaryCard } from './ConversationSummaryCard';
 import { RunCompletionSummaryCard } from './RunCompletionSummaryCard';
 import type { RunCompletionSummary } from '../session/runCompletionSummaryModel';
 import type { SessionCanvasTabId } from '../session/sessionCanvasModel';
+import { sessionRunStatusIsTerminal } from '../session/sessionViewModel';
 import { PinnedMessages } from './PinnedMessages';
 import { PromptTemplateLibrary } from './PromptTemplateLibrary';
 import {
@@ -93,7 +114,10 @@ import {
   isTimelineItemInitiallyExpanded,
   timelineKind,
 } from './chatTimelinePresentation';
-import { SessionEmptyState, WorkspaceTranscriptMessage } from './ChatTranscript';
+import {
+  SessionEmptyState,
+  WorkspaceTranscriptMessage,
+} from './ChatTranscript';
 import { ChatWorkflowStrip } from './ChatWorkflowStrip';
 import type { ChatWorkflowTarget } from './ChatWorkflowStrip';
 import {
@@ -112,7 +136,10 @@ import {
   readComposeAheadDefaultIntent,
   writeComposeAheadDefaultIntent,
 } from './composeAheadModel';
-import type { ComposeAheadIntent, ComposeAheadPrompt } from './composeAheadModel';
+import type {
+  ComposeAheadIntent,
+  ComposeAheadPrompt,
+} from './composeAheadModel';
 import {
   canConfirmMessageDeletion,
   filterHiddenMessages,
@@ -132,7 +159,10 @@ import {
   reconcilePinnedMessageIds,
   togglePinnedMessageId,
 } from './pinnedMessageModel';
-import { latestAgentSuggestions, timelineItemsForDisplay } from './chatTimelineModel';
+import {
+  latestAgentSuggestions,
+  timelineItemsForDisplay,
+} from './chatTimelineModel';
 import { createConversationExportSnapshot } from './conversationExportModel';
 import {
   conversationComparisonAvailable,
@@ -179,7 +209,10 @@ import './ChatPanel.css';
 import './ComposerMenus.css';
 
 export type { ChatWorkflowTarget } from './ChatWorkflowStrip';
-export type { AgentTaskSignal, AgentTaskSignalStatus } from './agentTaskSignalModel';
+export type {
+  AgentTaskSignal,
+  AgentTaskSignalStatus,
+} from './agentTaskSignalModel';
 
 type ChatAuthorityNotice = {
   tone: 'loading' | 'warning' | 'error';
@@ -239,6 +272,8 @@ type ChatPanelProps = {
   modelError?: string | null;
   runtimeTargetLabel?: string;
   runtimeTargetOptions?: string[];
+  composeAheadFallbackAllowed?: boolean;
+  canonicalRunStatus?: DesktopRunStatus | null;
   runInputDelivery: RunInputDelivery | null;
   runInputDeliveryOptions: RunInputDelivery[];
   runInputs: DesktopRunInput[];
@@ -258,6 +293,10 @@ type ChatPanelProps = {
   onRegenerateConversationSummary?: (conversationId: string) => Promise<void>;
   onStopResponse?: (conversationId: string) => boolean;
   onSteerResponse?: (request: ChatSteerRequest) => boolean;
+  subAgentControlAuthority?: SubAgentControlAuthority;
+  onSubAgentControl?: (
+    command: SubAgentControlCommand,
+  ) => Promise<SubAgentControlReceipt>;
   onRefresh: () => void;
   onLoadEarlier: () => void;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
@@ -336,7 +375,8 @@ function timelineAnchorMemberIds(anchor: HTMLElement): string[] {
   if (!serialized) return [];
   try {
     const parsed: unknown = JSON.parse(serialized);
-    return Array.isArray(parsed) && parsed.every((value) => typeof value === 'string')
+    return Array.isArray(parsed) &&
+      parsed.every((value) => typeof value === 'string')
       ? parsed
       : [];
   } catch {
@@ -344,8 +384,14 @@ function timelineAnchorMemberIds(anchor: HTMLElement): string[] {
   }
 }
 
-function equalStringArrays(left: readonly string[], right: readonly string[]): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
+function equalStringArrays(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
 }
 
 export const ChatPanel = memo(function ChatPanel({
@@ -378,6 +424,8 @@ export const ChatPanel = memo(function ChatPanel({
   modelError,
   runtimeTargetLabel,
   runtimeTargetOptions,
+  composeAheadFallbackAllowed = false,
+  canonicalRunStatus = null,
   runInputDelivery,
   runInputDeliveryOptions,
   runInputs,
@@ -393,6 +441,8 @@ export const ChatPanel = memo(function ChatPanel({
   onRegenerateConversationSummary,
   onStopResponse,
   onSteerResponse,
+  subAgentControlAuthority,
+  onSubAgentControl,
   onRefresh,
   onLoadEarlier,
   onRespondToHitl,
@@ -421,29 +471,41 @@ export const ChatPanel = memo(function ChatPanel({
   const workspaceTailKeyRef = useRef<string | null>(null);
   const pinnedToLatestRef = useRef(true);
   const earlierScrollRef = useRef<EarlierTimelineScrollAnchor | null>(null);
-  const [expandedTimelineItems, setExpandedTimelineItems] = useState<Record<string, boolean>>({});
+  const [expandedTimelineItems, setExpandedTimelineItems] = useState<
+    Record<string, boolean>
+  >({});
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [composerDraftRequest, setComposerDraftRequest] =
     useState<ComposerDraftRequest | null>(null);
-  const [messageActionNotice, setMessageActionNotice] = useState<string | null>(null);
+  const [messageActionNotice, setMessageActionNotice] = useState<string | null>(
+    null,
+  );
   const [saveTemplateRequest, setSaveTemplateRequest] =
     useState<SavePromptTemplateTarget | null>(null);
   const [messageDeleteRequest, setMessageDeleteRequest] =
     useState<MessageDeleteRequest | null>(null);
   const [localMessageVisibility, setLocalMessageVisibility] =
     useState<LocalMessageVisibilityState | null>(null);
-  const [promptTemplateRefreshToken, setPromptTemplateRefreshToken] = useState(0);
-  const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
-  const [conversationSearchVisible, setConversationSearchVisible] = useState(false);
-  const [conversationComparisonVisible, setConversationComparisonVisible] = useState(false);
-  const [conversationComparisonPickerOpen, setConversationComparisonPickerOpen] = useState(false);
-  const [comparisonConversation, setComparisonConversation] = useState<AgentConversation | null>(
+  const [promptTemplateRefreshToken, setPromptTemplateRefreshToken] =
+    useState(0);
+  const [retryingMessageId, setRetryingMessageId] = useState<string | null>(
     null,
   );
+  const [conversationSearchVisible, setConversationSearchVisible] =
+    useState(false);
+  const [conversationComparisonVisible, setConversationComparisonVisible] =
+    useState(false);
+  const [
+    conversationComparisonPickerOpen,
+    setConversationComparisonPickerOpen,
+  ] = useState(false);
+  const [comparisonConversation, setComparisonConversation] =
+    useState<AgentConversation | null>(null);
   const [pinnedMessageIds, setPinnedMessageIds] = useState<string[]>([]);
   const [pinnedMessagesCollapsed, setPinnedMessagesCollapsed] = useState(false);
-  const [stopRequest, setStopRequest] =
-    useState<AgentStopRequestState>(EMPTY_AGENT_STOP_REQUEST);
+  const [stopRequest, setStopRequest] = useState<AgentStopRequestState>(
+    EMPTY_AGENT_STOP_REQUEST,
+  );
   const composerDraftSequenceRef = useRef(0);
   const retryDispatchLockRef = useRef<string | null>(null);
   const retryDispatchSawSendingRef = useRef(false);
@@ -462,7 +524,8 @@ export const ChatPanel = memo(function ChatPanel({
       (timelineState?.items ?? []).flatMap((item) => {
         if (item.type !== 'error' && item.isError !== true) return [];
         return [item.executionMessageId, item.message_id].filter(
-          (value): value is string => typeof value === 'string' && value.length > 0,
+          (value): value is string =>
+            typeof value === 'string' && value.length > 0,
         );
       }),
     );
@@ -473,7 +536,10 @@ export const ChatPanel = memo(function ChatPanel({
     );
   }, [agentTaskSignals, timelineState?.items]);
   const signalStateKey = useMemo(
-    () => visibleAgentTaskSignals.map((signal) => `${signal.id}:${signal.status}`).join('|'),
+    () =>
+      visibleAgentTaskSignals
+        .map((signal) => `${signal.id}:${signal.status}`)
+        .join('|'),
     [visibleAgentTaskSignals],
   );
   const timelineItemCount = timelineState?.items.length ?? 0;
@@ -482,7 +548,10 @@ export const ChatPanel = memo(function ChatPanel({
   const timelineTailItem = timelineState?.items[timelineItemCount - 1];
   const timelineLastId = timelineTailItem?.id ?? '';
   const timelineTailRevision =
-    timelineTailItem?.content ?? timelineTailItem?.display?.summary ?? timelineTailItem?.error ?? '';
+    timelineTailItem?.content ??
+    timelineTailItem?.display?.summary ??
+    timelineTailItem?.error ??
+    '';
   const timelineHasMore = timelineState?.hasMore ?? false;
   const timelineLoading = timelineState?.loading ?? false;
   const timelineLoadingEarlier = timelineState?.loadingEarlier ?? false;
@@ -498,9 +567,14 @@ export const ChatPanel = memo(function ChatPanel({
   const timelineItems = timelineState?.items ?? null;
   const hasTimelineState = timelineState !== null;
   const messageActionConversationId =
-    timelineConversationId || selectedConversationId || messages[0]?.workspace_id || '';
+    timelineConversationId ||
+    selectedConversationId ||
+    messages[0]?.workspace_id ||
+    '';
   const messageActionConversation =
-    conversations.find((conversation) => conversation.id === messageActionConversationId) ?? null;
+    conversations.find(
+      (conversation) => conversation.id === messageActionConversationId,
+    ) ?? null;
   const messageActionScopeKey = `${messageActionConversation?.tenant_id ?? ''}:${
     messageActionConversation?.project_id ?? ''
   }:${messageActionConversationId}`;
@@ -514,7 +588,12 @@ export const ChatPanel = memo(function ChatPanel({
     [localMessageVisibility, messageActionScopeKey, timelineItems],
   );
   const visibleWorkspaceMessages = useMemo(
-    () => filterHiddenMessages(messages, localMessageVisibility, messageActionScopeKey),
+    () =>
+      filterHiddenMessages(
+        messages,
+        localMessageVisibility,
+        messageActionScopeKey,
+      ),
     [localMessageVisibility, messageActionScopeKey, messages],
   );
   const visibleTimelineState = useMemo(
@@ -534,11 +613,17 @@ export const ChatPanel = memo(function ChatPanel({
   const turnCollapseScope = useMemo(
     () => ({
       ...turnCollapseRuntime,
-      tenantId: messageActionConversation?.tenant_id || turnCollapseRuntime.tenantId,
-      projectId: messageActionConversation?.project_id || turnCollapseRuntime.projectId,
+      tenantId:
+        messageActionConversation?.tenant_id || turnCollapseRuntime.tenantId,
+      projectId:
+        messageActionConversation?.project_id || turnCollapseRuntime.projectId,
       conversationId: messageActionConversationId,
     }),
-    [messageActionConversation, messageActionConversationId, turnCollapseRuntime],
+    [
+      messageActionConversation,
+      messageActionConversationId,
+      turnCollapseRuntime,
+    ],
   );
   const timelineDisplayItems = useMemo(
     () => timelineItemsForDisplay(visibleTimelineItems),
@@ -585,11 +670,14 @@ export const ChatPanel = memo(function ChatPanel({
         : null,
     [messageActionConversationId, sessionTitle, visibleTimelineState],
   );
-  const conversationSearchScopeId = timelineConversationId || selectedConversationId || '';
+  const conversationSearchScopeId =
+    timelineConversationId || selectedConversationId || '';
   const composeAheadConversation = useMemo(
     () =>
       selectedConversationId
-        ? conversations.find((conversation) => conversation.id === selectedConversationId) ?? null
+        ? (conversations.find(
+            (conversation) => conversation.id === selectedConversationId,
+          ) ?? null)
         : null,
     [conversations, selectedConversationId],
   );
@@ -609,7 +697,9 @@ export const ChatPanel = memo(function ChatPanel({
     [composeAheadConversation],
   );
   const composeAheadEnabled =
-    Boolean(composeAheadScope) && runInputDeliveryOptions.length === 0;
+    Boolean(composeAheadScope) &&
+    composeAheadFallbackAllowed &&
+    runInputDeliveryOptions.length === 0;
   const rawResponseStreaming = conversationResponseIsStreaming({
     activeConversationId: selectedConversationId ?? '',
     sending,
@@ -618,8 +708,12 @@ export const ChatPanel = memo(function ChatPanel({
     timelineItems: timelineState?.items ?? [],
   });
   const responseStreaming =
+    !sessionRunStatusIsTerminal(canonicalRunStatus) &&
     rawResponseStreaming &&
-    !agentStopRequestSettlesStreaming(stopRequest, selectedConversationId ?? '');
+    !agentStopRequestSettlesStreaming(
+      stopRequest,
+      selectedConversationId ?? '',
+    );
   useEffect(() => {
     stopEventHeadRef.current = agentControlEventsRef.current[0] ?? null;
     setStopRequest((current) =>
@@ -628,14 +722,14 @@ export const ChatPanel = memo(function ChatPanel({
   }, [selectedConversationId]);
   useEffect(() => {
     if (stopRequest.status !== 'stopping') return;
-    const events = socketEventsSince(agentControlEvents, stopEventHeadRef.current);
+    const events = socketEventsSince(
+      agentControlEvents,
+      stopEventHeadRef.current,
+    );
     stopEventHeadRef.current = agentControlEvents[0] ?? null;
     if (!events.length) return;
     setStopRequest((current) =>
-      events.reduce(
-        (next, event) => applyAgentStopEvent(next, event),
-        current,
-      ),
+      events.reduce((next, event) => applyAgentStopEvent(next, event), current),
     );
   }, [agentControlEvents, stopRequest.status]);
   useEffect(() => {
@@ -671,7 +765,10 @@ export const ChatPanel = memo(function ChatPanel({
     () =>
       visibleTimelineState
         ? visibleTimelineState.items.flatMap((item) => {
-            const message = timelineVisibleMessage(item, timelineConversationId);
+            const message = timelineVisibleMessage(
+              item,
+              timelineConversationId,
+            );
             return message ? [message] : [];
           })
         : visibleWorkspaceMessages.map((message) =>
@@ -707,7 +804,8 @@ export const ChatPanel = memo(function ChatPanel({
     ],
   );
   const pinnedMessages = useMemo(
-    () => pinnedMessagesInTimelineOrder(visibleActionMessages, pinnedMessageIds),
+    () =>
+      pinnedMessagesInTimelineOrder(visibleActionMessages, pinnedMessageIds),
     [pinnedMessageIds, visibleActionMessages],
   );
   const workspaceFirstMessageId = visibleWorkspaceMessages[0]?.id ?? '';
@@ -723,7 +821,8 @@ export const ChatPanel = memo(function ChatPanel({
   const activityEvidence = useMemo(() => {
     if (!activitySummary) return '';
     if (activitySummary.evidence.kind === 'structured') {
-      const { artifactCount, checkCount, toolActivityCount } = activitySummary.evidence;
+      const { artifactCount, checkCount, toolActivityCount } =
+        activitySummary.evidence;
       if (checkCount === null) {
         return t('session.structuredActivityEvidenceCount', {
           artifactCount,
@@ -737,7 +836,9 @@ export const ChatPanel = memo(function ChatPanel({
       });
     }
     if (activitySummary.evidence.kind === 'agent_reported') {
-      return t('session.agentReportedEvidence', { evidence: activitySummary.evidence.text });
+      return t('session.agentReportedEvidence', {
+        evidence: activitySummary.evidence.text,
+      });
     }
     return t('session.notAvailable');
   }, [activitySummary, t]);
@@ -746,8 +847,9 @@ export const ChatPanel = memo(function ChatPanel({
   }, []);
   const scrollViewport = useCallback(() => {
     return (
-      scrollAreaRef.current?.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]') ??
-      scrollAreaRef.current
+      scrollAreaRef.current?.querySelector<HTMLElement>(
+        '[data-radix-scroll-area-viewport]',
+      ) ?? scrollAreaRef.current
     );
   }, []);
   const clearPinnedJumpTarget = useCallback(() => {
@@ -762,31 +864,38 @@ export const ChatPanel = memo(function ChatPanel({
       pinnedJumpTimerRef.current = null;
     }
   }, []);
-  const captureEarlierScrollAnchor = useCallback((): EarlierTimelineScrollAnchor | null => {
-    const viewport = scrollViewport();
-    if (!viewport) return null;
-    const viewportTop = viewport.getBoundingClientRect().top;
-    const anchors = viewport.querySelectorAll<HTMLElement>('[data-timeline-anchor-id]');
-    let visibleAnchor: HTMLElement | null = null;
-    let intersectingAnchor: HTMLElement | null = null;
-    for (const anchor of anchors) {
-      const bounds = anchor.getBoundingClientRect();
-      if (bounds.bottom <= viewportTop + 1) continue;
-      if (bounds.top >= viewportTop - 1) {
-        visibleAnchor = anchor;
-        break;
+  const captureEarlierScrollAnchor =
+    useCallback((): EarlierTimelineScrollAnchor | null => {
+      const viewport = scrollViewport();
+      if (!viewport) return null;
+      const viewportTop = viewport.getBoundingClientRect().top;
+      const anchors = viewport.querySelectorAll<HTMLElement>(
+        '[data-timeline-anchor-id]',
+      );
+      let visibleAnchor: HTMLElement | null = null;
+      let intersectingAnchor: HTMLElement | null = null;
+      for (const anchor of anchors) {
+        const bounds = anchor.getBoundingClientRect();
+        if (bounds.bottom <= viewportTop + 1) continue;
+        if (bounds.top >= viewportTop - 1) {
+          visibleAnchor = anchor;
+          break;
+        }
+        intersectingAnchor = anchor;
       }
-      intersectingAnchor = anchor;
-    }
-    visibleAnchor ??= intersectingAnchor;
-    return {
-      conversationId: timelineConversationId,
-      anchorId: visibleAnchor?.dataset.timelineAnchorId ?? null,
-      anchorMemberId: visibleAnchor ? (timelineAnchorMemberIds(visibleAnchor)[0] ?? null) : null,
-      anchorOffset: visibleAnchor ? visibleAnchor.getBoundingClientRect().top - viewportTop : 0,
-      top: viewport.scrollTop,
-    };
-  }, [scrollViewport, timelineConversationId]);
+      visibleAnchor ??= intersectingAnchor;
+      return {
+        conversationId: timelineConversationId,
+        anchorId: visibleAnchor?.dataset.timelineAnchorId ?? null,
+        anchorMemberId: visibleAnchor
+          ? (timelineAnchorMemberIds(visibleAnchor)[0] ?? null)
+          : null,
+        anchorOffset: visibleAnchor
+          ? visibleAnchor.getBoundingClientRect().top - viewportTop
+          : 0,
+        top: viewport.scrollTop,
+      };
+    }, [scrollViewport, timelineConversationId]);
   const followLatest = useCallback(() => {
     pinnedToLatestRef.current = true;
     setShowJumpToLatest(false);
@@ -820,7 +929,10 @@ export const ChatPanel = memo(function ChatPanel({
 
   useEffect(() => {
     setPinnedMessageIds((current) => {
-      const reconciled = reconcilePinnedMessageIds(current, visibleActionMessages);
+      const reconciled = reconcilePinnedMessageIds(
+        current,
+        visibleActionMessages,
+      );
       return equalStringArrays(current, reconciled) ? current : reconciled;
     });
   }, [visibleActionMessages]);
@@ -837,7 +949,8 @@ export const ChatPanel = memo(function ChatPanel({
       }
     };
     window.addEventListener('keydown', handleConversationSearchShortcut);
-    return () => window.removeEventListener('keydown', handleConversationSearchShortcut);
+    return () =>
+      window.removeEventListener('keydown', handleConversationSearchShortcut);
   }, [conversationSearchScopeId]);
 
   useEffect(() => {
@@ -869,7 +982,10 @@ export const ChatPanel = memo(function ChatPanel({
         tailRevision: timelineTailRevision,
         count: timelineItemCount,
       };
-      const change = classifySessionTimelineWindowChange(timelineWindowRef.current, current);
+      const change = classifySessionTimelineWindowChange(
+        timelineWindowRef.current,
+        current,
+      );
       timelineWindowRef.current = current;
       if (shouldFollowSessionTimeline(change, pinnedToLatestRef.current)) {
         pinnedToLatestRef.current = true;
@@ -892,7 +1008,8 @@ export const ChatPanel = memo(function ChatPanel({
       visibleWorkspaceMessages.length,
       signalStateKey,
     ].join(':');
-    const workspaceTailChanged = workspaceTailKeyRef.current !== workspaceTailKey;
+    const workspaceTailChanged =
+      workspaceTailKeyRef.current !== workspaceTailKey;
     workspaceTailKeyRef.current = workspaceTailKey;
     if (workspaceTailChanged && pinnedToLatestRef.current) {
       window.requestAnimationFrame(scrollToLatest);
@@ -938,7 +1055,9 @@ export const ChatPanel = memo(function ChatPanel({
         ? candidates.find(
             (candidate) =>
               candidate.getClientRects().length > 0 &&
-              timelineAnchorMemberIds(candidate).includes(snapshot.anchorMemberId ?? ''),
+              timelineAnchorMemberIds(candidate).includes(
+                snapshot.anchorMemberId ?? '',
+              ),
           )
         : null);
     if (!anchor || !snapshot.anchorId) {
@@ -946,10 +1065,15 @@ export const ChatPanel = memo(function ChatPanel({
       return;
     }
     const restoreAnchorOffset = () => {
-      if (!anchor.isConnected || timelineWindowRef.current?.conversationId !== snapshot.conversationId) {
+      if (
+        !anchor.isConnected ||
+        timelineWindowRef.current?.conversationId !== snapshot.conversationId
+      ) {
         return;
       }
-      const nextOffset = anchor.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
+      const nextOffset =
+        anchor.getBoundingClientRect().top -
+        viewport.getBoundingClientRect().top;
       viewport.scrollTop += nextOffset - snapshot.anchorOffset;
     };
     restoreAnchorOffset();
@@ -957,10 +1081,17 @@ export const ChatPanel = memo(function ChatPanel({
       restoreAnchorOffset();
       window.requestAnimationFrame(restoreAnchorOffset);
     });
-  }, [scrollViewport, timelineConversationId, timelineItemCount, timelineLoadingEarlier, timelineEarlierAllowance]);
+  }, [
+    scrollViewport,
+    timelineConversationId,
+    timelineItemCount,
+    timelineLoadingEarlier,
+    timelineEarlierAllowance,
+  ]);
 
   const requestEarlierTimeline = useCallback(() => {
-    if (timelineLoading || timelineLoadingEarlier || earlierScrollRef.current) return;
+    if (timelineLoading || timelineLoadingEarlier || earlierScrollRef.current)
+      return;
     earlierScrollRef.current = captureEarlierScrollAnchor() ?? {
       conversationId: timelineConversationId,
       anchorId: null,
@@ -988,8 +1119,9 @@ export const ChatPanel = memo(function ChatPanel({
     setEarlierTimelineRender((current) => ({
       conversationId: timelineConversationId,
       allowance:
-        (current.conversationId === timelineConversationId ? current.allowance : 0) +
-        TIMELINE_RENDER_STEP,
+        (current.conversationId === timelineConversationId
+          ? current.allowance
+          : 0) + TIMELINE_RENDER_STEP,
     }));
   }, [captureEarlierScrollAnchor, timelineConversationId]);
 
@@ -999,7 +1131,9 @@ export const ChatPanel = memo(function ChatPanel({
     const handleScroll = () => {
       const pinnedToLatest = isSessionTimelinePinnedToLatest(viewport);
       pinnedToLatestRef.current = pinnedToLatest;
-      setShowJumpToLatest(!pinnedToLatest && viewport.scrollHeight > viewport.clientHeight);
+      setShowJumpToLatest(
+        !pinnedToLatest && viewport.scrollHeight > viewport.clientHeight,
+      );
 
       if (timelineLoadingEarlier && earlierScrollRef.current) {
         const nextAnchor = captureEarlierScrollAnchor();
@@ -1025,7 +1159,8 @@ export const ChatPanel = memo(function ChatPanel({
 
   useEffect(() => {
     const handleResize = () => {
-      if (pinnedToLatestRef.current) window.requestAnimationFrame(scrollToLatest);
+      if (pinnedToLatestRef.current)
+        window.requestAnimationFrame(scrollToLatest);
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -1087,7 +1222,11 @@ export const ChatPanel = memo(function ChatPanel({
       };
       if (
         message.conversationId !== messageActionConversationId ||
-        !canConfirmMessageDeletion(target, messageActionScopeKey, visibleActionMessages)
+        !canConfirmMessageDeletion(
+          target,
+          messageActionScopeKey,
+          visibleActionMessages,
+        )
       ) {
         return;
       }
@@ -1149,7 +1288,9 @@ export const ChatPanel = memo(function ChatPanel({
         const viewport = scrollViewport();
         const anchors = viewport
           ? Array.from(
-              viewport.querySelectorAll<HTMLElement>('[data-timeline-anchor-id]'),
+              viewport.querySelectorAll<HTMLElement>(
+                '[data-timeline-anchor-id]',
+              ),
             )
           : [];
         const anchor = focusNeighborId
@@ -1292,7 +1433,9 @@ export const ChatPanel = memo(function ChatPanel({
       ) {
         return;
       }
-      setPinnedMessageIds((current) => togglePinnedMessageId(current, message.id));
+      setPinnedMessageIds((current) =>
+        togglePinnedMessageId(current, message.id),
+      );
     },
     [messageActionConversationId],
   );
@@ -1332,7 +1475,8 @@ export const ChatPanel = memo(function ChatPanel({
         pinnedToLatestRef.current = false;
         setShowJumpToLatest(viewport.scrollHeight > viewport.clientHeight);
         target.scrollIntoView({
-          behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+          behavior: window.matchMedia('(prefers-reduced-motion: reduce)')
+            .matches
             ? 'auto'
             : 'smooth',
           block: 'center',
@@ -1340,7 +1484,10 @@ export const ChatPanel = memo(function ChatPanel({
         target.classList.add('chat-pinned-jump-target');
         target.focus({ preventScroll: true });
         pinnedJumpTargetRef.current = target;
-        pinnedJumpTimerRef.current = window.setTimeout(clearPinnedJumpTarget, 1_800);
+        pinnedJumpTimerRef.current = window.setTimeout(
+          clearPinnedJumpTarget,
+          1_800,
+        );
       };
       if (revealTimelineMember(message.id)) {
         pinnedJumpFrameRef.current = window.requestAnimationFrame(() => {
@@ -1362,7 +1509,8 @@ export const ChatPanel = memo(function ChatPanel({
   );
   const toggleTimelineItem = useCallback((item: AgentTimelineItem) => {
     setExpandedTimelineItems((current) => {
-      const currentValue = current[item.id] ?? isTimelineItemInitiallyExpanded(item);
+      const currentValue =
+        current[item.id] ?? isTimelineItemInitiallyExpanded(item);
       return { ...current, [item.id]: !currentValue };
     });
   }, []);
@@ -1393,7 +1541,9 @@ export const ChatPanel = memo(function ChatPanel({
   return (
     <section
       className={`pane-shell chat-shell ${
-        composerVariant === 'session' ? 'session-chat-narrative' : 'workspace-chat-panel'
+        composerVariant === 'session'
+          ? 'session-chat-narrative'
+          : 'workspace-chat-panel'
       }`}
     >
       {composerPresentation.showPaneHeader ? (
@@ -1438,7 +1588,9 @@ export const ChatPanel = memo(function ChatPanel({
           ) : null}
         </div>
       ) : null}
-      {conversationComparisonVisible && comparisonClient && composeAheadConversation ? (
+      {conversationComparisonVisible &&
+      comparisonClient &&
+      composeAheadConversation ? (
         <ConversationComparison
           client={comparisonClient}
           currentConversation={composeAheadConversation}
@@ -1448,319 +1600,364 @@ export const ChatPanel = memo(function ChatPanel({
         />
       ) : (
         <>
-      <ScrollArea
-        className="message-scroll"
-        ref={scrollAreaRef}
-        aria-label={t('session.timelineScrollRegion')}
-        aria-busy={timelineLoading || timelineLoadingEarlier}
-        tabIndex={0}
-      >
-        <PinnedMessages
-          messages={pinnedMessages}
-          collapsed={pinnedMessagesCollapsed}
-          onCollapsedChange={setPinnedMessagesCollapsed}
-          onJump={jumpToPinnedMessage}
-          onUnpin={unpinVisibleMessage}
-        />
-        {composeAheadConversation ? (
-          <ConversationSummaryCard
-            key={composeAheadConversation.id}
-            conversationId={composeAheadConversation.id}
-            summary={composeAheadConversation?.summary ?? null}
-            regenerationAvailable={turnCollapseRuntime.mode === 'cloud'}
-            onRegenerate={onRegenerateConversationSummary}
-          />
-        ) : null}
-        <div className="message-stack">
-          {timelineState ? (
-            <>
-              {activitySummary ? (
-                <section
-                  className="session-current-activity"
-                  aria-label={t('session.currentActivity')}
-                >
-                  <div className="session-current-activity-primary">
-                    <span className="session-current-activity-icon" aria-hidden="true">
-                      <ActivityLogIcon />
-                    </span>
-                    <span className="session-current-activity-copy">
-                      <small>
-                        {t(
-                          activityPresence === 'live'
-                            ? 'session.currentActivity'
-                            : 'session.latestActivity',
-                        )}
-                      </small>
-                      <strong>
-                        {activitySummary.titleKey
-                          ? t(activitySummary.titleKey)
-                          : activitySummary.title || t('session.waitingForActivity')}
-                      </strong>
-                    </span>
-                    <Badge color={activityPresence === 'live' ? 'cyan' : 'gray'} variant="soft">
-                      {t(activityPresence === 'live' ? 'session.live' : 'session.recorded')}
-                    </Badge>
-                  </div>
-                  {activitySummary.detail ? <p>{activitySummary.detail}</p> : null}
-                  <dl>
-                    <div>
-                      <dt>{t('session.latestCheckpoint')}</dt>
-                      <dd>
-                        {activitySummary.checkpointKey
-                          ? t(activitySummary.checkpointKey)
-                          : activitySummary.checkpoint || t('session.notAvailable')}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{t('session.sessionEvidence')}</dt>
-                      <dd>{activityEvidence}</dd>
-                    </div>
-                  </dl>
-                </section>
-              ) : null}
-              <AgentTimeline
-                state={visibleTimelineState ?? timelineState}
-                expandedItems={expandedTimelineItems}
-                onToggleItem={toggleTimelineItem}
-                onLoadEarlier={requestEarlierTimeline}
-                onShowEarlier={showEarlierTimelineItems}
-                earlierRenderAllowance={timelineEarlierAllowance}
-                onRetry={onRefresh}
-                onRespondToHitl={onRespondToHitl}
-                respondableHitlRequestIds={respondableHitlRequestIds}
-                activityPresence={activityPresence}
-                onOpenMCPAppResult={onOpenMCPAppResult}
-                onReplyMessage={replyToTimelineMessage}
-                onEditMessage={editTimelineMessage}
-                onDeleteMessage={requestTimelineMessageDeletion}
-                onRetryMessage={retryTimelineMessage}
-                onSaveTemplateMessage={saveTimelineMessageAsTemplate}
-                pinnedMessageIds={pinnedMessageIds}
-                onPinMessage={togglePinnedTimelineMessage}
-                retryDisabled={disabled || sending || Boolean(retryingMessageId)}
-                turns={timelineTurns}
-                collapsedTurnIds={collapsedTurnIds}
-                onToggleTurn={toggleTimelineTurn}
+          <ScrollArea
+            className="message-scroll"
+            ref={scrollAreaRef}
+            aria-label={t('session.timelineScrollRegion')}
+            aria-busy={timelineLoading || timelineLoadingEarlier}
+            tabIndex={0}
+          >
+            <PinnedMessages
+              messages={pinnedMessages}
+              collapsed={pinnedMessagesCollapsed}
+              onCollapsedChange={setPinnedMessagesCollapsed}
+              onJump={jumpToPinnedMessage}
+              onUnpin={unpinVisibleMessage}
+            />
+            {composeAheadConversation ? (
+              <ConversationSummaryCard
+                key={composeAheadConversation.id}
+                conversationId={composeAheadConversation.id}
+                summary={composeAheadConversation?.summary ?? null}
+                regenerationAvailable={turnCollapseRuntime.mode === 'cloud'}
+                onRegenerate={onRegenerateConversationSummary}
               />
-              {runCompletionSummary && onOpenSessionCanvasTab ? (
-                <RunCompletionSummaryCard
-                  summary={runCompletionSummary}
-                  onOpenTab={onOpenSessionCanvasTab}
+            ) : null}
+            <div className="message-stack">
+              {timelineState ? (
+                <>
+                  {activitySummary ? (
+                    <section
+                      className="session-current-activity"
+                      aria-label={t('session.currentActivity')}
+                    >
+                      <div className="session-current-activity-primary">
+                        <span
+                          className="session-current-activity-icon"
+                          aria-hidden="true"
+                        >
+                          <ActivityLogIcon />
+                        </span>
+                        <span className="session-current-activity-copy">
+                          <small>
+                            {t(
+                              activityPresence === 'live'
+                                ? 'session.currentActivity'
+                                : 'session.latestActivity',
+                            )}
+                          </small>
+                          <strong>
+                            {activitySummary.titleKey
+                              ? t(activitySummary.titleKey)
+                              : activitySummary.title ||
+                                t('session.waitingForActivity')}
+                          </strong>
+                        </span>
+                        <Badge
+                          color={activityPresence === 'live' ? 'cyan' : 'gray'}
+                          variant="soft"
+                        >
+                          {t(
+                            activityPresence === 'live'
+                              ? 'session.live'
+                              : 'session.recorded',
+                          )}
+                        </Badge>
+                      </div>
+                      {activitySummary.detail ? (
+                        <p>{activitySummary.detail}</p>
+                      ) : null}
+                      <dl>
+                        <div>
+                          <dt>{t('session.latestCheckpoint')}</dt>
+                          <dd>
+                            {activitySummary.checkpointKey
+                              ? t(activitySummary.checkpointKey)
+                              : activitySummary.checkpoint ||
+                                t('session.notAvailable')}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>{t('session.sessionEvidence')}</dt>
+                          <dd>{activityEvidence}</dd>
+                        </div>
+                      </dl>
+                    </section>
+                  ) : null}
+                  <AgentTimeline
+                    state={visibleTimelineState ?? timelineState}
+                    expandedItems={expandedTimelineItems}
+                    onToggleItem={toggleTimelineItem}
+                    onLoadEarlier={requestEarlierTimeline}
+                    onShowEarlier={showEarlierTimelineItems}
+                    earlierRenderAllowance={timelineEarlierAllowance}
+                    onRetry={onRefresh}
+                    onRespondToHitl={onRespondToHitl}
+                    respondableHitlRequestIds={respondableHitlRequestIds}
+                    activityPresence={activityPresence}
+                    onOpenMCPAppResult={onOpenMCPAppResult}
+                    onReplyMessage={replyToTimelineMessage}
+                    onEditMessage={editTimelineMessage}
+                    onDeleteMessage={requestTimelineMessageDeletion}
+                    onRetryMessage={retryTimelineMessage}
+                    onSaveTemplateMessage={saveTimelineMessageAsTemplate}
+                    pinnedMessageIds={pinnedMessageIds}
+                    onPinMessage={togglePinnedTimelineMessage}
+                    retryDisabled={disabled || sending || Boolean(retryingMessageId)}
+                    turns={timelineTurns}
+                    collapsedTurnIds={collapsedTurnIds}
+                    onToggleTurn={toggleTimelineTurn}
+                    subAgentControlAuthority={subAgentControlAuthority}
+                    onSubAgentControl={onSubAgentControl}
+                  />
+                  {runCompletionSummary && onOpenSessionCanvasTab ? (
+                    <RunCompletionSummaryCard
+                      summary={runCompletionSummary}
+                      onOpenTab={onOpenSessionCanvasTab}
+                    />
+                  ) : null}
+                </>
+              ) : visibleWorkspaceMessages.length === 0 ? (
+                <SessionEmptyState />
+              ) : (
+                visibleWorkspaceMessages.map((message) => {
+                  const visibleMessage = workspaceVisibleMessage(
+                    message,
+                    messageActionConversationId,
+                  );
+                  return (
+                    <WorkspaceTranscriptMessage
+                      message={message}
+                      key={message.id}
+                      onReply={
+                        visibleMessage.kind === 'runtime'
+                          ? undefined
+                          : () => replyToVisibleMessage(visibleMessage)
+                      }
+                      onEdit={
+                        visibleMessage.kind === 'user'
+                          ? () => editVisibleMessage(visibleMessage)
+                          : undefined
+                      }
+                      onDelete={
+                        visibleMessage.kind === 'user'
+                          ? (returnFocus) =>
+                              requestVisibleMessageDeletion(
+                                visibleMessage,
+                                returnFocus,
+                              )
+                          : undefined
+                      }
+                      onRetry={
+                        visibleMessage.kind === 'agent'
+                          ? () => retryVisibleMessage(visibleMessage)
+                          : undefined
+                      }
+                      isPinned={
+                        visibleMessage.kind === 'agent' &&
+                        pinnedMessageIds.includes(visibleMessage.id)
+                      }
+                      onPin={
+                        visibleMessage.kind === 'agent'
+                          ? () => togglePinnedVisibleMessage(visibleMessage)
+                          : undefined
+                      }
+                      onSaveTemplate={
+                        visibleMessage.kind === 'agent'
+                          ? (returnFocus) =>
+                              saveVisibleMessageAsTemplate(
+                                visibleMessage,
+                                returnFocus,
+                              )
+                          : undefined
+                      }
+                      retryDisabled={disabled || sending || Boolean(retryingMessageId)}
+                    />
+                  );
+                })
+              )}
+              {visibleAgentTaskSignals.length ? (
+                <div
+                  className="agent-run-stack"
+                  aria-label={t('chat.agentTaskStatus')}
+                >
+                  {visibleAgentTaskSignals.map((signal) => (
+                    <article
+                      className={`message agent-run ${signal.status}`}
+                      key={signal.id}
+                    >
+                      <Flex align="center" justify="between" gap="2" mb="2">
+                        <Flex
+                          align="center"
+                          gap="2"
+                          className="agent-run-title"
+                        >
+                          <RocketIcon />
+                          <Text size="2" weight="bold">
+                            {t('chat.agentTask')}
+                          </Text>
+                          <Badge
+                            color={agentSignalColor(signal.status)}
+                            variant="soft"
+                          >
+                            {t(agentSignalLabelKey(signal.status))}
+                          </Badge>
+                        </Flex>
+                        <Text size="1" color="gray">
+                          {formatTime(signal.createdAt)}
+                        </Text>
+                      </Flex>
+                      <Text as="p" size="2" className="agent-run-content">
+                        {signal.content}
+                      </Text>
+                      <div className="agent-run-meta">
+                        <span>{signal.detail}</span>
+                        {signal.conversationId ? (
+                          <span title={signal.conversationId}>
+                            {t('chat.conversationReference', {
+                              conversationId: shortId(signal.conversationId),
+                            })}
+                          </span>
+                        ) : null}
+                        {signal.eventType ? (
+                          <span>{signal.eventType}</span>
+                        ) : null}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+              {agentSuggestions.length > 0 &&
+              activityPresence === 'recorded' &&
+              !sending &&
+              !disabled ? (
+                <AgentSuggestionChips
+                  suggestions={agentSuggestions}
+                  onSelect={handleSuggestionSelect}
                 />
               ) : null}
-            </>
-          ) : visibleWorkspaceMessages.length === 0 ? (
-            <SessionEmptyState />
-          ) : (
-            visibleWorkspaceMessages.map((message) => {
-              const visibleMessage = workspaceVisibleMessage(
-                message,
-                messageActionConversationId,
-              );
-              return (
-                <WorkspaceTranscriptMessage
-                  message={message}
-                  key={message.id}
-                  onReply={
-                    visibleMessage.kind === 'runtime'
-                      ? undefined
-                      : () => replyToVisibleMessage(visibleMessage)
-                  }
-                  onEdit={
-                    visibleMessage.kind === 'user'
-                      ? () => editVisibleMessage(visibleMessage)
-                      : undefined
-                  }
-                  onDelete={
-                    visibleMessage.kind === 'user'
-                      ? (returnFocus) =>
-                          requestVisibleMessageDeletion(visibleMessage, returnFocus)
-                      : undefined
-                  }
-                  onRetry={
-                    visibleMessage.kind === 'agent'
-                      ? () => retryVisibleMessage(visibleMessage)
-                      : undefined
-                  }
-                  isPinned={
-                    visibleMessage.kind === 'agent' &&
-                    pinnedMessageIds.includes(visibleMessage.id)
-                  }
-                  onPin={
-                    visibleMessage.kind === 'agent'
-                      ? () => togglePinnedVisibleMessage(visibleMessage)
-                      : undefined
-                  }
-                  onSaveTemplate={
-                    visibleMessage.kind === 'agent'
-                      ? (returnFocus) =>
-                          saveVisibleMessageAsTemplate(visibleMessage, returnFocus)
-                      : undefined
-                  }
-                  retryDisabled={disabled || sending || Boolean(retryingMessageId)}
-                />
-              );
-            })
-          )}
-          {visibleAgentTaskSignals.length ? (
-            <div className="agent-run-stack" aria-label={t('chat.agentTaskStatus')}>
-              {visibleAgentTaskSignals.map((signal) => (
-                <article className={`message agent-run ${signal.status}`} key={signal.id}>
-                  <Flex align="center" justify="between" gap="2" mb="2">
-                    <Flex align="center" gap="2" className="agent-run-title">
-                      <RocketIcon />
-                      <Text size="2" weight="bold">
-                        {t('chat.agentTask')}
-                      </Text>
-                      <Badge color={agentSignalColor(signal.status)} variant="soft">
-                        {t(agentSignalLabelKey(signal.status))}
-                      </Badge>
-                    </Flex>
-                    <Text size="1" color="gray">
-                      {formatTime(signal.createdAt)}
-                    </Text>
-                  </Flex>
-                  <Text as="p" size="2" className="agent-run-content">
-                    {signal.content}
-                  </Text>
-                  <div className="agent-run-meta">
-                    <span>{signal.detail}</span>
-                    {signal.conversationId ? (
-                      <span title={signal.conversationId}>
-                        {t('chat.conversationReference', {
-                          conversationId: shortId(signal.conversationId),
-                        })}
-                      </span>
-                    ) : null}
-                    {signal.eventType ? <span>{signal.eventType}</span> : null}
-                  </div>
-                </article>
-              ))}
+              <div ref={scrollAnchorRef} aria-hidden="true" />
+            </div>
+          </ScrollArea>
+          <ConversationSearch
+            items={visibleTimelineItems}
+            visible={conversationSearchVisible}
+            getViewport={scrollViewport}
+            onRevealItem={revealTimelineMember}
+            onClose={() => setConversationSearchVisible(false)}
+          />
+          {showJumpToLatest ? (
+            <Button
+              type="button"
+              size="1"
+              variant="surface"
+              className="session-jump-latest"
+              onClick={followLatest}
+            >
+              <ChevronDownIcon aria-hidden="true" />
+              {t('session.jumpToLatest')}
+            </Button>
+          ) : null}
+          {messageActionNotice ? (
+            <div
+              className="session-message-action-notice"
+              role="status"
+              aria-live="polite"
+            >
+              {messageActionNotice}
             </div>
           ) : null}
-          {agentSuggestions.length > 0 &&
-          activityPresence === 'recorded' &&
-          !sending &&
-          !disabled ? (
-            <AgentSuggestionChips
-              suggestions={agentSuggestions}
-              onSelect={handleSuggestionSelect}
+          {stopResponseError ? (
+            <div className="session-stop-response-error" role="alert">
+              {stopResponseError}
+            </div>
+          ) : null}
+          {currentActivity ? (
+            <CurrentActivityHeadlineBar
+              activity={currentActivity}
+              sessionKey={messageActionConversationId}
+              presence={activityPresence}
+              usage={sessionUsage}
             />
           ) : null}
-          <div ref={scrollAnchorRef} aria-hidden="true" />
-        </div>
-      </ScrollArea>
-      <ConversationSearch
-        items={visibleTimelineItems}
-        visible={conversationSearchVisible}
-        getViewport={scrollViewport}
-        onRevealItem={revealTimelineMember}
-        onClose={() => setConversationSearchVisible(false)}
-      />
-      {showJumpToLatest ? (
-        <Button
-          type="button"
-          size="1"
-          variant="surface"
-          className="session-jump-latest"
-          onClick={followLatest}
-        >
-          <ChevronDownIcon aria-hidden="true" />
-          {t('session.jumpToLatest')}
-        </Button>
-      ) : null}
-      {messageActionNotice ? (
-        <div className="session-message-action-notice" role="status" aria-live="polite">
-          {messageActionNotice}
-        </div>
-      ) : null}
-      {stopResponseError ? (
-        <div className="session-stop-response-error" role="alert">
-          {stopResponseError}
-        </div>
-      ) : null}
-      {currentActivity ? (
-        <CurrentActivityHeadlineBar
-          activity={currentActivity}
-          sessionKey={messageActionConversationId}
-          presence={activityPresence}
-          usage={sessionUsage}
-        />
-      ) : null}
-      <ChatComposer
-        key={composerResetKey}
-        api={api}
-        conversations={conversations}
-        selectedConversationId={selectedConversationId}
-        activeConversationId={messageActionConversationId}
-        promptTemplateRefreshToken={promptTemplateRefreshToken}
-        draftRequest={composerDraftRequest}
-        composerVariant={composerVariant}
-        initialInput={initialInput}
-        sending={sending}
-        disabledReason={disabledReason}
-        activeWorkflowTarget={activeWorkflowTarget}
-        workflowCounts={workflowCounts}
-        runInputDelivery={runInputDelivery}
-        runInputDeliveryOptions={runInputDeliveryOptions}
-        runInputs={runInputs}
-        runInputsLoading={runInputsLoading}
-        runInputsError={runInputsError}
-        promotingRunInputId={promotingRunInputId}
-        runInputAuthorityRunId={runInputAuthorityRunId}
-        references={references}
-        modelLabel={modelLabel}
-        modelOptions={modelOptions}
-        selectedModelValue={selectedModelValue}
-        modelSwitching={modelSwitching}
-        modelError={modelError}
-        runtimeTargetLabel={runtimeTargetLabel}
-        runtimeTargetOptions={runtimeTargetOptions}
-        authorityNotice={authorityNotice}
-        onAuthorityAction={onAuthorityAction}
-        permissionPreset={permissionPreset}
-        permissionPresetFullAccessAcknowledged={permissionPresetFullAccessAcknowledged}
-        onPermissionPresetChange={onPermissionPresetChange}
-        onAcknowledgeFullAccessWarning={onAcknowledgeFullAccessWarning}
-        onRunInputDeliveryChange={onRunInputDeliveryChange}
-        onPromoteRunInput={onPromoteRunInput}
-        onRemoveReference={onRemoveReference}
-        onWorkflowSelect={onWorkflowSelect}
-        onRuntimeTargetChange={onRuntimeTargetChange}
-        onModelChange={onModelChange}
-        onModelReset={onModelReset}
-        onOpenCommands={onOpenCommands}
-        onSend={handleComposerSend}
-        onStopResponse={stopResponse}
-        onSteerResponse={onSteerResponse}
-        agentControlEvents={agentControlEvents}
-        composeAheadScope={composeAheadScope}
-        composeAheadEnabled={composeAheadEnabled}
-        responseStreaming={responseStreaming}
-        stopResponseAvailable={Boolean(onStopResponse)}
-        stopResponseStatus={stopRequest.status}
-        voiceTranscriptionConfig={voiceTranscriptionConfig}
-        voiceTranscriptionRuntime={voiceTranscriptionRuntime}
-        voiceCallRuntime={voiceCallRuntime}
-      />
-      {messageDeleteRequest ? (
-        <MessageDeleteDialog
-          target={messageDeleteRequest}
-          onCancel={cancelMessageDeletion}
-          onConfirm={confirmMessageDeletion}
-        />
-      ) : null}
-      {saveTemplateRequest ? (
-        <SavePromptTemplateDialog
-          api={api}
-          target={saveTemplateRequest}
-          onClose={closeSaveTemplateDialog}
-          onSaved={completeSaveTemplate}
-        />
-      ) : null}
+          <ChatComposer
+            key={composerResetKey}
+            api={api}
+            conversations={conversations}
+            selectedConversationId={selectedConversationId}
+            activeConversationId={messageActionConversationId}
+            promptTemplateRefreshToken={promptTemplateRefreshToken}
+            draftRequest={composerDraftRequest}
+            composerVariant={composerVariant}
+            initialInput={initialInput}
+            sending={sending}
+            disabledReason={disabledReason}
+            activeWorkflowTarget={activeWorkflowTarget}
+            workflowCounts={workflowCounts}
+            runInputDelivery={runInputDelivery}
+            runInputDeliveryOptions={runInputDeliveryOptions}
+            runInputs={runInputs}
+            runInputsLoading={runInputsLoading}
+            runInputsError={runInputsError}
+            promotingRunInputId={promotingRunInputId}
+            runInputAuthorityRunId={runInputAuthorityRunId}
+            references={references}
+            modelLabel={modelLabel}
+            modelOptions={modelOptions}
+            selectedModelValue={selectedModelValue}
+            modelSwitching={modelSwitching}
+            modelError={modelError}
+            runtimeTargetLabel={runtimeTargetLabel}
+            runtimeTargetOptions={runtimeTargetOptions}
+            authorityNotice={authorityNotice}
+            onAuthorityAction={onAuthorityAction}
+            permissionPreset={permissionPreset}
+            permissionPresetFullAccessAcknowledged={
+              permissionPresetFullAccessAcknowledged
+            }
+            onPermissionPresetChange={onPermissionPresetChange}
+            onAcknowledgeFullAccessWarning={onAcknowledgeFullAccessWarning}
+            onRunInputDeliveryChange={onRunInputDeliveryChange}
+            onPromoteRunInput={onPromoteRunInput}
+            onRemoveReference={onRemoveReference}
+            onWorkflowSelect={onWorkflowSelect}
+            onRuntimeTargetChange={onRuntimeTargetChange}
+            onModelChange={onModelChange}
+            onModelReset={onModelReset}
+            onOpenCommands={onOpenCommands}
+            onSend={handleComposerSend}
+            onStopResponse={stopResponse}
+            onSteerResponse={onSteerResponse}
+            agentControlEvents={agentControlEvents}
+            composeAheadScope={composeAheadScope}
+            composeAheadEnabled={composeAheadEnabled}
+            responseStreaming={responseStreaming}
+            stopResponseAvailable={Boolean(onStopResponse)}
+            stopResponseStatus={stopRequest.status}
+            voiceTranscriptionConfig={voiceTranscriptionConfig}
+            voiceTranscriptionRuntime={voiceTranscriptionRuntime}
+            voiceCallRuntime={voiceCallRuntime}
+          />
+          {messageDeleteRequest ? (
+            <MessageDeleteDialog
+              target={messageDeleteRequest}
+              onCancel={cancelMessageDeletion}
+              onConfirm={confirmMessageDeletion}
+            />
+          ) : null}
+          {saveTemplateRequest ? (
+            <SavePromptTemplateDialog
+              api={api}
+              target={saveTemplateRequest}
+              onClose={closeSaveTemplateDialog}
+              onSaved={completeSaveTemplate}
+            />
+          ) : null}
         </>
       )}
-      {conversationComparisonVisible && comparisonClient && composeAheadConversation ? (
+      {conversationComparisonVisible &&
+      comparisonClient &&
+      composeAheadConversation ? (
         <ConversationComparisonPicker
           open={conversationComparisonPickerOpen}
           client={comparisonClient}
@@ -1782,7 +1979,10 @@ const AgentSuggestionChips = memo(function AgentSuggestionChips({
 }) {
   const { t } = useI18n();
   return (
-    <section className="agent-suggestion-list" aria-label={t('chat.suggestedFollowUps')}>
+    <section
+      className="agent-suggestion-list"
+      aria-label={t('chat.suggestedFollowUps')}
+    >
       <p>{t('chat.suggestedFollowUps')}</p>
       <div>
         {suggestions.map((suggestion, index) => (
@@ -1942,33 +2142,48 @@ function ChatComposer({
   responseStreamingRef.current = responseStreaming;
   const disabled = Boolean(disabledReason);
   const promptTemplateConversation =
-    conversations.find((conversation) => conversation.id === activeConversationId) ?? null;
+    conversations.find(
+      (conversation) => conversation.id === activeConversationId,
+    ) ?? null;
   const voiceConnection = useMemo<VoiceTranscriptionConnection>(
     () =>
       voiceTranscriptionConfig
         ? resolveVoiceTranscriptionConnection(
             voiceTranscriptionConfig,
-            promptTemplateConversation?.project_id ?? voiceTranscriptionConfig.projectId,
+            promptTemplateConversation?.project_id ??
+              voiceTranscriptionConfig.projectId,
             promptTemplateConversation?.id ?? activeConversationId,
           )
         : { availability: 'local_runtime' },
-    [activeConversationId, promptTemplateConversation, voiceTranscriptionConfig],
+    [
+      activeConversationId,
+      promptTemplateConversation,
+      voiceTranscriptionConfig,
+    ],
   );
   const voiceCallConnection = useMemo<VoiceCallConnection>(
     () =>
       voiceTranscriptionConfig
         ? resolveVoiceCallConnection(
             voiceTranscriptionConfig,
-            promptTemplateConversation?.project_id ?? voiceTranscriptionConfig.projectId,
+            promptTemplateConversation?.project_id ??
+              voiceTranscriptionConfig.projectId,
             promptTemplateConversation?.id ?? activeConversationId,
           )
         : { availability: 'local_runtime' },
-    [activeConversationId, promptTemplateConversation, voiceTranscriptionConfig],
+    [
+      activeConversationId,
+      promptTemplateConversation,
+      voiceTranscriptionConfig,
+    ],
   );
   const voiceDraftRef = useRef(initialVoiceTranscriptDraft(''));
   const applyVoiceMessage = useCallback(
     (message: Parameters<typeof applyVoiceTranscriptMessage>[1]) => {
-      const nextDraft = applyVoiceTranscriptMessage(voiceDraftRef.current, message);
+      const nextDraft = applyVoiceTranscriptMessage(
+        voiceDraftRef.current,
+        message,
+      );
       voiceDraftRef.current = nextDraft;
       setInput(voiceTranscriptDraftValue(nextDraft));
     },
@@ -1984,7 +2199,8 @@ function ChatComposer({
     connection: voiceCallConnection,
     runtime: voiceCallRuntime,
   });
-  const voiceActive = voice.state === 'connecting' || voice.state === 'listening';
+  const voiceActive =
+    voice.state === 'connecting' || voice.state === 'listening';
   const voiceCallActive =
     voiceCall.status === 'connecting' ||
     voiceCall.status === 'connected' ||
@@ -1999,7 +2215,8 @@ function ChatComposer({
       : t(`composer.voiceCall.unavailable.${voiceCallConnection.availability}`);
   const toggleVoice = useCallback(async () => {
     if (voiceCallActive) return;
-    if (!voiceActive) voiceDraftRef.current = initialVoiceTranscriptDraft(input);
+    if (!voiceActive)
+      voiceDraftRef.current = initialVoiceTranscriptDraft(input);
     await voice.toggle();
   }, [input, voice.toggle, voiceActive, voiceCallActive]);
   const toggleVoiceCall = useCallback(async () => {
@@ -2046,7 +2263,10 @@ function ChatComposer({
     (Boolean(input.trim()) || composerHasSendableAttachment(contextItems));
   const canSubmit = canSendNow || composeAheadQueueEligibility.canQueue;
   const composerPresentation = chatComposerPresentation(composerVariant);
-  const queuedRunInputs = useMemo(() => visibleQueuedRunInputs(runInputs), [runInputs]);
+  const queuedRunInputs = useMemo(
+    () => visibleQueuedRunInputs(runInputs),
+    [runInputs],
+  );
   const getComposeAheadSnapshot = useCallback(
     () =>
       composeAheadScope
@@ -2060,7 +2280,8 @@ function ChatComposer({
     getComposeAheadSnapshot,
   );
   useEffect(() => {
-    if (!draftRequest || draftRequest.conversationId !== activeConversationId) return;
+    if (!draftRequest || draftRequest.conversationId !== activeConversationId)
+      return;
     setInput(draftRequest.content);
     window.requestAnimationFrame(() => composerInputRef.current?.focus());
   }, [activeConversationId, draftRequest]);
@@ -2101,10 +2322,13 @@ function ChatComposer({
     t,
     voice.stop,
   ]);
-  const setComposeAheadDefaultIntent = useCallback((intent: ComposeAheadIntent) => {
-    setComposeAheadDefaultIntentState(intent);
-    writeComposeAheadDefaultIntent(intent);
-  }, []);
+  const setComposeAheadDefaultIntent = useCallback(
+    (intent: ComposeAheadIntent) => {
+      setComposeAheadDefaultIntentState(intent);
+      writeComposeAheadDefaultIntent(intent);
+    },
+    [],
+  );
   const handleStopAndSend = useCallback(() => {
     const content = input.trim();
     if (!content || disabled || sending) return;
@@ -2114,7 +2338,15 @@ function ChatComposer({
       setInput('');
       setContextItems([]);
     });
-  }, [contextItems, disabled, input, onSend, onStopResponse, sending, voice.stop]);
+  }, [
+    contextItems,
+    disabled,
+    input,
+    onSend,
+    onStopResponse,
+    sending,
+    voice.stop,
+  ]);
   const handleSteerFallback = useCallback(
     (scope: string, promptId: string) => {
       if (composeAheadQueueStore.applySteerFallback(scope, promptId)) {
@@ -2149,7 +2381,10 @@ function ChatComposer({
       }
       if (activeMonitor) {
         window.clearTimeout(activeMonitor.timerId);
-        composeAheadQueueStore.fail(activeMonitor.scope, activeMonitor.promptId);
+        composeAheadQueueStore.fail(
+          activeMonitor.scope,
+          activeMonitor.promptId,
+        );
       }
       const monitorDispatch = () => {
         const currentMonitor = dispatchMonitorRef.current;
@@ -2181,12 +2416,7 @@ function ChatComposer({
       scheduleDispatchMonitor(head);
       return;
     }
-    if (
-      !composeAheadEnabled ||
-      responseStreaming ||
-      sending ||
-      disabled
-    ) {
+    if (!composeAheadEnabled || responseStreaming || sending || disabled) {
       return;
     }
     const claimed = composeAheadQueueStore.claimNext(composeAheadScope, false);
@@ -2342,20 +2572,29 @@ function ChatComposer({
       ) : null}
       {composerPresentation.showQueueHandoff &&
       (runInputsLoading || runInputsError || queuedRunInputs.length) ? (
-        <section className="run-input-queue" aria-label={t('session.queueHandoffRegion')}>
+        <section
+          className="run-input-queue"
+          aria-label={t('session.queueHandoffRegion')}
+        >
           <div className="run-input-queue-header">
             <span>
               <strong>{t('session.queueHandoffTitle')}</strong>
               {queuedRunInputs.length ? (
                 <small>
-                  {t('session.queueHandoffCount', { count: queuedRunInputs.length })}
+                  {t('session.queueHandoffCount', {
+                    count: queuedRunInputs.length,
+                  })}
                 </small>
               ) : null}
             </span>
-            {runInputsLoading ? <small>{t('session.queueLoading')}</small> : null}
+            {runInputsLoading ? (
+              <small>{t('session.queueLoading')}</small>
+            ) : null}
           </div>
           {runInputsError ? (
-            <p className="run-input-queue-error">{t('session.queueLoadError')}</p>
+            <p className="run-input-queue-error">
+              {t('session.queueLoadError')}
+            </p>
           ) : null}
           {queuedRunInputs.map((queuedInput) => {
             const handoffState = queuedRunInputHandoffState(queuedInput);
@@ -2435,17 +2674,19 @@ function ChatComposer({
             <small>{authorityNotice.description}</small>
           </span>
           {authorityNotice.actionLabel && onAuthorityAction ? (
-            <Button type="button" size="1" variant="soft" onClick={onAuthorityAction}>
+            <Button
+              type="button"
+              size="1"
+              variant="soft"
+              onClick={onAuthorityAction}
+            >
               {authorityNotice.actionLabel}
             </Button>
           ) : null}
         </div>
       ) : null}
       {composeAheadEnabled && queuedPrompts.length ? (
-        <ComposeAheadQueue
-          prompts={queuedPrompts}
-          scope={composeAheadScope}
-        />
+        <ComposeAheadQueue prompts={queuedPrompts} scope={composeAheadScope} />
       ) : null}
       <div
         className={`session-composer-editor${isFileDragging ? ' is-file-dragging' : ''}`}
@@ -2456,13 +2697,21 @@ function ChatComposer({
         onDrop={handleFileDrop}
       >
         {isFileDragging ? (
-          <div className="composer-file-drop-overlay" role="status" aria-live="polite">
+          <div
+            className="composer-file-drop-overlay"
+            role="status"
+            aria-live="polite"
+          >
             <UploadIcon aria-hidden="true" />
             <strong>{t('composer.dropFilesToUpload')}</strong>
           </div>
         ) : null}
         {uploadingFileCount ? (
-          <div className="composer-file-upload-status" role="status" aria-live="polite">
+          <div
+            className="composer-file-upload-status"
+            role="status"
+            aria-live="polite"
+          >
             {t('composer.uploadingFiles', { count: uploadingFileCount })}
           </div>
         ) : null}
@@ -2479,14 +2728,21 @@ function ChatComposer({
           </div>
         ) : null}
         {contextItems.length ? (
-          <div className="composer-context-chips" aria-label={t('composer.addedContext')}>
+          <div
+            className="composer-context-chips"
+            aria-label={t('composer.addedContext')}
+          >
             {contextItems.map((item) => (
               <button
                 type="button"
                 key={`${item.kind}:${item.resource_id}`}
-                aria-label={t('composer.removeContext', { context: item.label })}
+                aria-label={t('composer.removeContext', {
+                  context: item.label,
+                })}
                 onClick={() =>
-                  setContextItems((current) => current.filter((candidate) => candidate !== item))
+                  setContextItems((current) =>
+                    current.filter((candidate) => candidate !== item),
+                  )
                 }
               >
                 {item.label}
@@ -2496,9 +2752,14 @@ function ChatComposer({
           </div>
         ) : null}
         {references.length ? (
-          <div className="composer-reference-chips" aria-label={t('session.attachedReferences')}>
+          <div
+            className="composer-reference-chips"
+            aria-label={t('session.attachedReferences')}
+          >
             {references.map((reference) => (
-              <span key={`${reference.snapshot_id}:${runInputReferenceLabel(reference)}`}>
+              <span
+                key={`${reference.snapshot_id}:${runInputReferenceLabel(reference)}`}
+              >
                 <CodeIcon aria-hidden="true" />
                 <strong>{runInputReferenceLabel(reference)}</strong>
                 <button
@@ -2532,29 +2793,69 @@ function ChatComposer({
               !event.shiftKey &&
               !event.nativeEvent.isComposing &&
               canSubmit &&
-              (runInputDeliveryOptions.length === 0 || event.metaKey || event.ctrlKey)
+              (runInputDeliveryOptions.length === 0 ||
+                event.metaKey ||
+                event.ctrlKey)
             ) {
               event.preventDefault();
               handleSend();
             }
           }}
         />
-        <Flex
-          align="center"
-          justify="between"
-          className="chat-composer-footer"
-        >
-        {composerVariant === 'session' ? (
-          <div className="session-composer-context-actions">
-            <ComposerPlusMenu
-              api={api}
-              conversations={conversations}
-              excludedConversationId={selectedConversationId}
-              compact
-              onAdd={addContextItem}
-              onUploadFiles={uploadFiles}
-              uploadingFileCount={uploadingFileCount}
-            />
+        <Flex align="center" justify="between" className="chat-composer-footer">
+          {composerVariant === 'session' ? (
+            <div className="session-composer-context-actions">
+              <ComposerPlusMenu
+                api={api}
+                conversations={conversations}
+                excludedConversationId={selectedConversationId}
+                compact
+                onAdd={addContextItem}
+                onUploadFiles={uploadFiles}
+                uploadingFileCount={uploadingFileCount}
+              />
+              <PromptTemplateLibrary
+                api={api}
+                tenantId={promptTemplateConversation?.tenant_id ?? ''}
+                projectId={promptTemplateConversation?.project_id ?? ''}
+                conversationId={promptTemplateConversation?.id ?? ''}
+                refreshToken={promptTemplateRefreshToken}
+                disabled={disabled}
+                onInsert={insertPromptTemplate}
+              />
+              <button
+                type="button"
+                onClick={(event) => onOpenCommands(event.currentTarget)}
+              >
+                <MixerHorizontalIcon aria-hidden="true" />
+                {t('session.context')}
+              </button>
+              {modelLabel && modelOptions?.length && onModelChange ? (
+                <ComposerControls
+                  modelLabel={modelLabel}
+                  modelOptions={modelOptions}
+                  modelValue={selectedModelValue}
+                  modelPending={modelSwitching}
+                  modelError={modelError}
+                  onModelChange={onModelChange}
+                  onModelReset={onModelReset}
+                />
+              ) : null}
+              {permissionPreset &&
+              onPermissionPresetChange &&
+              onAcknowledgeFullAccessWarning ? (
+                <PermissionPresetControl
+                  preset={permissionPreset}
+                  fullAccessAcknowledged={
+                    permissionPresetFullAccessAcknowledged
+                  }
+                  onPresetChange={onPermissionPresetChange}
+                  onAcknowledgeFullAccess={onAcknowledgeFullAccessWarning}
+                />
+              ) : null}
+            </div>
+          ) : null}
+          {composerVariant !== 'session' ? (
             <PromptTemplateLibrary
               api={api}
               tenantId={promptTemplateConversation?.tenant_id ?? ''}
@@ -2564,264 +2865,245 @@ function ChatComposer({
               disabled={disabled}
               onInsert={insertPromptTemplate}
             />
-            <button
-              type="button"
-              onClick={(event) => onOpenCommands(event.currentTarget)}
-            >
-              <MixerHorizontalIcon aria-hidden="true" />
-              {t('session.context')}
-            </button>
-            {modelLabel && modelOptions?.length && onModelChange ? (
+          ) : null}
+          <Flex align="center" gap="2" className="composer-right-actions">
+            {voiceTranscriptionConfig ? (
+              <button
+                className={`composer-voice-button is-${voice.state}`}
+                type="button"
+                aria-label={t(
+                  voiceActive ? 'composer.voice.stop' : 'composer.voice.start',
+                )}
+                aria-pressed={voiceActive}
+                title={
+                  voiceDisabledReason ??
+                  t(
+                    voiceActive
+                      ? 'composer.voice.stop'
+                      : 'composer.voice.start',
+                  )
+                }
+                disabled={
+                  disabled ||
+                  sending ||
+                  uploadingAttachments ||
+                  voiceCallActive ||
+                  voiceConnection.availability !== 'available'
+                }
+                onClick={() => void toggleVoice()}
+              >
+                <VoiceMicrophoneIcon active={voiceActive} />
+                {voiceActive ? (
+                  <span className="composer-voice-wave" aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                ) : null}
+              </button>
+            ) : null}
+            {voiceTranscriptionConfig ? (
+              <button
+                className={`composer-voice-button composer-call-button is-${voiceCall.status}`}
+                type="button"
+                aria-label={t(
+                  voiceCallActive
+                    ? 'composer.voiceCall.end'
+                    : 'composer.voiceCall.start',
+                )}
+                aria-pressed={voiceCallActive}
+                title={
+                  voiceCallActive
+                    ? t('composer.voiceCall.end')
+                    : (voiceCallDisabledReason ?? t('composer.voiceCall.start'))
+                }
+                disabled={
+                  !voiceCallActive &&
+                  (disabled ||
+                    sending ||
+                    responseStreaming ||
+                    uploadingAttachments ||
+                    voiceActive ||
+                    voiceCallConnection.availability !== 'available')
+                }
+                onClick={() => void toggleVoiceCall()}
+              >
+                <VoiceCallIcon active={voiceCallActive} />
+              </button>
+            ) : null}
+            {composerPresentation.showCommands ? (
+              <button
+                className="composer-slash-button"
+                type="button"
+                aria-label={t('chat.slashCommands')}
+                title={t('chat.slashCommands')}
+                onClick={(event) => onOpenCommands(event.currentTarget)}
+              >
+                /
+              </button>
+            ) : null}
+            {runInputDeliveryOptions.length ? (
+              <div
+                className="composer-delivery-switch"
+                aria-label={t('session.deliveryMode')}
+              >
+                {runInputDeliveryOptions.map((delivery) => (
+                  <button
+                    type="button"
+                    className={runInputDelivery === delivery ? 'is-active' : ''}
+                    aria-pressed={runInputDelivery === delivery}
+                    onClick={() => onRunInputDeliveryChange(delivery)}
+                    key={delivery}
+                  >
+                    {delivery === 'steer_now'
+                      ? t('session.steerNow')
+                      : t('session.queueNext')}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {composerPresentation.showRuntimeControls &&
+            runtimeTargetLabel &&
+            runtimeTargetOptions?.length &&
+            onRuntimeTargetChange ? (
               <ComposerControls
+                disabledHint={disabledReason}
                 modelLabel={modelLabel}
                 modelOptions={modelOptions}
                 modelValue={selectedModelValue}
                 modelPending={modelSwitching}
                 modelError={modelError}
+                runtimeTargetLabel={runtimeTargetLabel}
+                runtimeTargetOptions={runtimeTargetOptions}
                 onModelChange={onModelChange}
                 onModelReset={onModelReset}
+                onRuntimeTargetChange={onRuntimeTargetChange}
               />
             ) : null}
-            {permissionPreset && onPermissionPresetChange && onAcknowledgeFullAccessWarning ? (
-              <PermissionPresetControl
-                preset={permissionPreset}
-                fullAccessAcknowledged={permissionPresetFullAccessAcknowledged}
-                onPresetChange={onPermissionPresetChange}
-                onAcknowledgeFullAccess={onAcknowledgeFullAccessWarning}
+            {composerPresentation.showRuntimeStatus ? (
+              <span
+                className={`composer-status-button composer-status-dot ${
+                  disabledReason ? 'is-blocked' : 'is-connected'
+                }`}
+                aria-label={disabledReason ?? t('session.runtimeAvailable')}
+                title={disabledReason ?? t('session.runtimeAvailable')}
               />
             ) : null}
-          </div>
-        ) : null}
-        {composerVariant !== 'session' ? (
-          <PromptTemplateLibrary
-            api={api}
-            tenantId={promptTemplateConversation?.tenant_id ?? ''}
-            projectId={promptTemplateConversation?.project_id ?? ''}
-            conversationId={promptTemplateConversation?.id ?? ''}
-            refreshToken={promptTemplateRefreshToken}
-            disabled={disabled}
-            onInsert={insertPromptTemplate}
-          />
-        ) : null}
-        <Flex align="center" gap="2" className="composer-right-actions">
-          {voiceTranscriptionConfig ? (
-            <button
-              className={`composer-voice-button is-${voice.state}`}
-              type="button"
-              aria-label={t(voiceActive ? 'composer.voice.stop' : 'composer.voice.start')}
-              aria-pressed={voiceActive}
-              title={
-                voiceDisabledReason ??
-                t(voiceActive ? 'composer.voice.stop' : 'composer.voice.start')
-              }
-              disabled={
-                disabled ||
-                sending ||
-                uploadingAttachments ||
-                voiceCallActive ||
-                voiceConnection.availability !== 'available'
-              }
-              onClick={() => void toggleVoice()}
-            >
-              <VoiceMicrophoneIcon active={voiceActive} />
-              {voiceActive ? (
-                <span className="composer-voice-wave" aria-hidden="true">
-                  <i />
-                  <i />
-                  <i />
-                </span>
-              ) : null}
-            </button>
-          ) : null}
-          {voiceTranscriptionConfig ? (
-            <button
-              className={`composer-voice-button composer-call-button is-${voiceCall.status}`}
-              type="button"
-              aria-label={t(
-                voiceCallActive ? 'composer.voiceCall.end' : 'composer.voiceCall.start',
-              )}
-              aria-pressed={voiceCallActive}
-              title={
-                voiceCallActive
-                  ? t('composer.voiceCall.end')
-                  : voiceCallDisabledReason ?? t('composer.voiceCall.start')
-              }
-              disabled={
-                !voiceCallActive &&
-                (disabled ||
-                  sending ||
-                  responseStreaming ||
-                  uploadingAttachments ||
-                  voiceActive ||
-                  voiceCallConnection.availability !== 'available')
-              }
-              onClick={() => void toggleVoiceCall()}
-            >
-              <VoiceCallIcon active={voiceCallActive} />
-            </button>
-          ) : null}
-          {composerPresentation.showCommands ? (
-            <button
-              className="composer-slash-button"
-              type="button"
-              aria-label={t('chat.slashCommands')}
-              title={t('chat.slashCommands')}
-              onClick={(event) => onOpenCommands(event.currentTarget)}
-            >
-              /
-            </button>
-          ) : null}
-          {runInputDeliveryOptions.length ? (
-            <div className="composer-delivery-switch" aria-label={t('session.deliveryMode')}>
-              {runInputDeliveryOptions.map((delivery) => (
-                <button
-                  type="button"
-                  className={runInputDelivery === delivery ? 'is-active' : ''}
-                  aria-pressed={runInputDelivery === delivery}
-                  onClick={() => onRunInputDeliveryChange(delivery)}
-                  key={delivery}
+            {responseStreaming &&
+            stopResponseAvailable &&
+            stopResponseStatus !== 'stopped' ? (
+              <Button
+                size="2"
+                color="red"
+                variant="soft"
+                className="stop-response-pill"
+                type="button"
+                aria-label={
+                  stopResponseStatus === 'stopping'
+                    ? t('session.stoppingResponse')
+                    : t('session.stopResponse')
+                }
+                title={
+                  stopResponseStatus === 'stopping'
+                    ? t('session.stoppingResponse')
+                    : t('session.stopResponse')
+                }
+                loading={stopResponseStatus === 'stopping'}
+                disabled={stopResponseStatus === 'stopping'}
+                onClick={onStopResponse}
+              >
+                <StopIcon />
+              </Button>
+            ) : null}
+            {composeAheadQueueEligibility.canQueue ? (
+              <div className="composer-send-split">
+                <Button
+                  size="2"
+                  color="green"
+                  className="send-pill"
+                  type="submit"
+                  aria-label={
+                    composeAheadDefaultIntent === 'steer'
+                      ? t('chat.composeAhead.steerMessage')
+                      : t('chat.composeAhead.queueMessage')
+                  }
+                  title={
+                    composeAheadDefaultIntent === 'steer'
+                      ? t('chat.composeAhead.steerMessage')
+                      : t('chat.composeAhead.queueMessage')
+                  }
+                  loading={sending}
+                  disabled={!canSubmit}
                 >
-                  {delivery === 'steer_now'
-                    ? t('session.steerNow')
-                    : t('session.queueNext')}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          {composerPresentation.showRuntimeControls &&
-          runtimeTargetLabel &&
-          runtimeTargetOptions?.length &&
-          onRuntimeTargetChange ? (
-            <ComposerControls
-              disabledHint={disabledReason}
-              modelLabel={modelLabel}
-              modelOptions={modelOptions}
-              modelValue={selectedModelValue}
-              modelPending={modelSwitching}
-              modelError={modelError}
-              runtimeTargetLabel={runtimeTargetLabel}
-              runtimeTargetOptions={runtimeTargetOptions}
-              onModelChange={onModelChange}
-              onModelReset={onModelReset}
-              onRuntimeTargetChange={onRuntimeTargetChange}
-            />
-          ) : null}
-          {composerPresentation.showRuntimeStatus ? (
-            <span
-              className={`composer-status-button composer-status-dot ${
-                disabledReason ? 'is-blocked' : 'is-connected'
-              }`}
-              aria-label={disabledReason ?? t('session.runtimeAvailable')}
-              title={disabledReason ?? t('session.runtimeAvailable')}
-            />
-          ) : null}
-          {responseStreaming && stopResponseAvailable && stopResponseStatus !== 'stopped' ? (
-            <Button
-              size="2"
-              color="red"
-              variant="soft"
-              className="stop-response-pill"
-              type="button"
-              aria-label={
-                stopResponseStatus === 'stopping'
-                  ? t('session.stoppingResponse')
-                  : t('session.stopResponse')
-              }
-              title={
-                stopResponseStatus === 'stopping'
-                  ? t('session.stoppingResponse')
-                  : t('session.stopResponse')
-              }
-              loading={stopResponseStatus === 'stopping'}
-              disabled={stopResponseStatus === 'stopping'}
-              onClick={onStopResponse}
-            >
-              <StopIcon />
-            </Button>
-          ) : null}
-          {composeAheadQueueEligibility.canQueue ? (
-            <div className="composer-send-split">
+                  {composeAheadDefaultIntent === 'steer' ? (
+                    <RocketIcon />
+                  ) : (
+                    <ClockIcon />
+                  )}
+                </Button>
+                <PickerMenu
+                  label={t('chat.composeAhead.sendOptions')}
+                  value={composeAheadDefaultIntent}
+                  hideLabel
+                  disabled={!canSubmit}
+                  options={[
+                    {
+                      value: 'queue',
+                      label: t('chat.composeAhead.intent.queue'),
+                      description: t('chat.composeAhead.menu.queueDescription'),
+                    },
+                    {
+                      value: 'steer',
+                      label: t('chat.composeAhead.intent.steer'),
+                      description: t('chat.composeAhead.menu.steerDescription'),
+                    },
+                  ]}
+                  onChange={(value) =>
+                    setComposeAheadDefaultIntent(
+                      value === 'steer' ? 'steer' : 'queue',
+                    )
+                  }
+                  footer={
+                    stopResponseAvailable
+                      ? {
+                          label: t('chat.composeAhead.menu.stopAndSend'),
+                          icon: <StopIcon aria-hidden="true" />,
+                          onClick: handleStopAndSend,
+                        }
+                      : undefined
+                  }
+                />
+              </div>
+            ) : (
               <Button
                 size="2"
                 color="green"
                 className="send-pill"
                 type="submit"
                 aria-label={
-                  composeAheadDefaultIntent === 'steer'
-                    ? t('chat.composeAhead.steerMessage')
-                    : t('chat.composeAhead.queueMessage')
+                  runInputDelivery === 'steer_now'
+                    ? t('session.sendSteering')
+                    : runInputDelivery === 'queue_next'
+                      ? t('session.sendQueuedInput')
+                      : t('session.sendMessage')
                 }
                 title={
-                  composeAheadDefaultIntent === 'steer'
-                    ? t('chat.composeAhead.steerMessage')
-                    : t('chat.composeAhead.queueMessage')
+                  composeAheadEnabled &&
+                  responseStreaming &&
+                  composeAheadQueueEligibility.reason &&
+                  composeAheadQueueEligibility.reason !== 'empty'
+                    ? t('chat.composeAhead.unsupportedContext')
+                    : runInputDeliveryOptions.length
+                      ? t('session.sendShortcut')
+                      : undefined
                 }
                 loading={sending}
                 disabled={!canSubmit}
               >
-                {composeAheadDefaultIntent === 'steer' ? <RocketIcon /> : <ClockIcon />}
+                <ArrowUpIcon />
               </Button>
-              <PickerMenu
-                label={t('chat.composeAhead.sendOptions')}
-                value={composeAheadDefaultIntent}
-                hideLabel
-                disabled={!canSubmit}
-                options={[
-                  {
-                    value: 'queue',
-                    label: t('chat.composeAhead.intent.queue'),
-                    description: t('chat.composeAhead.menu.queueDescription'),
-                  },
-                  {
-                    value: 'steer',
-                    label: t('chat.composeAhead.intent.steer'),
-                    description: t('chat.composeAhead.menu.steerDescription'),
-                  },
-                ]}
-                onChange={(value) =>
-                  setComposeAheadDefaultIntent(value === 'steer' ? 'steer' : 'queue')
-                }
-                footer={
-                  stopResponseAvailable
-                    ? {
-                        label: t('chat.composeAhead.menu.stopAndSend'),
-                        icon: <StopIcon aria-hidden="true" />,
-                        onClick: handleStopAndSend,
-                      }
-                    : undefined
-                }
-              />
-            </div>
-          ) : (
-          <Button
-            size="2"
-            color="green"
-            className="send-pill"
-            type="submit"
-            aria-label={
-              runInputDelivery === 'steer_now'
-                ? t('session.sendSteering')
-                : runInputDelivery === 'queue_next'
-                  ? t('session.sendQueuedInput')
-                  : t('session.sendMessage')
-            }
-            title={
-              composeAheadEnabled &&
-              responseStreaming &&
-              composeAheadQueueEligibility.reason &&
-              composeAheadQueueEligibility.reason !== 'empty'
-                ? t('chat.composeAhead.unsupportedContext')
-                : runInputDeliveryOptions.length
-                  ? t('session.sendShortcut')
-                  : undefined
-            }
-            loading={sending}
-            disabled={!canSubmit}
-          >
-            <ArrowUpIcon />
-          </Button>
-          )}
-        </Flex>
+            )}
+          </Flex>
         </Flex>
       </div>
       {voiceCallActive ? (
@@ -2963,7 +3245,9 @@ const ComposeAheadQueue = memo(function ComposeAheadQueue({
             >
               <DragHandleDots2Icon
                 className="compose-ahead-grip"
-                aria-label={t('chat.composeAhead.reorder', { prompt: prompt.text })}
+                aria-label={t('chat.composeAhead.reorder', {
+                  prompt: prompt.text,
+                })}
               />
               <em className="compose-ahead-intent">
                 {t(`chat.composeAhead.intent.${prompt.intent}`)}
@@ -2978,12 +3262,16 @@ const ComposeAheadQueue = memo(function ComposeAheadQueue({
                   aria-label={
                     prompt.intent === 'queue'
                       ? t('chat.composeAhead.steerNow', { prompt: prompt.text })
-                      : t('chat.composeAhead.dequeueToQueue', { prompt: prompt.text })
+                      : t('chat.composeAhead.dequeueToQueue', {
+                          prompt: prompt.text,
+                        })
                   }
                   title={
                     prompt.intent === 'queue'
                       ? t('chat.composeAhead.steerNow', { prompt: prompt.text })
-                      : t('chat.composeAhead.dequeueToQueue', { prompt: prompt.text })
+                      : t('chat.composeAhead.dequeueToQueue', {
+                          prompt: prompt.text,
+                        })
                   }
                   onClick={() =>
                     composeAheadQueueStore.setIntent(
@@ -3010,7 +3298,9 @@ const ComposeAheadQueue = memo(function ComposeAheadQueue({
               ) : null}
               <button
                 type="button"
-                aria-label={t('chat.composeAhead.remove', { prompt: prompt.text })}
+                aria-label={t('chat.composeAhead.remove', {
+                  prompt: prompt.text,
+                })}
                 onClick={() => composeAheadQueueStore.remove(scope, prompt.id)}
               >
                 <Cross2Icon aria-hidden="true" />
@@ -3025,7 +3315,9 @@ const ComposeAheadQueue = memo(function ComposeAheadQueue({
 
 function composeAheadPreview(text: string): string {
   const normalized = text.trim();
-  return normalized.length > 60 ? `${normalized.slice(0, 60).trim()}…` : normalized;
+  return normalized.length > 60
+    ? `${normalized.slice(0, 60).trim()}…`
+    : normalized;
 }
 
 function agentSignalLabelKey(status: AgentTaskSignalStatus): string {
@@ -3035,7 +3327,9 @@ function agentSignalLabelKey(status: AgentTaskSignalStatus): string {
   return 'chat.status.needsAttention';
 }
 
-function agentSignalColor(status: AgentTaskSignalStatus): 'gray' | 'cyan' | 'green' | 'red' {
+function agentSignalColor(
+  status: AgentTaskSignalStatus,
+): 'gray' | 'cyan' | 'green' | 'red' {
   if (status === 'saving') return 'gray';
   if (status === 'queued') return 'cyan';
   if (status === 'acknowledged') return 'green';

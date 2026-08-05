@@ -17,6 +17,7 @@ import type {
   ConversationSessionProjection,
   SessionAllowedAction,
   SessionProjectionCapabilities,
+  SessionProjectionPlan,
   SessionProjectionScope,
   SessionProjectionTask,
 } from './sessionProjectionTypes';
@@ -63,6 +64,22 @@ export function decodeCloudConversationSessionProjection(
   if (currentAttempt && !sameJson(currentAttempt, attemptHistory[0])) return null;
   if (currentRun && !sameJson(currentRun, runHistory[0])) return null;
   if (!hasUniqueIds(attemptHistory) || !hasUniqueIds(runHistory)) return null;
+
+  const planHistory = readArray(root.plan_history, (value) => readCloudAgentPlan(value, scope));
+  const currentPlan = readNullable(root.current_plan, (value) =>
+    readCloudAgentPlan(value, scope),
+  );
+  if (!planHistory || currentPlan === undefined || !hasUniqueIds(planHistory)) return null;
+  if ((currentPlan === null) !== (planHistory.length === 0)) return null;
+  if (currentPlan && !sameJson(currentPlan, planHistory[0])) return null;
+  const planIds = new Set(planHistory.map((plan) => plan.id));
+  if (
+    runHistory.some(
+      (run) => run.plan_version_id !== null && !planIds.has(run.plan_version_id),
+    )
+  ) {
+    return null;
+  }
 
   const authorityKind = nonEmptyString(root.authority_kind);
   const authorityId = nonEmptyString(root.authority_id);
@@ -153,8 +170,8 @@ export function decodeCloudConversationSessionProjection(
     cloudEvidenceSummary,
     currentRun,
     runHistory,
-    currentPlan: null,
-    planHistory: [],
+    currentPlan,
+    planHistory,
     tasks,
     pendingHitl,
     artifactVersions: [],
@@ -200,7 +217,7 @@ function readCloudRun(value: unknown, scope: SessionProjectionScope): DesktopRun
     !nonEmptyString(run.id) ||
     run.conversation_id !== scope.conversationId ||
     !nonEmptyString(run.project_id) ||
-    !nonEmptyString(run.plan_version_id) ||
+    !(run.plan_version_id === null || nonEmptyString(run.plan_version_id)) ||
     !nonEmptyString(run.idempotency_key) ||
     !nonEmptyString(run.message_id) ||
     typeof run.request_message !== 'string' ||
@@ -245,7 +262,7 @@ function readCloudRun(value: unknown, scope: SessionProjectionScope): DesktopRun
     id: run.id as string,
     conversation_id: scope.conversationId,
     project_id: run.project_id as string,
-    plan_version_id: run.plan_version_id as string,
+    plan_version_id: (run.plan_version_id as string | null) ?? null,
     idempotency_key: run.idempotency_key as string,
     message_id: run.message_id as string,
     request_message: run.request_message,
@@ -479,6 +496,43 @@ function readCloudTask(value: unknown, scope: SessionProjectionScope): SessionPr
     order_index: task.order_index,
     created_at: createdAt,
     updated_at: (task.updated_at as string | null) ?? null,
+  };
+}
+
+function readCloudAgentPlan(
+  value: unknown,
+  scope: SessionProjectionScope,
+): SessionProjectionPlan | null {
+  const plan = recordValue(value);
+  if (!plan) return null;
+  const id = nonEmptyString(plan.id);
+  const status = nonEmptyString(plan.status);
+  const createdAt = nonEmptyString(plan.created_at);
+  const approvedAt = plan.approved_at === null ? null : nonEmptyString(plan.approved_at);
+  const tasks = readArray(plan.tasks, (task) => readCloudTask(task, scope));
+  if (
+    !id ||
+    plan.conversation_id !== scope.conversationId ||
+    !positiveInteger(plan.version) ||
+    !status ||
+    !['draft', 'approved'].includes(status) ||
+    !tasks ||
+    !hasUniqueIds(tasks) ||
+    !createdAt ||
+    (plan.approved_at !== null && !approvedAt) ||
+    (status === 'draft' && approvedAt !== null) ||
+    (status === 'approved' && approvedAt === null)
+  ) {
+    return null;
+  }
+  return {
+    id,
+    conversation_id: scope.conversationId,
+    version: plan.version as number,
+    status: status as SessionProjectionPlan['status'],
+    tasks,
+    created_at: createdAt,
+    approved_at: approvedAt,
   };
 }
 

@@ -15,6 +15,7 @@ const {
   myWorkDisplayGroupForAuthorityGroup,
   myWorkConversationMatchesScope,
   myWorkEffectiveGroup,
+  myWorkItemSummary,
   myWorkItemKey,
   myWorkRefreshScopeIsCurrent,
   socketEventInvalidatesMyWork,
@@ -222,6 +223,42 @@ test('My Work exposes desktop runtime facts only for desktop-run authority', () 
   );
 });
 
+test('My Work exposes canonical agent-run runtime facts and nested completion summary', () => {
+  const item = {
+    authority_kind: 'agent_run',
+    authority_id: 'run-7',
+    run_id: 'run-7',
+    revision: 7,
+    attempt_number: null,
+    permission_profile: 'workspace_write',
+    environment: 'cloud',
+    last_heartbeat_at: '2026-08-04T02:00:00Z',
+    summary: 'Legacy summary',
+    run_summary: {
+      completion_summary: 'Canonical completion summary',
+    },
+  };
+
+  assert.deepEqual(describeMyWorkAuthority(item), {
+    sourceKey: 'myWork.authorityKind.agent_run',
+    descriptionKey: 'myWork.authorityDescription.agent_run',
+    identifier: 'run-7',
+    sequence: { labelKey: 'myWork.runRevisionLabel', value: '7' },
+    runtime: {
+      runId: 'run-7',
+      revision: 7,
+      permissionProfile: 'workspace_write',
+      environment: 'cloud',
+      lastHeartbeatAt: '2026-08-04T02:00:00Z',
+    },
+  });
+  assert.equal(myWorkItemSummary(item), 'Canonical completion summary');
+  assert.equal(
+    myWorkItemSummary({ ...item, run_summary: null }),
+    'Legacy summary',
+  );
+});
+
 test('My Work presents workspace attempts without fabricated desktop runtime facts', () => {
   assert.deepEqual(
     describeMyWorkAuthority({
@@ -381,6 +418,37 @@ test('My Work opens only the exact tenant, project, workspace, and conversation 
       item,
       { ...conversation, tenant_id: 'tenant-2' },
       context
+    ),
+    false
+  );
+});
+
+test('My Work matches an unbound Agent Workspace conversation without fabricating a workspace', () => {
+  const item = {
+    ...items[2],
+    project_id: 'project-1',
+    workspace_id: null,
+    conversation_id: 'conversation-1',
+  };
+  const conversation = {
+    id: 'conversation-1',
+    tenant_id: 'tenant-1',
+    project_id: 'project-1',
+    workspace_id: null,
+  };
+
+  assert.equal(
+    myWorkConversationMatchesScope(item, conversation, {
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
+    }),
+    true
+  );
+  assert.equal(
+    myWorkConversationMatchesScope(
+      item,
+      { ...conversation, workspace_id: 'workspace-1' },
+      { tenantId: 'tenant-1', projectId: 'project-1' }
     ),
     false
   );

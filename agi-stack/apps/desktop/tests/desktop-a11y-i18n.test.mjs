@@ -68,6 +68,14 @@ test('command palette and recovery affordances use localized, accurate copy', ()
   assert.doesNotMatch(appSource, /placeholder="Search commands/);
 });
 
+test('Cloud Changes structural reason codes are localized in both locales', () => {
+  const key = 'session.changesReason.change_attribution_not_recorded';
+  assert.equal(
+    (i18nSource.match(new RegExp(`'${key.replaceAll('.', '\\.')}'`, 'g')) ?? []).length,
+    2,
+  );
+});
+
 test('session history exposes keyboard recovery and preserves manual reading position', () => {
   assert.match(chatPanelSource, /aria-label=\{t\('session\.timelineScrollRegion'\)\}/);
   assert.match(chatPanelSource, /aria-busy=\{timelineLoading \|\| timelineLoadingEarlier\}/);

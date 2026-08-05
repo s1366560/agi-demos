@@ -24,6 +24,13 @@ class ControlMessage:
         sender_id: Identifier of the sending agent/user.
         timestamp: When the message was created.
         cascade: For KILL, whether to also terminate child SubAgents.
+        run_input_id: Canonical persisted run-input identifier for Cloud steering.
+        delivery_mode: Structured delivery mode; never inferred from payload text.
+        run_revision: Canonical parent run revision accepted by the authority.
+        message_id: Timeline message identifier associated with the input.
+        idempotency_key: Authority command idempotency key.
+        target_agent_id: Roster agent identifier for audited SubAgent control.
+        target_agent_name: Roster agent display name captured at acceptance.
     """
 
     run_id: str
@@ -32,6 +39,13 @@ class ControlMessage:
     sender_id: str = ""
     timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     cascade: bool = False
+    run_input_id: str = ""
+    delivery_mode: str = ""
+    run_revision: int | None = None
+    message_id: str = ""
+    idempotency_key: str = ""
+    target_agent_id: str = ""
+    target_agent_name: str = ""
 
 
 @runtime_checkable

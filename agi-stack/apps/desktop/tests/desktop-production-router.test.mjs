@@ -1,24 +1,24 @@
-import assert from 'node:assert/strict';
-import { copyFileSync, mkdirSync, readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { test } from 'node:test';
+import assert from "node:assert/strict";
+import { copyFileSync, mkdirSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { test } from "node:test";
 
 const require = createRequire(import.meta.url);
 const compiledNavigationDirectory =
-  '/tmp/agistack-desktop-test-dist/src/features/navigation';
+  "/tmp/agistack-desktop-test-dist/src/features/navigation";
 mkdirSync(compiledNavigationDirectory, { recursive: true });
 copyFileSync(
   new URL(
-    '../src/features/navigation/DesktopProductionRouter.css',
+    "../src/features/navigation/DesktopProductionRouter.css",
     import.meta.url,
   ),
   `${compiledNavigationDirectory}/DesktopProductionRouter.css`,
 );
-require.extensions['.css'] = () => {};
+require.extensions[".css"] = () => {};
 
-const React = require('react');
-const { renderToStaticMarkup } = require('react-dom/server');
-const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
+const React = require("react");
+const { renderToStaticMarkup } = require("react-dom/server");
+const { I18nProvider } = require("/tmp/agistack-desktop-test-dist/src/i18n.js");
 const {
   DesktopProductionRouter,
   DesktopProductionRouterView,
@@ -26,106 +26,106 @@ const {
   retryDesktopProductionRoute,
   returnToDesktopWorkbench,
   shouldPassThroughAuthenticationBoundary,
-} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/DesktopProductionRouter.js');
+} = require("/tmp/agistack-desktop-test-dist/src/features/navigation/DesktopProductionRouter.js");
 const {
   createDesktopRouteRegistry,
-} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js');
+} = require("/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js");
 
 const source = readFileSync(
   new URL(
-    '../src/features/navigation/DesktopProductionRouter.tsx',
+    "../src/features/navigation/DesktopProductionRouter.tsx",
     import.meta.url,
   ),
-  'utf8',
+  "utf8",
 );
 const stylesheet = readFileSync(
   new URL(
-    '../src/features/navigation/DesktopProductionRouter.css',
+    "../src/features/navigation/DesktopProductionRouter.css",
     import.meta.url,
   ),
-  'utf8',
+  "utf8",
 );
 const messages = readFileSync(
   new URL(
-    '../src/features/navigation/locales/desktopProductionRouterMessages.ts',
+    "../src/features/navigation/locales/desktopProductionRouterMessages.ts",
     import.meta.url,
   ),
-  'utf8',
+  "utf8",
 );
 const globalStylesheet = readFileSync(
-  new URL('../src/styles.css', import.meta.url),
-  'utf8',
+  new URL("../src/styles.css", import.meta.url),
+  "utf8",
 );
 
 const routeContext = Object.freeze({
-  tenantId: 'tenant-1',
-  projectId: 'project-1',
+  tenantId: "tenant-1",
+  projectId: "project-1",
 });
 const module = Object.freeze({
-  routeId: 'project-project-overview',
-  capability: 'project-project-overview',
-  localPolicy: 'native_equivalent',
-  disposition: 'implemented',
-  availability: 'available',
+  routeId: "project-project-overview",
+  capability: "project-project-overview",
+  localPolicy: "native_equivalent",
+  disposition: "implemented",
+  availability: "available",
   reasonCode: null,
   Surface({ module: routeModule, context }) {
-    return React.createElement('output', {
-      'data-surface-route': routeModule.routeId,
-      'data-surface-tenant': context.tenantId,
-      'data-surface-project': context.projectId,
+    return React.createElement("output", {
+      "data-surface-route": routeModule.routeId,
+      "data-surface-tenant": context.tenantId,
+      "data-surface-project": context.projectId,
     });
   },
 });
 const registry = createDesktopRouteRegistry([
   {
-    id: 'project-project-overview',
-    path: '/tenant/:tenantId/project/:projectId',
-    scope: ['tenant', 'project'],
-    navGroup: 'project-workspace',
-    capability: 'project-project-overview',
-    requiredPermission: [['authenticated', 'project_member']],
-    localPolicy: 'native_equivalent',
+    id: "project-project-overview",
+    path: "/tenant/:tenantId/project/:projectId",
+    scope: ["tenant", "project"],
+    navGroup: "project-workspace",
+    capability: "project-project-overview",
+    requiredPermission: [["authenticated", "project_member"]],
+    localPolicy: "native_equivalent",
     loader: async () => module,
   },
 ]);
 const match = Object.freeze({
   definition: registry.definitions[0],
   context: routeContext,
-  canonicalPath: '/tenant/tenant-1/project/project-1',
+  canonicalPath: "/tenant/tenant-1/project/project-1",
 });
 const capability = Object.freeze({
-  availability: 'available',
+  availability: "available",
   reason_code: null,
-  service_version: '3.0.0',
-  contract_version: '3.0.0',
-  allowed_actions: ['view'],
+  service_version: "3.0.0",
+  contract_version: "3.0.0",
+  allowed_actions: ["view"],
   scope: {
-    tenant_id: 'tenant-1',
-    project_id: 'project-1',
+    tenant_id: "tenant-1",
+    project_id: "project-1",
     workspace_id: null,
     instance_id: null,
   },
   authority_revision: 4,
 });
 
-test('production router delegates to the React host and keeps legacy children mounted', () => {
-  const location = hashLocation('');
+test("production router delegates to the React host and keeps legacy children mounted", () => {
+  const location = hashLocation("");
   const markup = render(
     React.createElement(
       DesktopProductionRouter,
       {
         registry,
         location: location.port,
-        mode: 'cloud',
-        permissions: new Set(['authenticated', 'project_member']),
+        mode: "cloud",
+        permissions: new Set(["authenticated", "project_member"]),
         resolveCapability: () => capability,
         switchScope: async () => {},
         navigation: { clearHash() {} },
       },
       React.createElement(
-        'article',
-        { 'data-legacy': true },
-        'Legacy workbench',
+        "article",
+        { "data-legacy": true },
+        "Legacy workbench",
       ),
     ),
   );
@@ -138,17 +138,17 @@ test('production router delegates to the React host and keeps legacy children mo
   assert.doesNotMatch(source, /useState|features\/session|stores\//u);
 });
 
-test('ready and degraded states render the exact module Surface and route context', () => {
-  for (const status of ['ready', 'degraded']) {
+test("ready and degraded states render the exact module Surface and route context", () => {
+  for (const status of ["ready", "degraded"]) {
     const markup = renderView({
       state: {
         status,
         match,
         capability: {
           ...capability,
-          availability: status === 'degraded' ? 'degraded' : 'available',
+          availability: status === "degraded" ? "degraded" : "available",
           reason_code:
-            status === 'degraded' ? 'project_overview_read_only' : null,
+            status === "degraded" ? "project_overview_read_only" : null,
         },
         module,
       },
@@ -159,7 +159,7 @@ test('ready and degraded states render the exact module Surface and route contex
       /class="desktop-production-router-legacy"[^>]*hidden="" inert=""/u,
     );
     assert.match(markup, /data-legacy="true"/u);
-    assert.match(markup, new RegExp(`data-route-state="${status}"`, 'u'));
+    assert.match(markup, new RegExp(`data-route-state="${status}"`, "u"));
     assert.match(markup, /data-surface-route="project-project-overview"/u);
     assert.match(markup, /data-surface-tenant="tenant-1"/u);
     assert.match(markup, /data-surface-project="project-1"/u);
@@ -168,12 +168,38 @@ test('ready and degraded states render the exact module Surface and route contex
   }
 });
 
-test('only an empty hash retains legacy while every rejected deep link uses native recovery', () => {
+test("a route_content module moves legacy content into one production route surface", () => {
+  const contentModule = Object.freeze({
+    ...module,
+    contentPolicy: "route_content",
+    Surface({ content }) {
+      return React.createElement(
+        "section",
+        { "data-route-content-owner": true },
+        content,
+      );
+    },
+  });
+  const markup = renderView({
+    state: {
+      status: "ready",
+      match,
+      capability,
+      module: contentModule,
+    },
+  });
+
+  assert.equal((markup.match(/data-legacy="true"/gu) ?? []).length, 1);
+  assert.match(markup, /data-route-content-owner="true"/u);
+  assert.match(markup, /desktop-production-route-stage/u);
+});
+
+test("only an empty hash retains legacy while every rejected deep link uses native recovery", () => {
   const emptyMarkup = renderView({
     state: {
-      status: 'malformed',
-      location: '',
-      reasonCode: 'desktop_route_malformed',
+      status: "malformed",
+      location: "",
+      reasonCode: "desktop_route_malformed",
     },
   });
   assert.match(emptyMarkup, /data-legacy="true"/u);
@@ -182,19 +208,19 @@ test('only an empty hash retains legacy while every rejected deep link uses nati
   for (const [state, expected] of [
     [
       {
-        status: 'malformed',
-        location: '#/tenant/%E0%A4%A/project/project-1',
-        reasonCode: 'desktop_route_malformed',
+        status: "malformed",
+        location: "#/tenant/%E0%A4%A/project/project-1",
+        reasonCode: "desktop_route_malformed",
       },
-      'Route could not be restored',
+      "Route could not be restored",
     ],
     [
       {
-        status: 'not_found',
-        location: '#/unknown?token=untrusted',
-        reasonCode: 'desktop_route_not_found',
+        status: "not_found",
+        location: "#/unknown?token=untrusted",
+        reasonCode: "desktop_route_not_found",
       },
-      'Native route not found',
+      "Native route not found",
     ],
   ]) {
     const markup = renderView({ state });
@@ -203,96 +229,93 @@ test('only an empty hash retains legacy while every rejected deep link uses nati
       /class="desktop-production-router-legacy"[^>]*hidden="" inert=""/u,
     );
     assert.match(markup, /data-legacy="true"/u);
-    assert.match(markup, new RegExp(expected, 'u'));
-    assert.match(markup, new RegExp(state.reasonCode, 'u'));
-    assert.match(
-      markup,
-      /data-action="return-workbench"[^>]*autofocus=""/u,
-    );
+    assert.match(markup, new RegExp(expected, "u"));
+    assert.match(markup, new RegExp(state.reasonCode, "u"));
+    assert.match(markup, /data-action="return-workbench"[^>]*autofocus=""/u);
     assert.doesNotMatch(markup, /unknown\?token=untrusted/u);
   }
 });
 
-test('loading, forbidden, unavailable, and error states expose structured boundaries', () => {
+test("loading, forbidden, unavailable, and error states expose structured boundaries", () => {
   const cases = [
     [
       {
-        status: 'loading',
+        status: "loading",
         match,
         capability,
         attempt: 2,
       },
-      ['Loading native route', 'project-project-overview'],
+      ["Loading native route", "project-project-overview"],
     ],
     [
       {
-        status: 'forbidden',
+        status: "forbidden",
         match,
-        reasonCode: 'desktop_route_permission_denied',
-        missingPermissions: ['project_member'],
+        reasonCode: "desktop_route_permission_denied",
+        missingPermissions: ["project_member"],
       },
       [
-        'Permission required',
-        'desktop_route_permission_denied',
-        'project_member',
+        "Permission required",
+        "desktop_route_permission_denied",
+        "project_member",
       ],
     ],
     [
       {
-        status: 'unavailable',
+        status: "unavailable",
         match,
-        reasonCode: 'project_overview_authority_unavailable',
+        reasonCode: "project_overview_authority_unavailable",
         capability: null,
       },
       [
-        'Native route unavailable',
-        'project_overview_authority_unavailable',
-        'Retry',
+        "Native route unavailable",
+        "project_overview_authority_unavailable",
+        "Retry",
       ],
     ],
     [
       {
-        status: 'error',
+        status: "error",
         match,
-        reasonCode: 'desktop_route_module_load_failed',
+        reasonCode: "desktop_route_module_load_failed",
         retryable: true,
       },
-      ['Native route failed', 'desktop_route_module_load_failed', 'Retry'],
+      ["Native route failed", "desktop_route_module_load_failed", "Retry"],
     ],
   ];
 
   for (const [state, expectedValues] of cases) {
     const markup = renderView({ state });
     for (const expected of expectedValues) {
-      assert.match(markup, new RegExp(expected, 'u'));
+      assert.match(markup, new RegExp(expected, "u"));
     }
   }
 });
 
-test('authentication-required route can preserve its deep link behind the login surface', () => {
+test("authentication-required route can preserve its deep link behind the login surface", () => {
   const deviceMatch = {
     definition: {
       ...match.definition,
-      id: 'device-approval',
-      path: '/device',
-      scope: ['global'],
-      capability: 'device-approval',
-      requiredPermission: [['authenticated']],
-      localPolicy: 'cloud_only',
+      id: "device-approval",
+      path: "/device",
+      scope: ["global"],
+      capability: "device-approval",
+      requiredPermission: [["authenticated"]],
+      localPolicy: "cloud_only",
     },
     context: {},
-    canonicalPath: '/device',
+    canonicalPath: "/device",
   };
   const state = {
-    status: 'forbidden',
+    status: "forbidden",
     match: deviceMatch,
-    reasonCode: 'desktop_route_permission_denied',
-    missingPermissions: ['authenticated'],
+    reasonCode: "desktop_route_permission_denied",
+    missingPermissions: ["authenticated"],
   };
   assert.equal(
     shouldPassThroughAuthenticationBoundary(
       state,
-      new Set(['device-approval']),
+      new Set(["device-approval"]),
     ),
     true,
   );
@@ -302,16 +325,16 @@ test('authentication-required route can preserve its deep link behind the login 
   );
   const markup = renderView({
     state,
-    authenticationPassthroughRouteIds: new Set(['device-approval']),
+    authenticationPassthroughRouteIds: new Set(["device-approval"]),
   });
   assert.match(markup, /data-legacy="true"/u);
   assert.doesNotMatch(markup, /desktop-production-route-stage/u);
 });
 
-test('an explicit legacy-child handoff hides a ready native route without clearing its hash', () => {
+test("an explicit legacy-child handoff hides a ready native route without clearing its hash", () => {
   const markup = renderView({
     state: {
-      status: 'ready',
+      status: "ready",
       match,
       capability,
       module,
@@ -327,7 +350,56 @@ test('an explicit legacy-child handoff hides a ready native route without cleari
   );
 });
 
-test('breadcrumb return and retry actions use only the injected ports', async () => {
+test("a route-scoped legacy passthrough waits for capability and scope authority", () => {
+  const legacyPassthroughRouteIds = new Set(["project-project-overview"]);
+  for (const status of ["ready", "degraded"]) {
+    const markup = renderView({
+      state: {
+        status,
+        match,
+        capability: {
+          ...capability,
+          availability: status === "degraded" ? "degraded" : "available",
+          reason_code:
+            status === "degraded" ? "workspace_projection_partial" : null,
+        },
+        module,
+      },
+      legacyPassthroughRouteIds,
+    });
+    assert.match(markup, /data-legacy="true"/u);
+    assert.doesNotMatch(markup, /desktop-production-route-stage/u);
+    assert.doesNotMatch(
+      markup,
+      /class="desktop-production-router-legacy"[^>]*hidden="" inert=""/u,
+    );
+  }
+
+  for (const state of [
+    { status: "loading", match, capability, attempt: 1 },
+    {
+      status: "forbidden",
+      match,
+      reasonCode: "desktop_route_permission_denied",
+      missingPermissions: ["project_member"],
+    },
+    {
+      status: "unavailable",
+      match,
+      reasonCode: "desktop_route_capability_scope_mismatch",
+      capability,
+    },
+  ]) {
+    const markup = renderView({ state, legacyPassthroughRouteIds });
+    assert.match(
+      markup,
+      /class="desktop-production-router-legacy"[^>]*hidden="" inert=""/u,
+    );
+    assert.match(markup, /desktop-production-route-stage/u);
+  }
+});
+
+test("breadcrumb return and retry actions use only the injected ports", async () => {
   let clearCalls = 0;
   let retryCalls = 0;
   returnToDesktopWorkbench({
@@ -351,7 +423,7 @@ test('breadcrumb return and retry actions use only the injected ports', async ()
   );
 });
 
-test('Escape returns rejected deep links through the injected navigation port only', () => {
+test("Escape returns rejected deep links through the injected navigation port only", () => {
   let clearCalls = 0;
   let prevented = 0;
   const navigation = {
@@ -360,27 +432,27 @@ test('Escape returns rejected deep links through the injected navigation port on
     },
   };
   const event = {
-    key: 'Escape',
+    key: "Escape",
     preventDefault() {
       prevented += 1;
     },
   };
 
   assert.equal(
-    handleDesktopProductionRouteBoundaryEscape('not_found', navigation, event),
+    handleDesktopProductionRouteBoundaryEscape("not_found", navigation, event),
     true,
   );
   assert.equal(clearCalls, 1);
   assert.equal(prevented, 1);
   assert.equal(
-    handleDesktopProductionRouteBoundaryEscape('ready', navigation, event),
+    handleDesktopProductionRouteBoundaryEscape("ready", navigation, event),
     false,
   );
   assert.equal(clearCalls, 1);
   assert.equal(prevented, 1);
 });
 
-test('router styling and copy remain native, responsive, and bilingual', () => {
+test("router styling and copy remain native, responsive, and bilingual", () => {
   assert.doesNotMatch(
     source,
     /<iframe|<webview|shell\.openExternal|window\.open|href=/iu,
@@ -391,14 +463,14 @@ test('router styling and copy remain native, responsive, and bilingual', () => {
   assert.match(messages, /desktopProductionRouterEnUS/u);
   assert.match(messages, /desktopProductionRouterZhCN/u);
   for (const key of [
-    'desktopProductionRouter.breadcrumb',
-    'desktopProductionRouter.returnWorkbench',
-    'desktopProductionRouter.loading.title',
-    'desktopProductionRouter.forbidden.title',
-    'desktopProductionRouter.unavailable.title',
-    'desktopProductionRouter.error.title',
-    'desktopProductionRouter.malformed.title',
-    'desktopProductionRouter.notFound.title',
+    "desktopProductionRouter.breadcrumb",
+    "desktopProductionRouter.returnWorkbench",
+    "desktopProductionRouter.loading.title",
+    "desktopProductionRouter.forbidden.title",
+    "desktopProductionRouter.unavailable.title",
+    "desktopProductionRouter.error.title",
+    "desktopProductionRouter.malformed.title",
+    "desktopProductionRouter.notFound.title",
   ]) {
     assert.equal(messages.split(`'${key}'`).length, 3);
   }
@@ -408,7 +480,7 @@ test('router styling and copy remain native, responsive, and bilingual', () => {
     ),
   );
   for (const token of referencedTokens) {
-    assert.match(globalStylesheet, new RegExp(`${token}\\s*:`, 'u'));
+    assert.match(globalStylesheet, new RegExp(`${token}\\s*:`, "u"));
   }
 });
 
@@ -416,6 +488,7 @@ function renderView({
   state,
   authenticationPassthroughRouteIds,
   forceLegacyChildren,
+  legacyPassthroughRouteIds,
 }) {
   return render(
     React.createElement(
@@ -427,11 +500,12 @@ function renderView({
         navigation: { clearHash() {} },
         authenticationPassthroughRouteIds,
         forceLegacyChildren,
+        legacyPassthroughRouteIds,
       },
       React.createElement(
-        'article',
-        { 'data-legacy': true },
-        'Legacy workbench',
+        "article",
+        { "data-legacy": true },
+        "Legacy workbench",
       ),
     ),
   );

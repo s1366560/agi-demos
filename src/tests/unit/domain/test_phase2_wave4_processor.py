@@ -7,7 +7,12 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.domain.events.agent_events import AgentErrorEvent
+from src.domain.events.agent_events import (
+    AgentErrorEvent,
+    AgentRunInputAppliedEvent,
+    SubAgentKilledEvent,
+    SubAgentSteeredEvent,
+)
 from src.domain.model.agent.tool_policy import ControlMessageType
 from src.domain.ports.agent.control_channel_port import ControlMessage
 from src.infrastructure.agent.processor.processor import (
@@ -69,6 +74,27 @@ class TestCheckControlChannelNone:
 
 @pytest.mark.unit
 class TestCheckControlChannelKill:
+    async def test_authorized_kill_emits_subagent_terminal_event(self) -> None:
+        channel = _make_control_channel()
+        channel.consume_control.return_value = [
+            ControlMessage(
+                run_id="run-1",
+                message_type=ControlMessageType.KILL,
+                payload="Killed by user",
+                target_agent_id="agent-1",
+                target_agent_name="Researcher",
+            )
+        ]
+        proc = _make_processor(control_channel=channel, run_id="run-1")
+
+        events = await proc._check_control_channel([])  # pyright: ignore[reportPrivateUsage]
+
+        assert len(events) == 2
+        assert isinstance(events[0], SubAgentKilledEvent)
+        assert events[0].subagent_id == "agent-1"
+        assert events[0].kill_reason == "user_cancel"
+        assert isinstance(events[1], AgentErrorEvent)
+
     async def test_kill_sets_abort_event(self) -> None:
         channel = _make_control_channel()
         kill_msg = ControlMessage(
@@ -130,6 +156,26 @@ class TestCheckControlChannelKill:
 
 @pytest.mark.unit
 class TestCheckControlChannelSteer:
+    async def test_authorized_subagent_steer_emits_consumption_event(self) -> None:
+        channel = _make_control_channel()
+        channel.consume_control.return_value = [
+            ControlMessage(
+                run_id="run-1",
+                message_type=ControlMessageType.STEER,
+                payload="Inspect the authority boundary.",
+                target_agent_id="agent-1",
+                target_agent_name="Researcher",
+            )
+        ]
+        proc = _make_processor(control_channel=channel, run_id="run-1")
+
+        events = await proc._check_control_channel([])  # pyright: ignore[reportPrivateUsage]
+
+        assert len(events) == 1
+        assert isinstance(events[0], SubAgentSteeredEvent)
+        assert events[0].subagent_id == "agent-1"
+        assert events[0].instruction == "Inspect the authority boundary."
+
     async def test_steer_injects_system_message(self) -> None:
         channel = _make_control_channel()
         steer_msg = ControlMessage(
@@ -168,6 +214,37 @@ class TestCheckControlChannelSteer:
         assert len(messages) == 3
         for i in range(3):
             assert f"instruction {i}" in messages[i]["content"]
+
+    async def test_canonical_run_input_emits_structured_applied_event(self) -> None:
+        channel = _make_control_channel()
+        steer_msg = ControlMessage(
+            run_id="run-1",
+            message_type=ControlMessageType.STEER,
+            payload="Focus on the failing authority test.",
+            sender_id="user-1",
+            run_input_id="input-1",
+            delivery_mode="steer_now",
+            run_revision=4,
+            message_id="message-1",
+            idempotency_key="input-key-1",
+        )
+        channel.consume_control.return_value = [steer_msg]
+        proc = _make_processor(control_channel=channel, run_id="run-1")
+        proc._step_count = 3  # pyright: ignore[reportPrivateUsage]
+        messages: list[dict[str, str]] = []
+
+        events = await proc._check_control_channel(messages)  # pyright: ignore[reportPrivateUsage]
+
+        assert len(events) == 1
+        event = events[0]
+        assert isinstance(event, AgentRunInputAppliedEvent)
+        assert event.run_input_id == "input-1"
+        assert event.run_id == "run-1"
+        assert event.run_revision == 4
+        assert event.delivery_mode == "steer_now"
+        assert event.applied_round == 3
+        assert event.injected_via == "control_channel_observe_boundary"
+        assert len(messages) == 1
 
 
 @pytest.mark.unit

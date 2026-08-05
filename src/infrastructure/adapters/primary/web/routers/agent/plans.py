@@ -8,7 +8,7 @@ import asyncio
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -24,6 +24,10 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_db,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
+from src.infrastructure.adapters.secondary.event.redis_event_bus import RedisEventBusAdapter
+from src.infrastructure.adapters.secondary.persistence.agent_run_settlement import (
+    settle_agent_plan_run,
+)
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentPlanRunModel,
@@ -34,13 +38,30 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserTenant as UserTenantModel,
     WorkspaceAgentPolicyModel,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
+    ensure_plan_run_authority,
+)
 from src.infrastructure.i18n import gettext as _
+
+if TYPE_CHECKING:
+    from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
+        ConnectionManager,
+    )
 
 logger = logging.getLogger(__name__)
 _PLAN_RUN_TASKS: set[asyncio.Task[None]] = set()
 
 router = APIRouter(prefix="/plan", tags=["plan"])
 approval_router = APIRouter(prefix="/plans", tags=["plan"])
+
+
+def get_connection_manager() -> "ConnectionManager":
+    """Resolve the WebSocket manager lazily to keep router imports acyclic."""
+    from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
+        get_connection_manager as resolve_connection_manager,
+    )
+
+    return resolve_connection_manager()
 
 
 # === Request/Response Schemas ===
@@ -500,6 +521,11 @@ async def approve_plan_and_start(
         updated_at=now,
     )
     db.add(run)
+    await ensure_plan_run_authority(
+        db,
+        run=run,
+        tenant_id=conversation.tenant_id,
+    )
     await db.commit()
     response = _approval_response(conversation, plan, run, created=True)
     task = asyncio.create_task(
@@ -587,6 +613,73 @@ def _approval_response(
     }
 
 
+async def _publish_plan_run_status(
+    *,
+    base_container: DIContainer,
+    run: AgentPlanRunModel,
+) -> None:
+    """Publish terminal plan-run authority after its database commit."""
+
+    emitted_at = datetime.now(UTC)
+    payload = {
+        "id": run.id,
+        "conversation_id": run.conversation_id,
+        "project_id": run.project_id,
+        "plan_version_id": run.plan_version_id,
+        "idempotency_key": run.idempotency_key,
+        "message_id": run.message_id,
+        "request_message": run.request_message,
+        "status": run.status,
+        "revision": run.revision,
+        "created_at": run.created_at.isoformat(),
+        "updated_at": run.updated_at.isoformat(),
+        "started_at": None,
+        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+        "last_heartbeat_at": None,
+        "error": run.error,
+        "environment": run.authorization_snapshot.get("environment"),
+        "permission_profile": run.permission_profile,
+        "authorization_snapshot": run.authorization_snapshot,
+    }
+    event = {
+        "type": "run_status",
+        "event_type": "run_status",
+        "conversation_id": run.conversation_id,
+        "payload": payload,
+        "data": payload,
+        "timestamp": emitted_at.isoformat(),
+        "event_time_us": int(emitted_at.timestamp() * 1_000_000),
+        "event_counter": 0,
+    }
+
+    redis_client = base_container.redis_client
+    if redis_client is not None:
+        try:
+            await RedisEventBusAdapter(redis_client).publish_to_stream(
+                run.conversation_id,
+                event,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to persist plan run status event: run_id=%s status=%s revision=%s",
+                run.id,
+                run.status,
+                run.revision,
+            )
+    try:
+        await get_connection_manager().broadcast_to_conversation(
+            run.conversation_id,
+            event,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to broadcast plan run status event: run_id=%s status=%s revision=%s",
+            run.id,
+            run.status,
+            run.revision,
+        )
+
+
 async def _execute_approved_plan(
     *,
     base_container: DIContainer,
@@ -602,9 +695,10 @@ async def _execute_approved_plan(
         run = await session.get(AgentPlanRunModel, run_id)
         if run is None:
             return
+        started_at = datetime.now(UTC)
         try:
             run.status = "running"
-            run.updated_at = datetime.now(UTC)
+            run.updated_at = started_at
             await session.commit()
             container = base_container.with_db(session)
             llm = await create_llm_client(tenant_id)
@@ -616,23 +710,50 @@ async def _execute_approved_plan(
                 user_id=user_id,
                 tenant_id=tenant_id,
                 execution_message_id=message_id,
+                canonical_run_id=run_id,
             ):
                 pass
+            await session.refresh(run)
             run.status = "ready_review"
             run.revision += 1
             completed_at = datetime.now(UTC)
             run.completed_at = completed_at
             run.updated_at = completed_at
+            await settle_agent_plan_run(
+                session,
+                run=run,
+                tenant_id=tenant_id,
+                started_at=started_at,
+                succeeded=True,
+                completed_at=completed_at,
+            )
             await session.commit()
+            await _publish_plan_run_status(
+                base_container=base_container,
+                run=run,
+            )
         except Exception as exc:
             logger.exception("Approved plan execution failed: run_id=%s", run_id)
             await session.rollback()
             failed = await session.get(AgentPlanRunModel, run_id)
             if failed is not None:
+                await session.refresh(failed)
                 failed.status = "failed"
                 failed.revision += 1
                 failed.error = str(exc)[:2000]
                 completed_at = datetime.now(UTC)
                 failed.completed_at = completed_at
                 failed.updated_at = completed_at
+                await settle_agent_plan_run(
+                    session,
+                    run=failed,
+                    tenant_id=tenant_id,
+                    started_at=started_at,
+                    succeeded=False,
+                    completed_at=completed_at,
+                )
                 await session.commit()
+                await _publish_plan_run_status(
+                    base_container=base_container,
+                    run=failed,
+                )

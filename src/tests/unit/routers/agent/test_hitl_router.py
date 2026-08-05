@@ -45,10 +45,15 @@ def _hitl_request(*, status: HITLRequestStatus = HITLRequestStatus.PENDING) -> H
         {"action": "allow", "granted": True, "scope": "once"},
         {"action": "allow_always", "granted": True, "scope": "workspace_tool"},
         {"action": "deny", "granted": False, "scope": "once"},
-        {"granted": True},
+        {
+            "action": "deny",
+            "granted": False,
+            "scope": "once",
+            "feedback": "Use the read-only path instead.",
+        },
     ],
 )
-def test_permission_response_shape_accepts_canonical_and_legacy_payloads(
+def test_permission_response_shape_accepts_canonical_union_payloads(
     payload: dict[str, object],
 ) -> None:
     hitl_router._validate_hitl_response_shape(hitl_type="permission", response_data=payload)
@@ -60,6 +65,13 @@ def test_permission_response_shape_accepts_canonical_and_legacy_payloads(
     [
         {"action": "allow_always", "granted": True, "scope": "once"},
         {"action": "allow", "granted": False, "scope": "once"},
+        {"granted": True},
+        {
+            "action": "deny",
+            "granted": False,
+            "scope": "once",
+            "feedback": {"not": "text"},
+        },
         {
             "action": "allow_always",
             "granted": True,

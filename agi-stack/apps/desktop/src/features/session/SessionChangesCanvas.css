@@ -368,3 +368,7 @@
     grid-template-columns: 34px 34px 22px minmax(0, 1fr);
   }
 }
+.session-changes-scope {
+  display: inline-flex;
+  gap: 4px;
+}

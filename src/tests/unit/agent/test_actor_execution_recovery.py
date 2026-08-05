@@ -21,6 +21,7 @@ class _FakeAgent:
         conversation_context,
         tenant_id,
         message_id,
+        canonical_run_id=None,
         hitl_response=None,
     ):
         self.calls.append(
@@ -31,6 +32,7 @@ class _FakeAgent:
                 "conversation_context": conversation_context,
                 "tenant_id": tenant_id,
                 "message_id": message_id,
+                "canonical_run_id": canonical_run_id,
                 "hitl_response": hitl_response,
             }
         )
@@ -58,6 +60,7 @@ class _SummaryFakeAgent(_FakeAgent):
         conversation_context,
         tenant_id,
         message_id,
+        canonical_run_id=None,
         hitl_response=None,
     ):
         self.calls.append(
@@ -68,6 +71,7 @@ class _SummaryFakeAgent(_FakeAgent):
                 "conversation_context": conversation_context,
                 "tenant_id": tenant_id,
                 "message_id": message_id,
+                "canonical_run_id": canonical_run_id,
                 "hitl_response": hitl_response,
             }
         )
@@ -84,6 +88,7 @@ class _ErrorAgent(_FakeAgent):
         conversation_context,
         tenant_id,
         message_id,
+        canonical_run_id=None,
         hitl_response=None,
     ):
         self.calls.append(
@@ -94,6 +99,7 @@ class _ErrorAgent(_FakeAgent):
                 "conversation_context": conversation_context,
                 "tenant_id": tenant_id,
                 "message_id": message_id,
+                "canonical_run_id": canonical_run_id,
                 "hitl_response": hitl_response,
             }
         )
@@ -102,11 +108,29 @@ class _ErrorAgent(_FakeAgent):
         raise RuntimeError("resume failed")
 
 
+class _CanonicalRunAgent:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    async def execute_chat(self, **kwargs):
+        self.calls.append(kwargs)
+        yield {"type": "complete", "data": {"content": "ok"}}
+
+
 @pytest.fixture(autouse=True)
 def _stub_mark_hitl_completed(monkeypatch) -> AsyncMock:
     completion_mock = AsyncMock()
     monkeypatch.setattr(hitl_coordinator_mod, "mark_hitl_request_completed", completion_mock)
     return completion_mock
+
+
+@pytest.fixture(autouse=True)
+def _stub_run_authority(monkeypatch) -> tuple[AsyncMock, AsyncMock]:
+    mark = AsyncMock()
+    settle = AsyncMock()
+    monkeypatch.setattr(execution, "_mark_root_run_authority_running", mark)
+    monkeypatch.setattr(execution, "_settle_root_run_authority", settle)
+    return mark, settle
 
 
 @pytest.mark.unit
@@ -159,6 +183,67 @@ class TestActorExecutionRecovery:
         assert agent.calls[0]["conversation_context"] == state.messages
         execution.load_hitl_snapshot.assert_awaited_once_with("req-1")
         _stub_mark_hitl_completed.assert_awaited_once_with("req-1", lease_owner=None)
+
+    async def test_continue_chat_restores_canonical_plan_run_authority(
+        self,
+        monkeypatch,
+        _stub_mark_hitl_completed: AsyncMock,
+    ):
+        state = HITLAgentState(
+            conversation_id="conv-plan",
+            message_id="client-message",
+            canonical_run_id="plan-run",
+            tenant_id="tenant-1",
+            project_id="project-1",
+            hitl_request_id="req-plan",
+            hitl_type="permission",
+            hitl_request_data={"action": "write"},
+            user_message="continue",
+            user_id="user-1",
+        )
+        agent = _CanonicalRunAgent()
+        mark = AsyncMock()
+        settle = AsyncMock()
+        _stub_mark_hitl_completed.return_value = True
+
+        monkeypatch.setattr(execution, "_get_redis_client", AsyncMock(return_value=object()))
+        monkeypatch.setattr(execution, "_publish_event_to_stream", AsyncMock())
+        monkeypatch.setattr(execution, "_persist_events", AsyncMock())
+        monkeypatch.setattr(execution, "set_agent_running", AsyncMock())
+        monkeypatch.setattr(execution, "clear_agent_running", AsyncMock())
+        monkeypatch.setattr(execution, "delete_hitl_snapshot", AsyncMock())
+        monkeypatch.setattr(execution, "load_hitl_snapshot", AsyncMock(return_value=state))
+        monkeypatch.setattr(execution, "HITLStateStore", _FakeStateStore)
+        monkeypatch.setattr(execution, "_mark_root_run_authority_running", mark)
+        monkeypatch.setattr(execution, "_settle_root_run_authority", settle)
+
+        result = await execution.continue_project_chat(
+            agent,
+            "req-plan",
+            {"action": "allow"},
+            tenant_id="tenant-1",
+            project_id="project-1",
+            conversation_id="conv-plan",
+            message_id="client-message",
+        )
+
+        assert result.is_error is False
+        assert agent.calls[0]["message_id"] == "client-message"
+        assert agent.calls[0]["canonical_run_id"] == "plan-run"
+        mark.assert_awaited_once_with(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            conversation_id="conv-plan",
+            run_id="plan-run",
+        )
+        settle.assert_awaited_once_with(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            conversation_id="conv-plan",
+            run_id="plan-run",
+            outcome="success",
+            error=None,
+        )
 
     async def test_continue_chat_keeps_recovery_state_when_completion_is_rejected(
         self, monkeypatch, _stub_mark_hitl_completed: AsyncMock

@@ -108,6 +108,52 @@ class TestProjectReActAgentLifecycleNotifications:
     """
 
     @pytest.mark.asyncio
+    async def test_init_react_agent_forwards_root_control_channel(
+        self,
+        agent_config,
+        mock_graph_service,
+        mock_redis_client,
+        mock_llm_client,
+        mock_provider_config,
+        mock_session_context,
+    ):
+        """Root processors must receive the same Redis authority used by run inputs."""
+        from src.infrastructure.agent.subagent.control_channel import RedisControlChannel
+
+        agent = ProjectReActAgent(agent_config)
+        agent._tools = {"test_tool": lambda value: value}
+        agent._skills = []
+        agent._subagents = []
+        message_bus = MagicMock()
+        agent._message_bus = message_bus
+
+        with (
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_agent_session",
+                new_callable=AsyncMock,
+                return_value=mock_session_context,
+            ),
+            patch("src.infrastructure.agent.core.react_agent.ReActAgent") as react_agent,
+            patch(
+                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+                return_value=None,
+            ),
+        ):
+            await agent._init_react_agent(
+                graph_service=mock_graph_service,
+                redis_client=mock_redis_client,
+                artifact_service=MagicMock(),
+                provider_config=mock_provider_config,
+                llm_client=mock_llm_client,
+                memory_runtime=None,
+                session_factory=None,
+            )
+
+        constructor_args = react_agent.call_args.kwargs
+        assert constructor_args["message_bus"] is message_bus
+        assert isinstance(constructor_args["control_channel"], RedisControlChannel)
+
+    @pytest.mark.asyncio
     async def test_initialize_sends_initializing_and_ready_notifications(
         self,
         agent_config,
@@ -590,6 +636,40 @@ class TestProjectReActAgentLifecycleNotifications:
         ]
         # At least one 'ready' call (after execution completes)
         assert len(ready_calls) >= 1
+
+    @pytest.mark.asyncio
+    async def test_execute_chat_forwards_canonical_run_id_to_react_stream(
+        self,
+        agent_config,
+        mock_notifier,
+    ):
+        agent = ProjectReActAgent(agent_config)
+        agent._initialized = True
+        received: dict[str, object] = {}
+
+        async def mock_stream(**kwargs):
+            received.update(kwargs)
+            yield {"type": "complete", "data": {"content": "done"}}
+
+        mock_react = MagicMock()
+        mock_react.stream = mock_stream
+        agent._react_agent = mock_react
+
+        with patch(
+            "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+            return_value=mock_notifier,
+        ):
+            async for _event in agent.execute_chat(
+                conversation_id="test-conv",
+                user_message="Execute",
+                user_id="test-user",
+                message_id="client-message-1",
+                canonical_run_id="plan-run-1",
+            ):
+                pass
+
+        assert received["message_id"] == "client-message-1"
+        assert received["canonical_run_id"] == "plan-run-1"
 
     @pytest.mark.asyncio
     async def test_execute_chat_error_sends_error_notification(self, agent_config, mock_notifier):

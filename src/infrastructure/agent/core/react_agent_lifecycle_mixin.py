@@ -376,6 +376,8 @@ class LifecycleMixin:
         temperature: float,
         max_tokens: int,
         max_steps: int,
+        message_bus: object | None,
+        control_channel: Any | None,
     ) -> None:
         """Initialize tool definitions and processor config."""
         if cached_tool_definitions is not None:
@@ -416,4 +418,6 @@ class LifecycleMixin:
             plugin_registry=get_plugin_registry(),
             skill_names=[s.name for s in (self.skills or [])],
             provider_options=_provider_opts,
+            message_bus=message_bus,
+            control_channel=control_channel,
         )

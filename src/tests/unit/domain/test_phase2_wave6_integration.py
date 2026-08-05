@@ -549,6 +549,23 @@ class TestControlMessageProtocol:
 
 @pytest.mark.unit
 class TestProcessorFactoryWiresControlChannel:
+    def test_react_agent_wires_root_control_dependencies(self) -> None:
+        from src.infrastructure.agent.core.react_agent import ReActAgent
+
+        channel = AsyncMock()
+        message_bus = MagicMock()
+        agent = ReActAgent(
+            model="test-model",
+            tools={},
+            message_bus=message_bus,
+            control_channel=channel,
+        )
+
+        assert agent.config.message_bus is message_bus
+        assert agent.config.control_channel is channel
+        assert agent._processor_factory.message_bus is message_bus
+        assert agent._processor_factory.control_channel is channel
+
     def test_factory_wires_channel_to_subagent_config(self) -> None:
         from src.infrastructure.agent.processor.factory import ProcessorFactory
 

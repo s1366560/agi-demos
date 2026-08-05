@@ -37,13 +37,14 @@ import {
 } from 'lucide-react';
 
 import { useAgentV3Store } from '../../../stores/agentV3';
-
-import { SubAgentActions } from './SubAgentActions';
-import { SubAgentDetailPanel } from './SubAgentDetailPanel';
 import {
   SUBAGENT_SESSION_SPAWNED_FALLBACK,
   SUBAGENT_UNKNOWN_ERROR_FALLBACK,
 } from '../message/groupTimelineEvents';
+
+import { SubAgentActions } from './SubAgentActions';
+import { latestSubagentRunRevision } from './subagentControlModel';
+import { SubAgentDetailPanel } from './SubAgentDetailPanel';
 import {
   formatDuration,
   formatTokens,
@@ -428,6 +429,10 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
   const [showDetail, setShowDetail] = useState(false);
   const { t } = useTranslation();
   const activeConversationId = useAgentV3Store((state) => state.activeConversationId);
+  const expectedRunRevision = useMemo(
+    () => latestSubagentRunRevision(group.events),
+    [group.events]
+  );
 
   // 1.5 - Humanized error
   const humanizedError = useHumanizedError(group.error);
@@ -742,9 +747,24 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
             </div>
           )}
 
-          {group.status === 'running' && activeConversationId && (
-            <SubAgentActions subagentId={group.subagentId} conversationId={activeConversationId} />
+          {group.status === 'running' && activeConversationId && expectedRunRevision !== null && (
+            <SubAgentActions
+              subagentId={group.subagentId}
+              conversationId={activeConversationId}
+              expectedRunRevision={expectedRunRevision}
+            />
           )}
+
+          {group.status === 'running' &&
+            activeConversationId &&
+            expectedRunRevision === null && (
+              <p className="text-2xs text-slate-400 dark:text-slate-500">
+                {t(
+                  'agent.subagent.controlAuthorityUnavailable',
+                  'Sub-agent controls are unavailable until the run authority revision is received.'
+                )}
+              </p>
+            )}
 
           {/* 2.2 - Inline Detail Panel refinement (moved to bottom of body) */}
           <div className="pt-1 flex justify-end">

@@ -6359,6 +6359,17 @@
         "summaryLabel": "Linked task"
       }
     },
+    "runInput": {
+      "dispatchFailed": "Delivery failed: {{reason}}"
+    },
+    "activity": {
+      "usage": "{{tokens}} tokens · {{cost}} {{currency}}"
+    },
+    "runReview": {
+      "tokens": "{{count}} tokens",
+      "changeCount": "{{count}} files changed",
+      "checkCount": "{{passed}} passed · {{failed}} failed"
+    },
     "taskList": {
       "empty": "No tasks yet. The agent will create tasks when working on complex requests.",
       "completedSummary": "{{completed}}/{{total}} completed",
@@ -7443,6 +7454,9 @@
       "removeSelectedSubAgent": "Remove @{{name}} subagent",
       "retryAttachmentUpload": "Retry upload for {{filename}}",
       "removeAttachment": "Remove {{filename}} attachment",
+      "runInputAttachmentContextRequired": "Open a project conversation before attaching run input files.",
+      "runInputAttachmentUploadUnknown": "Unknown upload error",
+      "runInputAttachmentUploadFailed": "Could not attach files to the run input: {{detail}}",
       "advancedSettings": "Advanced settings",
       "charLimitHint": "Messages over {{count}} characters may be truncated by the model"
     },
@@ -7517,6 +7531,7 @@
       "selectionSimplify": "Simplify",
       "selectionExpand": "Expand",
       "selectionAsk": "Ask about",
+      "askRefinePrompt": "I've edited the content below. Please review and improve it:\n\n{{content}}",
       "undo": "Undo (Ctrl+Z)",
       "redo": "Redo (Ctrl+Shift+Z)",
       "save": "Save (Ctrl+S)",
@@ -7706,6 +7721,8 @@
       "redirect_placeholder": "Enter new instructions…",
       "send_redirect": "Send redirect",
       "cancel_redirect": "Cancel redirect",
+      "stopRejected": "Stop request was rejected: {{reason}}",
+      "steerRejected": "Redirect was rejected: {{reason}}",
       "parallel_badge": "Parallel",
       "parallel_completed": "completed",
       "chain_completed": "steps completed",

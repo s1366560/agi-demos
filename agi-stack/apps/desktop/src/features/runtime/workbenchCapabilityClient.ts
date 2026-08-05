@@ -9,6 +9,7 @@ import {
   automationActionAvailability,
   normalizeAutomationCapabilities,
 } from '../automations/automationModel';
+import { agentWorkspaceCapability } from '../agent-workspace/agentWorkspaceCapability';
 import { deviceApprovalCapability } from '../device-approval/deviceApprovalCapability';
 import { tenantCreationCapability } from '../tenant-creation/tenantCreationCapability';
 import { invitationAcceptanceCapability } from '../invitation-acceptance/invitationAcceptanceCapability';
@@ -28,6 +29,7 @@ import { loadTenantAgentBindingsCapability } from '../tenant/tenantAgentBindings
 import { loadTenantOverviewCapability } from '../tenant/tenantOverviewCapability';
 import { loadTenantProjectsCapability } from '../tenant/tenantProjectsCapability';
 import { tenantTasksCapability } from '../tenant/tenantTasksCapability';
+import { tenantWorkspacesCapability } from '../tenant/tenantWorkspacesCapability';
 import { WORKSPACE_HTTP_MUTATION_ACTIONS } from '../workspace/workspaceCollaborationHttpMutations';
 import type { DesktopRuntimeConfig } from '../../types';
 import {
@@ -67,8 +69,15 @@ const WORKSPACE_COLLABORATION_DEGRADED_REASON =
   'workspace_collaboration_mutation_guards_unavailable';
 const PROJECT_OVERVIEW_SERVICE_VERSION = '0.1.0';
 const PROJECT_OVERVIEW_CONTRACT_VERSION = '3.0.0';
-const LOCAL_SEARCH_SUPPORTED_TYPES = ['advanced', 'temporal', 'faceted'] as const;
-const LOCAL_SEARCH_UNAVAILABLE_TYPES = ['graph_traversal', 'community'] as const;
+const LOCAL_SEARCH_SUPPORTED_TYPES = [
+  'advanced',
+  'temporal',
+  'faceted',
+] as const;
+const LOCAL_SEARCH_UNAVAILABLE_TYPES = [
+  'graph_traversal',
+  'community',
+] as const;
 
 const WORKSPACE_COLLABORATION_READ_SURFACES = [
   'goals',
@@ -109,7 +118,9 @@ export function createDesktopWorkbenchCapabilityClient(
   config: DesktopRuntimeConfig,
 ): DesktopWorkbenchCapabilityClient {
   return {
-    async loadSnapshot(signal?: AbortSignal): Promise<DesktopCapabilitySnapshot> {
+    async loadSnapshot(
+      signal?: AbortSignal,
+    ): Promise<DesktopCapabilitySnapshot> {
       const [
         search,
         automationCapabilities,
@@ -163,20 +174,20 @@ export function createDesktopWorkbenchCapabilityClient(
           'device-approval': deviceApprovalCapability(config),
           'tenant-creation': tenantCreationCapability(config),
           'invitation-acceptance': invitationAcceptanceCapability(config),
+          'agent-workspace-tenant-agent-workspace':
+            agentWorkspaceCapability(config),
           'project-project-overview': withCapabilityScope(
             projectOverview,
             projectScope,
           ),
-          'project-project-search': withCapabilityScope(
-            search,
-            projectScope,
-          ),
+          'project-project-search': withCapabilityScope(search, projectScope),
           'project-support': projectSupportCapability(config),
           'tenant-tenant-overview': tenantOverview,
           'tenant-tenant-analytics': tenantAnalytics,
           'tenant-tenant-agent-configuration': tenantAgentDashboard,
           'tenant-tenant-agent-bindings': tenantAgentBindings,
           'tenant-tenant-projects': tenantProjects,
+          'tenant-tenant-workspaces': tenantWorkspacesCapability(config),
           'tenant-tenant-tasks': tenantTasksCapability(config),
           'tenant-tenant-runtimes': unifiedRuntimesCapability(config),
           'tenant-tenant-pool': runtimePoolCapability(config),
@@ -465,19 +476,19 @@ export function normalizeWorkspaceCollaborationCapabilityContract(
     );
   }
   const capabilityKeys = [
-      'service_version',
-      'contract_version',
-      'authority',
-      'tenant_id',
-      'project_id',
-      'workspace_id',
-      'status',
-      'reason_code',
-      'canonical_read',
-      'read_surfaces',
-      'mutations',
-      'allowed_actions',
-    ];
+    'service_version',
+    'contract_version',
+    'authority',
+    'tenant_id',
+    'project_id',
+    'workspace_id',
+    'status',
+    'reason_code',
+    'canonical_read',
+    'read_surfaces',
+    'mutations',
+    'allowed_actions',
+  ];
   if (
     input.status === 'available' &&
     isExactRecord(input, capabilityKeys) &&
@@ -492,7 +503,8 @@ export function normalizeWorkspaceCollaborationCapabilityContract(
     input.mutations.revision_guarded === true &&
     input.mutations.idempotency_guarded === true &&
     matchesWorkspaceMutationActions(input.mutations.actions) &&
-    JSON.stringify(input.allowed_actions) === JSON.stringify(input.mutations.actions)
+    JSON.stringify(input.allowed_actions) ===
+      JSON.stringify(input.mutations.actions)
   ) {
     return available(negotiation, {
       allowedActions: flattenWorkspaceMutationActions(input.mutations.actions),
@@ -553,7 +565,8 @@ async function loadSearchCapability(
       absoluteUrl(config.apiBaseUrl, '/api/v1/search-enhanced/capabilities'),
       { headers, signal },
     );
-    if (!response.ok) return unavailable('search_capability_contract_unavailable');
+    if (!response.ok)
+      return unavailable('search_capability_contract_unavailable');
     const contentType = response.headers.get('content-type') ?? '';
     if (!contentType.includes('application/json')) {
       return unavailable('search_capability_contract_invalid');
@@ -576,16 +589,21 @@ async function loadAutomationCapabilities(
   automationApi: AutomationCapabilityAuthority,
   projectId: string,
   signal?: AbortSignal,
-): Promise<Readonly<{
-  run: DesktopCapabilityAvailability;
-  cronJobs: DesktopCapabilityAvailability;
-}>> {
+): Promise<
+  Readonly<{
+    run: DesktopCapabilityAvailability;
+    cronJobs: DesktopCapabilityAvailability;
+  }>
+> {
   if (!projectId.trim()) {
     const capability = unavailable('automation_capability_scope_unavailable');
     return { run: capability, cronJobs: capability };
   }
   try {
-    const payload = await automationApi.getAutomationCapabilities(projectId, signal);
+    const payload = await automationApi.getAutomationCapabilities(
+      projectId,
+      signal,
+    );
     return {
       run: normalizeAutomationCapabilityContract(payload),
       cronJobs: normalizeProjectCronJobsCapabilityContract(payload),
@@ -626,7 +644,9 @@ async function loadWorkspaceCollaborationCapability(
       signal,
     });
     if (!response.ok) {
-      return unavailable('workspace_collaboration_capability_contract_unavailable');
+      return unavailable(
+        'workspace_collaboration_capability_contract_unavailable',
+      );
     }
     const contentType = response.headers.get('content-type') ?? '';
     if (!contentType.includes('application/json')) {
@@ -636,7 +656,9 @@ async function loadWorkspaceCollaborationCapability(
     return normalizeWorkspaceCollaborationCapabilityContract(payload, scope);
   } catch (error) {
     if (signal?.aborted) throw error;
-    return unavailable('workspace_collaboration_capability_contract_unavailable');
+    return unavailable(
+      'workspace_collaboration_capability_contract_unavailable',
+    );
   }
 }
 
@@ -822,11 +844,16 @@ function isExactRecord(
   if (!isRecord(input)) return false;
   const keys = Object.keys(input).sort();
   const expected = [...expectedKeys].sort();
-  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+  return (
+    keys.length === expected.length &&
+    keys.every((key, index) => key === expected[index])
+  );
 }
 
 function isStringArray(input: unknown): input is string[] {
-  return Array.isArray(input) && input.every((item) => typeof item === 'string');
+  return (
+    Array.isArray(input) && input.every((item) => typeof item === 'string')
+  );
 }
 
 function matchesExactStringRecord(

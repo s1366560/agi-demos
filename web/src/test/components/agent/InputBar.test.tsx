@@ -3,20 +3,32 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { mentionService } from '@/services/mentionService';
 import { skillAPI } from '@/services/skillService';
+import { attachmentService } from '@/services/attachmentService';
 
 // eslint-disable-next-line no-restricted-imports
 import { InputBar } from '@/components/agent/InputBar';
 
 import type { SkillResponse } from '@/types/agent';
 
+const fileUploadMock = vi.hoisted(() => ({
+  attachments: [] as Array<Record<string, unknown>>,
+  clearAll: vi.fn(),
+}));
+
 vi.mock('@/components/agent/FileUploader', () => ({
   useFileUpload: () => ({
-    attachments: [],
+    attachments: fileUploadMock.attachments,
     addFiles: vi.fn(),
     removeAttachment: vi.fn(),
     retryAttachment: vi.fn(),
-    clearAll: vi.fn(),
+    clearAll: fileUploadMock.clearAll,
   }),
+}));
+
+vi.mock('@/services/attachmentService', () => ({
+  attachmentService: {
+    upload: vi.fn(),
+  },
 }));
 
 vi.mock('@/services/skillService', () => ({
@@ -61,6 +73,7 @@ const mockSkill: SkillResponse = {
 describe('InputBar autocomplete overlays', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    fileUploadMock.attachments = [];
     vi.mocked(skillAPI.list).mockResolvedValue({
       skills: [mockSkill],
       total: 1,
@@ -154,5 +167,112 @@ describe('InputBar autocomplete overlays', () => {
     expect(fileInput).toHaveAttribute('type', 'file');
     expect(fileInput).toHaveAttribute('aria-label', 'Attach files (or drag & drop)');
     expect(fileInput).toHaveAttribute('title', 'Attach files (or drag & drop)');
+  });
+
+  it('renders the structured dispatch failure instead of inferring delivery from status text', () => {
+    render(
+      <InputBar
+        onSend={vi.fn()}
+        onAbort={vi.fn()}
+        isStreaming
+        runInputs={[
+          {
+            id: 'input-1',
+            conversation_id: 'conversation-1',
+            run_id: 'run-1',
+            expected_run_revision: 4,
+            message_id: 'message-1',
+            idempotency_key: 'run-input-1',
+            delivery: 'steer_now',
+            status: 'pending_boundary',
+            sequence: 1,
+            content: 'Use the focused tests',
+            references: [],
+            context_items: [],
+            injected_via: null,
+            dispatch_status: 'failed',
+            dispatch_attempts: 1,
+            dispatch_lease_expires_at: null,
+            dispatch_error_code: 'control_channel_unavailable',
+            created_at: '2026-08-04T01:00:00Z',
+            updated_at: '2026-08-04T01:00:00Z',
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByText('Delivery failed: control_channel_unavailable')).toBeInTheDocument();
+  });
+
+  it('uploads attachment context once and preserves the composer across a rejected retry', async () => {
+    const file = new File(['evidence'], 'evidence.txt', { type: 'text/plain' });
+    fileUploadMock.attachments = [
+      {
+        id: 'pending-1',
+        file,
+        filename: file.name,
+        mimeType: file.type,
+        sizeBytes: file.size,
+        status: 'uploaded',
+        progress: 100,
+        fileMetadata: {
+          filename: file.name,
+          sandbox_path: '/tmp/evidence.txt',
+          mime_type: file.type,
+          size_bytes: file.size,
+        },
+      },
+    ];
+    vi.mocked(attachmentService.upload).mockResolvedValue({
+      id: 'attachment-1',
+      conversation_id: 'conversation-1',
+      project_id: 'project-1',
+      filename: file.name,
+      mime_type: file.type,
+      size_bytes: file.size,
+      purpose: 'both',
+      status: 'uploaded',
+      created_at: '2026-08-04T01:00:00Z',
+    });
+    const onSubmitRunInput = vi.fn().mockResolvedValue(false);
+
+    render(
+      <InputBar
+        onSend={vi.fn()}
+        onAbort={vi.fn()}
+        isStreaming
+        projectId="project-1"
+        conversationId="conversation-1"
+        runInputDelivery="queue_next"
+        runInputDeliveryOptions={['queue_next']}
+        onSubmitRunInput={onSubmitRunInput}
+      />
+    );
+
+    const input = await screen.findByTestId('chat-input');
+    fireEvent.change(input, { target: { value: 'Use the attached evidence' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => expect(onSubmitRunInput).toHaveBeenCalledTimes(1));
+    expect(onSubmitRunInput).toHaveBeenLastCalledWith('Use the attached evidence', 'queue_next', {
+      contextItems: [
+        {
+          kind: 'attachment',
+          resource_id: 'attachment-1',
+          label: 'evidence.txt',
+          metadata: {
+            mime_type: 'text/plain',
+            size_bytes: file.size,
+            status: 'uploaded',
+          },
+        },
+      ],
+    });
+    expect(input).toHaveValue('Use the attached evidence');
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(onSubmitRunInput).toHaveBeenCalledTimes(2));
+    expect(attachmentService.upload).toHaveBeenCalledTimes(1);
+    expect(fileUploadMock.clearAll).not.toHaveBeenCalled();
   });
 });

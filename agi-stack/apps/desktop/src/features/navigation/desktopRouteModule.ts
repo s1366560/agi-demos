@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 
 import type {
   DesktopRouteContext,
@@ -14,6 +14,7 @@ type DesktopRouteModuleBase = Readonly<{
   routeId: string;
   capability: string;
   localPolicy: DesktopRouteLocalPolicy;
+  contentPolicy?: 'route_content';
   Surface: ComponentType<DesktopRouteSurfaceProps>;
 }>;
 
@@ -38,6 +39,7 @@ export type DesktopRouteModule =
 export type DesktopRouteSurfaceProps = Readonly<{
   module: DesktopRouteModule;
   context: DesktopRouteContext;
+  content?: ReactNode;
 }>;
 
 export type DesktopRouteModuleLoader = () => Promise<DesktopRouteModule>;

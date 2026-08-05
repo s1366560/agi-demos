@@ -1,9 +1,19 @@
-import type { ChangeSnapshot, DesktopArtifactVersion } from '../../types';
+import type {
+  ChangeSnapshot,
+  DesktopArtifactVersion,
+  RunSummary,
+} from '../../types';
 import { currentArtifactVersions } from './sessionArtifactModel';
-import { sessionCanvasTabs, type SessionCanvasTabId } from './sessionCanvasModel';
+import {
+  sessionCanvasTabs,
+  type SessionCanvasTabId,
+} from './sessionCanvasModel';
 import { artifactEvidenceForCurrentVersions } from './sessionEvidenceModel';
 import { runDurationMs, type SessionUsageSummary } from './sessionUsageModel';
-import { sessionRunStatusIsTerminal, type SessionCapabilityMode } from './sessionViewModel';
+import {
+  sessionRunStatusIsTerminal,
+  type SessionCapabilityMode,
+} from './sessionViewModel';
 
 export type RunCompletionOutcome = 'completed' | 'failed' | 'cancelled';
 
@@ -45,14 +55,25 @@ export type RunCompletionVerificationSummary = {
   link: RunCompletionSummaryLink;
 };
 
+export type RunCompletionTokenUsage = {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  costUsd: number | null;
+  modelBreakdown: ReadonlyArray<Readonly<Record<string, unknown>>>;
+};
+
 export type RunCompletionSummary = {
   outcome: RunCompletionOutcome;
   outcomeLabelKey: string;
   failureReason: string | null;
+  completionSummary: string | null;
   /** Wall-clock run duration from authoritative run timestamps; null when unavailable. */
   durationMs: number | null;
   /** Latest context-window occupancy reported during the run; null when never reported. */
   usage: SessionUsageSummary | null;
+  tokenUsage: RunCompletionTokenUsage | null;
+  authorityState: RunSummary['summary_state'] | null;
+  authorityReasonCode: string | null;
   changes: RunCompletionChangesSummary | null;
   artifacts: RunCompletionArtifactsSummary | null;
   verification: RunCompletionVerificationSummary | null;
@@ -68,6 +89,7 @@ export type RunCompletionSummaryInput = {
   usage?: SessionUsageSummary | null;
   changeSnapshot?: ChangeSnapshot | null;
   artifactVersions?: readonly DesktopArtifactVersion[];
+  authoritySummary?: RunSummary | null;
 };
 
 const MAX_ARTIFACT_ENTRIES = 3;
@@ -85,7 +107,11 @@ const PASSED_CHECK_STATUSES: ReadonlySet<string> = new Set([
   'success',
   'succeeded',
 ]);
-const FAILED_CHECK_STATUSES: ReadonlySet<string> = new Set(['failed', 'fail', 'error']);
+const FAILED_CHECK_STATUSES: ReadonlySet<string> = new Set([
+  'failed',
+  'fail',
+  'error',
+]);
 
 export function runCompletionOutcome(
   status: string | null | undefined,
@@ -117,24 +143,82 @@ export function buildRunCompletionSummary(
       tab.labelKey,
     ]),
   );
-  const linkFor = (tab: SessionCanvasTabId): RunCompletionSummaryLink | null => {
+  const linkFor = (
+    tab: SessionCanvasTabId,
+  ): RunCompletionSummaryLink | null => {
     const labelKey = tabById.get(tab);
     return labelKey ? { tab, labelKey } : null;
   };
+  const authority = input.authoritySummary ?? null;
 
   return {
     outcome,
     outcomeLabelKey: OUTCOME_LABEL_KEYS[outcome],
     failureReason:
-      outcome === 'completed' ? null : (input.error?.trim() ? input.error.trim() : null),
-    durationMs: runDurationMs(input.runStartedAt, input.runCompletedAt),
+      outcome === 'completed'
+        ? null
+        : input.error?.trim()
+          ? input.error.trim()
+          : null,
+    completionSummary: authority?.completion_summary ?? null,
+    durationMs: authority
+      ? authority.duration_ms
+      : runDurationMs(input.runStartedAt, input.runCompletedAt),
     usage: input.usage ?? null,
-    changes: changesSummary(input.changeSnapshot ?? null, linkFor('changes')),
-    artifacts: artifactsSummary(input.artifactVersions ?? [], linkFor('artifacts')),
-    verification: verificationSummary(
+    tokenUsage: tokenUsageSummary(authority),
+    authorityState: authority?.summary_state ?? null,
+    authorityReasonCode: authority?.reason_code ?? null,
+    changes: authority
+      ? authorityChangesSummary(authority, linkFor('changes'))
+      : changesSummary(input.changeSnapshot ?? null, linkFor('changes')),
+    artifacts: artifactsSummary(
       input.artifactVersions ?? [],
-      linkFor('checks') ?? linkFor('verification'),
+      linkFor('artifacts'),
+      authority?.artifact_count ?? null,
+      authority === null,
     ),
+    verification: authority
+      ? authorityVerificationSummary(
+          authority,
+          linkFor('checks') ?? linkFor('verification'),
+        )
+      : verificationSummary(
+          input.artifactVersions ?? [],
+          linkFor('checks') ?? linkFor('verification'),
+        ),
+  };
+}
+
+function tokenUsageSummary(
+  authority: RunSummary | null,
+): RunCompletionTokenUsage | null {
+  if (
+    !authority ||
+    (authority.input_tokens === null &&
+      authority.output_tokens === null &&
+      authority.cost_usd === null)
+  ) {
+    return null;
+  }
+  return {
+    inputTokens: authority.input_tokens,
+    outputTokens: authority.output_tokens,
+    costUsd: authority.cost_usd,
+    modelBreakdown: authority.model_breakdown.map((entry) => ({ ...entry })),
+  };
+}
+
+function authorityChangesSummary(
+  authority: RunSummary | null,
+  link: RunCompletionSummaryLink | null,
+): RunCompletionChangesSummary | null {
+  if (!authority || !authority.files_changed) return null;
+  return {
+    filesChanged: authority.files_changed,
+    additions: authority.lines_added ?? 0,
+    deletions: authority.lines_deleted ?? 0,
+    truncated: false,
+    link,
   };
 }
 
@@ -142,7 +226,8 @@ function changesSummary(
   snapshot: ChangeSnapshot | null,
   link: RunCompletionSummaryLink | null,
 ): RunCompletionChangesSummary | null {
-  if (!snapshot || snapshot.status !== 'ready' || snapshot.files_changed < 1) return null;
+  if (!snapshot || snapshot.status !== 'ready' || snapshot.files_changed < 1)
+    return null;
   return {
     filesChanged: snapshot.files_changed,
     additions: snapshot.additions,
@@ -155,11 +240,15 @@ function changesSummary(
 function artifactsSummary(
   versions: readonly DesktopArtifactVersion[],
   link: RunCompletionSummaryLink | null,
+  authoritativeCount: number | null,
+  allowVersionCountFallback: boolean,
 ): RunCompletionArtifactsSummary | null {
   const current = currentArtifactVersions([...versions]);
-  if (!current.length) return null;
+  const totalCount =
+    authoritativeCount ?? (allowVersionCountFallback ? current.length : 0);
+  if (totalCount < 1) return null;
   return {
-    totalCount: current.length,
+    totalCount,
     entries: current.slice(0, MAX_ARTIFACT_ENTRIES).map((version) => ({
       artifactId: version.artifact_id,
       versionId: version.id,
@@ -167,6 +256,27 @@ function artifactsSummary(
       mimeType: version.mime_type,
       status: version.status,
     })),
+    link,
+  };
+}
+
+function authorityVerificationSummary(
+  authority: RunSummary | null,
+  link: RunCompletionSummaryLink | null,
+): RunCompletionVerificationSummary | null {
+  if (
+    !authority ||
+    !link ||
+    authority.checks_passed === null ||
+    authority.checks_failed === null
+  ) {
+    return null;
+  }
+  return {
+    total: authority.checks_passed + authority.checks_failed,
+    passedCount: authority.checks_passed,
+    failedCount: authority.checks_failed,
+    pendingCount: 0,
     link,
   };
 }

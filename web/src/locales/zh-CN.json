@@ -6382,6 +6382,17 @@
         "summaryLabel": "关联任务"
       }
     },
+    "runInput": {
+      "dispatchFailed": "投递失败：{{reason}}"
+    },
+    "activity": {
+      "usage": "{{tokens}} Token · {{cost}} {{currency}}"
+    },
+    "runReview": {
+      "tokens": "{{count}} Token",
+      "changeCount": "{{count}} 个文件已更改",
+      "checkCount": "{{passed}} 项通过 · {{failed}} 项失败"
+    },
     "taskList": {
       "empty": "暂无任务。处理复杂请求时，Agent 会创建任务。",
       "completedSummary": "{{completed}}/{{total}} 已完成",
@@ -7464,6 +7475,9 @@
       "removeSelectedSubAgent": "移除 @{{name}} 子智能体",
       "retryAttachmentUpload": "重试上传 {{filename}}",
       "removeAttachment": "移除附件 {{filename}}",
+      "runInputAttachmentContextRequired": "请先打开项目对话，再为运行输入附加文件。",
+      "runInputAttachmentUploadUnknown": "未知上传错误",
+      "runInputAttachmentUploadFailed": "无法将文件附加到运行输入：{{detail}}",
       "advancedSettings": "高级设置",
       "charLimitHint": "超过 {{count}} 个字符的消息可能会被模型截断"
     },
@@ -7538,6 +7552,7 @@
       "selectionSimplify": "简化",
       "selectionExpand": "展开",
       "selectionAsk": "提问",
+      "askRefinePrompt": "我已编辑以下内容，请检查并改进：\n\n{{content}}",
       "undo": "撤销 (Ctrl+Z)",
       "redo": "重做 (Ctrl+Shift+Z)",
       "save": "保存 (Ctrl+S)",
@@ -7727,6 +7742,8 @@
       "redirect_placeholder": "输入新的指令…",
       "send_redirect": "发送重定向",
       "cancel_redirect": "取消重定向",
+      "stopRejected": "停止请求被拒绝：{{reason}}",
+      "steerRejected": "重定向请求被拒绝：{{reason}}",
       "parallel_badge": "并行",
       "parallel_completed": "已完成",
       "chain_completed": "步骤已完成",

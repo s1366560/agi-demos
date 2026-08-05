@@ -14,6 +14,10 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
+  AGENT_WORKSPACE_ROUTE_ID,
+  createAgentWorkspaceRouteModuleLoader,
+} = require('/tmp/agistack-desktop-test-dist/src/features/agent-workspace/agentWorkspaceRouteModule.js');
+const {
   DEVICE_APPROVAL_ROUTE_ID,
   INVITATION_ACCEPTANCE_ROUTE_ID,
   TENANT_CREATION_ROUTE_ID,
@@ -431,9 +435,11 @@ function createRegistry(
   projectSupportLoader = async () => implementedProjectSupportModule(),
   tenantAgentDashboardLoader = async () =>
     implementedTenantAgentDashboardModule(),
+  agentWorkspaceLoader = createAgentWorkspaceRouteModuleLoader(),
 ) {
   return createDesktopProductionRouteRegistry({
     implementedLoaders: {
+      [AGENT_WORKSPACE_ROUTE_ID]: agentWorkspaceLoader,
       [PROJECT_OVERVIEW_ROUTE_ID]: projectLoader,
       [PROJECT_SEARCH_ROUTE_ID]: searchLoader,
       [PROJECT_CRON_JOBS_ROUTE_ID]: cronJobsLoader,
@@ -555,7 +561,7 @@ test('production registry requires every implemented project route loader', () =
   );
 });
 
-test('all 55 production loaders remain lazy and twenty-one routes are real modules', async () => {
+test('all 55 production loaders remain lazy and twenty-two routes are real modules', async () => {
   let projectLoadCount = 0;
   let searchLoadCount = 0;
   let cronJobsLoadCount = 0;
@@ -734,10 +740,11 @@ test('all 55 production loaders remain lazy and twenty-one routes are real modul
   const planned = loaded.filter(
     ({ module }) => module.disposition === 'planned',
   );
-  assert.equal(implemented.length, 21);
+  assert.equal(implemented.length, 22);
   assert.deepEqual(
     implemented.map(({ definition }) => definition.id).sort(),
     [
+      AGENT_WORKSPACE_ROUTE_ID,
       PROJECT_OVERVIEW_ROUTE_ID,
       PROJECT_SEARCH_ROUTE_ID,
       PROJECT_CRON_JOBS_ROUTE_ID,
@@ -870,7 +877,7 @@ test('all 55 production loaders remain lazy and twenty-one routes are real modul
     ).module,
     tenantCreationModule,
   );
-  assert.equal(planned.length, 34);
+  assert.equal(planned.length, 33);
 
   for (const { definition, module } of planned) {
     assert.equal(module.routeId, definition.id);

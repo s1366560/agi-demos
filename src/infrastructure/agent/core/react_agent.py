@@ -68,6 +68,7 @@ from .tool_name_policy import canonical_tool_policy_names
 if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
     from src.domain.llm_providers.llm_types import LLMClient
+    from src.domain.ports.agent.control_channel_port import ControlChannelPort
     from src.domain.ports.services.graph_service_port import GraphServicePort
 
 logger = logging.getLogger(__name__)
@@ -283,6 +284,8 @@ class ReActAgent(
         tool_policy_layers: Mapping[str, Any] | None = None,
         span_service: Any | None = None,
         fork_merge_service: Any | None = None,
+        message_bus: object | None = None,
+        control_channel: ControlChannelPort | None = None,
     ) -> None:
         """
         Initialize ReAct Agent.
@@ -428,7 +431,15 @@ class ReActAgent(
         self._init_orchestrators()
         self._init_background_services(llm_client)
         self._init_tool_definitions(
-            _cached_tool_definitions, model, api_key, base_url, temperature, max_tokens, max_steps
+            _cached_tool_definitions,
+            model,
+            api_key,
+            base_url,
+            temperature,
+            max_tokens,
+            max_steps,
+            message_bus,
+            control_channel,
         )
         self._reset_stream_state()
 
@@ -447,6 +458,8 @@ class ReActAgent(
             base_api_key=self.api_key,
             base_url=self.base_url,
             plugin_registry=get_plugin_registry(),
+            message_bus=message_bus,
+            control_channel=control_channel,
         )
 
         # -- Wire extracted SubAgent helpers --

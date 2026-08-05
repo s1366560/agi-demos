@@ -19,6 +19,30 @@ export interface SubscribeOptions {
   from_time_us?: number;
   from_counter?: number;
 }
+
+export interface SubAgentControlOptions {
+  expectedRunRevision: number;
+  idempotencyKey?: string;
+}
+
+export interface KillSubAgentOptions extends SubAgentControlOptions {
+  cascade: boolean;
+}
+
+export interface ControlCommandAck {
+  type: 'control_command_ack';
+  action: 'kill_run' | 'steer';
+  accepted: boolean;
+  duplicate: boolean;
+  reason_code: string | null;
+  conversation_id: string | null;
+  project_id: string | null;
+  run_id: string | null;
+  run_revision: number | null;
+  idempotency_key: string;
+  cascade?: boolean;
+}
+
 /**
  * Agent service interface (extended for multi-level thinking)
  */
@@ -61,6 +85,15 @@ export interface AgentService {
     limit?: number
   ): Promise<ToolExecutionsResponse>;
   listTools(): Promise<ToolsListResponse>;
-  killSubAgent(conversationId: string, subagentId: string): boolean;
-  steerSubAgent(conversationId: string, subagentId: string, instruction: string): boolean;
+  killSubAgent(
+    conversationId: string,
+    subagentId: string,
+    options: KillSubAgentOptions
+  ): Promise<ControlCommandAck>;
+  steerSubAgent(
+    conversationId: string,
+    subagentId: string,
+    instruction: string,
+    options: SubAgentControlOptions
+  ): Promise<ControlCommandAck>;
 }

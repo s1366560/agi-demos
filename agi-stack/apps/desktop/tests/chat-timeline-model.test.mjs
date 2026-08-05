@@ -1,27 +1,25 @@
-import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { test } from 'node:test';
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { test } from "node:test";
 
 const require = createRequire(import.meta.url);
-const { agentLifecyclePresentation } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/chat/agentLifecyclePresentationModel.js',
-);
-const { groupSubAgentTimelineItems } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/chat/subagentTimelineGroupModel.js',
-);
-const { coalesceStreamingTextEvents } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/chat/streamingTextEventModel.js',
-);
-const { aggregateStructuredToolSources } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/chat/toolSourceAggregationModel.js',
-);
+const {
+  agentLifecyclePresentation,
+} = require("/tmp/agistack-desktop-test-dist/src/features/chat/agentLifecyclePresentationModel.js");
+const {
+  groupSubAgentTimelineItems,
+} = require("/tmp/agistack-desktop-test-dist/src/features/chat/subagentTimelineGroupModel.js");
+const {
+  coalesceStreamingTextEvents,
+} = require("/tmp/agistack-desktop-test-dist/src/features/chat/streamingTextEventModel.js");
+const {
+  aggregateStructuredToolSources,
+} = require("/tmp/agistack-desktop-test-dist/src/features/chat/toolSourceAggregationModel.js");
 const {
   formatTimelineAttachmentSize,
   timelineMessageAttachments,
-} = require(
-  '/tmp/agistack-desktop-test-dist/src/features/chat/messageAttachmentModel.js',
-);
+} = require("/tmp/agistack-desktop-test-dist/src/features/chat/messageAttachmentModel.js");
 const {
   assistantDisplayDuplicateItems,
   assistantCostTracking,
@@ -50,34 +48,46 @@ const {
   toolCallPairDurationMs,
   toolCallPairStatus,
   toolCallPresentationKind,
-} = require('/tmp/agistack-desktop-test-dist/src/features/chat/chatTimelineModel.js');
-const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+} = require("/tmp/agistack-desktop-test-dist/src/features/chat/chatTimelineModel.js");
+const appSource = readFileSync(
+  new URL("../src/App.tsx", import.meta.url),
+  "utf8",
+);
 const chatTimelineSource = readFileSync(
-  new URL('../src/features/chat/ChatTimeline.tsx', import.meta.url),
-  'utf8',
+  new URL("../src/features/chat/ChatTimeline.tsx", import.meta.url),
+  "utf8",
 );
 const chatPanelSource = readFileSync(
-  new URL('../src/features/chat/ChatPanel.tsx', import.meta.url),
-  'utf8',
+  new URL("../src/features/chat/ChatPanel.tsx", import.meta.url),
+  "utf8",
 );
 const sessionSteeringQaSource = readFileSync(
-  new URL('../src/qa/SessionSteeringQa.tsx', import.meta.url),
-  'utf8',
+  new URL("../src/qa/SessionSteeringQa.tsx", import.meta.url),
+  "utf8",
 );
-const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+const i18nSource = readFileSync(
+  new URL("../src/i18n.tsx", import.meta.url),
+  "utf8",
+);
 
-test('assistant text stream preserves whitespace tokens and settles to authoritative full text', () => {
+test("assistant text stream preserves whitespace tokens and settles to authoritative full text", () => {
   let items = mergeAssistantTextStreamChunk([], {
-    kind: 'start',
-    messageId: 'message-text-1',
-    content: '',
+    kind: "start",
+    messageId: "message-text-1",
+    content: "",
     eventTimeUs: 1_000_000,
     eventCounter: 1,
   });
-  for (const [index, content] of ['Hello', ' ', 'world', '\n\n', 'draft'].entries()) {
+  for (const [index, content] of [
+    "Hello",
+    " ",
+    "world",
+    "\n\n",
+    "draft",
+  ].entries()) {
     items = mergeAssistantTextStreamChunk(items, {
-      kind: 'delta',
-      messageId: 'message-text-1',
+      kind: "delta",
+      messageId: "message-text-1",
       content,
       eventTimeUs: 1_100_000 + index * 100_000,
       eventCounter: index + 2,
@@ -85,174 +95,180 @@ test('assistant text stream preserves whitespace tokens and settles to authorita
   }
 
   assert.equal(items.length, 1);
-  assert.equal(items[0].content, 'Hello world\n\ndraft');
+  assert.equal(items[0].content, "Hello world\n\ndraft");
   assert.equal(items[0].metadata.streaming, true);
 
   items = mergeAssistantTextStreamChunk(items, {
-    kind: 'complete',
-    messageId: 'message-text-1',
-    content: 'Hello world\n\nFinal answer.',
+    kind: "complete",
+    messageId: "message-text-1",
+    content: "Hello world\n\nFinal answer.",
     eventTimeUs: 2_000_000,
     eventCounter: 7,
   });
   assert.equal(items.length, 1);
-  assert.equal(items[0].content, 'Hello world\n\nFinal answer.');
+  assert.equal(items[0].content, "Hello world\n\nFinal answer.");
   assert.equal(items[0].metadata.streaming, false);
 });
 
-test('a late text delta cannot reopen a settled assistant response', () => {
+test("a late text delta cannot reopen a settled assistant response", () => {
   let items = mergeAssistantTextStreamChunk([], {
-    kind: 'delta',
-    messageId: 'message-text-late-delta',
-    content: 'Final answer.',
+    kind: "delta",
+    messageId: "message-text-late-delta",
+    content: "Final answer.",
     eventTimeUs: 1_000_000,
     eventCounter: 1,
   });
   items = mergeAssistantTextStreamChunk(items, {
-    kind: 'complete',
-    messageId: 'message-text-late-delta',
-    content: 'Final answer.',
+    kind: "complete",
+    messageId: "message-text-late-delta",
+    content: "Final answer.",
     eventTimeUs: 2_000_000,
     eventCounter: 2,
   });
   items = mergeAssistantTextStreamChunk(items, {
-    kind: 'delta',
-    messageId: 'message-text-late-delta',
-    content: ' delayed duplicate',
+    kind: "delta",
+    messageId: "message-text-late-delta",
+    content: " delayed duplicate",
     eventTimeUs: 3_000_000,
     eventCounter: 3,
   });
 
   assert.equal(items.length, 1);
-  assert.equal(items[0].content, 'Final answer.');
+  assert.equal(items[0].content, "Final answer.");
   assert.equal(items[0].metadata.streaming, false);
 });
 
-test('text event coalescing preserves standalone whitespace and newline tokens', () => {
-  const events = ['Hello', ' ', 'world', '\n\n', 'next'].map((delta, index) => ({
-    type: 'text_delta',
-    conversation_id: 'conversation-1',
-    event_time_us: 1_000_000 + index,
-    event_counter: index + 1,
-    data: {
-      message_id: 'execution-message-1',
-      delta,
-    },
-  }));
+test("text event coalescing preserves standalone whitespace and newline tokens", () => {
+  const events = ["Hello", " ", "world", "\n\n", "next"].map(
+    (delta, index) => ({
+      type: "text_delta",
+      conversation_id: "conversation-1",
+      event_time_us: 1_000_000 + index,
+      event_counter: index + 1,
+      data: {
+        message_id: "execution-message-1",
+        delta,
+      },
+    }),
+  );
 
   const coalesced = coalesceStreamingTextEvents(events);
 
   assert.equal(coalesced.length, 1);
-  assert.equal(coalesced[0].data.delta, 'Hello world\n\nnext');
+  assert.equal(coalesced[0].data.delta, "Hello world\n\nnext");
   assert.equal(coalesced[0].event_time_us, 1_000_004);
   assert.equal(coalesced[0].event_counter, 5);
 });
 
-test('text end can recover the full response when every delta was missed', () => {
+test("text end can recover the full response when every delta was missed", () => {
   const items = mergeAssistantTextStreamChunk([], {
-    kind: 'complete',
-    messageId: 'message-text-replay',
-    content: 'Recovered from text_end.full_text',
+    kind: "complete",
+    messageId: "message-text-replay",
+    content: "Recovered from text_end.full_text",
     eventTimeUs: 3_000_000,
     eventCounter: 1,
   });
 
   assert.equal(items.length, 1);
-  assert.equal(items[0].content, 'Recovered from text_end.full_text');
-  assert.equal(items[0].message_id, 'message-text-replay');
+  assert.equal(items[0].content, "Recovered from text_end.full_text");
+  assert.equal(items[0].message_id, "message-text-replay");
   assert.equal(items[0].metadata.streaming, false);
 });
 
-test('complete merges content and execution metadata into its exact assistant response', () => {
+test("complete merges content and execution metadata into its exact assistant response", () => {
   const existing = [
     {
-      id: 'user-1',
-      type: 'user_message',
-      role: 'user',
-      content: 'Run it',
+      id: "user-1",
+      type: "user_message",
+      role: "user",
+      content: "Run it",
       eventTimeUs: 1_000_000,
       eventCounter: 1,
     },
     {
-      id: 'streaming-assistant-server-final-message-id',
-      type: 'assistant_message',
-      role: 'assistant',
-      message_id: 'server-final-message-id',
-      content: 'Draft',
+      id: "streaming-assistant-server-final-message-id",
+      type: "assistant_message",
+      role: "assistant",
+      message_id: "server-final-message-id",
+      content: "Draft",
       metadata: { streaming: false },
       eventTimeUs: 2_000_000,
       eventCounter: 2,
     },
   ];
   const items = mergeAssistantCompletionEvent(existing, {
-    messageId: 'server-final-message-id',
-    content: 'Authoritative final answer',
+    messageId: "server-final-message-id",
+    content: "Authoritative final answer",
     eventTimeUs: 3_000_000,
     eventCounter: 3,
     metadata: {
-      traceUrl: 'https://trace.example/run',
-      executionSummary: { step_count: 4, call_count: 2, total_tokens: { total: 3200 } },
+      traceUrl: "https://trace.example/run",
+      executionSummary: {
+        step_count: 4,
+        call_count: 2,
+        total_tokens: { total: 3200 },
+      },
     },
-    artifacts: [{ artifact_id: 'artifact-1' }],
+    artifacts: [{ artifact_id: "artifact-1" }],
   });
 
   assert.equal(items.length, 2);
-  assert.equal(items[1].id, 'streaming-assistant-server-final-message-id');
-  assert.equal(items[1].content, 'Authoritative final answer');
+  assert.equal(items[1].id, "streaming-assistant-server-final-message-id");
+  assert.equal(items[1].content, "Authoritative final answer");
   assert.equal(items[1].metadata.streaming, false);
-  assert.equal(items[1].metadata.traceUrl, 'https://trace.example/run');
-  assert.deepEqual(items[1].artifacts, [{ artifact_id: 'artifact-1' }]);
+  assert.equal(items[1].metadata.traceUrl, "https://trace.example/run");
+  assert.deepEqual(items[1].artifacts, [{ artifact_id: "artifact-1" }]);
   assert.deepEqual(assistantExecutionSummary(items[1]), {
     stepCount: 4,
     artifactCount: 0,
     callCount: 2,
     totalCost: 0,
-    totalCostFormatted: '$0.000000',
+    totalCostFormatted: "$0.000000",
     totalTokens: 3200,
     tasks: null,
   });
 });
 
-test('complete can create a final assistant response when text streaming was absent', () => {
+test("complete can create a final assistant response when text streaming was absent", () => {
   const items = mergeAssistantCompletionEvent([], {
-    messageId: 'message-complete-only',
-    content: 'Completed without text events',
+    messageId: "message-complete-only",
+    content: "Completed without text events",
     eventTimeUs: 4_000_000,
     eventCounter: 1,
   });
 
   assert.equal(items.length, 1);
-  assert.equal(items[0].role, 'assistant');
-  assert.equal(items[0].content, 'Completed without text events');
+  assert.equal(items[0].role, "assistant");
+  assert.equal(items[0].content, "Completed without text events");
   assert.equal(items[0].metadata.streaming, false);
 });
 
-test('id-less complete folds into the single assistant response in its user turn', () => {
+test("id-less complete folds into the single assistant response in its user turn", () => {
   const existing = [
     {
-      id: 'user-message-1',
-      type: 'user_message',
-      role: 'user',
-      message_id: 'request-message-1',
-      content: 'hi',
+      id: "user-message-1",
+      type: "user_message",
+      role: "user",
+      message_id: "request-message-1",
+      content: "hi",
       eventTimeUs: 1_000_000,
       eventCounter: 0,
     },
     {
-      id: 'assistant-message-1',
-      type: 'assistant_message',
-      role: 'assistant',
-      message_id: 'response-message-1',
-      content: '你好！有什么可以帮你的吗？',
+      id: "assistant-message-1",
+      type: "assistant_message",
+      role: "assistant",
+      message_id: "response-message-1",
+      content: "你好！有什么可以帮你的吗？",
       eventTimeUs: 2_000_000,
       eventCounter: 0,
-      metadata: { source: 'live' },
+      metadata: { source: "live" },
     },
   ];
 
   const items = mergeAssistantCompletionEvent(existing, {
-    messageId: 'unassociated-conversation-1-complete-3000000-0',
-    content: '你好！有什么可以帮你的吗？',
+    messageId: "unassociated-conversation-1-complete-3000000-0",
+    content: "你好！有什么可以帮你的吗？",
     eventTimeUs: 3_000_000,
     eventCounter: 0,
     metadata: { executionSummary: { step_count: 1 } },
@@ -261,21 +277,23 @@ test('id-less complete folds into the single assistant response in its user turn
 
   assert.equal(items.length, 2);
   assert.deepEqual(
-    items.filter((item) => item.role === 'assistant').map((item) => ({
-      id: item.id,
-      messageId: item.message_id,
-      executionMessageId: item.executionMessageId,
-      content: item.content,
-      metadata: item.metadata,
-    })),
+    items
+      .filter((item) => item.role === "assistant")
+      .map((item) => ({
+        id: item.id,
+        messageId: item.message_id,
+        executionMessageId: item.executionMessageId,
+        content: item.content,
+        metadata: item.metadata,
+      })),
     [
       {
-        id: 'assistant-message-1',
-        messageId: 'response-message-1',
+        id: "assistant-message-1",
+        messageId: "response-message-1",
         executionMessageId: undefined,
-        content: '你好！有什么可以帮你的吗？',
+        content: "你好！有什么可以帮你的吗？",
         metadata: {
-          source: 'live',
+          source: "live",
           executionSummary: { step_count: 1 },
           streaming: false,
         },
@@ -284,133 +302,137 @@ test('id-less complete folds into the single assistant response in its user turn
   );
 });
 
-test('turn-scoped complete uses its event cursor instead of the latest user turn', () => {
+test("turn-scoped complete uses its event cursor instead of the latest user turn", () => {
   const existing = [
     {
-      id: 'user-message-1',
-      type: 'user_message',
-      role: 'user',
-      content: 'First',
+      id: "user-message-1",
+      type: "user_message",
+      role: "user",
+      content: "First",
       eventTimeUs: 1_000_000,
       eventCounter: 0,
     },
     {
-      id: 'assistant-message-1',
-      type: 'assistant_message',
-      role: 'assistant',
-      content: 'First answer',
+      id: "assistant-message-1",
+      type: "assistant_message",
+      role: "assistant",
+      content: "First answer",
       eventTimeUs: 2_000_000,
       eventCounter: 0,
     },
     {
-      id: 'user-message-2',
-      type: 'user_message',
-      role: 'user',
-      content: 'Second',
+      id: "user-message-2",
+      type: "user_message",
+      role: "user",
+      content: "Second",
       eventTimeUs: 4_000_000,
       eventCounter: 0,
     },
     {
-      id: 'assistant-message-2',
-      type: 'assistant_message',
-      role: 'assistant',
-      content: 'Second answer',
+      id: "assistant-message-2",
+      type: "assistant_message",
+      role: "assistant",
+      content: "Second answer",
       eventTimeUs: 5_000_000,
       eventCounter: 0,
     },
   ];
 
   const items = mergeAssistantCompletionEvent(existing, {
-    messageId: 'unassociated-conversation-1-complete-3000000-0',
-    content: 'First final answer',
+    messageId: "unassociated-conversation-1-complete-3000000-0",
+    content: "First final answer",
     eventTimeUs: 3_000_000,
     eventCounter: 0,
     turnScopedFallback: true,
   });
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'assistant').map((item) => item.content),
-    ['First final answer', 'Second answer'],
+    items
+      .filter((item) => item.role === "assistant")
+      .map((item) => item.content),
+    ["First final answer", "Second answer"],
   );
 });
 
-test('turn-scoped complete does not collapse multiple assistant messages in one turn', () => {
+test("turn-scoped complete does not collapse multiple assistant messages in one turn", () => {
   const existing = [
     {
-      id: 'user-message-1',
-      type: 'user_message',
-      role: 'user',
-      content: 'Ask both agents',
+      id: "user-message-1",
+      type: "user_message",
+      role: "user",
+      content: "Ask both agents",
       eventTimeUs: 1_000_000,
       eventCounter: 0,
     },
     {
-      id: 'assistant-message-1',
-      type: 'assistant_message',
-      role: 'assistant',
-      content: 'First agent answer',
+      id: "assistant-message-1",
+      type: "assistant_message",
+      role: "assistant",
+      content: "First agent answer",
       eventTimeUs: 2_000_000,
       eventCounter: 0,
     },
     {
-      id: 'assistant-message-2',
-      type: 'assistant_message',
-      role: 'assistant',
-      content: 'Second agent answer',
+      id: "assistant-message-2",
+      type: "assistant_message",
+      role: "assistant",
+      content: "Second agent answer",
       eventTimeUs: 2_500_000,
       eventCounter: 0,
     },
   ];
 
   const items = mergeAssistantCompletionEvent(existing, {
-    messageId: 'unassociated-conversation-1-complete-3000000-0',
-    content: 'Combined completion',
+    messageId: "unassociated-conversation-1-complete-3000000-0",
+    content: "Combined completion",
     eventTimeUs: 3_000_000,
     eventCounter: 0,
     turnScopedFallback: true,
   });
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'assistant').map((item) => item.content),
-    ['First agent answer', 'Second agent answer', 'Combined completion'],
+    items
+      .filter((item) => item.role === "assistant")
+      .map((item) => item.content),
+    ["First agent answer", "Second agent answer", "Combined completion"],
   );
 });
 
-test('history hydration reconciles a transient assistant only by its authoritative cursor', () => {
+test("history hydration reconciles a transient assistant only by its authoritative cursor", () => {
   const history = [
     {
-      id: 'user-message-1',
-      type: 'user_message',
-      role: 'user',
-      message_id: 'request-message-1',
-      content: 'hi',
+      id: "user-message-1",
+      type: "user_message",
+      role: "user",
+      message_id: "request-message-1",
+      content: "hi",
       eventTimeUs: 1_000_000,
       eventCounter: 1,
     },
     {
-      id: 'assistant-message-1',
-      type: 'assistant_message',
-      role: 'assistant',
-      message_id: 'persisted-assistant-message-1',
-      content: '你好！有什么可以帮你的吗？',
+      id: "assistant-message-1",
+      type: "assistant_message",
+      role: "assistant",
+      message_id: "persisted-assistant-message-1",
+      content: "你好！有什么可以帮你的吗？",
       eventTimeUs: 2_000_000,
       eventCounter: 4,
-      metadata: { source: 'history' },
+      metadata: { source: "history" },
     },
   ];
   const live = [
     {
       ...history[0],
-      id: 'optimistic-user-request-message-1',
+      id: "optimistic-user-request-message-1",
       metadata: { optimistic: true },
     },
     {
-      id: 'streaming-assistant-request-message-1',
-      type: 'assistant_message',
-      role: 'assistant',
-      message_id: 'request-message-1',
-      executionMessageId: 'request-message-1',
-      content: 'stale streamed draft',
+      id: "streaming-assistant-request-message-1",
+      type: "assistant_message",
+      role: "assistant",
+      message_id: "request-message-1",
+      executionMessageId: "request-message-1",
+      content: "stale streamed draft",
       eventTimeUs: 2_000_000,
       eventCounter: 4,
       metadata: {
@@ -421,127 +443,129 @@ test('history hydration reconciles a transient assistant only by its authoritati
   ];
 
   const items = mergeConversationTimelineItems(history, live);
-  const assistantItems = items.filter((item) => item.role === 'assistant');
+  const assistantItems = items.filter((item) => item.role === "assistant");
 
   assert.equal(assistantItems.length, 1);
-  assert.equal(assistantItems[0].id, 'assistant-message-1');
-  assert.equal(assistantItems[0].message_id, 'persisted-assistant-message-1');
-  assert.equal(assistantItems[0].executionMessageId, 'request-message-1');
-  assert.equal(assistantItems[0].content, '你好！有什么可以帮你的吗？');
+  assert.equal(assistantItems[0].id, "assistant-message-1");
+  assert.equal(assistantItems[0].message_id, "persisted-assistant-message-1");
+  assert.equal(assistantItems[0].executionMessageId, "request-message-1");
+  assert.equal(assistantItems[0].content, "你好！有什么可以帮你的吗？");
   assert.equal(assistantItems[0].metadata.streaming, false);
-  assert.deepEqual(assistantItems[0].metadata.executionSummary, { step_count: 2 });
+  assert.deepEqual(assistantItems[0].metadata.executionSummary, {
+    step_count: 2,
+  });
 });
 
-test('live-first hydration still promotes the persisted assistant identity', () => {
+test("live-first hydration still promotes the persisted assistant identity", () => {
   const user = {
-    id: 'user-message-1',
-    type: 'user_message',
-    role: 'user',
-    message_id: 'request-message-1',
-    content: 'hi',
+    id: "user-message-1",
+    type: "user_message",
+    role: "user",
+    message_id: "request-message-1",
+    content: "hi",
     eventTimeUs: 1_000_000,
     eventCounter: 1,
   };
   const transient = {
-    id: 'completed-assistant-request-message-1',
-    type: 'assistant_message',
-    role: 'assistant',
-    message_id: 'request-message-1',
-    executionMessageId: 'request-message-1',
-    content: 'draft',
+    id: "completed-assistant-request-message-1",
+    type: "assistant_message",
+    role: "assistant",
+    message_id: "request-message-1",
+    executionMessageId: "request-message-1",
+    content: "draft",
     eventTimeUs: 2_000_000,
     eventCounter: 1,
-    metadata: { streaming: false, traceUrl: 'https://trace.example/run' },
+    metadata: { streaming: false, traceUrl: "https://trace.example/run" },
   };
   const persisted = {
-    id: 'assistant-message-1',
-    type: 'assistant_message',
-    role: 'assistant',
-    message_id: 'persisted-assistant-message-1',
-    content: 'final',
+    id: "assistant-message-1",
+    type: "assistant_message",
+    role: "assistant",
+    message_id: "persisted-assistant-message-1",
+    content: "final",
     eventTimeUs: 2_000_000,
     eventCounter: 1,
-    metadata: { source: 'history' },
+    metadata: { source: "history" },
   };
 
   const items = mergeConversationTimelineItems([user, transient], [persisted]);
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'assistant'),
+    items.filter((item) => item.role === "assistant"),
     [
       {
         ...persisted,
-        executionMessageId: 'request-message-1',
+        executionMessageId: "request-message-1",
         metadata: {
           streaming: false,
-          traceUrl: 'https://trace.example/run',
-          source: 'history',
+          traceUrl: "https://trace.example/run",
+          source: "history",
         },
       },
     ],
   );
 });
 
-test('history hydration reconciles a live assistant by execution id when cursors differ', () => {
+test("history hydration reconciles a live assistant by execution id when cursors differ", () => {
   const live = {
-    id: 'completed-assistant-execution-message-1',
-    type: 'assistant_message',
-    role: 'assistant',
-    message_id: 'execution-message-1',
-    executionMessageId: 'execution-message-1',
-    content: 'Live final answer',
+    id: "completed-assistant-execution-message-1",
+    type: "assistant_message",
+    role: "assistant",
+    message_id: "execution-message-1",
+    executionMessageId: "execution-message-1",
+    content: "Live final answer",
     eventTimeUs: 2_000_000,
     eventCounter: 2,
-    metadata: { streaming: false, traceUrl: 'https://trace.example/run' },
+    metadata: { streaming: false, traceUrl: "https://trace.example/run" },
   };
   const history = {
-    id: 'assistant-message-1',
-    type: 'assistant_message',
-    role: 'assistant',
-    message_id: 'response-message-1',
-    executionMessageId: 'execution-message-1',
-    content: 'Persisted final answer',
+    id: "assistant-message-1",
+    type: "assistant_message",
+    role: "assistant",
+    message_id: "response-message-1",
+    executionMessageId: "execution-message-1",
+    content: "Persisted final answer",
     eventTimeUs: 2_100_000,
     eventCounter: 3,
-    metadata: { source: 'history' },
+    metadata: { source: "history" },
   };
 
   const items = mergeConversationTimelineItems([live], [history]);
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'assistant'),
+    items.filter((item) => item.role === "assistant"),
     [
       {
         ...history,
         metadata: {
           streaming: false,
-          traceUrl: 'https://trace.example/run',
-          source: 'history',
+          traceUrl: "https://trace.example/run",
+          source: "history",
         },
       },
     ],
   );
 });
 
-test('history hydration also accepts an exact response id when live replay lacks execution identity', () => {
+test("history hydration also accepts an exact response id when live replay lacks execution identity", () => {
   const liveReplay = {
-    id: 'completed-assistant-response-message-1',
-    type: 'assistant_message',
-    role: 'assistant',
-    message_id: 'response-message-1',
-    executionMessageId: 'response-message-1',
-    content: 'Live replay',
+    id: "completed-assistant-response-message-1",
+    type: "assistant_message",
+    role: "assistant",
+    message_id: "response-message-1",
+    executionMessageId: "response-message-1",
+    content: "Live replay",
     eventTimeUs: 2_000_000,
     eventCounter: 2,
     metadata: { streaming: false },
   };
   const history = {
-    id: 'assistant-message-1',
-    type: 'assistant_message',
-    role: 'assistant',
-    message_id: 'response-message-1',
-    executionMessageId: 'execution-message-1',
-    content: 'Persisted final answer',
+    id: "assistant-message-1",
+    type: "assistant_message",
+    role: "assistant",
+    message_id: "response-message-1",
+    executionMessageId: "execution-message-1",
+    content: "Persisted final answer",
     eventTimeUs: 2_100_000,
     eventCounter: 3,
   };
@@ -549,30 +573,32 @@ test('history hydration also accepts an exact response id when live replay lacks
   const items = mergeConversationTimelineItems([liveReplay], [history]);
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'assistant').map((item) => item.content),
-    ['Persisted final answer'],
+    items
+      .filter((item) => item.role === "assistant")
+      .map((item) => item.content),
+    ["Persisted final answer"],
   );
 });
 
-test('history hydration collapses every transient row bridged by response and execution ids', () => {
+test("history hydration collapses every transient row bridged by response and execution ids", () => {
   const responseReplay = {
-    id: 'completed-assistant-response-message-1',
-    type: 'assistant_message',
-    role: 'assistant',
-    message_id: 'response-message-1',
-    executionMessageId: 'response-message-1',
-    content: 'Response replay',
+    id: "completed-assistant-response-message-1",
+    type: "assistant_message",
+    role: "assistant",
+    message_id: "response-message-1",
+    executionMessageId: "response-message-1",
+    content: "Response replay",
     eventTimeUs: 2_000_000,
     eventCounter: 2,
-    metadata: { streaming: false, traceUrl: 'https://trace.example/run' },
+    metadata: { streaming: false, traceUrl: "https://trace.example/run" },
   };
   const executionCompletion = {
-    id: 'completed-assistant-execution-message-1',
-    type: 'assistant_message',
-    role: 'assistant',
-    message_id: 'execution-message-1',
-    executionMessageId: 'execution-message-1',
-    content: 'Execution completion',
+    id: "completed-assistant-execution-message-1",
+    type: "assistant_message",
+    role: "assistant",
+    message_id: "execution-message-1",
+    executionMessageId: "execution-message-1",
+    content: "Execution completion",
     eventTimeUs: 2_100_000,
     eventCounter: 3,
     metadata: {
@@ -581,15 +607,15 @@ test('history hydration collapses every transient row bridged by response and ex
     },
   };
   const history = {
-    id: 'assistant-message-1',
-    type: 'assistant_message',
-    role: 'assistant',
-    message_id: 'response-message-1',
-    executionMessageId: 'execution-message-1',
-    content: 'Persisted final answer',
+    id: "assistant-message-1",
+    type: "assistant_message",
+    role: "assistant",
+    message_id: "response-message-1",
+    executionMessageId: "execution-message-1",
+    content: "Persisted final answer",
     eventTimeUs: 2_200_000,
     eventCounter: 4,
-    metadata: { source: 'history' },
+    metadata: { source: "history" },
   };
 
   const items = mergeConversationTimelineItems(
@@ -598,55 +624,60 @@ test('history hydration collapses every transient row bridged by response and ex
   );
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'assistant'),
+    items.filter((item) => item.role === "assistant"),
     [
       {
         ...history,
         metadata: {
           streaming: false,
-          traceUrl: 'https://trace.example/run',
+          traceUrl: "https://trace.example/run",
           executionSummary: { step_count: 2 },
-          source: 'history',
+          source: "history",
         },
       },
     ],
   );
 });
 
-test('DB replay execution identity lets complete settle the response row before HTTP hydration', () => {
-  let items = mergeConversationTimelineItems([], [
-    {
-      id: 'completed-assistant-response-message-1',
-      type: 'assistant_message',
-      role: 'assistant',
-      message_id: 'response-message-1',
-      executionMessageId: 'execution-message-1',
-      content: 'Persisted response',
-      eventTimeUs: 2_000_000,
-      eventCounter: 2,
-      metadata: { streaming: false },
-    },
-  ]);
+test("DB replay execution identity lets complete settle the response row before HTTP hydration", () => {
+  let items = mergeConversationTimelineItems(
+    [],
+    [
+      {
+        id: "completed-assistant-response-message-1",
+        type: "assistant_message",
+        role: "assistant",
+        message_id: "response-message-1",
+        executionMessageId: "execution-message-1",
+        content: "Persisted response",
+        eventTimeUs: 2_000_000,
+        eventCounter: 2,
+        metadata: { streaming: false },
+      },
+    ],
+  );
 
   items = mergeAssistantCompletionEvent(items, {
-    messageId: 'execution-message-1',
-    content: 'Persisted final answer',
+    messageId: "execution-message-1",
+    content: "Persisted final answer",
     eventTimeUs: 2_100_000,
     eventCounter: 3,
     metadata: { executionSummary: { step_count: 2 } },
   });
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'assistant').map((item) => ({
-      messageId: item.message_id,
-      executionMessageId: item.executionMessageId,
-      content: item.content,
-    })),
+    items
+      .filter((item) => item.role === "assistant")
+      .map((item) => ({
+        messageId: item.message_id,
+        executionMessageId: item.executionMessageId,
+        content: item.content,
+      })),
     [
       {
-        messageId: 'response-message-1',
-        executionMessageId: 'execution-message-1',
-        content: 'Persisted final answer',
+        messageId: "response-message-1",
+        executionMessageId: "execution-message-1",
+        content: "Persisted final answer",
       },
     ],
   );
@@ -656,15 +687,15 @@ test('DB replay execution identity lets complete settle the response row before 
   );
 });
 
-test('DB replay execution identity lets text end settle the response row without duplication', () => {
+test("DB replay execution identity lets text end settle the response row without duplication", () => {
   const existing = [
     {
-      id: 'completed-assistant-response-message-1',
-      type: 'assistant_message',
-      role: 'assistant',
-      message_id: 'response-message-1',
-      executionMessageId: 'execution-message-1',
-      content: 'Persisted response',
+      id: "completed-assistant-response-message-1",
+      type: "assistant_message",
+      role: "assistant",
+      message_id: "response-message-1",
+      executionMessageId: "execution-message-1",
+      content: "Persisted response",
       eventTimeUs: 2_000_000,
       eventCounter: 2,
       metadata: { streaming: false },
@@ -672,9 +703,9 @@ test('DB replay execution identity lets text end settle the response row without
   ];
 
   const items = mergeAssistantTextStreamChunk(existing, {
-    kind: 'complete',
-    messageId: 'execution-message-1',
-    content: 'Authoritative text end',
+    kind: "complete",
+    messageId: "execution-message-1",
+    content: "Authoritative text end",
     eventTimeUs: 2_100_000,
     eventCounter: 3,
   });
@@ -688,56 +719,56 @@ test('DB replay execution identity lets text end settle the response row without
     })),
     [
       {
-        id: 'completed-assistant-response-message-1',
-        messageId: 'response-message-1',
-        executionMessageId: 'execution-message-1',
-        content: 'Authoritative text end',
+        id: "completed-assistant-response-message-1",
+        messageId: "response-message-1",
+        executionMessageId: "execution-message-1",
+        content: "Authoritative text end",
       },
     ],
   );
 });
 
-test('send acknowledgement rebinds an optimistic user to its canonical execution identity', () => {
+test("send acknowledgement rebinds an optimistic user to its canonical execution identity", () => {
   const optimistic = {
-    id: 'optimistic-user-client-request-1',
-    type: 'user_message',
-    role: 'user',
-    message_id: 'client-request-1',
-    content: '仅回复 DESKTOP_RENDER_PARITY_OK',
+    id: "optimistic-user-client-request-1",
+    type: "user_message",
+    role: "user",
+    message_id: "client-request-1",
+    content: "仅回复 DESKTOP_RENDER_PARITY_OK",
     eventTimeUs: 1_000_000,
     eventCounter: 0,
     metadata: { optimistic: true },
   };
   const canonical = {
-    id: 'persisted-user-message-1',
-    type: 'user_message',
-    role: 'user',
-    message_id: 'execution-message-1',
-    content: '仅回复 DESKTOP_RENDER_PARITY_OK',
+    id: "persisted-user-message-1",
+    type: "user_message",
+    role: "user",
+    message_id: "execution-message-1",
+    content: "仅回复 DESKTOP_RENDER_PARITY_OK",
     eventTimeUs: 1_000_001,
     eventCounter: 1,
-    metadata: { source: 'history' },
+    metadata: { source: "history" },
   };
 
   const rebound = mergeAgentSendAcknowledgement(
     [optimistic],
-    'client-request-1',
-    'execution-message-1',
+    "client-request-1",
+    "execution-message-1",
   );
   const historyFirst = mergeConversationTimelineItems([canonical], rebound);
   const liveFirst = mergeConversationTimelineItems(rebound, [canonical]);
 
   for (const items of [historyFirst, liveFirst]) {
     assert.deepEqual(
-      items.filter((item) => item.role === 'user'),
+      items.filter((item) => item.role === "user"),
       [
         {
           ...canonical,
-          executionMessageId: 'execution-message-1',
+          executionMessageId: "execution-message-1",
           metadata: {
             optimistic: false,
-            clientMessageId: 'client-request-1',
-            source: 'history',
+            clientMessageId: "client-request-1",
+            source: "history",
           },
         },
       ],
@@ -745,80 +776,80 @@ test('send acknowledgement rebinds an optimistic user to its canonical execution
   }
 });
 
-test('user attachment metadata survives optimistic acknowledgement and authoritative replacement', () => {
+test("user attachment metadata survives optimistic acknowledgement and authoritative replacement", () => {
   const attachments = [
     {
-      filename: 'roadmap.pdf',
-      sandbox_path: '/workspace/uploads/roadmap.pdf',
-      mime_type: 'application/pdf',
+      filename: "roadmap.pdf",
+      sandbox_path: "/workspace/uploads/roadmap.pdf",
+      mime_type: "application/pdf",
       size_bytes: 1536,
     },
     {
-      filename: 'diagram.png',
-      sandbox_path: '/workspace/uploads/diagram.png',
-      mime_type: 'image/png',
+      filename: "diagram.png",
+      sandbox_path: "/workspace/uploads/diagram.png",
+      mime_type: "image/png",
       size_bytes: 2_621_440,
     },
   ];
   const optimistic = {
-    id: 'optimistic-user-attachment-request',
-    type: 'user_message',
-    role: 'user',
-    message_id: 'attachment-request',
-    content: 'Review these files',
+    id: "optimistic-user-attachment-request",
+    type: "user_message",
+    role: "user",
+    message_id: "attachment-request",
+    content: "Review these files",
     eventTimeUs: 1_000_000,
     eventCounter: 0,
     metadata: { optimistic: true, fileMetadata: attachments },
   };
   const canonical = {
-    id: 'persisted-user-attachment-message',
-    type: 'user_message',
-    role: 'user',
-    message_id: 'attachment-execution',
-    content: 'Review these files',
+    id: "persisted-user-attachment-message",
+    type: "user_message",
+    role: "user",
+    message_id: "attachment-execution",
+    content: "Review these files",
     eventTimeUs: 1_000_001,
     eventCounter: 1,
-    metadata: { source: 'history', file_metadata: attachments },
+    metadata: { source: "history", file_metadata: attachments },
   };
 
   const rebound = mergeAgentSendAcknowledgement(
     [optimistic],
-    'attachment-request',
-    'attachment-execution',
+    "attachment-request",
+    "attachment-execution",
   );
   const merged = mergeConversationTimelineItems(rebound, [canonical]);
 
   assert.equal(merged.length, 1);
   assert.deepEqual(timelineMessageAttachments(merged[0]), [
     {
-      filename: 'roadmap.pdf',
-      sandboxPath: '/workspace/uploads/roadmap.pdf',
-      mimeType: 'application/pdf',
+      filename: "roadmap.pdf",
+      sandboxPath: "/workspace/uploads/roadmap.pdf",
+      mimeType: "application/pdf",
       sizeBytes: 1536,
     },
     {
-      filename: 'diagram.png',
-      sandboxPath: '/workspace/uploads/diagram.png',
-      mimeType: 'image/png',
+      filename: "diagram.png",
+      sandboxPath: "/workspace/uploads/diagram.png",
+      mimeType: "image/png",
       sizeBytes: 2_621_440,
     },
   ]);
 });
 
-test('message attachments normalize supported protocol aliases and deduplicate exact files', () => {
+test("message attachments normalize supported protocol aliases and deduplicate exact files", () => {
   assert.deepEqual(
     timelineMessageAttachments({
-      id: 'history-user-attachment',
-      type: 'user_message',
-      role: 'user',
+      id: "history-user-attachment",
+      type: "user_message",
+      role: "user",
       eventTimeUs: 1,
       eventCounter: 1,
       metadata: {
         fileMetadata: [
           {
-            filename: 'notes.txt',
-            sandbox_path: '/workspace/uploads/notes.txt',
-            mime_type: 'text/plain',
+            filename: "notes.txt",
+            sandbox_path: "/workspace/uploads/notes.txt",
+            mime_type: "text/plain",
             size_bytes: 42,
           },
         ],
@@ -826,14 +857,14 @@ test('message attachments normalize supported protocol aliases and deduplicate e
       payload: {
         file_metadata: [
           {
-            filename: 'notes.txt',
-            sandboxPath: '/workspace/uploads/notes.txt',
-            mimeType: 'text/plain',
+            filename: "notes.txt",
+            sandboxPath: "/workspace/uploads/notes.txt",
+            mimeType: "text/plain",
             sizeBytes: 42,
           },
           {
-            filename: 'archive.custom',
-            mimeType: 'application/x-custom',
+            filename: "archive.custom",
+            mimeType: "application/x-custom",
             sizeBytes: 2048,
           },
         ],
@@ -841,61 +872,73 @@ test('message attachments normalize supported protocol aliases and deduplicate e
     }),
     [
       {
-        filename: 'notes.txt',
-        sandboxPath: '/workspace/uploads/notes.txt',
-        mimeType: 'text/plain',
+        filename: "notes.txt",
+        sandboxPath: "/workspace/uploads/notes.txt",
+        mimeType: "text/plain",
         sizeBytes: 42,
       },
       {
-        filename: 'archive.custom',
+        filename: "archive.custom",
         sandboxPath: null,
-        mimeType: 'application/x-custom',
+        mimeType: "application/x-custom",
         sizeBytes: 2048,
       },
     ],
   );
 });
 
-test('message attachments ignore malformed records without filename or valid byte size', () => {
+test("message attachments ignore malformed records without filename or valid byte size", () => {
   assert.deepEqual(
     timelineMessageAttachments({
-      id: 'malformed-user-attachment',
-      type: 'user_message',
-      role: 'user',
+      id: "malformed-user-attachment",
+      type: "user_message",
+      role: "user",
       eventTimeUs: 1,
       eventCounter: 1,
       metadata: {
         fileMetadata: [
           null,
-          'report.pdf',
-          { filename: '', mime_type: 'application/pdf', size_bytes: 1 },
-          { filename: 'missing-mime.pdf', size_bytes: 1 },
-          { filename: 'negative.pdf', mime_type: 'application/pdf', size_bytes: -1 },
-          { filename: 'fractional.pdf', mime_type: 'application/pdf', size_bytes: 1.5 },
-          { filename: 'valid.bin', mime_type: 'application/octet-stream', size_bytes: 0 },
+          "report.pdf",
+          { filename: "", mime_type: "application/pdf", size_bytes: 1 },
+          { filename: "missing-mime.pdf", size_bytes: 1 },
+          {
+            filename: "negative.pdf",
+            mime_type: "application/pdf",
+            size_bytes: -1,
+          },
+          {
+            filename: "fractional.pdf",
+            mime_type: "application/pdf",
+            size_bytes: 1.5,
+          },
+          {
+            filename: "valid.bin",
+            mime_type: "application/octet-stream",
+            size_bytes: 0,
+          },
         ],
       },
     }),
     [
       {
-        filename: 'valid.bin',
+        filename: "valid.bin",
         sandboxPath: null,
-        mimeType: 'application/octet-stream',
+        mimeType: "application/octet-stream",
         sizeBytes: 0,
       },
     ],
   );
 });
 
-test('message attachment sizes match the Web conversation formatter', () => {
-  assert.equal(formatTimelineAttachmentSize(0), '0 B');
-  assert.equal(formatTimelineAttachmentSize(1023), '1023 B');
-  assert.equal(formatTimelineAttachmentSize(1536), '1.5 KB');
-  assert.equal(formatTimelineAttachmentSize(2_621_440), '2.5 MB');
-  assert.equal(formatTimelineAttachmentSize(2_684_354_560), '2.5 GB');
+test("message attachment sizes match the Web conversation formatter", () => {
+  assert.equal(formatTimelineAttachmentSize(0), "0 B");
+  assert.equal(formatTimelineAttachmentSize(1023), "1023 B");
+  assert.equal(formatTimelineAttachmentSize(1536), "1.5 KB");
+  assert.equal(formatTimelineAttachmentSize(2_621_440), "2.5 MB");
+  assert.equal(formatTimelineAttachmentSize(2_684_354_560), "2.5 GB");
 });
 
-test('optimistic user rows preserve authoritative composer file metadata', () => {
+test("optimistic user rows preserve authoritative composer file metadata", () => {
   assert.match(
     appSource,
     /optimisticUserTimelineItem\(\s*messageId,\s*content,\s*execution\.forcedSkillName,\s*execution\.fileMetadata,\s*\)/,
@@ -906,26 +949,26 @@ test('optimistic user rows preserve authoritative composer file metadata', () =>
   );
 });
 
-test('optimistic user rows never reconcile by cursor alone before acknowledgement', () => {
+test("optimistic user rows never reconcile by cursor alone before acknowledgement", () => {
   const optimistic = {
-    id: 'optimistic-user-client-request-1',
-    type: 'user_message',
-    role: 'user',
-    message_id: 'client-request-1',
-    content: 'First request',
+    id: "optimistic-user-client-request-1",
+    type: "user_message",
+    role: "user",
+    message_id: "client-request-1",
+    content: "First request",
     eventTimeUs: 1_000_000,
     eventCounter: 0,
     metadata: { optimistic: true },
   };
   const unrelatedCanonical = {
-    id: 'persisted-user-message-2',
-    type: 'user_message',
-    role: 'user',
-    message_id: 'execution-message-2',
-    content: 'Second request',
+    id: "persisted-user-message-2",
+    type: "user_message",
+    role: "user",
+    message_id: "execution-message-2",
+    content: "Second request",
     eventTimeUs: 1_000_000,
     eventCounter: 0,
-    metadata: { source: 'history' },
+    metadata: { source: "history" },
   };
 
   const items = mergeConversationTimelineItems(
@@ -934,24 +977,24 @@ test('optimistic user rows never reconcile by cursor alone before acknowledgemen
   );
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'user').map((item) => item.content),
-    ['First request', 'Second request'],
+    items.filter((item) => item.role === "user").map((item) => item.content),
+    ["First request", "Second request"],
   );
 });
 
-test('canonical user rows are never deduplicated by content or shared message id', () => {
+test("canonical user rows are never deduplicated by content or shared message id", () => {
   const first = {
-    id: 'persisted-user-message-1',
-    type: 'user_message',
-    role: 'user',
-    message_id: 'shared-request-id',
-    content: 'same content',
+    id: "persisted-user-message-1",
+    type: "user_message",
+    role: "user",
+    message_id: "shared-request-id",
+    content: "same content",
     eventTimeUs: 1_000_000,
     eventCounter: 1,
   };
   const second = {
     ...first,
-    id: 'persisted-user-message-2',
+    id: "persisted-user-message-2",
     eventTimeUs: 2_000_000,
     eventCounter: 2,
   };
@@ -959,63 +1002,63 @@ test('canonical user rows are never deduplicated by content or shared message id
   const items = mergeConversationTimelineItems([first], [second]);
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'user').map((item) => item.id),
-    ['persisted-user-message-1', 'persisted-user-message-2'],
+    items.filter((item) => item.role === "user").map((item) => item.id),
+    ["persisted-user-message-1", "persisted-user-message-2"],
   );
 });
 
-test('two optimistic user sends before an assistant response both remain visible', () => {
+test("two optimistic user sends before an assistant response both remain visible", () => {
   const first = {
-    id: 'optimistic-user-client-request-1',
-    type: 'user_message',
-    role: 'user',
-    message_id: 'client-request-1',
-    content: 'First',
+    id: "optimistic-user-client-request-1",
+    type: "user_message",
+    role: "user",
+    message_id: "client-request-1",
+    content: "First",
     eventTimeUs: 1_000_000,
     eventCounter: 0,
     metadata: { optimistic: true },
   };
   const second = {
     ...first,
-    id: 'optimistic-user-client-request-2',
-    message_id: 'client-request-2',
-    content: 'Second',
+    id: "optimistic-user-client-request-2",
+    message_id: "client-request-2",
+    content: "Second",
     eventTimeUs: 2_000_000,
   };
 
   const items = mergeConversationTimelineItems([first], [second]);
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'user').map((item) => item.content),
-    ['First', 'Second'],
+    items.filter((item) => item.role === "user").map((item) => item.content),
+    ["First", "Second"],
   );
 });
 
-test('optimistic user reconciliation does not cross an assistant boundary', () => {
+test("optimistic user reconciliation does not cross an assistant boundary", () => {
   const optimistic = {
-    id: 'optimistic-user-client-request-1',
-    type: 'user_message',
-    role: 'user',
-    message_id: 'client-request-1',
-    content: 'First',
+    id: "optimistic-user-client-request-1",
+    type: "user_message",
+    role: "user",
+    message_id: "client-request-1",
+    content: "First",
     eventTimeUs: 1_000_000,
     eventCounter: 0,
     metadata: { optimistic: true },
   };
   const assistant = {
-    id: 'assistant-1',
-    type: 'assistant_message',
-    role: 'assistant',
-    content: 'First result',
+    id: "assistant-1",
+    type: "assistant_message",
+    role: "assistant",
+    content: "First result",
     eventTimeUs: 2_000_000,
     eventCounter: 1,
   };
   const canonical = {
-    id: 'persisted-user-message-2',
-    type: 'user_message',
-    role: 'user',
-    message_id: 'persisted-user-message-2',
-    content: 'Second',
+    id: "persisted-user-message-2",
+    type: "user_message",
+    role: "user",
+    message_id: "persisted-user-message-2",
+    content: "Second",
     eventTimeUs: 3_000_000,
     eventCounter: 1,
   };
@@ -1026,44 +1069,44 @@ test('optimistic user reconciliation does not cross an assistant boundary', () =
   );
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'user').map((item) => item.id),
-    ['optimistic-user-client-request-1', 'persisted-user-message-2'],
+    items.filter((item) => item.role === "user").map((item) => item.id),
+    ["optimistic-user-client-request-1", "persisted-user-message-2"],
   );
 });
 
-test('canonical assistant messages remain distinct within and across user turns', () => {
+test("canonical assistant messages remain distinct within and across user turns", () => {
   const firstUser = {
-    id: 'user-1',
-    type: 'user_message',
-    role: 'user',
-    content: 'repeat',
+    id: "user-1",
+    type: "user_message",
+    role: "user",
+    content: "repeat",
     eventTimeUs: 1_000_000,
     eventCounter: 1,
   };
   const firstAssistant = {
-    id: 'assistant-1',
-    type: 'assistant_message',
-    role: 'assistant',
-    message_id: 'request-1',
-    content: 'same text',
+    id: "assistant-1",
+    type: "assistant_message",
+    role: "assistant",
+    message_id: "request-1",
+    content: "same text",
     eventTimeUs: 2_000_000,
     eventCounter: 1,
   };
   const secondAssistant = {
     ...firstAssistant,
-    id: 'assistant-2',
+    id: "assistant-2",
     eventTimeUs: 2_500_000,
     eventCounter: 2,
   };
   const secondUser = {
     ...firstUser,
-    id: 'user-2',
+    id: "user-2",
     eventTimeUs: 3_000_000,
     eventCounter: 1,
   };
   const thirdAssistant = {
     ...firstAssistant,
-    id: 'assistant-3',
+    id: "assistant-3",
     eventTimeUs: 4_000_000,
     eventCounter: 1,
   };
@@ -1074,53 +1117,53 @@ test('canonical assistant messages remain distinct within and across user turns'
   );
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'assistant').map((item) => item.id),
-    ['assistant-1', 'assistant-2', 'assistant-3'],
+    items.filter((item) => item.role === "assistant").map((item) => item.id),
+    ["assistant-1", "assistant-2", "assistant-3"],
   );
 });
 
-test('multiple live assistants reconcile to persisted rows by cursor without swapping metadata', () => {
+test("multiple live assistants reconcile to persisted rows by cursor without swapping metadata", () => {
   const user = {
-    id: 'user-1',
-    type: 'user_message',
-    role: 'user',
-    content: 'Run both',
+    id: "user-1",
+    type: "user_message",
+    role: "user",
+    content: "Run both",
     eventTimeUs: 1_000_000,
     eventCounter: 1,
   };
   const firstTransient = {
-    id: 'streaming-assistant-request-1',
-    type: 'assistant_message',
-    role: 'assistant',
-    message_id: 'request-1',
-    content: 'first draft',
+    id: "streaming-assistant-request-1",
+    type: "assistant_message",
+    role: "assistant",
+    message_id: "request-1",
+    content: "first draft",
     eventTimeUs: 2_000_000,
     eventCounter: 1,
-    metadata: { streaming: false, traceUrl: 'trace-first' },
+    metadata: { streaming: false, traceUrl: "trace-first" },
   };
   const secondTransient = {
     ...firstTransient,
-    id: 'streaming-assistant-request-2',
-    message_id: 'request-2',
-    content: 'second draft',
+    id: "streaming-assistant-request-2",
+    message_id: "request-2",
+    content: "second draft",
     eventTimeUs: 3_000_000,
     eventCounter: 2,
-    metadata: { streaming: false, traceUrl: 'trace-second' },
+    metadata: { streaming: false, traceUrl: "trace-second" },
   };
   const firstPersisted = {
-    id: 'assistant-1',
-    type: 'assistant_message',
-    role: 'assistant',
-    message_id: 'persisted-1',
-    content: 'first final',
+    id: "assistant-1",
+    type: "assistant_message",
+    role: "assistant",
+    message_id: "persisted-1",
+    content: "first final",
     eventTimeUs: 2_000_000,
     eventCounter: 1,
   };
   const secondPersisted = {
     ...firstPersisted,
-    id: 'assistant-2',
-    message_id: 'persisted-2',
-    content: 'second final',
+    id: "assistant-2",
+    message_id: "persisted-2",
+    content: "second final",
     eventTimeUs: 3_000_000,
     eventCounter: 2,
   };
@@ -1131,83 +1174,87 @@ test('multiple live assistants reconcile to persisted rows by cursor without swa
   );
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'assistant').map((item) => ({
-      id: item.id,
-      content: item.content,
-      traceUrl: item.metadata.traceUrl,
-    })),
+    items
+      .filter((item) => item.role === "assistant")
+      .map((item) => ({
+        id: item.id,
+        content: item.content,
+        traceUrl: item.metadata.traceUrl,
+      })),
     [
-      { id: 'assistant-1', content: 'first final', traceUrl: 'trace-first' },
-      { id: 'assistant-2', content: 'second final', traceUrl: 'trace-second' },
+      { id: "assistant-1", content: "first final", traceUrl: "trace-first" },
+      { id: "assistant-2", content: "second final", traceUrl: "trace-second" },
     ],
   );
 });
 
-test('replayed text_end reconciles a canonical assistant at the same event cursor', () => {
+test("replayed text_end reconciles a canonical assistant at the same event cursor", () => {
   const canonical = {
-    id: 'assistant-response-1',
-    type: 'assistant_message',
-    role: 'assistant',
-    message_id: 'response-message-1',
-    content: 'Persisted response',
+    id: "assistant-response-1",
+    type: "assistant_message",
+    role: "assistant",
+    message_id: "response-message-1",
+    content: "Persisted response",
     eventTimeUs: 2_000_000,
     eventCounter: 2,
     metadata: { streaming: false },
   };
 
   const items = mergeAssistantTextStreamChunk([canonical], {
-    kind: 'complete',
-    messageId: 'execution-message-1',
-    content: 'Authoritative text end',
+    kind: "complete",
+    messageId: "execution-message-1",
+    content: "Authoritative text end",
     eventTimeUs: 2_000_000,
     eventCounter: 2,
   });
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'assistant').map((item) => ({
-      id: item.id,
-      content: item.content,
-      streaming: item.metadata.streaming,
-    })),
+    items
+      .filter((item) => item.role === "assistant")
+      .map((item) => ({
+        id: item.id,
+        content: item.content,
+        streaming: item.metadata.streaming,
+      })),
     [
       {
-        id: 'assistant-response-1',
-        content: 'Persisted response',
+        id: "assistant-response-1",
+        content: "Persisted response",
         streaming: false,
       },
     ],
   );
 });
 
-test('assistant reconciliation never crosses a user-turn boundary', () => {
+test("assistant reconciliation never crosses a user-turn boundary", () => {
   const firstUser = {
-    id: 'user-1',
-    type: 'user_message',
-    role: 'user',
-    content: 'First',
+    id: "user-1",
+    type: "user_message",
+    role: "user",
+    content: "First",
     eventTimeUs: 1_000_000,
     eventCounter: 1,
   };
   const firstTransient = {
-    id: 'streaming-assistant-first',
-    type: 'assistant_message',
-    role: 'assistant',
-    content: 'First draft',
+    id: "streaming-assistant-first",
+    type: "assistant_message",
+    role: "assistant",
+    content: "First draft",
     eventTimeUs: 2_000_000,
     eventCounter: 1,
     metadata: { streaming: false },
   };
   const secondUser = {
     ...firstUser,
-    id: 'user-2',
-    content: 'Second',
+    id: "user-2",
+    content: "Second",
     eventTimeUs: 3_000_000,
   };
   const secondPersisted = {
-    id: 'assistant-2',
-    type: 'assistant_message',
-    role: 'assistant',
-    content: 'Second final',
+    id: "assistant-2",
+    type: "assistant_message",
+    role: "assistant",
+    content: "Second final",
     eventTimeUs: 4_000_000,
     eventCounter: 1,
   };
@@ -1218,37 +1265,37 @@ test('assistant reconciliation never crosses a user-turn boundary', () => {
   );
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'assistant').map((item) => item.id),
-    ['streaming-assistant-first', 'assistant-2'],
+    items.filter((item) => item.role === "assistant").map((item) => item.id),
+    ["streaming-assistant-first", "assistant-2"],
   );
 });
 
-test('an unmatched transient assistant remains beside an older canonical assistant', () => {
+test("an unmatched transient assistant remains beside an older canonical assistant", () => {
   const existing = [
     {
-      id: 'user-1',
-      type: 'user_message',
-      role: 'user',
-      content: 'Continue',
+      id: "user-1",
+      type: "user_message",
+      role: "user",
+      content: "Continue",
       eventTimeUs: 1_000_000,
       eventCounter: 1,
     },
     {
-      id: 'assistant-old',
-      type: 'assistant_message',
-      role: 'assistant',
-      message_id: 'persisted-old',
-      content: 'Older canonical answer',
+      id: "assistant-old",
+      type: "assistant_message",
+      role: "assistant",
+      message_id: "persisted-old",
+      content: "Older canonical answer",
       eventTimeUs: 2_000_000,
       eventCounter: 1,
     },
   ];
   const transient = {
-    id: 'streaming-assistant-new',
-    type: 'assistant_message',
-    role: 'assistant',
-    message_id: 'execution-new',
-    content: 'New answer in progress',
+    id: "streaming-assistant-new",
+    type: "assistant_message",
+    role: "assistant",
+    message_id: "execution-new",
+    content: "New answer in progress",
     eventTimeUs: 3_000_000,
     eventCounter: 1,
     metadata: { streaming: true },
@@ -1257,21 +1304,23 @@ test('an unmatched transient assistant remains beside an older canonical assista
   const items = mergeConversationTimelineItems(existing, [transient]);
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'assistant').map((item) => item.content),
-    ['Older canonical answer', 'New answer in progress'],
+    items
+      .filter((item) => item.role === "assistant")
+      .map((item) => item.content),
+    ["Older canonical answer", "New answer in progress"],
   );
 });
 
-test('id-less final events receive event-scoped identities instead of a mutable turn identity', () => {
+test("id-less final events receive event-scoped identities instead of a mutable turn identity", () => {
   const lateFirstTurnComplete = eventScopedStreamMessageId(
-    'conversation-1',
-    'complete',
+    "conversation-1",
+    "complete",
     2_500_000,
     4,
   );
   const secondTurnComplete = eventScopedStreamMessageId(
-    'conversation-1',
-    'complete',
+    "conversation-1",
+    "complete",
     4_500_000,
     2,
   );
@@ -1279,81 +1328,86 @@ test('id-less final events receive event-scoped identities instead of a mutable 
   assert.notEqual(lateFirstTurnComplete, secondTurnComplete);
   assert.equal(
     lateFirstTurnComplete,
-    'unassociated-conversation-1-complete-2500000-4',
+    "unassociated-conversation-1-complete-2500000-4",
   );
 });
 
-test('complete with an unmatched response id appends without mutating canonical assistants', () => {
+test("complete with an unmatched response id appends without mutating canonical assistants", () => {
   const existing = [
     {
-      id: 'user-1',
-      type: 'user_message',
-      role: 'user',
-      content: 'Report both',
+      id: "user-1",
+      type: "user_message",
+      role: "user",
+      content: "Report both",
       eventTimeUs: 1_000_000,
       eventCounter: 1,
     },
     {
-      id: 'assistant-1',
-      type: 'assistant_message',
-      role: 'assistant',
-      content: 'First result',
+      id: "assistant-1",
+      type: "assistant_message",
+      role: "assistant",
+      content: "First result",
       eventTimeUs: 2_000_000,
       eventCounter: 1,
     },
     {
-      id: 'assistant-2',
-      type: 'assistant_message',
-      role: 'assistant',
-      content: 'Second draft',
+      id: "assistant-2",
+      type: "assistant_message",
+      role: "assistant",
+      content: "Second draft",
       eventTimeUs: 3_000_000,
       eventCounter: 2,
     },
   ];
 
   const items = mergeAssistantCompletionEvent(existing, {
-    messageId: 'request-1',
-    content: 'Second final',
+    messageId: "request-1",
+    content: "Second final",
     eventTimeUs: 4_000_000,
     eventCounter: 3,
   });
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'assistant').map((item) => item.content),
-    ['First result', 'Second draft', 'Second final'],
+    items
+      .filter((item) => item.role === "assistant")
+      .map((item) => item.content),
+    ["First result", "Second draft", "Second final"],
   );
-  assert.equal(items.find((item) => item.id === 'assistant-2')?.message_id, undefined);
   assert.equal(
-    items.find((item) => item.content === 'Second final')?.executionMessageId,
-    'request-1',
+    items.find((item) => item.id === "assistant-2")?.message_id,
+    undefined,
+  );
+  assert.equal(
+    items.find((item) => item.content === "Second final")?.executionMessageId,
+    "request-1",
   );
 });
 
-test('complete updates its exact transient response without overwriting an older canonical answer', () => {
+test("complete updates its exact transient response without overwriting an older canonical answer", () => {
   const existing = [
     {
-      id: 'user-1',
-      type: 'user_message',
-      role: 'user',
-      content: 'Continue',
+      id: "user-1",
+      type: "user_message",
+      role: "user",
+      content: "Continue",
       eventTimeUs: 1_000_000,
       eventCounter: 1,
     },
     {
-      id: 'assistant-old',
-      type: 'assistant_message',
-      role: 'assistant',
-      message_id: 'persisted-old',
-      content: 'Older canonical answer',
+      id: "assistant-old",
+      type: "assistant_message",
+      role: "assistant",
+      message_id: "persisted-old",
+      content: "Older canonical answer",
       eventTimeUs: 2_000_000,
       eventCounter: 1,
     },
     {
-      id: 'streaming-assistant-execution-new',
-      type: 'assistant_message',
-      role: 'assistant',
-      message_id: 'execution-new',
-      content: 'New draft',
+      id: "streaming-assistant-execution-new",
+      type: "assistant_message",
+      role: "assistant",
+      message_id: "execution-new",
+      content: "New draft",
       eventTimeUs: 3_000_000,
       eventCounter: 1,
       metadata: { streaming: true },
@@ -1361,52 +1415,54 @@ test('complete updates its exact transient response without overwriting an older
   ];
 
   const items = mergeAssistantCompletionEvent(existing, {
-    messageId: 'execution-new',
-    content: 'New final answer',
+    messageId: "execution-new",
+    content: "New final answer",
     eventTimeUs: 4_000_000,
     eventCounter: 1,
   });
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'assistant').map((item) => item.content),
-    ['Older canonical answer', 'New final answer'],
+    items
+      .filter((item) => item.role === "assistant")
+      .map((item) => item.content),
+    ["Older canonical answer", "New final answer"],
   );
 });
 
-test('a delayed explicit completion updates its response across a newer user-turn boundary', () => {
+test("a delayed explicit completion updates its response across a newer user-turn boundary", () => {
   const existing = [
     {
-      id: 'user-1',
-      type: 'user_message',
-      role: 'user',
-      content: 'First',
+      id: "user-1",
+      type: "user_message",
+      role: "user",
+      content: "First",
       eventTimeUs: 1_000_000,
       eventCounter: 1,
     },
     {
-      id: 'streaming-assistant-execution-1',
-      type: 'assistant_message',
-      role: 'assistant',
-      message_id: 'execution-1',
-      content: 'First draft',
+      id: "streaming-assistant-execution-1",
+      type: "assistant_message",
+      role: "assistant",
+      message_id: "execution-1",
+      content: "First draft",
       eventTimeUs: 2_000_000,
       eventCounter: 1,
       metadata: { streaming: true },
     },
     {
-      id: 'user-2',
-      type: 'user_message',
-      role: 'user',
-      content: 'Second',
+      id: "user-2",
+      type: "user_message",
+      role: "user",
+      content: "Second",
       eventTimeUs: 3_000_000,
       eventCounter: 1,
     },
     {
-      id: 'streaming-assistant-execution-2',
-      type: 'assistant_message',
-      role: 'assistant',
-      message_id: 'execution-2',
-      content: 'Second draft',
+      id: "streaming-assistant-execution-2",
+      type: "assistant_message",
+      role: "assistant",
+      message_id: "execution-2",
+      content: "Second draft",
       eventTimeUs: 4_000_000,
       eventCounter: 1,
       metadata: { streaming: true },
@@ -1414,52 +1470,54 @@ test('a delayed explicit completion updates its response across a newer user-tur
   ];
 
   const items = mergeAssistantCompletionEvent(existing, {
-    messageId: 'execution-1',
-    content: 'First final',
+    messageId: "execution-1",
+    content: "First final",
     eventTimeUs: 5_000_000,
     eventCounter: 1,
   });
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'assistant').map((item) => item.content),
-    ['First final', 'Second draft'],
+    items
+      .filter((item) => item.role === "assistant")
+      .map((item) => item.content),
+    ["First final", "Second draft"],
   );
 });
 
-test('a delayed text end settles its exact assistant without moving it across newer turns', () => {
+test("a delayed text end settles its exact assistant without moving it across newer turns", () => {
   const existing = [
     {
-      id: 'user-1',
-      type: 'user_message',
-      role: 'user',
-      content: 'First',
+      id: "user-1",
+      type: "user_message",
+      role: "user",
+      content: "First",
       eventTimeUs: 1_000_000,
       eventCounter: 1,
     },
     {
-      id: 'streaming-assistant-execution-1',
-      type: 'assistant_message',
-      role: 'assistant',
-      message_id: 'execution-1',
-      content: 'First draft',
+      id: "streaming-assistant-execution-1",
+      type: "assistant_message",
+      role: "assistant",
+      message_id: "execution-1",
+      content: "First draft",
       eventTimeUs: 2_000_000,
       eventCounter: 1,
       metadata: { streaming: true },
     },
     {
-      id: 'user-2',
-      type: 'user_message',
-      role: 'user',
-      content: 'Second',
+      id: "user-2",
+      type: "user_message",
+      role: "user",
+      content: "Second",
       eventTimeUs: 3_000_000,
       eventCounter: 1,
     },
     {
-      id: 'streaming-assistant-execution-2',
-      type: 'assistant_message',
-      role: 'assistant',
-      message_id: 'execution-2',
-      content: 'Second answer',
+      id: "streaming-assistant-execution-2",
+      type: "assistant_message",
+      role: "assistant",
+      message_id: "execution-2",
+      content: "Second answer",
       eventTimeUs: 4_000_000,
       eventCounter: 1,
       metadata: { streaming: false },
@@ -1467,9 +1525,9 @@ test('a delayed text end settles its exact assistant without moving it across ne
   ];
 
   const items = mergeAssistantTextStreamChunk(existing, {
-    kind: 'complete',
-    messageId: 'execution-1',
-    content: 'First final',
+    kind: "complete",
+    messageId: "execution-1",
+    content: "First final",
     eventTimeUs: 5_000_000,
     eventCounter: 1,
   });
@@ -1477,10 +1535,10 @@ test('a delayed text end settles its exact assistant without moving it across ne
   assert.deepEqual(
     items.map((item) => [item.id, item.content]),
     [
-      ['user-1', 'First'],
-      ['streaming-assistant-execution-1', 'First final'],
-      ['user-2', 'Second'],
-      ['streaming-assistant-execution-2', 'Second answer'],
+      ["user-1", "First"],
+      ["streaming-assistant-execution-1", "First final"],
+      ["user-2", "Second"],
+      ["streaming-assistant-execution-2", "Second answer"],
     ],
   );
   assert.equal(items[1].eventTimeUs, 2_000_000);
@@ -1488,38 +1546,38 @@ test('a delayed text end settles its exact assistant without moving it across ne
   assert.equal(items[1].metadata.streaming, false);
 });
 
-test('a delayed thought completion settles its exact row without moving it across newer turns', () => {
+test("a delayed thought completion settles its exact row without moving it across newer turns", () => {
   const existing = [
     {
-      id: 'user-1',
-      type: 'user_message',
-      role: 'user',
-      content: 'First',
+      id: "user-1",
+      type: "user_message",
+      role: "user",
+      content: "First",
       eventTimeUs: 1_000_000,
       eventCounter: 1,
     },
     {
-      id: 'streaming-thought-execution-1-2000000-1',
-      type: 'thought',
-      message_id: 'execution-1',
-      content: 'First thought draft',
+      id: "streaming-thought-execution-1-2000000-1",
+      type: "thought",
+      message_id: "execution-1",
+      content: "First thought draft",
       eventTimeUs: 2_000_000,
       eventCounter: 1,
       metadata: { streaming: true },
     },
     {
-      id: 'user-2',
-      type: 'user_message',
-      role: 'user',
-      content: 'Second',
+      id: "user-2",
+      type: "user_message",
+      role: "user",
+      content: "Second",
       eventTimeUs: 3_000_000,
       eventCounter: 1,
     },
     {
-      id: 'streaming-thought-execution-2-4000000-1',
-      type: 'thought',
-      message_id: 'execution-2',
-      content: 'Second thought',
+      id: "streaming-thought-execution-2-4000000-1",
+      type: "thought",
+      message_id: "execution-2",
+      content: "Second thought",
       eventTimeUs: 4_000_000,
       eventCounter: 1,
       metadata: { streaming: false },
@@ -1527,9 +1585,9 @@ test('a delayed thought completion settles its exact row without moving it acros
   ];
 
   const items = mergeThoughtStreamChunk(existing, {
-    kind: 'complete',
-    messageId: 'execution-1',
-    content: 'First thought final',
+    kind: "complete",
+    messageId: "execution-1",
+    content: "First thought final",
     eventTimeUs: 5_000_000,
     eventCounter: 1,
   });
@@ -1537,10 +1595,10 @@ test('a delayed thought completion settles its exact row without moving it acros
   assert.deepEqual(
     items.map((item) => [item.id, item.content]),
     [
-      ['user-1', 'First'],
-      ['streaming-thought-execution-1-2000000-1', 'First thought final'],
-      ['user-2', 'Second'],
-      ['streaming-thought-execution-2-4000000-1', 'Second thought'],
+      ["user-1", "First"],
+      ["streaming-thought-execution-1-2000000-1", "First thought final"],
+      ["user-2", "Second"],
+      ["streaming-thought-execution-2-4000000-1", "Second thought"],
     ],
   );
   assert.equal(items[1].eventTimeUs, 2_000_000);
@@ -1548,30 +1606,30 @@ test('a delayed thought completion settles its exact row without moving it acros
   assert.equal(items[1].metadata.streaming, false);
 });
 
-test('complete without a matching response id preserves the existing transient assistant', () => {
+test("complete without a matching response id preserves the existing transient assistant", () => {
   const existing = [
     {
-      id: 'user-1',
-      type: 'user_message',
-      role: 'user',
-      content: 'Continue',
+      id: "user-1",
+      type: "user_message",
+      role: "user",
+      content: "Continue",
       eventTimeUs: 1_000_000,
       eventCounter: 1,
     },
     {
-      id: 'assistant-old',
-      type: 'assistant_message',
-      role: 'assistant',
-      content: 'Older canonical answer',
+      id: "assistant-old",
+      type: "assistant_message",
+      role: "assistant",
+      content: "Older canonical answer",
       eventTimeUs: 2_000_000,
       eventCounter: 1,
     },
     {
-      id: 'streaming-assistant-new',
-      type: 'assistant_message',
-      role: 'assistant',
-      message_id: 'execution-new',
-      content: 'Newest draft',
+      id: "streaming-assistant-new",
+      type: "assistant_message",
+      role: "assistant",
+      message_id: "execution-new",
+      content: "Newest draft",
       eventTimeUs: 3_000_000,
       eventCounter: 1,
       metadata: { streaming: true },
@@ -1579,46 +1637,48 @@ test('complete without a matching response id preserves the existing transient a
   ];
 
   const items = mergeAssistantCompletionEvent(existing, {
-    messageId: 'completion-without-stream-id',
-    content: 'Newest final answer',
+    messageId: "completion-without-stream-id",
+    content: "Newest final answer",
     eventTimeUs: 4_000_000,
     eventCounter: 1,
   });
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'assistant').map((item) => item.content),
-    ['Older canonical answer', 'Newest draft', 'Newest final answer'],
+    items
+      .filter((item) => item.role === "assistant")
+      .map((item) => item.content),
+    ["Older canonical answer", "Newest draft", "Newest final answer"],
   );
 });
 
-test('a channel inbound user message starts a new completion turn', () => {
+test("a channel inbound user message starts a new completion turn", () => {
   const existing = [
     {
-      id: 'assistant-before-channel',
-      type: 'assistant_message',
-      role: 'assistant',
-      content: 'Before channel message',
+      id: "assistant-before-channel",
+      type: "assistant_message",
+      role: "assistant",
+      content: "Before channel message",
       eventTimeUs: 1_000_000,
       eventCounter: 1,
     },
     {
-      id: 'channel-event-1',
-      type: 'message',
+      id: "channel-event-1",
+      type: "message",
       eventTimeUs: 2_000_000,
       eventCounter: 1,
       payload: {
-        id: 'channel-user-1',
-        role: 'user',
-        content: 'Continue from Feishu',
-        metadata: { source: 'channel_inbound' },
+        id: "channel-user-1",
+        role: "user",
+        content: "Continue from Feishu",
+        metadata: { source: "channel_inbound" },
       },
     },
     {
-      id: 'streaming-assistant-channel-turn',
-      type: 'assistant_message',
-      role: 'assistant',
-      message_id: 'channel-execution-1',
-      content: 'Channel draft',
+      id: "streaming-assistant-channel-turn",
+      type: "assistant_message",
+      role: "assistant",
+      message_id: "channel-execution-1",
+      content: "Channel draft",
       eventTimeUs: 3_000_000,
       eventCounter: 1,
       metadata: { streaming: true },
@@ -1626,20 +1686,25 @@ test('a channel inbound user message starts a new completion turn', () => {
   ];
 
   const items = mergeAssistantCompletionEvent(existing, {
-    messageId: 'channel-execution-1',
-    content: 'Channel final',
+    messageId: "channel-execution-1",
+    content: "Channel final",
     eventTimeUs: 4_000_000,
     eventCounter: 1,
   });
 
   assert.deepEqual(
-    items.filter((item) => item.role === 'assistant').map((item) => item.content),
-    ['Before channel message', 'Channel final'],
+    items
+      .filter((item) => item.role === "assistant")
+      .map((item) => item.content),
+    ["Before channel message", "Channel final"],
   );
 });
 
-test('live Agent complete events preserve final content and execution summary metadata', () => {
-  assert.match(appSource, /type === 'complete'[\s\S]*?mergeAssistantCompletionEvent\(/);
+test("live Agent complete events preserve final content and execution summary metadata", () => {
+  assert.match(
+    appSource,
+    /type === 'complete'[\s\S]*?mergeAssistantCompletionEvent\(/,
+  );
   assert.match(
     appSource,
     /const explicitMessageId = streamingMessageId\(payload\)[\s\S]*?turnScopedFallback: !explicitMessageId/,
@@ -1652,7 +1717,7 @@ test('live Agent complete events preserve final content and execution summary me
   assert.match(appSource, /readTextField\(data, 'content'\)/);
 });
 
-test('transport acknowledgements stay out of the transcript and terminal signals are released', () => {
+test("transport acknowledgements stay out of the transcript and terminal signals are released", () => {
   assert.match(
     appSource,
     /type === 'ack'[\s\S]*?action'\) === 'send_message'[\s\S]*?mergeAgentSendAcknowledgement\(/,
@@ -1675,74 +1740,74 @@ test('transport acknowledgements stay out of the transcript and terminal signals
   );
 });
 
-test('MCP elicitation events expose safe request and response audit semantics', () => {
+test("MCP elicitation events expose safe request and response audit semantics", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'elicitation-asked-1',
-      type: 'elicitation_asked',
+      id: "elicitation-asked-1",
+      type: "elicitation_asked",
       eventTimeUs: 1_000_000,
       eventCounter: 1,
       payload: {
-        server_id: 'mcp-release',
-        server_name: 'Release MCP',
-        message: 'Choose the release region',
+        server_id: "mcp-release",
+        server_name: "Release MCP",
+        message: "Choose the release region",
         requested_schema: {
-          type: 'object',
+          type: "object",
           properties: {
-            region: { type: 'string' },
-            api_token: { type: 'string' },
+            region: { type: "string" },
+            api_token: { type: "string" },
           },
         },
       },
     }),
     {
-      family: 'elicitation',
-      state: 'waiting',
-      subject: 'Release MCP',
-      detail: 'Choose the release region · region, api_token',
+      family: "elicitation",
+      state: "waiting",
+      subject: "Release MCP",
+      detail: "Choose the release region · region, api_token",
       isError: false,
     },
   );
 
   const answered = agentLifecyclePresentation({
-    id: 'elicitation-asked-2',
-    type: 'elicitation_asked',
+    id: "elicitation-asked-2",
+    type: "elicitation_asked",
     eventTimeUs: 2_000_000,
     eventCounter: 2,
     answered: true,
-    providedFields: ['region', 'api_token'],
+    providedFields: ["region", "api_token"],
     payload: {
-      server_name: 'Release MCP',
-      message: 'Choose the release region',
+      server_name: "Release MCP",
+      message: "Choose the release region",
     },
   });
   assert.deepEqual(answered, {
-    family: 'elicitation',
-    state: 'complete',
-    subject: 'Release MCP',
-    detail: 'Choose the release region · region, api_token',
+    family: "elicitation",
+    state: "complete",
+    subject: "Release MCP",
+    detail: "Choose the release region · region, api_token",
     isError: false,
   });
   assert.doesNotMatch(JSON.stringify(answered), /eu-west|must-never-render/);
 });
 
-test('cost updates merge into the current Agent reply without losing execution summary fields', () => {
+test("cost updates merge into the current Agent reply without losing execution summary fields", () => {
   const existing = [
     {
-      id: 'user-cost-1',
-      type: 'user_message',
-      role: 'user',
-      content: 'Run the verification',
+      id: "user-cost-1",
+      type: "user_message",
+      role: "user",
+      content: "Run the verification",
       eventTimeUs: 1_000_000,
       eventCounter: 1,
     },
     {
-      id: 'assistant-cost-1',
-      type: 'assistant_message',
-      role: 'assistant',
-      message_id: 'execution-cost-1',
-      executionMessageId: 'execution-cost-1',
-      content: 'Verification complete',
+      id: "assistant-cost-1",
+      type: "assistant_message",
+      role: "assistant",
+      message_id: "execution-cost-1",
+      executionMessageId: "execution-cost-1",
+      content: "Verification complete",
       eventTimeUs: 2_000_000,
       eventCounter: 2,
       metadata: {
@@ -1753,12 +1818,12 @@ test('cost updates merge into the current Agent reply without losing execution s
   ];
 
   const merged = mergeCostUpdateEvent(existing, {
-    message_id: 'execution-cost-1',
+    message_id: "execution-cost-1",
     cost_usd: 0.0042,
     total_tokens: 900,
     input_tokens: 700,
     output_tokens: 200,
-    model: 'gpt-5.5',
+    model: "gpt-5.5",
   });
 
   assert.notEqual(merged, existing);
@@ -1768,7 +1833,7 @@ test('cost updates merge into the current Agent reply without losing execution s
     artifactCount: 1,
     callCount: 0,
     totalCost: 0.0042,
-    totalCostFormatted: '$0.004200',
+    totalCostFormatted: "$0.004200",
     totalTokens: 900,
     tasks: null,
   });
@@ -1778,25 +1843,25 @@ test('cost updates merge into the current Agent reply without losing execution s
     reasoningTokens: 0,
     totalTokens: 900,
     costUsd: 0.0042,
-    model: 'gpt-5.5',
+    model: "gpt-5.5",
   });
 });
 
-test('cost updates accept domain token maps, prefer cumulative totals, and avoid phantom rows', () => {
+test("cost updates accept domain token maps, prefer cumulative totals, and avoid phantom rows", () => {
   const existing = [
     {
-      id: 'assistant-cost-2',
-      type: 'assistant_message',
-      role: 'assistant',
-      message_id: 'execution-cost-2',
-      executionMessageId: 'execution-cost-2',
-      content: 'Done',
+      id: "assistant-cost-2",
+      type: "assistant_message",
+      role: "assistant",
+      message_id: "execution-cost-2",
+      executionMessageId: "execution-cost-2",
+      content: "Done",
       eventTimeUs: 3_000_000,
       eventCounter: 3,
     },
   ];
   const merged = mergeCostUpdateEvent(existing, {
-    execution_message_id: 'execution-cost-2',
+    execution_message_id: "execution-cost-2",
     cost: 0.001,
     cumulative_cost_usd: 0.006,
     tokens: { input: 800, output: 200, total: 1_000 },
@@ -1805,56 +1870,62 @@ test('cost updates accept domain token maps, prefer cumulative totals, and avoid
 
   assert.equal(assistantExecutionSummary(merged[0]).totalCost, 0.006);
   assert.equal(assistantExecutionSummary(merged[0]).totalTokens, 1_600);
-  assert.equal(mergeCostUpdateEvent([], { cost: 0.001, tokens: { total: 100 } }).length, 0);
+  assert.equal(
+    mergeCostUpdateEvent([], { cost: 0.001, tokens: { total: 100 } }).length,
+    0,
+  );
   assert.equal(
     mergeCostUpdateEvent(existing, { cost: 0.001, tokens: { total: 100 } }),
     existing,
   );
-  assert.match(appSource, /type === 'cost_update'[\s\S]*?mergeCostUpdateEvent\(/);
+  assert.match(
+    appSource,
+    /type === 'cost_update'[\s\S]*?mergeCostUpdateEvent\(/,
+  );
 });
 
-test('a delayed cost update changes only the assistant with the exact execution id', () => {
+test("a delayed cost update changes only the assistant with the exact execution id", () => {
   const existing = [
     {
-      id: 'user-cost-first',
-      type: 'user_message',
-      role: 'user',
-      content: 'First',
+      id: "user-cost-first",
+      type: "user_message",
+      role: "user",
+      content: "First",
       eventTimeUs: 1_000_000,
       eventCounter: 1,
     },
     {
-      id: 'assistant-cost-first',
-      type: 'assistant_message',
-      role: 'assistant',
-      message_id: 'response-cost-first',
-      executionMessageId: 'execution-cost-first',
-      content: 'First answer',
+      id: "assistant-cost-first",
+      type: "assistant_message",
+      role: "assistant",
+      message_id: "response-cost-first",
+      executionMessageId: "execution-cost-first",
+      content: "First answer",
       eventTimeUs: 2_000_000,
       eventCounter: 2,
     },
     {
-      id: 'user-cost-second',
-      type: 'user_message',
-      role: 'user',
-      content: 'Second',
+      id: "user-cost-second",
+      type: "user_message",
+      role: "user",
+      content: "Second",
       eventTimeUs: 3_000_000,
       eventCounter: 1,
     },
     {
-      id: 'assistant-cost-second',
-      type: 'assistant_message',
-      role: 'assistant',
-      message_id: 'response-cost-second',
-      executionMessageId: 'execution-cost-second',
-      content: 'Second answer',
+      id: "assistant-cost-second",
+      type: "assistant_message",
+      role: "assistant",
+      message_id: "response-cost-second",
+      executionMessageId: "execution-cost-second",
+      content: "Second answer",
       eventTimeUs: 4_000_000,
       eventCounter: 2,
     },
   ];
 
   const merged = mergeCostUpdateEvent(existing, {
-    message_id: 'execution-cost-first',
+    message_id: "execution-cost-first",
     cost_usd: 0.12,
     input_tokens: 900,
     output_tokens: 100,
@@ -1867,20 +1938,20 @@ test('a delayed cost update changes only the assistant with the exact execution 
     reasoningTokens: 0,
     totalTokens: 1_000,
     costUsd: 0.12,
-    model: '',
+    model: "",
   });
   assert.equal(assistantCostTracking(merged[3]), null);
 });
 
-test('domain cost updates accumulate input, output, reasoning, total tokens, and cost', () => {
+test("domain cost updates accumulate input, output, reasoning, total tokens, and cost", () => {
   const existing = [
     {
-      id: 'assistant-cost-reasoning',
-      type: 'assistant_message',
-      role: 'assistant',
-      message_id: 'execution-cost-reasoning',
-      executionMessageId: 'execution-cost-reasoning',
-      content: 'Compared both execution paths',
+      id: "assistant-cost-reasoning",
+      type: "assistant_message",
+      role: "assistant",
+      message_id: "execution-cost-reasoning",
+      executionMessageId: "execution-cost-reasoning",
+      content: "Compared both execution paths",
       eventTimeUs: 3_500_000,
       eventCounter: 4,
       metadata: { executionSummary: {} },
@@ -1888,12 +1959,12 @@ test('domain cost updates accumulate input, output, reasoning, total tokens, and
   ];
 
   const afterFirstStep = mergeCostUpdateEvent(existing, {
-    message_id: 'execution-cost-reasoning',
+    message_id: "execution-cost-reasoning",
     cost: 0.001,
     tokens: { input: 800, output: 100, reasoning: 100 },
   });
   const afterSecondStep = mergeCostUpdateEvent(afterFirstStep, {
-    message_id: 'execution-cost-reasoning',
+    message_id: "execution-cost-reasoning",
     cost: 0.002,
     tokens: { input: 400, output: 200, reasoning: 50 },
   });
@@ -1904,18 +1975,21 @@ test('domain cost updates accumulate input, output, reasoning, total tokens, and
     reasoningTokens: 150,
     totalTokens: 1_650,
     costUsd: 0.003,
-    model: '',
+    model: "",
   });
-  assert.equal(assistantExecutionSummary(afterSecondStep[0]).totalTokens, 1_650);
+  assert.equal(
+    assistantExecutionSummary(afterSecondStep[0]).totalTokens,
+    1_650,
+  );
   assert.equal(assistantExecutionSummary(afterSecondStep[0]).totalCost, 0.003);
 });
 
-test('assistant cost tracking fails closed for malformed token metadata', () => {
+test("assistant cost tracking fails closed for malformed token metadata", () => {
   assert.equal(
     assistantCostTracking({
-      id: 'assistant-cost-malformed',
-      type: 'assistant_message',
-      role: 'assistant',
+      id: "assistant-cost-malformed",
+      type: "assistant_message",
+      role: "assistant",
       eventTimeUs: 3_600_000,
       eventCounter: 5,
       metadata: {
@@ -1925,7 +1999,7 @@ test('assistant cost tracking fails closed for malformed token metadata', () => 
           reasoningTokens: -1,
           totalTokens: 149,
           costUsd: 0.001,
-          model: 'gpt-5.5',
+          model: "gpt-5.5",
         },
       },
     }),
@@ -1933,1222 +2007,1235 @@ test('assistant cost tracking fails closed for malformed token metadata', () => 
   );
 });
 
-test('LLM retry events expose an explicit waiting lifecycle instead of a raw generic event', () => {
+test("LLM retry events expose an explicit waiting lifecycle instead of a raw generic event", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'retry-1',
-      type: 'retry',
+      id: "retry-1",
+      type: "retry",
       eventTimeUs: 4_000_000,
       eventCounter: 4,
       payload: {
         attempt: 2,
         delay_ms: 1_500,
-        message: 'Provider rate limit',
+        message: "Provider rate limit",
       },
     }),
     {
-      family: 'retry',
-      state: 'waiting',
-      subject: '2',
-      detail: 'Provider rate limit',
+      family: "retry",
+      state: "waiting",
+      subject: "2",
+      detail: "Provider rate limit",
       isError: false,
     },
   );
 });
 
-test('subagent lifecycle events expose readable subjects, details, and protocol states', () => {
+test("subagent lifecycle events expose readable subjects, details, and protocol states", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'subagent-started-1',
-      type: 'subagent_started',
+      id: "subagent-started-1",
+      type: "subagent_started",
       eventTimeUs: 1_000_000,
       eventCounter: 1,
       payload: {
-        subagent_name: 'Regression reviewer',
-        task: 'Verify the concurrent disposal fix',
+        subagent_name: "Regression reviewer",
+        task: "Verify the concurrent disposal fix",
       },
     }),
     {
-      family: 'subagent',
-      state: 'running',
-      subject: 'Regression reviewer',
-      detail: 'Verify the concurrent disposal fix',
+      family: "subagent",
+      state: "running",
+      subject: "Regression reviewer",
+      detail: "Verify the concurrent disposal fix",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'subagent-failed-1',
-      type: 'subagent_failed',
+      id: "subagent-failed-1",
+      type: "subagent_failed",
       eventTimeUs: 2_000_000,
       eventCounter: 2,
       payload: {
-        subagent_name: 'CI verifier',
-        error: 'Runner image is missing the fixture module',
+        subagent_name: "CI verifier",
+        error: "Runner image is missing the fixture module",
       },
     }),
     {
-      family: 'subagent',
-      state: 'failed',
-      subject: 'CI verifier',
-      detail: 'Runner image is missing the fixture module',
+      family: "subagent",
+      state: "failed",
+      subject: "CI verifier",
+      detail: "Runner image is missing the fixture module",
       isError: true,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'tools-updated-1',
-      type: 'tools_updated',
+      id: "tools-updated-1",
+      type: "tools_updated",
       eventTimeUs: 23_500_000,
       eventCounter: 4,
       payload: {
-        project_id: 'project-release',
-        server_name: 'release-tools',
-        tool_names: ['mcp__release__verify', 'mcp__release__publish'],
+        project_id: "project-release",
+        server_name: "release-tools",
+        tool_names: ["mcp__release__verify", "mcp__release__publish"],
         requires_refresh: true,
       },
     }),
     {
-      family: 'toolset',
-      state: 'ready',
-      subject: 'release-tools',
-      detail: '',
+      family: "toolset",
+      state: "ready",
+      subject: "release-tools",
+      detail: "",
       isError: false,
-      progress: { unit: 'tools', total: 2 },
+      progress: { unit: "tools", total: 2 },
     },
   );
 });
 
-test('graph lifecycle events render run, node, and handoff semantics without raw JSON', () => {
+test("graph lifecycle events render run, node, and handoff semantics without raw JSON", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'graph-completed-1',
-      type: 'graph_run_completed',
+      id: "graph-completed-1",
+      type: "graph_run_completed",
       eventTimeUs: 3_000_000,
       eventCounter: 1,
-      payload: { graph_name: 'Release validation', total_steps: 6 },
+      payload: { graph_name: "Release validation", total_steps: 6 },
     }),
     {
-      family: 'graphRun',
-      state: 'complete',
-      subject: 'Release validation',
-      detail: '',
+      family: "graphRun",
+      state: "complete",
+      subject: "Release validation",
+      detail: "",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'graph-node-failed-1',
-      type: 'graph_node_failed',
+      id: "graph-node-failed-1",
+      type: "graph_node_failed",
       eventTimeUs: 4_000_000,
       eventCounter: 2,
       payload: {
-        node_label: 'Run regression tests',
-        error_message: '1 test failed after 12.4s',
+        node_label: "Run regression tests",
+        error_message: "1 test failed after 12.4s",
       },
     }),
     {
-      family: 'graphNode',
-      state: 'failed',
-      subject: 'Run regression tests',
-      detail: '1 test failed after 12.4s',
+      family: "graphNode",
+      state: "failed",
+      subject: "Run regression tests",
+      detail: "1 test failed after 12.4s",
       isError: true,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'graph-handoff-1',
-      type: 'graph_handoff',
+      id: "graph-handoff-1",
+      type: "graph_handoff",
       eventTimeUs: 5_000_000,
       eventCounter: 3,
       payload: {
-        from_label: 'Planner',
-        to_label: 'Reviewer',
-        context_summary: 'Patch ready for verification',
+        from_label: "Planner",
+        to_label: "Reviewer",
+        context_summary: "Patch ready for verification",
       },
     }),
     {
-      family: 'graphHandoff',
-      state: 'running',
-      subject: 'Planner → Reviewer',
-      detail: 'Patch ready for verification',
+      family: "graphHandoff",
+      state: "running",
+      subject: "Planner → Reviewer",
+      detail: "Patch ready for verification",
       isError: false,
     },
   );
 });
 
-test('agent collaboration lifecycle exposes readable work, completion, and stop states', () => {
+test("agent collaboration lifecycle exposes readable work, completion, and stop states", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'agent-spawned-1',
-      type: 'agent_spawned',
+      id: "agent-spawned-1",
+      type: "agent_spawned",
       eventTimeUs: 6_000_000,
       eventCounter: 1,
       payload: {
-        agent_name: 'Researcher',
-        task_summary: 'Collect release evidence',
+        agent_name: "Researcher",
+        task_summary: "Collect release evidence",
       },
     }),
     {
-      family: 'agent',
-      state: 'running',
-      subject: 'Researcher',
-      detail: 'Collect release evidence',
+      family: "agent",
+      state: "running",
+      subject: "Researcher",
+      detail: "Collect release evidence",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'agent-completed-1',
-      type: 'agent_completed',
+      id: "agent-completed-1",
+      type: "agent_completed",
       eventTimeUs: 7_000_000,
       eventCounter: 2,
       payload: {
-        agent_name: 'Verifier',
-        result: 'Release gate failed',
+        agent_name: "Verifier",
+        result: "Release gate failed",
         success: false,
       },
     }),
     {
-      family: 'agent',
-      state: 'failed',
-      subject: 'Verifier',
-      detail: 'Release gate failed',
+      family: "agent",
+      state: "failed",
+      subject: "Verifier",
+      detail: "Release gate failed",
       isError: true,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'agent-stopped-1',
-      type: 'agent_stopped',
+      id: "agent-stopped-1",
+      type: "agent_stopped",
       eventTimeUs: 8_000_000,
       eventCounter: 3,
-      payload: { agent_name: 'Researcher', reason: 'Superseded by a newer run' },
-    }),
-    {
-      family: 'agent',
-      state: 'stopped',
-      subject: 'Researcher',
-      detail: 'Superseded by a newer run',
-      isError: false,
-    },
-  );
-});
-
-test('agent messages expose sender to recipient direction for live and history shapes', () => {
-  assert.deepEqual(
-    agentLifecyclePresentation({
-      id: 'agent-message-sent-1',
-      type: 'agent_message_sent',
-      eventTimeUs: 9_000_000,
-      eventCounter: 1,
       payload: {
-        from_agent_name: 'Planner',
-        to_agent_name: 'Reviewer',
-        message_preview: 'Please verify the patch',
+        agent_name: "Researcher",
+        reason: "Superseded by a newer run",
       },
     }),
     {
-      family: 'agentMessage',
-      state: 'sent',
-      subject: 'Planner → Reviewer',
-      detail: 'Please verify the patch',
-      isError: false,
-    },
-  );
-
-  assert.deepEqual(
-    agentLifecyclePresentation({
-      id: 'agent-message-received-1',
-      type: 'agent_message_received',
-      eventTimeUs: 10_000_000,
-      eventCounter: 2,
-      agentName: 'Planner',
-      fromAgentName: 'Reviewer',
-      messagePreview: 'Patch verified successfully',
-    }),
-    {
-      family: 'agentMessage',
-      state: 'received',
-      subject: 'Reviewer → Planner',
-      detail: 'Patch verified successfully',
+      family: "agent",
+      state: "stopped",
+      subject: "Researcher",
+      detail: "Superseded by a newer run",
       isError: false,
     },
   );
 });
 
-test('parallel orchestration exposes task progress, participants, and structured failure', () => {
+test("agent messages expose sender to recipient direction for live and history shapes", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'parallel-started-1',
-      type: 'parallel_started',
+      id: "agent-message-sent-1",
+      type: "agent_message_sent",
+      eventTimeUs: 9_000_000,
+      eventCounter: 1,
+      payload: {
+        from_agent_name: "Planner",
+        to_agent_name: "Reviewer",
+        message_preview: "Please verify the patch",
+      },
+    }),
+    {
+      family: "agentMessage",
+      state: "sent",
+      subject: "Planner → Reviewer",
+      detail: "Please verify the patch",
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: "agent-message-received-1",
+      type: "agent_message_received",
+      eventTimeUs: 10_000_000,
+      eventCounter: 2,
+      agentName: "Planner",
+      fromAgentName: "Reviewer",
+      messagePreview: "Patch verified successfully",
+    }),
+    {
+      family: "agentMessage",
+      state: "received",
+      subject: "Reviewer → Planner",
+      detail: "Patch verified successfully",
+      isError: false,
+    },
+  );
+});
+
+test("parallel orchestration exposes task progress, participants, and structured failure", () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: "parallel-started-1",
+      type: "parallel_started",
       eventTimeUs: 11_000_000,
       eventCounter: 1,
       payload: {
         task_count: 2,
         subtasks: [
-          { subagent_name: 'Researcher', task: 'Collect release evidence' },
-          { subagent_name: 'Reviewer', task: 'Review the release gate' },
+          { subagent_name: "Researcher", task: "Collect release evidence" },
+          { subagent_name: "Reviewer", task: "Review the release gate" },
         ],
       },
     }),
     {
-      family: 'parallel',
-      state: 'running',
-      subject: 'Researcher, Reviewer',
-      detail: '',
+      family: "parallel",
+      state: "running",
+      subject: "Researcher, Reviewer",
+      detail: "",
       isError: false,
-      progress: { unit: 'tasks', total: 2 },
+      progress: { unit: "tasks", total: 2 },
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'parallel-completed-1',
-      type: 'parallel_completed',
+      id: "parallel-completed-1",
+      type: "parallel_completed",
       eventTimeUs: 12_000_000,
       eventCounter: 2,
       results: [
-        { subagentName: 'Researcher', summary: 'Evidence collected', success: true },
-        { subagentName: 'Reviewer', summary: 'Release gate failed', success: false },
+        {
+          subagentName: "Researcher",
+          summary: "Evidence collected",
+          success: true,
+        },
+        {
+          subagentName: "Reviewer",
+          summary: "Release gate failed",
+          success: false,
+        },
       ],
     }),
     {
-      family: 'parallel',
-      state: 'failed',
-      subject: 'Researcher, Reviewer',
-      detail: 'Reviewer',
+      family: "parallel",
+      state: "failed",
+      subject: "Researcher, Reviewer",
+      detail: "Reviewer",
       isError: true,
-      progress: { unit: 'tasks', current: 2, total: 2 },
+      progress: { unit: "tasks", current: 2, total: 2 },
     },
   );
 });
 
-test('chain orchestration preserves step names, previews, summaries, and progress', () => {
+test("chain orchestration preserves step names, previews, summaries, and progress", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'chain-started-1',
-      type: 'chain_started',
+      id: "chain-started-1",
+      type: "chain_started",
       eventTimeUs: 13_000_000,
       eventCounter: 1,
       payload: {
         total_steps: 3,
-        step_names: ['Plan', 'Review', 'Verify'],
+        step_names: ["Plan", "Review", "Verify"],
       },
     }),
     {
-      family: 'chain',
-      state: 'running',
-      subject: 'Plan → Review → Verify',
-      detail: '',
+      family: "chain",
+      state: "running",
+      subject: "Plan → Review → Verify",
+      detail: "",
       isError: false,
-      progress: { unit: 'steps', total: 3 },
+      progress: { unit: "steps", total: 3 },
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'chain-step-started-1',
-      type: 'chain_step_started',
+      id: "chain-step-started-1",
+      type: "chain_step_started",
       eventTimeUs: 14_000_000,
       eventCounter: 2,
       stepIndex: 1,
-      stepName: 'Review',
-      taskPreview: 'Review the release evidence',
+      stepName: "Review",
+      taskPreview: "Review the release evidence",
     }),
     {
-      family: 'chainStep',
-      state: 'running',
-      subject: 'Review',
-      detail: 'Review the release evidence',
+      family: "chainStep",
+      state: "running",
+      subject: "Review",
+      detail: "Review the release evidence",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'chain-step-completed-1',
-      type: 'chain_step_completed',
+      id: "chain-step-completed-1",
+      type: "chain_step_completed",
       eventTimeUs: 15_000_000,
       eventCounter: 3,
       payload: {
         step_index: 1,
-        step_name: 'Review',
-        summary: 'Evidence passed review',
+        step_name: "Review",
+        summary: "Evidence passed review",
         success: true,
       },
     }),
     {
-      family: 'chainStep',
-      state: 'complete',
-      subject: 'Review',
-      detail: 'Evidence passed review',
+      family: "chainStep",
+      state: "complete",
+      subject: "Review",
+      detail: "Evidence passed review",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'chain-completed-1',
-      type: 'chain_completed',
+      id: "chain-completed-1",
+      type: "chain_completed",
       eventTimeUs: 16_000_000,
       eventCounter: 4,
       payload: {
         steps_completed: 3,
         total_steps: 3,
-        final_summary: 'Release ready',
+        final_summary: "Release ready",
         success: true,
       },
     }),
     {
-      family: 'chain',
-      state: 'complete',
-      subject: '',
-      detail: 'Release ready',
+      family: "chain",
+      state: "complete",
+      subject: "",
+      detail: "Release ready",
       isError: false,
-      progress: { unit: 'steps', current: 3, total: 3 },
+      progress: { unit: "steps", current: 3, total: 3 },
     },
   );
 });
 
-test('background launch exposes the assigned SubAgent and task for both protocol shapes', () => {
+test("background launch exposes the assigned SubAgent and task for both protocol shapes", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'background-launched-1',
-      type: 'background_launched',
+      id: "background-launched-1",
+      type: "background_launched",
       eventTimeUs: 17_000_000,
       eventCounter: 1,
       payload: {
-        subagent_name: 'Auditor',
-        task_description: 'Audit the release evidence asynchronously',
+        subagent_name: "Auditor",
+        task_description: "Audit the release evidence asynchronously",
       },
     }),
     {
-      family: 'background',
-      state: 'running',
-      subject: 'Auditor',
-      detail: 'Audit the release evidence asynchronously',
+      family: "background",
+      state: "running",
+      subject: "Auditor",
+      detail: "Audit the release evidence asynchronously",
       isError: false,
     },
   );
 });
 
-test('execution governance events expose routing, selection, and policy semantics', () => {
+test("execution governance events expose routing, selection, and policy semantics", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'execution-path-decided-1',
-      type: 'execution_path_decided',
+      id: "execution-path-decided-1",
+      type: "execution_path_decided",
       eventTimeUs: 18_000_000,
       eventCounter: 1,
       payload: {
-        path: 'react_loop',
+        path: "react_loop",
         confidence: 0.92,
-        reason: 'Complex task requires tools',
-        target: 'workspace-agent',
+        reason: "Complex task requires tools",
+        target: "workspace-agent",
       },
     }),
     {
-      family: 'routing',
-      state: 'complete',
-      subject: 'react_loop → workspace-agent',
-      detail: 'Complex task requires tools',
+      family: "routing",
+      state: "complete",
+      subject: "react_loop → workspace-agent",
+      detail: "Complex task requires tools",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'selection-trace-1',
-      type: 'selection_trace',
+      id: "selection-trace-1",
+      type: "selection_trace",
       eventTimeUs: 19_000_000,
       eventCounter: 2,
-      domainLane: 'code',
+      domainLane: "code",
       initialCount: 12,
       finalCount: 4,
       removedTotal: 8,
-      budgetExceededStages: ['semantic_ranker_stage'],
+      budgetExceededStages: ["semantic_ranker_stage"],
     }),
     {
-      family: 'selection',
-      state: 'complete',
-      subject: 'code',
-      detail: 'semantic_ranker_stage',
+      family: "selection",
+      state: "complete",
+      subject: "code",
+      detail: "semantic_ranker_stage",
       isError: false,
-      progress: { unit: 'tools', current: 4, total: 12 },
+      progress: { unit: "tools", current: 4, total: 12 },
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'policy-filtered-1',
-      type: 'policy_filtered',
+      id: "policy-filtered-1",
+      type: "policy_filtered",
       eventTimeUs: 20_000_000,
       eventCounter: 3,
       payload: {
-        domain_lane: 'code',
+        domain_lane: "code",
         removed_total: 3,
         stage_count: 2,
-        budget_exceeded_stages: ['semantic_ranker_stage'],
+        budget_exceeded_stages: ["semantic_ranker_stage"],
       },
     }),
     {
-      family: 'policy',
-      state: 'attention',
-      subject: 'code',
-      detail: 'semantic_ranker_stage',
+      family: "policy",
+      state: "attention",
+      subject: "code",
+      detail: "semantic_ranker_stage",
       isError: false,
-      progress: { unit: 'filteredTools', total: 3 },
+      progress: { unit: "filteredTools", total: 3 },
     },
   );
 });
 
-test('tool policy denial and toolset refresh expose blocked and failure states', () => {
+test("tool policy denial and toolset refresh expose blocked and failure states", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'tool-policy-denied-1',
-      type: 'tool_policy_denied',
+      id: "tool-policy-denied-1",
+      type: "tool_policy_denied",
       eventTimeUs: 21_000_000,
       eventCounter: 1,
       payload: {
-        agent_id: 'agent-main',
-        tool_name: 'shell_command',
-        policy_layer: 'workspace',
-        denial_reason: 'Requires approval',
+        agent_id: "agent-main",
+        tool_name: "shell_command",
+        policy_layer: "workspace",
+        denial_reason: "Requires approval",
       },
     }),
     {
-      family: 'policy',
-      state: 'blocked',
-      subject: 'shell_command',
-      detail: 'Requires approval',
+      family: "policy",
+      state: "blocked",
+      subject: "shell_command",
+      detail: "Requires approval",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'toolset-changed-1',
-      type: 'toolset_changed',
+      id: "toolset-changed-1",
+      type: "toolset_changed",
       eventTimeUs: 22_000_000,
       eventCounter: 2,
       payload: {
-        source: 'plugin_manager',
-        plugin_name: 'github',
-        action: 'install',
-        refresh_status: 'success',
+        source: "plugin_manager",
+        plugin_name: "github",
+        action: "install",
+        refresh_status: "success",
         refreshed_tool_count: 3,
       },
     }),
     {
-      family: 'toolset',
-      state: 'complete',
-      subject: 'github',
-      detail: 'install',
+      family: "toolset",
+      state: "complete",
+      subject: "github",
+      detail: "install",
       isError: false,
-      progress: { unit: 'tools', total: 3 },
+      progress: { unit: "tools", total: 3 },
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'toolset-changed-failed-1',
-      type: 'toolset_changed',
+      id: "toolset-changed-failed-1",
+      type: "toolset_changed",
       eventTimeUs: 23_000_000,
       eventCounter: 3,
-      source: 'register_mcp_server',
-      serverName: 'release-tools',
-      refreshStatus: 'failed',
+      source: "register_mcp_server",
+      serverName: "release-tools",
+      refreshStatus: "failed",
     }),
     {
-      family: 'toolset',
-      state: 'failed',
-      subject: 'release-tools',
-      detail: 'register_mcp_server',
+      family: "toolset",
+      state: "failed",
+      subject: "release-tools",
+      detail: "register_mcp_server",
       isError: true,
     },
   );
 });
 
-test('skill matching and execution expose the selected skill and structured progress', () => {
+test("skill matching and execution expose the selected skill and structured progress", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'skill-matched-1',
-      type: 'skill_matched',
+      id: "skill-matched-1",
+      type: "skill_matched",
       eventTimeUs: 24_000_000,
       eventCounter: 1,
       payload: {
-        skill_id: 'skill-release-guard',
-        skill_name: 'Release guard',
-        tools: ['read_file', 'shell_command'],
+        skill_id: "skill-release-guard",
+        skill_name: "Release guard",
+        tools: ["read_file", "shell_command"],
         match_score: 1,
-        execution_mode: 'forced',
+        execution_mode: "forced",
       },
     }),
     {
-      family: 'skill',
-      state: 'complete',
-      subject: 'Release guard',
-      detail: 'forced',
+      family: "skill",
+      state: "complete",
+      subject: "Release guard",
+      detail: "forced",
       isError: false,
-      progress: { unit: 'tools', total: 2 },
+      progress: { unit: "tools", total: 2 },
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'skill-execution-start-1',
-      type: 'skill_execution_start',
+      id: "skill-execution-start-1",
+      type: "skill_execution_start",
       eventTimeUs: 25_000_000,
       eventCounter: 2,
-      skillName: 'Release guard',
-      query: 'Run release checks',
+      skillName: "Release guard",
+      query: "Run release checks",
       totalSteps: 3,
     }),
     {
-      family: 'skill',
-      state: 'running',
-      subject: 'Release guard',
-      detail: 'Run release checks',
+      family: "skill",
+      state: "running",
+      subject: "Release guard",
+      detail: "Run release checks",
       isError: false,
-      progress: { unit: 'steps', total: 3 },
+      progress: { unit: "steps", total: 3 },
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'skill-tool-start-1',
-      type: 'skill_tool_start',
+      id: "skill-tool-start-1",
+      type: "skill_tool_start",
       eventTimeUs: 26_000_000,
       eventCounter: 3,
       payload: {
-        skill_name: 'Release guard',
-        tool_name: 'shell_command',
+        skill_name: "Release guard",
+        tool_name: "shell_command",
         step_index: 1,
         total_steps: 3,
-        status: 'running',
+        status: "running",
       },
     }),
     {
-      family: 'skill',
-      state: 'running',
-      subject: 'Release guard → shell_command',
-      detail: '',
+      family: "skill",
+      state: "running",
+      subject: "Release guard → shell_command",
+      detail: "",
       isError: false,
-      progress: { unit: 'steps', current: 1, total: 3 },
+      progress: { unit: "steps", current: 1, total: 3 },
     },
   );
 });
 
-test('skill results, completion, and fallback expose outcome semantics', () => {
+test("skill results, completion, and fallback expose outcome semantics", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'skill-tool-result-1',
-      type: 'skill_tool_result',
+      id: "skill-tool-result-1",
+      type: "skill_tool_result",
       eventTimeUs: 27_000_000,
       eventCounter: 1,
       payload: {
-        skill_name: 'Release guard',
-        tool_name: 'shell_command',
-        error: 'Release verification failed',
+        skill_name: "Release guard",
+        tool_name: "shell_command",
+        error: "Release verification failed",
         duration_ms: 812,
         step_index: 2,
         total_steps: 3,
-        status: 'error',
+        status: "error",
       },
     }),
     {
-      family: 'skill',
-      state: 'failed',
-      subject: 'Release guard → shell_command',
-      detail: 'Release verification failed',
+      family: "skill",
+      state: "failed",
+      subject: "Release guard → shell_command",
+      detail: "Release verification failed",
       isError: true,
-      progress: { unit: 'steps', current: 2, total: 3 },
+      progress: { unit: "steps", current: 2, total: 3 },
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'skill-execution-complete-1',
-      type: 'skill_execution_complete',
+      id: "skill-execution-complete-1",
+      type: "skill_execution_complete",
       eventTimeUs: 28_000_000,
       eventCounter: 2,
       payload: {
-        skill_name: 'Release guard',
+        skill_name: "Release guard",
         success: true,
-        summary: 'Release checks passed',
+        summary: "Release checks passed",
         tool_results: [
-          { tool_name: 'read_file', status: 'completed' },
-          { tool_name: 'shell_command', status: 'completed' },
+          { tool_name: "read_file", status: "completed" },
+          { tool_name: "shell_command", status: "completed" },
         ],
         execution_time_ms: 1_240,
       },
     }),
     {
-      family: 'skill',
-      state: 'complete',
-      subject: 'Release guard',
-      detail: 'Release checks passed',
+      family: "skill",
+      state: "complete",
+      subject: "Release guard",
+      detail: "Release checks passed",
       isError: false,
-      progress: { unit: 'tools', total: 2 },
+      progress: { unit: "tools", total: 2 },
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'skill-fallback-1',
-      type: 'skill_fallback',
+      id: "skill-fallback-1",
+      type: "skill_fallback",
       eventTimeUs: 29_000_000,
       eventCounter: 3,
-      skillName: 'Release guard',
-      reason: 'execution_failed',
-      error: 'Continuing with the general agent',
+      skillName: "Release guard",
+      reason: "execution_failed",
+      error: "Continuing with the general agent",
     }),
     {
-      family: 'skill',
-      state: 'attention',
-      subject: 'Release guard',
-      detail: 'Continuing with the general agent',
+      family: "skill",
+      state: "attention",
+      subject: "Release guard",
+      detail: "Continuing with the general agent",
       isError: false,
     },
   );
 });
 
-test('model switch events distinguish scheduled changes from rejected overrides', () => {
+test("model switch events distinguish scheduled changes from rejected overrides", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'model-switch-requested-1',
-      type: 'model_switch_requested',
+      id: "model-switch-requested-1",
+      type: "model_switch_requested",
       eventTimeUs: 30_000_000,
       eventCounter: 1,
       payload: {
-        model: 'gpt-4.1',
-        provider_type: 'openai',
-        provider_name: 'OpenAI production',
-        scope: 'next_turn',
-        reason: 'Need deeper reasoning',
+        model: "gpt-4.1",
+        provider_type: "openai",
+        provider_name: "OpenAI production",
+        scope: "next_turn",
+        reason: "Need deeper reasoning",
       },
     }),
     {
-      family: 'model',
-      state: 'scheduled',
-      subject: 'gpt-4.1',
-      detail: 'Need deeper reasoning',
+      family: "model",
+      state: "scheduled",
+      subject: "gpt-4.1",
+      detail: "Need deeper reasoning",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'model-override-rejected-1',
-      type: 'model_override_rejected',
+      id: "model-override-rejected-1",
+      type: "model_override_rejected",
       eventTimeUs: 31_000_000,
       eventCounter: 2,
-      model: 'claude-sonnet-4',
-      reason: 'Cross-provider switch not allowed',
-      currentModel: 'gpt-4.1',
-      currentProvider: 'openai',
+      model: "claude-sonnet-4",
+      reason: "Cross-provider switch not allowed",
+      currentModel: "gpt-4.1",
+      currentProvider: "openai",
     }),
     {
-      family: 'model',
-      state: 'blocked',
-      subject: 'claude-sonnet-4',
-      detail: 'Cross-provider switch not allowed',
+      family: "model",
+      state: "blocked",
+      subject: "claude-sonnet-4",
+      detail: "Cross-provider switch not allowed",
       isError: false,
     },
   );
 });
 
-test('context events expose token occupancy and compression results', () => {
+test("context events expose token occupancy and compression results", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'context-status-1',
-      type: 'context_status',
+      id: "context-status-1",
+      type: "context_status",
       eventTimeUs: 32_000_000,
       eventCounter: 1,
       payload: {
         current_tokens: 7_200,
         token_budget: 16_000,
         occupancy_pct: 45,
-        compression_level: 'none',
+        compression_level: "none",
       },
     }),
     {
-      family: 'context',
-      state: 'complete',
-      subject: 'none',
-      detail: '',
+      family: "context",
+      state: "complete",
+      subject: "none",
+      detail: "",
       isError: false,
-      progress: { unit: 'tokens', current: 7_200, total: 16_000 },
+      progress: { unit: "tokens", current: 7_200, total: 16_000 },
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'context-compressed-1',
-      type: 'context_compressed',
+      id: "context-compressed-1",
+      type: "context_compressed",
       eventTimeUs: 33_000_000,
       eventCounter: 2,
-      compressionStrategy: 'summarize',
-      compressionLevel: 'moderate',
+      compressionStrategy: "summarize",
+      compressionLevel: "moderate",
       originalMessageCount: 18,
       finalMessageCount: 10,
       tokensSaved: 3_400,
     }),
     {
-      family: 'context',
-      state: 'complete',
-      subject: 'summarize',
-      detail: 'moderate',
+      family: "context",
+      state: "complete",
+      subject: "summarize",
+      detail: "moderate",
       isError: false,
-      progress: { unit: 'messages', current: 10, total: 18 },
+      progress: { unit: "messages", current: 10, total: 18 },
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'context-compacted-1',
-      type: 'context_compacted',
+      id: "context-compacted-1",
+      type: "context_compacted",
       eventTimeUs: 33_500_000,
       eventCounter: 3,
       payload: {
-        conversation_id: 'conversation-release',
+        conversation_id: "conversation-release",
         before_tokens: 12_000,
         after_tokens: 4_500,
       },
     }),
     {
-      family: 'context',
-      state: 'complete',
-      subject: 'conversation-release',
-      detail: '',
+      family: "context",
+      state: "complete",
+      subject: "conversation-release",
+      detail: "",
       isError: false,
-      progress: { unit: 'tokens', current: 4_500, total: 12_000 },
+      progress: { unit: "tokens", current: 4_500, total: 12_000 },
     },
   );
 });
 
-test('session fork and merge events expose the child lifecycle direction and strategy', () => {
+test("session fork and merge events expose the child lifecycle direction and strategy", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'session-forked-1',
-      type: 'session_forked',
+      id: "session-forked-1",
+      type: "session_forked",
       eventTimeUs: 33_600_000,
       eventCounter: 1,
       payload: {
-        parent_conversation_id: 'conversation-parent',
-        child_conversation_id: 'conversation-child',
+        parent_conversation_id: "conversation-parent",
+        child_conversation_id: "conversation-child",
       },
     }),
     {
-      family: 'sessionLifecycle',
-      state: 'complete',
-      subject: 'conversation-parent → conversation-child',
-      detail: '',
+      family: "sessionLifecycle",
+      state: "complete",
+      subject: "conversation-parent → conversation-child",
+      detail: "",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'session-merged-1',
-      type: 'session_merged',
+      id: "session-merged-1",
+      type: "session_merged",
       eventTimeUs: 33_700_000,
       eventCounter: 2,
       payload: {
-        parent_conversation_id: 'conversation-parent',
-        child_conversation_id: 'conversation-child',
-        merge_strategy: 'result_only',
+        parent_conversation_id: "conversation-parent",
+        child_conversation_id: "conversation-child",
+        merge_strategy: "result_only",
       },
     }),
     {
-      family: 'sessionLifecycle',
-      state: 'complete',
-      subject: 'conversation-child → conversation-parent',
-      detail: 'result_only',
+      family: "sessionLifecycle",
+      state: "complete",
+      subject: "conversation-child → conversation-parent",
+      detail: "result_only",
       isError: false,
     },
   );
 });
 
-test('conversation participant events expose roster membership and exit context', () => {
+test("conversation participant events expose roster membership and exit context", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'participant-joined-1',
-      type: 'conversation_participant_joined',
+      id: "participant-joined-1",
+      type: "conversation_participant_joined",
       eventTimeUs: 33_800_000,
       eventCounter: 1,
       payload: {
-        conversation_id: 'conversation-release',
-        agent_id: 'agent-reviewer',
-        actor_id: 'agent-coordinator',
-        role: 'participant',
+        conversation_id: "conversation-release",
+        agent_id: "agent-reviewer",
+        actor_id: "agent-coordinator",
+        role: "participant",
       },
     }),
     {
-      family: 'participant',
-      state: 'ready',
-      subject: 'agent-reviewer',
-      detail: 'participant',
+      family: "participant",
+      state: "ready",
+      subject: "agent-reviewer",
+      detail: "participant",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'participant-left-1',
-      type: 'conversation_participant_left',
+      id: "participant-left-1",
+      type: "conversation_participant_left",
       eventTimeUs: 33_900_000,
       eventCounter: 2,
       payload: {
-        conversation_id: 'conversation-release',
-        agent_id: 'agent-reviewer',
-        actor_id: 'agent-coordinator',
-        reason: 'review completed',
+        conversation_id: "conversation-release",
+        agent_id: "agent-reviewer",
+        actor_id: "agent-coordinator",
+        reason: "review completed",
       },
     }),
     {
-      family: 'participant',
-      state: 'stopped',
-      subject: 'agent-reviewer',
-      detail: 'review completed',
+      family: "participant",
+      state: "stopped",
+      subject: "agent-reviewer",
+      detail: "review completed",
       isError: false,
     },
   );
 });
 
-test('structured agent task events expose assignment, refusal, and declared progress', () => {
+test("structured agent task events expose assignment, refusal, and declared progress", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'agent-task-assigned-1',
-      type: 'agent_task_assigned',
+      id: "agent-task-assigned-1",
+      type: "agent_task_assigned",
       eventTimeUs: 34_000_000,
       eventCounter: 1,
       payload: {
-        conversation_id: 'conversation-release',
-        actor_agent_id: 'agent-coordinator',
-        target_agent_id: 'agent-reviewer',
-        task_id: 'task-release-review',
-        task_title: 'Review the release evidence',
-        rationale: 'Independent verification is required.',
+        conversation_id: "conversation-release",
+        actor_agent_id: "agent-coordinator",
+        target_agent_id: "agent-reviewer",
+        task_id: "task-release-review",
+        task_title: "Review the release evidence",
+        rationale: "Independent verification is required.",
       },
     }),
     {
-      family: 'agentTask',
-      state: 'scheduled',
-      subject: 'agent-coordinator → agent-reviewer',
-      detail: 'Review the release evidence',
+      family: "agentTask",
+      state: "scheduled",
+      subject: "agent-coordinator → agent-reviewer",
+      detail: "Review the release evidence",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'agent-task-refused-1',
-      type: 'agent_task_refused',
+      id: "agent-task-refused-1",
+      type: "agent_task_refused",
       eventTimeUs: 34_100_000,
       eventCounter: 2,
       payload: {
-        conversation_id: 'conversation-release',
-        actor_agent_id: 'agent-reviewer',
-        task_id: 'task-release-review',
-        reason: 'Missing deployment credentials',
-        suggested_reassignment: 'agent-operator',
+        conversation_id: "conversation-release",
+        actor_agent_id: "agent-reviewer",
+        task_id: "task-release-review",
+        reason: "Missing deployment credentials",
+        suggested_reassignment: "agent-operator",
       },
     }),
     {
-      family: 'agentTask',
-      state: 'blocked',
-      subject: 'agent-reviewer',
-      detail: 'Missing deployment credentials · agent-operator',
+      family: "agentTask",
+      state: "blocked",
+      subject: "agent-reviewer",
+      detail: "Missing deployment credentials · agent-operator",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'agent-progress-declared-1',
-      type: 'agent_progress_declared',
+      id: "agent-progress-declared-1",
+      type: "agent_progress_declared",
       eventTimeUs: 34_200_000,
       eventCounter: 3,
       payload: {
-        conversation_id: 'conversation-release',
-        actor_agent_id: 'agent-reviewer',
-        task_id: 'task-release-review',
-        status: 'needs_review',
-        summary: 'Ready for coordinator review',
+        conversation_id: "conversation-release",
+        actor_agent_id: "agent-reviewer",
+        task_id: "task-release-review",
+        status: "needs_review",
+        summary: "Ready for coordinator review",
         percent_complete: 75,
       },
     }),
     {
-      family: 'agentTask',
-      state: 'attention',
-      subject: 'task-release-review',
-      detail: 'Ready for coordinator review',
+      family: "agentTask",
+      state: "attention",
+      subject: "task-release-review",
+      detail: "Ready for coordinator review",
       isError: false,
-      progress: { unit: 'percent', current: 75, total: 100 },
+      progress: { unit: "percent", current: 75, total: 100 },
     },
   );
 });
 
-test('agent governance events expose human input, escalation, and conflict evidence', () => {
+test("agent governance events expose human input, escalation, and conflict evidence", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'agent-human-input-1',
-      type: 'agent_human_input_requested',
+      id: "agent-human-input-1",
+      type: "agent_human_input_requested",
       eventTimeUs: 34_300_000,
       eventCounter: 1,
       payload: {
-        conversation_id: 'conversation-release',
-        actor_agent_id: 'agent-reviewer',
-        question: 'Approve the production rollout?',
-        urgency: 'blocking',
-        category: 'permission',
-        rationale: 'Deployment changes production state.',
+        conversation_id: "conversation-release",
+        actor_agent_id: "agent-reviewer",
+        question: "Approve the production rollout?",
+        urgency: "blocking",
+        category: "permission",
+        rationale: "Deployment changes production state.",
       },
     }),
     {
-      family: 'agentGovernance',
-      state: 'blocked',
-      subject: 'agent-reviewer',
-      detail: 'Approve the production rollout? · blocking · permission',
+      family: "agentGovernance",
+      state: "blocked",
+      subject: "agent-reviewer",
+      detail: "Approve the production rollout? · blocking · permission",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'agent-escalated-1',
-      type: 'agent_escalated',
+      id: "agent-escalated-1",
+      type: "agent_escalated",
       eventTimeUs: 34_400_000,
       eventCounter: 2,
       payload: {
-        conversation_id: 'conversation-release',
-        actor_agent_id: 'agent-reviewer',
-        escalated_to: 'human',
-        reason: 'Release approval required',
-        severity: 'high',
+        conversation_id: "conversation-release",
+        actor_agent_id: "agent-reviewer",
+        escalated_to: "human",
+        reason: "Release approval required",
+        severity: "high",
       },
     }),
     {
-      family: 'agentGovernance',
-      state: 'attention',
-      subject: 'agent-reviewer → human',
-      detail: 'Release approval required · high',
+      family: "agentGovernance",
+      state: "attention",
+      subject: "agent-reviewer → human",
+      detail: "Release approval required · high",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'agent-conflict-1',
-      type: 'agent_conflict_marked',
+      id: "agent-conflict-1",
+      type: "agent_conflict_marked",
       eventTimeUs: 34_500_000,
       eventCounter: 3,
       payload: {
-        conversation_id: 'conversation-release',
-        actor_agent_id: 'agent-reviewer',
-        conflict_with: 'artifact-release-notes',
-        summary: 'Release evidence mismatch',
-        evidence: 'Checksum differs from the verified build.',
+        conversation_id: "conversation-release",
+        actor_agent_id: "agent-reviewer",
+        conflict_with: "artifact-release-notes",
+        summary: "Release evidence mismatch",
+        evidence: "Checksum differs from the verified build.",
       },
     }),
     {
-      family: 'agentGovernance',
-      state: 'attention',
-      subject: 'agent-reviewer ↔ artifact-release-notes',
-      detail: 'Release evidence mismatch · Checksum differs from the verified build.',
+      family: "agentGovernance",
+      state: "attention",
+      subject: "agent-reviewer ↔ artifact-release-notes",
+      detail:
+        "Release evidence mismatch · Checksum differs from the verified build.",
       isError: false,
     },
   );
 });
 
-test('agent audit events expose supervisor verdicts and decision-call evidence', () => {
+test("agent audit events expose supervisor verdicts and decision-call evidence", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'agent-supervisor-verdict-1',
-      type: 'agent_supervisor_verdict',
+      id: "agent-supervisor-verdict-1",
+      type: "agent_supervisor_verdict",
       eventTimeUs: 34_600_000,
       eventCounter: 1,
       payload: {
-        conversation_id: 'conversation-release',
-        actor_agent_id: 'agent-supervisor',
-        status: 'goal_drift',
-        rationale: 'Implementation diverged from the release objective.',
-        recommended_actions: ['restate goal', 'reassign review'],
-        trigger: 'tick',
+        conversation_id: "conversation-release",
+        actor_agent_id: "agent-supervisor",
+        status: "goal_drift",
+        rationale: "Implementation diverged from the release objective.",
+        recommended_actions: ["restate goal", "reassign review"],
+        trigger: "tick",
       },
     }),
     {
-      family: 'agentAudit',
-      state: 'attention',
-      subject: 'agent-supervisor',
+      family: "agentAudit",
+      state: "attention",
+      subject: "agent-supervisor",
       detail:
-        'goal_drift · Implementation diverged from the release objective. · restate goal, reassign review',
+        "goal_drift · Implementation diverged from the release objective. · restate goal, reassign review",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'agent-decision-logged-1',
-      type: 'agent_decision_logged',
+      id: "agent-decision-logged-1",
+      type: "agent_decision_logged",
       eventTimeUs: 34_700_000,
       eventCounter: 2,
       payload: {
-        conversation_id: 'conversation-release',
-        actor_agent_id: 'agent-reviewer',
-        tool_name: 'mark_conflict',
-        output_summary: 'Conflict recorded',
-        rationale: 'Evidence mismatch requires adjudication.',
+        conversation_id: "conversation-release",
+        actor_agent_id: "agent-reviewer",
+        tool_name: "mark_conflict",
+        output_summary: "Conflict recorded",
+        rationale: "Evidence mismatch requires adjudication.",
         latency_ms: 18,
       },
     }),
     {
-      family: 'agentAudit',
-      state: 'complete',
-      subject: 'agent-reviewer → mark_conflict',
-      detail: 'Conflict recorded · Evidence mismatch requires adjudication. · 18 ms',
+      family: "agentAudit",
+      state: "complete",
+      subject: "agent-reviewer → mark_conflict",
+      detail:
+        "Conflict recorded · Evidence mismatch requires adjudication. · 18 ms",
       isError: false,
     },
   );
 });
 
-test('workspace orchestration events expose the complete goal execution lifecycle', () => {
+test("workspace orchestration events expose the complete goal execution lifecycle", () => {
   const cases = [
     {
       item: {
-        id: 'workspace-goal-materialized-1',
-        type: 'workspace_goal_materialized',
+        id: "workspace-goal-materialized-1",
+        type: "workspace_goal_materialized",
         eventTimeUs: 34_800_000,
         eventCounter: 1,
         payload: {
-          workspace_id: 'workspace-release',
-          goal_id: 'goal-release',
-          goal_description: 'Validate and publish the release.',
+          workspace_id: "workspace-release",
+          goal_id: "goal-release",
+          goal_description: "Validate and publish the release.",
         },
       },
       expected: {
-        family: 'workspaceOrchestration',
-        state: 'scheduled',
-        subject: 'goal-release',
-        detail: 'Validate and publish the release.',
+        family: "workspaceOrchestration",
+        state: "scheduled",
+        subject: "goal-release",
+        detail: "Validate and publish the release.",
         isError: false,
       },
     },
     {
       item: {
-        id: 'workspace-decomposition-complete-1',
-        type: 'workspace_decomposition_complete',
+        id: "workspace-decomposition-complete-1",
+        type: "workspace_decomposition_complete",
         eventTimeUs: 34_900_000,
         eventCounter: 2,
         payload: {
-          workspace_id: 'workspace-release',
-          goal_id: 'goal-release',
-          subtask_ids: ['task-security-review', 'task-docs', 'task-publish'],
+          workspace_id: "workspace-release",
+          goal_id: "goal-release",
+          subtask_ids: ["task-security-review", "task-docs", "task-publish"],
           subtask_count: 3,
         },
       },
       expected: {
-        family: 'workspaceOrchestration',
-        state: 'complete',
-        subject: 'goal-release',
-        detail: '',
+        family: "workspaceOrchestration",
+        state: "complete",
+        subject: "goal-release",
+        detail: "",
         isError: false,
-        progress: { unit: 'tasks', total: 3 },
+        progress: { unit: "tasks", total: 3 },
       },
     },
     {
       item: {
-        id: 'workspace-worker-dispatched-1',
-        type: 'workspace_worker_dispatched',
+        id: "workspace-worker-dispatched-1",
+        type: "workspace_worker_dispatched",
         eventTimeUs: 35_000_000,
         eventCounter: 3,
         payload: {
-          workspace_id: 'workspace-release',
-          task_id: 'task-security-review',
-          worker_agent_id: 'agent-security',
-          attempt_id: 'attempt-1',
+          workspace_id: "workspace-release",
+          task_id: "task-security-review",
+          worker_agent_id: "agent-security",
+          attempt_id: "attempt-1",
         },
       },
       expected: {
-        family: 'workspaceOrchestration',
-        state: 'running',
-        subject: 'task-security-review',
-        detail: 'agent-security · attempt-1',
+        family: "workspaceOrchestration",
+        state: "running",
+        subject: "task-security-review",
+        detail: "agent-security · attempt-1",
         isError: false,
       },
     },
     {
       item: {
-        id: 'workspace-worker-report-1',
-        type: 'workspace_worker_report_submitted',
+        id: "workspace-worker-report-1",
+        type: "workspace_worker_report_submitted",
         eventTimeUs: 35_100_000,
         eventCounter: 4,
         payload: {
-          workspace_id: 'workspace-release',
-          task_id: 'task-security-review',
-          attempt_id: 'attempt-1',
-          worker_agent_id: 'agent-security',
-          status: 'completed',
+          workspace_id: "workspace-release",
+          task_id: "task-security-review",
+          attempt_id: "attempt-1",
+          worker_agent_id: "agent-security",
+          status: "completed",
         },
       },
       expected: {
-        family: 'workspaceOrchestration',
-        state: 'waiting',
-        subject: 'task-security-review',
-        detail: 'agent-security · completed',
+        family: "workspaceOrchestration",
+        state: "waiting",
+        subject: "task-security-review",
+        detail: "agent-security · completed",
         isError: false,
       },
     },
     {
       item: {
-        id: 'workspace-adjudication-complete-1',
-        type: 'workspace_adjudication_complete',
+        id: "workspace-adjudication-complete-1",
+        type: "workspace_adjudication_complete",
         eventTimeUs: 35_200_000,
         eventCounter: 5,
         payload: {
-          workspace_id: 'workspace-release',
-          task_id: 'task-security-review',
-          attempt_id: 'attempt-1',
-          verdict: 'accepted',
-          next_task_id: 'task-docs',
+          workspace_id: "workspace-release",
+          task_id: "task-security-review",
+          attempt_id: "attempt-1",
+          verdict: "accepted",
+          next_task_id: "task-docs",
         },
       },
       expected: {
-        family: 'workspaceOrchestration',
-        state: 'complete',
-        subject: 'task-security-review',
-        detail: 'accepted · task-docs',
+        family: "workspaceOrchestration",
+        state: "complete",
+        subject: "task-security-review",
+        detail: "accepted · task-docs",
         isError: false,
       },
     },
     {
       item: {
-        id: 'workspace-goal-completed-1',
-        type: 'workspace_goal_completed',
+        id: "workspace-goal-completed-1",
+        type: "workspace_goal_completed",
         eventTimeUs: 35_300_000,
         eventCounter: 6,
         payload: {
-          workspace_id: 'workspace-release',
-          goal_id: 'goal-release',
-          final_status: 'completed',
+          workspace_id: "workspace-release",
+          goal_id: "goal-release",
+          final_status: "completed",
           completed_subtask_count: 3,
           total_subtask_count: 3,
         },
       },
       expected: {
-        family: 'workspaceOrchestration',
-        state: 'complete',
-        subject: 'goal-release',
-        detail: 'completed',
+        family: "workspaceOrchestration",
+        state: "complete",
+        subject: "goal-release",
+        detail: "completed",
         isError: false,
-        progress: { unit: 'tasks', current: 3, total: 3 },
+        progress: { unit: "tasks", current: 3, total: 3 },
       },
     },
   ];
@@ -3158,100 +3245,101 @@ test('workspace orchestration events expose the complete goal execution lifecycl
   }
 });
 
-test('task recovery events expose session health, incidents, and queued recovery actions', () => {
+test("task recovery events expose session health, incidents, and queued recovery actions", () => {
   const cases = [
     {
       item: {
-        id: 'task-session-updated-1',
-        type: 'task_execution_session_updated',
+        id: "task-session-updated-1",
+        type: "task_execution_session_updated",
         eventTimeUs: 35_400_000,
         eventCounter: 1,
         payload: {
-          workspace_id: 'workspace-release',
-          task_id: 'task-security-review',
-          health: 'degraded',
-          session_status: 'initialization_failed',
-          attempt_id: 'attempt-1',
-          recommended_recovery_action: 'new_attempt',
+          workspace_id: "workspace-release",
+          task_id: "task-security-review",
+          health: "degraded",
+          session_status: "initialization_failed",
+          attempt_id: "attempt-1",
+          recommended_recovery_action: "new_attempt",
         },
       },
       expected: {
-        family: 'taskRecovery',
-        state: 'attention',
-        subject: 'task-security-review',
-        detail: 'degraded · initialization_failed · new_attempt',
+        family: "taskRecovery",
+        state: "attention",
+        subject: "task-security-review",
+        detail: "degraded · initialization_failed · new_attempt",
         isError: false,
       },
     },
     {
       item: {
-        id: 'task-incident-opened-1',
-        type: 'task_execution_incident_opened',
+        id: "task-incident-opened-1",
+        type: "task_execution_incident_opened",
         eventTimeUs: 35_500_000,
         eventCounter: 2,
         payload: {
-          workspace_id: 'workspace-release',
-          task_id: 'task-security-review',
-          conversation_id: 'conversation-release',
-          attempt_id: 'attempt-1',
+          workspace_id: "workspace-release",
+          task_id: "task-security-review",
+          conversation_id: "conversation-release",
+          attempt_id: "attempt-1",
           incident: {
-            type: 'no_assistant_response',
-            severity: 'error',
-            summary: 'Conversation produced no assistant output.',
+            type: "no_assistant_response",
+            severity: "error",
+            summary: "Conversation produced no assistant output.",
           },
         },
       },
       expected: {
-        family: 'taskRecovery',
-        state: 'failed',
-        subject: 'task-security-review',
-        detail: 'no_assistant_response · error · Conversation produced no assistant output.',
+        family: "taskRecovery",
+        state: "failed",
+        subject: "task-security-review",
+        detail:
+          "no_assistant_response · error · Conversation produced no assistant output.",
         isError: true,
       },
     },
     {
       item: {
-        id: 'task-recovery-started-1',
-        type: 'task_recovery_action_started',
+        id: "task-recovery-started-1",
+        type: "task_recovery_action_started",
         eventTimeUs: 35_600_000,
         eventCounter: 3,
         payload: {
-          workspace_id: 'workspace-release',
-          task_id: 'task-security-review',
-          action: 'new_attempt',
-          status: 'queued',
-          message: 'Fresh worker attempt queued.',
-          attempt_id: 'attempt-1',
+          workspace_id: "workspace-release",
+          task_id: "task-security-review",
+          action: "new_attempt",
+          status: "queued",
+          message: "Fresh worker attempt queued.",
+          attempt_id: "attempt-1",
         },
       },
       expected: {
-        family: 'taskRecovery',
-        state: 'running',
-        subject: 'task-security-review',
-        detail: 'new_attempt · queued · Fresh worker attempt queued.',
+        family: "taskRecovery",
+        state: "running",
+        subject: "task-security-review",
+        detail: "new_attempt · queued · Fresh worker attempt queued.",
         isError: false,
       },
     },
     {
       item: {
-        id: 'task-recovery-completed-1',
-        type: 'task_recovery_action_completed',
+        id: "task-recovery-completed-1",
+        type: "task_recovery_action_completed",
         eventTimeUs: 35_700_000,
         eventCounter: 4,
         payload: {
-          workspace_id: 'workspace-release',
-          task_id: 'task-security-review',
-          action: 'new_attempt',
-          status: 'queued',
-          message: 'Fresh worker attempt queued.',
-          attempt_id: 'attempt-1',
+          workspace_id: "workspace-release",
+          task_id: "task-security-review",
+          action: "new_attempt",
+          status: "queued",
+          message: "Fresh worker attempt queued.",
+          attempt_id: "attempt-1",
         },
       },
       expected: {
-        family: 'taskRecovery',
-        state: 'scheduled',
-        subject: 'task-security-review',
-        detail: 'new_attempt · queued · Fresh worker attempt queued.',
+        family: "taskRecovery",
+        state: "scheduled",
+        subject: "task-security-review",
+        detail: "new_attempt · queued · Fresh worker attempt queued.",
         isError: false,
       },
     },
@@ -3262,67 +3350,70 @@ test('task recovery events expose session health, incidents, and queued recovery
   }
 });
 
-test('tool progress events expose structured work progress without raw payload fields', () => {
+test("tool progress events expose structured work progress without raw payload fields", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'tool-progress-release-1',
-      type: 'progress',
+      id: "tool-progress-release-1",
+      type: "progress",
       eventTimeUs: 35_800_000,
       eventCounter: 1,
       payload: {
-        tool_name: 'release_uploader',
-        progress_token: 'upload-release-bundle',
+        tool_name: "release_uploader",
+        progress_token: "upload-release-bundle",
         progress: 42,
         total: 100,
-        message: 'Uploading release bundle',
+        message: "Uploading release bundle",
       },
     }),
     {
-      family: 'toolProgress',
-      state: 'running',
-      subject: 'release_uploader',
-      detail: 'Uploading release bundle',
+      family: "toolProgress",
+      state: "running",
+      subject: "release_uploader",
+      detail: "Uploading release bundle",
       isError: false,
-      progress: { unit: 'work', current: 42, total: 100 },
+      progress: { unit: "work", current: 42, total: 100 },
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'tool-progress-release-complete',
-      type: 'progress',
+      id: "tool-progress-release-complete",
+      type: "progress",
       eventTimeUs: 35_900_000,
       eventCounter: 2,
       payload: {
-        tool_name: 'release_uploader',
-        progress_token: 'upload-release-bundle',
+        tool_name: "release_uploader",
+        progress_token: "upload-release-bundle",
         progress: 100,
         total: 100,
       },
     }),
     {
-      family: 'toolProgress',
-      state: 'complete',
-      subject: 'release_uploader',
-      detail: '',
+      family: "toolProgress",
+      state: "complete",
+      subject: "release_uploader",
+      detail: "",
       isError: false,
-      progress: { unit: 'work', current: 100, total: 100 },
+      progress: { unit: "work", current: 100, total: 100 },
     },
   );
 });
 
-test('live cloud progress remains available as a structured Desktop activity', () => {
-  assert.equal(shouldSkipLiveTimelineEvent('progress', null), false);
+test("live cloud progress remains available as a structured Desktop activity", () => {
+  assert.equal(shouldSkipLiveTimelineEvent("progress", null), false);
   const progress = {
-    id: 'progress-1',
-    type: 'progress',
+    id: "progress-1",
+    type: "progress",
     eventTimeUs: 1,
     eventCounter: 1,
-    payload: { message: 'Uploading' },
+    payload: { message: "Uploading" },
   };
   assert.deepEqual(timelineItemsForDisplay([progress]), [progress]);
-  assert.equal(shouldSkipLiveTimelineEvent('status', null), true);
-  assert.equal(shouldSkipLiveTimelineEvent('message', 'subscribe_workspace'), true);
+  assert.equal(shouldSkipLiveTimelineEvent("status", null), true);
+  assert.equal(
+    shouldSkipLiveTimelineEvent("message", "subscribe_workspace"),
+    true,
+  );
   assert.match(
     appSource,
     /shouldSkipLiveTimelineEvent\(type, readStringField\(payload, 'action'\)\)/,
@@ -3333,33 +3424,33 @@ test('live cloud progress remains available as a structured Desktop activity', (
   );
 });
 
-test('history hydration hides the same protocol control events as the live Web transcript', () => {
+test("history hydration hides the same protocol control events as the live Web transcript", () => {
   const user = {
-    id: 'user-control-boundary',
-    type: 'user_message',
-    role: 'user',
-    content: 'hi',
+    id: "user-control-boundary",
+    type: "user_message",
+    role: "user",
+    content: "hi",
     eventTimeUs: 1,
     eventCounter: 1,
   };
   const assistant = {
-    id: 'assistant-control-boundary',
-    type: 'assistant_message',
-    role: 'assistant',
-    content: 'Hello.',
+    id: "assistant-control-boundary",
+    type: "assistant_message",
+    role: "assistant",
+    content: "Hello.",
     eventTimeUs: 9,
     eventCounter: 9,
   };
   const controls = [
-    'ack',
-    'status',
-    'start',
-    'complete',
-    'cancelled',
-    'heartbeat',
-    'status_update',
-    'lifecycle_state_change',
-    'sandbox_event',
+    "ack",
+    "status",
+    "start",
+    "complete",
+    "cancelled",
+    "heartbeat",
+    "status_update",
+    "lifecycle_state_change",
+    "sandbox_event",
   ].map((type, index) => ({
     id: `control-${type}`,
     type,
@@ -3368,40 +3459,42 @@ test('history hydration hides the same protocol control events as the live Web t
   }));
 
   assert.deepEqual(
-    timelineItemsForDisplay([user, ...controls, assistant]).map((item) => item.id),
+    timelineItemsForDisplay([user, ...controls, assistant]).map(
+      (item) => item.id,
+    ),
     [user.id, assistant.id],
   );
 });
 
-test('display folds persisted assistant duplicates only within one execution and user turn', () => {
+test("display folds persisted assistant duplicates only within one execution and user turn", () => {
   const user = {
-    id: 'user-duplicate-execution',
-    type: 'user_message',
-    role: 'user',
-    content: 'Create the story',
+    id: "user-duplicate-execution",
+    type: "user_message",
+    role: "user",
+    content: "Create the story",
     eventTimeUs: 1,
     eventCounter: 1,
   };
   const first = {
-    id: 'assistant-duplicate-execution-1',
-    type: 'assistant_message',
-    role: 'assistant',
-    message_id: 'persisted-message-1',
-    executionMessageId: 'execution-story-1',
-    content: '```canonical-story\nstory: exact\n```',
+    id: "assistant-duplicate-execution-1",
+    type: "assistant_message",
+    role: "assistant",
+    message_id: "persisted-message-1",
+    executionMessageId: "execution-story-1",
+    content: "```canonical-story\nstory: exact\n```",
     eventTimeUs: 2,
     eventCounter: 1,
   };
   const second = {
     ...first,
-    id: 'assistant-duplicate-execution-2',
-    message_id: 'persisted-message-2',
+    id: "assistant-duplicate-execution-2",
+    message_id: "persisted-message-2",
     eventTimeUs: 3,
   };
   const third = {
     ...first,
-    id: 'assistant-duplicate-execution-3',
-    message_id: 'persisted-message-3',
+    id: "assistant-duplicate-execution-3",
+    message_id: "persisted-message-3",
     eventTimeUs: 4,
   };
 
@@ -3416,69 +3509,68 @@ test('display folds persisted assistant duplicates only within one execution and
     [first.id, second.id, third.id],
   );
   assert.deepEqual(assistantDisplayDuplicateItems(first), []);
-  assert.deepEqual([first, second, third].map((item) => item.id), [
-    first.id,
-    second.id,
-    third.id,
-  ]);
+  assert.deepEqual(
+    [first, second, third].map((item) => item.id),
+    [first.id, second.id, third.id],
+  );
 });
 
-test('display duplicate folding fails open across protocol identity boundaries', () => {
+test("display duplicate folding fails open across protocol identity boundaries", () => {
   const userOne = {
-    id: 'user-boundary-1',
-    type: 'user_message',
-    role: 'user',
-    content: 'First turn',
+    id: "user-boundary-1",
+    type: "user_message",
+    role: "user",
+    content: "First turn",
     eventTimeUs: 1,
     eventCounter: 1,
   };
   const baseline = {
-    id: 'assistant-boundary-1',
-    type: 'assistant_message',
-    role: 'assistant',
-    message_id: 'persisted-boundary-1',
-    executionMessageId: 'execution-boundary',
-    content: 'same bytes',
+    id: "assistant-boundary-1",
+    type: "assistant_message",
+    role: "assistant",
+    message_id: "persisted-boundary-1",
+    executionMessageId: "execution-boundary",
+    content: "same bytes",
     eventTimeUs: 2,
     eventCounter: 1,
   };
   const differentExecution = {
     ...baseline,
-    id: 'assistant-boundary-2',
-    message_id: 'persisted-boundary-2',
-    executionMessageId: 'execution-other',
+    id: "assistant-boundary-2",
+    message_id: "persisted-boundary-2",
+    executionMessageId: "execution-other",
     eventTimeUs: 3,
   };
   const differentContent = {
     ...baseline,
-    id: 'assistant-boundary-3',
-    message_id: 'persisted-boundary-3',
-    content: 'same bytes ',
+    id: "assistant-boundary-3",
+    message_id: "persisted-boundary-3",
+    content: "same bytes ",
     eventTimeUs: 4,
   };
   const missingExecution = {
     ...baseline,
-    id: 'assistant-boundary-4',
-    message_id: 'persisted-boundary-4',
-    executionMessageId: '',
+    id: "assistant-boundary-4",
+    message_id: "persisted-boundary-4",
+    executionMessageId: "",
     eventTimeUs: 5,
   };
   const transient = {
     ...baseline,
-    id: 'completed-assistant-execution-boundary',
-    message_id: 'execution-boundary',
+    id: "completed-assistant-execution-boundary",
+    message_id: "execution-boundary",
     eventTimeUs: 6,
   };
   const userTwo = {
     ...userOne,
-    id: 'user-boundary-2',
-    content: 'Second turn',
+    id: "user-boundary-2",
+    content: "Second turn",
     eventTimeUs: 7,
   };
   const crossTurn = {
     ...baseline,
-    id: 'assistant-boundary-5',
-    message_id: 'persisted-boundary-5',
+    id: "assistant-boundary-5",
+    message_id: "persisted-boundary-5",
     eventTimeUs: 8,
   };
 
@@ -3508,37 +3600,37 @@ test('display duplicate folding fails open across protocol identity boundaries',
   );
 });
 
-test('display duplicate folding preserves assistants with conflicting explicit sources', () => {
+test("display duplicate folding preserves assistants with conflicting explicit sources", () => {
   const user = {
-    id: 'user-source-conflict',
-    type: 'user_message',
-    role: 'user',
-    content: 'Ask both agents',
+    id: "user-source-conflict",
+    type: "user_message",
+    role: "user",
+    content: "Ask both agents",
     eventTimeUs: 1,
     eventCounter: 1,
   };
   const first = {
-    id: 'assistant-source-a',
-    type: 'assistant_message',
-    role: 'assistant',
-    message_id: 'persisted-source-a',
-    executionMessageId: 'execution-shared',
-    content: 'same bytes',
+    id: "assistant-source-a",
+    type: "assistant_message",
+    role: "assistant",
+    message_id: "persisted-source-a",
+    executionMessageId: "execution-shared",
+    content: "same bytes",
     eventTimeUs: 2,
     eventCounter: 1,
-    metadata: { agent_id: 'agent-a', source: 'agent_runtime' },
+    metadata: { agent_id: "agent-a", source: "agent_runtime" },
   };
   const second = {
     ...first,
-    id: 'assistant-source-b',
-    message_id: 'persisted-source-b',
+    id: "assistant-source-b",
+    message_id: "persisted-source-b",
     eventTimeUs: 3,
-    metadata: { agent_id: 'agent-b', source: 'agent_runtime' },
+    metadata: { agent_id: "agent-b", source: "agent_runtime" },
   };
   const sameSource = {
     ...first,
-    id: 'assistant-source-a-repeat',
-    message_id: 'persisted-source-a-repeat',
+    id: "assistant-source-a-repeat",
+    message_id: "persisted-source-a-repeat",
     eventTimeUs: 4,
   };
 
@@ -3555,812 +3647,814 @@ test('display duplicate folding preserves assistants with conflicting explicit s
   assert.deepEqual(assistantDisplayDuplicateItems(visible[2]), []);
 });
 
-test('MCP App events expose the registered app and interactive tool result', () => {
+test("MCP App events expose the registered app and interactive tool result", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'mcp-app-registered-1',
-      type: 'mcp_app_registered',
+      id: "mcp-app-registered-1",
+      type: "mcp_app_registered",
       eventTimeUs: 34_000_000,
       eventCounter: 1,
       payload: {
-        app_id: 'github-issue-board',
-        server_name: 'github',
-        tool_name: 'create_issue_board',
-        source: 'agent_developed',
-        resource_uri: 'ui://github/issue-board',
-        title: 'Issue board',
+        app_id: "github-issue-board",
+        server_name: "github",
+        tool_name: "create_issue_board",
+        source: "agent_developed",
+        resource_uri: "ui://github/issue-board",
+        title: "Issue board",
       },
     }),
     {
-      family: 'mcpApp',
-      state: 'ready',
-      subject: 'Issue board',
-      detail: 'github · create_issue_board · agent_developed',
+      family: "mcpApp",
+      state: "ready",
+      subject: "Issue board",
+      detail: "github · create_issue_board · agent_developed",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'mcp-app-result-1',
-      type: 'mcp_app_result',
+      id: "mcp-app-result-1",
+      type: "mcp_app_result",
       eventTimeUs: 35_000_000,
       eventCounter: 2,
       payload: {
-        app_id: 'github-issue-board',
-        server_name: 'github',
-        tool_name: 'create_issue_board',
-        resource_uri: 'ui://github/issue-board',
-        ui_metadata: { title: 'Issue board' },
+        app_id: "github-issue-board",
+        server_name: "github",
+        tool_name: "create_issue_board",
+        resource_uri: "ui://github/issue-board",
+        ui_metadata: { title: "Issue board" },
         structured_content: { open: 12, closed: 34 },
       },
     }),
     {
-      family: 'mcpApp',
-      state: 'complete',
-      subject: 'Issue board',
-      detail: 'github · create_issue_board',
+      family: "mcpApp",
+      state: "complete",
+      subject: "Issue board",
+      detail: "github · create_issue_board",
       isError: false,
     },
   );
 });
 
-test('memory events expose authoritative recall and capture counts', () => {
+test("memory events expose authoritative recall and capture counts", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'memory-recalled-1',
-      type: 'memory_recalled',
+      id: "memory-recalled-1",
+      type: "memory_recalled",
       eventTimeUs: 36_000_000,
       eventCounter: 1,
       payload: {
         memories: [
-          { id: 'memory-1', category: 'semantic' },
-          { id: 'memory-2', category: 'preference' },
-          { id: 'memory-3', category: 'procedural' },
+          { id: "memory-1", category: "semantic" },
+          { id: "memory-2", category: "preference" },
+          { id: "memory-3", category: "procedural" },
         ],
         count: 3,
         search_ms: 24,
       },
     }),
     {
-      family: 'memory',
-      state: 'complete',
-      subject: '',
-      detail: '',
+      family: "memory",
+      state: "complete",
+      subject: "",
+      detail: "",
       isError: false,
-      progress: { unit: 'memories', total: 3 },
+      progress: { unit: "memories", total: 3 },
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'memory-captured-1',
-      type: 'memory_captured',
+      id: "memory-captured-1",
+      type: "memory_captured",
       eventTimeUs: 37_000_000,
       eventCounter: 2,
       capturedCount: 2,
-      categories: ['semantic', 'preference'],
+      categories: ["semantic", "preference"],
     }),
     {
-      family: 'memory',
-      state: 'complete',
-      subject: 'semantic, preference',
-      detail: '',
+      family: "memory",
+      state: "complete",
+      subject: "semantic, preference",
+      detail: "",
       isError: false,
-      progress: { unit: 'memories', total: 2 },
+      progress: { unit: "memories", total: 2 },
     },
   );
 });
 
-test('task timeline markers expose content, progress, and terminal status', () => {
+test("task timeline markers expose content, progress, and terminal status", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'task-start-1',
-      type: 'task_start',
+      id: "task-start-1",
+      type: "task_start",
       eventTimeUs: 38_000_000,
       eventCounter: 1,
       payload: {
-        task_id: 'task-2',
-        content: 'Verify the release evidence',
+        task_id: "task-2",
+        content: "Verify the release evidence",
         order_index: 1,
         total_tasks: 4,
       },
     }),
     {
-      family: 'task',
-      state: 'running',
-      subject: 'Verify the release evidence',
-      detail: '',
+      family: "task",
+      state: "running",
+      subject: "Verify the release evidence",
+      detail: "",
       isError: false,
-      progress: { unit: 'tasks', current: 2, total: 4 },
+      progress: { unit: "tasks", current: 2, total: 4 },
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'task-complete-1',
-      type: 'task_complete',
+      id: "task-complete-1",
+      type: "task_complete",
       eventTimeUs: 39_000_000,
       eventCounter: 2,
-      taskId: 'task-2',
-      status: 'completed',
+      taskId: "task-2",
+      status: "completed",
       orderIndex: 1,
       totalTasks: 4,
     }),
     {
-      family: 'task',
-      state: 'complete',
-      subject: 'task-2',
-      detail: 'completed',
+      family: "task",
+      state: "complete",
+      subject: "task-2",
+      detail: "completed",
       isError: false,
-      progress: { unit: 'tasks', current: 2, total: 4 },
+      progress: { unit: "tasks", current: 2, total: 4 },
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'task-complete-failed-1',
-      type: 'task_complete',
+      id: "task-complete-failed-1",
+      type: "task_complete",
       eventTimeUs: 40_000_000,
       eventCounter: 3,
       payload: {
-        task_id: 'task-3',
-        status: 'failed',
+        task_id: "task-3",
+        status: "failed",
         order_index: 2,
         total_tasks: 4,
       },
     }),
     {
-      family: 'task',
-      state: 'failed',
-      subject: 'task-3',
-      detail: 'failed',
+      family: "task",
+      state: "failed",
+      subject: "task-3",
+      detail: "failed",
       isError: true,
-      progress: { unit: 'tasks', current: 3, total: 4 },
+      progress: { unit: "tasks", current: 3, total: 4 },
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'task-complete-cancelled-1',
-      type: 'task_complete',
+      id: "task-complete-cancelled-1",
+      type: "task_complete",
       eventTimeUs: 41_000_000,
       eventCounter: 4,
-      taskId: 'task-4',
-      status: 'cancelled',
+      taskId: "task-4",
+      status: "cancelled",
       orderIndex: 3,
       totalTasks: 4,
     }),
     {
-      family: 'task',
-      state: 'attention',
-      subject: 'task-4',
-      detail: 'cancelled',
+      family: "task",
+      state: "attention",
+      subject: "task-4",
+      detail: "cancelled",
       isError: false,
-      progress: { unit: 'tasks', current: 4, total: 4 },
+      progress: { unit: "tasks", current: 4, total: 4 },
     },
   );
 });
 
-test('artifact timeline events expose lifecycle state, source, and batch progress', () => {
+test("artifact timeline events expose lifecycle state, source, and batch progress", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'artifact-created-1',
-      type: 'artifact_created',
+      id: "artifact-created-1",
+      type: "artifact_created",
       eventTimeUs: 42_000_000,
       eventCounter: 1,
       payload: {
-        artifact_id: 'artifact-1',
-        filename: 'release-notes.md',
-        source_tool: 'export_artifact',
+        artifact_id: "artifact-1",
+        filename: "release-notes.md",
+        source_tool: "export_artifact",
       },
     }),
     {
-      family: 'artifact',
-      state: 'running',
-      subject: 'release-notes.md',
-      detail: 'export_artifact',
+      family: "artifact",
+      state: "running",
+      subject: "release-notes.md",
+      detail: "export_artifact",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'artifact-created-ready-1',
-      type: 'artifact_created',
+      id: "artifact-created-ready-1",
+      type: "artifact_created",
       eventTimeUs: 43_000_000,
       eventCounter: 2,
-      artifactId: 'artifact-2',
-      filename: 'verification.pdf',
-      sourceTool: 'publish_report',
-      url: 'https://artifacts.example/verification.pdf',
+      artifactId: "artifact-2",
+      filename: "verification.pdf",
+      sourceTool: "publish_report",
+      url: "https://artifacts.example/verification.pdf",
     }),
     {
-      family: 'artifact',
-      state: 'ready',
-      subject: 'verification.pdf',
-      detail: 'publish_report',
+      family: "artifact",
+      state: "ready",
+      subject: "verification.pdf",
+      detail: "publish_report",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'artifact-ready-1',
-      type: 'artifact_ready',
+      id: "artifact-ready-1",
+      type: "artifact_ready",
       eventTimeUs: 44_000_000,
       eventCounter: 3,
       payload: {
-        artifact_id: 'artifact-3',
-        filename: 'release.zip',
-        source_tool: 'package_release',
-        url: 'https://artifacts.example/release.zip',
+        artifact_id: "artifact-3",
+        filename: "release.zip",
+        source_tool: "package_release",
+        url: "https://artifacts.example/release.zip",
       },
     }),
     {
-      family: 'artifact',
-      state: 'ready',
-      subject: 'release.zip',
-      detail: 'package_release',
+      family: "artifact",
+      state: "ready",
+      subject: "release.zip",
+      detail: "package_release",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'artifact-error-1',
-      type: 'artifact_error',
+      id: "artifact-error-1",
+      type: "artifact_error",
       eventTimeUs: 45_000_000,
       eventCounter: 4,
       payload: {
-        artifact_id: 'artifact-4',
-        filename: 'broken.tar.gz',
-        error: 'Upload checksum mismatch',
+        artifact_id: "artifact-4",
+        filename: "broken.tar.gz",
+        error: "Upload checksum mismatch",
       },
     }),
     {
-      family: 'artifact',
-      state: 'failed',
-      subject: 'broken.tar.gz',
-      detail: 'Upload checksum mismatch',
+      family: "artifact",
+      state: "failed",
+      subject: "broken.tar.gz",
+      detail: "Upload checksum mismatch",
       isError: true,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'artifacts-batch-1',
-      type: 'artifacts_batch',
+      id: "artifacts-batch-1",
+      type: "artifacts_batch",
       eventTimeUs: 46_000_000,
       eventCounter: 5,
       payload: {
-        source_tool: 'export_release',
+        source_tool: "export_release",
         artifacts: [
-          { id: 'artifact-5', filename: 'manifest.json' },
-          { id: 'artifact-6', filename: 'checksums.txt' },
+          { id: "artifact-5", filename: "manifest.json" },
+          { id: "artifact-6", filename: "checksums.txt" },
         ],
       },
     }),
     {
-      family: 'artifact',
-      state: 'complete',
-      subject: 'export_release',
-      detail: '',
+      family: "artifact",
+      state: "complete",
+      subject: "export_release",
+      detail: "",
       isError: false,
-      progress: { unit: 'artifacts', total: 2 },
+      progress: { unit: "artifacts", total: 2 },
     },
   );
 });
 
-test('runtime infrastructure events expose sandbox, desktop, and terminal state', () => {
+test("runtime infrastructure events expose sandbox, desktop, and terminal state", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'sandbox-created-1',
-      type: 'sandbox_created',
+      id: "sandbox-created-1",
+      type: "sandbox_created",
       eventTimeUs: 60_000_000,
       eventCounter: 1,
       payload: {
-        sandbox_id: 'sandbox-release-1',
-        status: 'running',
-        endpoint: 'wss://sandbox.example/ws',
+        sandbox_id: "sandbox-release-1",
+        status: "running",
+        endpoint: "wss://sandbox.example/ws",
       },
     }),
     {
-      family: 'sandbox',
-      state: 'ready',
-      subject: 'sandbox-release-1',
-      detail: 'wss://sandbox.example/ws',
+      family: "sandbox",
+      state: "ready",
+      subject: "sandbox-release-1",
+      detail: "wss://sandbox.example/ws",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'sandbox-status-error-1',
-      type: 'sandbox_status',
+      id: "sandbox-status-error-1",
+      type: "sandbox_status",
       eventTimeUs: 61_000_000,
       eventCounter: 2,
       payload: {
-        sandbox_id: 'sandbox-release-1',
-        status: 'error',
-        error_message: 'Runtime health probe failed',
+        sandbox_id: "sandbox-release-1",
+        status: "error",
+        error_message: "Runtime health probe failed",
       },
     }),
     {
-      family: 'sandbox',
-      state: 'failed',
-      subject: 'sandbox-release-1',
-      detail: 'Runtime health probe failed',
+      family: "sandbox",
+      state: "failed",
+      subject: "sandbox-release-1",
+      detail: "Runtime health probe failed",
       isError: true,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'desktop-started-1',
-      type: 'desktop_started',
+      id: "desktop-started-1",
+      type: "desktop_started",
       eventTimeUs: 62_000_000,
       eventCounter: 3,
       payload: {
-        sandbox_id: 'sandbox-release-1',
-        resolution: '1280x720',
-        display: ':1',
+        sandbox_id: "sandbox-release-1",
+        resolution: "1280x720",
+        display: ":1",
       },
     }),
     {
-      family: 'desktop',
-      state: 'ready',
-      subject: 'sandbox-release-1',
-      detail: '1280x720 · :1',
+      family: "desktop",
+      state: "ready",
+      subject: "sandbox-release-1",
+      detail: "1280x720 · :1",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'terminal-status-1',
-      type: 'terminal_status',
+      id: "terminal-status-1",
+      type: "terminal_status",
       eventTimeUs: 63_000_000,
       eventCounter: 4,
       payload: {
-        sandbox_id: 'sandbox-release-1',
-        session_id: 'terminal-release-1',
+        sandbox_id: "sandbox-release-1",
+        session_id: "terminal-release-1",
         running: false,
       },
     }),
     {
-      family: 'terminal',
-      state: 'stopped',
-      subject: 'terminal-release-1',
-      detail: 'sandbox-release-1',
+      family: "terminal",
+      state: "stopped",
+      subject: "terminal-release-1",
+      detail: "sandbox-release-1",
       isError: false,
     },
   );
 });
 
-test('HTTP preview service events expose service identity, preview URL, and status', () => {
+test("HTTP preview service events expose service identity, preview URL, and status", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'http-service-started-1',
-      type: 'http_service_started',
+      id: "http-service-started-1",
+      type: "http_service_started",
       eventTimeUs: 64_000_000,
       eventCounter: 1,
       payload: {
-        sandbox_id: 'sandbox-release-1',
-        service_id: 'service-preview-1',
-        service_name: 'Vite preview',
-        source_type: 'sandbox_internal',
-        service_url: 'http://172.17.0.2:5173',
-        proxy_url: '/api/v1/projects/project-1/sandbox/http-services/service-preview-1/proxy/',
+        sandbox_id: "sandbox-release-1",
+        service_id: "service-preview-1",
+        service_name: "Vite preview",
+        source_type: "sandbox_internal",
+        service_url: "http://172.17.0.2:5173",
+        proxy_url:
+          "/api/v1/projects/project-1/sandbox/http-services/service-preview-1/proxy/",
         auto_open: true,
       },
     }),
     {
-      family: 'httpService',
-      state: 'ready',
-      subject: 'Vite preview',
+      family: "httpService",
+      state: "ready",
+      subject: "Vite preview",
       detail:
-        'service-preview-1 · /api/v1/projects/project-1/sandbox/http-services/service-preview-1/proxy/',
+        "service-preview-1 · /api/v1/projects/project-1/sandbox/http-services/service-preview-1/proxy/",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'http-service-updated-1',
-      type: 'http_service_updated',
+      id: "http-service-updated-1",
+      type: "http_service_updated",
       eventTimeUs: 65_000_000,
       eventCounter: 2,
       payload: {
-        sandbox_id: 'sandbox-release-1',
-        service_id: 'service-preview-1',
-        service_name: 'Vite preview',
-        source_type: 'sandbox_internal',
-        service_url: 'http://172.17.0.2:4173',
-        proxy_url: '/api/v1/projects/project-1/sandbox/http-services/service-preview-1/proxy/',
-        status: 'running',
+        sandbox_id: "sandbox-release-1",
+        service_id: "service-preview-1",
+        service_name: "Vite preview",
+        source_type: "sandbox_internal",
+        service_url: "http://172.17.0.2:4173",
+        proxy_url:
+          "/api/v1/projects/project-1/sandbox/http-services/service-preview-1/proxy/",
+        status: "running",
       },
     }),
     {
-      family: 'httpService',
-      state: 'ready',
-      subject: 'Vite preview',
+      family: "httpService",
+      state: "ready",
+      subject: "Vite preview",
       detail:
-        'service-preview-1 · /api/v1/projects/project-1/sandbox/http-services/service-preview-1/proxy/',
+        "service-preview-1 · /api/v1/projects/project-1/sandbox/http-services/service-preview-1/proxy/",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'http-service-stopped-1',
-      type: 'http_service_stopped',
+      id: "http-service-stopped-1",
+      type: "http_service_stopped",
       eventTimeUs: 66_000_000,
       eventCounter: 3,
       payload: {
-        sandbox_id: 'sandbox-release-1',
-        service_id: 'service-preview-1',
-        service_name: 'Vite preview',
-        status: 'stopped',
+        sandbox_id: "sandbox-release-1",
+        service_id: "service-preview-1",
+        service_name: "Vite preview",
+        status: "stopped",
       },
     }),
     {
-      family: 'httpService',
-      state: 'stopped',
-      subject: 'Vite preview',
-      detail: 'service-preview-1',
+      family: "httpService",
+      state: "stopped",
+      subject: "Vite preview",
+      detail: "service-preview-1",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'http-service-error-1',
-      type: 'http_service_error',
+      id: "http-service-error-1",
+      type: "http_service_error",
       eventTimeUs: 67_000_000,
       eventCounter: 4,
       payload: {
-        sandbox_id: 'sandbox-release-1',
-        service_id: 'service-preview-1',
-        service_name: 'Vite preview',
-        status: 'error',
-        error_message: 'Preview port is not reachable',
+        sandbox_id: "sandbox-release-1",
+        service_id: "service-preview-1",
+        service_name: "Vite preview",
+        status: "error",
+        error_message: "Preview port is not reachable",
       },
     }),
     {
-      family: 'httpService',
-      state: 'failed',
-      subject: 'Vite preview',
-      detail: 'Preview port is not reachable',
+      family: "httpService",
+      state: "failed",
+      subject: "Vite preview",
+      detail: "Preview port is not reachable",
       isError: true,
     },
   );
 });
 
-test('doom-loop safeguard events expose repeated tool calls and intervention state', () => {
+test("doom-loop safeguard events expose repeated tool calls and intervention state", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'doom-loop-detected-1',
-      type: 'doom_loop_detected',
+      id: "doom-loop-detected-1",
+      type: "doom_loop_detected",
       eventTimeUs: 68_000_000,
       eventCounter: 1,
       payload: {
-        request_id: 'request-doom-loop-1',
-        tool_name: 'terminal',
+        request_id: "request-doom-loop-1",
+        tool_name: "terminal",
         call_count: 4,
         last_calls: [],
       },
     }),
     {
-      family: 'doomLoop',
-      state: 'failed',
-      subject: 'terminal',
-      detail: '',
+      family: "doomLoop",
+      state: "failed",
+      subject: "terminal",
+      detail: "",
       isError: true,
-      progress: { unit: 'calls', total: 4 },
+      progress: { unit: "calls", total: 4 },
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'doom-loop-intervened-1',
-      type: 'doom_loop_intervened',
+      id: "doom-loop-intervened-1",
+      type: "doom_loop_intervened",
       eventTimeUs: 69_000_000,
       eventCounter: 2,
       payload: {
-        request_id: 'request-doom-loop-1',
-        action: 'resume_with_guardrails',
+        request_id: "request-doom-loop-1",
+        action: "resume_with_guardrails",
       },
     }),
     {
-      family: 'doomLoop',
-      state: 'complete',
-      subject: 'resume_with_guardrails',
-      detail: '',
+      family: "doomLoop",
+      state: "complete",
+      subject: "resume_with_guardrails",
+      detail: "",
       isError: false,
     },
   );
 
   assert.equal(
     agentLifecyclePresentation({
-      id: 'doom-loop-detected-python-1',
-      type: 'doom_loop_detected',
+      id: "doom-loop-detected-python-1",
+      type: "doom_loop_detected",
       eventTimeUs: 70_000_000,
       eventCounter: 3,
       payload: {
-        tool: 'desktop',
-        input: { action: 'click' },
+        tool: "desktop",
+        input: { action: "click" },
       },
     })?.subject,
-    'desktop',
+    "desktop",
   );
 });
 
-test('conversation terminal events expose completion and gate-specific stop states', () => {
+test("conversation terminal events expose completion and gate-specific stop states", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'agent-goal-completed-1',
-      type: 'agent_goal_completed',
+      id: "agent-goal-completed-1",
+      type: "agent_goal_completed",
       eventTimeUs: 71_000_000,
       eventCounter: 1,
       payload: {
-        conversation_id: 'conversation-1',
-        actor_agent_id: 'coordinator',
-        summary: 'All requested checks passed',
-        artifacts: ['report-1', 'patch-1'],
+        conversation_id: "conversation-1",
+        actor_agent_id: "coordinator",
+        summary: "All requested checks passed",
+        artifacts: ["report-1", "patch-1"],
       },
     }),
     {
-      family: 'conversation',
-      state: 'complete',
-      subject: 'All requested checks passed',
-      detail: 'coordinator',
+      family: "conversation",
+      state: "complete",
+      subject: "All requested checks passed",
+      detail: "coordinator",
       isError: false,
-      progress: { unit: 'artifacts', total: 2 },
+      progress: { unit: "artifacts", total: 2 },
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'agent-conversation-budget-finished-1',
-      type: 'agent_conversation_finished',
+      id: "agent-conversation-budget-finished-1",
+      type: "agent_conversation_finished",
       eventTimeUs: 72_000_000,
       eventCounter: 2,
       payload: {
-        conversation_id: 'conversation-1',
-        reason: 'budget_turns',
-        actor: 'system',
-        rationale: 'Turn budget reached',
+        conversation_id: "conversation-1",
+        reason: "budget_turns",
+        actor: "system",
+        rationale: "Turn budget reached",
       },
     }),
     {
-      family: 'conversation',
-      state: 'attention',
-      subject: 'budget_turns',
-      detail: 'Turn budget reached',
+      family: "conversation",
+      state: "attention",
+      subject: "budget_turns",
+      detail: "Turn budget reached",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'agent-conversation-safety-finished-1',
-      type: 'agent_conversation_finished',
+      id: "agent-conversation-safety-finished-1",
+      type: "agent_conversation_finished",
       eventTimeUs: 73_000_000,
       eventCounter: 3,
       payload: {
-        conversation_id: 'conversation-1',
-        reason: 'safety_doom_loop',
-        actor: 'supervisor',
-        rationale: 'Repeated tool calls remained unsafe',
+        conversation_id: "conversation-1",
+        reason: "safety_doom_loop",
+        actor: "supervisor",
+        rationale: "Repeated tool calls remained unsafe",
       },
     }),
     {
-      family: 'conversation',
-      state: 'failed',
-      subject: 'safety_doom_loop',
-      detail: 'Repeated tool calls remained unsafe',
+      family: "conversation",
+      state: "failed",
+      subject: "safety_doom_loop",
+      detail: "Repeated tool calls remained unsafe",
       isError: true,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'agent-conversation-cancelled-1',
-      type: 'agent_conversation_finished',
+      id: "agent-conversation-cancelled-1",
+      type: "agent_conversation_finished",
       eventTimeUs: 74_000_000,
       eventCounter: 4,
       payload: {
-        conversation_id: 'conversation-1',
-        reason: 'user_cancel',
-        actor: 'user',
-        rationale: 'Stopped from the session header',
+        conversation_id: "conversation-1",
+        reason: "user_cancel",
+        actor: "user",
+        rationale: "Stopped from the session header",
       },
     }),
     {
-      family: 'conversation',
-      state: 'stopped',
-      subject: 'user_cancel',
-      detail: 'Stopped from the session header',
+      family: "conversation",
+      state: "stopped",
+      subject: "user_cancel",
+      detail: "Stopped from the session header",
       isError: false,
     },
   );
 });
 
-test('Agent definition mutation events expose the changed definition and operation state', () => {
+test("Agent definition mutation events expose the changed definition and operation state", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'agent-definition-created-1',
-      type: 'agent_definition_created',
+      id: "agent-definition-created-1",
+      type: "agent_definition_created",
       eventTimeUs: 75_000_000,
       eventCounter: 1,
-      payload: { agent_id: 'agent-release', agent_name: 'release_guardian' },
+      payload: { agent_id: "agent-release", agent_name: "release_guardian" },
     }),
     {
-      family: 'agentDefinition',
-      state: 'complete',
-      subject: 'release_guardian',
-      detail: 'agent-release',
+      family: "agentDefinition",
+      state: "complete",
+      subject: "release_guardian",
+      detail: "agent-release",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'agent-definition-updated-1',
-      type: 'agent_definition_updated',
+      id: "agent-definition-updated-1",
+      type: "agent_definition_updated",
       eventTimeUs: 76_000_000,
       eventCounter: 2,
-      payload: { agent_id: 'agent-release', agent_name: 'release_guardian' },
+      payload: { agent_id: "agent-release", agent_name: "release_guardian" },
     }),
     {
-      family: 'agentDefinition',
-      state: 'complete',
-      subject: 'release_guardian',
-      detail: 'agent-release',
+      family: "agentDefinition",
+      state: "complete",
+      subject: "release_guardian",
+      detail: "agent-release",
       isError: false,
     },
   );
 
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'agent-definition-deleted-1',
-      type: 'agent_definition_deleted',
+      id: "agent-definition-deleted-1",
+      type: "agent_definition_deleted",
       eventTimeUs: 77_000_000,
       eventCounter: 3,
-      payload: { agent_id: 'agent-release', agent_name: 'release_guardian' },
+      payload: { agent_id: "agent-release", agent_name: "release_guardian" },
     }),
     {
-      family: 'agentDefinition',
-      state: 'stopped',
-      subject: 'release_guardian',
-      detail: 'agent-release',
+      family: "agentDefinition",
+      state: "stopped",
+      subject: "release_guardian",
+      detail: "agent-release",
       isError: false,
     },
   );
 });
 
-test('plan reflection events expose assessment and adjustment attention without raw JSON', () => {
+test("plan reflection events expose assessment and adjustment attention without raw JSON", () => {
   assert.deepEqual(
     agentLifecyclePresentation({
-      id: 'plan-reflection-complete-1',
-      type: 'reflection_complete',
+      id: "plan-reflection-complete-1",
+      type: "reflection_complete",
       eventTimeUs: 78_000_000,
       eventCounter: 1,
       payload: {
-        plan_id: 'release-plan',
-        assessment: 'needs_adjustment',
-        reasoning: 'Reorder the verification and rollout steps',
+        plan_id: "release-plan",
+        assessment: "needs_adjustment",
+        reasoning: "Reorder the verification and rollout steps",
         has_adjustments: true,
         adjustment_count: 2,
       },
     }),
     {
-      family: 'planReflection',
-      state: 'attention',
-      subject: 'release-plan',
-      detail: 'needs_adjustment · Reorder the verification and rollout steps',
+      family: "planReflection",
+      state: "attention",
+      subject: "release-plan",
+      detail: "needs_adjustment · Reorder the verification and rollout steps",
       isError: false,
     },
   );
 });
 
-test('artifact ready and error stream events settle the original created row', () => {
+test("artifact ready and error stream events settle the original created row", () => {
   const created = {
-    id: 'artifact-created-1',
-    type: 'artifact_created',
+    id: "artifact-created-1",
+    type: "artifact_created",
     eventTimeUs: 47_000_000,
     eventCounter: 1,
     payload: {
-      artifact_id: 'artifact-1',
-      filename: 'release-notes.md',
-      source_tool: 'export_artifact',
+      artifact_id: "artifact-1",
+      filename: "release-notes.md",
+      source_tool: "export_artifact",
     },
   };
   const createdItems = mergeArtifactStreamItem([], created);
   assert.equal(createdItems.length, 1);
-  assert.equal(createdItems[0].artifactId, 'artifact-1');
-  assert.equal(createdItems[0].filename, 'release-notes.md');
+  assert.equal(createdItems[0].artifactId, "artifact-1");
+  assert.equal(createdItems[0].filename, "release-notes.md");
 
   const readyItems = mergeArtifactStreamItem(createdItems, {
-    id: 'artifact-ready-1',
-    type: 'artifact_ready',
+    id: "artifact-ready-1",
+    type: "artifact_ready",
     eventTimeUs: 48_000_000,
     eventCounter: 2,
     payload: {
-      artifact_id: 'artifact-1',
-      filename: 'release-notes.md',
-      url: 'https://artifacts.example/release-notes.md',
-      preview_url: 'https://artifacts.example/release-notes.preview',
+      artifact_id: "artifact-1",
+      filename: "release-notes.md",
+      url: "https://artifacts.example/release-notes.md",
+      preview_url: "https://artifacts.example/release-notes.preview",
     },
   });
   assert.equal(readyItems.length, 1);
-  assert.equal(readyItems[0].id, 'artifact-created-1');
-  assert.equal(readyItems[0].type, 'artifact_created');
+  assert.equal(readyItems[0].id, "artifact-created-1");
+  assert.equal(readyItems[0].type, "artifact_created");
   assert.equal(
     readyItems[0].payload.url,
-    'https://artifacts.example/release-notes.md',
+    "https://artifacts.example/release-notes.md",
   );
 
   const errorItems = mergeArtifactStreamItem(createdItems, {
-    id: 'artifact-error-1',
-    type: 'artifact_error',
+    id: "artifact-error-1",
+    type: "artifact_error",
     eventTimeUs: 49_000_000,
     eventCounter: 3,
     payload: {
-      artifact_id: 'artifact-1',
-      filename: 'release-notes.md',
-      error: 'Upload checksum mismatch',
+      artifact_id: "artifact-1",
+      filename: "release-notes.md",
+      error: "Upload checksum mismatch",
     },
   });
   assert.equal(errorItems.length, 1);
-  assert.equal(errorItems[0].id, 'artifact-created-1');
-  assert.equal(errorItems[0].type, 'artifact_created');
-  assert.equal(errorItems[0].error, 'Upload checksum mismatch');
+  assert.equal(errorItems[0].id, "artifact-created-1");
+  assert.equal(errorItems[0].type, "artifact_created");
+  assert.equal(errorItems[0].error, "Upload checksum mismatch");
   assert.equal(errorItems[0].isError, true);
 
   const orphanReady = mergeArtifactStreamItem([], {
-    id: 'artifact-ready-orphan-1',
-    type: 'artifact_ready',
+    id: "artifact-ready-orphan-1",
+    type: "artifact_ready",
     eventTimeUs: 50_000_000,
     eventCounter: 4,
     payload: {
-      artifact_id: 'artifact-orphan',
-      filename: 'recovered.zip',
-      url: 'https://artifacts.example/recovered.zip',
+      artifact_id: "artifact-orphan",
+      filename: "recovered.zip",
+      url: "https://artifacts.example/recovered.zip",
     },
   });
   assert.equal(orphanReady.length, 1);
-  assert.equal(orphanReady[0].type, 'artifact_ready');
-  assert.equal(orphanReady[0].filename, 'recovered.zip');
+  assert.equal(orphanReady[0].type, "artifact_ready");
+  assert.equal(orphanReady[0].filename, "recovered.zip");
 });
 
-test('UI-state events stay out of the visible conversation timeline', () => {
+test("UI-state events stay out of the visible conversation timeline", () => {
   const items = [
     {
-      id: 'user-message-1',
-      type: 'user_message',
-      role: 'user',
-      content: 'Prepare the release.',
+      id: "user-message-1",
+      type: "user_message",
+      role: "user",
+      content: "Prepare the release.",
       eventTimeUs: 51_000_000,
       eventCounter: 1,
     },
     {
-      id: 'assistant-message-1',
-      type: 'assistant_message',
-      role: 'assistant',
-      content: 'The release is ready for review.',
+      id: "assistant-message-1",
+      type: "assistant_message",
+      role: "assistant",
+      content: "The release is ready for review.",
       eventTimeUs: 52_000_000,
       eventCounter: 2,
     },
     {
-      id: 'suggestions-1',
-      type: 'suggestions',
+      id: "suggestions-1",
+      type: "suggestions",
       payload: {
         suggestions: [
-          'Open the verification report',
-          '',
-          'Run the compatibility matrix',
+          "Open the verification report",
+          "",
+          "Run the compatibility matrix",
           42,
         ],
       },
@@ -4368,139 +4462,143 @@ test('UI-state events stay out of the visible conversation timeline', () => {
       eventCounter: 3,
     },
     {
-      id: 'context-status-1',
-      type: 'context_status',
+      id: "context-status-1",
+      type: "context_status",
       payload: { current_tokens: 1200, token_budget: 8000 },
       eventTimeUs: 54_000_000,
       eventCounter: 4,
     },
     {
-      id: 'canvas-replay-1',
-      type: 'canvas_updated',
+      id: "canvas-replay-1",
+      type: "canvas_updated",
       payload: {
-        action: 'created',
-        block_id: 'release-approval',
-        block: { id: 'release-approval', content: '{"beginRendering":{}}' },
+        action: "created",
+        block_id: "release-approval",
+        block: { id: "release-approval", content: '{"beginRendering":{}}' },
       },
       eventTimeUs: 54_500_000,
       eventCounter: 5,
     },
     {
-      id: 'pattern-match-1',
-      type: 'pattern_match',
-      payload: { pattern_name: 'internal-pattern-sentinel' },
+      id: "pattern-match-1",
+      type: "pattern_match",
+      payload: { pattern_name: "internal-pattern-sentinel" },
       eventTimeUs: 54_510_000,
       eventCounter: 6,
     },
     {
-      id: 'context-summary-generated-1',
-      type: 'context_summary_generated',
-      payload: { summary_id: 'internal-summary-sentinel' },
+      id: "context-summary-generated-1",
+      type: "context_summary_generated",
+      payload: { summary_id: "internal-summary-sentinel" },
       eventTimeUs: 54_520_000,
       eventCounter: 7,
     },
     {
-      id: 'compact-needed-1',
-      type: 'compact_needed',
-      payload: { reason: 'internal-compact-sentinel' },
+      id: "compact-needed-1",
+      type: "compact_needed",
+      payload: { reason: "internal-compact-sentinel" },
       eventTimeUs: 54_530_000,
       eventCounter: 8,
     },
     {
-      id: 'screenshot-update-1',
-      type: 'screenshot_update',
+      id: "screenshot-update-1",
+      type: "screenshot_update",
       payload: {
-        sandbox_id: 'sandbox-release',
-        image_url: 'data:image/png;base64,internal-screenshot-sentinel',
+        sandbox_id: "sandbox-release",
+        image_url: "data:image/png;base64,internal-screenshot-sentinel",
       },
       eventTimeUs: 54_540_000,
       eventCounter: 9,
     },
     ...[
-      'plan_mode_enter',
-      'plan_mode_exit',
-      'plan_created',
-      'plan_updated',
-      'plan_suggested',
-      'plan_exploration_started',
-      'plan_exploration_completed',
-      'plan_draft_created',
-      'plan_approved',
-      'plan_rejected',
-      'plan_cancelled',
-      'workplan_created',
-      'workplan_step_started',
-      'workplan_step_completed',
-      'workplan_step_failed',
-      'workplan_completed',
-      'workplan_failed',
-      'plan_execution_start',
-      'plan_execution_complete',
-      'plan_mode_changed',
-      'plan_status_changed',
-      'plan_step_ready',
-      'plan_step_complete',
-      'plan_step_skipped',
-      'plan_snapshot_created',
-      'plan_rollback',
-      'adjustment_applied',
+      "plan_mode_enter",
+      "plan_mode_exit",
+      "plan_created",
+      "plan_updated",
+      "plan_suggested",
+      "plan_exploration_started",
+      "plan_exploration_completed",
+      "plan_draft_created",
+      "plan_approved",
+      "plan_rejected",
+      "plan_cancelled",
+      "workplan_created",
+      "workplan_step_started",
+      "workplan_step_completed",
+      "workplan_step_failed",
+      "workplan_completed",
+      "workplan_failed",
+      "plan_execution_start",
+      "plan_execution_complete",
+      "plan_mode_changed",
+      "plan_status_changed",
+      "plan_step_ready",
+      "plan_step_complete",
+      "plan_step_skipped",
+      "plan_snapshot_created",
+      "plan_rollback",
+      "adjustment_applied",
     ].map((type, index) => ({
       id: `plan-ui-state-${index}`,
       type,
-      payload: { plan_id: 'release-plan' },
+      payload: { plan_id: "release-plan" },
       eventTimeUs: 54_600_000 + index,
       eventCounter: 6 + index,
     })),
     {
-      id: 'reflection-complete-1',
-      type: 'reflection_complete',
-      payload: { plan_id: 'release-plan', assessment: 'continue' },
+      id: "reflection-complete-1",
+      type: "reflection_complete",
+      payload: { plan_id: "release-plan", assessment: "continue" },
       eventTimeUs: 54_700_000,
       eventCounter: 40,
     },
     {
-      id: 'task-list-updated-1',
-      type: 'task_list_updated',
-      payload: { tasks: [{ id: 'release-task', content: 'task-list-sentinel' }] },
+      id: "task-list-updated-1",
+      type: "task_list_updated",
+      payload: {
+        tasks: [{ id: "release-task", content: "task-list-sentinel" }],
+      },
       eventTimeUs: 54_800_000,
       eventCounter: 41,
     },
     {
-      id: 'task-updated-1',
-      type: 'task_updated',
-      payload: { task: { id: 'release-task', content: 'task-update-sentinel' } },
+      id: "task-updated-1",
+      type: "task_updated",
+      payload: {
+        task: { id: "release-task", content: "task-update-sentinel" },
+      },
       eventTimeUs: 54_900_000,
       eventCounter: 42,
     },
     {
-      id: 'task-start-1',
-      type: 'task_start',
-      payload: { task_id: 'release-task', content: 'Verify the release' },
+      id: "task-start-1",
+      type: "task_start",
+      payload: { task_id: "release-task", content: "Verify the release" },
       eventTimeUs: 55_000_000,
       eventCounter: 43,
     },
     {
-      id: 'task-complete-1',
-      type: 'task_complete',
-      payload: { task_id: 'release-task', success: true },
+      id: "task-complete-1",
+      type: "task_complete",
+      payload: { task_id: "release-task", success: true },
       eventTimeUs: 55_100_000,
       eventCounter: 44,
     },
   ];
 
   assert.deepEqual(latestAgentSuggestions(items), [
-    'Open the verification report',
-    'Run the compatibility matrix',
+    "Open the verification report",
+    "Run the compatibility matrix",
   ]);
   assert.deepEqual(
     timelineItemsForDisplay(items).map((item) => item.id),
     [
-      'user-message-1',
-      'assistant-message-1',
-      'reflection-complete-1',
-      'task-list-updated-1',
-      'task-start-1',
-      'task-complete-1',
+      "user-message-1",
+      "assistant-message-1",
+      "reflection-complete-1",
+      "task-list-updated-1",
+      "task-start-1",
+      "task-complete-1",
     ],
   );
 
@@ -4508,10 +4606,10 @@ test('UI-state events stay out of the visible conversation timeline', () => {
     latestAgentSuggestions([
       ...items,
       {
-        id: 'user-message-2',
-        type: 'user_message',
-        role: 'user',
-        content: 'Run the compatibility matrix',
+        id: "user-message-2",
+        type: "user_message",
+        role: "user",
+        content: "Run the compatibility matrix",
         eventTimeUs: 55_000_000,
         eventCounter: 5,
       },
@@ -4523,15 +4621,15 @@ test('UI-state events stay out of the visible conversation timeline', () => {
     latestAgentSuggestions([
       ...items,
       {
-        id: 'channel-inbound-user-1',
-        type: 'message',
+        id: "channel-inbound-user-1",
+        type: "message",
         eventTimeUs: 55_200_000,
         eventCounter: 45,
         payload: {
-          id: 'channel-user-1',
-          role: 'user',
-          content: 'Continue from Feishu',
-          metadata: { source: 'channel_inbound' },
+          id: "channel-user-1",
+          role: "user",
+          content: "Continue from Feishu",
+          metadata: { source: "channel_inbound" },
         },
       },
     ]),
@@ -4542,8 +4640,8 @@ test('UI-state events stay out of the visible conversation timeline', () => {
     latestAgentSuggestions([
       ...items,
       {
-        id: 'suggestions-cleared',
-        type: 'suggestions',
+        id: "suggestions-cleared",
+        type: "suggestions",
         suggestions: [],
         eventTimeUs: 55_000_000,
         eventCounter: 5,
@@ -4555,25 +4653,25 @@ test('UI-state events stay out of the visible conversation timeline', () => {
   assert.deepEqual(
     latestAgentSuggestions([
       {
-        id: 'suggestions-history-1',
-        type: 'suggestions',
-        suggestions: ['Inspect the generated patch'],
+        id: "suggestions-history-1",
+        type: "suggestions",
+        suggestions: ["Inspect the generated patch"],
         eventTimeUs: 56_000_000,
         eventCounter: 6,
       },
     ]),
-    ['Inspect the generated patch'],
+    ["Inspect the generated patch"],
   );
 });
 
-test('Web state-only routing and lifecycle events do not become conversation activity rows', () => {
+test("Web state-only routing and lifecycle events do not become conversation activity rows", () => {
   const visible = timelineItemsForDisplay(
     [
-      'context_status',
-      'execution_path_decided',
-      'selection_trace',
-      'policy_filtered',
-      'toolset_changed',
+      "context_status",
+      "execution_path_decided",
+      "selection_trace",
+      "policy_filtered",
+      "toolset_changed",
     ].map((type, index) => ({
       id: `${type}-${index}`,
       type,
@@ -4586,76 +4684,76 @@ test('Web state-only routing and lifecycle events do not become conversation act
   assert.deepEqual(visible, []);
 });
 
-test('the reported Web-parity turn renders only user, memory, and final assistant rows', () => {
+test("the reported Web-parity turn renders only user, memory, and final assistant rows", () => {
   const items = [
     {
-      id: 'user-1',
-      type: 'user_message',
-      role: 'user',
-      content: 'hi',
+      id: "user-1",
+      type: "user_message",
+      role: "user",
+      content: "hi",
       eventTimeUs: 1,
       eventCounter: 1,
     },
     {
-      id: 'route-1',
-      type: 'execution_path_decided',
+      id: "route-1",
+      type: "execution_path_decided",
       eventTimeUs: 2,
       eventCounter: 2,
     },
     {
-      id: 'memory-1',
-      type: 'memory_recalled',
+      id: "memory-1",
+      type: "memory_recalled",
       eventTimeUs: 3,
       eventCounter: 3,
       payload: { count: 6, search_ms: 424 },
     },
     {
-      id: 'context-1',
-      type: 'context_status',
+      id: "context-1",
+      type: "context_status",
       eventTimeUs: 4,
       eventCounter: 4,
     },
     {
-      id: 'selection-1',
-      type: 'selection_trace',
+      id: "selection-1",
+      type: "selection_trace",
       eventTimeUs: 5,
       eventCounter: 5,
     },
     ...[
-      'agent_spawned',
-      'agent_message_sent',
-      'agent_message_received',
-      'agent_completed',
-      'agent_stopped',
+      "agent_spawned",
+      "agent_message_sent",
+      "agent_message_received",
+      "agent_completed",
+      "agent_stopped",
     ].map((type, index) => ({
       id: `l4-lifecycle-${type}`,
       type,
       eventTimeUs: 5 + index / 10,
       eventCounter: 50 + index,
       payload: {
-        agent_name: 'General Agent',
-        from_agent_name: 'General Agent',
-        to_agent_name: 'General Agent',
+        agent_name: "General Agent",
+        from_agent_name: "General Agent",
+        to_agent_name: "General Agent",
       },
     })),
     {
-      id: 'assistant-1',
-      type: 'assistant_message',
-      role: 'assistant',
-      content: '你好！有什么可以帮你的吗？',
+      id: "assistant-1",
+      type: "assistant_message",
+      role: "assistant",
+      content: "你好！有什么可以帮你的吗？",
       eventTimeUs: 6,
       eventCounter: 6,
     },
     {
-      id: 'context-2',
-      type: 'context_status',
+      id: "context-2",
+      type: "context_status",
       eventTimeUs: 7,
       eventCounter: 7,
     },
     {
-      id: 'suggestions-1',
-      type: 'suggestions',
-      suggestions: ['帮我开始一个新任务'],
+      id: "suggestions-1",
+      type: "suggestions",
+      suggestions: ["帮我开始一个新任务"],
       eventTimeUs: 8,
       eventCounter: 8,
     },
@@ -4663,27 +4761,27 @@ test('the reported Web-parity turn renders only user, memory, and final assistan
 
   assert.deepEqual(
     timelineItemsForDisplay(items).map((item) => item.type),
-    ['user_message', 'memory_recalled', 'assistant_message'],
+    ["user_message", "memory_recalled", "assistant_message"],
   );
 });
 
-test('L4 Agent state events stay out of conversation rows without hiding user-visible work', () => {
+test("L4 Agent state events stay out of conversation rows without hiding user-visible work", () => {
   const hiddenTypes = [
-    'agent_spawned',
-    'agent_completed',
-    'agent_stopped',
-    'agent_message_sent',
-    'agent_message_received',
+    "agent_spawned",
+    "agent_completed",
+    "agent_stopped",
+    "agent_message_sent",
+    "agent_message_received",
   ];
   const visibleTypes = [
-    'thought',
-    'act',
-    'observe',
-    'subagent_started',
-    'subagent_completed',
-    'clarification_needed',
-    'artifact_created',
-    'error',
+    "thought",
+    "act",
+    "observe",
+    "subagent_started",
+    "subagent_completed",
+    "clarification_needed",
+    "artifact_created",
+    "error",
   ];
   const items = [...hiddenTypes, ...visibleTypes].map((type, index) => ({
     id: `${type}-${index}`,
@@ -4699,296 +4797,311 @@ test('L4 Agent state events stay out of conversation rows without hiding user-vi
   );
 });
 
-test('channel inbound message events become conversation rows and other generic messages stay hidden', () => {
+test("channel inbound message events become conversation rows and other generic messages stay hidden", () => {
   const inboundUser = {
-    id: 'message-event-user',
-    type: 'message',
+    id: "message-event-user",
+    type: "message",
     payload: {
-      id: 'channel-user-1',
-      role: 'user',
-      content: 'Hello from Feishu',
-      metadata: { source: 'channel_inbound', channel: 'feishu' },
+      id: "channel-user-1",
+      role: "user",
+      content: "Hello from Feishu",
+      metadata: { source: "channel_inbound", channel: "feishu" },
     },
     eventTimeUs: 56_000_000,
     eventCounter: 1,
   };
   const inboundAssistant = {
-    id: 'message-event-assistant',
-    type: 'message',
+    id: "message-event-assistant",
+    type: "message",
     payload: {
-      id: 'channel-assistant-1',
-      role: 'assistant',
-      content: 'Reply mirrored to the channel',
-      metadata: { source: 'channel_inbound', channel: 'feishu' },
+      id: "channel-assistant-1",
+      role: "assistant",
+      content: "Reply mirrored to the channel",
+      metadata: { source: "channel_inbound", channel: "feishu" },
     },
     eventTimeUs: 57_000_000,
     eventCounter: 2,
   };
   const nonChannel = {
-    id: 'message-event-internal',
-    type: 'message',
+    id: "message-event-internal",
+    type: "message",
     payload: {
-      id: 'internal-1',
-      role: 'user',
-      content: 'internal-message-sentinel',
-      metadata: { source: 'agent_runtime' },
+      id: "internal-1",
+      role: "user",
+      content: "internal-message-sentinel",
+      metadata: { source: "agent_runtime" },
     },
     eventTimeUs: 58_000_000,
     eventCounter: 3,
   };
   const malformed = {
-    id: 'message-event-malformed',
-    type: 'message',
+    id: "message-event-malformed",
+    type: "message",
     payload: {
-      id: 'malformed-1',
-      role: 'system',
-      content: 'malformed-message-sentinel',
-      metadata: { source: 'channel_inbound' },
+      id: "malformed-1",
+      role: "system",
+      content: "malformed-message-sentinel",
+      metadata: { source: "channel_inbound" },
     },
     eventTimeUs: 59_000_000,
     eventCounter: 4,
   };
 
-  assert.deepEqual(timelineItemsForDisplay([inboundUser, inboundAssistant, nonChannel, malformed]), [
-    {
-      ...inboundUser,
-      id: 'channel-user-1',
-      type: 'user_message',
-      role: 'user',
-      content: 'Hello from Feishu',
-      message_id: 'channel-user-1',
-      metadata: { source: 'channel_inbound', channel: 'feishu' },
-    },
-    {
-      ...inboundAssistant,
-      id: 'channel-assistant-1',
-      type: 'assistant_message',
-      role: 'assistant',
-      content: 'Reply mirrored to the channel',
-      message_id: 'channel-assistant-1',
-      metadata: { source: 'channel_inbound', channel: 'feishu' },
-    },
-  ]);
-  assert.equal(inboundUser.type, 'message');
+  assert.deepEqual(
+    timelineItemsForDisplay([
+      inboundUser,
+      inboundAssistant,
+      nonChannel,
+      malformed,
+    ]),
+    [
+      {
+        ...inboundUser,
+        id: "channel-user-1",
+        type: "user_message",
+        role: "user",
+        content: "Hello from Feishu",
+        message_id: "channel-user-1",
+        metadata: { source: "channel_inbound", channel: "feishu" },
+      },
+      {
+        ...inboundAssistant,
+        id: "channel-assistant-1",
+        type: "assistant_message",
+        role: "assistant",
+        content: "Reply mirrored to the channel",
+        message_id: "channel-assistant-1",
+        metadata: { source: "channel_inbound", channel: "feishu" },
+      },
+    ],
+  );
+  assert.equal(inboundUser.type, "message");
 });
 
-test('streaming thought chunks merge into one readable timeline item and then settle', () => {
+test("streaming thought chunks merge into one readable timeline item and then settle", () => {
   let items = mergeThoughtStreamChunk([], {
-    kind: 'start',
-    messageId: 'message-1',
-    content: '',
+    kind: "start",
+    messageId: "message-1",
+    content: "",
     eventTimeUs: 1_000_000,
     eventCounter: 1,
-    payload: { thought_level: 'reasoning' },
+    payload: { thought_level: "reasoning" },
   });
   items = mergeThoughtStreamChunk(items, {
-    kind: 'delta',
-    messageId: 'message-1',
-    content: 'Inspect ',
+    kind: "delta",
+    messageId: "message-1",
+    content: "Inspect ",
     eventTimeUs: 1_100_000,
     eventCounter: 2,
-    payload: { delta: 'Inspect ' },
+    payload: { delta: "Inspect " },
   });
   items = mergeThoughtStreamChunk(items, {
-    kind: 'delta',
-    messageId: 'message-1',
-    content: 'the tests.',
+    kind: "delta",
+    messageId: "message-1",
+    content: "the tests.",
     eventTimeUs: 1_200_000,
     eventCounter: 3,
-    payload: { delta: 'the tests.' },
+    payload: { delta: "the tests." },
   });
 
   assert.equal(items.length, 1);
-  assert.equal(items[0].type, 'thought');
-  assert.equal(items[0].content, 'Inspect the tests.');
+  assert.equal(items[0].type, "thought");
+  assert.equal(items[0].content, "Inspect the tests.");
   assert.equal(items[0].metadata.streaming, true);
 
   items = mergeThoughtStreamChunk(items, {
-    kind: 'complete',
-    messageId: 'message-1',
-    content: 'Inspect the tests before editing.',
+    kind: "complete",
+    messageId: "message-1",
+    content: "Inspect the tests before editing.",
     eventTimeUs: 1_300_000,
     eventCounter: 4,
-    payload: { thought: 'Inspect the tests before editing.' },
+    payload: { thought: "Inspect the tests before editing." },
   });
   assert.equal(items.length, 1);
-  assert.equal(items[0].content, 'Inspect the tests before editing.');
+  assert.equal(items[0].content, "Inspect the tests before editing.");
   assert.equal(items[0].metadata.streaming, false);
 });
 
-test('an unassociated final thought settles the only active stream with authoritative content', () => {
+test("an unassociated final thought settles the only active stream with authoritative content", () => {
   let items = mergeThoughtStreamChunk([], {
-    kind: 'start',
-    messageId: 'execution-message-1',
-    content: '',
+    kind: "start",
+    messageId: "execution-message-1",
+    content: "",
     eventTimeUs: 1_000_000,
     eventCounter: 1,
   });
   items = mergeThoughtStreamChunk(items, {
-    kind: 'delta',
-    messageId: 'execution-message-1',
-    content: '。序顺的误错',
+    kind: "delta",
+    messageId: "execution-message-1",
+    content: "。序顺的误错",
     eventTimeUs: 1_100_000,
     eventCounter: 2,
   });
   items = mergeThoughtStreamChunk(items, {
-    kind: 'complete',
+    kind: "complete",
     messageId: eventScopedStreamMessageId(
-      'conversation-1',
-      'thought',
+      "conversation-1",
+      "thought",
       1_200_000,
       3,
     ),
-    content: '正确顺序。',
+    content: "正确顺序。",
     eventTimeUs: 1_200_000,
     eventCounter: 3,
   });
 
   assert.equal(items.length, 1);
-  assert.equal(items[0].message_id, 'execution-message-1');
-  assert.equal(items[0].content, '正确顺序。');
+  assert.equal(items[0].message_id, "execution-message-1");
+  assert.equal(items[0].content, "正确顺序。");
   assert.equal(items[0].metadata.streaming, false);
   assert.equal(items[0].metadata.thoughtCompletionEventTimeUs, 1_200_000);
   assert.equal(items[0].metadata.thoughtCompletionEventCounter, 3);
 });
 
-test('a second thought stream under the same Agent message remains a separate step', () => {
+test("a second thought stream under the same Agent message remains a separate step", () => {
   const completed = mergeThoughtStreamChunk([], {
-    kind: 'complete',
-    messageId: 'message-1',
-    content: 'First thought',
+    kind: "complete",
+    messageId: "message-1",
+    content: "First thought",
     eventTimeUs: 1_000_000,
     eventCounter: 1,
   });
   const withNext = mergeThoughtStreamChunk(completed, {
-    kind: 'start',
-    messageId: 'message-1',
-    content: '',
+    kind: "start",
+    messageId: "message-1",
+    content: "",
     eventTimeUs: 2_000_000,
     eventCounter: 2,
   });
 
   assert.equal(withNext.length, 2);
-  assert.equal(withNext[0].content, 'First thought');
+  assert.equal(withNext[0].content, "First thought");
   assert.equal(withNext[1].metadata.streaming, true);
 });
 
-test('completed thought skeleton reconciles with its history row in either arrival order', () => {
+test("completed thought skeleton reconciles with its history row in either arrival order", () => {
   let inFlight = mergeThoughtStreamChunk([], {
-    kind: 'start',
-    messageId: 'execution-message-1',
-    content: '',
+    kind: "start",
+    messageId: "execution-message-1",
+    content: "",
     eventTimeUs: 1_000_000,
     eventCounter: 1,
   });
   inFlight = mergeThoughtStreamChunk(inFlight, {
-    kind: 'delta',
-    messageId: 'execution-message-1',
-    content: 'Inspect tests',
+    kind: "delta",
+    messageId: "execution-message-1",
+    content: "Inspect tests",
     eventTimeUs: 1_100_000,
     eventCounter: 2,
   });
   const completeChunk = {
-    kind: 'complete',
-    messageId: 'execution-message-1',
-    content: 'Inspect tests',
+    kind: "complete",
+    messageId: "execution-message-1",
+    content: "Inspect tests",
     eventTimeUs: 1_200_000,
     eventCounter: 3,
   };
   const completed = mergeThoughtStreamChunk(inFlight, completeChunk);
   const history = {
-    id: 'thought-1200000-3',
-    type: 'thought',
-    content: 'Inspect tests',
+    id: "thought-1200000-3",
+    type: "thought",
+    content: "Inspect tests",
     eventTimeUs: 1_200_000,
     eventCounter: 3,
-    metadata: { source: 'history' },
+    metadata: { source: "history" },
   };
 
-  const hydratedAfterComplete = mergeConversationTimelineItems(completed, [history]);
+  const hydratedAfterComplete = mergeConversationTimelineItems(completed, [
+    history,
+  ]);
   const liveAfterHistory = mergeConversationTimelineItems([history], completed);
   const historyBeforeComplete = mergeThoughtStreamChunk(
     mergeConversationTimelineItems(inFlight, [history]),
     completeChunk,
   );
 
-  for (const items of [hydratedAfterComplete, liveAfterHistory, historyBeforeComplete]) {
+  for (const items of [
+    hydratedAfterComplete,
+    liveAfterHistory,
+    historyBeforeComplete,
+  ]) {
     assert.deepEqual(
-      items.filter((item) => item.type === 'thought').map((item) => item.id),
-      ['thought-1200000-3'],
+      items.filter((item) => item.type === "thought").map((item) => item.id),
+      ["thought-1200000-3"],
     );
   }
 });
 
-test('display hides a legacy internal goal-control exchange after a substantive answer', () => {
+test("display hides a legacy internal goal-control exchange after a substantive answer", () => {
   const items = [
     {
-      id: 'user-1',
-      type: 'user_message',
-      role: 'user',
-      content: '你有哪些工具？',
+      id: "user-1",
+      type: "user_message",
+      role: "user",
+      content: "你有哪些工具？",
       eventTimeUs: 1_000_000,
       eventCounter: 1,
     },
     {
-      id: 'thought-answer',
-      type: 'thought',
-      content: '整理可用工具。',
+      id: "thought-answer",
+      type: "thought",
+      content: "整理可用工具。",
       eventTimeUs: 2_000_000,
       eventCounter: 2,
     },
     {
-      id: 'assistant-answer',
-      type: 'assistant_message',
-      role: 'assistant',
-      content: '我可以使用文件、终端和浏览器工具。',
+      id: "assistant-answer",
+      type: "assistant_message",
+      role: "assistant",
+      content: "我可以使用文件、终端和浏览器工具。",
       eventTimeUs: 3_000_000,
       eventCounter: 3,
     },
     {
-      id: 'thought-control',
-      type: 'thought',
-      content: 'The runtime asks for a completion signal.',
+      id: "thought-control",
+      type: "thought",
+      content: "The runtime asks for a completion signal.",
       eventTimeUs: 4_000_000,
       eventCounter: 4,
     },
     {
-      id: 'assistant-control',
-      type: 'assistant_message',
-      role: 'assistant',
-      content: '{"goal_achieved":true,"reason":"The informational request is complete."}',
+      id: "assistant-control",
+      type: "assistant_message",
+      role: "assistant",
+      content:
+        '{"goal_achieved":true,"reason":"The informational request is complete."}',
       eventTimeUs: 5_000_000,
       eventCounter: 5,
     },
     {
-      id: 'suggestions-1',
-      type: 'suggestions',
+      id: "suggestions-1",
+      type: "suggestions",
       eventTimeUs: 6_000_000,
       eventCounter: 6,
-      payload: { suggestions: ['继续'] },
+      payload: { suggestions: ["继续"] },
     },
   ];
 
   assert.deepEqual(
     timelineItemsForDisplay(items).map((item) => item.id),
-    ['user-1', 'thought-answer', 'assistant-answer'],
+    ["user-1", "thought-answer", "assistant-answer"],
   );
 });
 
-test('display preserves a standalone assistant answer that uses the goal signal JSON shape', () => {
+test("display preserves a standalone assistant answer that uses the goal signal JSON shape", () => {
   const items = [
     {
-      id: 'user-1',
-      type: 'user_message',
-      role: 'user',
-      content: 'Return the completion object.',
+      id: "user-1",
+      type: "user_message",
+      role: "user",
+      content: "Return the completion object.",
       eventTimeUs: 1_000_000,
       eventCounter: 1,
     },
     {
-      id: 'assistant-1',
-      type: 'assistant_message',
-      role: 'assistant',
+      id: "assistant-1",
+      type: "assistant_message",
+      role: "assistant",
       content: '{"goal_achieved":true,"reason":"Requested JSON response."}',
       eventTimeUs: 2_000_000,
       eventCounter: 2,
@@ -4997,32 +5110,32 @@ test('display preserves a standalone assistant answer that uses the goal signal 
 
   assert.deepEqual(
     timelineItemsForDisplay(items).map((item) => item.id),
-    ['user-1', 'assistant-1'],
+    ["user-1", "assistant-1"],
   );
 });
 
-test('display preserves a requested goal-shaped follow-up when no control thought precedes it', () => {
+test("display preserves a requested goal-shaped follow-up when no control thought precedes it", () => {
   const items = [
     {
-      id: 'user-1',
-      type: 'user_message',
-      role: 'user',
-      content: 'Explain the result, then return the completion object.',
+      id: "user-1",
+      type: "user_message",
+      role: "user",
+      content: "Explain the result, then return the completion object.",
       eventTimeUs: 1_000_000,
       eventCounter: 1,
     },
     {
-      id: 'assistant-explanation',
-      type: 'assistant_message',
-      role: 'assistant',
-      content: 'The requested work completed successfully.',
+      id: "assistant-explanation",
+      type: "assistant_message",
+      role: "assistant",
+      content: "The requested work completed successfully.",
       eventTimeUs: 2_000_000,
       eventCounter: 2,
     },
     {
-      id: 'assistant-json',
-      type: 'assistant_message',
-      role: 'assistant',
+      id: "assistant-json",
+      type: "assistant_message",
+      role: "assistant",
       content: '{"goal_achieved":true,"reason":"Requested JSON response."}',
       eventTimeUs: 3_000_000,
       eventCounter: 3,
@@ -5031,11 +5144,11 @@ test('display preserves a requested goal-shaped follow-up when no control though
 
   assert.deepEqual(
     timelineItemsForDisplay(items).map((item) => item.id),
-    ['user-1', 'assistant-explanation', 'assistant-json'],
+    ["user-1", "assistant-explanation", "assistant-json"],
   );
 });
 
-test('live Agent events route thought start, delta, and completion through the stream merger', () => {
+test("live Agent events route thought start, delta, and completion through the stream merger", () => {
   assert.match(
     appSource,
     /type === 'thought_start'[\s\S]*?type === 'thought_delta'[\s\S]*?type === 'thought'/,
@@ -5044,234 +5157,250 @@ test('live Agent events route thought start, delta, and completion through the s
   assert.match(appSource, /type\.startsWith\('thought_'\)/);
 });
 
-test('live Agent text events preserve raw delta whitespace and read text_end full_text', () => {
+test("live Agent text events preserve raw delta whitespace and read text_end full_text", () => {
   assert.match(appSource, /mergeAssistantTextStreamChunk\(existing/);
   assert.match(appSource, /readTextField\(data, 'full_text'\)/);
   assert.match(appSource, /readTextField\(data, 'delta'\)/);
 });
 
-test('act items pair with the observe that answers them, preserving order', () => {
+test("act items pair with the observe that answers them, preserving order", () => {
   const pairs = pairToolCallItems([
-    { id: 'act-1', type: 'act', toolName: 'read_file', eventTimeUs: 1_000_000 },
-    { id: 'observe-1', type: 'observe', toolName: 'read_file', eventTimeUs: 1_400_000 },
-    { id: 'act-2', type: 'act', toolName: 'run_tests', eventTimeUs: 2_000_000 },
-    { id: 'observe-2', type: 'observe', toolName: 'run_tests', eventTimeUs: 3_000_000 },
+    { id: "act-1", type: "act", toolName: "read_file", eventTimeUs: 1_000_000 },
+    {
+      id: "observe-1",
+      type: "observe",
+      toolName: "read_file",
+      eventTimeUs: 1_400_000,
+    },
+    { id: "act-2", type: "act", toolName: "run_tests", eventTimeUs: 2_000_000 },
+    {
+      id: "observe-2",
+      type: "observe",
+      toolName: "run_tests",
+      eventTimeUs: 3_000_000,
+    },
   ]);
 
   assert.equal(pairs.length, 2);
-  assert.equal(pairs[0].call.id, 'act-1');
-  assert.equal(pairs[0].result?.id, 'observe-1');
-  assert.equal(pairs[1].call.id, 'act-2');
-  assert.equal(pairs[1].result?.id, 'observe-2');
+  assert.equal(pairs[0].call.id, "act-1");
+  assert.equal(pairs[0].result?.id, "observe-1");
+  assert.equal(pairs[1].call.id, "act-2");
+  assert.equal(pairs[1].result?.id, "observe-2");
 });
 
-test('streamed tool arguments merge into one stable call and settle on observe', () => {
+test("streamed tool arguments merge into one stable call and settle on observe", () => {
   let items = mergeToolStreamItem(
     [],
     {
-      id: 'delta-1',
-      type: 'act',
-      toolName: 'read_file',
-      toolInput: '',
-      payload: { call_id: 'call-1', accumulated_arguments: '' },
-      message_id: 'message-1',
+      id: "delta-1",
+      type: "act",
+      toolName: "read_file",
+      toolInput: "",
+      payload: { call_id: "call-1", accumulated_arguments: "" },
+      message_id: "message-1",
       eventTimeUs: 1_000_000,
       eventCounter: 1,
     },
-    'delta',
+    "delta",
   );
   items = mergeToolStreamItem(
     items,
     {
-      id: 'delta-2',
-      type: 'act',
-      toolName: 'read_file',
+      id: "delta-2",
+      type: "act",
+      toolName: "read_file",
       toolInput: '{"path":"README.md"',
-      payload: { call_id: 'call-1', accumulated_arguments: '{"path":"README.md"' },
-      message_id: 'message-1',
+      payload: {
+        call_id: "call-1",
+        accumulated_arguments: '{"path":"README.md"',
+      },
+      message_id: "message-1",
       eventTimeUs: 1_100_000,
       eventCounter: 2,
     },
-    'delta',
+    "delta",
   );
   items = mergeToolStreamItem(
     items,
     {
-      id: 'act-1',
-      type: 'act',
-      toolName: 'read_file',
-      toolInput: { path: 'README.md' },
-      payload: { call_id: 'call-1', tool_execution_id: 'exec-1' },
-      message_id: 'message-1',
+      id: "act-1",
+      type: "act",
+      toolName: "read_file",
+      toolInput: { path: "README.md" },
+      payload: { call_id: "call-1", tool_execution_id: "exec-1" },
+      message_id: "message-1",
       eventTimeUs: 1_200_000,
       eventCounter: 3,
     },
-    'act',
+    "act",
   );
 
   assert.equal(items.length, 1);
-  assert.equal(items[0].id, 'delta-1');
-  assert.deepEqual(items[0].toolInput, { path: 'README.md' });
+  assert.equal(items[0].id, "delta-1");
+  assert.deepEqual(items[0].toolInput, { path: "README.md" });
   assert.equal(items[0].metadata.streaming, true);
 
   items = mergeToolStreamItem(
     items,
     {
-      id: 'observe-1',
-      type: 'observe',
-      toolName: 'read_file',
-      toolOutput: 'contents',
-      payload: { call_id: 'call-1', tool_execution_id: 'exec-1' },
-      message_id: 'message-1',
+      id: "observe-1",
+      type: "observe",
+      toolName: "read_file",
+      toolOutput: "contents",
+      payload: { call_id: "call-1", tool_execution_id: "exec-1" },
+      message_id: "message-1",
       eventTimeUs: 1_800_000,
       eventCounter: 4,
     },
-    'observe',
+    "observe",
   );
   assert.equal(items.length, 2);
   assert.equal(items[0].metadata.streaming, false);
-  assert.equal(pairToolCallItems(items)[0].result?.id, 'observe-1');
+  assert.equal(pairToolCallItems(items)[0].result?.id, "observe-1");
 });
 
-test('history tool calls replace live delta skeletons without leaving a running duplicate', () => {
+test("history tool calls replace live delta skeletons without leaving a running duplicate", () => {
   const deltaOnly = mergeToolStreamItem(
     [],
     {
-      id: 'act_delta-100-1',
-      type: 'act',
-      toolName: 'read_file',
+      id: "act_delta-100-1",
+      type: "act",
+      toolName: "read_file",
       toolInput: '{"path":"README.md"',
-      payload: { call_id: 'call-1', accumulated_arguments: '{"path":"README.md"' },
-      message_id: 'message-1',
+      payload: {
+        call_id: "call-1",
+        accumulated_arguments: '{"path":"README.md"',
+      },
+      message_id: "message-1",
       eventTimeUs: 100,
       eventCounter: 1,
     },
-    'delta',
+    "delta",
   );
   const finalAct = {
-    id: 'act-200-2',
-    type: 'act',
-    toolName: 'read_file',
-    toolInput: { path: 'README.md' },
-    payload: { call_id: 'call-1', tool_execution_id: 'exec-1' },
-    message_id: 'message-1',
+    id: "act-200-2",
+    type: "act",
+    toolName: "read_file",
+    toolInput: { path: "README.md" },
+    payload: { call_id: "call-1", tool_execution_id: "exec-1" },
+    message_id: "message-1",
     eventTimeUs: 200,
     eventCounter: 2,
   };
   const observe = {
-    id: 'observe-300-3',
-    type: 'observe',
-    toolName: 'read_file',
-    toolOutput: 'contents',
-    payload: { call_id: 'call-1', tool_execution_id: 'exec-1' },
-    message_id: 'message-1',
+    id: "observe-300-3",
+    type: "observe",
+    toolName: "read_file",
+    toolOutput: "contents",
+    payload: { call_id: "call-1", tool_execution_id: "exec-1" },
+    message_id: "message-1",
     eventTimeUs: 300,
     eventCounter: 3,
   };
   const historyAct = {
-    id: 'act-200-2',
-    type: 'act',
-    toolName: 'read_file',
-    toolInput: { path: 'README.md' },
-    execution_id: 'exec-1',
+    id: "act-200-2",
+    type: "act",
+    toolName: "read_file",
+    toolInput: { path: "README.md" },
+    execution_id: "exec-1",
     eventTimeUs: 200,
     eventCounter: 2,
   };
   const historyObserve = {
-    id: 'observe-300-3',
-    type: 'observe',
-    toolName: 'read_file',
-    toolOutput: 'contents',
-    execution_id: 'exec-1',
+    id: "observe-300-3",
+    type: "observe",
+    toolName: "read_file",
+    toolOutput: "contents",
+    execution_id: "exec-1",
     eventTimeUs: 300,
     eventCounter: 3,
   };
-  let live = mergeToolStreamItem(deltaOnly, finalAct, 'act');
-  live = mergeToolStreamItem(live, observe, 'observe');
+  let live = mergeToolStreamItem(deltaOnly, finalAct, "act");
+  live = mergeToolStreamItem(live, observe, "observe");
   const hydratedAfterLive = mergeConversationTimelineItems(live, [
     historyAct,
     historyObserve,
   ]);
 
   let historyFirst = mergeConversationTimelineItems(deltaOnly, [historyAct]);
-  historyFirst = mergeToolStreamItem(historyFirst, finalAct, 'act');
-  historyFirst = mergeToolStreamItem(historyFirst, observe, 'observe');
+  historyFirst = mergeToolStreamItem(historyFirst, finalAct, "act");
+  historyFirst = mergeToolStreamItem(historyFirst, observe, "observe");
 
   for (const items of [hydratedAfterLive, historyFirst]) {
     const pairs = pairToolCallItems(
-      items.filter((item) => item.type === 'act' || item.type === 'observe'),
+      items.filter((item) => item.type === "act" || item.type === "observe"),
     );
     assert.equal(pairs.length, 1);
-    assert.equal(pairs[0].call.id, 'act-200-2');
+    assert.equal(pairs[0].call.id, "act-200-2");
     assert.equal(pairs[0].call.eventTimeUs, 200);
-    assert.equal(pairs[0].result?.id, 'observe-300-3');
-    assert.equal(toolCallPairStatus(pairs[0]), 'complete');
+    assert.equal(pairs[0].result?.id, "observe-300-3");
+    assert.equal(toolCallPairStatus(pairs[0]), "complete");
   }
 });
 
-test('persisted act delta skeletons yield to canonical executions like the Web client', () => {
+test("persisted act delta skeletons yield to canonical executions like the Web client", () => {
   const pairs = pairToolCallItems([
     {
-      id: 'act_delta-100-0',
-      type: 'act',
-      toolName: 'export_artifact',
-      execution_id: 'call-export-1',
+      id: "act_delta-100-0",
+      type: "act",
+      toolName: "export_artifact",
+      execution_id: "call-export-1",
       eventTimeUs: 100,
       eventCounter: 0,
     },
     {
-      id: 'act-200-0',
-      type: 'act',
-      toolName: 'export_artifact',
-      execution_id: 'exec-export-1',
+      id: "act-200-0",
+      type: "act",
+      toolName: "export_artifact",
+      execution_id: "exec-export-1",
       eventTimeUs: 200,
       eventCounter: 0,
     },
     {
-      id: 'observe-300-0',
-      type: 'observe',
-      toolName: 'export_artifact',
-      execution_id: 'exec-export-1',
+      id: "observe-300-0",
+      type: "observe",
+      toolName: "export_artifact",
+      execution_id: "exec-export-1",
       eventTimeUs: 300,
       eventCounter: 0,
     },
     {
-      id: 'act_delta-400-0',
-      type: 'act',
-      toolName: 'todoread',
-      execution_id: 'call-todoread-1',
+      id: "act_delta-400-0",
+      type: "act",
+      toolName: "todoread",
+      execution_id: "call-todoread-1",
       eventTimeUs: 400,
       eventCounter: 0,
     },
     {
-      id: 'act-500-0',
-      type: 'act',
-      toolName: 'todoread',
-      execution_id: 'exec-todoread-1',
+      id: "act-500-0",
+      type: "act",
+      toolName: "todoread",
+      execution_id: "exec-todoread-1",
       eventTimeUs: 500,
       eventCounter: 0,
     },
     {
-      id: 'observe-600-0',
-      type: 'observe',
-      toolName: 'todoread',
-      execution_id: 'exec-todoread-1',
+      id: "observe-600-0",
+      type: "observe",
+      toolName: "todoread",
+      execution_id: "exec-todoread-1",
       eventTimeUs: 600,
       eventCounter: 0,
     },
     {
-      id: 'act_delta-700-0',
-      type: 'act',
-      toolName: 'todowrite',
-      execution_id: 'call-todowrite-1',
+      id: "act_delta-700-0",
+      type: "act",
+      toolName: "todowrite",
+      execution_id: "call-todowrite-1",
       eventTimeUs: 700,
       eventCounter: 0,
     },
     {
-      id: 'act_delta-800-0',
-      type: 'act',
-      toolName: 'write_file',
-      execution_id: 'call-write-1',
+      id: "act_delta-800-0",
+      type: "act",
+      toolName: "write_file",
+      execution_id: "call-write-1",
       metadata: { streaming: true },
       eventTimeUs: 800,
       eventCounter: 0,
@@ -5286,42 +5415,42 @@ test('persisted act delta skeletons yield to canonical executions like the Web c
     })),
     [
       {
-        call: 'act-200-0',
-        result: 'observe-300-0',
-        status: 'complete',
+        call: "act-200-0",
+        result: "observe-300-0",
+        status: "complete",
       },
       {
-        call: 'act-500-0',
-        result: 'observe-600-0',
-        status: 'complete',
+        call: "act-500-0",
+        result: "observe-600-0",
+        status: "complete",
       },
       {
-        call: 'act_delta-800-0',
+        call: "act_delta-800-0",
         result: null,
-        status: 'running',
+        status: "running",
       },
     ],
   );
 });
 
-test('reused weak call ids never merge distinct strong tool executions', () => {
+test("reused weak call ids never merge distinct strong tool executions", () => {
   const items = mergeConversationTimelineItems(
     [
       {
-        id: 'act-execution-1',
-        type: 'act',
-        execution_id: 'execution-1',
-        payload: { call_id: 'workspace-recovery' },
+        id: "act-execution-1",
+        type: "act",
+        execution_id: "execution-1",
+        payload: { call_id: "workspace-recovery" },
         eventTimeUs: 100,
         eventCounter: 1,
       },
     ],
     [
       {
-        id: 'act-execution-2',
-        type: 'act',
-        execution_id: 'execution-2',
-        payload: { call_id: 'workspace-recovery' },
+        id: "act-execution-2",
+        type: "act",
+        execution_id: "execution-2",
+        payload: { call_id: "workspace-recovery" },
         eventTimeUs: 200,
         eventCounter: 2,
       },
@@ -5330,150 +5459,157 @@ test('reused weak call ids never merge distinct strong tool executions', () => {
 
   assert.deepEqual(
     items.map((item) => item.id),
-    ['act-execution-1', 'act-execution-2'],
+    ["act-execution-1", "act-execution-2"],
   );
 });
 
-test('tool pairing prefers strong execution ids when weak call ids are reused', () => {
+test("tool pairing prefers strong execution ids when weak call ids are reused", () => {
   const pairs = pairToolCallItems([
     {
-      id: 'act-execution-1',
-      type: 'act',
-      execution_id: 'execution-1',
-      payload: { call_id: 'workspace-recovery' },
+      id: "act-execution-1",
+      type: "act",
+      execution_id: "execution-1",
+      payload: { call_id: "workspace-recovery" },
       eventTimeUs: 100,
     },
     {
-      id: 'act-execution-2',
-      type: 'act',
-      execution_id: 'execution-2',
-      payload: { call_id: 'workspace-recovery' },
+      id: "act-execution-2",
+      type: "act",
+      execution_id: "execution-2",
+      payload: { call_id: "workspace-recovery" },
       eventTimeUs: 200,
     },
     {
-      id: 'observe-execution-2',
-      type: 'observe',
-      execution_id: 'execution-2',
-      payload: { call_id: 'workspace-recovery' },
+      id: "observe-execution-2",
+      type: "observe",
+      execution_id: "execution-2",
+      payload: { call_id: "workspace-recovery" },
       eventTimeUs: 300,
     },
     {
-      id: 'observe-execution-1',
-      type: 'observe',
-      execution_id: 'execution-1',
-      payload: { call_id: 'workspace-recovery' },
+      id: "observe-execution-1",
+      type: "observe",
+      execution_id: "execution-1",
+      payload: { call_id: "workspace-recovery" },
       eventTimeUs: 400,
     },
   ]);
 
   assert.equal(pairs.length, 2);
-  assert.equal(pairs[0].result?.id, 'observe-execution-1');
-  assert.equal(pairs[1].result?.id, 'observe-execution-2');
+  assert.equal(pairs[0].result?.id, "observe-execution-1");
+  assert.equal(pairs[1].result?.id, "observe-execution-2");
 });
 
-test('parallel tool observations pair by call identity instead of arrival order', () => {
+test("parallel tool observations pair by call identity instead of arrival order", () => {
   const pairs = pairToolCallItems([
     {
-      id: 'act-1',
-      type: 'act',
-      toolName: 'read_file',
-      payload: { call_id: 'call-1', tool_execution_id: 'exec-1' },
+      id: "act-1",
+      type: "act",
+      toolName: "read_file",
+      payload: { call_id: "call-1", tool_execution_id: "exec-1" },
       eventTimeUs: 1,
     },
     {
-      id: 'act-2',
-      type: 'act',
-      toolName: 'read_file',
-      payload: { call_id: 'call-2', tool_execution_id: 'exec-2' },
+      id: "act-2",
+      type: "act",
+      toolName: "read_file",
+      payload: { call_id: "call-2", tool_execution_id: "exec-2" },
       eventTimeUs: 2,
     },
     {
-      id: 'observe-2',
-      type: 'observe',
-      toolName: 'read_file',
-      payload: { call_id: 'call-2', tool_execution_id: 'exec-2' },
+      id: "observe-2",
+      type: "observe",
+      toolName: "read_file",
+      payload: { call_id: "call-2", tool_execution_id: "exec-2" },
       eventTimeUs: 3,
     },
     {
-      id: 'observe-1',
-      type: 'observe',
-      toolName: 'read_file',
-      payload: { call_id: 'call-1', tool_execution_id: 'exec-1' },
+      id: "observe-1",
+      type: "observe",
+      toolName: "read_file",
+      payload: { call_id: "call-1", tool_execution_id: "exec-1" },
       eventTimeUs: 4,
     },
   ]);
 
   assert.equal(pairs.length, 2);
-  assert.equal(pairs[0].result?.id, 'observe-1');
-  assert.equal(pairs[1].result?.id, 'observe-2');
+  assert.equal(pairs[0].result?.id, "observe-1");
+  assert.equal(pairs[1].result?.id, "observe-2");
 });
 
-test('live Agent tool events route deltas, calls, and observations through the stream merger', () => {
-  assert.match(appSource, /type === 'act_delta'[\s\S]*?type === 'act'[\s\S]*?type === 'observe'/);
+test("live Agent tool events route deltas, calls, and observations through the stream merger", () => {
+  assert.match(
+    appSource,
+    /type === 'act_delta'[\s\S]*?type === 'act'[\s\S]*?type === 'observe'/,
+  );
   assert.match(appSource, /mergeToolStreamItem\(/);
 });
 
-test('tool activity rows preserve structured thinking ahead of paired tool calls', () => {
+test("tool activity rows preserve structured thinking ahead of paired tool calls", () => {
   const rows = toolActivityRows([
-    { id: 'thought-1', type: 'thought', content: 'Inspect the shared fixture.' },
-    { id: 'act-1', type: 'act', toolName: 'read_file' },
-    { id: 'observe-1', type: 'observe', toolName: 'read_file' },
+    {
+      id: "thought-1",
+      type: "thought",
+      content: "Inspect the shared fixture.",
+    },
+    { id: "act-1", type: "act", toolName: "read_file" },
+    { id: "observe-1", type: "observe", toolName: "read_file" },
   ]);
 
   assert.equal(rows.length, 2);
-  assert.equal(rows[0].kind, 'thought');
-  assert.equal(rows[0].item.id, 'thought-1');
-  assert.equal(rows[1].kind, 'tool_call');
-  assert.equal(rows[1].pair.call.id, 'act-1');
-  assert.equal(rows[1].pair.result.id, 'observe-1');
+  assert.equal(rows[0].kind, "thought");
+  assert.equal(rows[0].item.id, "thought-1");
+  assert.equal(rows[1].kind, "tool_call");
+  assert.equal(rows[1].pair.call.id, "act-1");
+  assert.equal(rows[1].pair.result.id, "observe-1");
 });
 
-test('structured sources aggregate across calls, deduplicate URLs, and keep stable groups', () => {
+test("structured sources aggregate across calls, deduplicate URLs, and keep stable groups", () => {
   const model = aggregateStructuredToolSources([
     {
-      id: 'act-search-1',
-      type: 'act',
-      display: { kind: 'search', metadata: { source_type: 'web' } },
+      id: "act-search-1",
+      type: "act",
+      display: { kind: "search", metadata: { source_type: "web" } },
       eventTimeUs: 1,
     },
     {
-      id: 'observe-search-1',
-      type: 'observe',
+      id: "observe-search-1",
+      type: "observe",
       toolOutput: {
         results: [
           {
-            title: 'OpenAI documentation',
-            url: 'https://www.openai.com/docs/',
-            snippet: 'Primary documentation.',
+            title: "OpenAI documentation",
+            url: "https://www.openai.com/docs/",
+            snippet: "Primary documentation.",
             score: 0.91,
           },
           {
-            title: 'Protocol notes',
-            url: 'https://example.com/protocol',
+            title: "Protocol notes",
+            url: "https://example.com/protocol",
           },
         ],
       },
       eventTimeUs: 2,
     },
     {
-      id: 'act-search-2',
-      type: 'act',
-      display: { kind: 'search' },
+      id: "act-search-2",
+      type: "act",
+      display: { kind: "search" },
       eventTimeUs: 3,
     },
     {
-      id: 'observe-search-2',
-      type: 'observe',
+      id: "observe-search-2",
+      type: "observe",
       toolOutput: JSON.stringify({
         sources: [
           {
-            title: 'OpenAI documentation duplicate',
-            url: 'https://openai.com/docs#overview',
+            title: "OpenAI documentation duplicate",
+            url: "https://openai.com/docs#overview",
           },
           {
-            title: 'Workspace handbook',
-            source_type: 'rag',
-            provider_label: 'Project knowledge',
+            title: "Workspace handbook",
+            source_type: "rag",
+            provider_label: "Project knowledge",
           },
         ],
       }),
@@ -5491,85 +5627,98 @@ test('structured sources aggregate across calls, deduplicate URLs, and keep stab
     })),
     [
       {
-        key: 'web:openai.com',
-        label: 'openai.com',
-        titles: ['OpenAI documentation'],
+        key: "web:openai.com",
+        label: "openai.com",
+        titles: ["OpenAI documentation"],
       },
       {
-        key: 'web:example.com',
-        label: 'example.com',
-        titles: ['Protocol notes'],
+        key: "web:example.com",
+        label: "example.com",
+        titles: ["Protocol notes"],
       },
       {
-        key: 'provider:project knowledge',
-        label: 'Project knowledge',
-        titles: ['Workspace handbook'],
+        key: "provider:project knowledge",
+        label: "Project knowledge",
+        titles: ["Workspace handbook"],
       },
     ],
   );
 });
 
-test('structured source aggregation refuses one call and unmarked generic result arrays', () => {
+test("structured source aggregation refuses one call and unmarked generic result arrays", () => {
   const oneCall = aggregateStructuredToolSources([
     {
-      id: 'act-one',
-      type: 'act',
-      display: { kind: 'search' },
+      id: "act-one",
+      type: "act",
+      display: { kind: "search" },
       eventTimeUs: 1,
     },
     {
-      id: 'observe-one',
-      type: 'observe',
-      toolOutput: { sources: [{ title: 'Only source', url: 'https://example.com/only' }] },
+      id: "observe-one",
+      type: "observe",
+      toolOutput: {
+        sources: [{ title: "Only source", url: "https://example.com/only" }],
+      },
       eventTimeUs: 2,
     },
   ]);
   const genericResults = aggregateStructuredToolSources([
     {
-      id: 'act-generic-1',
-      type: 'act',
-      toolName: 'search_everything',
+      id: "act-generic-1",
+      type: "act",
+      toolName: "search_everything",
       eventTimeUs: 1,
     },
     {
-      id: 'observe-generic-1',
-      type: 'observe',
-      toolOutput: { results: [{ title: 'Looks like a source', url: 'https://example.com/a' }] },
+      id: "observe-generic-1",
+      type: "observe",
+      toolOutput: {
+        results: [
+          { title: "Looks like a source", url: "https://example.com/a" },
+        ],
+      },
       eventTimeUs: 2,
     },
     {
-      id: 'act-generic-2',
-      type: 'act',
-      toolName: 'retrieval_keyword_should_not_decide',
+      id: "act-generic-2",
+      type: "act",
+      toolName: "retrieval_keyword_should_not_decide",
       eventTimeUs: 3,
     },
     {
-      id: 'observe-generic-2',
-      type: 'observe',
-      toolOutput: { results: [{ title: 'Another result', url: 'https://example.com/b' }] },
+      id: "observe-generic-2",
+      type: "observe",
+      toolOutput: {
+        results: [{ title: "Another result", url: "https://example.com/b" }],
+      },
       eventTimeUs: 4,
     },
   ]);
   const thoughtAndOneCall = aggregateStructuredToolSources([
     {
-      id: 'thought-with-sources',
-      type: 'thought',
+      id: "thought-with-sources",
+      type: "thought",
       payload: {
-        sources: [{ title: 'Reasoning reference', url: 'https://example.com/reasoning' }],
+        sources: [
+          {
+            title: "Reasoning reference",
+            url: "https://example.com/reasoning",
+          },
+        ],
       },
       eventTimeUs: 1,
     },
     {
-      id: 'act-only-source-call',
-      type: 'act',
-      display: { kind: 'search' },
+      id: "act-only-source-call",
+      type: "act",
+      display: { kind: "search" },
       eventTimeUs: 2,
     },
     {
-      id: 'observe-only-source-call',
-      type: 'observe',
+      id: "observe-only-source-call",
+      type: "observe",
       toolOutput: {
-        sources: [{ title: 'Tool source', url: 'https://example.com/tool' }],
+        sources: [{ title: "Tool source", url: "https://example.com/tool" }],
       },
       eventTimeUs: 3,
     },
@@ -5580,36 +5729,38 @@ test('structured source aggregation refuses one call and unmarked generic result
   assert.equal(thoughtAndOneCall, null);
 });
 
-test('structured source aggregation accepts explicit source lists in display metadata', () => {
+test("structured source aggregation accepts explicit source lists in display metadata", () => {
   const model = aggregateStructuredToolSources([
     {
-      id: 'act-display-1',
-      type: 'act',
+      id: "act-display-1",
+      type: "act",
       display: {
         metadata: {
-          provider_label: 'Agent research',
-          sources: [{ title: 'Display source', url: 'https://example.com/display' }],
+          provider_label: "Agent research",
+          sources: [
+            { title: "Display source", url: "https://example.com/display" },
+          ],
         },
       },
       eventTimeUs: 1,
     },
     {
-      id: 'observe-display-1',
-      type: 'observe',
+      id: "observe-display-1",
+      type: "observe",
       eventTimeUs: 2,
     },
     {
-      id: 'act-display-2',
-      type: 'act',
+      id: "act-display-2",
+      type: "act",
       eventTimeUs: 3,
     },
     {
-      id: 'observe-display-2',
-      type: 'observe',
+      id: "observe-display-2",
+      type: "observe",
       display: {
         metadata: {
-          source_type: 'rag',
-          citations: [{ title: 'Display citation' }],
+          source_type: "rag",
+          citations: [{ title: "Display citation" }],
         },
       },
       eventTimeUs: 4,
@@ -5620,46 +5771,53 @@ test('structured source aggregation accepts explicit source lists in display met
   assert.equal(model.sourceCount, 2);
   assert.deepEqual(
     model.groups.map((group) => group.sources.map((source) => source.title)),
-    [['Display source'], ['Display citation']],
+    [["Display source"], ["Display citation"]],
   );
 });
 
-test('structured source aggregation ignores malformed candidates and unsafe links', () => {
+test("structured source aggregation ignores malformed candidates and unsafe links", () => {
   const model = aggregateStructuredToolSources([
     {
-      id: 'act-safe-1',
-      type: 'act',
-      display: { kind: 'search' },
+      id: "act-safe-1",
+      type: "act",
+      display: { kind: "search" },
       eventTimeUs: 1,
     },
     {
-      id: 'observe-safe-1',
-      type: 'observe',
+      id: "observe-safe-1",
+      type: "observe",
       toolOutput: {
         citations: [
           null,
-          { url: 'https://example.com/no-title' },
-          { title: 'Unsafe link', url: 'javascript:alert(1)', score: Number.NaN },
-          { title: 'Insecure remote link', url: 'http://example.com/insecure' },
-          { title: 'Safe source', url: 'https://example.com/safe', score: 'excellent' },
+          { url: "https://example.com/no-title" },
+          {
+            title: "Unsafe link",
+            url: "javascript:alert(1)",
+            score: Number.NaN,
+          },
+          { title: "Insecure remote link", url: "http://example.com/insecure" },
+          {
+            title: "Safe source",
+            url: "https://example.com/safe",
+            score: "excellent",
+          },
         ],
       },
       eventTimeUs: 2,
     },
     {
-      id: 'act-safe-2',
-      type: 'act',
-      display: { metadata: { source_type: 'rag', provider_label: 'Knowledge base' } },
+      id: "act-safe-2",
+      type: "act",
+      display: {
+        metadata: { source_type: "rag", provider_label: "Knowledge base" },
+      },
       eventTimeUs: 3,
     },
     {
-      id: 'observe-safe-2',
-      type: 'observe',
+      id: "observe-safe-2",
+      type: "observe",
       toolOutput: {
-        documents: [
-          { title: '' },
-          { title: 'Internal guide', snippet: 42 },
-        ],
+        documents: [{ title: "" }, { title: "Internal guide", snippet: 42 }],
       },
       eventTimeUs: 4,
     },
@@ -5676,102 +5834,133 @@ test('structured source aggregation ignores malformed candidates and unsafe link
       })),
     ),
     [
-      { title: 'Unsafe link', url: undefined, score: undefined },
-      { title: 'Insecure remote link', url: undefined, score: undefined },
-      { title: 'Safe source', url: 'https://example.com/safe', score: undefined },
-      { title: 'Internal guide', url: undefined, score: undefined },
+      { title: "Unsafe link", url: undefined, score: undefined },
+      { title: "Insecure remote link", url: undefined, score: undefined },
+      {
+        title: "Safe source",
+        url: "https://example.com/safe",
+        score: undefined,
+      },
+      { title: "Internal guide", url: undefined, score: undefined },
     ],
   );
 });
 
-test('a trailing act without its observe renders as a running call', () => {
+test("a trailing act without its observe renders as a running call", () => {
   const pairs = pairToolCallItems([
-    { id: 'act-1', type: 'act', toolName: 'read_file', eventTimeUs: 1 },
-    { id: 'observe-1', type: 'observe', toolName: 'read_file', eventTimeUs: 2 },
-    { id: 'act-2', type: 'act', toolName: 'write_file', eventTimeUs: 3 },
+    { id: "act-1", type: "act", toolName: "read_file", eventTimeUs: 1 },
+    { id: "observe-1", type: "observe", toolName: "read_file", eventTimeUs: 2 },
+    { id: "act-2", type: "act", toolName: "write_file", eventTimeUs: 3 },
   ]);
 
   assert.equal(pairs.length, 2);
-  assert.equal(toolCallPairStatus(pairs[0]), 'complete');
-  assert.equal(toolCallPairStatus(pairs[1]), 'running');
+  assert.equal(toolCallPairStatus(pairs[0]), "complete");
+  assert.equal(toolCallPairStatus(pairs[1]), "running");
   assert.equal(toolCallPairDurationMs(pairs[1]), null);
 });
 
-test('an orphaned observe still renders as a completed call on its own', () => {
+test("an orphaned observe still renders as a completed call on its own", () => {
   const pairs = pairToolCallItems([
-    { id: 'observe-1', type: 'observe', toolName: 'read_file', eventTimeUs: 5 },
+    { id: "observe-1", type: "observe", toolName: "read_file", eventTimeUs: 5 },
   ]);
 
   assert.equal(pairs.length, 1);
   assert.equal(pairs[0].result, null);
-  assert.equal(toolCallPairStatus(pairs[0]), 'complete');
+  assert.equal(toolCallPairStatus(pairs[0]), "complete");
 });
 
-test('failed observations surface as failed pairs with a duration', () => {
+test("failed observations surface as failed pairs with a duration", () => {
   const failed = pairToolCallItems([
-    { id: 'act-1', type: 'act', toolName: 'run_tests', eventTimeUs: 1_000_000 },
-    { id: 'observe-1', type: 'observe', toolName: 'run_tests', isError: true, eventTimeUs: 2_000_000 },
+    { id: "act-1", type: "act", toolName: "run_tests", eventTimeUs: 1_000_000 },
+    {
+      id: "observe-1",
+      type: "observe",
+      toolName: "run_tests",
+      isError: true,
+      eventTimeUs: 2_000_000,
+    },
   ]);
   const withDelta = pairToolCallItems([
-    { id: 'act-1', type: 'act', toolName: 'run_tests', eventTimeUs: 1_000_000 },
-    { id: 'observe-1', type: 'observe', toolName: 'run_tests', eventTimeUs: 2_500_000 },
+    { id: "act-1", type: "act", toolName: "run_tests", eventTimeUs: 1_000_000 },
+    {
+      id: "observe-1",
+      type: "observe",
+      toolName: "run_tests",
+      eventTimeUs: 2_500_000,
+    },
   ]);
 
-  assert.equal(toolCallPairStatus(failed[0]), 'failed');
+  assert.equal(toolCallPairStatus(failed[0]), "failed");
   assert.equal(toolCallPairDurationMs(withDelta[0]), 1500);
 });
 
-test('tool call durations format for quick scanning', () => {
-  assert.equal(formatToolCallDuration(420), '420ms');
-  assert.equal(formatToolCallDuration(1800), '1.8s');
-  assert.equal(formatToolCallDuration(12_000), '12s');
-  assert.equal(formatToolCallDuration(72_000), '1m 12s');
-  assert.equal(formatToolCallDuration(-5), '');
+test("tool call durations format for quick scanning", () => {
+  assert.equal(formatToolCallDuration(420), "420ms");
+  assert.equal(formatToolCallDuration(1800), "1.8s");
+  assert.equal(formatToolCallDuration(12_000), "12s");
+  assert.equal(formatToolCallDuration(72_000), "1m 12s");
+  assert.equal(formatToolCallDuration(-5), "");
 });
 
-test('structured tool presentation metadata drives worklog anatomy', () => {
+test("structured tool presentation metadata drives worklog anatomy", () => {
   const pair = pairToolCallItems([
     {
-      id: 'act-edit',
-      type: 'act',
-      toolName: 'patch',
-      display: { kind: 'edit' },
+      id: "act-edit",
+      type: "act",
+      toolName: "patch",
+      display: { kind: "edit" },
       eventTimeUs: 1_000_000,
     },
     {
-      id: 'observe-edit',
-      type: 'observe',
-      toolName: 'patch',
-      display: { kind: 'edit' },
-      fileMetadata: { diffStat: { filesChanged: 2, additions: 18, deletions: 4 } },
+      id: "observe-edit",
+      type: "observe",
+      toolName: "patch",
+      display: { kind: "edit" },
+      fileMetadata: {
+        diffStat: { filesChanged: 2, additions: 18, deletions: 4 },
+      },
       eventTimeUs: 1_500_000,
     },
   ])[0];
 
-  assert.equal(toolCallPresentationKind(pair), 'edit');
-  assert.deepEqual(toolCallDiffStat(pair), { filesChanged: 2, additions: 18, deletions: 4 });
+  assert.equal(toolCallPresentationKind(pair), "edit");
+  assert.deepEqual(toolCallDiffStat(pair), {
+    filesChanged: 2,
+    additions: 18,
+    deletions: 4,
+  });
 });
 
-test('unknown presentation metadata stays generic instead of text-classified', () => {
+test("unknown presentation metadata stays generic instead of text-classified", () => {
   const pair = pairToolCallItems([
     {
-      id: 'act-unknown',
-      type: 'act',
-      toolName: 'custom_tool',
-      toolInput: { description: 'edit and run a command' },
+      id: "act-unknown",
+      type: "act",
+      toolName: "custom_tool",
+      toolInput: { description: "edit and run a command" },
       eventTimeUs: 1,
     },
   ])[0];
 
-  assert.equal(toolCallPresentationKind(pair), 'tool');
+  assert.equal(toolCallPresentationKind(pair), "tool");
   assert.equal(toolCallDiffStat(pair), null);
 });
 
-test('working duration starts from the latest authoritative running boundary', () => {
+test("working duration starts from the latest authoritative running boundary", () => {
   const items = [
-    { id: 'user-1', type: 'user_message', role: 'user', eventTimeUs: 1_000_000 },
-    { id: 'run-1', type: 'run_status', payload: { status: 'running' }, eventTimeUs: 2_000_000 },
-    { id: 'tool-1', type: 'act', eventTimeUs: 3_000_000 },
+    {
+      id: "user-1",
+      type: "user_message",
+      role: "user",
+      eventTimeUs: 1_000_000,
+    },
+    {
+      id: "run-1",
+      type: "run_status",
+      payload: { status: "running" },
+      eventTimeUs: 2_000_000,
+    },
+    { id: "tool-1", type: "act", eventTimeUs: 3_000_000 },
   ];
 
   assert.equal(timelineWorkingStartedAtUs(items), 2_000_000);
@@ -5779,14 +5968,14 @@ test('working duration starts from the latest authoritative running boundary', (
   assert.equal(
     timelineWorkingStartedAtUs([
       {
-        id: 'channel-inbound-user-1',
-        type: 'message',
+        id: "channel-inbound-user-1",
+        type: "message",
         eventTimeUs: 4_000_000,
         payload: {
-          id: 'channel-user-1',
-          role: 'user',
-          content: 'Continue from Feishu',
-          metadata: { source: 'channel_inbound' },
+          id: "channel-user-1",
+          role: "user",
+          content: "Continue from Feishu",
+          metadata: { source: "channel_inbound" },
         },
       },
     ]),
@@ -5795,7 +5984,7 @@ test('working duration starts from the latest authoritative running boundary', (
   assert.equal(timelineWorkingStartedAtUs([]), null);
 });
 
-test('day dividers bucket items by local calendar day', () => {
+test("day dividers bucket items by local calendar day", () => {
   const now = new Date(2026, 6, 20, 15, 0, 0).getTime();
   const todayUs = new Date(2026, 6, 20, 9, 0, 0).getTime() * 1000;
   const yesterdayUs = new Date(2026, 6, 19, 23, 0, 0).getTime() * 1000;
@@ -5803,136 +5992,179 @@ test('day dividers bucket items by local calendar day', () => {
 
   assert.equal(timelineDayKey(todayUs), timelineDayKey(now * 1000));
   assert.notEqual(timelineDayKey(yesterdayUs), timelineDayKey(todayUs));
-  assert.deepEqual(timelineDayLabel(todayUs, now), { kind: 'today' });
-  assert.deepEqual(timelineDayLabel(yesterdayUs, now), { kind: 'yesterday' });
+  assert.deepEqual(timelineDayLabel(todayUs, now), { kind: "today" });
+  assert.deepEqual(timelineDayLabel(yesterdayUs, now), { kind: "yesterday" });
   const older = timelineDayLabel(olderUs, now);
-  assert.equal(older.kind, 'date');
+  assert.equal(older.kind, "date");
   assert.ok(older.date.length > 0);
 });
 
-test('working indicator only shows while live, blocked neither by stream nor HITL', () => {
-  const userTail = [{ id: 'u1', type: 'user_message', role: 'user', eventTimeUs: 1 }];
+test("working indicator only shows while live, blocked neither by stream nor HITL", () => {
+  const userTail = [
+    { id: "u1", type: "user_message", role: "user", eventTimeUs: 1 },
+  ];
   const streamingTail = [
     {
-      id: 'a1',
-      type: 'assistant_message',
-      role: 'assistant',
+      id: "a1",
+      type: "assistant_message",
+      role: "assistant",
       metadata: { streaming: true },
       eventTimeUs: 2,
     },
   ];
-  const answerTail = [{ id: 'a2', type: 'assistant_message', role: 'assistant', eventTimeUs: 3 }];
-  const observeTail = [{ id: 'o1', type: 'observe', toolName: 'read_file', eventTimeUs: 4 }];
+  const answerTail = [
+    { id: "a2", type: "assistant_message", role: "assistant", eventTimeUs: 3 },
+  ];
+  const observeTail = [
+    { id: "o1", type: "observe", toolName: "read_file", eventTimeUs: 4 },
+  ];
   const terminatedTail = [
     ...observeTail,
     {
-      id: 'conversation-finished-1',
-      type: 'agent_conversation_finished',
+      id: "conversation-finished-1",
+      type: "agent_conversation_finished",
       eventTimeUs: 5,
-      payload: { reason: 'budget_turns' },
+      payload: { reason: "budget_turns" },
     },
   ];
 
   assert.equal(
-    shouldShowAgentWorkingIndicator({ items: userTail, presence: 'live', awaitingHitl: false }),
+    shouldShowAgentWorkingIndicator({
+      items: userTail,
+      presence: "live",
+      awaitingHitl: false,
+    }),
     true,
-  );
-  assert.equal(
-    shouldShowAgentWorkingIndicator({ items: observeTail, presence: 'live', awaitingHitl: false }),
-    true,
-  );
-  assert.equal(
-    shouldShowAgentWorkingIndicator({ items: streamingTail, presence: 'live', awaitingHitl: false }),
-    false,
-  );
-  assert.equal(
-    shouldShowAgentWorkingIndicator({ items: answerTail, presence: 'live', awaitingHitl: false }),
-    false,
   );
   assert.equal(
     shouldShowAgentWorkingIndicator({
-      items: terminatedTail,
-      presence: 'live',
+      items: observeTail,
+      presence: "live",
+      awaitingHitl: false,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldShowAgentWorkingIndicator({
+      items: streamingTail,
+      presence: "live",
       awaitingHitl: false,
     }),
     false,
   );
   assert.equal(
-    shouldShowAgentWorkingIndicator({ items: userTail, presence: 'recorded', awaitingHitl: false }),
+    shouldShowAgentWorkingIndicator({
+      items: answerTail,
+      presence: "live",
+      awaitingHitl: false,
+    }),
     false,
   );
   assert.equal(
-    shouldShowAgentWorkingIndicator({ items: userTail, presence: 'live', awaitingHitl: true }),
+    shouldShowAgentWorkingIndicator({
+      items: terminatedTail,
+      presence: "live",
+      awaitingHitl: false,
+    }),
     false,
   );
   assert.equal(
-    shouldShowAgentWorkingIndicator({ items: [], presence: 'live', awaitingHitl: false }),
+    shouldShowAgentWorkingIndicator({
+      items: userTail,
+      presence: "recorded",
+      awaitingHitl: false,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldShowAgentWorkingIndicator({
+      items: userTail,
+      presence: "live",
+      awaitingHitl: true,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldShowAgentWorkingIndicator({
+      items: [],
+      presence: "live",
+      awaitingHitl: false,
+    }),
     false,
   );
 });
 
-test('payload detection pretty-prints JSON and keeps plain text untouched', () => {
-  assert.deepEqual(detectPayloadLanguage('hello world'), {
-    code: 'hello world',
-    language: 'text',
+test("payload detection pretty-prints JSON and keeps plain text untouched", () => {
+  assert.deepEqual(detectPayloadLanguage("hello world"), {
+    code: "hello world",
+    language: "text",
   });
-  assert.deepEqual(detectPayloadLanguage('{"a":1}'), { code: '{\n  "a": 1\n}', language: 'json' });
-  assert.deepEqual(detectPayloadLanguage({ a: 1 }), { code: '{\n  "a": 1\n}', language: 'json' });
-  assert.deepEqual(detectPayloadLanguage('{not json'), { code: '{not json', language: 'text' });
-  assert.deepEqual(detectPayloadLanguage('$ cargo test\nok'), {
-    code: '$ cargo test\nok',
-    language: 'text',
+  assert.deepEqual(detectPayloadLanguage('{"a":1}'), {
+    code: '{\n  "a": 1\n}',
+    language: "json",
+  });
+  assert.deepEqual(detectPayloadLanguage({ a: 1 }), {
+    code: '{\n  "a": 1\n}',
+    language: "json",
+  });
+  assert.deepEqual(detectPayloadLanguage("{not json"), {
+    code: "{not json",
+    language: "text",
+  });
+  assert.deepEqual(detectPayloadLanguage("$ cargo test\nok"), {
+    code: "$ cargo test\nok",
+    language: "text",
   });
 });
 
-test('SubAgent lifecycle events become one structured execution group', () => {
+test("SubAgent lifecycle events become one structured execution group", () => {
   const items = [
     {
-      id: 'subagent-routed-1',
-      type: 'subagent_routed',
+      id: "subagent-routed-1",
+      type: "subagent_routed",
       eventTimeUs: 1,
       eventCounter: 1,
       payload: {
-        subagent_id: 'reviewer-1',
-        subagent_name: 'Regression reviewer',
+        subagent_id: "reviewer-1",
+        subagent_name: "Regression reviewer",
         confidence: 0.92,
-        reason: 'Matches concurrent lifecycle review',
+        reason: "Matches concurrent lifecycle review",
       },
     },
     {
-      id: 'subagent-started-1',
-      type: 'subagent_started',
+      id: "subagent-started-1",
+      type: "subagent_started",
       eventTimeUs: 2,
       eventCounter: 2,
       payload: {
-        subagent_id: 'reviewer-1',
-        subagent_name: 'Regression reviewer',
-        task: 'Verify disposal ownership and regression coverage',
+        subagent_id: "reviewer-1",
+        subagent_name: "Regression reviewer",
+        task: "Verify disposal ownership and regression coverage",
       },
     },
     {
-      id: 'subagent-progress-1',
-      type: 'subagent_session_update',
+      id: "subagent-progress-1",
+      type: "subagent_session_update",
       eventTimeUs: 3,
       eventCounter: 3,
       payload: {
-        subagent_id: 'reviewer-1',
-        subagent_name: 'Regression reviewer',
+        subagent_id: "reviewer-1",
+        subagent_name: "Regression reviewer",
         progress: 70,
-        status_message: 'Running the concurrent regression suite',
+        status_message: "Running the concurrent regression suite",
         tokens_used: 840,
         tool_calls_count: 4,
       },
     },
     {
-      id: 'subagent-completed-1',
-      type: 'subagent_completed',
+      id: "subagent-completed-1",
+      type: "subagent_completed",
       eventTimeUs: 4,
       eventCounter: 4,
       payload: {
-        subagent_id: 'reviewer-1',
-        subagent_name: 'Regression reviewer',
-        summary: 'Ownership is isolated and the regression suite passes.',
+        subagent_id: "reviewer-1",
+        subagent_name: "Regression reviewer",
+        summary: "Ownership is isolated and the regression suite passes.",
         tokens_used: 1_240,
         execution_time_ms: 3_450,
         success: true,
@@ -5943,28 +6175,29 @@ test('SubAgent lifecycle events become one structured execution group', () => {
   assert.deepEqual(groupSubAgentTimelineItems(items), {
     groups: [
       {
-        id: 'subagent-group:subagent-routed-1:subagent-completed-1',
-        startItemId: 'subagent-routed-1',
+        id: "subagent-group:subagent-routed-1:subagent-completed-1",
+        startItemId: "subagent-routed-1",
         itemIds: [
-          'subagent-routed-1',
-          'subagent-started-1',
-          'subagent-progress-1',
-          'subagent-completed-1',
+          "subagent-routed-1",
+          "subagent-started-1",
+          "subagent-progress-1",
+          "subagent-completed-1",
         ],
         items,
-        mode: 'single',
-        subagentId: 'reviewer-1',
-        subagentName: 'Regression reviewer',
-        status: 'success',
-        task: 'Verify disposal ownership and regression coverage',
-        reason: 'Matches concurrent lifecycle review',
-        summary: 'Ownership is isolated and the regression suite passes.',
-        error: '',
+        mode: "single",
+        runId: "",
+        subagentId: "reviewer-1",
+        subagentName: "Regression reviewer",
+        status: "success",
+        task: "Verify disposal ownership and regression coverage",
+        reason: "Matches concurrent lifecycle review",
+        summary: "Ownership is isolated and the regression suite passes.",
+        error: "",
         confidence: 0.92,
         tokensUsed: 1_240,
         executionTimeMs: 3_450,
         progress: 100,
-        statusMessage: 'Running the concurrent regression suite',
+        statusMessage: "Running the concurrent regression suite",
         toolCallsCount: 4,
         phases: {
           routed: true,
@@ -5975,98 +6208,99 @@ test('SubAgent lifecycle events become one structured execution group', () => {
       },
     ],
     claimedItemIds: [
-      'subagent-routed-1',
-      'subagent-started-1',
-      'subagent-progress-1',
-      'subagent-completed-1',
+      "subagent-routed-1",
+      "subagent-started-1",
+      "subagent-progress-1",
+      "subagent-completed-1",
     ],
   });
 });
 
-test('SubAgent grouping claims a matching terminal event across interleaved main-agent work', () => {
+test("SubAgent grouping claims a matching terminal event across interleaved main-agent work", () => {
   const items = [
     {
-      id: 'subagent-started-2',
-      type: 'subagent_run_started',
+      id: "subagent-started-2",
+      type: "subagent_run_started",
       eventTimeUs: 1,
       eventCounter: 1,
       payload: {
-        run_id: 'run-reviewer-2',
-        subagent_name: 'Release reviewer',
-        task: 'Review the release gate',
+        run_id: "run-reviewer-2",
+        subagent_name: "Release reviewer",
+        task: "Review the release gate",
       },
     },
     {
-      id: 'main-thought-1',
-      type: 'thought',
+      id: "main-thought-1",
+      type: "thought",
       eventTimeUs: 2,
       eventCounter: 2,
-      content: 'Waiting for delegated evidence.',
+      content: "Waiting for delegated evidence.",
     },
     {
-      id: 'subagent-completed-2',
-      type: 'subagent_run_completed',
+      id: "subagent-completed-2",
+      type: "subagent_run_completed",
       eventTimeUs: 3,
       eventCounter: 3,
       payload: {
-        run_id: 'run-reviewer-2',
-        subagent_name: 'Release reviewer',
-        summary: 'Release gate approved.',
-        status: 'completed',
+        run_id: "run-reviewer-2",
+        subagent_name: "Release reviewer",
+        summary: "Release gate approved.",
+        status: "completed",
       },
     },
   ];
 
   const grouped = groupSubAgentTimelineItems(items);
   assert.equal(grouped.groups.length, 1);
-  assert.equal(grouped.groups[0].status, 'success');
+  assert.equal(grouped.groups[0].status, "success");
+  assert.equal(grouped.groups[0].runId, "run-reviewer-2");
   assert.deepEqual(grouped.groups[0].itemIds, [
-    'subagent-started-2',
-    'subagent-completed-2',
+    "subagent-started-2",
+    "subagent-completed-2",
   ]);
   assert.deepEqual(grouped.claimedItemIds, [
-    'subagent-started-2',
-    'subagent-completed-2',
+    "subagent-started-2",
+    "subagent-completed-2",
   ]);
-  assert.equal(grouped.claimedItemIds.includes('main-thought-1'), false);
+  assert.equal(grouped.claimedItemIds.includes("main-thought-1"), false);
 });
 
-test('SubAgent delegation and doom-loop events preserve child identity and terminal failure', () => {
+test("SubAgent delegation and doom-loop events preserve child identity and terminal failure", () => {
   const items = [
     {
-      id: 'subagent-delegated-doom-loop',
-      type: 'subagent_delegation',
+      id: "subagent-delegated-doom-loop",
+      type: "subagent_delegation",
       eventTimeUs: 1,
       eventCounter: 1,
       payload: {
-        conversation_id: 'conversation-doom-loop',
+        conversation_id: "conversation-doom-loop",
         from_agent_id: null,
-        to_subagent_id: 'reviewer-doom-loop',
-        to_subagent_name: 'Loop reviewer',
-        trigger_type: 'semantic',
-        task_description: 'Inspect the repeated tool calls',
+        to_subagent_id: "reviewer-doom-loop",
+        to_subagent_name: "Loop reviewer",
+        trigger_type: "semantic",
+        task_description: "Inspect the repeated tool calls",
       },
     },
     {
-      id: 'subagent-started-doom-loop',
-      type: 'subagent_started',
+      id: "subagent-started-doom-loop",
+      type: "subagent_started",
       eventTimeUs: 2,
       eventCounter: 2,
       payload: {
-        subagent_id: 'reviewer-doom-loop',
-        subagent_name: 'Loop reviewer',
-        task: 'Inspect the repeated tool calls',
+        subagent_id: "reviewer-doom-loop",
+        subagent_name: "Loop reviewer",
+        task: "Inspect the repeated tool calls",
       },
     },
     {
-      id: 'subagent-doom-loop',
-      type: 'subagent_doom_loop',
+      id: "subagent-doom-loop",
+      type: "subagent_doom_loop",
       eventTimeUs: 3,
       eventCounter: 3,
       payload: {
-        subagent_id: 'reviewer-doom-loop',
-        subagent_name: 'Loop reviewer',
-        reason: 'Repeated terminal invocation detected',
+        subagent_id: "reviewer-doom-loop",
+        subagent_name: "Loop reviewer",
+        reason: "Repeated terminal invocation detected",
         threshold: 3,
       },
     },
@@ -6075,23 +6309,24 @@ test('SubAgent delegation and doom-loop events preserve child identity and termi
   const grouped = groupSubAgentTimelineItems(items);
   assert.equal(grouped.groups.length, 1);
   assert.deepEqual(grouped.groups[0], {
-    id: 'subagent-group:subagent-delegated-doom-loop:subagent-doom-loop',
-    startItemId: 'subagent-delegated-doom-loop',
+    id: "subagent-group:subagent-delegated-doom-loop:subagent-doom-loop",
+    startItemId: "subagent-delegated-doom-loop",
     itemIds: items.map((item) => item.id),
     items,
-    mode: 'single',
-    subagentId: 'reviewer-doom-loop',
-    subagentName: 'Loop reviewer',
-    status: 'error',
-    task: 'Inspect the repeated tool calls',
-    reason: 'Repeated terminal invocation detected',
-    summary: '',
-    error: '',
+    mode: "single",
+    runId: "",
+    subagentId: "reviewer-doom-loop",
+    subagentName: "Loop reviewer",
+    status: "error",
+    task: "Inspect the repeated tool calls",
+    reason: "Repeated terminal invocation detected",
+    summary: "",
+    error: "",
     confidence: null,
     tokensUsed: null,
     executionTimeMs: null,
     progress: null,
-    statusMessage: '',
+    statusMessage: "",
     toolCallsCount: null,
     phases: {
       routed: true,
@@ -6102,41 +6337,75 @@ test('SubAgent delegation and doom-loop events preserve child identity and termi
   });
 });
 
-test('SubAgent result announcements render one completed child communication lifecycle', () => {
-  const items = [
+test("SubAgent grouping keeps execution run id separate from roster agent id", () => {
+  const grouped = groupSubAgentTimelineItems([
     {
-      id: 'subagent-announce-sent',
-      type: 'subagent_announce_sent',
+      id: "subagent-spawning-control",
+      type: "subagent_spawning",
       eventTimeUs: 1,
       eventCounter: 1,
       payload: {
-        agent_id: 'reviewer-announcement',
-        session_id: 'session-announcement',
-        parent_agent_id: 'main-agent',
-        result_preview: 'Regression suite passed.',
+        run_id: "child-run-control",
+        subagent_name: "Control reviewer",
       },
     },
     {
-      id: 'subagent-announce-received',
-      type: 'subagent_announce_received',
+      id: "subagent-started-control",
+      type: "subagent_started",
       eventTimeUs: 2,
       eventCounter: 2,
       payload: {
-        agent_id: 'main-agent',
-        session_id: 'session-announcement',
-        from_agent_id: 'reviewer-announcement',
-        from_agent_name: 'Announcement reviewer',
-        result_preview: 'Regression suite passed with 42 checks.',
+        subagent_id: "reviewer-control",
+        subagent_name: "Control reviewer",
+        task: "Check control authority",
+      },
+    },
+  ]);
+
+  assert.equal(grouped.groups.length, 1);
+  assert.equal(grouped.groups[0].runId, "child-run-control");
+  assert.equal(grouped.groups[0].subagentId, "reviewer-control");
+  assert.equal(grouped.groups[0].status, "running");
+});
+
+test("SubAgent result announcements render one completed child communication lifecycle", () => {
+  const items = [
+    {
+      id: "subagent-announce-sent",
+      type: "subagent_announce_sent",
+      eventTimeUs: 1,
+      eventCounter: 1,
+      payload: {
+        agent_id: "reviewer-announcement",
+        session_id: "session-announcement",
+        parent_agent_id: "main-agent",
+        result_preview: "Regression suite passed.",
+      },
+    },
+    {
+      id: "subagent-announce-received",
+      type: "subagent_announce_received",
+      eventTimeUs: 2,
+      eventCounter: 2,
+      payload: {
+        agent_id: "main-agent",
+        session_id: "session-announcement",
+        from_agent_id: "reviewer-announcement",
+        from_agent_name: "Announcement reviewer",
+        result_preview: "Regression suite passed with 42 checks.",
       },
     },
   ];
 
   const grouped = groupSubAgentTimelineItems(items);
   assert.equal(grouped.groups.length, 1);
-  assert.equal(grouped.groups[0].subagentId, 'reviewer-announcement');
-  assert.equal(grouped.groups[0].subagentName, 'Announcement reviewer');
-  assert.equal(grouped.groups[0].status, 'success');
-  assert.equal(grouped.groups[0].summary, 'Regression suite passed with 42 checks.');
+  assert.equal(grouped.groups[0].subagentId, "reviewer-announcement");
+  assert.equal(grouped.groups[0].subagentName, "Announcement reviewer");
+  assert.equal(grouped.groups[0].status, "success");
+  assert.equal(
+    grouped.groups[0].summary,
+    "Regression suite passed with 42 checks.",
+  );
   assert.deepEqual(grouped.groups[0].phases, {
     routed: false,
     started: false,
@@ -6145,35 +6414,51 @@ test('SubAgent result announcements render one completed child communication lif
   });
 });
 
-test('SubAgent grouping never combines structurally different executions', () => {
+test("SubAgent grouping never combines structurally different executions", () => {
   const grouped = groupSubAgentTimelineItems([
     {
-      id: 'subagent-a-started',
-      type: 'subagent_started',
+      id: "subagent-a-started",
+      type: "subagent_started",
       eventTimeUs: 1,
       eventCounter: 1,
-      payload: { subagent_id: 'subagent-a', subagent_name: 'Reviewer A', task: 'Task A' },
+      payload: {
+        subagent_id: "subagent-a",
+        subagent_name: "Reviewer A",
+        task: "Task A",
+      },
     },
     {
-      id: 'subagent-b-started',
-      type: 'subagent_started',
+      id: "subagent-b-started",
+      type: "subagent_started",
       eventTimeUs: 2,
       eventCounter: 2,
-      payload: { subagent_id: 'subagent-b', subagent_name: 'Reviewer B', task: 'Task B' },
+      payload: {
+        subagent_id: "subagent-b",
+        subagent_name: "Reviewer B",
+        task: "Task B",
+      },
     },
     {
-      id: 'subagent-a-completed',
-      type: 'subagent_completed',
+      id: "subagent-a-completed",
+      type: "subagent_completed",
       eventTimeUs: 3,
       eventCounter: 3,
-      payload: { subagent_id: 'subagent-a', subagent_name: 'Reviewer A', summary: 'A done' },
+      payload: {
+        subagent_id: "subagent-a",
+        subagent_name: "Reviewer A",
+        summary: "A done",
+      },
     },
     {
-      id: 'subagent-b-failed',
-      type: 'subagent_failed',
+      id: "subagent-b-failed",
+      type: "subagent_failed",
       eventTimeUs: 4,
       eventCounter: 4,
-      payload: { subagent_id: 'subagent-b', subagent_name: 'Reviewer B', error: 'B failed' },
+      payload: {
+        subagent_id: "subagent-b",
+        subagent_name: "Reviewer B",
+        error: "B failed",
+      },
     },
   ]);
 
@@ -6185,20 +6470,20 @@ test('SubAgent grouping never combines structurally different executions', () =>
     })),
     [
       {
-        start: 'subagent-a-started',
-        status: 'success',
-        itemIds: ['subagent-a-started', 'subagent-a-completed'],
+        start: "subagent-a-started",
+        status: "success",
+        itemIds: ["subagent-a-started", "subagent-a-completed"],
       },
       {
-        start: 'subagent-b-started',
-        status: 'error',
-        itemIds: ['subagent-b-started', 'subagent-b-failed'],
+        start: "subagent-b-started",
+        status: "error",
+        itemIds: ["subagent-b-started", "subagent-b-failed"],
       },
     ],
   );
 });
 
-test('Desktop renders SubAgent groups as structured first-class timeline cards', () => {
+test("Desktop renders SubAgent groups as structured first-class timeline cards", () => {
   assert.match(chatTimelineSource, /kind: 'subagent_group'/);
   assert.match(chatTimelineSource, /function SubAgentGroupView/);
   assert.match(chatTimelineSource, /groupSubAgentTimelineItems/);
@@ -6211,6 +6496,6 @@ test('Desktop renders SubAgent groups as structured first-class timeline cards',
   assert.equal(
     i18nSource.split("'chat.subagentExecution'").length - 1,
     2,
-    'SubAgent group labels must cover both locales',
+    "SubAgent group labels must cover both locales",
   );
 });

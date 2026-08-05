@@ -14,3 +14,14 @@ test('Desktop validates HITL commands against request authority instead of run r
     /request\.run_revision === submission\.expectedRevision/u,
   );
 });
+
+test('permission deny feedback is submitted atomically with the HITL response', () => {
+  const callback = appSource.match(
+    /const respondToHitlWithSteering = useCallback\([\s\S]*?\n  \);/u,
+  )?.[0];
+
+  assert.ok(callback);
+  assert.match(callback, /await respondToHitl\(submission\)/u);
+  assert.doesNotMatch(callback, /sendChatMessage/u);
+  assert.doesNotMatch(callback, /denialSteeringFeedback/u);
+});

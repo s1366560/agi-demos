@@ -53,6 +53,39 @@
       "body": {}
     },
     {
+      "area": "tenant_workspaces",
+      "method": "GET",
+      "uri": "/api/v1/tenants/local/projects/local-project/workspaces?limit=500&offset=0",
+      "source": "client",
+      "source_marker": ")}/workspaces?${params.toString()}",
+      "authority": "local_workspace_catalog",
+      "body": {}
+    },
+    {
+      "area": "tenant_workspaces",
+      "method": "POST",
+      "uri": "/api/v1/tenants/local/projects/local-project/workspaces",
+      "source": "client",
+      "source_marker": ")}/workspaces`",
+      "authority": "local_workspace_catalog",
+      "body": {
+        "name": "Route Parity Workspace",
+        "description": "Created by the executable local route contract",
+        "metadata": {
+          "source": "desktop",
+          "workspace_use_case": "conversation",
+          "workspace_type": "general",
+          "collaboration_mode": "multi_agent_shared",
+          "agent_conversation_mode": "multi_agent_shared",
+          "autonomy_profile": {
+            "workspace_type": "general"
+          }
+        },
+        "use_case": "conversation",
+        "collaboration_mode": "multi_agent_shared"
+      }
+    },
+    {
       "area": "project",
       "method": "GET",
       "uri": "/api/v1/projects/local-project/overview",
@@ -935,6 +968,28 @@
       "authority": "local_mcp_supervisor",
       "body": {
         "project_id": "local-project"
+      }
+    },
+    {
+      "area": "activity",
+      "method": "GET",
+      "uri": "/api/v1/projects/local-project/activity/read-state",
+      "source": "client",
+      "source_marker": "/activity/read-state",
+      "authority": "local_activity_read_state",
+      "body": {}
+    },
+    {
+      "area": "activity",
+      "method": "PUT",
+      "uri": "/api/v1/projects/local-project/activity/read-state",
+      "source": "client",
+      "source_marker": "/activity/read-state",
+      "authority": "local_activity_read_state",
+      "expected_status": 200,
+      "body": {
+        "expected_authority_revision": 0,
+        "entries": []
       }
     },
     {

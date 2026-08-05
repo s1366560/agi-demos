@@ -829,6 +829,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
         error: data.error,
         executionTimeMs: data.execution_time_ms ?? undefined,
         tokensUsed: data.tokens_used ?? undefined,
+        metadata: data.metadata,
       } as TimelineEvent;
     }
 
