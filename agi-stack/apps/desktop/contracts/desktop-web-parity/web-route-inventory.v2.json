@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "checker_version": "2.0.0",
-  "source_revision": "fb9c5b7cca2fbdf1b99d8bff1bcf2061278ac705",
+  "source_revision": "2b03d5f0f1f3f75cf1044a1da936a3f31436afe6",
   "sources": {
     "canonical_navigation_registry": "web/src/config/navigation.ts#CANONICAL_NAVIGATION_DESTINATIONS",
     "eager_route_entries": "reachable route registration modules#relative imports used by JSX or object routes",
@@ -10,12 +10,12 @@
     "production_router": "reachable modules registering JSX Route or static react-router-dom route objects"
   },
   "counts": {
-    "audited_sources": 634,
+    "audited_sources": 641,
     "canonical_navigation_targets": 51,
     "eager_route_entries": 4,
     "lazy_page_entries": 89,
-    "production_dependency_edges": 1613,
-    "production_dependency_sources": 540,
+    "production_dependency_edges": 1627,
+    "production_dependency_sources": 547,
     "production_routes": 174,
     "route_registration_sources": 1
   },
@@ -39,7 +39,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:0ad66d5ef203fb515d2027fd741e6eeacf928c1754298cdb8e50e02dba11d530"
+      "sha256": "sha256:2163179b8d6ebc5f156aff8c79a63a0d61fa75822dccf476f5b4ea979c1c74c5"
     },
     {
       "source_entry": "web/src/components/agent/AgentDefinitionModal.tsx",
@@ -123,7 +123,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:902f0d7ad24daa762ea489896b65650ce90118e6cb14ae292b3beb9fa28e9dad"
+      "sha256": "sha256:17555b691044969867299801a60f525ae466379b101acf2a4340d07584dac262"
     },
     {
       "source_entry": "web/src/components/agent/InputToolbar.tsx",
@@ -159,13 +159,6 @@
         "production_dependency"
       ],
       "sha256": "sha256:bd6d61529bd54e8dad3ca5ec431d3694c5961d331f9f834717c806e1696c9306"
-    },
-    {
-      "source_entry": "web/src/components/agent/QueuedPromptStrip.tsx",
-      "roles": [
-        "production_dependency"
-      ],
-      "sha256": "sha256:92709cdd2a6cce8f7a8b4ea48d42832b638b608251f829f67d3a36338382896d"
     },
     {
       "source_entry": "web/src/components/agent/Resizer.tsx",
@@ -222,6 +215,20 @@
         "production_dependency"
       ],
       "sha256": "sha256:6700f8dc412206e1771ce44e13de0117ed5a48a41275dd5c147f518583ccf392"
+    },
+    {
+      "source_entry": "web/src/components/agent/activity/ProjectActivityInbox.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:4a55b0e0565ed24e1a5eeb4d486fba2b6a3293d99e387c3dd1d2359c37cd14fe"
+    },
+    {
+      "source_entry": "web/src/components/agent/activity/projectActivityModel.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:d7588ae1a889f2cde6ec9c3c1bc9c16a2264c3d2681ecccbb4a812f38feccfef"
     },
     {
       "source_entry": "web/src/components/agent/agentChatScope.ts",
@@ -777,6 +784,13 @@
       "sha256": "sha256:3925f9ae705f5aa8263ad01842cf7af114027c67d5610c446a329d628375f01b"
     },
     {
+      "source_entry": "web/src/components/agent/review/RunReviewDrawer.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:a5fd2dab9219b3095bdc7185afb702ae708ddb08fdd47dea06e75fff5ae03a5a"
+    },
+    {
       "source_entry": "web/src/components/agent/sandbox/KasmVNCViewer.tsx",
       "roles": [
         "production_dependency"
@@ -893,7 +907,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:bf9606c415adbaca8bf5e700ff30f0fa1d9247712ec26e66c71a4c15e902335f"
+      "sha256": "sha256:42897a39d937d395a7f48b1734ce29e553fe31056cb1f72bb1c113361a957a82"
     },
     {
       "source_entry": "web/src/components/agent/timeline/SubAgentDetailPanel.tsx",
@@ -907,7 +921,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:c0a371ea3e17f96179edd1835917a47e4c051e154f61835d06be27b564316ba0"
+      "sha256": "sha256:5cb9e26c12ed346b40d582ca4bd185f3baeb131b0d68f2d56b376e1b47b4d78d"
+    },
+    {
+      "source_entry": "web/src/components/agent/timeline/subagentControlModel.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:135df4960aeaa93b7b346c5ddd5b5283d9199cbce8d7ddc6865295d24d177d48"
     },
     {
       "source_entry": "web/src/components/agent/timeline/subagentUtils.ts",
@@ -2136,6 +2157,13 @@
       "sha256": "sha256:4ef95b97eed2dda935178eb652aa0a9846e327fb82e42e0f4661e185738e8878"
     },
     {
+      "source_entry": "web/src/hooks/useRunInputAuthority.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:9da4a436ca03e3ff16a077bcb6edb887b31f7ea47f841dd8fe2854190c485c6b"
+    },
+    {
       "source_entry": "web/src/hooks/useSandboxDetection.ts",
       "roles": [
         "production_dependency"
@@ -2525,7 +2553,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:3628e71ec1f498efdee32fd301419d252e39559afbf6c91536115ce2d6cdb5c3"
+      "sha256": "sha256:60601eeb9f84c703d1e5383f754f29cd276daf2808f1042161de9f5c3466c062"
     },
     {
       "source_entry": "web/src/pages/tenant/Analytics.tsx",
@@ -3113,7 +3141,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:9b8d9963cdc2bf25cec2cdbec1dfa3fdd347003181778bb5bb22b19b7f510cc4"
+      "sha256": "sha256:2c1596475598a9f6971a535d5f603f747c1b2153c7f2110cb80de5d60bc93bc5"
     },
     {
       "source_entry": "web/src/services/analyticsService.ts",
@@ -3135,6 +3163,13 @@
         "production_dependency"
       ],
       "sha256": "sha256:ea05cc59a531b292ed6cb6b38134053708a2eab7006cf3e4aa21eab16e72f97c"
+    },
+    {
+      "source_entry": "web/src/services/attachmentService.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:785f229fca258de33a1e6fe776acdb8817783bdef38b67b28bc00147961b0216"
     },
     {
       "source_entry": "web/src/services/auditService.ts",
@@ -3382,11 +3417,32 @@
       "sha256": "sha256:819c564e922a31fba4fdf88858b739667ebb56b3ba098673ca91fe1e1b9b6c4a"
     },
     {
+      "source_entry": "web/src/services/projectWorkService.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:f7df1cf92ba5bce1397a7db459ac755e0b3d909aaa3c9bd4e3605dcf1751f4f3"
+    },
+    {
       "source_entry": "web/src/services/registryService.ts",
       "roles": [
         "production_dependency"
       ],
       "sha256": "sha256:e555ecd5bd8cb4db5577c7e15404834901a518efb70d2980173bd4a55ff8c3bc"
+    },
+    {
+      "source_entry": "web/src/services/runInputService.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:f005ebbe60223efadb657eba170ff0dffb2ba3b72cdaf7e4cd6d4998f4919c31"
+    },
+    {
+      "source_entry": "web/src/services/runReviewService.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:037f5d397a3fef3195a9f186a0bf43bab8120bb7071ac16a2efaf2a4a996c045"
     },
     {
       "source_entry": "web/src/services/sandboxSSEService.ts",
@@ -3767,13 +3823,6 @@
       "sha256": "sha256:b5828c7d42cbe7bcdda2233fd9a0a8b49866b73323fc6af2334435f2ba0241be"
     },
     {
-      "source_entry": "web/src/stores/pendingPromptStore.ts",
-      "roles": [
-        "production_dependency"
-      ],
-      "sha256": "sha256:0dac5990e10172cbbfe3161d90478398d88ed80191f4c2e9311033fe9c178305"
-    },
-    {
       "source_entry": "web/src/stores/pool.ts",
       "roles": [
         "production_dependency"
@@ -4100,7 +4149,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:84d6f8a354e36f9d76ccdcda15bb4b29a6028c1c2fa4b6a73b01118879308b0b"
+      "sha256": "sha256:72f8576fcfbadd70255779e871234a5e968a731aed532c3b45f0232854830962"
     },
     {
       "source_entry": "web/src/utils/tabSync.ts",
@@ -9036,6 +9085,11 @@
     {
       "from_source_entry": "web/src/components/agent/AgentChatContent.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/agent/review/RunReviewDrawer.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/AgentChatContent.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/components/agent/styles.ts"
     },
     {
@@ -9077,6 +9131,11 @@
       "from_source_entry": "web/src/components/agent/AgentChatContent.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/hooks/useProjectBasePath.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/AgentChatContent.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/hooks/useRunInputAuthority.ts"
     },
     {
       "from_source_entry": "web/src/components/agent/AgentChatContent.tsx",
@@ -9371,11 +9430,6 @@
     {
       "from_source_entry": "web/src/components/agent/InputBar.tsx",
       "relationship": "static_import",
-      "to_source_entry": "web/src/components/agent/QueuedPromptStrip.tsx"
-    },
-    {
-      "from_source_entry": "web/src/components/agent/InputBar.tsx",
-      "relationship": "static_import",
       "to_source_entry": "web/src/components/agent/SlashCommandDropdown.tsx"
     },
     {
@@ -9441,12 +9495,12 @@
     {
       "from_source_entry": "web/src/components/agent/InputBar.tsx",
       "relationship": "static_import",
-      "to_source_entry": "web/src/stores/agentV3.ts"
+      "to_source_entry": "web/src/services/attachmentService.ts"
     },
     {
       "from_source_entry": "web/src/components/agent/InputBar.tsx",
       "relationship": "static_import",
-      "to_source_entry": "web/src/stores/pendingPromptStore.ts"
+      "to_source_entry": "web/src/stores/agentV3.ts"
     },
     {
       "from_source_entry": "web/src/components/agent/InputBar.tsx",
@@ -9629,11 +9683,6 @@
       "to_source_entry": "web/src/stores/agentV3.ts"
     },
     {
-      "from_source_entry": "web/src/components/agent/QueuedPromptStrip.tsx",
-      "relationship": "static_import",
-      "to_source_entry": "web/src/stores/pendingPromptStore.ts"
-    },
-    {
       "from_source_entry": "web/src/components/agent/RightPanel.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/components/agent/AgentGraphView.tsx"
@@ -9772,6 +9821,21 @@
       "from_source_entry": "web/src/components/agent/TenantAgentConfigView.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/utils/date.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/activity/ProjectActivityInbox.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/agent/activity/projectActivityModel.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/activity/ProjectActivityInbox.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/client/ApiError.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/activity/ProjectActivityInbox.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/projectWorkService.ts"
     },
     {
       "from_source_entry": "web/src/components/agent/canonicalStory/CanonicalStoryCard.tsx",
@@ -10429,6 +10493,11 @@
       "to_source_entry": "web/src/components/agent/results/normalizeSources.ts"
     },
     {
+      "from_source_entry": "web/src/components/agent/review/RunReviewDrawer.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/runReviewService.ts"
+    },
+    {
       "from_source_entry": "web/src/components/agent/sandbox/KasmVNCViewer.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/services/sandboxWebSocketUtils.ts"
@@ -10592,6 +10661,11 @@
       "from_source_entry": "web/src/components/agent/timeline/SubAgentTimeline.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/components/agent/timeline/SubAgentDetailPanel.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/timeline/SubAgentTimeline.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/agent/timeline/subagentControlModel.ts"
     },
     {
       "from_source_entry": "web/src/components/agent/timeline/SubAgentTimeline.tsx",
@@ -12639,6 +12713,11 @@
       "to_source_entry": "web/src/services/participantsService.ts"
     },
     {
+      "from_source_entry": "web/src/hooks/useRunInputAuthority.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/runInputService.ts"
+    },
+    {
       "from_source_entry": "web/src/hooks/useSandboxDetection.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/stores/sandbox.ts"
@@ -13757,6 +13836,11 @@
       "from_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
       "relationship": "dynamic_import",
       "to_source_entry": "web/src/components/agent/AgentChatContent.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/agent/activity/ProjectActivityInbox.tsx"
     },
     {
       "from_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
@@ -15499,6 +15583,26 @@
       "to_source_entry": "web/src/services/client/urlUtils.ts"
     },
     {
+      "from_source_entry": "web/src/services/attachmentService.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/i18n/config.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/attachmentService.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/client/httpClient.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/attachmentService.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/client/urlUtils.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/attachmentService.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/utils/tokenResolver.ts"
+    },
+    {
       "from_source_entry": "web/src/services/auditService.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/services/client/httpClient.ts"
@@ -15699,7 +15803,22 @@
       "to_source_entry": "web/src/services/client/urlUtils.ts"
     },
     {
+      "from_source_entry": "web/src/services/projectWorkService.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/client/httpClient.ts"
+    },
+    {
       "from_source_entry": "web/src/services/registryService.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/client/httpClient.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/runInputService.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/client/httpClient.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/runReviewService.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/services/client/httpClient.ts"
     },

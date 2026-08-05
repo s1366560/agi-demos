@@ -87,7 +87,9 @@
         "view",
         "send-message",
         "stop-session",
-        "manage-roster"
+        "manage-roster",
+        "kill-subagent",
+        "steer-subagent"
       ],
       "cloud_actions": [
         "view",
@@ -139,7 +141,7 @@
             "tenant_member",
             "conversation_access"
           ],
-          "enforcement": "missing",
+          "enforcement": "enforced",
           "feature_gate": null
         },
         {
@@ -174,8 +176,9 @@
         }
       ],
       "web_status": "partial",
-      "web_reason_code": "web_subagent_control_handler_missing",
+      "web_reason_code": "current_head_core_session_required_channel_evidence_incomplete",
       "cloud_status": "partial",
+      "cloud_reason_code": "current_head_core_session_required_channel_evidence_incomplete",
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/session/SessionWorkspace.tsx",
@@ -183,14 +186,14 @@
       ],
       "local_status": "partial",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_agent_workspace_partial",
+      "local_reason_code": "current_head_core_session_required_channel_evidence_incomplete",
       "local_deviation": "The sidecar owns local execution and must return structured unavailable authority for secure environment HITL until vault sealing is implemented.",
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/hooks/useAgentSocket.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
       ],
-      "judgment_rationale": "Agent Workspace is a canonical tenant route. Web roster authority is implemented, but the current WebSocket router does not register the kill_run or steer messages emitted by the Web client. Existing native Cloud and Local workbenches expose authenticated conversation view, send, and stop flows; they do not yet cover roster management, individual SubAgent control, attachment import, secure environment HITL, or the complete plan-authority contract."
+      "judgment_rationale": "Current-HEAD implements canonical Queue/Steer run inputs, atomic HITL denial feedback, encrypted secure-env responses, roster and SubAgent control, Activity read receipts, My Work summaries, and scoped Changes. Web, Cloud Desktop, and Local Desktop remain partial until one clean current-HEAD aggregate supplies every required renderer, backend or sidecar, and native Electron evidence channel without the recorded usage, direct-open, or Queue/Steer observation gaps."
     }
   ],
   "source_ownership": {
