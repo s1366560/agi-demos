@@ -709,7 +709,7 @@ class Neo4jClient:
             project_filter = "WHERE node.project_id = $project_id OR $project_id IS NULL"
 
         query_str = f"""
-            CALL db.index.fulltext.queryNodes($index_name, $query)
+            CALL db.index.fulltext.queryNodes($index_name, $search_query)
             YIELD node, score
             {project_filter}
             RETURN node, score
@@ -719,7 +719,7 @@ class Neo4jClient:
 
         params = {
             "index_name": index_name,
-            "query": query,
+            "search_query": query,
             "limit": limit,
         }
         if project_id:

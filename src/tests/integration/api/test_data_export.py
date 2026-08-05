@@ -1,10 +1,11 @@
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
 from fastapi import status
 
-from src.infrastructure.adapters.primary.web.dependencies import get_graphiti_client
+from src.domain.model.graph.dtos import GraphExportDTO
+from src.infrastructure.adapters.primary.web.dependencies import get_graph_store
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
     verify_api_key_dependency,
 )
@@ -25,44 +26,25 @@ def mock_api_key_dependency(test_user):
 @pytest.fixture
 def mock_graphiti_service():
     service = AsyncMock()
-    # Mock the client driver
-    mock_driver = AsyncMock()
-
-    # Mock result records for stats/cleanup
-    mock_record = {"count": 5, "deleted": 5}
-    mock_result = Mock()
-    mock_result.records = [mock_record]
-
-    # Default behavior
-    mock_driver.execute_query.return_value = mock_result
-
-    service.driver = mock_driver
-    # Also attach driver to client for compatibility if accessed via client.driver
-    service.client = Mock()
-    service.client.driver = mock_driver
-
+    service.data_export = AsyncMock()
+    service.count_stats = AsyncMock()
+    service.count_episodes_by_age = AsyncMock()
+    service.delete_episodes_by_age = AsyncMock()
     return service
 
 
 @pytest.mark.asyncio
 async def test_export_data(mock_api_key_dependency, mock_graphiti_service, test_app, async_client):
     test_app.dependency_overrides[verify_api_key_dependency] = lambda: mock_api_key_dependency
-    test_app.dependency_overrides[get_graphiti_client] = lambda: mock_graphiti_service
+    test_app.dependency_overrides[get_graph_store] = lambda: mock_graphiti_service
 
-    # Setup mock for export queries
-    # The router iterates over records and accesses "props"
     mock_props = {"uuid": "123", "content": "test"}
-    mock_record = {
-        "props": mock_props,
-        "labels": ["Entity"],
-        "edge_id": "e1",
-        "rel_type": "RELATED",
-        "deleted": 5,
-        "count": 5,
-    }
-    mock_result = Mock()
-    mock_result.records = [mock_record]
-    mock_graphiti_service.driver.execute_query.return_value = mock_result
+    mock_graphiti_service.data_export.return_value = GraphExportDTO(
+        exported_at="2026-08-05T00:00:00+00:00",
+        tenant_id=None,
+        project_id=None,
+        episodes=[mock_props],
+    )
 
     response = await async_client.post(
         "/api/v1/data/export",
@@ -80,7 +62,14 @@ async def test_export_data(mock_api_key_dependency, mock_graphiti_service, test_
     assert len(data["episodes"]) == 1
     assert data["episodes"][0] == mock_props
 
-    assert mock_graphiti_service.driver.execute_query.called
+    mock_graphiti_service.data_export.assert_awaited_once_with(
+        tenant_id=None,
+        project_id=None,
+        include_episodes=True,
+        include_entities=False,
+        include_relationships=False,
+        include_communities=False,
+    )
 
     test_app.dependency_overrides = {}
 
@@ -88,9 +77,15 @@ async def test_export_data(mock_api_key_dependency, mock_graphiti_service, test_
 @pytest.mark.asyncio
 async def test_get_stats(mock_api_key_dependency, mock_graphiti_service, test_app, async_client):
     test_app.dependency_overrides[verify_api_key_dependency] = lambda: mock_api_key_dependency
-    test_app.dependency_overrides[get_graphiti_client] = lambda: mock_graphiti_service
+    test_app.dependency_overrides[get_graph_store] = lambda: mock_graphiti_service
 
-    # The mock returns count=5 for all queries
+    mock_graphiti_service.count_stats.return_value = {
+        "entities": 5,
+        "episodes": 5,
+        "communities": 5,
+        "relationships": 5,
+        "total_nodes": 15,
+    }
     response = await async_client.get("/api/v1/data/stats")
 
     assert response.status_code == status.HTTP_200_OK
@@ -111,15 +106,12 @@ async def test_cleanup_dry_run(
 ):
     # Setup overrides on the test app
     test_app.dependency_overrides[verify_api_key_dependency] = lambda: mock_api_key_dependency
-    test_app.dependency_overrides[get_graphiti_client] = lambda: mock_graphiti_service
+    test_app.dependency_overrides[get_graph_store] = lambda: mock_graphiti_service
 
     # User is already created by test_user fixture
     # Do NOT create user manually here
 
-    # Mock graphiti search result
-    mock_result = Mock()
-    mock_result.records = [{"count": 5, "deleted": 5}]
-    mock_graphiti_service.driver.execute_query.return_value = mock_result
+    mock_graphiti_service.count_episodes_by_age.return_value = 5
 
     response = await async_client.post("/api/v1/data/cleanup", json={"dry_run": True})
 
@@ -136,26 +128,11 @@ async def test_cleanup_execute(
     mock_api_key_dependency, mock_graphiti_service, test_db, async_client, test_app, test_user
 ):
     test_app.dependency_overrides[verify_api_key_dependency] = lambda: mock_api_key_dependency
-    test_app.dependency_overrides[get_graphiti_client] = lambda: mock_graphiti_service
+    test_app.dependency_overrides[get_graph_store] = lambda: mock_graphiti_service
 
     # User is already created by test_user fixture
 
-    # Mock graphiti search result
-    mock_result = Mock()
-    mock_result.records = [{"count": 5, "deleted": 5}]
-    mock_graphiti_service.driver.execute_query.return_value = mock_result
-
-    # Execute calls count_query then delete_query
-    # We need side_effect to return different results
-    # For execute, it calls count first, then delete.
-    # The mock setup in upstream block seemed to just set return_value.
-    # But wait, looking at the conflict block for execute:
-    # Upstream: `mock_graphiti_service.driver.execute_query.return_value = mock_result`
-    # Stashed: `side_effect = [mock_result_count, mock_result_delete]`
-    # If the code calls it twice, return_value will return same thing twice.
-    # If the code expects count first then delete result, returning same object might work if structure is compatible.
-    # Upstream mock result has both `count` and `deleted`.
-    # So it probably works for both calls.
+    mock_graphiti_service.delete_episodes_by_age.return_value = 5
 
     response = await async_client.post("/api/v1/data/cleanup", params={"dry_run": False})
 

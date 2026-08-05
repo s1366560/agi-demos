@@ -1,5 +1,6 @@
 """Unit tests for Neo4jClient helper behavior."""
 
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -37,6 +38,37 @@ class TestNeo4jClientVectorIndex:
         assert exception_detail not in caplog.text
         assert "error_type=RuntimeError" in caplog.text
         assert "has_index_name=True" in caplog.text
+
+
+@pytest.mark.unit
+class TestNeo4jClientFulltextSearch:
+    async def test_search_query_does_not_collide_with_cypher_argument(self) -> None:
+        client = Neo4jClient(
+            uri="bolt://localhost:7687",
+            user="neo4j",
+            password="password",
+        )
+        calls: list[tuple[str, dict[str, Any]]] = []
+
+        async def record_execute_query(query: str, **kwargs: Any) -> object:
+            calls.append((query, kwargs))
+            return SimpleNamespace(records=[])
+
+        client.execute_query = record_execute_query  # type: ignore[method-assign]
+
+        hits = await client.fulltext_search(
+            index_name="entity_name_summary",
+            query="needle",
+            limit=5,
+            project_id="project-1",
+        )
+
+        assert hits == []
+        assert len(calls) == 1
+        cypher, params = calls[0]
+        assert "$search_query" in cypher
+        assert params["search_query"] == "needle"
+        assert "query" not in params
 
 
 @pytest.mark.unit

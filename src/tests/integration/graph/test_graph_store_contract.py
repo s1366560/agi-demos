@@ -34,18 +34,24 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
+import pytest_asyncio
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="session")]
 
 
-async def _can_reach_graph() -> bool:
+class _ContractEmbedder:
+    """Deterministic embedder used to align test entities with the factory index."""
+
+    def __init__(self, dimensions: int) -> None:
+        self._dimensions = dimensions
+
+    async def embed_text(self, _text: str) -> list[float]:
+        return [0.01] * self._dimensions
+
+
+async def _can_reach_graph(adapter) -> bool:
     """Return True if a graph backend is reachable; skip the test otherwise."""
     try:
-        from src.configuration.factories import create_native_graph_adapter
-
-        adapter = await create_native_graph_adapter()
-        if adapter is None:
-            return False
         # health probe via a trivial query through the current escape hatch.
         result = await adapter.client.execute_query("RETURN 1 AS ok")
         ok = bool(result.records) and result.records[0].get("ok", 0) == 1
@@ -54,22 +60,34 @@ async def _can_reach_graph() -> bool:
         return False
 
 
-@pytest.fixture
-async def graph_adapter():
+@pytest_asyncio.fixture(loop_scope="session")
+async def graph_adapter(test_engine, test_project_db, monkeypatch):
     """Build the current adapter (NativeGraphAdapter) and clean up afterwards."""
-    from src.configuration.factories import create_native_graph_adapter
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-    adapter = await create_native_graph_adapter()
+    from src.configuration.factories import create_native_graph_adapter
+    from src.infrastructure.adapters.secondary.schema import dynamic_schema
+
+    schema_session_factory = async_sessionmaker(
+        test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    monkeypatch.setattr(dynamic_schema, "async_session_factory", schema_session_factory)
+    monkeypatch.setattr(dynamic_schema, "_initialized_projects", set())
+    dynamic_schema.clear_schema_context_cache(str(test_project_db.id))
+
+    adapter = await create_native_graph_adapter(tenant_id=str(test_project_db.tenant_id))
     if adapter is None:
         pytest.skip("No graph provider configured (NoActiveProviderError)")
-    if not await _can_reach_graph():
+    if not await _can_reach_graph(adapter):
+        await adapter.close()
         pytest.skip("Graph backend not reachable")
-    yield adapter
-    # teardown is per-test via the cleanup_* deletes below; nothing global.
-
-
-def _unique_project_id() -> str:
-    return f"contract-{uuid.uuid4()}"
+    try:
+        yield adapter
+    finally:
+        dynamic_schema.clear_schema_context_cache(str(test_project_db.id))
+        await adapter.close()
 
 
 # ---------------------------------------------------------------------------
@@ -77,17 +95,17 @@ def _unique_project_id() -> str:
 # ---------------------------------------------------------------------------
 
 
-async def test_add_episode_returns_episode_with_required_fields(graph_adapter):
+async def test_add_episode_returns_episode_with_required_fields(graph_adapter, test_project_db):
     """add_episode must return an Episode carrying uuid, project_id, group_id."""
     from src.domain.model.memory.episode import Episode, SourceType
 
-    project_id = _unique_project_id()
+    project_id = str(test_project_db.id)
     episode = Episode(
         content="Contract test: Alice met Bob in Paris.",
         source_type=SourceType.TEXT,
         valid_at=datetime.now(UTC),
         name=f"contract-ep-{uuid.uuid4()}",
-        tenant_id="contract-tenant",
+        tenant_id=str(test_project_db.tenant_id),
         project_id=project_id,
     )
 
@@ -100,20 +118,20 @@ async def test_add_episode_returns_episode_with_required_fields(graph_adapter):
     assert saved.id is not None and saved.id != ""
     assert saved.project_id == project_id
     # cleanup
-    await graph_adapter.delete_episode(saved.name or "")
+    await graph_adapter.remove_episode(str(saved.id))
 
 
-async def test_search_returns_episode_and_entity_shapes(graph_adapter):
+async def test_search_returns_episode_and_entity_shapes(graph_adapter, test_project_db):
     """search() must return episode/entity dicts with the documented keys."""
     from src.domain.model.memory.episode import Episode, SourceType
 
-    project_id = _unique_project_id()
+    project_id = str(test_project_db.id)
     episode = Episode(
         content="Contract test: Zeta Corp acquired Beta Inc for 5 billion.",
         source_type=SourceType.TEXT,
         valid_at=datetime.now(UTC),
         name=f"contract-search-{uuid.uuid4()}",
-        tenant_id="contract-tenant",
+        tenant_id=str(test_project_db.tenant_id),
         project_id=project_id,
     )
     await graph_adapter.add_episode(episode)
@@ -132,7 +150,7 @@ async def test_search_returns_episode_and_entity_shapes(graph_adapter):
                 assert item["type"] == "entity"
                 assert {"type", "name", "summary", "uuid"}.issubset(item.keys())
     finally:
-        await graph_adapter.delete_episode(episode.name or "")
+        await graph_adapter.remove_episode(str(episode.id))
 
 
 # ---------------------------------------------------------------------------
@@ -140,17 +158,17 @@ async def test_search_returns_episode_and_entity_shapes(graph_adapter):
 # ---------------------------------------------------------------------------
 
 
-async def test_get_graph_data_node_and_edge_shapes(graph_adapter):
+async def test_get_graph_data_node_and_edge_shapes(graph_adapter, test_project_db):
     """get_graph_data must return {nodes:[...], edges:[...]} with stable keys."""
     from src.domain.model.memory.episode import Episode, SourceType
 
-    project_id = _unique_project_id()
+    project_id = str(test_project_db.id)
     episode = Episode(
         content="Contract test: Graph snapshot for node/edge shape verification.",
         source_type=SourceType.TEXT,
         valid_at=datetime.now(UTC),
         name=f"contract-snapshot-{uuid.uuid4()}",
-        tenant_id="contract-tenant",
+        tenant_id=str(test_project_db.tenant_id),
         project_id=project_id,
     )
     await graph_adapter.add_episode(episode)
@@ -174,7 +192,7 @@ async def test_get_graph_data_node_and_edge_shapes(graph_adapter):
                 f"edge missing required keys: {edge}"
             )
     finally:
-        await graph_adapter.delete_episode(episode.name or "")
+        await graph_adapter.remove_episode(str(episode.id))
 
 
 # ---------------------------------------------------------------------------
@@ -182,18 +200,18 @@ async def test_get_graph_data_node_and_edge_shapes(graph_adapter):
 # ---------------------------------------------------------------------------
 
 
-async def test_delete_episode_by_memory_id_returns_true(graph_adapter):
+async def test_delete_episode_by_memory_id_returns_true(graph_adapter, test_project_db):
     """delete_episode_by_memory_id must return True on success."""
     from src.domain.model.memory.episode import Episode, SourceType
 
-    project_id = _unique_project_id()
+    project_id = str(test_project_db.id)
     memory_id = f"contract-mem-{uuid.uuid4()}"
     episode = Episode(
         content="Contract test: delete by memory_id.",
         source_type=SourceType.TEXT,
         valid_at=datetime.now(UTC),
         name=f"contract-del-{uuid.uuid4()}",
-        tenant_id="contract-tenant",
+        tenant_id=str(test_project_db.tenant_id),
         project_id=project_id,
         metadata={"memory_id": memory_id},
     )
@@ -208,72 +226,112 @@ async def test_delete_episode_by_memory_id_returns_true(graph_adapter):
 # ---------------------------------------------------------------------------
 
 
-async def test_vector_search_returns_node_and_score(graph_adapter):
+async def test_vector_search_returns_node_and_score(graph_adapter, test_project_db):
     """The vector_search primitive must return [{"node": dict, "score": float}] sorted desc."""
     from src.domain.model.memory.episode import Episode, SourceType
 
-    project_id = _unique_project_id()
+    project_id = str(test_project_db.id)
     episode = Episode(
         content="Contract test: vector search shape check with entities.",
         source_type=SourceType.TEXT,
         valid_at=datetime.now(UTC),
         name=f"contract-vec-{uuid.uuid4()}",
-        tenant_id="contract-tenant",
+        tenant_id=str(test_project_db.tenant_id),
         project_id=project_id,
     )
     await graph_adapter.add_episode(episode)
 
     try:
-        # Use a zero-vector probe of the default entity index; the contract under
-        # test is the RESULT SHAPE, not relevance. We reach the current primitive
-        # through the Neo4jClient that the adapter owns (this path becomes
-        # GraphStorePort.vector_search in Phase 2). Index name/property match the
-        # default created in factories.create_native_graph_adapter
-        # (entity_name_vector / name_embedding).
-        dim = await graph_adapter.client.get_vector_index_dimension("entity_name_vector")
-        probe = [0.0] * max(dim or 1536, 1)
-        hits = await graph_adapter.client.vector_search(
-            "entity_name_vector", probe, limit=5, project_id=project_id
+        # Align the test entity with the current dimension-specific index built
+        # by create_native_graph_adapter. Query Neo4j's index metadata because a
+        # pre-existing index can remain authoritative across provider changes.
+        index_result = await graph_adapter.client.execute_query(
+            """
+            SHOW INDEXES YIELD name, type, state, labelsOrTypes, properties, options
+            WHERE type = 'VECTOR'
+              AND state = 'ONLINE'
+              AND labelsOrTypes = ['Entity']
+              AND properties = ['name_embedding']
+            RETURN name, options
+            """
+        )
+        assert len(index_result.records) == 1
+        index_record = index_result.records[0]
+        dim = int(index_record["options"]["indexConfig"]["vector.dimensions"])
+        index_name = str(index_record["name"])
+        assert index_name == f"entity_name_vector_{dim}D"
+        rebuild = await graph_adapter.rebuild_embeddings(_ContractEmbedder(dim), project_id)
+        assert rebuild["updated"] >= 1
+        embedding_result = await graph_adapter.client.execute_query(
+            """
+            MATCH (n:Entity {project_id: $project_id})
+            WHERE n.name_embedding IS NOT NULL
+            RETURN n.name_embedding AS embedding
+            LIMIT 1
+            """,
+            project_id=project_id,
+        )
+        assert embedding_result.records
+        probe = list(embedding_result.records[0]["embedding"])
+        assert len(probe) == dim
+        hits = await graph_adapter.vector_search(
+            probe,
+            limit=5,
+            project_id=project_id,
+            index_name=index_name,
         )
 
         assert isinstance(hits, list)
+        assert hits
         for hit in hits:
-            assert {"node", "score"}.issubset(hit.keys()), f"bad hit shape: {hit}"
-            assert isinstance(hit["node"], dict)
-            assert isinstance(hit["score"], (int, float))
+            assert isinstance(hit.node, dict)
+            assert isinstance(hit.score, (int, float))
         # scores must be non-increasing (sorted desc) when more than one hit
-        scores = [h["score"] for h in hits]
+        scores = [hit.score for hit in hits]
         assert scores == sorted(scores, reverse=True), "vector_search not sorted desc"
     finally:
-        await graph_adapter.delete_episode(episode.name or "")
+        await graph_adapter.remove_episode(str(episode.id))
 
 
-async def test_fulltext_search_returns_node_and_score(graph_adapter):
+async def test_fulltext_search_returns_node_and_score(graph_adapter, test_project_db):
     """The fulltext_search primitive must return [{"node": dict, "score": float}]."""
     from src.domain.model.memory.episode import Episode, SourceType
 
-    project_id = _unique_project_id()
+    project_id = str(test_project_db.id)
     episode = Episode(
         content="Contract test: fulltext search shape verification prose.",
         source_type=SourceType.TEXT,
         valid_at=datetime.now(UTC),
         name=f"contract-ft-{uuid.uuid4()}",
-        tenant_id="contract-tenant",
+        tenant_id=str(test_project_db.tenant_id),
         project_id=project_id,
     )
     await graph_adapter.add_episode(episode)
 
     try:
-        hits = await graph_adapter.client.fulltext_search(
-            "entity_name_summary", "fulltext", limit=5, project_id=project_id
+        entity_result = await graph_adapter.client.execute_query(
+            """
+            MATCH (n:Entity {project_id: $project_id})
+            WHERE n.name IS NOT NULL
+            RETURN n.name AS name
+            LIMIT 1
+            """,
+            project_id=project_id,
+        )
+        assert entity_result.records
+        hits = await graph_adapter.fulltext_search(
+            query=str(entity_result.records[0]["name"]),
+            limit=5,
+            project_id=project_id,
+            index_name="entity_name_summary",
         )
         assert isinstance(hits, list)
+        assert hits
         for hit in hits:
-            assert {"node", "score"}.issubset(hit.keys()), f"bad hit shape: {hit}"
-            assert isinstance(hit["node"], dict)
-            assert isinstance(hit["score"], (int, float))
+            assert isinstance(hit.node, dict)
+            assert isinstance(hit.score, (int, float))
     finally:
-        await graph_adapter.delete_episode(episode.name or "")
+        await graph_adapter.remove_episode(str(episode.id))
 
 
 # ---------------------------------------------------------------------------
@@ -281,7 +339,7 @@ async def test_fulltext_search_returns_node_and_score(graph_adapter):
 # ---------------------------------------------------------------------------
 
 
-async def test_data_export_top_level_shape(graph_adapter):
+async def test_data_export_top_level_shape(graph_adapter, test_project_db):
     """The export operation must return the documented top-level dict shape.
 
     This exercises the same Cypher the ``data_export`` router runs, via the
@@ -290,13 +348,13 @@ async def test_data_export_top_level_shape(graph_adapter):
     """
     from src.domain.model.memory.episode import Episode, SourceType
 
-    project_id = _unique_project_id()
+    project_id = str(test_project_db.id)
     episode = Episode(
         content="Contract test: data export envelope shape.",
         source_type=SourceType.TEXT,
         valid_at=datetime.now(UTC),
         name=f"contract-export-{uuid.uuid4()}",
-        tenant_id="contract-tenant",
+        tenant_id=str(test_project_db.tenant_id),
         project_id=project_id,
     )
     await graph_adapter.add_episode(episode)
@@ -311,7 +369,7 @@ async def test_data_export_top_level_shape(graph_adapter):
         # Frozen export envelope shape (matches data_export.py build path).
         export = {
             "exported_at": datetime.now(UTC).isoformat(),
-            "tenant_id": "contract-tenant",
+            "tenant_id": str(test_project_db.tenant_id),
             "project_id": project_id,
             "episodes": episodes,
             "entities": [],
@@ -330,4 +388,4 @@ async def test_data_export_top_level_shape(graph_adapter):
         assert isinstance(export["episodes"], list)
         assert len(export["episodes"]) >= 1
     finally:
-        await graph_adapter.delete_episode(episode.name or "")
+        await graph_adapter.remove_episode(str(episode.id))

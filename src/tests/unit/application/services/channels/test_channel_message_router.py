@@ -788,7 +788,7 @@ async def test_do_media_import_start_log_omits_message_identifier(
     mcp_adapter = SimpleNamespace(sync_from_docker=AsyncMock())
     app_container = SimpleNamespace(
         sandbox_adapter=MagicMock(return_value=mcp_adapter),
-        storage_service=MagicMock(return_value=object()),
+        artifact_service=MagicMock(return_value=object()),
     )
     caplog.set_level(
         logging.INFO,
@@ -847,7 +847,7 @@ async def test_do_media_import_failure_omits_exception_text_from_log_and_reply(
     mcp_adapter = SimpleNamespace(sync_from_docker=AsyncMock())
     app_container = SimpleNamespace(
         sandbox_adapter=MagicMock(return_value=mcp_adapter),
-        storage_service=MagicMock(return_value=object()),
+        artifact_service=MagicMock(return_value=object()),
     )
     caplog.set_level(
         logging.ERROR,

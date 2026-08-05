@@ -8,6 +8,7 @@ Requires one of: ARK_API_KEY, VOLCENGINE_API_KEY environment variables.
 
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import UTC, datetime
 from typing import Any
@@ -40,6 +41,7 @@ _RERANKER_MODEL = "doubao-reranker-large"
 
 _BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 _API_KEY_ENVS = ("ARK_API_KEY", "VOLCENGINE_API_KEY")
+_LIVE_CALL_TIMEOUT_SECONDS = 60.0
 
 EXTERNAL_ISSUE_KEYWORDS = (
     "invalid authentication",
@@ -71,6 +73,10 @@ def _resolve_env_value(env_names: tuple[str, ...]) -> str | None:
 
 
 def _skip_or_raise_external_issue(error: Exception) -> None:
+    if isinstance(error, TimeoutError):
+        pytest.skip(
+            f"volcengine external issue: live call exceeded {_LIVE_CALL_TIMEOUT_SECONDS:g}s"
+        )
     message = str(error).lower()
     if any(kw in message for kw in EXTERNAL_ISSUE_KEYWORDS):
         pytest.skip(f"volcengine external issue: {error}")
@@ -162,7 +168,8 @@ class TestVolcengineIntegration:
         ]
 
         try:
-            result = await client.generate(messages=messages)
+            async with asyncio.timeout(_LIVE_CALL_TIMEOUT_SECONDS):
+                result = await client.generate(messages=messages)
         except Exception as e:
             _skip_or_raise_external_issue(e)
             return
@@ -185,12 +192,13 @@ class TestVolcengineIntegration:
 
         collected: list[str] = []
         try:
-            async for chunk in client.generate_stream(
-                messages=messages,
-            ):
-                delta = _extract_stream_delta(chunk)
-                if delta:
-                    collected.append(delta)
+            async with asyncio.timeout(_LIVE_CALL_TIMEOUT_SECONDS):
+                async for chunk in client.generate_stream(
+                    messages=messages,
+                ):
+                    delta = _extract_stream_delta(chunk)
+                    if delta:
+                        collected.append(delta)
         except Exception as e:
             _skip_or_raise_external_issue(e)
             return
@@ -213,7 +221,8 @@ class TestVolcengineIntegration:
         )
 
         try:
-            vector = await embedder.create("Volcengine embedding integration test")
+            async with asyncio.timeout(_LIVE_CALL_TIMEOUT_SECONDS):
+                vector = await embedder.create("Volcengine embedding integration test")
         except Exception as e:
             _skip_or_raise_external_issue(e)
             return
@@ -246,7 +255,8 @@ class TestVolcengineIntegration:
         ]
 
         try:
-            result = await client.generate(messages=messages)
+            async with asyncio.timeout(_LIVE_CALL_TIMEOUT_SECONDS):
+                result = await client.generate(messages=messages)
         except Exception as e:
             _skip_or_raise_external_issue(e)
             return
@@ -286,10 +296,11 @@ class TestVolcengineIntegration:
         ]
 
         try:
-            result = await client.generate(
-                messages=messages,
-                tools=tools,
-            )
+            async with asyncio.timeout(_LIVE_CALL_TIMEOUT_SECONDS):
+                result = await client.generate(
+                    messages=messages,
+                    tools=tools,
+                )
         except Exception as e:
             _skip_or_raise_external_issue(e)
             return
@@ -311,7 +322,8 @@ class TestVolcengineIntegration:
         ]
 
         try:
-            result = await client.generate(messages=messages)
+            async with asyncio.timeout(_LIVE_CALL_TIMEOUT_SECONDS):
+                result = await client.generate(messages=messages)
         except Exception as e:
             _skip_or_raise_external_issue(e)
             return
@@ -342,11 +354,12 @@ class TestVolcengineIntegration:
         ]
 
         try:
-            ranked = await reranker._llm_rerank(
-                "Where is Paris?",
-                docs,
-                top_n=2,
-            )
+            async with asyncio.timeout(_LIVE_CALL_TIMEOUT_SECONDS):
+                ranked = await reranker._llm_rerank(
+                    "Where is Paris?",
+                    docs,
+                    top_n=2,
+                )
         except Exception as e:
             _skip_or_raise_external_issue(e)
             return

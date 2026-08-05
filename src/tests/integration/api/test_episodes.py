@@ -7,7 +7,10 @@ from fastapi import status
 from httpx import ASGITransport, AsyncClient
 
 from src.domain.model.memory.episode import Episode, SourceType
-from src.infrastructure.adapters.primary.web.dependencies import get_graphiti_client
+from src.infrastructure.adapters.primary.web.dependencies import (
+    get_graph_store,
+    get_graphiti_client,
+)
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
     verify_api_key_dependency,
 )
@@ -77,10 +80,8 @@ async def test_create_episode(
 
 @pytest.mark.asyncio
 async def test_health_check(test_app, mock_graphiti_service):
-    test_app.dependency_overrides[get_graphiti_client] = lambda: mock_graphiti_service
-
-    mock_graphiti_service.driver = Mock()
-    mock_graphiti_service.driver.execute_query = AsyncMock(return_value=Mock(records=[{"test": 1}]))
+    test_app.dependency_overrides[get_graph_store] = lambda: mock_graphiti_service
+    mock_graphiti_service.health_probe = AsyncMock(return_value=True)
 
     async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as ac:
         response = await ac.get("/api/v1/episodes/health")
@@ -93,12 +94,8 @@ async def test_health_check(test_app, mock_graphiti_service):
 
 @pytest.mark.asyncio
 async def test_health_check_unhealthy(test_app, mock_graphiti_service):
-    test_app.dependency_overrides[get_graphiti_client] = lambda: mock_graphiti_service
-
-    mock_graphiti_service.driver = Mock()
-    mock_graphiti_service.driver.execute_query = AsyncMock(
-        side_effect=Exception("Connection error")
-    )
+    test_app.dependency_overrides[get_graph_store] = lambda: mock_graphiti_service
+    mock_graphiti_service.health_probe = AsyncMock(side_effect=Exception("Connection error"))
 
     async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as ac:
         response = await ac.get("/api/v1/episodes/health")
