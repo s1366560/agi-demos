@@ -706,7 +706,6 @@
         }
       ],
       "cloud_status": "unavailable",
-      "cloud_authority": "none",
       "cloud_reason_code": "renderer_capability_authority_unobserved",
       "cloud_actions": [],
       "cloud_entries": [

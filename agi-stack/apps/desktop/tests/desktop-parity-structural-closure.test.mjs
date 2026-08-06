@@ -292,7 +292,7 @@ test('checked-in manifest is structurally closed after deterministic downgrades'
   assert.equal(invitation.surfaces.desktop_cloud.availability, 'unavailable');
   assert.equal(
     invitation.surfaces.desktop_cloud.reason_code,
-    'parity_structural_active_surface_api_contract_unavailable',
+    'renderer_capability_authority_unobserved',
   );
   assert.deepEqual(Object.keys(checkedInManifest.capabilities[0].surfaces).sort(), [
     ...surfaces,

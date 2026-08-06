@@ -53,6 +53,14 @@ test("Deploy records its current Web contract mismatch as degraded", () => {
     "inspect-progress",
     "stream-progress",
   ]);
+  const cloudContracts = deploy.api_contracts.filter(
+    (contract) => contract.surface === "desktop_cloud",
+  );
+  assert.equal(deploy.cloud_authority ?? "cloud_service", "cloud_service");
+  assert.ok(cloudContracts.length > 0);
+  assert.ok(
+    cloudContracts.every((contract) => contract.authority === "cloud_service"),
+  );
   assert.match(deploy.judgment_rationale, /deploys.*deployments/u);
   assert.match(deploy.judgment_rationale, /finished_at.*completed_at/u);
   assert.match(deploy.judgment_rationale, /running.*in_progress/u);
@@ -129,7 +137,14 @@ test("Instance Templates limits APIs to production page callers", () => {
     templates.cloud_reason_code,
     "renderer_capability_authority_unobserved",
   );
-  assert.equal(templates.cloud_authority, "none");
+  const cloudContracts = templates.api_contracts.filter(
+    (contract) => contract.surface === "desktop_cloud",
+  );
+  assert.equal(templates.cloud_authority ?? "cloud_service", "cloud_service");
+  assert.ok(cloudContracts.length > 0);
+  assert.ok(
+    cloudContracts.every((contract) => contract.authority === "cloud_service"),
+  );
   assert.deepEqual(templates.cloud_actions, []);
   const webRequirements = templates.permission_requirements.filter(
     (requirement) => requirement.surface === "web",
@@ -189,6 +204,14 @@ test("Dead Letter Queue does not claim its unused single-message API", () => {
   ]) {
     assert.ok(webContracts.includes(usedContract), `missing ${usedContract}`);
   }
+  const cloudContracts = dlq.api_contracts.filter(
+    (contract) => contract.surface === "desktop_cloud",
+  );
+  assert.equal(dlq.cloud_authority ?? "cloud_service", "cloud_service");
+  assert.ok(cloudContracts.length > 0);
+  assert.ok(
+    cloudContracts.every((contract) => contract.authority === "cloud_service"),
+  );
 });
 
 test("Decision Records inspects the selected list row without a detail GET", () => {
