@@ -12,7 +12,6 @@ import {
   Form,
   Modal,
   Popconfirm,
-  Spin,
   Space,
   Tag,
   Typography,
@@ -26,6 +25,7 @@ import { channelService } from '@/services/channelService';
 import { SECRET_UNCHANGED_SENTINEL } from '@/utils/channelConfigSanitizers';
 
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
+import { LoadingOverlay } from '@/components/common/Spinner';
 
 import { renderSchemaFormFields, sanitizePluginConfigValues } from './pluginSchemaForm';
 
@@ -503,7 +503,7 @@ export const PluginDetail: React.FC = () => {
           <SkeletonLoader type="form" />
         </section>
       ) : (
-        <Spin spinning={loading}>
+        <LoadingOverlay spinning={loading}>
           {!plugin ? (
             <section className="rounded-lg border border-slate-200 bg-white p-8 dark:border-slate-800 dark:bg-surface-dark">
               {loadError && !loading ? (
@@ -747,7 +747,7 @@ export const PluginDetail: React.FC = () => {
               </div>
             </div>
           )}
-        </Spin>
+        </LoadingOverlay>
       )}
 
       <Modal

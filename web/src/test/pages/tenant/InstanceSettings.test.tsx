@@ -114,7 +114,6 @@ vi.mock('@/components/ui/lazyAntd', () => ({
       ))}
     </select>
   ),
-  LazySpin: () => <div role="status">loading</div>,
   useLazyMessage: () => lazyMessageMock,
 }));
 

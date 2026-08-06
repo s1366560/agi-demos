@@ -3,10 +3,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Alert, Button, Empty, Input, Modal, Pagination, Spin, Tag, Typography } from 'antd';
+import { Alert, Button, Empty, Input, Modal, Pagination, Tag, Typography } from 'antd';
 import { Search } from 'lucide-react';
 
 import { geneMarketService, type GeneResponse } from '@/services/geneMarketService';
+
+import { Spinner } from '@/components/common/Spinner';
 
 import { marketplaceGeneToPayload } from './marketplaceMapper';
 import { getCategoryColor } from './utils';
@@ -168,7 +170,7 @@ export const GeneImportModal: React.FC<GeneImportModalProps> = ({
         <div className="min-h-[240px] max-h-[420px] overflow-y-auto rounded border border-slate-200 dark:border-slate-700">
           {loading ? (
             <div className="flex h-40 items-center justify-center" role="status">
-              <Spin />
+              <Spinner />
             </div>
           ) : items.length === 0 ? (
             <div className="flex h-40 items-center justify-center">

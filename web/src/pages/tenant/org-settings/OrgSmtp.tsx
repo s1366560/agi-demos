@@ -10,7 +10,8 @@ import { useTenantStore } from '@/stores/tenant';
 import { smtpService } from '@/services/smtpService';
 import type { SmtpConfigCreate } from '@/services/smtpService';
 
-import { useLazyMessage, LazyPopconfirm, LazySpin } from '@/components/ui/lazyAntd';
+import { Spinner } from '@/components/common/Spinner';
+import { useLazyMessage, LazyPopconfirm } from '@/components/ui/lazyAntd';
 
 export const OrgSmtp: React.FC = () => {
   const { t } = useTranslation();
@@ -164,7 +165,7 @@ export const OrgSmtp: React.FC = () => {
   if (isLoading && !config) {
     return (
       <div className="flex items-center justify-center py-20">
-        <LazySpin size="large" />
+        <Spinner size={32} />
       </div>
     );
   }

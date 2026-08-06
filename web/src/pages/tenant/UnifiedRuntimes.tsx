@@ -198,10 +198,10 @@ export function UnifiedRuntimes() {
       key: 'scope',
       render: (_: unknown, row: RuntimeRow) => (
         <Space orientation="vertical" size={0}>
-          <Text type="secondary" style={{ fontSize: 12 }}>
+          <Text type="secondary" className="text-xs">
             {row.tenantId}
           </Text>
-          <Text style={{ fontSize: 13 }}>{row.projectId}</Text>
+          <Text className="text-[13px]">{row.projectId}</Text>
         </Space>
       ),
     },
@@ -227,7 +227,7 @@ export function UnifiedRuntimes() {
       title: t('tenant.runtimes.columns.loadMemory'),
       key: 'load',
       render: (_: unknown, row: RuntimeRow) => (
-        <Text style={{ fontSize: 12 }} className="tabular-nums">
+        <Text className="text-xs tabular-nums">
           {renderLoad(row)}
         </Text>
       ),
@@ -243,10 +243,10 @@ export function UnifiedRuntimes() {
   const poolStatus = poolStatusQuery.data;
 
   return (
-    <div style={{ padding: 24 }}>
-      <Space orientation="vertical" size="large" style={{ width: '100%' }}>
+    <div className="p-6">
+      <Space orientation="vertical" size="large" className="w-full">
         <div>
-          <Title level={1} style={{ marginBottom: 4 }}>
+          <Title level={1} className="!mb-1">
             {t('tenant.runtimes.title')}
           </Title>
           <Text type="secondary">{t('tenant.runtimes.description')}</Text>
@@ -295,7 +295,7 @@ export function UnifiedRuntimes() {
             {poolStatus && (
               <>
                 <Card size="small" title={t('tenant.runtimes.cards.poolTotal')}>
-                  <Title level={4} style={{ margin: 0 }} className="tabular-nums">
+                  <Title level={4} className="!m-0 tabular-nums">
                     {poolStatus.total_instances}
                   </Title>
                 </Card>
@@ -333,7 +333,7 @@ export function UnifiedRuntimes() {
               </>
             )}
             <Card size="small" title={t('tenant.runtimes.cards.sandboxes')}>
-              <Title level={4} style={{ margin: 0 }} className="tabular-nums">
+              <Title level={4} className="!m-0 tabular-nums">
                 {sandboxSummary.total}
               </Title>
             </Card>
@@ -355,7 +355,7 @@ export function UnifiedRuntimes() {
           title={t('tenant.runtimes.instances')}
           extra={
             <Space size="middle">
-              <Text type="secondary" style={{ fontSize: 12 }}>
+              <Text type="secondary" className="text-xs">
                 {t('tenant.runtimes.autoRefresh')}
               </Text>
               <Button

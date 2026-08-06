@@ -16,7 +16,6 @@ import {
   Rate,
   Select,
   Space,
-  Spin,
   Tag,
   Typography,
 } from 'antd';
@@ -25,6 +24,7 @@ import { ArrowLeft, Download, Edit2, Star, Trash2 } from 'lucide-react';
 import { formatDateTime } from '@/utils/date';
 
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
+import { Spinner } from '@/components/common/Spinner';
 import { InstallEntityModal } from '@/components/marketplace/InstallEntityModal';
 import { PublishToggleButton } from '@/components/marketplace/PublishToggleButton';
 import { RateEntityModal } from '@/components/marketplace/RateEntityModal';
@@ -377,7 +377,7 @@ export const GenomeDetail: React.FC = () => {
           <Empty description={t('tenant.genomeDetail.noGenes', 'No genes in this genome')} />
         ) : genomeGenesLoading ? (
           <div className="flex items-center justify-center gap-2 py-6" role="status">
-            <Spin size="small" />
+            <Spinner size={16} />
             <Text type="secondary">
               {t('tenant.genomeDetail.loadingGenes', 'Loading included genes')}
             </Text>

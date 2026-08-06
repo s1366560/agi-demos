@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
-import { Input, Select, Spin, Switch } from 'antd';
+import { Input, Select, Switch } from 'antd';
 import {
   Archive,
   Check,
@@ -37,6 +37,7 @@ import {
 } from '@/utils/workspaceConfig';
 
 import { HostedProjectionBadge } from '@/components/blackboard/HostedProjectionBadge';
+import { Spinner } from '@/components/common/Spinner';
 import { LazyPopconfirm, useLazyMessage } from '@/components/ui/lazyAntd';
 
 import {
@@ -394,7 +395,7 @@ export const WorkspaceSettingsPanel: React.FC<{
   if (!workspace || !draft) {
     return (
       <div className="flex min-h-[240px] items-center justify-center" role="status">
-        <Spin size="large" />
+        <Spinner size={32} />
       </div>
     );
   }
@@ -434,7 +435,7 @@ export const WorkspaceSettingsPanel: React.FC<{
             disabled={!canSave}
             className="inline-flex h-9 items-center gap-2 rounded-md bg-text-primary px-3 text-sm font-medium text-surface-light transition-colors hover:bg-text-secondary disabled:cursor-not-allowed disabled:opacity-50 dark:bg-text-inverse dark:text-surface-dark"
           >
-            {isSaving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+            {isSaving ? <Loader2 size={15} className="animate-spin motion-reduce:animate-none" /> : <Check size={15} />}
             {t('common.save')}
           </button>
         </div>
@@ -1778,7 +1779,7 @@ export const WorkspaceSettingsPanel: React.FC<{
                   className="inline-flex h-9 items-center gap-2 rounded-md bg-text-primary px-3 text-sm font-medium text-surface-light transition-colors hover:bg-text-secondary disabled:cursor-not-allowed disabled:opacity-50 dark:bg-text-inverse dark:text-surface-dark"
                 >
                   {isAddingMember ? (
-                    <Loader2 size={15} className="animate-spin" />
+                    <Loader2 size={15} className="animate-spin motion-reduce:animate-none" />
                   ) : (
                     <Users size={15} />
                   )}

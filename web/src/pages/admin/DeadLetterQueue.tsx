@@ -353,7 +353,7 @@ const DeadLetterQueue: React.FC = () => {
       ellipsis: true,
       render: (id: string) => (
         <Tooltip title={id}>
-          <Text copyable={{ text: id }} style={{ fontFamily: 'monospace' }}>
+          <Text copyable={{ text: id }} className="font-mono">
             {id.substring(0, 12)}…
           </Text>
         </Tooltip>
@@ -481,12 +481,12 @@ const DeadLetterQueue: React.FC = () => {
     : 0;
 
   return (
-    <div style={{ padding: 24 }}>
+    <div className="p-6">
       {/* Header */}
-      <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
+      <Row justify="space-between" align="middle" className="mb-6">
         <Col>
-          <Title level={2} style={{ margin: 0 }}>
-            <AlertTriangle size={24} style={{ marginRight: 8, color: warningColor }} />
+          <Title level={2} className="!m-0">
+            <AlertTriangle size={24} className="mr-2" style={{ color: warningColor }} />
             {t('admin.deadLetterQueue.title')}
           </Title>
           <Text type="secondary">{t('admin.deadLetterQueue.description')}</Text>
@@ -539,7 +539,7 @@ const DeadLetterQueue: React.FC = () => {
         <Alert
           type="error"
           showIcon
-          style={{ marginBottom: 16 }}
+          className="mb-4"
           title={t('admin.deadLetterQueue.errors.failedToLoadStats')}
           description={statsError}
           action={
@@ -551,7 +551,7 @@ const DeadLetterQueue: React.FC = () => {
       )}
 
       {/* Statistics Cards */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+      <Row gutter={[16, 16]} className="mb-6">
         <Col xs={24} sm={12} md={8} lg={4}>
           <Card loading={statsLoading}>
             <Statistic
@@ -616,7 +616,7 @@ const DeadLetterQueue: React.FC = () => {
       {stats && Object.keys(stats.error_type_counts).length > 0 && (
         <Card
           title={t('admin.deadLetterQueue.errorTypeDistribution')}
-          style={{ marginBottom: 24 }}
+          className="mb-6"
           loading={statsLoading}
         >
           <Row gutter={[16, 8]}>
@@ -625,13 +625,13 @@ const DeadLetterQueue: React.FC = () => {
               .slice(0, 5)
               .map(([type, count]) => (
                 <Col key={type} xs={24} sm={12} md={8} lg={6}>
-                  <Space style={{ width: '100%' }}>
+                  <Space className="w-full">
                     <Tag color="red">{type.split('.').pop()}</Tag>
                     <Progress
                       percent={getDistributionPercent(count, errorTypeTotal)}
                       size="small"
                       format={() => count}
-                      style={{ flex: 1 }}
+                      className="flex-1"
                     />
                   </Space>
                 </Col>
@@ -641,7 +641,7 @@ const DeadLetterQueue: React.FC = () => {
       )}
 
       {/* Filters and Batch Actions */}
-      <Card style={{ marginBottom: 16 }}>
+      <Card className="mb-4">
         <Row gutter={[16, 16]} align="middle">
           <Col>
             <Text strong>{t('admin.deadLetterQueue.filters.label')}:</Text>
@@ -651,7 +651,7 @@ const DeadLetterQueue: React.FC = () => {
               aria-label={t('admin.deadLetterQueue.filters.status')}
               placeholder={t('admin.deadLetterQueue.filters.status')}
               allowClear
-              style={{ width: 120 }}
+              className="w-[120px]"
               value={statusFilter}
               onChange={handleStatusFilterChange}
               options={[
@@ -668,7 +668,7 @@ const DeadLetterQueue: React.FC = () => {
               aria-label={t('admin.deadLetterQueue.filters.eventType')}
               placeholder={t('admin.deadLetterQueue.filters.eventType')}
               allowClear
-              style={{ width: 160 }}
+              className="w-[160px]"
               value={eventTypeFilter}
               onChange={handleEventTypeFilterChange}
               options={eventTypes.map((t) => ({ value: t, label: t }))}
@@ -680,7 +680,7 @@ const DeadLetterQueue: React.FC = () => {
               aria-label={t('admin.deadLetterQueue.filters.errorType')}
               placeholder={t('admin.deadLetterQueue.filters.errorType')}
               allowClear
-              style={{ width: 200 }}
+              className="w-[200px]"
               value={errorTypeFilter}
               onChange={handleErrorTypeFilterChange}
               options={errorTypes.map((t) => ({
@@ -731,7 +731,7 @@ const DeadLetterQueue: React.FC = () => {
           <Alert
             type="error"
             showIcon
-            style={{ marginBottom: 16 }}
+            className="mb-4"
             title={t('admin.deadLetterQueue.errors.failedToLoadMessages')}
             description={messagesError}
             action={
@@ -852,13 +852,9 @@ const DeadLetterQueue: React.FC = () => {
             )}
             <Descriptions.Item label={t('admin.deadLetterQueue.detail.eventData')} span={2}>
               <pre
+                className="max-h-[200px] overflow-auto rounded p-2 text-xs"
                 style={{
-                  maxHeight: 200,
-                  overflow: 'auto',
                   backgroundColor: codeBgColor,
-                  padding: 8,
-                  borderRadius: 4,
-                  fontSize: 12,
                 }}
               >
                 {formatEventData(selectedMessage.event_data)}
@@ -867,17 +863,13 @@ const DeadLetterQueue: React.FC = () => {
             {selectedMessage.error_traceback && (
               <Descriptions.Item label={t('admin.deadLetterQueue.detail.stackTrace')} span={2}>
                 <details>
-                  <summary style={{ cursor: 'pointer', marginBottom: 8 }}>
+                  <summary className="cursor-pointer mb-2">
                     {t('admin.deadLetterQueue.detail.showStackTrace', 'Show stack trace')}
                   </summary>
                   <pre
+                    className="max-h-[200px] overflow-auto rounded p-2 text-[11px]"
                     style={{
-                      maxHeight: 200,
-                      overflow: 'auto',
                       backgroundColor: codeBgColor,
-                      padding: 8,
-                      borderRadius: 4,
-                      fontSize: 11,
                       color: errorColor,
                     }}
                   >
@@ -912,7 +904,7 @@ const DeadLetterQueue: React.FC = () => {
           title={t('admin.deadLetterQueue.discard.confirmMessage', {
             count: messagesForDiscard.length,
           })}
-          style={{ marginBottom: 16 }}
+          className="mb-4"
         />
         <Text>{t('admin.deadLetterQueue.discard.reasonLabel')}</Text>
         <TextArea
@@ -922,7 +914,7 @@ const DeadLetterQueue: React.FC = () => {
           }}
           placeholder={t('admin.deadLetterQueue.discard.reasonPlaceholder')}
           rows={3}
-          style={{ marginTop: 8 }}
+          className="mt-2"
         />
       </Modal>
     </div>

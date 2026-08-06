@@ -6,8 +6,10 @@ import React, { useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Space, Typography, Spin, Alert } from 'antd';
+import { Space, Typography, Alert } from 'antd';
 import { Volume2 } from 'lucide-react';
+
+import { Spinner } from '../common/Spinner';
 
 const { Text } = Typography;
 
@@ -71,7 +73,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
     <div className="audio-player p-3 bg-gray-50 rounded-lg">
       {loading && (
         <div className="flex items-center justify-center p-4">
-          <Spin size="small" />
+          <Spinner size={16} />
         </div>
       )}
       <div className={loading ? 'hidden' : ''}>

@@ -29,7 +29,7 @@ import React, { useState, useCallback, Children, useEffect } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Card, Spin, Alert, Typography, Space, Tag, Tooltip, Button } from 'antd';
+import { Card, Alert, Typography, Space, Tag, Tooltip, Button } from 'antd';
 import {
   Image as ImageIcon,
   Video,
@@ -44,13 +44,16 @@ import {
   Loader2,
 } from 'lucide-react';
 
+import { formatFileSize } from '@/utils/format';
+
+import { Spinner } from '../common/Spinner';
+
 import { AudioPlayer } from './AudioPlayer';
 import { CodeViewer } from './CodeViewer';
 import { FileDownloader } from './FileDownloader';
 import { ImageViewer } from './ImageViewer';
 import { VideoPlayer } from './VideoPlayer';
 
-import { formatFileSize } from '@/utils/format';
 
 import type {
   ArtifactRendererRootProps,
@@ -348,7 +351,7 @@ function LoadingContent({ artifact }: { artifact: Artifact }) {
   return (
     <div className="flex items-center justify-center p-8">
       <Space orientation="vertical">
-        <Spin indicator={<Loader2 className="animate-spin" size={24} />} />
+        <Loader2 className="animate-spin motion-reduce:animate-none" size={24} />
         <Text type="secondary">
           {artifact.status === 'pending'
             ? t('components.artifactRenderer.preparing', { defaultValue: 'Preparing…' })
@@ -671,7 +674,7 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
       <div className="relative" style={{ maxHeight, overflow: 'auto' }}>
         {loading && artifact.status === 'ready' && !error && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-10">
-            <Spin />
+            <Spinner />
           </div>
         )}
         {content}

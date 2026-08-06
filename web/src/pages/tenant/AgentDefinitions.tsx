@@ -10,7 +10,6 @@ import {
   message,
   Modal,
   Pagination,
-  Spin,
   Switch,
   Tag,
   Tooltip,
@@ -18,6 +17,7 @@ import {
 import { Bot, Edit2, Eye, MoreVertical, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
 
 import { AgentDefinitionModal } from '../../components/agent/AgentDefinitionModal';
+import { Spinner } from '../../components/common/Spinner';
 import { useDebounce } from '../../hooks/useDebounce';
 import {
   useClearDefinitionError,
@@ -531,7 +531,7 @@ export const AgentDefinitions: React.FC = () => {
       {/* Content */}
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
-          <Spin size="large" />
+          <Spinner size={32} />
         </div>
       ) : error ? (
         <div

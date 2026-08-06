@@ -101,15 +101,7 @@ const TokenDistributionBar: FC<{ distribution: TokenDistribution; t: TFunction }
 
   return (
     <div>
-      <div
-        style={{
-          display: 'flex',
-          height: 20,
-          borderRadius: 4,
-          overflow: 'hidden',
-          marginBottom: 8,
-        }}
-      >
+      <div className="mb-2 flex h-5 overflow-hidden rounded">
         {segments.map((seg) => (
           <div
             key={seg.key}
@@ -122,20 +114,17 @@ const TokenDistributionBar: FC<{ distribution: TokenDistribution; t: TFunction }
           />
         ))}
       </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', fontSize: 12 }}>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
         {segments.map((seg) => (
-          <span key={seg.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <span key={seg.key} className="inline-flex items-center gap-1">
             <span
+              className="inline-block h-2 w-2 rounded-sm"
               style={{
-                width: 8,
-                height: 8,
-                borderRadius: 2,
                 backgroundColor: seg.color,
-                display: 'inline-block',
               }}
             />
             <span style={{ color: tc.muted }}>{seg.label}</span>
-            <span style={{ fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
+            <span className="font-medium tabular-nums">
               {formatTokens(seg.value)}
             </span>
             <span style={{ color: tc.mutedLight }}>
@@ -168,10 +157,10 @@ const CompressionTimeline: FC<{ records: CompressionRecord[]; t: TFunction }> = 
       icon: <Minimize2 size={14} />,
       color: record.level.includes('l3') ? 'red' : record.level.includes('l2') ? 'orange' : 'blue',
       content: (
-        <div style={{ fontSize: 12, lineHeight: 1.6 }}>
+        <div className="text-xs leading-[1.6]">
           <div>
             <Text strong>{record.level.toUpperCase()}</Text>
-            <Text type="secondary" style={{ marginLeft: 8 }}>
+            <Text type="secondary" className="ml-2">
               {time}
             </Text>
           </div>
@@ -242,21 +231,21 @@ export const ContextDetailPanel: FC = () => {
       styles={{ body: { padding: '16px 20px' } }}
     >
       {/* Overall Usage */}
-      <div style={{ marginBottom: 24 }}>
-        <Title level={5} style={{ marginBottom: 12 }}>
+      <div className="mb-6">
+        <Title level={5} className="!mb-3">
           {t('agent.contextDetail.contextUsage')}
         </Title>
-        <div style={{ textAlign: 'center', marginBottom: 8 }}>
+        <div className="mb-2 text-center">
           <Progress
             type="dashboard"
             percent={Math.min(occupancy, 100)}
             strokeColor={getOccupancyColor(occupancy)}
             format={() => (
               <div>
-                <div style={{ fontSize: 20, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                <div className="text-xl font-semibold tabular-nums">
                   {occupancy.toFixed(1)}%
                 </div>
-                <div style={{ fontSize: 11, color: tc.muted }}>
+                <div className="text-[11px]" style={{ color: tc.muted }}>
                   {formatTokens(currentTokens)} / {formatTokens(tokenBudget)}
                 </div>
               </div>
@@ -264,7 +253,7 @@ export const ContextDetailPanel: FC = () => {
             size={140}
           />
         </div>
-        <div style={{ textAlign: 'center' }}>
+        <div className="text-center">
           <Tag
             color={
               compressionLevel === 'none'
@@ -282,16 +271,16 @@ export const ContextDetailPanel: FC = () => {
               : compressionLevel}
           </Tag>
         </div>
-        <div style={{ fontSize: 12, color: tc.muted, textAlign: 'center', marginTop: 6 }}>
+        <div className="mt-1.5 text-center text-xs" style={{ color: tc.muted }}>
           {levelDescription}
         </div>
       </div>
 
-      <Divider style={{ margin: '16px 0' }} />
+      <Divider className="!my-4" />
 
       {/* Token Distribution */}
-      <div style={{ marginBottom: 24 }}>
-        <Title level={5} style={{ marginBottom: 12 }}>
+      <div className="mb-6">
+        <Title level={5} className="!mb-3">
           {t('agent.contextDetail.tokenDistribution')}
         </Title>
         {distribution ? (
@@ -304,79 +293,64 @@ export const ContextDetailPanel: FC = () => {
         )}
       </div>
 
-      <Divider style={{ margin: '16px 0' }} />
+      <Divider className="!my-4" />
 
       {/* Compression Stats */}
       {history && history.total_compressions > 0 && (
-        <div style={{ marginBottom: 24 }}>
-          <Title level={5} style={{ marginBottom: 12 }}>
+        <div className="mb-6">
+          <Title level={5} className="!mb-3">
             {t('agent.contextDetail.compressionSummary')}
           </Title>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: 12,
-              marginBottom: 16,
-            }}
-          >
+          <div className="mb-4 grid grid-cols-2 gap-3">
             <div
+              className="rounded-lg px-3 py-2 text-center"
               style={{
                 background: tc.success + '1a',
-                borderRadius: 8,
-                padding: '8px 12px',
-                textAlign: 'center',
               }}
             >
-              <div style={{ fontSize: 18, fontWeight: 600, color: tc.success }}>
+              <div className="text-lg font-semibold" style={{ color: tc.success }}>
                 {formatTokens(history.total_tokens_saved)}
               </div>
-              <div style={{ fontSize: 11, color: tc.muted }}>
+              <div className="text-[11px]" style={{ color: tc.muted }}>
                 {t('agent.contextDetail.summary.tokensSaved')}
               </div>
             </div>
             <div
+              className="rounded-lg px-3 py-2 text-center"
               style={{
                 background: tc.info + '1a',
-                borderRadius: 8,
-                padding: '8px 12px',
-                textAlign: 'center',
               }}
             >
-              <div style={{ fontSize: 18, fontWeight: 600, color: tc.info }}>
+              <div className="text-lg font-semibold" style={{ color: tc.info }}>
                 {history.total_compressions}
               </div>
-              <div style={{ fontSize: 11, color: tc.muted }}>
+              <div className="text-[11px]" style={{ color: tc.muted }}>
                 {t('agent.contextDetail.summary.compressions')}
               </div>
             </div>
             <div
+              className="rounded-lg px-3 py-2 text-center"
               style={{
                 background: tc.warningDark + '1a',
-                borderRadius: 8,
-                padding: '8px 12px',
-                textAlign: 'center',
               }}
             >
-              <div style={{ fontSize: 18, fontWeight: 600, color: tc.warningDark }}>
+              <div className="text-lg font-semibold" style={{ color: tc.warningDark }}>
                 {(history.average_compression_ratio * 100).toFixed(0)}%
               </div>
-              <div style={{ fontSize: 11, color: tc.muted }}>
+              <div className="text-[11px]" style={{ color: tc.muted }}>
                 {t('agent.contextDetail.summary.avgRatio')}
               </div>
             </div>
             <div
+              className="rounded-lg px-3 py-2 text-center"
               style={{
                 background: tc.purple + '1a',
-                borderRadius: 8,
-                padding: '8px 12px',
-                textAlign: 'center',
               }}
             >
-              <div style={{ fontSize: 18, fontWeight: 600, color: tc.purple }}>
+              <div className="text-lg font-semibold" style={{ color: tc.purple }}>
                 {history.average_savings_pct.toFixed(0)}%
               </div>
-              <div style={{ fontSize: 11, color: tc.muted }}>
+              <div className="text-[11px]" style={{ color: tc.muted }}>
                 {t('agent.contextDetail.summary.avgSavings')}
               </div>
             </div>
@@ -384,11 +358,11 @@ export const ContextDetailPanel: FC = () => {
         </div>
       )}
 
-      <Divider style={{ margin: '16px 0' }} />
+      <Divider className="!my-4" />
 
       {/* Compression History Timeline */}
       <div>
-        <Title level={5} style={{ marginBottom: 12 }}>
+        <Title level={5} className="!mb-3">
           {t('agent.contextDetail.compressionHistory')}
         </Title>
         <CompressionTimeline records={history?.recent_records ?? []} t={t} />

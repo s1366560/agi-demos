@@ -9,7 +9,6 @@ import {
   InputNumber,
   Modal,
   Select,
-  Spin,
   Switch,
   Tag,
   Typography,
@@ -18,6 +17,8 @@ import {
 
 import { agentConfigService, TenantAgentConfigError } from '@/services/agentConfigService';
 import { systemService, type SystemInfoResponse } from '@/services/systemService';
+
+import { LoadingOverlay } from '@/components/common/Spinner';
 
 import {
   buildRuntimeHooks,
@@ -31,6 +32,7 @@ import {
   serializeCustomRuntimeHooks,
   serializeRuntimeHooks,
 } from './tenantAgentConfigHelpers';
+
 
 import type {
   HookExecutorKind,
@@ -459,7 +461,7 @@ export function TenantAgentConfigEditor({
           title={t('tenant.agentConfigEditor.alertTitle')}
           description={error}
           showIcon
-          style={{ marginBottom: 16 }}
+          className="mb-4"
         />
       ) : null}
 
@@ -487,11 +489,11 @@ export function TenantAgentConfigEditor({
                     })
           }
           showIcon
-          style={{ marginBottom: 16 }}
+          className="mb-4"
         />
       ) : null}
 
-      <Spin spinning={loading}>
+      <LoadingOverlay spinning={loading}>
         <Form form={form} layout="vertical" onValuesChange={onValuesChange} autoComplete="off">
           <div className="space-y-5">
             <section className="rounded-lg border border-slate-200/80 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
@@ -550,7 +552,7 @@ export function TenantAgentConfigEditor({
                     },
                   ]}
                 >
-                  <InputNumber min={0} max={2} step={0.1} precision={1} style={{ width: '100%' }} />
+                  <InputNumber min={0} max={2} step={0.1} precision={1} className="w-full" />
                 </Form.Item>
 
                 <SettingCard
@@ -613,7 +615,7 @@ export function TenantAgentConfigEditor({
                     },
                   ]}
                 >
-                  <InputNumber min={1} max={5000} style={{ width: '100%' }} />
+                  <InputNumber min={1} max={5000} className="w-full" />
                 </Form.Item>
 
                 <Form.Item
@@ -636,7 +638,7 @@ export function TenantAgentConfigEditor({
                     },
                   ]}
                 >
-                  <InputNumber min={1} max={300} style={{ width: '100%' }} />
+                  <InputNumber min={1} max={300} className="w-full" />
                 </Form.Item>
               </div>
 
@@ -700,7 +702,7 @@ export function TenantAgentConfigEditor({
                   title={t('tenant.agentConfigEditor.runtimeHooks.catalogUnavailableTitle')}
                   description={hookCatalogError}
                   showIcon
-                  style={{ marginBottom: 16 }}
+                  className="mb-4"
                 />
               ) : null}
 
@@ -823,7 +825,7 @@ export function TenantAgentConfigEditor({
                               aria-label={t('tenant.agentConfigEditor.runtimeHooks.priorityAria', {
                                 name: entry.display_name,
                               })}
-                              style={{ width: '100%' }}
+                              className="w-full"
                               value={currentHook.priority ?? null}
                               placeholder={String(entry.default_priority)}
                               onChange={(value) => {
@@ -891,7 +893,7 @@ export function TenantAgentConfigEditor({
                                 <div className="mt-2">
                                   <InputNumber
                                     aria-label={inputLabel}
-                                    style={{ width: '100%' }}
+                                    className="w-full"
                                     value={typeof currentValue === 'number' ? currentValue : null}
                                     onChange={(value) => {
                                       updateRuntimeHook(key, (hook) => ({
@@ -1068,11 +1070,10 @@ export function TenantAgentConfigEditor({
                                 {t('tenant.agentConfigEditor.runtimeHooks.custom.priority')}
                               </Text>
                               <InputNumber
-                                className="mt-2"
+                                className="mt-2 w-full"
                                 aria-label={t(
                                   'tenant.agentConfigEditor.runtimeHooks.custom.priority'
                                 )}
-                                style={{ width: '100%' }}
                                 value={hook.priority ?? null}
                                 placeholder={t(
                                   'tenant.agentConfigEditor.runtimeHooks.custom.priorityPlaceholder'
@@ -1243,7 +1244,7 @@ export function TenantAgentConfigEditor({
             </section>
           </div>
         </Form>
-      </Spin>
+      </LoadingOverlay>
     </Modal>
   );
 }

@@ -506,11 +506,11 @@ const TimelineStepItem = memo<{
 
   if (isAgentTool(step.toolName)) {
     return (
-      <div className="relative flex gap-2 mb-0" style={{ minHeight: '24px' }}>
-        <div className="flex flex-col items-center flex-shrink-0" style={{ width: '24px' }}>
+      <div className="relative flex gap-2 mb-0 min-h-6">
+        <div className="flex flex-col items-center flex-shrink-0 w-6">
           <div
             className={`
-              w-6 h-6 rounded-full flex items-center justify-center border-2 flex-shrink-0 transition-colors duration-200 motion-reduce:transition-none
+              min-w-6 min-h-6 w-6 h-6 rounded-full flex items-center justify-center border-2 flex-shrink-0 transition-colors duration-200 motion-reduce:transition-none
               ${
                 step.status === 'running'
                   ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/50'
@@ -519,7 +519,6 @@ const TimelineStepItem = memo<{
                     : 'border-red-400 bg-red-50 dark:bg-red-950/50'
               }
             `}
-            style={{ minWidth: '24px', minHeight: '24px' }}
           >
             {step.status === 'running' ? (
               <Loader2
@@ -562,7 +561,7 @@ const TimelineStepItem = memo<{
         : 'text-red-500';
 
   return (
-    <div className="relative flex gap-2 mb-0" style={{ minHeight: '24px' }}>
+    <div className="relative flex gap-2 mb-0 min-h-6">
       {/* Timeline line + dot */}
       <div
         className="flex flex-col items-center flex-shrink-0"
@@ -570,7 +569,7 @@ const TimelineStepItem = memo<{
       >
         <div
           className={`
-            w-6 h-6 rounded-full flex items-center justify-center border-2 flex-shrink-0 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300
+            min-w-6 min-h-6 w-6 h-6 rounded-full flex items-center justify-center border-2 flex-shrink-0 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300
             ${
               step.status === 'running'
                 ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/50'
@@ -579,7 +578,6 @@ const TimelineStepItem = memo<{
                   : 'border-red-400 bg-red-50 dark:bg-red-950/50'
             }
           `}
-          style={{ minWidth: '24px', minHeight: '24px' }}
         >
           {step.status === 'running' ? (
             <Loader2 size={11} className="text-blue-500 animate-spin motion-reduce:animate-none" />

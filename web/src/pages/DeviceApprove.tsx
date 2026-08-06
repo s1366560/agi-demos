@@ -52,18 +52,18 @@ export const DeviceApprove: React.FC = () => {
     // Kept as a defensive fallback so the shareable link can still be copied.
     const ret = `/device${code ? `?user_code=${code}` : ''}`;
     return (
-      <div style={{ maxWidth: 560, margin: '64px auto', padding: 24 }}>
+      <div className="mx-auto my-16 max-w-[560px] p-6">
         <Card
           variant="borderless"
-          style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)', borderRadius: 6 }}
+          className="rounded-md shadow-[0_0_0_1px_rgba(0,0,0,0.08)]"
         >
-          <Space orientation="vertical" size="large" style={{ width: '100%' }}>
+          <Space orientation="vertical" size="large" className="w-full">
             <Space orientation="vertical" size={4}>
               <Terminal size={28} strokeWidth={1.5} />
-              <Title level={3} style={{ margin: 0 }}>
+              <Title level={3} className="!m-0">
                 {t('device.signInTitle')}
               </Title>
-              <Paragraph type="secondary" style={{ margin: 0 }}>
+              <Paragraph type="secondary" className="!m-0">
                 {t('device.signInSubtitle')}
               </Paragraph>
             </Space>
@@ -111,7 +111,7 @@ export const DeviceApprove: React.FC = () => {
 
   if (approved) {
     return (
-      <div style={{ maxWidth: 560, margin: '64px auto', padding: 24 }}>
+      <div className="mx-auto my-16 max-w-[560px] p-6">
         <Result
           status="success"
           title={t('device.approvedTitle')}
@@ -127,18 +127,18 @@ export const DeviceApprove: React.FC = () => {
   }
 
   return (
-    <div style={{ maxWidth: 560, margin: '64px auto', padding: 24 }}>
+    <div className="mx-auto my-16 max-w-[560px] p-6">
       <Card
         variant="borderless"
-        style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)', borderRadius: 6 }}
+        className="rounded-md shadow-[0_0_0_1px_rgba(0,0,0,0.08)]"
       >
-        <Space orientation="vertical" size="large" style={{ width: '100%' }}>
+        <Space orientation="vertical" size="large" className="w-full">
           <Space orientation="vertical" size={4}>
             <Terminal size={28} strokeWidth={1.5} />
-            <Title level={3} style={{ margin: 0 }}>
+            <Title level={3} className="!m-0">
               {t('device.title')}
             </Title>
-            <Paragraph type="secondary" style={{ margin: 0 }}>
+            <Paragraph type="secondary" className="!m-0">
               {t('device.subtitle')}
             </Paragraph>
           </Space>
@@ -155,7 +155,7 @@ export const DeviceApprove: React.FC = () => {
             )}
           />
 
-          <Space orientation="vertical" size={8} style={{ width: '100%' }}>
+          <Space orientation="vertical" size={8} className="w-full">
             <label htmlFor="device-code-input">
               <Text strong>{t('device.codeLabel')}</Text>
             </label>
@@ -172,16 +172,11 @@ export const DeviceApprove: React.FC = () => {
                 setCode(normalize(e.target.value));
               }}
               onPressEnter={() => void handleSubmit()}
-              style={{
-                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                fontSize: 20,
-                letterSpacing: 4,
-                textAlign: 'center',
-              }}
+              className="font-mono text-xl tracking-[4px] text-center"
             />
           </Space>
 
-          <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+          <Space className="w-full justify-end">
             <Button onClick={() => void navigate('/')}>{t('common.cancel')}</Button>
             <Button
               type="primary"
@@ -193,7 +188,7 @@ export const DeviceApprove: React.FC = () => {
             </Button>
           </Space>
 
-          <Paragraph type="secondary" style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}>
+          <Paragraph type="secondary" className="mt-2 !mb-0 text-xs">
             {t('device.footer')}
           </Paragraph>
         </Space>

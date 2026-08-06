@@ -14,7 +14,9 @@ import type { ComponentType, LazyExoticComponent, ReactNode } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Spin, Empty as EmptyComponent } from 'antd';
+import { Empty as EmptyComponent } from 'antd';
+
+import { Spinner } from '@/components/common/Spinner';
 
 // ============================================================================
 // Default Loading Fallback
@@ -31,7 +33,7 @@ export const DefaultFallback: React.FC<{ message?: string | undefined }> = ({ me
 
 export const SpinnerFallback: React.FC = () => (
   <div className="flex items-center justify-center p-4">
-    <Spin size="small" />
+    <Spinner size={16} />
   </div>
 );
 
@@ -92,10 +94,6 @@ export function withSuspense<P extends object>(
 // ============================================================================
 
 // Basic Components
-export const LazySpin = createLazyComponent(
-  () => import('antd').then((m) => ({ default: m.Spin })),
-  'LazySpin'
-);
 export const LazyButton = createLazyComponent(
   () => import('antd').then((m) => ({ default: m.Button })),
   'LazyButton'
@@ -247,7 +245,6 @@ export {
   Modal,
   Form,
   Divider,
-  Spin,
   Progress,
   Tooltip,
   Empty,
@@ -339,7 +336,6 @@ export const LazyPopover = createLazyComponent(
 
 export type {
   ButtonProps,
-  SpinProps,
   InputProps,
   SpaceProps,
   TagProps,

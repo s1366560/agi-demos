@@ -5,7 +5,7 @@ import { Routes, Route, Navigate, useLocation, useParams, useSearchParams } from
 
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { OrgSetupGuard } from './components/common/OrgSetupGuard';
-import { LazySpin } from './components/ui/lazyAntd';
+import { Spinner } from './components/common/Spinner';
 import './i18n/config';
 import { SchemaLayout } from './layouts/SchemaLayout';
 import { TenantLayout } from './layouts/TenantLayout';
@@ -337,7 +337,7 @@ const PageLoader: React.FC = () => {
   const { t } = useTranslation();
   return (
     <div className="flex items-center justify-center h-50" role="status">
-      <LazySpin size="large" />
+      <Spinner size={32} />
       <span className="sr-only">{t('common.loading', 'Loading…')}</span>
     </div>
   );

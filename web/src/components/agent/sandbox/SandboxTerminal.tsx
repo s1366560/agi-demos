@@ -12,8 +12,10 @@ import { lazy, Suspense, useState, useCallback } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Spin, Alert, Button } from 'antd';
+import { Alert, Button } from 'antd';
 import { RefreshCw, Maximize2, Minimize2 } from 'lucide-react';
+
+import { Spinner } from '@/components/common/Spinner';
 
 // Lazy load terminal dependencies
 import '@xterm/xterm/css/xterm.css';
@@ -173,7 +175,7 @@ export function SandboxTerminal({
       <div className="flex-1 relative">
         {status === 'connecting' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background-dark z-10">
-            <Spin />
+            <Spinner />
             <span className="text-slate-400">
               {t('components.sandboxTerminal.connectingToTerminal', {
                 defaultValue: 'Connecting to terminal…',
@@ -202,7 +204,7 @@ export function SandboxTerminal({
         <Suspense
           fallback={
             <div className="h-full w-full flex items-center justify-center bg-background-dark text-slate-400">
-              <Spin />{' '}
+              <Spinner />{' '}
               {t('components.sandboxTerminal.loadingTerminal', {
                 defaultValue: 'Loading terminal…',
               })}

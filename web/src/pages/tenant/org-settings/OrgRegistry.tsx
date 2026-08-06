@@ -31,13 +31,8 @@ import { registryService } from '@/services/registryService';
 
 import { formatDateTime } from '@/utils/date';
 
-import {
-  useLazyMessage,
-  LazyPopconfirm,
-  LazySpin,
-  LazyModal,
-  LazySelect,
-} from '@/components/ui/lazyAntd';
+import { Spinner } from '@/components/common/Spinner';
+import { useLazyMessage, LazyPopconfirm, LazyModal, LazySelect } from '@/components/ui/lazyAntd';
 
 /**
  * Registry configuration interface
@@ -541,7 +536,7 @@ export const OrgRegistry: React.FC = () => {
       {/* Registries list */}
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
-          <LazySpin size="large" />
+          <Spinner size={32} />
         </div>
       ) : loadError && registries.length === 0 ? (
         <div

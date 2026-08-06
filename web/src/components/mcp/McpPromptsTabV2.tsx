@@ -7,12 +7,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Alert, Input, Select, Spin, Tag } from 'antd';
+import { Alert, Input, Select, Tag } from 'antd';
 import { ChevronDown, ChevronRight, MessageSquare, Search, Server } from 'lucide-react';
 
 import { useMCPStore } from '@/stores/mcp';
 
 import { mcpAPI } from '@/services/mcpService';
+
+import { Spinner } from '@/components/common/Spinner';
 
 import { CARD_STYLES } from './styles';
 import { useMcpProjectScope } from './useMcpProjectScope';
@@ -127,7 +129,7 @@ export const McpPromptsTabV2: React.FC = () => {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-16">
-        <Spin size="large" />
+        <Spinner size={32} />
         <p className="text-sm text-slate-400 mt-4">{t('mcp.prompts.loading')}</p>
       </div>
     );

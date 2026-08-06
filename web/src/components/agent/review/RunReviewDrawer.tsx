@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Drawer, Spin } from 'antd';
+import { Drawer } from 'antd';
 import { FileDiff, RefreshCw } from 'lucide-react';
+
 
 import type { RunSummary } from '@/services/projectWorkService';
 import type { ActiveAgentRun } from '@/services/runInputService';
@@ -12,6 +13,8 @@ import {
   type ChangeScope,
   type ChangeSnapshot,
 } from '@/services/runReviewService';
+
+import { Spinner } from '@/components/common/Spinner';
 
 interface RunReviewDrawerProps {
   run: ActiveAgentRun | null;
@@ -119,7 +122,7 @@ export function RunReviewDrawer({ run, latestTurnId }: RunReviewDrawerProps) {
         </div>
         {loading ? (
           <div className="flex justify-center py-12">
-            <Spin />
+            <Spinner />
           </div>
         ) : error ? (
           <div role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">

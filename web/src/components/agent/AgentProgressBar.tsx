@@ -140,11 +140,8 @@ export const AgentProgressBar: React.FC<AgentProgressBarProps> = ({
               key={index}
               data-testid={testId}
               data-step-dot={stepNumber <= current ? 'completed' : 'pending'}
-              className={stepClass}
+              className={`${stepClass} h-3 w-3 rounded-full`}
               style={{
-                width: 12,
-                height: 12,
-                borderRadius: '50%',
                 backgroundColor:
                   stepNumber < current ? tc.success : stepNumber === current ? tc.info : tc.border,
                 border: stepNumber === current ? `2px solid ${tc.info}` : undefined,
@@ -165,14 +162,14 @@ export const AgentProgressBar: React.FC<AgentProgressBarProps> = ({
       aria-live="polite"
       className={`agent-progress-bar ${compact ? 'compact' : ''}`}
     >
-      <LazySpace orientation="vertical" size="small" style={{ width: '100%' }}>
+      <LazySpace orientation="vertical" size="small" className="w-full">
         {/* Label and Step Indicators */}
-        <LazySpace style={{ width: '100%', justifyContent: 'space-between' }}>
+        <LazySpace className="w-full justify-between">
           <LazySpace>
             {config.icon}
             <Text strong>{displayLabel}</Text>
             {estimatedTimeRemaining && (
-              <Text type="secondary" style={{ fontSize: 11 }}>
+              <Text type="secondary" className="text-[11px]">
                 (~{estimatedTimeRemaining} remaining)
               </Text>
             )}
@@ -202,8 +199,7 @@ export const AgentProgressBar: React.FC<AgentProgressBarProps> = ({
                   ? tc.successLight
                   : tc.infoLight,
           }}
-          className={`progress-fill ${config.class} ${animate ? 'animate-progress' : ''} ${status === 'step_executing' || status === 'acting' ? 'progress-striped' : ''}`}
-          style={{ marginBottom: showSteps && !compact ? 8 : 0 }}
+          className={`progress-fill ${config.class} ${animate ? 'animate-progress' : ''} ${status === 'step_executing' || status === 'acting' ? 'progress-striped' : ''} ${showSteps && !compact ? 'mb-2' : ''}`}
         />
 
         {/* Step Indicators */}

@@ -28,7 +28,7 @@ import React, {
 import ReactDOM from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
-import { Alert, Button, Spin } from 'antd';
+import { Alert, Button } from 'antd';
 import { RefreshCw } from 'lucide-react';
 
 import { useConversationsStore } from '@/stores/agent/conversationsStore';
@@ -42,6 +42,7 @@ import { useMCPClient } from '@/hooks/useMCPClient';
 import { logger } from '@/utils/logger';
 
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
+import { Spinner } from '@/components/common/Spinner';
 
 import { buildHostStyles } from './hostStyles';
 
@@ -981,9 +982,7 @@ export const StandardMCPAppRenderer = forwardRef<
           <React.Suspense
             fallback={
               <div className="flex items-center justify-center" style={{ height }}>
-                <Spin tip={translate('components.mcpApp.renderer.loading', 'Loading MCP App…')}>
-                  <div style={{ minHeight: 100 }} />
-                </Spin>
+                <Spinner tip={translate('components.mcpApp.renderer.loading', 'Loading MCP App…')} />
               </div>
             }
           >

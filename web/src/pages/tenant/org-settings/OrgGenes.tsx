@@ -11,7 +11,8 @@ import type { GenePolicyResponse, GenePolicyRequest } from '@/services/genePolic
 
 import { formatDateTime } from '@/utils/date';
 
-import { useLazyMessage, LazyPopconfirm, LazySpin } from '@/components/ui/lazyAntd';
+import { Spinner } from '@/components/common/Spinner';
+import { useLazyMessage, LazyPopconfirm } from '@/components/ui/lazyAntd';
 
 interface EditingPolicy {
   policy_key: string;
@@ -136,7 +137,7 @@ export const OrgGenes: React.FC = () => {
   if (isLoading && policies.length === 0) {
     return (
       <div className="flex items-center justify-center py-20">
-        <LazySpin size="large" />
+        <Spinner size={32} />
       </div>
     );
   }

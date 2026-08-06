@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Badge, Drawer, Spin } from 'antd';
+import { Badge, Drawer } from 'antd';
 import { Bell, CheckCheck, RefreshCw } from 'lucide-react';
 
 import { ApiError, ApiErrorType } from '@/services/client/ApiError';
@@ -12,6 +12,8 @@ import {
   type ActivityReadState,
   type ProjectWorkItem,
 } from '@/services/projectWorkService';
+
+import { Spinner } from '@/components/common/Spinner';
 
 import {
   activityEntryIsRead,
@@ -226,7 +228,7 @@ export function ProjectActivityInbox({
       >
         {loading ? (
           <div className="flex justify-center py-12">
-            <Spin />
+            <Spinner />
           </div>
         ) : error && items.length === 0 ? (
           <div role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">

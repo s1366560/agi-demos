@@ -273,7 +273,7 @@ const PoolDashboard: React.FC = () => {
       ellipsis: true,
       render: (key: string) => (
         <Tooltip title={key}>
-          <Text code style={{ fontSize: 12 }}>
+          <Text code className="text-xs">
             {key}
           </Text>
         </Tooltip>
@@ -306,10 +306,10 @@ const PoolDashboard: React.FC = () => {
       width: 120,
       render: (_: unknown, record: PoolInstance) => (
         <Space orientation="vertical" size={0}>
-          <Text type="secondary" style={{ fontSize: 12 }} className="tabular-nums">
+          <Text type="secondary" className="text-xs tabular-nums">
             {t('admin.poolDashboard.columns.active')}: {record.active_requests}
           </Text>
-          <Text type="secondary" style={{ fontSize: 12 }} className="tabular-nums">
+          <Text type="secondary" className="text-xs tabular-nums">
             {t('admin.poolDashboard.columns.total')}: {record.total_requests}
           </Text>
         </Space>
@@ -417,7 +417,7 @@ const PoolDashboard: React.FC = () => {
     <div className="p-4 sm:p-6">
       {/* Header */}
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Title level={2} style={{ margin: 0 }}>
+        <Title level={2} className="!m-0">
           {t('admin.poolDashboard.title')}
         </Title>
         <Space wrap>
@@ -446,12 +446,12 @@ const PoolDashboard: React.FC = () => {
           type="error"
           showIcon
           closable
-          style={{ marginBottom: 16 }}
+          className="mb-4"
         />
       )}
 
       {/* Status Overview */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+      <Row gutter={[16, 16]} className="mb-6">
         <Col xs={24} sm={12} lg={6}>
           <Card loading={isStatusLoading}>
             <Statistic
@@ -498,7 +498,7 @@ const PoolDashboard: React.FC = () => {
       </Row>
 
       {/* Tier Distribution & Resources */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+      <Row gutter={[16, 16]} className="mb-6">
         <Col xs={24} lg={12}>
           <Card title={t('admin.poolDashboard.tierDistribution')} loading={isStatusLoading}>
             <Row gutter={16}>
@@ -540,7 +540,7 @@ const PoolDashboard: React.FC = () => {
         </Col>
         <Col xs={24} lg={12}>
           <Card title={t('admin.poolDashboard.resourceUsage')} loading={isStatusLoading}>
-            <Space orientation="vertical" style={{ width: '100%' }}>
+            <Space orientation="vertical" className="w-full">
               <div>
                 <Text type="secondary">{t('admin.poolDashboard.resources.memory')}</Text>
                 <Progress
@@ -563,7 +563,7 @@ const PoolDashboard: React.FC = () => {
       </Row>
 
       {/* Prewarm Pool */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+      <Row gutter={[16, 16]} className="mb-6">
         <Col span={24}>
           <Card title={t('admin.poolDashboard.prewarmPool')} loading={isStatusLoading}>
             <Row gutter={16}>
@@ -602,7 +602,7 @@ const PoolDashboard: React.FC = () => {
               aria-label={t('admin.poolDashboard.searchInstances', 'Search by instance key')}
               placeholder={t('admin.poolDashboard.searchInstances', 'Search by instance key')}
               allowClear
-              style={{ width: 200 }}
+              className="w-[200px]"
               value={instanceSearch}
               onChange={(e) => {
                 setInstanceSearch(e.target.value);
@@ -612,7 +612,7 @@ const PoolDashboard: React.FC = () => {
               aria-label={t('admin.poolDashboard.filterByTier')}
               placeholder={t('admin.poolDashboard.filterByTier')}
               allowClear
-              style={{ width: 120 }}
+              className="w-[120px]"
               value={tierFilter}
               onChange={setTierFilter}
               options={[
@@ -629,7 +629,7 @@ const PoolDashboard: React.FC = () => {
             title={instancesError}
             type="error"
             showIcon
-            style={{ marginBottom: 16 }}
+            className="mb-4"
             action={
               <Button size="small" onClick={() => void fetchInstances()}>
                 {t('common.retry')}

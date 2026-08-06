@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Alert, Button, Empty, Select, Spin, Tag } from 'antd';
+import { Alert, Button, Empty, Select, Tag } from 'antd';
 import { RefreshCw, Server, ScrollText } from 'lucide-react';
 
 import { useMCPStore } from '@/stores/mcp';
@@ -15,6 +15,8 @@ import { useMCPStore } from '@/stores/mcp';
 import { mcpAPI } from '@/services/mcpService';
 
 import { formatDateTimeFull } from '@/utils/date';
+
+import { Spinner } from '@/components/common/Spinner';
 
 import { CARD_STYLES } from './styles';
 import { useMcpProjectScope } from './useMcpProjectScope';
@@ -210,7 +212,7 @@ export const McpLogsTabV2: React.FC = () => {
 
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-16">
-          <Spin size="large" />
+          <Spinner size={32} />
           <p className="text-sm text-slate-400 mt-4">{t('mcp.logs.loading')}</p>
         </div>
       ) : logs.length === 0 ? (

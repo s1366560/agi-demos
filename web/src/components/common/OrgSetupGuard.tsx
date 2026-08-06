@@ -2,10 +2,10 @@ import React, { useEffect } from 'react';
 
 import { useNavigate, useLocation } from 'react-router-dom';
 
-import { Spin } from 'antd';
-
 import { useAuthStore } from '@/stores/auth';
 import { useTenantStore } from '@/stores/tenant';
+
+import { Spinner } from './Spinner';
 
 export const OrgSetupGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
@@ -38,7 +38,7 @@ export const OrgSetupGuard: React.FC<{ children: React.ReactNode }> = ({ childre
           minHeight: 200,
         }}
       >
-        <Spin size="large" />
+        <Spinner size={32} />
       </div>
     );
   }

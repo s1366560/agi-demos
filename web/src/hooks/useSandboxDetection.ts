@@ -61,7 +61,7 @@ export interface SandboxDetectionResult {
  *     <div>
  *       {isExecuting && (
  *         <div className="flex flex-col items-center gap-2">
- *           <Spin />
+ *           <Spinner />
  *           <span>Executing sandbox tool...</span>
  *         </div>
  *       )}

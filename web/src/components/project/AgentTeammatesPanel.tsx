@@ -94,11 +94,11 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
         </Space>
       }
       extra={
-        <Link to="/tenant/agent-definitions" style={{ fontSize: 13 }}>
+        <Link to="/tenant/agent-definitions" className="text-[13px]">
           {t('project.agentTeammates.manage')}
         </Link>
       }
-      style={{ marginTop: 24 }}
+      className="mt-6"
     >
       {query.isLoading ? (
         <Skeleton active paragraph={{ rows: 2 }} />
@@ -155,7 +155,7 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
                       <Badge
                         status={agent.enabled ? 'success' : 'default'}
                         text={
-                          <Text type="secondary" style={{ fontSize: 12 }}>
+                          <Text type="secondary" className="text-xs">
                             {agent.enabled
                               ? t('project.agentTeammates.status.enabled')
                               : t('project.agentTeammates.status.disabled')}
@@ -165,16 +165,16 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
                     </div>
 
                     <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
-                      <Text type="secondary" style={{ fontSize: 12 }}>
+                      <Text type="secondary" className="text-xs">
                         {agent.model ?? t('project.agentTeammates.defaultModel')}
                       </Text>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
+                      <Text type="secondary" className="text-xs">
                         {t('project.agentTeammates.invocations', {
                           count: agent.total_invocations,
                         })}
                       </Text>
                       {successPct != null && (
-                        <Text type="secondary" style={{ fontSize: 12 }}>
+                        <Text type="secondary" className="text-xs">
                           {t('project.agentTeammates.successRate', { percent: successPct })}
                         </Text>
                       )}
@@ -215,8 +215,8 @@ export function AgentTeammatesSkeleton() {
   const { t } = useTranslation();
 
   return (
-    <Card style={{ marginTop: 24 }}>
-      <Title level={5} style={{ marginBottom: 12 }}>
+    <Card className="mt-6">
+      <Title level={5} className="!mb-3">
         {t('project.agentTeammates.title')}
       </Title>
       <Skeleton active paragraph={{ rows: 2 }} />

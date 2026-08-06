@@ -12,13 +12,14 @@ import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Badge, Empty, Input, Popover, Spin } from 'antd';
+import { Badge, Empty, Input, Popover } from 'antd';
 import { AlertCircle, AppWindow, ExternalLink, Pin, RefreshCw, Search } from 'lucide-react';
 
 import { useCanvasStore, usePinnedCanvasTabs } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useMCPAppStore } from '@/stores/mcpAppStore';
 
+import { Spinner } from '@/components/common/Spinner';
 import { useMcpProjectScope } from '@/components/mcp/useMcpProjectScope';
 import { LazyTooltip } from '@/components/ui/lazyAntd';
 
@@ -209,7 +210,7 @@ export const AppLauncher: FC<AppLauncherProps> = ({ variant = 'header' }) => {
       <div className="overflow-y-auto flex-1 px-1 pb-2">
         {loading && appList.length === 0 ? (
           <div className="flex items-center justify-center py-8">
-            <Spin size="small" />
+            <Spinner size={16} />
           </div>
         ) : error && appList.length === 0 ? null : appList.length === 0 ? (
           <Empty

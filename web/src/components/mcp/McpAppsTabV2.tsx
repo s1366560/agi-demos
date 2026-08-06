@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { message, Spin, Input, Badge } from 'antd';
+import { message, Input, Badge } from 'antd';
 import { LayoutGrid, RefreshCw, Search } from 'lucide-react';
 
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -15,6 +15,8 @@ import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useMCPAppStore } from '@/stores/mcpAppStore';
 
 import { mcpAppAPI } from '@/services/mcpAppService';
+
+import { Spinner } from '@/components/common/Spinner';
 
 import { McpAppCardV2 } from './McpAppCardV2';
 import { CARD_STYLES, BUTTON_STYLES } from './styles';
@@ -124,7 +126,7 @@ export const McpAppsTabV2: React.FC = () => {
   if (loading && Object.keys(apps).length === 0) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Spin tip={t('mcp.apps.loading')} />
+        <Spinner tip={t('mcp.apps.loading')} />
       </div>
     );
   }

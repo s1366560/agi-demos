@@ -11,7 +11,6 @@ import {
   Popconfirm,
   Progress,
   Select,
-  Spin,
   Switch,
   Table,
   Tag,
@@ -20,6 +19,7 @@ import {
 import { Link, Plus, RefreshCw, Route, Search } from 'lucide-react';
 
 import { AgentBindingModal } from '../../components/agent/AgentBindingModal';
+import { Spinner } from '../../components/common/Spinner';
 import { bindingsService } from '../../services/agent/bindingsService';
 import {
   useBindingError,
@@ -544,7 +544,7 @@ export const AgentBindings: React.FC = () => {
 
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
-          <Spin size="large" />
+          <Spinner size={32} />
         </div>
       ) : error ? (
         <div

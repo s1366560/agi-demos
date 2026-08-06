@@ -6,7 +6,9 @@ import React, { useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Image, Spin } from 'antd';
+import { Image } from 'antd';
+
+import { Spinner } from '../common/Spinner';
 
 export interface ImageViewerProps {
   /** Image source URL */
@@ -58,7 +60,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
     >
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
-          <Spin />
+          <Spinner />
         </div>
       )}
       <Image
@@ -76,7 +78,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
             />
           ) : (
             <div className="flex items-center justify-center h-32 bg-gray-100">
-              <Spin />
+              <Spinner />
             </div>
           )
         }

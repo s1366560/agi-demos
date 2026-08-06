@@ -8,7 +8,8 @@ import { ArrowLeft } from 'lucide-react';
 
 import { logger } from '@/utils/logger';
 
-import { LazyButton, LazySpin, LazyEmpty, LazySelect } from '@/components/ui/lazyAntd';
+import { Spinner } from '@/components/common/Spinner';
+import { LazyButton, LazyEmpty, LazySelect } from '@/components/ui/lazyAntd';
 
 import {
   useEvolutionEvents,
@@ -122,7 +123,7 @@ export const EvolutionLog: React.FC = () => {
 
       {loading && evolutionEvents.length === 0 ? (
         <div className="flex justify-center p-12">
-          <LazySpin size="large" />
+          <Spinner size={32} />
         </div>
       ) : evolutionEvents.length === 0 && error ? null : evolutionEvents.length === 0 ? (
         <Card>

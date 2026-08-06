@@ -2,12 +2,13 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Spin, Empty } from 'antd';
+import { Empty } from 'antd';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 
+import { Spinner } from '@/components/common/Spinner';
 import { useLazyMessage } from '@/components/ui/lazyAntd';
 
 import { ChatMessage } from './ChatMessage';
@@ -96,7 +97,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ tenantId, projectId, works
       <div className="flex-1 overflow-y-auto p-4">
         {loading && messages.length === 0 ? (
           <div className="flex justify-center items-center h-full" role="status">
-            <Spin />
+            <Spinner />
           </div>
         ) : loadError && messages.length === 0 ? (
           <div className="flex flex-col justify-center items-center h-full gap-2" role="alert">

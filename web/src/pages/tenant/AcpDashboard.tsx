@@ -556,19 +556,19 @@ export const AcpDashboard: React.FC = () => {
   ) => (
     <Form.List name={fieldName}>
       {(fields, { add, remove }) => (
-        <Space orientation="vertical" style={{ width: '100%' }}>
+        <Space orientation="vertical" className="w-full">
           <Text strong>{title}</Text>
           {fields.map((field) => (
-            <Space key={field.key} align="start" style={{ width: '100%' }}>
+            <Space key={field.key} align="start" className="w-full">
               <Form.Item
                 name={[field.name, 'name']}
                 rules={[{ required: true, message: t('tenant.acp.errors.nameRequired') }]}
               >
-                <Input placeholder={t('tenant.acp.form.namePlaceholder')} style={{ width: 180 }} />
+                <Input placeholder={t('tenant.acp.form.namePlaceholder')} className="w-[180px]" />
               </Form.Item>
               <Form.Item name={[field.name, 'type']} initialValue="env_ref">
                 <Select
-                  style={{ width: 120 }}
+                  className="w-[120px]"
                   options={[
                     { value: 'env_ref', label: t('tenant.acp.form.envRef') },
                     { value: 'secret', label: t('tenant.acp.form.secret') },
@@ -585,12 +585,12 @@ export const AcpDashboard: React.FC = () => {
                       {type === 'secret' ? (
                         <Input.Password
                           placeholder={t('tenant.acp.form.secretPlaceholder')}
-                          style={{ width: 260 }}
+                          className="w-[260px]"
                         />
                       ) : (
                         <Input
                           placeholder={t('tenant.acp.form.envRefPlaceholder')}
-                          style={{ width: 260 }}
+                          className="w-[260px]"
                         />
                       )}
                     </Form.Item>
@@ -742,7 +742,7 @@ export const AcpDashboard: React.FC = () => {
                   }}
                   placeholder={t('tenant.acp.filters.searchAgents', 'Search agents…')}
                   aria-label={t('tenant.acp.filters.searchAgents', 'Search agents…')}
-                  style={{ maxWidth: 320, marginBottom: 12 }}
+                  className="max-w-[320px] mb-3"
                 />
                 <Table
                   rowKey="agentKey"
@@ -767,7 +767,7 @@ export const AcpDashboard: React.FC = () => {
                   }}
                   placeholder={t('tenant.acp.filters.searchSessions', 'Search sessions…')}
                   aria-label={t('tenant.acp.filters.searchSessions', 'Search sessions…')}
-                  style={{ maxWidth: 320, marginBottom: 12 }}
+                  className="max-w-[320px] mb-3"
                 />
                 <Table
                   rowKey="session_id"
@@ -784,7 +784,7 @@ export const AcpDashboard: React.FC = () => {
             label: t('tenant.acp.tabs.events'),
             children: (
               <Card>
-                <Space wrap style={{ marginBottom: 12 }}>
+                <Space wrap className="mb-3">
                   <Input.Search
                     allowClear
                     value={eventSearch}
@@ -793,7 +793,7 @@ export const AcpDashboard: React.FC = () => {
                     }}
                     placeholder={t('tenant.acp.filters.searchEvents', 'Search events…')}
                     aria-label={t('tenant.acp.filters.searchEvents', 'Search events…')}
-                    style={{ maxWidth: 320 }}
+                    className="max-w-[320px]"
                   />
                   <Select
                     allowClear
@@ -803,7 +803,7 @@ export const AcpDashboard: React.FC = () => {
                     }}
                     placeholder={t('tenant.acp.filters.status', 'Status')}
                     aria-label={t('tenant.acp.filters.status', 'Status')}
-                    style={{ minWidth: 140 }}
+                    className="min-w-[140px]"
                     options={eventStatusOptions}
                   />
                 </Space>
@@ -961,7 +961,7 @@ export const AcpDashboard: React.FC = () => {
             <Input.TextArea rows={4} />
           </Form.Item>
           <Form.Item name="timeoutSeconds" label={t('tenant.acp.test.timeout')}>
-            <InputNumber min={1} max={300} style={{ width: '100%' }} />
+            <InputNumber min={1} max={300} className="w-full" />
           </Form.Item>
         </Form>
         {testResult ? (

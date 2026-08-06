@@ -24,13 +24,8 @@ import {
   Shield,
 } from 'lucide-react';
 
-import {
-  LazyDrawer,
-  LazyEmpty,
-  useLazyMessage,
-  LazySelect,
-  LazySpin,
-} from '@/components/ui/lazyAntd';
+import { Spinner } from '@/components/common/Spinner';
+import { LazyDrawer, LazyEmpty, useLazyMessage, LazySelect } from '@/components/ui/lazyAntd';
 
 import { useDebounce } from '../../hooks/useDebounce';
 import {
@@ -988,7 +983,7 @@ export const AuditLogs: React.FC = () => {
 
           {isRuntimeHookSummaryLoading && !runtimeHookSummary ? (
             <div className="flex items-center justify-center py-10">
-              <LazySpin size="large" />
+              <Spinner size={32} />
             </div>
           ) : (
             <div className="space-y-6">
@@ -1085,7 +1080,7 @@ export const AuditLogs: React.FC = () => {
 
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
-          <LazySpin size="large" />
+          <Spinner size={32} />
         </div>
       ) : listLoadFailed ? (
         <div

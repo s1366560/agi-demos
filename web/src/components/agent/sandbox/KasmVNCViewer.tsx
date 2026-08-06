@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Button, Select, Space, Spin, Tooltip } from 'antd';
+import { Button, Select, Space, Tooltip } from 'antd';
 import {
   VolumeX,
   Volume2,
@@ -448,9 +448,7 @@ export function KasmVNCViewer({
       <div className="flex-1 relative bg-black overflow-hidden">
         {connectionState === 'connecting' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/60 z-10 pointer-events-none">
-            <Spin
-              indicator={<Loader2 className="animate-spin motion-reduce:animate-none" size={32} />}
-            />
+            <Loader2 className="animate-spin motion-reduce:animate-none" size={32} />
             <span className="text-white text-sm">{connectingToDesktopLabel}</span>
           </div>
         )}

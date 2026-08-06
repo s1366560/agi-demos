@@ -845,7 +845,7 @@ export const PluginHub: React.FC = () => {
           >
             {name}
           </Button>
-          <Text type="secondary" style={{ fontSize: 12 }}>
+          <Text type="secondary" className="text-xs">
             {record.package || t('tenant.pluginHub.pluginsList.local')}
             {record.version ? `@${record.version}` : ''}
           </Text>
@@ -1105,7 +1105,7 @@ export const PluginHub: React.FC = () => {
               <Package size={20} className="text-primary" />
             </div>
             <div>
-              <Title level={4} style={{ margin: 0 }}>
+              <Title level={4} className="!m-0">
                 {t('tenant.pluginHub.title')}
               </Title>
               <Text type="secondary">{t('tenant.pluginHub.subtitle')}</Text>
@@ -1115,7 +1115,7 @@ export const PluginHub: React.FC = () => {
           <Space wrap>
             <Select
               aria-label={t('tenant.pluginHub.projectSelectorLabel')}
-              style={{ minWidth: 240 }}
+              className="min-w-[240px]"
               placeholder={t('tenant.pluginHub.selectProjectPlaceholder')}
               value={selectedProjectId || undefined}
               options={projectOptions}
@@ -1134,7 +1134,7 @@ export const PluginHub: React.FC = () => {
               onPressEnter={() => {
                 void handleInstallPlugin();
               }}
-              style={{ width: 280 }}
+              className="w-[280px]"
             />
             <Button
               type="primary"
@@ -1160,7 +1160,7 @@ export const PluginHub: React.FC = () => {
 
       <section className="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div className="px-5 pt-5 pb-2">
-          <Title level={5} style={{ margin: 0 }}>
+          <Title level={5} className="!m-0">
             {t('tenant.pluginHub.pluginsList.installedPlugins')}
           </Title>
         </div>
@@ -1249,7 +1249,7 @@ export const PluginHub: React.FC = () => {
 
       <section className="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div className="px-5 pt-5 pb-2 flex items-center justify-between">
-          <Title level={5} style={{ margin: 0 }}>
+          <Title level={5} className="!m-0">
             {t('tenant.pluginHub.channelsList.configuredChannels')}
           </Title>
           <Button
@@ -1278,7 +1278,7 @@ export const PluginHub: React.FC = () => {
       </section>
 
       <section className="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-5">
-        <Title level={5} style={{ marginTop: 0 }}>
+        <Title level={5} className="!mt-0">
           {t('tenant.pluginHub.channelCatalogDiagnostics')}
         </Title>
         {channelPluginCatalog.length > 0 ? (

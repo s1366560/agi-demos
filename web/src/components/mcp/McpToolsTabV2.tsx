@@ -7,10 +7,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Input, Select, Spin } from 'antd';
+import { Input, Select } from 'antd';
 import { Search, Server, Wrench } from 'lucide-react';
 
 import { useMCPStore } from '@/stores/mcp';
+
+import { Spinner } from '@/components/common/Spinner';
 
 import { McpToolItemV2 } from './McpToolItemV2';
 import { CARD_STYLES } from './styles';
@@ -81,7 +83,7 @@ export const McpToolsTabV2: React.FC = () => {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-16">
-        <Spin size="large" />
+        <Spinner size={32} />
         <p className="text-sm text-slate-400 mt-4">{t('mcp.tools.loading')}</p>
       </div>
     );

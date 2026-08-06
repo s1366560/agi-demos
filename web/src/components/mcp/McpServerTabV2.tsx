@@ -7,13 +7,15 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { message, Select, Spin, Input, Tooltip } from 'antd';
+import { message, Select, Input, Tooltip } from 'antd';
 import { Plus, RefreshCw, Search, Filter, Server, AlertCircle } from 'lucide-react';
 
 import { useMCPStore } from '@/stores/mcp';
 import { useMCPAppStore } from '@/stores/mcpAppStore';
 
 import { mcpAPI } from '@/services/mcpService';
+
+import { Spinner } from '@/components/common/Spinner';
 
 import { McpServerCardV2 } from './McpServerCardV2';
 import { McpServerDrawer } from './McpServerDrawer';
@@ -395,7 +397,7 @@ export const McpServerTabV2: React.FC = () => {
       {/* Content */}
       {isLoading && servers.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16">
-          <Spin size="large" />
+          <Spinner size={32} />
           <p className="text-sm text-slate-400 mt-4">{t('mcp.servers.loadingServers')}</p>
         </div>
       ) : servers.length === 0 ? (

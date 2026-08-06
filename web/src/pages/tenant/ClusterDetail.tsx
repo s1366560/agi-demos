@@ -18,7 +18,6 @@ import {
   Descriptions,
   Progress,
   Empty,
-  Spin,
   Modal,
   Form,
   Input,
@@ -31,6 +30,7 @@ import {
 } from 'antd';
 import { Copy, Server, Network, HardDrive } from 'lucide-react';
 
+import { Spinner } from '../../components/common/Spinner';
 import { clusterService } from '../../services/clusterService';
 import {
   useCurrentCluster,
@@ -323,7 +323,7 @@ export const ClusterDetail: React.FC = () => {
   if (isLoading && !cluster) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
-        <Spin size="large" />
+        <Spinner size={32} />
       </div>
     );
   }

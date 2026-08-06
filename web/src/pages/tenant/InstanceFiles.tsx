@@ -28,11 +28,11 @@ import {
 
 import { instanceFileService } from '@/services/instanceFileService';
 
+import { Spinner } from '@/components/common/Spinner';
 import {
   useLazyMessage,
   LazyAlert,
   LazyEmpty,
-  LazySpin,
   LazyModal,
   LazyButton,
 } from '@/components/ui/lazyAntd';
@@ -581,7 +581,7 @@ export const InstanceFiles: React.FC = () => {
             <div className="p-2 max-h-[500px] overflow-y-auto">
               {isLoading ? (
                 <div className="flex justify-center py-8">
-                  <LazySpin />
+                  <Spinner />
                 </div>
               ) : loadError ? (
                 <div className="py-8 flex flex-col items-center gap-3 px-4">
@@ -729,7 +729,7 @@ export const InstanceFiles: React.FC = () => {
         <div className="max-h-[500px] overflow-y-auto">
           {isPreviewLoading ? (
             <div className="flex justify-center py-8">
-              <LazySpin />
+              <Spinner />
             </div>
           ) : previewError ? (
             <div className="flex flex-col items-center gap-3 py-8">

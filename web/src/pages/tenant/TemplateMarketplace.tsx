@@ -7,10 +7,11 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Input, Tag, Empty, Spin, App, Pagination, Tooltip } from 'antd';
+import { Input, Tag, Empty, App, Pagination, Tooltip } from 'antd';
 import { Search, Download, Star, Package, Shield, Bot, RefreshCw } from 'lucide-react';
 
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
+import { Spinner } from '@/components/common/Spinner';
 import { SubAgentTemplateDetailDrawer } from '@/components/marketplace/SubAgentTemplateDetailDrawer';
 
 import { useDebounce } from '../../hooks/useDebounce';
@@ -351,7 +352,7 @@ export const TemplateMarketplace: React.FC = () => {
                 >
                   {installing.has(tpl.id) ? (
                     <>
-                      <Spin size="small" />
+                      <Spinner size={16} className="text-white" />
                       {t('agent.templates.installing', 'Installing…')}
                     </>
                   ) : (

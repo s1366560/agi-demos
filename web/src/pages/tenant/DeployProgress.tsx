@@ -5,13 +5,8 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 
 import { Timeline, Badge, Card, Typography, Alert, Collapse, Space, Pagination } from 'antd';
 
-import {
-  LazyButton,
-  LazySpin,
-  LazyEmpty,
-  LazyPopconfirm,
-  useLazyMessage,
-} from '@/components/ui/lazyAntd';
+import { Spinner } from '@/components/common/Spinner';
+import { LazyButton, LazyEmpty, LazyPopconfirm, useLazyMessage } from '@/components/ui/lazyAntd';
 
 import {
   useDeploys,
@@ -140,7 +135,7 @@ export const DeployProgress: React.FC = () => {
   if (loading && !deploys.length && !currentDeploy) {
     return (
       <div className="flex justify-center p-12">
-        <LazySpin size="large" />
+        <Spinner size={32} />
       </div>
     );
   }

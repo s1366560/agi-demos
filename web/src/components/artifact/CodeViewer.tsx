@@ -7,10 +7,12 @@ import React, { useState, useEffect } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Typography, Spin, Alert, Button, Tooltip, message } from 'antd';
+import { Typography, Alert, Button, Tooltip, message } from 'antd';
 import { Copy, Check } from 'lucide-react';
 
 import { fetchArtifactResource } from '@/services/artifactService';
+
+import { Spinner } from '../common/Spinner';
 
 const { Text } = Typography;
 
@@ -164,7 +166,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <Spin />
+        <Spinner />
       </div>
     );
   }

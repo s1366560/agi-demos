@@ -67,7 +67,7 @@ export const WebhookCreatedSecretModal: React.FC<WebhookCreatedSecretModalProps>
       onCancel={onClose}
       destroyOnHidden
     >
-      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} className="w-full">
         <Alert
           type="warning"
           showIcon
@@ -77,7 +77,7 @@ export const WebhookCreatedSecretModal: React.FC<WebhookCreatedSecretModalProps>
             'For security, this value will not be shown again after you close this dialog.'
           )}
         />
-        <Space.Compact style={{ width: '100%' }}>
+        <Space.Compact className="w-full">
           <Input.Password value={secret ?? ''} readOnly />
           <Button
             icon={<Copy size={14} />}
@@ -317,8 +317,8 @@ export const Webhooks: React.FC = () => {
   ];
 
   return (
-    <div style={{ padding: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+    <div className="p-6">
+      <div className="mb-4 flex justify-between">
         <Title level={1}>{t('nav.webhooks')}</Title>
         <Button
           type="primary"
@@ -335,7 +335,7 @@ export const Webhooks: React.FC = () => {
           title={eventTypesError}
           type="warning"
           showIcon
-          style={{ marginBottom: 16 }}
+          className="mb-4"
           action={
             <Button size="small" onClick={fetchEventTypes}>
               {t('common.retry', 'Retry')}
@@ -348,7 +348,7 @@ export const Webhooks: React.FC = () => {
           title={loadError}
           type="error"
           showIcon
-          style={{ marginBottom: 16 }}
+          className="mb-4"
           action={
             <Button
               size="small"

@@ -6,7 +6,9 @@ import React, { useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Spin, Alert } from 'antd';
+import { Alert } from 'antd';
+
+import { Spinner } from '../common/Spinner';
 
 export interface VideoPlayerProps {
   /** Video source URL */
@@ -74,7 +76,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     >
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-900/10 z-10">
-          <Spin />
+          <Spinner />
         </div>
       )}
       <video

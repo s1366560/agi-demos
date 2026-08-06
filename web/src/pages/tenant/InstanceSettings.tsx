@@ -18,10 +18,10 @@ import type { InstanceLlmConfigUpdate } from '@/services/instanceService';
 
 import { setUnsavedChanges } from '@/utils/unsavedChanges';
 
+import { Spinner } from '@/components/common/Spinner';
 import {
   useLazyMessage,
   LazyPopconfirm,
-  LazySpin,
   LazyButton,
   LazySelect,
   LazyAlert,
@@ -307,7 +307,7 @@ export const InstanceSettings: React.FC = () => {
   if (isLoading && !detail) {
     return (
       <div className="flex items-center justify-center h-64">
-        <LazySpin size="large" />
+        <Spinner size={32} />
       </div>
     );
   }
@@ -414,7 +414,7 @@ export const InstanceSettings: React.FC = () => {
 
         {llmConfigLoading ? (
           <div className="flex items-center justify-center h-32">
-            <LazySpin />
+            <Spinner />
           </div>
         ) : (
           <div className="space-y-5">
