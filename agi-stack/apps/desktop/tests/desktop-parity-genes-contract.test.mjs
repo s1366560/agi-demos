@@ -127,8 +127,8 @@ test("Gene Market contracts only include APIs consumed by its owned production p
   assert.deepEqual(contractsFor("desktop_cloud"), [
     {
       method: "NONE",
-      path: "not_applicable:desktop_native_route_planned",
-      authority: "none",
+      path: "unavailable:tenant_genes_authority_contract_invalid",
+      authority: "cloud_service",
     },
   ]);
 });
@@ -193,6 +193,38 @@ test("Gene Market actions preserve tenant and review ownership enforcement", () 
       actions: ["delete-own-review"],
       authentication: "authenticated",
       authorization: ["tenant_member", "resource_owner"],
+      enforcement: "enforced",
+      feature_gate: null,
+    },
+    {
+      surface: "desktop_cloud",
+      actions: [
+        "view",
+        "list",
+        "inspect-genome",
+        "inspect-evolution",
+        "list-reviews",
+        "rate",
+        "create-review",
+        "delete-own-review",
+      ],
+      authentication: "authenticated",
+      authorization: ["tenant_member"],
+      enforcement: "enforced",
+      feature_gate: null,
+    },
+    {
+      surface: "desktop_cloud",
+      actions: [
+        "create",
+        "update",
+        "delete",
+        "publish",
+        "unpublish",
+        "install",
+      ],
+      authentication: "authenticated",
+      authorization: ["tenant_admin"],
       enforcement: "enforced",
       feature_gate: null,
     },

@@ -589,6 +589,50 @@
     },
     {
       "area": "skills",
+      "method": "GET",
+      "uri": "/api/v1/skills/evolution/overview?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/skills/evolution/overview?${query}",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_skill_evolution_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "skills",
+      "method": "GET",
+      "uri": "/api/v1/skills/evolution/config?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/skills/evolution/config?${query}",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_skill_evolution_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "skills",
+      "method": "PUT",
+      "uri": "/api/v1/skills/evolution/config?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/skills/evolution/config?${query}",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_skill_evolution_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "skills",
+      "method": "POST",
+      "uri": "/api/v1/skills/evolution/run?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/skills/evolution/run?${query}",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_skill_evolution_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "skills",
       "method": "POST",
       "uri": "/api/v1/skills/evolution/jobs/job-1/apply?tenant_id=local",
       "source": "client",
@@ -2008,26 +2052,6 @@
     },
     {
       "method": "GET",
-      "path": "/api/v1/skills/evolution/config",
-      "reason_code": "executable_fixture_registered_route_not_catalogued"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/v1/skills/evolution/config",
-      "reason_code": "executable_fixture_registered_route_not_catalogued"
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/skills/evolution/overview",
-      "reason_code": "executable_fixture_registered_route_not_catalogued"
-    },
-    {
-      "method": "POST",
-      "path": "/api/v1/skills/evolution/run",
-      "reason_code": "executable_fixture_registered_route_not_catalogued"
-    },
-    {
-      "method": "GET",
       "path": "/api/v1/subagents/{subagent_id}",
       "reason_code": "executable_fixture_registered_route_not_catalogued"
     },
@@ -2116,6 +2140,16 @@
     {
       "method": "POST",
       "path": "/api/v1/skills/import/zip?tenant_id=local",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/skills/implementation/evolution?tenant_id=local",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/skills/implementation/evolution/run?tenant_id=local",
       "reason_code": "executable_fixture_supporting_route_not_in_manifest"
     },
     {
@@ -2277,16 +2311,6 @@
       "method": "GET",
       "path": "/api/v1/projects/local-project/sandbox/files/download?path=%2Fworkspace%2Froute-parity.txt",
       "reason_code": "executable_fixture_supporting_route_not_in_manifest"
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/agent/workflows/patterns?tenant_id=local&page=1&page_size=50",
-      "reason_code": "executable_fixture_native_equivalent_authority_unavailable"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/v1/agent/workflows/patterns/route-parity-pattern?tenant_id=local",
-      "reason_code": "executable_fixture_native_equivalent_authority_unavailable"
     },
     {
       "method": "GET",
