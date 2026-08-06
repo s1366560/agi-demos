@@ -41,7 +41,7 @@
 .activity-inbox-state.error { border-color: var(--desktop-border-red-4); background: var(--desktop-surface-red); color: var(--red-9); }
 .activity-inbox-state strong { color: var(--desktop-text-soft); font-size: 11px; }
 .activity-inbox-state p { margin: 4px 0 0; font-size: 9px; }
-.activity-inbox .spinning { animation: activity-inbox-spin 900ms linear infinite; }
+.activity-inbox .spinning { animation: activity-inbox-spin var(--spin-duration) linear infinite; }
 @keyframes activity-inbox-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .activity-inbox .spinning { animation: none; } }
 @media (max-width: 900px) { .activity-inbox { padding: 34px 28px 48px; } .activity-inbox-heading { align-items: stretch; flex-direction: column; } }

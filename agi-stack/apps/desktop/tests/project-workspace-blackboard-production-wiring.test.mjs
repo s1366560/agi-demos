@@ -35,6 +35,7 @@ const {
 } = require('/tmp/agistack-desktop-test-dist/src/features/project-blackboard/projectBlackboardRouteModule.js');
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const registrySource = readFileSync(new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url), 'utf8');
 
 const cloudConfig = Object.freeze({
   apiBaseUrl: 'https://cloud.memstack.test',
@@ -298,19 +299,19 @@ test('authority failures and missing Blackboard workspace stay scoped and unavai
 
 test('App binds both typed route modules without browser handoff or DesktopApiClient expansion', () => {
   assert.match(
-    appSource,
+    registrySource,
     /\[PROJECT_WORKSPACES_ROUTE_ID\]:\s*createProjectWorkspacesRouteModuleLoader\(/,
   );
   assert.match(
-    appSource,
+    registrySource,
     /\[PROJECT_BLACKBOARD_ROUTE_ID\]:\s*createProjectBlackboardRouteModuleLoader\(/,
   );
-  assert.match(appSource, /createProjectWorkspacesHttpClient\(/);
-  assert.match(appSource, /createProjectBlackboardCloudClient\(/);
-  assert.match(appSource, /createProjectBlackboardLocalClient\(/);
-  assert.match(appSource, /buildProjectBlackboardCanonicalPath\(/);
+  assert.match(registrySource, /createProjectWorkspacesHttpClient\(/);
+  assert.match(registrySource, /createProjectBlackboardCloudClient\(/);
+  assert.match(registrySource, /createProjectBlackboardLocalClient\(/);
+  assert.match(registrySource, /buildProjectBlackboardCanonicalPath\(/);
   assert.doesNotMatch(
-    appSource,
+    registrySource,
     /PROJECT_(?:WORKSPACES|BLACKBOARD)_ROUTE_ID[^]{0,1200}(?:window\.open|openExternal|webview|iframe)/,
   );
 });

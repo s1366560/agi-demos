@@ -12,7 +12,7 @@ import type {
   ConversationTimelineState,
   WorkspaceMessage,
 } from '../types';
-import '../styles.css';
+import '../styles/global.css';
 import '../features/chat/ChatPanel.css';
 
 declare global {

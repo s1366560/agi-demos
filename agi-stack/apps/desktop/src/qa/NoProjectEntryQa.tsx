@@ -16,7 +16,7 @@ import type {
   WorkspaceAuthorityCollection,
   WorkspaceSummary,
 } from '../types';
-import '../styles.css';
+import '../styles/global.css';
 
 declare global {
   var __noProjectEntryQaRoot: Root | undefined;

@@ -6,7 +6,7 @@ import { Theme } from '@radix-ui/themes';
 
 import { ForcePasswordChangeScreen } from '../features/auth/ForcePasswordChangeScreen';
 import { I18nProvider } from '../i18n';
-import '../styles.css';
+import '../styles/global.css';
 import './forcePasswordChangeQa.css';
 
 declare global {

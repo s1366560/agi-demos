@@ -9,7 +9,7 @@ import { isTimelineItemInitiallyExpanded } from '../features/chat/chatTimelinePr
 import { ToastProvider } from '../features/feedback/ToastCenter';
 import { I18nProvider } from '../i18n';
 import type { AgentTimelineItem, ConversationTimelineState } from '../types';
-import '../styles.css';
+import '../styles/global.css';
 import '../features/chat/ChatPanel.css';
 
 declare global {

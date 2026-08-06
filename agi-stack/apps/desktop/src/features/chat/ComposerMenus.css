@@ -129,11 +129,17 @@
 }
 
 .plus-menu-category .chevron {
-  transition: transform 120ms ease;
+  transition: transform 120ms var(--ease-out);
 }
 
 .plus-menu-category.expanded .chevron {
   transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plus-menu-category .chevron {
+    transition: none;
+  }
 }
 
 .plus-menu-items {
@@ -430,7 +436,20 @@
 .prompt-template-card:focus-within {
   border-color: var(--desktop-border-cyan);
   background: var(--desktop-surface-cyan-3);
-  transform: translateY(-1px);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .prompt-template-card:hover,
+  .prompt-template-card:focus-within {
+    transform: translateY(-1px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prompt-template-card:hover,
+  .prompt-template-card:focus-within {
+    transform: none;
+  }
 }
 
 .prompt-template-card.is-code {

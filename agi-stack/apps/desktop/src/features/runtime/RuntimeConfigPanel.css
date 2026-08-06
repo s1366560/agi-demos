@@ -1,0 +1,74 @@
+
+/* Runtime configuration panel styles, extracted from the former
+   monolithic styles.css. Imported by RuntimeConfigPanel.tsx. */
+
+.runtime-panel {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid var(--desktop-border-soft);
+}
+
+.runtime-panel {
+  flex: 0 0 auto;
+  max-height: 210px;
+  overflow: auto;
+}
+
+.runtime-panel .rt-TextFieldRoot,
+.runtime-panel .rt-SelectTrigger,
+.runtime-panel .rt-Button {
+  min-height: 34px;
+}
+
+.runtime-panel .rt-TextFieldInput {
+  min-height: 32px;
+}
+
+.runtime-local-presets {
+  display: grid;
+  gap: 6px;
+  margin-top: -4px;
+}
+
+.runtime-local-presets .rt-Button {
+  min-width: 0;
+  justify-content: center;
+  border: 1px solid rgba(var(--desktop-slate-rgb), 0.18);
+  background: rgba(var(--desktop-slate-rgb), 0.06);
+  color: var(--desktop-muted);
+}
+
+.runtime-local-presets .rt-Button[aria-pressed='true'] {
+  border-color: rgba(var(--desktop-cyan-rgb), 0.42);
+  background: rgba(var(--desktop-cyan-rgb), 0.12);
+  color: var(--desktop-text);
+}
+
+.runtime-live-error {
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+.field-label {
+  display: grid;
+  gap: 4px;
+  color: var(--desktop-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.action-hint {
+  padding: 7px 8px;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 6px;
+  background: rgba(var(--desktop-amber-rgb), 0.08);
+}
+
+.settings-window-content .runtime-panel {
+  max-height: none;
+  padding-bottom: 14px;
+  overflow: visible;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 7px;
+}

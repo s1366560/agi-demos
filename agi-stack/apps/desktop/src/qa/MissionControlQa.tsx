@@ -25,7 +25,7 @@ import type {
   WorkspaceSummary,
 } from '../types';
 import type { WorkspaceRuntimeModelOption } from '../features/settings/workspaceRuntimeProviderModel';
-import '../styles.css';
+import '../styles/global.css';
 import './missionControlQa.css';
 
 declare global {

@@ -108,6 +108,7 @@ import {
   SessionEmptyState,
 } from './ChatTranscript';
 import './AssistantDuplicateDisclosure.css';
+import './ChatTimeline.css';
 
 const TIMELINE_RENDER_THRESHOLD = 150;
 const TIMELINE_RENDER_WINDOW = 100;
@@ -1593,7 +1594,7 @@ function SubAgentGroupView({
         >
           <span
             className="subagent-progress-bar"
-            style={{ width: `${group.progress}%` }}
+            style={{ transform: `scaleX(${(group.progress ?? 0) / 100})` }}
           />
         </div>
       ) : null}

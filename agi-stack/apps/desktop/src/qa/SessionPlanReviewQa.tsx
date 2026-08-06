@@ -9,7 +9,7 @@ import type {
   SessionProjectionCapabilities,
   SessionProjectionPlan,
 } from '../features/session/sessionProjectionTypes';
-import '../styles.css';
+import '../styles/global.css';
 
 declare global {
   var __sessionPlanReviewQaRoot: Root | undefined;

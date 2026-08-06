@@ -1,0 +1,8 @@
+/* Global stylesheet entry for the QA harness pages: pulls in the design tokens,
+   shell chrome, base layer and the app-shell feature styles that were formerly
+   delivered by the monolithic styles.css. Runtime pages get these through
+   main.tsx and the component-level imports instead. */
+@import './tokens.css';
+@import './chrome.css';
+@import './base.css';
+@import '../app-shell.css';

@@ -79,7 +79,7 @@ const i18nSource = readFileSync(
   'utf8',
 );
 const globalStylesheet = readFileSync(
-  new URL('../src/styles.css', import.meta.url),
+  new URL('../src/styles/tokens.css', import.meta.url),
   'utf8',
 );
 const productionRoutePolicies = new Map(

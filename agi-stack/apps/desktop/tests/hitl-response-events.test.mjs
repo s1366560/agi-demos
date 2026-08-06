@@ -12,6 +12,7 @@ const {
   '/tmp/agistack-desktop-test-dist/src/features/chat/hitlResponseEventModel.js',
 );
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const appTimelineEventModelSource = readFileSync(new URL('../src/features/chat/appTimelineEventModel.ts', import.meta.url), 'utf8');
 const cardSource = readFileSync(
   new URL('../src/features/chat/HitlResponseCard.tsx', import.meta.url),
   'utf8',
@@ -154,8 +155,8 @@ test('answered HITL cards expose safe localized response summaries', () => {
 });
 
 test('Desktop wires reply folding into live ingestion and the QA surface exercises it', () => {
-  assert.match(appSource, /applyHitlResponseStreamEvent\(existing, event\)/);
-  assert.match(appSource, /hitlResponse\.handled[\s\S]*return hitlResponse\.items/);
+  assert.match(appTimelineEventModelSource, /applyHitlResponseStreamEvent\(existing, event\)/);
+  assert.match(appTimelineEventModelSource, /hitlResponse\.handled[\s\S]*return hitlResponse\.items/);
   assert.match(cardSource, /hitlResponsePresentation\(item, hitlType\)/);
   assert.match(cardSource, /timeline-hitl-response/);
   assert.match(qaSource, /hitl-response-events/);

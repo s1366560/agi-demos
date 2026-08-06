@@ -3,8 +3,19 @@ import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const desktopAuthSource = [
+  '../src/hooks/useDesktopAuth.ts',
+  '../src/hooks/useCloudSessionAuth.ts',
+  '../src/hooks/useLocalCredentialAuth.ts',
+]
+  .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
+  .join('\n');
 const mainSource = readFileSync(new URL('../src/main.tsx', import.meta.url), 'utf8');
-const globalStyles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const globalStyles = readFileSync(new URL('../src/styles/chrome.css', import.meta.url), 'utf8');
+const runtimeConfigStyles = readFileSync(
+  new URL('../src/features/runtime/RuntimeConfigPanel.css', import.meta.url),
+  'utf8'
+);
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
 const sessionStyles = readFileSync(
   new URL('../src/features/session/SessionWorkspace.css', import.meta.url),
@@ -120,7 +131,7 @@ test('authenticated identities without a project remain inside the desktop shell
   assert.match(appSource, /const showRuntimeConfig = isWorkspaceReady\(auth, config\)/);
   assert.match(appSource, /useAgentSocket\([\s\S]*showRuntimeConfig && connection === 'ready'/);
   assert.match(
-    appSource,
+    desktopAuthSource,
     /setSettingsInitialSection\('workspace'\);[\s\S]*setSettingsWindowOpen\(true\);/,
   );
   assert.match(appSource, /if \(!identityAuthenticated\) \{[\s\S]*<LoginScreen/);
@@ -184,11 +195,11 @@ test('login is the only signed-out surface retained by the desktop shell', () =>
 
 test('workspace hydration and refresh fail closed across tenant boundaries', () => {
   assert.match(
-    appSource,
+    desktopAuthSource,
     /const projects = tenantId \? await projectClient\.listProjects\(tenantId\) : \[\];[\s\S]*?if \(authAttemptRevisionRef\.current !== authAttemptRevision\) return false;[\s\S]*?if \(tenantId && !tenants\.some/,
   );
   assert.match(
-    appSource,
+    desktopAuthSource,
     /const scopedProjects = projects\.filter\(\s*\(project\) => project\.tenant_id === tenantId\s*\)/,
   );
   assert.match(
@@ -205,7 +216,7 @@ test('workspace hydration and refresh fail closed across tenant boundaries', () 
 
 test('tenant and project changes require server-issued workspace context authority', () => {
   const hydrateCloudSession =
-    appSource.match(
+    desktopAuthSource.match(
       /const hydrateCloudSession = async \([\s\S]*?\n  const login = async/
     )?.[0] ?? '';
   const applySettingsContext =
@@ -563,7 +574,7 @@ test('connection recovery cannot bypass governed model or workspace settings', (
     /aria-label="(Server URL|API key|Connection mode|Connect runtime)"/,
   );
   assert.match(
-    globalStyles,
+    runtimeConfigStyles,
     /\.settings-window-content \.runtime-panel\s*\{[\s\S]*?max-height:\s*none;[\s\S]*?overflow:\s*visible;/,
   );
   assert.doesNotMatch(globalStyles, /\.settings-content \.runtime-panel/);

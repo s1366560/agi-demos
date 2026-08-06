@@ -29,6 +29,7 @@ const {
   '/tmp/agistack-desktop-test-dist/src/features/chat/artifactCanvasEventModel.js',
 );
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const appTimelineEventModelSource = readFileSync(new URL('../src/features/chat/appTimelineEventModel.ts', import.meta.url), 'utf8');
 const componentSource = readFileSync(
   new URL('../src/features/chat/LiveArtifactCanvas.tsx', import.meta.url),
   'utf8',
@@ -577,8 +578,8 @@ test('artifact view modes, data formatting, download, and save authority remain 
 });
 
 test('Desktop folds artifact canvas events out of the timeline and exposes Browser QA', () => {
-  assert.match(appSource, /applyArtifactCanvasStreamEvent\(emptyArtifactCanvasState\(\), event\)/);
-  assert.match(appSource, /artifactCanvasResult\.handled[\s\S]*return existing/);
+  assert.match(appTimelineEventModelSource, /applyArtifactCanvasStreamEvent\(emptyArtifactCanvasState\(\), event\)/);
+  assert.match(appTimelineEventModelSource, /artifactCanvasResult\.handled[\s\S]*return existing/);
   assert.match(appSource, /setReviewTab\('artifacts'\)/);
   assert.match(appSource, /replayArtifactCanvasEvents\(responseItems\)/);
   assert.match(componentSource, /aria-label=\{t\('artifact\.liveCanvas'\)\}/);

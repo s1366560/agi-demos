@@ -6,7 +6,7 @@ import { Button, Theme } from '@radix-ui/themes';
 import { WorkPlanTimelineCard } from '../features/chat/WorkPlanTimelineCard';
 import { I18nProvider } from '../i18n';
 import type { AgentTimelineItem } from '../types';
-import '../styles.css';
+import '../styles/global.css';
 import '../features/chat/ChatPanel.css';
 
 declare global {

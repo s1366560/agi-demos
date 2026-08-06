@@ -345,7 +345,7 @@
 
 .project-overview-state-page[data-state='loading'] .project-overview-state-icon svg,
 .project-overview-state-page[data-state='scope_switch'] .project-overview-state-icon svg {
-  animation: project-overview-spin 1.2s linear infinite;
+  animation: project-overview-spin var(--spin-duration) linear infinite;
 }
 
 .project-overview-state-detail {

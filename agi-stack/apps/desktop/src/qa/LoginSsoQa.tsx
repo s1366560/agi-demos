@@ -9,7 +9,7 @@ import {
 } from '../features/auth/LoginScreen';
 import { I18nProvider } from '../i18n';
 import type { AuthState } from '../types';
-import '../styles.css';
+import '../styles/global.css';
 
 declare global {
   var __loginSsoQaRoot: Root | undefined;

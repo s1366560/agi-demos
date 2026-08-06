@@ -9,7 +9,7 @@ import { WorkspaceCreateDialog } from '../features/workspace/WorkspaceCreateDial
 import { WorkspaceCreateScopeChangedError } from '../features/workspace/workspaceCreateModel';
 import type { WorkspaceCreateScope } from '../features/workspace/workspaceCreateModel';
 import { I18nProvider } from '../i18n';
-import '../styles.css';
+import '../styles/global.css';
 import './workspaceCreateQa.css';
 
 declare global {

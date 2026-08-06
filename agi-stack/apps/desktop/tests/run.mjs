@@ -225,6 +225,13 @@ copyFileSync(
   join(compiledWorkspaceDirectory, 'WorkspaceOverview.css'),
 );
 
+const compiledSessionDirectory = join(compiledRoot, 'src', 'features', 'session');
+mkdirSync(compiledSessionDirectory, { recursive: true });
+copyFileSync(
+  join(desktopRoot, 'src', 'features', 'session', 'SessionPlanReview.css'),
+  join(compiledSessionDirectory, 'SessionPlanReview.css'),
+);
+
 const compiledTenantDirectory = join(compiledRoot, 'src', 'features', 'tenant');
 mkdirSync(compiledTenantDirectory, { recursive: true });
 copyFileSync(

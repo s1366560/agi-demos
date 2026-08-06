@@ -31,7 +31,9 @@ const modelSource = readSource('features/navigation/keyboardShortcutModel.ts');
 const dialogSource = readSource('features/navigation/KeyboardShortcutsDialog.tsx');
 const dialogCssSource = readSource('features/navigation/KeyboardShortcutsDialog.css');
 const appSource = readSource('App.tsx');
-const stylesSource = readSource('styles.css');
+const shellTypesSource = readSource('appShellTypes.ts');
+const commandPaletteSource = readSource('features/navigation/CommandPalette.tsx');
+const stylesSource = readSource('app-shell.css');
 const i18nSource = readSource('i18n.tsx');
 
 function withStoredLocale(locale, render) {
@@ -165,11 +167,11 @@ test('shortcuts dialog renders localized zh-CN copy when the locale is stored', 
 });
 
 test('command palette renders a kbd hint for items with a shortcut', () => {
-  assert.match(appSource, /shortcut\?: string;/);
+  assert.match(shellTypesSource, /shortcut\?: string;/);
   assert.match(appSource, /id: 'keyboard-shortcuts'/);
   assert.match(appSource, /shortcut: showShortcutsChord/);
   assert.match(
-    appSource,
+    commandPaletteSource,
     /\{item\.shortcut \? <kbd className="command-shortcut">\{item\.shortcut\}<\/kbd> : null\}/,
   );
   assert.match(stylesSource, /\.command-shortcut \{/);

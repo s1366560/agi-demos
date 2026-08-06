@@ -20,6 +20,14 @@ const readOptionalSource = (path) => {
 };
 
 const appSource = readSource('App.tsx');
+const agentConversationSource = [
+  '../src/hooks/useAgentConversation.ts',
+  '../src/hooks/useConversationThreads.ts',
+  '../src/hooks/useConversationMessaging.ts',
+]
+  .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
+  .join('\n');
+const appTimelineEventModelSource = readSource('features/chat/appTimelineEventModel.ts');
 const timelineSource = readSource('features/chat/ChatTimeline.tsx');
 const transcriptSource = readSource('features/chat/ChatTranscript.tsx');
 const componentSource = readOptionalSource('features/chat/MessageForcedSkillBadge.tsx');
@@ -110,12 +118,12 @@ test('authoritative history replacement keeps the structured forced skill badge'
 
 test('optimistic user messages preserve the composer forced skill with attachments', () => {
   assert.match(
-    appSource,
+    agentConversationSource,
     /optimisticUserTimelineItem\(\s*messageId,\s*content,\s*execution\.forcedSkillName,\s*execution\.fileMetadata,\s*\)/,
   );
-  const optimisticFunction = appSource.slice(
-    appSource.indexOf('function optimisticUserTimelineItem'),
-    appSource.indexOf('function timelineItemFromSocketEvent'),
+  const optimisticFunction = appTimelineEventModelSource.slice(
+    appTimelineEventModelSource.indexOf('function optimisticUserTimelineItem'),
+    appTimelineEventModelSource.indexOf('function timelineItemFromSocketEvent'),
   );
   assert.match(optimisticFunction, /forcedSkillName/);
   assert.match(optimisticFunction, /fileMetadata/);

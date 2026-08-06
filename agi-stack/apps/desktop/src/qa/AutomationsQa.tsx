@@ -7,7 +7,7 @@ import { DesktopApiError } from '../api/client';
 import { AutomationsPage } from '../features/automations/AutomationsPage';
 import { I18nProvider } from '../i18n';
 import type { AutomationCapabilities, AutomationJob, AutomationRun } from '../types';
-import '../styles.css';
+import '../styles/global.css';
 import './automationsQa.css';
 
 declare global {

@@ -441,7 +441,7 @@
 }
 
 .managed-resource-spin {
-  animation: managed-resource-spin 0.8s linear infinite;
+  animation: managed-resource-spin var(--spin-duration) linear infinite;
 }
 
 @keyframes managed-resource-spin {

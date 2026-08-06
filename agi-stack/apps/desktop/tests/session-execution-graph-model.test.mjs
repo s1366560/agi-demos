@@ -282,7 +282,7 @@ test('recognizes only the exact graph orchestration protocol', () => {
 });
 
 test('Desktop exposes a dynamic Graph canvas with node selection and session navigation', () => {
-  const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const appSource = readFileSync(new URL('../src/features/session/WorkspaceReviewPanel.tsx', import.meta.url), 'utf8');
   const canvasSource = readFileSync(
     new URL('../src/features/session/SessionExecutionGraphCanvas.tsx', import.meta.url),
     'utf8'

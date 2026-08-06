@@ -282,7 +282,7 @@ test('recognizes only the exact runtime infrastructure event protocol', () => {
 });
 
 test('Desktop exposes a dynamic Runtime canvas with selectable resources and event history', () => {
-  const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const appSource = readFileSync(new URL('../src/features/session/WorkspaceReviewPanel.tsx', import.meta.url), 'utf8');
   const canvasSource = readFileSync(
     new URL('../src/features/session/SessionRuntimeInfrastructureCanvas.tsx', import.meta.url),
     'utf8'

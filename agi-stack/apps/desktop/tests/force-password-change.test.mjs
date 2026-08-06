@@ -17,6 +17,13 @@ const { DesktopApiClient } = require(
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const desktopAuthSource = [
+  '../src/hooks/useDesktopAuth.ts',
+  '../src/hooks/useCloudSessionAuth.ts',
+  '../src/hooks/useLocalCredentialAuth.ts',
+]
+  .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
+  .join('\n');
 const screenSource = readFileSync(
   new URL('../src/features/auth/ForcePasswordChangeScreen.tsx', import.meta.url),
   'utf8',
@@ -174,17 +181,17 @@ test('the forced password screen is localized, accessible, and cannot bypass the
 
 test('App retains the transient token only for the guarded flow and persists after success', () => {
   assert.match(appSource, /pendingPasswordChangeRef/);
-  assert.match(appSource, /passwordChangeTokenRetained = true/);
-  assert.match(appSource, /passwordChangeGateAuthState\(false, null\)/);
-  assert.match(appSource, /forceChangePassword\(currentPassword, newPassword\)/);
+  assert.match(desktopAuthSource, /passwordChangeTokenRetained = true/);
+  assert.match(desktopAuthSource, /passwordChangeGateAuthState\(false, null\)/);
+  assert.match(desktopAuthSource, /forceChangePassword\(currentPassword, newPassword\)/);
   assert.match(appSource, /completeForcedPasswordChangeOutcome/);
   assert.match(appSource, /auth\.status === 'password_change_required'/);
   assert.match(appSource, /auth\.status === 'changing_password'/);
   assert.match(appSource, /<ForcePasswordChangeScreen/);
 
-  const flowStart = appSource.indexOf('const submitForcedPasswordChange');
-  const flowEnd = appSource.indexOf('const hydrateLocalSession', flowStart);
-  const flowSource = appSource.slice(flowStart, flowEnd);
+  const flowStart = desktopAuthSource.indexOf('const submitForcedPasswordChange');
+  const flowEnd = desktopAuthSource.indexOf('const hydrateLocalSession', flowStart);
+  const flowSource = desktopAuthSource.slice(flowStart, flowEnd);
   const passwordChange = flowSource.indexOf('.forceChangePassword(');
   const trustedSave = flowSource.indexOf('saveNativeTrustedSession(');
   assert.ok(passwordChange >= 0);

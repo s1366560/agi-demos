@@ -451,3 +451,14 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Lane column shell, extracted from the former monolithic styles.css. */
+.lane {
+  display: grid;
+  min-width: 0;
+  min-height: 260px;
+  grid-template-rows: 38px minmax(0, 1fr);
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 7px;
+  background: rgba(var(--desktop-surface-32-rgb), 0.55);
+}

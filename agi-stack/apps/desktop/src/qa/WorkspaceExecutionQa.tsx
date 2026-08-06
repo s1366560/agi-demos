@@ -19,7 +19,7 @@ import type {
   RuntimeNodeLoadState,
   WorkspaceSummary,
 } from '../types';
-import '../styles.css';
+import '../styles/global.css';
 import './workspaceExecutionQa.css';
 
 declare global {

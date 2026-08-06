@@ -24,7 +24,7 @@ import { computeTimelineTurns } from '../features/chat/timelineTurnCollapseModel
 import { useTimelineTurnCollapse } from '../features/chat/useTimelineTurnCollapse';
 import { I18nProvider } from '../i18n';
 import type { AgentTimelineItem, ConversationTimelineState } from '../types';
-import '../styles.css';
+import '../styles/global.css';
 import '../features/chat/ChatPanel.css';
 
 declare global {

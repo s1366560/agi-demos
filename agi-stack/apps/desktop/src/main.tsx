@@ -6,7 +6,10 @@ import { App } from './App';
 import { ToastProvider } from './features/feedback/ToastCenter';
 import { I18nProvider } from './i18n';
 import { ThemePreferenceProvider } from './theme';
-import './styles.css';
+import './styles/tokens.css';
+import './styles/chrome.css';
+import './styles/base.css';
+import './app-shell.css';
 
 function formatError(error: unknown): string {
   if (error instanceof Error) {

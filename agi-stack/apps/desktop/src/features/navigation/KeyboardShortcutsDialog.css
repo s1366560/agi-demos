@@ -134,6 +134,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .shortcuts-dialog__close {
-    transition: none;
+    transition-property: color, border-color;
   }
 }

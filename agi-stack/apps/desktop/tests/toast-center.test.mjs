@@ -23,6 +23,7 @@ const toastCssSource = readFileSync(
 );
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const runStatusModelSource = readFileSync(new URL('../src/features/runtime/runStatusModel.ts', import.meta.url), 'utf8');
 const chatTranscriptSource = readFileSync(
   new URL('../src/features/chat/ChatTranscript.tsx', import.meta.url),
   'utf8',
@@ -266,9 +267,9 @@ test('session run actions announce success via toast while errors stay inline', 
     appSource,
     /showToast\(\s*'success',\s*t\('toast\.sessionRunActionSuccess', \{ action: t\(SESSION_RUN_ACTION_LABEL_KEY\[action\]\) \}\),?\s*\)/,
   );
-  assert.match(appSource, /pause: 'session\.pauseRun'/);
-  assert.match(appSource, /approve: 'session\.approveRun'/);
-  assert.match(appSource, /request_changes: 'session\.requestChanges'/);
+  assert.match(runStatusModelSource, /pause: 'session\.pauseRun'/);
+  assert.match(runStatusModelSource, /approve: 'session\.approveRun'/);
+  assert.match(runStatusModelSource, /request_changes: 'session\.requestChanges'/);
 });
 
 test('ToastCenter styles use desktop tokens and honor reduced motion', () => {

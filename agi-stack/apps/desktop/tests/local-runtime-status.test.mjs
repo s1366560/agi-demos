@@ -21,6 +21,14 @@ const {
   '/tmp/agistack-desktop-test-dist/src/features/settings/workspaceRuntimeProviderModel.js'
 );
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const shellTypesSource = readFileSync(new URL('../src/appShellTypes.ts', import.meta.url), 'utf8');
+const desktopAuthSource = [
+  '../src/hooks/useDesktopAuth.ts',
+  '../src/hooks/useCloudSessionAuth.ts',
+  '../src/hooks/useLocalCredentialAuth.ts',
+]
+  .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
+  .join('\n');
 const typesSource = readFileSync(new URL('../src/types.ts', import.meta.url), 'utf8');
 const providerSettingsQaSource = readFileSync(
   new URL('../src/qa/ProviderSettingsQa.tsx', import.meta.url),
@@ -532,8 +540,8 @@ test('Desktop runtime configuration and sidecar configure payload contain no LLM
   const defaultConfig =
     typesSource.match(/export const DEFAULT_CONFIG: DesktopRuntimeConfig = \{[\s\S]*?\n\};/)?.[0] ?? '';
   const sidecarConfig =
-    appSource.match(/function localRuntimeSidecarConfig\([\s\S]*?\n\}/)?.[0] ?? '';
-  const logout = appSource.match(/const logout = async \(\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+    shellTypesSource.match(/function localRuntimeSidecarConfig\([\s\S]*?\n\}/)?.[0] ?? '';
+  const logout = desktopAuthSource.match(/const logout = async \(\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
   const forbidden = /llmProvider|llmBaseUrl|llmModel|llmApiKey|api_key|base_url|provider:|model:/;
 
   assert.doesNotMatch(configType, forbidden);

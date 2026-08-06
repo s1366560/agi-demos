@@ -6,7 +6,7 @@ import { useI18n } from '../../i18n';
 import { formatToastErrorDetail } from '../feedback/toastModel';
 import { useToast } from '../feedback/ToastCenter';
 
-// highlight.js token colors are themed in styles.css (`.hljs-*`) so code in
+// highlight.js token colors are themed in ChatTimeline.css (`.hljs-*`) so code in
 // chat matches the desktop dark palette instead of a stock theme.
 
 const LANGUAGE_ALIASES: Record<string, string> = {

@@ -16,7 +16,7 @@ import type {
   WorkspaceMessage,
   WorkspaceSummary,
 } from '../types';
-import '../styles.css';
+import '../styles/global.css';
 
 declare global {
   var __newTaskFlowQaRoot: Root | undefined;

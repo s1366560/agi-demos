@@ -40,9 +40,11 @@ export function useToast(): ToastContextValue {
 export function ToastViewport({
   toasts,
   onDismiss,
+  exitingIds,
 }: {
   toasts: readonly Toast[];
   onDismiss: (id: string) => void;
+  exitingIds?: ReadonlySet<string>;
 }) {
   const { t } = useI18n();
   return (
@@ -50,7 +52,7 @@ export function ToastViewport({
       {toasts.map((toast) => (
         <div
           key={toast.id}
-          className={`toast toast--${toast.kind}`}
+          className={`toast toast--${toast.kind}${exitingIds?.has(toast.id) ? ' toast-exiting' : ''}`}
           role={toastAriaRole(toast.kind)}
           aria-live={toast.kind === 'error' ? 'assertive' : undefined}
         >
@@ -74,13 +76,17 @@ export function ToastViewport({
   );
 }
 
+const TOAST_EXIT_MS = 140;
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<readonly Toast[]>([]);
+  const [exitingIds, setExitingIds] = useState<ReadonlySet<string>>(new Set());
   const idFactoryRef = useRef<ToastIdFactory | null>(null);
   if (idFactoryRef.current === null) {
     idFactoryRef.current = createToastIdFactory();
   }
   const timersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const exitTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
   const dismissToast = useCallback((id: string) => {
     const timer = timersRef.current.get(id);
@@ -88,7 +94,21 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       clearTimeout(timer);
       timersRef.current.delete(id);
     }
-    setToasts((current) => dismissToastFromQueue(current, id));
+    if (exitTimersRef.current.has(id)) return;
+    setExitingIds((current) => new Set(current).add(id));
+    exitTimersRef.current.set(
+      id,
+      setTimeout(() => {
+        exitTimersRef.current.delete(id);
+        setExitingIds((current) => {
+          if (!current.has(id)) return current;
+          const next = new Set(current);
+          next.delete(id);
+          return next;
+        });
+        setToasts((current) => dismissToastFromQueue(current, id));
+      }, TOAST_EXIT_MS),
+    );
   }, []);
 
   const showToast = useCallback(
@@ -108,6 +128,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     () => () => {
       for (const timer of timersRef.current.values()) clearTimeout(timer);
       timersRef.current.clear();
+      for (const timer of exitTimersRef.current.values()) clearTimeout(timer);
+      exitTimersRef.current.clear();
     },
     [],
   );
@@ -122,7 +144,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       {typeof document === 'undefined'
         ? null
-        : createPortal(<ToastViewport toasts={toasts} onDismiss={dismissToast} />, document.body)}
+        : createPortal(
+            <ToastViewport toasts={toasts} exitingIds={exitingIds} onDismiss={dismissToast} />,
+            document.body,
+          )}
     </ToastContext.Provider>
   );
 }

@@ -39,9 +39,9 @@ const declarationValues = (css) => {
   return values;
 };
 
-const stylesCss = readSrc('styles.css');
+const stylesCss = readSrc('styles/tokens.css');
 const rootBlock = stylesCss.match(/:root\s*\{([\s\S]*?)\}/);
-assert.ok(rootBlock, 'styles.css must define a :root block');
+assert.ok(rootBlock, 'styles/tokens.css must define a :root block');
 const definedTokens = new Set();
 const duplicateTokens = new Set();
 for (const match of rootBlock[1].matchAll(/(--desktop-[\w-]+)\s*:/g)) {
@@ -49,7 +49,7 @@ for (const match of rootBlock[1].matchAll(/(--desktop-[\w-]+)\s*:/g)) {
   definedTokens.add(match[1]);
 }
 
-test('every --desktop-* token in the styles.css :root block is defined exactly once', () => {
+test('every --desktop-* token in the styles/tokens.css :root block is defined exactly once', () => {
   assert.deepEqual([...duplicateTokens], []);
   assert.ok(definedTokens.size > 0);
 });

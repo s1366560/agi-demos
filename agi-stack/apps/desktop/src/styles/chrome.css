@@ -1,0 +1,300 @@
+/* Shell chrome: app grid, titlebar, sidebar/workbench frame, pane
+   stage and the chrome-owned responsive rules. Extracted from the
+   former monolithic styles.css. */
+
+.app-shell {
+  --desktop-sidebar-width: var(--desktop-sidebar-preferred-width, 220px);
+  display: grid;
+  width: 100vw;
+  height: 100vh;
+  grid-template-columns: var(--desktop-sidebar-width) minmax(0, 1fr);
+  grid-template-rows: 44px minmax(0, 1fr);
+  background: var(--desktop-bg);
+}
+
+.app-shell.desktop-window {
+  grid-template-rows: 44px minmax(0, 1fr);
+}
+
+.app-shell.sidebar-collapsed {
+  grid-template-columns: 44px minmax(0, 1fr);
+}
+
+.app-shell.desktop-window.sidebar-collapsed {
+  grid-template-columns: 44px minmax(0, 1fr);
+}
+
+.app-shell .window-dots,
+.app-shell .window-controls,
+.app-shell .traffic-lights,
+.app-shell .traffic-buttons,
+.app-shell .traffic-light,
+.app-shell .window-control-dot,
+.app-shell .macos-window-controls,
+.app-shell .mac-window-controls,
+.app-shell .titlebar-window-controls,
+.app-shell [aria-label="Window controls"],
+.app-shell [data-window-controls],
+.app-shell [data-desktop-window-controls],
+.app-shell [class*="traffic-light"],
+.app-shell [class*="window-control"],
+.app-shell [class*="window-dot"],
+html[data-desktop-window] .app-shell [class*="traffic-light"],
+html[data-desktop-window] .app-shell [class*="window-dot"] {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
+
+.app-shell .window-dots *,
+.app-shell .window-controls *,
+.app-shell .traffic-lights *,
+.app-shell .traffic-buttons *,
+.app-shell .macos-window-controls *,
+.app-shell .mac-window-controls *,
+.app-shell .titlebar-window-controls * {
+  display: none !important;
+}
+
+.titlebar {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0 10px;
+  border-bottom: 1px solid rgba(var(--desktop-slate-rgb), 0.08);
+  background: var(--desktop-surface-7);
+}
+
+.app-shell.desktop-window .titlebar {
+  padding-left: 10px;
+}
+
+.titlebar .rt-Button {
+  min-height: 34px;
+}
+
+.titlebar .rt-IconButton {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+}
+
+.desktop-body {
+  display: contents;
+}
+
+.workbench {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.copilot-sidebar {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: 44px minmax(0, 1fr) auto;
+  overflow: hidden;
+  border-right: 1px solid var(--desktop-border);
+  background: var(--desktop-panel-2);
+}
+
+.app-shell.desktop-window .copilot-sidebar {
+  grid-template-rows: 44px minmax(0, 1fr) auto;
+}
+
+.app-shell.sidebar-collapsed .copilot-sidebar {
+  grid-template-rows: 44px minmax(0, 1fr);
+}
+
+.app-shell.desktop-window.sidebar-collapsed .copilot-sidebar {
+  grid-template-rows: 44px minmax(0, 1fr);
+}
+
+.workbench {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+  background: var(--desktop-bg);
+}
+
+.workbench-layout {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.workbench-error {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(520px, 58vw);
+  padding: 6px 9px;
+  overflow: hidden;
+  border: 1px solid rgba(var(--desktop-red-rgb), 0.34);
+  border-radius: 6px;
+  background: rgba(var(--desktop-red-rgb), 0.1);
+  color: var(--desktop-red-blush);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workbench-error > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workbench-error > button {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border: 1px solid rgba(var(--desktop-red-blush-rgb), 0.38);
+  border-radius: 4px;
+  background: rgba(var(--desktop-white-rgb), 0.05);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.workbench-error > button:hover {
+  background: rgba(var(--desktop-white-rgb), 0.1);
+}
+
+.pane-stage {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: minmax(280px, 0.92fr) minmax(340px, 1.18fr) minmax(320px, 0.9fr);
+  gap: 8px;
+  padding: 8px;
+  overflow: hidden;
+}
+
+.pane-stage.single-stage {
+  grid-template-columns: minmax(0, 1fr);
+  overflow: auto;
+}
+
+.pane-stage.single-stage.my-work-stage {
+  padding: 0;
+  overflow: hidden;
+}
+
+.pane-stage.single-stage.auxiliary-stage {
+  padding: 0;
+  overflow: hidden;
+}
+
+.pane-stage.single-stage .pane-shell {
+  min-height: 0;
+}
+
+.pane-shell {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--desktop-border);
+  border-radius: 7px;
+  background: var(--desktop-surface-10);
+  box-shadow: none;
+}
+
+.settings-grid {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 12px;
+}
+
+.settings-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 1380px) {
+.pane-stage {
+    grid-template-columns: minmax(280px, 1fr);
+    overflow: auto;
+  }
+
+.pane-shell {
+    min-height: 420px;
+  }
+
+.pane-stage.overview-stage .pane-shell {
+    min-height: 420px;
+  }
+}
+
+@media (max-width: 760px) {
+.app-shell,
+.app-shell.desktop-window {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 44px minmax(0, 1fr);
+  }
+
+.app-shell.desktop-window {
+    grid-template-rows: 44px minmax(0, 1fr);
+  }
+
+.titlebar {
+    grid-column: 1;
+    gap: 6px;
+    padding-right: 8px;
+  }
+
+.copilot-sidebar {
+    display: none;
+  }
+
+.workbench {
+    grid-column: 1;
+  }
+
+.workbench-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+.pane-stage,
+.pane-stage.overview-stage {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: auto;
+    padding: 8px;
+  }
+
+.pane-shell,
+.pane-stage.overview-stage .pane-shell {
+    min-height: 0;
+  }
+
+.settings-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    padding: 8px;
+  }
+}
+
+@media (max-width: 360px) {
+.settings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

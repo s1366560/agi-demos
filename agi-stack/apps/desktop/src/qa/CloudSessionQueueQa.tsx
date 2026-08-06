@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { useAgentSocket } from '../hooks/useAgentSocket';
 import { DEFAULT_CONFIG, type DesktopRuntimeConfig } from '../types';
 
-import '../styles.css';
+import '../styles/global.css';
 
 type SentSocketMessage = Record<string, unknown>;
 

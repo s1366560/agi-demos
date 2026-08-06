@@ -92,7 +92,7 @@
 .session-tool-group > button b { overflow: hidden; color: var(--desktop-gray-37); font-size: 7.2px; text-overflow: ellipsis; white-space: nowrap; }
 .session-tool-group > button small { color: var(--desktop-gray-2); font-size: 6px; }
 .session-tool-group > button em { color: var(--green); font-size: 5.5px; font-style: normal; }
-.session-tool-group > button > svg { color: var(--desktop-gray-1); transition: transform .15s ease; }
+.session-tool-group > button > svg { color: var(--desktop-gray-1); transition: transform .15s var(--ease-out); }
 .session-tool-group > button > svg.expanded { transform: rotate(180deg); }
 .session-tool-rows { display: grid; padding: 0 8px 6px 39px; border-top: 1px solid var(--desktop-border-1); }
 .session-tool-rows > div { display: grid; grid-template-columns: 13px minmax(0, 1fr) auto; align-items: center; gap: 6px; min-height: 32px; border-bottom: 1px solid var(--desktop-border-1); }
@@ -139,8 +139,13 @@
 .session-canvas-toolbar b { color: var(--green); font-size: 6px; }
 .session-canvas-toolbar em { color: var(--red); font-size: 6px; font-style: normal; }
 .session-canvas-toolbar button { display: inline-flex; align-items: center; height: 24px; gap: 4px; padding: 0 7px; border: 1px solid var(--desktop-border-17); border-radius: 5px; background: var(--desktop-surface-25); color: var(--desktop-gray-12); font-size: 5.8px; }
-.session-canvas-toolbar button svg { transition: transform .15s ease; }
+.session-canvas-toolbar button svg { transition: transform .15s var(--ease-out); }
 .session-canvas-toolbar button svg.expanded { transform: rotate(180deg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .session-tool-group > button > svg,
+  .session-canvas-toolbar button svg { transition: none; }
+}
 
 .session-canvas-hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 14px; border: 1px solid var(--desktop-border-15); border-radius: 7px; background: var(--desktop-surface-9); }
 .session-canvas-hero > div { min-width: 0; }

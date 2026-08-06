@@ -8,6 +8,7 @@ import { SessionSandboxTools } from '../sandbox/SessionSandboxTools';
 import type { SandboxRuntimeCapability } from '../sandbox/sandboxRuntimeClient';
 import type { SessionSandboxRuntimeSurface } from '../sandbox/useSandboxRuntimeSurface';
 import { terminalOutputText, type TerminalBindingState } from './sessionTerminalModel';
+import './SessionTerminalCanvas.css';
 
 type SessionTerminalCanvasProps = {
   terminal: TerminalServiceResponse | null;

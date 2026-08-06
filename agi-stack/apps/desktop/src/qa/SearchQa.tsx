@@ -10,7 +10,7 @@ import type {
 } from '../api/searchContract';
 import { DesktopSearch } from '../features/search/DesktopSearch';
 import { I18nProvider } from '../i18n';
-import '../styles.css';
+import '../styles/global.css';
 import './searchQa.css';
 
 declare global {

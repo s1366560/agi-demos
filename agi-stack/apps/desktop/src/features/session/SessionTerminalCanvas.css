@@ -1,0 +1,51 @@
+/* Session terminal preview styles, extracted from the former monolithic
+   styles.css. Imported by SessionTerminalCanvas.tsx. */
+
+
+.review-terminal {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+}
+
+.review-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.terminal-preview {
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 7px;
+  background: var(--desktop-surface-1);
+  color: var(--desktop-gray-35);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.terminal-preview {
+  min-height: 240px;
+}
+
+.terminal-authority-alert {
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 1px solid rgba(var(--desktop-red-bright-rgb), 0.28);
+  border-radius: 7px;
+  background: rgba(var(--desktop-red-deep-rgb), 0.14);
+  color: var(--desktop-red-pale-2);
+  font-size: 11px;
+}
+
+.terminal-authority-alert span,
+.terminal-authority-alert code {
+  color: var(--desktop-muted);
+}

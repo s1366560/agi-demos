@@ -11,7 +11,7 @@ import type {
 } from '../features/sandbox/sandboxRuntimeClient';
 import type { SessionSandboxRuntimeSurface } from '../features/sandbox/useSandboxRuntimeSurface';
 import { I18nProvider } from '../i18n';
-import '../styles.css';
+import '../styles/global.css';
 import './parityRuntimeQa.css';
 
 declare global {

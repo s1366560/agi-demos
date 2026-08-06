@@ -53,6 +53,17 @@ const appSource = readFileSync(
   new URL("../src/App.tsx", import.meta.url),
   "utf8",
 );
+const agentConversationSource = [
+  '../src/hooks/useAgentConversation.ts',
+  '../src/hooks/useConversationThreads.ts',
+  '../src/hooks/useConversationMessaging.ts',
+]
+  .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
+  .join('\n');
+const appTimelineEventModelSource = readFileSync(
+  new URL("../src/features/chat/appTimelineEventModel.ts", import.meta.url),
+  "utf8",
+);
 const chatTimelineSource = readFileSync(
   new URL("../src/features/chat/ChatTimeline.tsx", import.meta.url),
   "utf8",
@@ -682,7 +693,7 @@ test("DB replay execution identity lets complete settle the response row before 
     ],
   );
   assert.match(
-    appSource,
+    appTimelineEventModelSource,
     /readStringField\(data, 'execution_message_id'\)[\s\S]*?item\.executionMessageId = executionMessageId/,
   );
 });
@@ -940,11 +951,11 @@ test("message attachment sizes match the Web conversation formatter", () => {
 
 test("optimistic user rows preserve authoritative composer file metadata", () => {
   assert.match(
-    appSource,
+    agentConversationSource,
     /optimisticUserTimelineItem\(\s*messageId,\s*content,\s*execution\.forcedSkillName,\s*execution\.fileMetadata,\s*\)/,
   );
   assert.match(
-    appSource,
+    appTimelineEventModelSource,
     /metadata:\s*\{[\s\S]*optimistic:\s*true[\s\S]*fileMetadata/,
   );
 });
@@ -1702,32 +1713,32 @@ test("a channel inbound user message starts a new completion turn", () => {
 
 test("live Agent complete events preserve final content and execution summary metadata", () => {
   assert.match(
-    appSource,
+    appTimelineEventModelSource,
     /type === 'complete'[\s\S]*?mergeAssistantCompletionEvent\(/,
   );
   assert.match(
-    appSource,
+    appTimelineEventModelSource,
     /const explicitMessageId = streamingMessageId\(payload\)[\s\S]*?turnScopedFallback: !explicitMessageId/,
   );
   assert.match(
-    appSource,
+    appTimelineEventModelSource,
     /if \(type === 'assistant_message'\) \{(?:(?!if \(type === 'complete'\))[\s\S])*?return mergeAssistantCompletionEvent\(/,
   );
-  assert.match(appSource, /objectField\(data, 'execution_summary'\)/);
-  assert.match(appSource, /readTextField\(data, 'content'\)/);
+  assert.match(appTimelineEventModelSource, /objectField\(data, 'execution_summary'\)/);
+  assert.match(appTimelineEventModelSource, /readTextField\(data, 'content'\)/);
 });
 
 test("transport acknowledgements stay out of the transcript and terminal signals are released", () => {
   assert.match(
-    appSource,
+    appTimelineEventModelSource,
     /type === 'ack'[\s\S]*?action'\) === 'send_message'[\s\S]*?mergeAgentSendAcknowledgement\(/,
   );
   assert.match(
-    appSource,
+    appTimelineEventModelSource,
     /function streamingMessageId\([\s\S]*?return protocolStreamMessageId\(payload\)/,
   );
   assert.match(
-    appSource,
+    appTimelineEventModelSource,
     /!explicitMessageId && type !== 'text_end'[\s\S]*?eventScopedStreamMessageId\(/,
   );
   assert.match(
@@ -1879,7 +1890,7 @@ test("cost updates accept domain token maps, prefer cumulative totals, and avoid
     existing,
   );
   assert.match(
-    appSource,
+    appTimelineEventModelSource,
     /type === 'cost_update'[\s\S]*?mergeCostUpdateEvent\(/,
   );
 });
@@ -3415,11 +3426,11 @@ test("live cloud progress remains available as a structured Desktop activity", (
     true,
   );
   assert.match(
-    appSource,
+    appTimelineEventModelSource,
     /shouldSkipLiveTimelineEvent\(type, readStringField\(payload, 'action'\)\)/,
   );
   assert.match(
-    appSource,
+    appTimelineEventModelSource,
     /const item = timelineItemFromSocketEvent\(event\);[\s\S]*?return item \? mergeTimelineItems/,
   );
 });
@@ -5150,17 +5161,17 @@ test("display preserves a requested goal-shaped follow-up when no control though
 
 test("live Agent events route thought start, delta, and completion through the stream merger", () => {
   assert.match(
-    appSource,
+    appTimelineEventModelSource,
     /type === 'thought_start'[\s\S]*?type === 'thought_delta'[\s\S]*?type === 'thought'/,
   );
-  assert.match(appSource, /mergeThoughtStreamChunk\(existing/);
-  assert.match(appSource, /type\.startsWith\('thought_'\)/);
+  assert.match(appTimelineEventModelSource, /mergeThoughtStreamChunk\(existing/);
+  assert.match(appTimelineEventModelSource, /type\.startsWith\('thought_'\)/);
 });
 
 test("live Agent text events preserve raw delta whitespace and read text_end full_text", () => {
-  assert.match(appSource, /mergeAssistantTextStreamChunk\(existing/);
-  assert.match(appSource, /readTextField\(data, 'full_text'\)/);
-  assert.match(appSource, /readTextField\(data, 'delta'\)/);
+  assert.match(appTimelineEventModelSource, /mergeAssistantTextStreamChunk\(existing/);
+  assert.match(appTimelineEventModelSource, /readTextField\(data, 'full_text'\)/);
+  assert.match(appTimelineEventModelSource, /readTextField\(data, 'delta'\)/);
 });
 
 test("act items pair with the observe that answers them, preserving order", () => {
@@ -5539,10 +5550,10 @@ test("parallel tool observations pair by call identity instead of arrival order"
 
 test("live Agent tool events route deltas, calls, and observations through the stream merger", () => {
   assert.match(
-    appSource,
+    appTimelineEventModelSource,
     /type === 'act_delta'[\s\S]*?type === 'act'[\s\S]*?type === 'observe'/,
   );
-  assert.match(appSource, /mergeToolStreamItem\(/);
+  assert.match(appTimelineEventModelSource, /mergeToolStreamItem\(/);
 });
 
 test("tool activity rows preserve structured thinking ahead of paired tool calls", () => {

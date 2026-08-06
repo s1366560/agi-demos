@@ -94,7 +94,10 @@ export function SkillTimelineCard({
               : t(`chat.skillStatus.${skill.status}`)
           }
         >
-          <span className="skill-progress-bar" style={{ width: `${progress}%` }} />
+          <span
+            className="skill-progress-bar"
+            style={{ transform: `scaleX(${progress / 100})` }}
+          />
         </div>
       ) : null}
       {expanded ? (

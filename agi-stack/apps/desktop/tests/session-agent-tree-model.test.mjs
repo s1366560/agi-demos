@@ -196,7 +196,7 @@ test('recognizes only the exact multi-Agent lifecycle protocol', () => {
 
 test('Desktop exposes the Agents canvas as a dynamic session surface with navigation', () => {
   const appSource = readFileSync(
-    new URL('../src/App.tsx', import.meta.url),
+    new URL('../src/features/session/WorkspaceReviewPanel.tsx', import.meta.url),
     'utf8'
   );
   const canvasSource = readFileSync(

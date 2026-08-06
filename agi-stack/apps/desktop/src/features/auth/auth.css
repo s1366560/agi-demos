@@ -1,0 +1,340 @@
+/* Auth panel, sign-in modal and account summary styles, extracted from the
+   former monolithic styles.css. Owns .auth-* and .account-* plus the shared
+   .field-label / .auth-hint / .action-hint / .auth-error form primitives
+   (RuntimeConfigPanel consumes them transitively via the app module graph).
+   Imported by AuthPanel.tsx. */
+
+
+.auth-panel {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid var(--desktop-border-soft);
+}
+
+.auth-panel.signed-in {
+  flex: 0 0 auto;
+  max-height: none;
+  overflow: hidden;
+}
+
+.auth-form {
+  display: grid;
+  gap: 8px;
+}
+
+.account-panel {
+  border-bottom: 0;
+}
+
+.account-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.account-panel:not(.signed-in) .account-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.account-profile-button {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.account-profile-button:hover .account-avatar {
+  border-color: rgba(var(--desktop-slate-rgb), 0.42);
+  background: rgba(var(--desktop-slate-rgb), 0.12);
+}
+
+.account-avatar {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 50%;
+  background: rgba(var(--desktop-cyan-rgb), 0.1);
+  color: var(--desktop-cyan);
+}
+
+.account-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.account-copy .rt-Text,
+.account-scope {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.auth-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(var(--desktop-overlay-1-rgb), 0.64);
+  backdrop-filter: blur(8px);
+}
+
+.auth-modal {
+  width: min(420px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  padding: 18px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--desktop-border);
+  border-radius: 8px;
+  background: var(--desktop-panel-2);
+  color: var(--desktop-text);
+  box-shadow: 0 24px 90px rgba(var(--desktop-black-rgb), 0.52);
+}
+
+.auth-modal .rt-Text {
+  color: inherit;
+}
+
+.auth-modal .rt-Text[color="gray"],
+.auth-modal .auth-hint {
+  color: var(--desktop-muted);
+}
+
+.auth-modal-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+}
+
+.auth-close-button {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+}
+
+.auth-modal .auth-form {
+  margin-top: 14px;
+}
+
+.auth-modal .rt-Button {
+  min-height: 34px;
+  color: var(--desktop-text);
+}
+
+.auth-modal .rt-IconButton {
+  color: var(--desktop-muted);
+}
+
+.auth-modal .rt-Button:disabled {
+  color: var(--desktop-faint);
+}
+
+.auth-modal-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.auth-modal-actions .rt-Button,
+.auth-manual-fallback {
+  width: 100%;
+  border: 1px solid var(--desktop-border);
+  background: rgba(var(--desktop-slate-rgb), 0.08);
+  box-shadow: none;
+  color: var(--desktop-text);
+  justify-content: center;
+}
+
+.auth-login-button {
+  gap: 6px;
+}
+
+.auth-login-button svg {
+  flex: 0 0 auto;
+}
+
+.auth-manual-fallback {
+  margin-top: 8px;
+}
+
+.auth-modal-actions .rt-Button:hover,
+.auth-manual-fallback:hover {
+  border-color: rgba(var(--desktop-slate-rgb), 0.42);
+  background: rgba(var(--desktop-slate-rgb), 0.14);
+}
+
+.auth-modal-actions .auth-login-button:not(:disabled) {
+  border-color: rgba(var(--desktop-cyan-rgb), 0.48);
+  background: rgba(var(--desktop-cyan-rgb), 0.18);
+  color: var(--desktop-text);
+}
+
+.auth-modal-actions .rt-Button:disabled,
+.auth-manual-fallback:disabled {
+  border-color: rgba(var(--desktop-slate-rgb), 0.12);
+  background: rgba(var(--desktop-slate-rgb), 0.05);
+  color: var(--desktop-faint);
+  opacity: 1;
+}
+
+.auth-modal .rt-TextFieldRoot {
+  min-height: 34px;
+}
+
+.auth-modal .rt-TextFieldInput {
+  min-height: 32px;
+  color: var(--desktop-text);
+}
+
+.auth-modal .rt-TextFieldInput::placeholder {
+  color: var(--desktop-faint);
+  opacity: 1;
+}
+
+.auth-modal .field-label span {
+  color: var(--desktop-muted);
+}
+
+.auth-modal .auth-hint {
+  background: rgba(var(--desktop-amber-rgb), 0.12);
+  color: var(--desktop-amber-pale);
+}
+
+.auth-dev-helper {
+  display: grid;
+  gap: 6px;
+}
+
+.auth-dev-presets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.auth-fill-dev-button {
+  width: 100%;
+  min-width: 0;
+  justify-content: center;
+  border: 1px solid rgba(var(--desktop-amber-rgb), 0.24);
+  background: rgba(var(--desktop-amber-rgb), 0.08);
+  color: var(--desktop-amber-pale);
+}
+
+.auth-fill-dev-button:hover {
+  border-color: rgba(var(--desktop-amber-rgb), 0.42);
+  background: rgba(var(--desktop-amber-rgb), 0.14);
+}
+
+.auth-fill-dev-button[aria-pressed='true'] {
+  border-color: rgba(var(--desktop-cyan-rgb), 0.48);
+  background: rgba(var(--desktop-cyan-rgb), 0.13);
+  color: var(--desktop-text);
+}
+
+.auth-hint {
+  padding: 7px 8px;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 6px;
+  background: rgba(var(--desktop-amber-rgb), 0.08);
+}
+
+.auth-error {
+  padding: 7px 8px;
+  border: 1px solid rgba(var(--desktop-red-rgb), 0.42);
+  border-radius: 6px;
+  background: rgba(var(--desktop-red-rgb), 0.1);
+  color: var(--desktop-red-blush) !important;
+  line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  .auth-modal-actions {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .auth-modal-backdrop {
+    padding: 16px;
+  }
+
+  .auth-modal {
+    width: min(360px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    padding: 14px;
+  }
+
+  .auth-modal-header {
+    gap: 8px;
+  }
+
+  .auth-modal-header > div {
+    min-width: 0;
+  }
+
+  .auth-modal-header > div > .rt-Text:first-child {
+    margin-bottom: 3px;
+    font-size: 18px;
+    line-height: 24px;
+  }
+
+  .auth-modal-header > div > .rt-Text:last-child {
+    margin: 0;
+    font-size: 12px;
+    line-height: 18px;
+  }
+
+  .auth-close-button {
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+  }
+
+  .auth-modal .auth-form {
+    gap: 7px;
+    margin-top: 10px;
+  }
+
+  .auth-modal .rt-TextFieldRoot {
+    min-height: 32px;
+  }
+
+  .auth-modal .rt-TextFieldInput {
+    min-height: 30px;
+  }
+
+  .auth-modal .auth-hint {
+    padding: 6px 7px;
+    line-height: 17px;
+  }
+
+  .auth-modal-actions .rt-Button,
+.auth-manual-fallback {
+    min-height: 34px;
+  }
+
+  .auth-manual-fallback {
+    margin-top: 6px;
+  }
+}

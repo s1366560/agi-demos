@@ -27,6 +27,7 @@ const sandboxRuntimeHookSource = readFileSync(
   'utf8'
 );
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const reviewPanelSource = readFileSync(new URL('../src/features/session/WorkspaceReviewPanel.tsx', import.meta.url), 'utf8');
 
 test('Desktop interactive terminal uses xterm, Fit, and WebLinks', () => {
   assert.match(interactiveTerminalSource, /from '@xterm\/xterm'/);
@@ -51,7 +52,7 @@ test('terminal canvas gates xterm and retains the history fallback', () => {
   );
   assert.match(sessionTerminalSource, /<InteractiveTerminal/);
   assert.match(sessionTerminalSource, /<pre[\s\S]*className="terminal-preview"/);
-  assert.match(appSource, /interactiveCapability=\{terminalInteractiveCapability\}/);
+  assert.match(reviewPanelSource, /interactiveCapability=\{terminalInteractiveCapability\}/);
   assert.match(appSource, /onTerminalInput=\{terminalProxy\.sendInput\}/);
   assert.match(appSource, /onTerminalResize=\{terminalProxy\.resize\}/);
 });
@@ -77,7 +78,7 @@ test('session terminal exposes files and desktop through an optional runtime pro
   assert.doesNotMatch(sandboxToolsSource, /URL\.createObjectURL|createElement\('a'\)/);
   assert.match(sandboxFilesSource, /await onDownloadFile\?\.\(result\.value\)/);
   assert.match(appSource, /const sandboxRuntime = useSandboxRuntimeSurface/);
-  assert.match(appSource, /sandboxRuntime=\{sandboxRuntime\}/);
+  assert.match(reviewPanelSource, /sandboxRuntime=\{sandboxRuntime\}/);
 });
 
 test('remote desktop iframe is credential-free and reconnectable', () => {

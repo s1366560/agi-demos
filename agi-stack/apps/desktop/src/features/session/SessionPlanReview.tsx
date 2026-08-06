@@ -20,6 +20,7 @@ import type {
   SessionProjectionTask,
 } from './sessionProjectionTypes';
 import type { SessionCapabilityMode } from './sessionViewModel';
+import './SessionPlanReview.css';
 
 type SessionPlanReviewProps = {
   plan: SessionProjectionPlan;

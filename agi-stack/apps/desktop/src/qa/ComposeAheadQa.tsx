@@ -16,7 +16,7 @@ import type {
   ComposerContextItem,
   ConversationTimelineState,
 } from '../types';
-import '../styles.css';
+import '../styles/global.css';
 import './sessionSteeringQa.css';
 
 declare global {

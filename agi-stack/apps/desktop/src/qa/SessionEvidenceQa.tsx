@@ -6,7 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { SessionEvidenceCanvas } from '../features/session/SessionEvidenceCanvas';
 import { I18nProvider } from '../i18n';
 import type { DesktopArtifactVersion } from '../types';
-import '../styles.css';
+import '../styles/global.css';
 import './sessionEvidenceQa.css';
 
 declare global {

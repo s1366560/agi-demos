@@ -6,6 +6,8 @@ const readSource = (path) =>
   readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8');
 
 const appSource = readSource('App.tsx');
+const commandPaletteSource = readSource('features/navigation/CommandPalette.tsx');
+const reviewPanelSource = readSource('features/session/WorkspaceReviewPanel.tsx');
 const flowSource = readSource('features/task/NewTaskFlow.tsx');
 const stagesSource = readSource('features/task/NewTaskFlowStages.tsx');
 const runtimeSource = readSource('features/runtime/RuntimeConfigPanel.tsx');
@@ -16,14 +18,14 @@ const chatTranscriptSource = readSource('features/chat/ChatTranscript.tsx');
 const i18nSource = readSource('i18n.tsx');
 
 test('session canvas implements an arrow-key navigable tab pattern', () => {
-  assert.match(appSource, /role="tablist"/);
-  assert.match(appSource, /role="tab"/);
-  assert.match(appSource, /aria-selected=\{activeTab === tab\}/);
-  assert.match(appSource, /aria-controls=\{panelId\}/);
-  assert.match(appSource, /tabIndex=\{activeTab === tab \? 0 : -1\}/);
-  assert.match(appSource, /\['ArrowLeft', 'ArrowRight', 'Home', 'End'\]/);
-  assert.match(appSource, /role="tabpanel"/);
-  assert.match(appSource, /aria-labelledby=\{tabId\(activeTab\)\}/);
+  assert.match(reviewPanelSource, /role="tablist"/);
+  assert.match(reviewPanelSource, /role="tab"/);
+  assert.match(reviewPanelSource, /aria-selected=\{activeTab === tab\}/);
+  assert.match(reviewPanelSource, /aria-controls=\{panelId\}/);
+  assert.match(reviewPanelSource, /tabIndex=\{activeTab === tab \? 0 : -1\}/);
+  assert.match(reviewPanelSource, /\['ArrowLeft', 'ArrowRight', 'Home', 'End'\]/);
+  assert.match(reviewPanelSource, /role="tabpanel"/);
+  assert.match(reviewPanelSource, /aria-labelledby=\{tabId\(activeTab\)\}/);
 });
 
 test('new-task review announces and focuses the newly available plan', () => {
@@ -60,12 +62,12 @@ test('command palette and recovery affordances use localized, accurate copy', ()
   ]) {
     assert.equal((i18nSource.match(new RegExp(`'${key.replaceAll('.', '\\.')}'`, 'g')) ?? []).length, 2);
   }
-  assert.match(appSource, /t\('commandPalette\.title'\)/);
-  assert.match(appSource, /t\('commandPalette\.searchPlaceholder'\)/);
+  assert.match(commandPaletteSource, /t\('commandPalette\.title'\)/);
+  assert.match(commandPaletteSource, /t\('commandPalette\.searchPlaceholder'\)/);
   assert.match(i18nSource, /Open connection recovery/);
   assert.match(i18nSource, /打开连接恢复/);
-  assert.doesNotMatch(appSource, /aria-label="Command palette"/);
-  assert.doesNotMatch(appSource, /placeholder="Search commands/);
+  assert.doesNotMatch(commandPaletteSource, /aria-label="Command palette"/);
+  assert.doesNotMatch(commandPaletteSource, /placeholder="Search commands/);
 });
 
 test('Cloud Changes structural reason codes are localized in both locales', () => {

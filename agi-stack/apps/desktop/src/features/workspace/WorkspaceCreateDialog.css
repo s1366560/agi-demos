@@ -107,7 +107,18 @@
 .workspace-create-option-grid button:hover:not(:disabled) {
   border-color: rgba(var(--desktop-cyan-rgb), 0.6);
   background: rgba(var(--desktop-surface-cyan-7-rgb), 0.72);
-  transform: translateY(-1px);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .workspace-create-option-grid button:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-create-option-grid button:hover:not(:disabled) {
+    transform: none;
+  }
 }
 
 .workspace-create-option-grid button:focus-visible {

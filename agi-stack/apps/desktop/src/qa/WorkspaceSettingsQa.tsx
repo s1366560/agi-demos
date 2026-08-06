@@ -26,7 +26,7 @@ import type {
   WorkspaceMemberSummary,
   WorkspaceSummary,
 } from '../types';
-import '../styles.css';
+import '../styles/global.css';
 import './workspaceSettingsQa.css';
 
 declare global {

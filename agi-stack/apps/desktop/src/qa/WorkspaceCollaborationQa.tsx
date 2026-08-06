@@ -10,7 +10,7 @@ import type {
   WorkspaceSurfaceState,
 } from '../features/workspace/workspaceCollaborationClient';
 import { I18nProvider } from '../i18n';
-import '../styles.css';
+import '../styles/global.css';
 import './parityRuntimeQa.css';
 
 declare global {

@@ -43,6 +43,13 @@ const composerFileUploadSource = readFileSync(
   'utf8',
 );
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const agentConversationSource = [
+  '../src/hooks/useAgentConversation.ts',
+  '../src/hooks/useConversationThreads.ts',
+  '../src/hooks/useConversationMessaging.ts',
+]
+  .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
+  .join('\n');
 const qaSource = readFileSync(new URL('../src/qa/SessionSteeringQa.tsx', import.meta.url), 'utf8');
 const newThreadComposerSource = readFileSync(
   new URL('../src/features/task/NewThreadComposer.tsx', import.meta.url),
@@ -141,7 +148,7 @@ test('workspace mention routing suppresses the duplicate default Agent launch', 
   );
   assert.match(composerCatalogSource, /listWorkspaceAgents/);
   assert.match(composerPlusMenuSource, /mention_target: true/);
-  assert.match(appSource, /workspaceMessageRequiresDefaultAgentLaunch\(saved\)/);
+  assert.match(agentConversationSource, /workspaceMessageRequiresDefaultAgentLaunch\(saved\)/);
 });
 
 test('composer plus menu captures Escape and restores focus to its trigger', () => {
@@ -488,12 +495,12 @@ test('composer catalog exposes execution metadata for Agents, SubAgents, skills,
   assert.match(composerPlusMenuSource, /execution_subagent_name/);
   assert.match(composerPlusMenuSource, /execution_skill_name/);
   assert.match(composerPlusMenuSource, /execution_slot: 'command'/);
-  assert.match(appSource, /composerAgentExecutionContext\(content, contextItems\)/);
-  assert.match(appSource, /agentId: execution\.agentId/);
-  assert.match(appSource, /forcedSkillName: execution\.forcedSkillName/);
-  assert.match(appSource, /appModelContext: execution\.appModelContext/);
+  assert.match(agentConversationSource, /composerAgentExecutionContext\(content, contextItems\)/);
+  assert.match(agentConversationSource, /agentId: execution\.agentId/);
+  assert.match(agentConversationSource, /forcedSkillName: execution\.forcedSkillName/);
+  assert.match(agentConversationSource, /appModelContext: execution\.appModelContext/);
   assert.match(
-    appSource,
+    agentConversationSource,
     /composerAgentExecutionContext\([\s\S]*?buildPlanningPrompt\(definition\)[\s\S]*?input\.contextItems/,
   );
   assert.match(composerFileUploadSource, /api\.uploadSandboxFile/);

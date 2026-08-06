@@ -11,6 +11,7 @@ const {
   '/tmp/agistack-desktop-test-dist/src/features/chat/conversationTitleEventModel.js',
 );
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const appTimelineEventModelSource = readFileSync(new URL('../src/features/chat/appTimelineEventModel.ts', import.meta.url), 'utf8');
 const qaSource = readFileSync(new URL('../src/qa/SessionSteeringQa.tsx', import.meta.url), 'utf8');
 
 function conversation(id, title) {
@@ -86,8 +87,8 @@ test('conversation title updates change only the exact active session and catalo
 });
 
 test('Desktop consumes title events as metadata instead of raw timeline rows', () => {
-  assert.match(appSource, /readConversationTitleStreamEvent\(event\)/);
-  assert.match(appSource, /titleEvent\.handled[\s\S]*return existing/);
+  assert.match(appTimelineEventModelSource, /readConversationTitleStreamEvent\(event\)/);
+  assert.match(appTimelineEventModelSource, /titleEvent\.handled[\s\S]*return existing/);
   assert.match(appSource, /applyConversationTitleUpdate\(/);
   assert.match(qaSource, /title-events/);
   assert.match(qaSource, /Verify cloud session startup/);

@@ -3,6 +3,13 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const desktopAuthSource = [
+  '../src/hooks/useDesktopAuth.ts',
+  '../src/hooks/useCloudSessionAuth.ts',
+  '../src/hooks/useLocalCredentialAuth.ts',
+]
+  .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
+  .join('\n');
 const loginSource = readFileSync(
   new URL('../src/features/auth/LoginScreen.tsx', import.meta.url),
   'utf8'
@@ -49,13 +56,13 @@ test('browser fallback uses the cloud runtime for email login and workspace SSO'
     appSource,
     /initialDesktopRuntimeConfig\(undefined, runsInNativeDesktop\)/,
   );
-  const ssoHandler = appSource.slice(
-    appSource.indexOf('const loginWithWorkspaceSso'),
-    appSource.indexOf('const login = async'),
+  const ssoHandler = desktopAuthSource.slice(
+    desktopAuthSource.indexOf('const loginWithWorkspaceSso'),
+    desktopAuthSource.indexOf('const login = async'),
   );
-  const emailHandler = appSource.slice(
-    appSource.indexOf('const login = async'),
-    appSource.indexOf('const hydrateLocalSession'),
+  const emailHandler = desktopAuthSource.slice(
+    desktopAuthSource.indexOf('const login = async'),
+    desktopAuthSource.indexOf('const hydrateLocalSession'),
   );
   assert.match(
     ssoHandler,
@@ -125,9 +132,9 @@ test('the workspace continue action exposes available authority without a fake s
     appSource,
     /onLocalSession=\{\(trustedDevice\) => void loginLocalSession\(trustedDevice\)\}/,
   );
-  assert.match(appSource, /createLocalSession\(trustedDevice\)/);
+  assert.match(desktopAuthSource, /createLocalSession\(trustedDevice\)/);
   assert.match(
-    appSource,
+    desktopAuthSource,
     /if \(trustedDevice && hasNativeTrustedSessionBroker\(\) && sessionId\)/,
   );
   assert.match(loginSource, /action\.kind === 'workspace_sso'/);
@@ -153,46 +160,46 @@ test('workspace SSO shows one accessible device authorization checkpoint', () =>
 });
 
 test('workspace SSO polls by structured protocol state and is cancellable', () => {
-  assert.match(appSource, /createDeviceCode\(controller\.signal\)/);
-  assert.match(appSource, /pollDeviceToken\([\s\S]{0,100}deviceAuthorization\.device_code/);
-  assert.match(appSource, /classifyDeviceTokenError\(caught\)/);
+  assert.match(desktopAuthSource, /createDeviceCode\(controller\.signal\)/);
+  assert.match(desktopAuthSource, /pollDeviceToken\([\s\S]{0,100}deviceAuthorization\.device_code/);
+  assert.match(desktopAuthSource, /classifyDeviceTokenError\(caught\)/);
   assert.match(appSource, /deviceAuthAttemptRef/);
   assert.match(appSource, /cancelWorkspaceSso/);
-  assert.match(appSource, /open_device_authorization_url/);
-  assert.match(appSource, /expectedUserCode/);
+  assert.match(desktopAuthSource, /open_device_authorization_url/);
+  assert.match(desktopAuthSource, /expectedUserCode/);
   assert.match(appSource, /openInFlight/);
-  assert.match(appSource, /window\.open\('about:blank', '_blank'\)/);
-  assert.match(appSource, /opened\.opener = null/);
-  assert.match(appSource, /opened\.location\.replace\(authorizationUrl\)/);
+  assert.match(desktopAuthSource, /window\.open\('about:blank', '_blank'\)/);
+  assert.match(desktopAuthSource, /opened\.opener = null/);
+  assert.match(desktopAuthSource, /opened\.location\.replace\(authorizationUrl\)/);
   assert.match(appSource, /WorkspaceSsoFlowError/);
-  assert.match(appSource, /keepExpiredPresentation/);
+  assert.match(desktopAuthSource, /keepExpiredPresentation/);
   assert.doesNotMatch(appSource, /localStorage[\s\S]*device_code/);
 
-  const nativeSave = appSource.indexOf('await saveNativeTrustedSession');
-  const staleAttemptCheck = appSource.indexOf(
+  const nativeSave = desktopAuthSource.indexOf('await saveNativeTrustedSession');
+  const staleAttemptCheck = desktopAuthSource.indexOf(
     'if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller))',
     nativeSave,
   );
-  const adoption = appSource.indexOf('tokenAdopted = true', nativeSave);
+  const adoption = desktopAuthSource.indexOf('tokenAdopted = true', nativeSave);
   assert.ok(nativeSave >= 0 && staleAttemptCheck > nativeSave && adoption > staleAttemptCheck);
 });
 
 test('device grant cleanup covers cancellation, expiry, retry, supersession, unmount and approval races', () => {
-  assert.match(appSource, /let issuedDeviceCode = '';/);
+  assert.match(desktopAuthSource, /let issuedDeviceCode = '';/);
   assert.match(
-    appSource,
+    desktopAuthSource,
     /const deviceAuthorization = await loginClient\.createDeviceCode\(controller\.signal\);\s*issuedDeviceCode = deviceAuthorization\.device_code;\s*if \(!deviceAuthAttemptIsCurrent/,
   );
   assert.match(
-    appSource,
+    desktopAuthSource,
     /const token = await loginClient\.pollDeviceToken\([\s\S]{0,160}?\);\s*issuedAccessToken = token\.access_token;\s*if \(!deviceAuthAttemptIsCurrent/,
   );
   assert.match(
-    appSource,
+    desktopAuthSource,
     /if \(issuedDeviceCode && !tokenAdopted\) \{\s*await cancelIssuedDeviceCodeBestEffort\(issuedDeviceCode, runtimeConfig\);\s*\}/,
   );
   assert.match(
-    appSource,
+    desktopAuthSource,
     /const cancelController = new AbortController\(\);[\s\S]{0,400}?cancelDeviceCode\(\s*deviceCode,\s*cancelController\.signal/,
   );
   assert.match(
@@ -200,15 +207,15 @@ test('device grant cleanup covers cancellation, expiry, retry, supersession, unm
     /useEffect\(\s*\(\) => \(\) => \{\s*deviceAuthAttemptRef\.current\?\.controller\.abort\(\);\s*deviceAuthAttemptRef\.current = null;/,
   );
   assert.match(
-    appSource,
+    desktopAuthSource,
     /const supersedeWorkspaceSsoAttempt = \(clearPresentation = true\) => \{\s*deviceAuthAttemptRef\.current\?\.controller\.abort\(\);\s*deviceAuthAttemptRef\.current = null;/,
   );
   assert.match(
-    appSource,
+    desktopAuthSource,
     /deviceError\?\.code === 'authorization_pending'[\s\S]{0,180}?continue;/,
   );
   assert.match(
-    appSource,
+    desktopAuthSource,
     /caught instanceof WorkspaceSsoFlowError && caught\.code === 'expired'[\s\S]{0,500}?return;[\s\S]{0,900}?issuedDeviceCode && !tokenAdopted/,
   );
 
@@ -220,9 +227,9 @@ test('device grant cleanup covers cancellation, expiry, retry, supersession, unm
 });
 
 test('email login revokes failed tokens while retaining only the guarded password-change token', () => {
-  const loginStart = appSource.indexOf('const login = async (trustedDevice: boolean) =>');
-  const loginEnd = appSource.indexOf('const hydrateLocalSession = async', loginStart);
-  const emailLoginSource = appSource.slice(loginStart, loginEnd);
+  const loginStart = desktopAuthSource.indexOf('const login = async (trustedDevice: boolean) =>');
+  const loginEnd = desktopAuthSource.indexOf('const hydrateLocalSession = async', loginStart);
+  const emailLoginSource = desktopAuthSource.slice(loginStart, loginEnd);
   assert.match(emailLoginSource, /let issuedAccessToken = '';/);
   assert.match(emailLoginSource, /issuedAccessToken = outcome\.access_token;/);
   assert.match(emailLoginSource, /let tokenAdopted = false;/);
@@ -252,9 +259,10 @@ test('authentication and workspace context failures are localized at their sourc
     'settings.selectedProjectUnavailable',
     'settings.contextResponseMismatch',
   ];
+  const appAndAuthSource = appSource + desktopAuthSource;
 
   for (const key of localizedKeys) {
-    assert.match(appSource, new RegExp(`t\\('${key.replaceAll('.', '\\.')}'\\)`));
+    assert.match(appAndAuthSource, new RegExp(`t\\('${key.replaceAll('.', '\\.')}'\\)`));
     assert.equal((i18nSource.match(new RegExp(`'${key.replaceAll('.', '\\.')}'`, 'g')) ?? []).length, 2);
   }
 
@@ -295,12 +303,12 @@ test('browser storage never receives a trusted session credential or recovery ca
   assert.doesNotMatch(appSource, /trustedLocalSessionReference/);
   assert.doesNotMatch(appSource, /writeTrustedLocalSessionReference/);
   assert.doesNotMatch(appSource, /readTrustedLocalSessionReference/);
-  assert.match(appSource, /credential_kind: 'cloud_bearer'/);
+  assert.match(desktopAuthSource, /credential_kind: 'cloud_bearer'/);
   assert.match(appSource, /credential_kind: 'local_session_reference'/);
   assert.match(appSource, /loadNativeTrustedSession\(\)/);
   assert.match(appSource, /clearNativeTrustedSession\(\)/);
   assert.match(appSource, /const message = t\('login\.restoreFailed'\)/);
-  assert.match(appSource, /if \(outcome\.must_change_password\)/);
+  assert.match(desktopAuthSource, /if \(outcome\.must_change_password\)/);
   assert.match(appSource, /authAttemptRevisionRef/);
   assert.match(appSource, /authAttemptRevisionRef\.current !== authAttemptRevision/);
   assert.match(appSource, /localReady=\{localRuntimeAuthorityReady\}/);

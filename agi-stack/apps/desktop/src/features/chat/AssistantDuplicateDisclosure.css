@@ -45,11 +45,17 @@
 }
 
 .assistant-duplicate-disclosure > summary > span:last-child svg {
-  transition: transform 120ms ease;
+  transition: transform 120ms var(--ease-out);
 }
 
 .assistant-duplicate-disclosure[open] > summary > span:last-child svg {
   transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-duplicate-disclosure > summary > span:last-child svg {
+    transition: none;
+  }
 }
 
 .assistant-duplicate-disclosure ol {

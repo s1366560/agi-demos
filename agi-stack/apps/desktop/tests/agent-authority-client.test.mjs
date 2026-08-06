@@ -760,10 +760,19 @@ test("Cloud run-input receipts project into the existing Desktop composer model"
 });
 
 test("Desktop production composer selects the narrow Cloud run-input authority", () => {
-  const source = require("node:fs").readFileSync(
-    new URL("../src/App.tsx", import.meta.url),
-    "utf8",
-  );
+  const source =
+    require("node:fs").readFileSync(
+      new URL("../src/App.tsx", import.meta.url),
+      "utf8",
+    ) +
+    require("node:fs").readFileSync(
+      new URL("../src/hooks/useAgentConversation.ts", import.meta.url),
+      "utf8",
+    ) +
+    require("node:fs").readFileSync(
+      new URL("../src/hooks/useConversationMessaging.ts", import.meta.url),
+      "utf8",
+    );
 
   assert.match(source, /activityAuthorityAdapter\.client\.createRunInput/);
   assert.match(source, /activityAuthorityAdapter\.client\.listRunInputs/);

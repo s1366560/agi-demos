@@ -16,7 +16,7 @@ import {
 import { SessionWorkspace } from '../features/session/SessionWorkspace';
 import type { SessionDetailViewModel } from '../features/session/sessionViewModel';
 import { I18nProvider } from '../i18n';
-import '../styles.css';
+import '../styles/global.css';
 import './sessionSteeringQa.css';
 import './sessionRecoveryQa.css';
 

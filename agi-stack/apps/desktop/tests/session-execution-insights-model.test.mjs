@@ -381,7 +381,7 @@ test('recognizes only the exact execution insight protocol', () => {
 });
 
 test('Desktop exposes a dynamic Insights canvas with selectable diagnostic evidence', () => {
-  const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const appSource = readFileSync(new URL('../src/features/session/WorkspaceReviewPanel.tsx', import.meta.url), 'utf8');
   const canvasSource = readFileSync(
     new URL('../src/features/session/SessionExecutionInsightsCanvas.tsx', import.meta.url),
     'utf8'

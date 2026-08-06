@@ -6,6 +6,10 @@ const appSource = readFileSync(
   new URL('../src/App.tsx', import.meta.url),
   'utf8',
 );
+const registrySource = readFileSync(
+  new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
+  'utf8',
+);
 const routerSource = readFileSync(
   new URL(
     '../src/features/navigation/DesktopProductionRouter.tsx',
@@ -16,19 +20,19 @@ const routerSource = readFileSync(
 
 test('App owns one production route registry with latest Project Overview, Search, and Cron bindings', () => {
   assert.match(
-    appSource,
+    registrySource,
     /createDesktopProductionRouteRegistry\(\{[\s\S]*PROJECT_OVERVIEW_ROUTE_ID[\s\S]*createProjectOverviewRouteModuleLoader\(\{[\s\S]*configRef\.current/u,
   );
   assert.match(
-    appSource,
+    registrySource,
     /createProjectOverviewRouteBindingForRuntime\(\s*configRef\.current,\s*context,?\s*\)/u,
   );
   assert.doesNotMatch(
-    appSource,
+    registrySource,
     /createCloudProjectOverviewClient|createLocalProjectOverviewClient/u,
   );
   assert.match(
-    appSource,
+    registrySource,
     /PROJECT_SEARCH_ROUTE_ID[\s\S]*createProjectSearchRouteModuleLoader\(\{[\s\S]*projectSearchRouteBindingRef\.current/u,
   );
   assert.match(
@@ -36,7 +40,7 @@ test('App owns one production route registry with latest Project Overview, Searc
     /projectSearchRouteBindingRef\.current\s*=\s*Object\.freeze\(\{[\s\S]*api,[\s\S]*config,[\s\S]*project:[\s\S]*capability:[\s\S]*capabilityLoading:/u,
   );
   assert.match(
-    appSource,
+    registrySource,
     /PROJECT_CRON_JOBS_ROUTE_ID[\s\S]*createProjectCronJobsRouteModuleLoader\(\{[\s\S]*projectCronJobsRouteBindingRef\.current/u,
   );
   assert.match(
@@ -47,53 +51,53 @@ test('App owns one production route registry with latest Project Overview, Searc
 
 test('App wires Project Support through the native scoped Cloud authority', () => {
   assert.match(
-    appSource,
+    registrySource,
     /PROJECT_SUPPORT_ROUTE_ID[\s\S]*createProjectSupportRouteModuleLoader\(\{[\s\S]*createProjectSupportRouteBindingForRuntime\(\s*configRef\.current,\s*context,?\s*\)/u,
   );
   assert.doesNotMatch(
-    appSource,
+    registrySource,
     /project-support[\s\S]{0,500}(?:iframe|webview|openExternal|window\.open)/iu,
   );
 });
 
 test('App wires the native Runtime Pool loader through the scoped runtime binding', () => {
   assert.match(
-    appSource,
+    registrySource,
     /TENANT_POOL_ROUTE_ID[\s\S]*createRuntimePoolRouteModuleLoader\(\{[\s\S]*createRuntimePoolRouteBindingForRuntime\(\s*configRef\.current,\s*context,?\s*\)/u,
   );
 });
 
 test('App wires Runtime Instances through one scoped Cloud or Local binding', () => {
   assert.match(
-    appSource,
+    registrySource,
     /TENANT_INSTANCES_ROUTE_ID[\s\S]*createRuntimeInstancesRouteModuleLoader\(\{[\s\S]*createRuntimeInstancesRouteBindingForRuntime\(\s*configRef\.current,\s*context,?\s*\)/u,
   );
 });
 
 test('App wires Runtime Clusters through one scoped Cloud or Local binding', () => {
   assert.match(
-    appSource,
+    registrySource,
     /TENANT_CLUSTERS_ROUTE_ID[\s\S]*createRuntimeClustersRouteModuleLoader\(\{[\s\S]*createRuntimeClustersRouteBindingForRuntime\(\s*configRef\.current,\s*context,?\s*\)/u,
   );
 });
 
 test('App wires Runtime Deployments through one instance-scoped Cloud or Local binding', () => {
   assert.match(
-    appSource,
+    registrySource,
     /TENANT_DEPLOY_ROUTE_ID[\s\S]*createRuntimeDeploymentsRouteModuleLoader\(\{[\s\S]*createRuntimeDeploymentsRouteBindingForRuntime\(\s*configRef\.current,\s*context,?\s*\)/u,
   );
 });
 
 test('App wires Instance Templates through one tenant-scoped Cloud or Local binding', () => {
   assert.match(
-    appSource,
+    registrySource,
     /TENANT_INSTANCE_TEMPLATES_ROUTE_ID[\s\S]*createInstanceTemplatesRouteModuleLoader\(\{[\s\S]*createInstanceTemplatesRouteBindingForRuntime\(\s*configRef\.current,\s*context,?\s*\)/u,
   );
 });
 
 test('App wires Unified Runtimes through one scoped Cloud or Local binding', () => {
   assert.match(
-    appSource,
+    registrySource,
     /TENANT_RUNTIMES_ROUTE_ID[\s\S]*createUnifiedRuntimesRouteModuleLoader\(\{[\s\S]*createUnifiedRuntimesRouteBindingForRuntime\(\s*configRef\.current,\s*context,?\s*\)/u,
   );
 });
@@ -214,7 +218,7 @@ test('invitation sign-in hands the preserved hash to LoginScreen and resets afte
     /useEffect\(\(\) => \{[\s\S]*identityAuthenticated[\s\S]*setInvitationSignInRequested\(false\)[\s\S]*\}, \[identityAuthenticated, invitationSignInRequested\]\)/u,
   );
   assert.match(
-    appSource,
+    registrySource,
     /onRequireSignIn:\s*\(\)\s*=>\s*setInvitationSignInRequested\(true\)/u,
   );
 });

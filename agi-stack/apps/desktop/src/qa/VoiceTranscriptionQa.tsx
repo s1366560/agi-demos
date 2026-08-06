@@ -22,7 +22,7 @@ import type {
   ConversationTimelineState,
   DesktopRuntimeConfig,
 } from '../types';
-import '../styles.css';
+import '../styles/global.css';
 import './sessionSteeringQa.css';
 import './voiceTranscriptionQa.css';
 

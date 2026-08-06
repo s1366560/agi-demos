@@ -38,6 +38,7 @@ const observedCapability = Object.freeze({
   provenance: 'observed',
 });
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const registrySource = readFileSync(new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url), 'utf8');
 
 function access(definition) {
   return evaluateDesktopRouteAccess({
@@ -80,7 +81,7 @@ test('production App owns exactly one loader binding for every catalog route', (
   for (const routeId of DESKTOP_IMPLEMENTED_ROUTE_IDS) {
     const symbol = symbolByRouteId.get(routeId);
     assert.ok(symbol, `missing route symbol for ${routeId}`);
-    const bindings = appSource.match(new RegExp(`\\[${symbol}\\]\\s*:`, 'gu')) ?? [];
+    const bindings = registrySource.match(new RegExp(`\\[${symbol}\\]\\s*:`, 'gu')) ?? [];
     assert.equal(bindings.length, 1, `${routeId} must have exactly one App loader binding`);
   }
 });

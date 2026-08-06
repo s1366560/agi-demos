@@ -478,6 +478,22 @@
   min-height: 0;
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
+  transition:
+    opacity 240ms var(--ease-drawer),
+    transform 240ms var(--ease-drawer);
+}
+
+@starting-style {
+  .session-workspace-canvas {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-workspace-canvas {
+    transition: opacity 200ms var(--ease-drawer);
+  }
 }
 
 .session-context-rail {
@@ -844,8 +860,9 @@
 .timeline-tool-group.status-running > summary em { color: var(--cyan-9); }
 .timeline-tool-group.status-complete > summary em { color: var(--green-9); }
 .timeline-tool-group.status-failed > summary em { color: var(--red-9); }
-.timeline-tool-group-chevron { transition: transform 140ms ease; }
+.timeline-tool-group-chevron { transition: transform 140ms var(--ease-out); }
 .timeline-tool-group[open] .timeline-tool-group-chevron { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .timeline-tool-group-chevron { transition: none; } }
 
 .timeline-tool-group-items {
   display: grid;

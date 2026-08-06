@@ -157,13 +157,17 @@ test('chrome CSS does not transition layout-triggering properties', () => {
   // Always-mounted chrome (sidebar/header shell) must not animate layout
   // properties; confined exceptions (2px in-track progress bars, the settings
   // toggle thumb) are documented in docs/render-performance-budget.md.
-  const chromeCss = readSource('src/styles.css');
+  const stylesDirectory = new URL('src/styles/', desktopRoot);
+  const chromeCss = readdirSync(stylesDirectory)
+    .filter((entry) => entry.endsWith('.css'))
+    .map((entry) => readFileSync(new URL(entry, stylesDirectory), 'utf8'))
+    .join('\n');
   const layoutTransitions = chromeCss.match(
     /transition[^;]*\b(width|height|top|left|right|bottom|margin|padding)\b[^;]*;/g,
   );
   assert.deepEqual(
     layoutTransitions ?? [],
     [],
-    'src/styles.css chrome must not transition layout-triggering properties',
+    'src/styles/*.css chrome must not transition layout-triggering properties',
   );
 });

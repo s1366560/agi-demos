@@ -3,6 +3,13 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const agentConversationSource = [
+  '../src/hooks/useAgentConversation.ts',
+  '../src/hooks/useConversationThreads.ts',
+  '../src/hooks/useConversationMessaging.ts',
+]
+  .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
+  .join('\n');
 const composerSource = readFileSync(
   new URL('../src/features/task/NewThreadComposer.tsx', import.meta.url),
   'utf8',
@@ -21,11 +28,11 @@ const workspaceAgentPolicyHookSource = readFileSync(
 );
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
 
-const createThreadStart = appSource.indexOf('const createComposerThread');
-const createThreadEnd = appSource.indexOf('const ensureAgentConversation', createThreadStart);
+const createThreadStart = agentConversationSource.indexOf('const createComposerThread');
+const createThreadEnd = agentConversationSource.indexOf('const ensureAgentConversation', createThreadStart);
 const createThreadSource =
   createThreadStart >= 0 && createThreadEnd > createThreadStart
-    ? appSource.slice(createThreadStart, createThreadEnd)
+    ? agentConversationSource.slice(createThreadStart, createThreadEnd)
     : '';
 const unboundCreateStart = createThreadSource.indexOf('if (!workspaceId)');
 const unboundCreateEnd = createThreadSource.indexOf('const policy =', unboundCreateStart);
@@ -33,11 +40,11 @@ const unboundCreateSource =
   unboundCreateStart >= 0 && unboundCreateEnd > unboundCreateStart
     ? createThreadSource.slice(unboundCreateStart, unboundCreateEnd)
     : '';
-const sendMessageStart = appSource.indexOf('const sendMessageContent');
-const sendMessageEnd = appSource.indexOf('const sendMessageContentRef', sendMessageStart);
+const sendMessageStart = agentConversationSource.indexOf('const sendMessageContent');
+const sendMessageEnd = agentConversationSource.indexOf('\n  };', sendMessageStart);
 const sendMessageSource =
   sendMessageStart >= 0 && sendMessageEnd > sendMessageStart
-    ? appSource.slice(sendMessageStart, sendMessageEnd)
+    ? agentConversationSource.slice(sendMessageStart, sendMessageEnd)
     : '';
 const chatDisabledStart = appSource.indexOf('const chatDisabledReason');
 const chatDisabledEnd = appSource.indexOf('\n\n  useEffect(', chatDisabledStart);
@@ -46,7 +53,7 @@ const chatDisabledSource =
     ? appSource.slice(chatDisabledStart, chatDisabledEnd)
     : '';
 const unboundLoadStart = appSource.indexOf('const loadWorkspaceConversations');
-const unboundLoadEnd = appSource.indexOf('\n\n  const login', unboundLoadStart);
+const unboundLoadEnd = appSource.indexOf('\n\n  const refreshMyWork', unboundLoadStart);
 const unboundLoadSource =
   unboundLoadStart >= 0 && unboundLoadEnd > unboundLoadStart
     ? appSource.slice(unboundLoadStart, unboundLoadEnd)
@@ -112,7 +119,7 @@ test('unbound new threads create an Agent conversation and preserve null workspa
   assert.match(unboundCreateSource, /activateUnboundNewThread\(/);
   assert.match(unboundCreateSource, /runNewTaskAgentTurn\(/);
   assert.doesNotMatch(unboundCreateSource, /createTaskSession\(/);
-  assert.match(appSource, /conversationsByWorkspace:[\s\S]*\[UNBOUND_CONVERSATIONS_KEY\]/);
+  assert.match(agentConversationSource, /conversationsByWorkspace:[\s\S]*\[UNBOUND_CONVERSATIONS_KEY\]/);
 });
 
 test('unbound first-turn delivery failure remains visible after activating chat', () => {
@@ -123,7 +130,7 @@ test('unbound first-turn delivery failure remains visible after activating chat'
     /deferUntilNextConnection:\s*!isSameDesktopRequestScope\(config, input\.config\)/,
   );
   assert.match(
-    appSource,
+    agentConversationSource,
     /runNewTaskAgentTurn\(\s*\{[\s\S]*?conversationId: conversation\.id,[\s\S]*?\},\s*\{\s*deferUntilNextConnection:\s*!isSameDesktopRequestScope\(\s*requestConfig,\s*threadConfig/,
   );
   assert.match(

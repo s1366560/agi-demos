@@ -71,7 +71,7 @@
 }
 
 .chat-conversation-export summary svg:last-child {
-  transition: transform 140ms ease;
+  transition: transform 140ms var(--ease-out);
 }
 
 .chat-conversation-export details[open] summary svg:last-child {
@@ -310,7 +310,7 @@
 }
 
 .conversation-comparison-spin {
-  animation: timeline-working-spin 850ms linear infinite;
+  animation: timeline-working-spin var(--spin-duration) linear infinite;
 }
 
 .conversation-comparison-picker {
@@ -832,7 +832,7 @@
 }
 
 .conversation-summary-regenerate .is-spinning {
-  animation: conversation-summary-spin 900ms linear infinite;
+  animation: conversation-summary-spin var(--spin-duration) linear infinite;
 }
 
 .conversation-summary-local-only {
@@ -1102,7 +1102,7 @@
   border: 1.5px solid rgba(var(--desktop-cyan-soft-2-rgb), 0.24);
   border-top-color: var(--desktop-cyan);
   border-radius: 50%;
-  animation: timeline-working-spin 750ms linear infinite;
+  animation: timeline-working-spin var(--spin-duration) linear infinite;
 }
 
 .timeline-working-copy strong {
@@ -2265,7 +2265,7 @@
 }
 
 .artifact-timeline-spin {
-  animation: artifact-timeline-spin 1s linear infinite;
+  animation: artifact-timeline-spin var(--spin-duration) linear infinite;
 }
 
 @keyframes artifact-timeline-spin {
@@ -2689,7 +2689,7 @@
 
 .timeline-debug-group-chevron,
 .session-chat-narrative .timeline-tool-group-chevron {
-  transition: transform 140ms ease;
+  transition: transform 140ms var(--ease-out);
 }
 
 .timeline-debug-group[open] .timeline-debug-group-chevron,
@@ -2781,11 +2781,20 @@
 }
 
 .session-chat-narrative .aggregated-source-group > summary svg {
-  transition: transform 140ms ease;
+  transition: transform 140ms var(--ease-out);
 }
 
 .session-chat-narrative .aggregated-source-group[open] > summary svg {
   transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-conversation-export summary svg:last-child,
+  .timeline-debug-group-chevron,
+  .session-chat-narrative .timeline-tool-group-chevron,
+  .session-chat-narrative .aggregated-source-group > summary svg {
+    transition: none;
+  }
 }
 
 .session-chat-narrative .aggregated-source-group > summary em {
@@ -3251,7 +3260,7 @@
 
 .skill-execution-card[data-status="executing"] .skill-execution-icon svg,
 .skill-tool-chain li[data-status="running"] .skill-tool-step-index svg {
-  animation: timeline-working-spin 1.1s linear infinite;
+  animation: timeline-working-spin var(--spin-duration) linear infinite;
 }
 
 .skill-execution-card[data-status="completed"] .skill-execution-icon {
@@ -3314,13 +3323,15 @@
 
 .skill-progress-bar {
   display: block;
+  width: 100%;
   height: 100%;
   background: linear-gradient(
     90deg,
     var(--desktop-indigo-bright),
     var(--desktop-indigo-pale)
   );
-  transition: width 180ms ease;
+  transform-origin: left;
+  transition: transform 180ms var(--ease-out);
 }
 
 .skill-execution-card[data-status="failed"] .skill-progress-bar {
@@ -3935,13 +3946,15 @@
 
 .subagent-progress-bar {
   display: block;
+  width: 100%;
   height: 100%;
   background: linear-gradient(
     90deg,
     var(--desktop-cyan-strong),
     var(--desktop-cyan)
   );
-  transition: width 180ms ease;
+  transform-origin: left;
+  transition: transform 180ms var(--ease-out);
 }
 
 .subagent-group-body {
@@ -4308,6 +4321,10 @@
     transition: none;
     animation: none;
   }
+
+  .voice-call-panel {
+    transition-property: opacity;
+  }
 }
 
 .voice-call-panel {
@@ -4326,6 +4343,16 @@
     0 24px 60px rgba(var(--desktop-black-rgb), 0.48),
     0 0 0 1px rgba(var(--desktop-teal-rgb), 0.04);
   backdrop-filter: blur(18px);
+  transition:
+    opacity 200ms var(--ease-out),
+    transform 200ms var(--ease-out);
+}
+
+@starting-style {
+  .voice-call-panel {
+    opacity: 0;
+    transform: scale(0.96);
+  }
 }
 
 .voice-call-panel:focus-visible {
@@ -4883,5 +4910,111 @@
   .session-composer-context-actions .composer-model-button::after,
   .session-composer-context-actions .composer-model-button > span {
     display: none;
+  }
+}
+
+/* Pane header and queued-run list, extracted from the former monolithic
+   styles.css (base rules; scoped variants live above in this file). */
+.pane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 46px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--desktop-border-soft);
+  background: var(--desktop-surface-14);
+}
+
+.run-input-queue {
+  display: grid;
+  max-height: 210px;
+  margin: 8px 10px 0;
+  overflow-y: auto;
+  border: 1px solid var(--gray-a5);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--gray-a2) 78%, transparent);
+}
+
+.run-input-queue-header,
+.run-input-queue-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.run-input-queue-header {
+  min-height: 34px;
+  padding: 6px 9px;
+  border-bottom: 1px solid var(--gray-a4);
+  color: var(--gray-11);
+}
+
+.run-input-queue-header > span,
+.run-input-queue-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.run-input-queue-header strong {
+  color: var(--gray-12);
+  font-size: 11px;
+}
+
+.run-input-queue-header small,
+.run-input-queue-copy small,
+.run-input-queue-copy p {
+  color: var(--gray-10);
+  font-size: 10px;
+}
+
+.run-input-queue-error {
+  margin: 0;
+  padding: 8px 9px;
+  color: var(--red-11);
+  font-size: 11px;
+}
+
+.run-input-queue-item {
+  min-height: 72px;
+  padding: 8px 9px;
+}
+
+.run-input-queue-item + .run-input-queue-item {
+  border-top: 1px solid var(--gray-a4);
+}
+
+.run-input-queue-item.is-ready {
+  background: var(--cyan-a2);
+}
+
+.run-input-queue-copy > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.run-input-queue-copy > strong {
+  overflow: hidden;
+  color: var(--gray-12);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-input-queue-copy p {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.run-input-queue-item > button {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1100px) {
+  .run-input-queue-item {
+    align-items: flex-start;
   }
 }

@@ -12,6 +12,7 @@ import {
 
 import { LOCAL_DEV_SERVER_PRESETS } from '../../types';
 import type { AuthState, DesktopRuntimeConfig } from '../../types';
+import './auth.css';
 
 type AuthPanelProps = {
   auth: AuthState;

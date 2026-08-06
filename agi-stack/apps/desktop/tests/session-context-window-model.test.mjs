@@ -237,7 +237,7 @@ test('recognizes only the exact context window event protocol', () => {
 });
 
 test('Desktop exposes a dynamic Context canvas with distribution and selectable history', () => {
-  const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const appSource = readFileSync(new URL('../src/features/session/WorkspaceReviewPanel.tsx', import.meta.url), 'utf8');
   const canvasSource = readFileSync(
     new URL('../src/features/session/SessionContextWindowCanvas.tsx', import.meta.url),
     'utf8'

@@ -34,6 +34,13 @@ const localRecord = {
 };
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const desktopAuthSource = [
+  '../src/hooks/useDesktopAuth.ts',
+  '../src/hooks/useCloudSessionAuth.ts',
+  '../src/hooks/useLocalCredentialAuth.ts',
+]
+  .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
+  .join('\n');
 
 test('native trusted session decoder accepts only the versioned broker contract', () => {
   assert.deepEqual(decodeNativeTrustedSession(cloudRecord), cloudRecord);
@@ -116,9 +123,9 @@ test('local trusted session references use the SQLite broker instead of native c
 });
 
 test('local login never invokes the native credential broker', () => {
-  const localLogin = appSource.slice(
-    appSource.indexOf('const loginLocalSession = async'),
-    appSource.indexOf('const handleConfigChange ='),
+  const localLogin = desktopAuthSource.slice(
+    desktopAuthSource.indexOf('const loginLocalSession = async'),
+    desktopAuthSource.indexOf('const handleConfigChange ='),
   );
   assert.match(localLogin, /clearLocalTrustedSession/);
   assert.match(localLogin, /saveLocalTrustedSession/);

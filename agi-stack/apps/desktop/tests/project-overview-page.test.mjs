@@ -39,7 +39,7 @@ const {
 const pageSource = readFileSync(`${projectDirectory}/ProjectOverviewPage.tsx`, 'utf8');
 const stylesheet = readFileSync(`${projectDirectory}/ProjectOverviewPage.css`, 'utf8');
 const globalStylesheet = readFileSync(
-  new URL('../src/styles.css', import.meta.url),
+  new URL('../src/styles/tokens.css', import.meta.url),
   'utf8',
 );
 const i18nSource = readFileSync(

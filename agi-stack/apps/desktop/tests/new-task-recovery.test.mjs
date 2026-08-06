@@ -7,6 +7,21 @@ const taskFlowSource = readFileSync(
   'utf8',
 );
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const reviewPanelSource = readFileSync(new URL('../src/features/session/WorkspaceReviewPanel.tsx', import.meta.url), 'utf8');
+const desktopAuthSource = [
+  '../src/hooks/useDesktopAuth.ts',
+  '../src/hooks/useCloudSessionAuth.ts',
+  '../src/hooks/useLocalCredentialAuth.ts',
+]
+  .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
+  .join('\n');
+const agentConversationSource = [
+  '../src/hooks/useAgentConversation.ts',
+  '../src/hooks/useConversationThreads.ts',
+  '../src/hooks/useConversationMessaging.ts',
+]
+  .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
+  .join('\n');
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
 const generatePlanSource =
   taskFlowSource.match(
@@ -25,11 +40,11 @@ const generatePlanCatchSource =
   generatePlanCatchStart >= 0 && generatePlanCatchEnd > generatePlanCatchStart
     ? generatePlanSource.slice(generatePlanCatchStart, generatePlanCatchEnd)
     : '';
-const runTurnStart = appSource.indexOf('const runNewTaskAgentTurn');
-const runTurnEnd = appSource.indexOf('const ensureAgentConversation', runTurnStart);
+const runTurnStart = agentConversationSource.indexOf('const runNewTaskAgentTurn');
+const runTurnEnd = agentConversationSource.indexOf('const ensureAgentConversation', runTurnStart);
 const runTurnSource =
   runTurnStart >= 0 && runTurnEnd > runTurnStart
-    ? appSource.slice(runTurnStart, runTurnEnd)
+    ? agentConversationSource.slice(runTurnStart, runTurnEnd)
     : '';
 const cloudCapabilityStart = generatePlanSource.indexOf("if (config.mode === 'cloud') {");
 const cloudCapabilityEnd = generatePlanSource.indexOf(
@@ -299,11 +314,11 @@ test('planning workspace label uses the atomic session before the workspace cata
 
 test('catalog persistence does not switch transport while activation selects the bound session', () => {
   const persistSource =
-    appSource.match(
+    agentConversationSource.match(
       /const persistNewTaskSession = \(session: NewTaskSession\) => \{[\s\S]*?\n  \};\n\n  const activateNewTaskSession/,
     )?.[0] ?? '';
   const activateSource =
-    appSource.match(
+    agentConversationSource.match(
       /const activateNewTaskSession = \(session: NewTaskSession\) => \{[\s\S]*?\n  \};\n\n  const runNewTaskAgentTurn/,
     )?.[0] ?? '';
 
@@ -318,11 +333,11 @@ test('catalog persistence does not switch transport while activation selects the
 
 test('opening and cancelling New Task preserves the active conversation until activation', () => {
   const openSource =
-    appSource.match(
+    agentConversationSource.match(
       /const openNewTask = \([\s\S]*?\n  \};\n\n  const startNewSession/,
     )?.[0] ?? '';
   const activateSource =
-    appSource.match(
+    agentConversationSource.match(
       /const activateNewTaskSession = \(session: NewTaskSession\) => \{[\s\S]*?\n  \};\n\n  const runNewTaskAgentTurn/,
     )?.[0] ?? '';
 
@@ -374,9 +389,9 @@ test('runtime preset selection requires both matching origin and transport mode'
 });
 
 test('runtime identity changes clear the trusted authority owned by the previous mode', () => {
-  const start = appSource.indexOf('const handleConfigChange');
-  const end = appSource.indexOf('const useApiKeyManually', start);
-  const source = start >= 0 && end > start ? appSource.slice(start, end) : '';
+  const start = desktopAuthSource.indexOf('const handleConfigChange');
+  const end = desktopAuthSource.indexOf('const useApiKeyManually', start);
+  const source = start >= 0 && end > start ? desktopAuthSource.slice(start, end) : '';
 
   assert.match(source, /runtimeTransportIdentityChanged\(/);
   assert.match(source, /transportIdentityChanged[\s\S]*apiKey: ''[\s\S]*localApiToken: ''/);
@@ -388,16 +403,16 @@ test('runtime identity changes clear the trusted authority owned by the previous
 });
 
 test('cloud task-list sessions reopen the exact conversation through guarded legacy review', () => {
-  const start = appSource.indexOf('const resumeSessionTaskListReview');
-  const end = appSource.indexOf('const persistNewTaskSession', start);
-  const source = start >= 0 && end > start ? appSource.slice(start, end) : '';
+  const start = agentConversationSource.indexOf('const resumeSessionTaskListReview');
+  const end = agentConversationSource.indexOf('const persistNewTaskSession', start);
+  const source = start >= 0 && end > start ? agentConversationSource.slice(start, end) : '';
 
   assert.match(source, /planAuthority\.kind !== 'agent_task_list'/);
   assert.match(source, /sessionTaskListPlanRecovery\?\.canResume/);
   assert.match(source, /const tasks = sessionTaskListPlanRecovery\.tasks/);
   assert.match(appSource, /normalizeSessionTaskListPlan\(/);
   assert.match(source, /openNewTask\(workspaceId, resumeDraft\)/);
-  assert.match(appSource, /<SessionTaskListReview[\s\S]*onResumeReview=\{onResumeTaskListReview\}/);
+  assert.match(reviewPanelSource, /<SessionTaskListReview[\s\S]*onResumeReview=\{onResumeTaskListReview\}/);
 });
 
 test('legacy approval persists the exact dispatch identity before entering Build mode', () => {
@@ -427,9 +442,9 @@ test('Build-without-attempt recovery is gated by the durable exact task-list ide
 });
 
 test('conversation plan canvas never substitutes the workspace envelope plan', () => {
-  const start = appSource.indexOf('function WorkspaceReviewPanel(');
-  const end = appSource.indexOf('\nfunction ', start + 1);
-  const source = start >= 0 ? appSource.slice(start, end > start ? end : undefined) : '';
+  const start = reviewPanelSource.indexOf('function WorkspaceReviewPanel(');
+  const end = reviewPanelSource.indexOf('\nexport function ', start + 1);
+  const source = start >= 0 ? reviewPanelSource.slice(start, end > start ? end : undefined) : '';
 
   assert.notEqual(source, '');
   assert.doesNotMatch(source, /dataset\.plan/);

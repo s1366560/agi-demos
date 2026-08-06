@@ -16,7 +16,7 @@ const notificationPreferences = require(
   '/tmp/agistack-desktop-test-dist/src/features/settings/notificationPreferences.js'
 );
 
-const stylesCss = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const stylesCss = readFileSync(new URL('../src/styles/tokens.css', import.meta.url), 'utf8');
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const mainSource = readFileSync(new URL('../src/main.tsx', import.meta.url), 'utf8');
@@ -52,9 +52,9 @@ function blockTokens(blockSource) {
 }
 
 const rootBlock = stylesCss.match(/:root\s*\{([\s\S]*?)\}/);
-assert.ok(rootBlock, 'styles.css must define a plain :root block');
+assert.ok(rootBlock, 'styles/tokens.css must define a plain :root block');
 const lightBlock = stylesCss.match(/:root\[data-theme='light'\]\s*\{([\s\S]*?)\}/);
-assert.ok(lightBlock, "styles.css must define a :root[data-theme='light'] block");
+assert.ok(lightBlock, "styles/tokens.css must define a :root[data-theme='light'] block");
 const darkTokens = blockTokens(rootBlock[1]);
 const lightTokens = blockTokens(lightBlock[1]);
 

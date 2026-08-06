@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
+require.extensions['.css'] = () => {};
 const reviewSource = readFileSync(
   new URL('../src/features/session/SessionPlanReview.tsx', import.meta.url),
   'utf8',

@@ -27,7 +27,7 @@ import type {
   PluginConfigSchema,
 } from '../types';
 import { DEFAULT_CONFIG } from '../types';
-import '../styles.css';
+import '../styles/global.css';
 
 type QaPlugin = Omit<ManagedPlugin, 'id'> & { id?: string };
 

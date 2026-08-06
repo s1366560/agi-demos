@@ -9,6 +9,7 @@ import {
   updateRuntimeConnectionConfig,
   type RuntimeConnectionField,
 } from './runtimeConfigModel';
+import './RuntimeConfigPanel.css';
 
 type RuntimeConfigPanelProps = {
   config: DesktopRuntimeConfig;

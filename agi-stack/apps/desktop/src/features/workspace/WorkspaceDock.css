@@ -398,3 +398,35 @@
   outline: 1px solid var(--desktop-cyan);
   outline-offset: 2px;
 }
+
+/* Base dock layout, extracted from the former monolithic styles.css. */
+.workspace-dock {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.workspace-dock .rt-Button,
+.workspace-dock .rt-TextFieldRoot {
+  min-height: 34px;
+}
+
+.workspace-dock .rt-TextFieldInput {
+  min-height: 32px;
+}
+
+.dock-list {
+  min-height: 0;
+}
+
+.dock-list > div {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  padding: 12px;
+}
+
+.workspace-session-tree .dock-list > div {
+  gap: 3px;
+}

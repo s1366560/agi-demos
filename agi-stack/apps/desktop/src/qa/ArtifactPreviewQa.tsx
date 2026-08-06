@@ -6,7 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { ArtifactPreviewSurface } from '../features/chat/ArtifactPreviewSurface';
 import type { DesktopArtifactClient } from '../features/chat/desktopArtifactClient';
 import { I18nProvider } from '../i18n';
-import '../styles.css';
+import '../styles/global.css';
 import './parityRuntimeQa.css';
 
 declare global {
