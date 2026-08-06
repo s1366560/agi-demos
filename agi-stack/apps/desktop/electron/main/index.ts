@@ -32,6 +32,20 @@ import {
   resolveRendererAsset,
 } from './rendererProtocol';
 import { isTrustedAudioMediaPermission } from './mediaPermissionPolicy';
+import {
+  isTrustedNativeFileFrameUrl,
+  ingestNativeFiles,
+  openNativeFileWithDialog,
+  readNativeFileNoFollow,
+  saveNativeFileWithDialog,
+  writeNativeFileAtomically,
+  type NativeFileDialogAuthority,
+  type NativeFileDialogFilter,
+} from './nativeFileDialogPolicy';
+import {
+  configureQaProfile,
+  resolveSidecarLegacyDataDirectories,
+} from './qaProfilePolicy';
 import { SidecarSupervisor } from './sidecarSupervisor';
 import { startAutomaticUpdates } from './updater';
 import {
@@ -44,6 +58,9 @@ import {
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
 const rendererDirectory = join(currentDirectory, '../renderer');
 const DESKTOP_COMMAND_CHANNEL = 'agistack:desktop-command';
+const NATIVE_FILE_SAVE_CHANNEL = 'agistack:native-file-save';
+const NATIVE_FILE_OPEN_CHANNEL = 'agistack:native-file-open';
+const NATIVE_FILE_INGEST_CHANNEL = 'agistack:native-file-ingest';
 const SIDECAR_RECOVERED_CHANNEL = 'agistack:sidecar-recovered';
 const DEVICE_USER_CODE = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/u;
 const SIDECAR_COMMANDS = new Set([
@@ -57,6 +74,10 @@ const SIDECAR_COMMANDS = new Set([
   'local_runtime_configure',
 ]);
 const captureAuthorizationGate = new DisplayCaptureAuthorizationGate();
+const qaProfileDirectory = configureQaProfile({
+  app,
+  requestedPath: process.env.AGISTACK_DESKTOP_QA_PROFILE_DIR,
+});
 const webControlPlaneConfiguration = resolveWebControlPlaneConfiguration({
   developmentOrigin: process.env.AGISTACK_WEB_CONTROL_PLANE_ORIGIN,
   isPackaged: app.isPackaged,
@@ -215,6 +236,75 @@ function desktopNativeCapabilities(): DesktopNativeCapabilitySnapshot {
   });
 }
 
+function electronDialogFilters(
+  filters: readonly NativeFileDialogFilter[],
+): Electron.FileFilter[] {
+  return filters.map((filter) => ({
+    name: filter.name,
+    extensions: [...filter.extensions],
+  }));
+}
+
+function nativeFileDialogAuthority(
+  event: IpcMainInvokeEvent,
+): NativeFileDialogAuthority {
+  const ownerWindow = mainWindow;
+  if (
+    !ownerWindow ||
+    ownerWindow.isDestroyed() ||
+    event.sender !== ownerWindow.webContents ||
+    event.senderFrame !== ownerWindow.webContents.mainFrame ||
+    !isTrustedNativeFileFrameUrl(event.senderFrame.url, rendererDevelopmentUrl())
+  ) {
+    throw new Error('native file request is not authorized');
+  }
+  return Object.freeze({
+    async chooseSaveTarget(input) {
+      const result = await dialog.showSaveDialog(ownerWindow, {
+        defaultPath: input.suggestedName,
+        filters: electronDialogFilters(input.filters),
+        properties: ['createDirectory', 'showOverwriteConfirmation'],
+      });
+      return result.canceled || !result.filePath ? null : result.filePath;
+    },
+    async chooseOpenTargets(input) {
+      const result = await dialog.showOpenDialog(ownerWindow, {
+        filters: electronDialogFilters(input.filters),
+        properties: input.allowMultiple ? ['openFile', 'multiSelections'] : ['openFile'],
+        title:
+          input.purpose === 'skill_package'
+            ? 'Import Skill ZIP package'
+            : 'Import attachment files',
+      });
+      return result.canceled ? null : Object.freeze([...result.filePaths]);
+    },
+    readFileNoFollow: readNativeFileNoFollow,
+    writeFileAtomically: writeNativeFileAtomically,
+  });
+}
+
+async function handleNativeFileSave(
+  event: IpcMainInvokeEvent,
+  request: unknown,
+): Promise<unknown> {
+  return saveNativeFileWithDialog(request, nativeFileDialogAuthority(event));
+}
+
+async function handleNativeFileOpen(
+  event: IpcMainInvokeEvent,
+  request: unknown,
+): Promise<unknown> {
+  return openNativeFileWithDialog(request, nativeFileDialogAuthority(event));
+}
+
+async function handleNativeFileIngest(
+  event: IpcMainInvokeEvent,
+  request: unknown,
+): Promise<unknown> {
+  void nativeFileDialogAuthority(event);
+  return ingestNativeFiles(request);
+}
+
 async function executeDesktopCommand(
   event: IpcMainInvokeEvent,
   command: unknown,
@@ -312,7 +402,10 @@ function createSidecarSupervisor(): SidecarSupervisor {
     binaryPath: sidecarBinaryPath(),
     dataDirectory,
     workspaceRoot: defaultWorkspaceRoot(),
-    legacyDataDirectories: legacyTauriDataDirectories(dataDirectory),
+    legacyDataDirectories: resolveSidecarLegacyDataDirectories({
+      qaProfileDirectory,
+      resolveNormalCandidates: () => legacyTauriDataDirectories(dataDirectory),
+    }),
     onRecovered: () => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send(SIDECAR_RECOVERED_CHANNEL);
@@ -468,6 +561,9 @@ async function bootstrapApplication(): Promise<void> {
   sidecarSupervisor = createSidecarSupervisor();
   await sidecarSupervisor.start();
   ipcMain.handle(DESKTOP_COMMAND_CHANNEL, executeDesktopCommand);
+  ipcMain.handle(NATIVE_FILE_SAVE_CHANNEL, handleNativeFileSave);
+  ipcMain.handle(NATIVE_FILE_OPEN_CHANNEL, handleNativeFileOpen);
+  ipcMain.handle(NATIVE_FILE_INGEST_CHANNEL, handleNativeFileIngest);
   await createMainWindow();
   stopAutomaticUpdates = startAutomaticUpdates();
   app.on('activate', () => {

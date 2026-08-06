@@ -16,6 +16,7 @@ const {
 );
 const {
   createDesktopProductionRouteRegistry,
+  DESKTOP_IMPLEMENTED_ROUTE_IDS,
   DEVICE_APPROVAL_ROUTE_ID,
   INVITATION_ACCEPTANCE_ROUTE_ID,
   PROJECT_CRON_JOBS_ROUTE_ID,
@@ -60,6 +61,12 @@ test('Tenant Overview loader stays lazy and renders the exact tenant binding', a
   });
   const registry = createDesktopProductionRouteRegistry({
     implementedLoaders: {
+      ...Object.fromEntries(
+        DESKTOP_IMPLEMENTED_ROUTE_IDS.map((routeId) => [
+          routeId,
+          fakeLoader(routeId),
+        ]),
+      ),
       [AGENT_WORKSPACE_ROUTE_ID]: createAgentWorkspaceRouteModuleLoader(),
       [DEVICE_APPROVAL_ROUTE_ID]: fakeLoader(DEVICE_APPROVAL_ROUTE_ID),
       [TENANT_CREATION_ROUTE_ID]: fakeLoader(TENANT_CREATION_ROUTE_ID),

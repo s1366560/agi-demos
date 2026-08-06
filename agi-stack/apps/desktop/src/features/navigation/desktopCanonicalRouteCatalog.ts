@@ -359,33 +359,31 @@ const CANONICAL_ROUTE_METADATA = [
     '/tenant/:tenantId/project/:projectId/agent',
     ['tenant', 'project'],
     'project-workspace',
-    'blocked_by_web_contract',
+    'native_equivalent',
   ],
   [
     'project-agent-logs',
     '/tenant/:tenantId/project/:projectId/agent/logs',
     ['tenant', 'project'],
     'project-workspace',
-    'blocked_by_web_contract',
+    'native_equivalent',
   ],
   [
     'project-agent-patterns',
     '/tenant/:tenantId/project/:projectId/agent/patterns',
     ['tenant', 'project'],
     'project-workspace',
-    'blocked_by_web_contract',
+    'native_equivalent',
   ],
 ] as const satisfies readonly CanonicalRouteMetadata[];
 
-export type CanonicalDesktopRouteId =
-  (typeof CANONICAL_ROUTE_METADATA)[number][0];
+export type CanonicalDesktopRouteId = (typeof CANONICAL_ROUTE_METADATA)[number][0];
 
-export const CANONICAL_DESKTOP_ROUTE_IDS: readonly CanonicalDesktopRouteId[] =
-  Object.freeze(CANONICAL_ROUTE_METADATA.map(([id]) => id));
-
-const CANONICAL_DESKTOP_ROUTE_ID_SET = new Set<string>(
-  CANONICAL_DESKTOP_ROUTE_IDS,
+export const CANONICAL_DESKTOP_ROUTE_IDS: readonly CanonicalDesktopRouteId[] = Object.freeze(
+  CANONICAL_ROUTE_METADATA.map(([id]) => id),
 );
+
+const CANONICAL_DESKTOP_ROUTE_ID_SET = new Set<string>(CANONICAL_DESKTOP_ROUTE_IDS);
 const ROUTE_ENTRY_PERMISSION_BY_ID = new Map(
   routeEntryPermissionCatalog.capabilities.map((capability) => [
     capability.id,
@@ -397,8 +395,7 @@ export function createDesktopCanonicalRouteCatalog<TModule>(
   loaders: Readonly<Record<string, unknown>>,
 ): DesktopRouteRegistry<TModule> {
   if (
-    ROUTE_ENTRY_PERMISSION_BY_ID.size !==
-      routeEntryPermissionCatalog.capabilities.length ||
+    ROUTE_ENTRY_PERMISSION_BY_ID.size !== routeEntryPermissionCatalog.capabilities.length ||
     ROUTE_ENTRY_PERMISSION_BY_ID.size !== CANONICAL_DESKTOP_ROUTE_IDS.length
   ) {
     throw new Error('desktop_route_entry_permission_catalog_invalid');
@@ -436,9 +433,7 @@ export function createDesktopCanonicalRouteCatalog<TModule>(
   return createDesktopRouteRegistry(definitions);
 }
 
-function routeEntryPermissions(
-  id: CanonicalDesktopRouteId,
-): readonly (readonly string[])[] {
+function routeEntryPermissions(id: CanonicalDesktopRouteId): readonly (readonly string[])[] {
   const requirements = ROUTE_ENTRY_PERMISSION_BY_ID.get(id);
   if (!requirements) {
     throw new Error(`desktop_route_entry_permission_missing:${id}`);

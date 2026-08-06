@@ -397,6 +397,40 @@ test('sandbox file paths and oversized downloads fail closed', async () => {
   }
 });
 
+test('sandbox native download requests share the 16 MiB file-dialog boundary', async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedUrl = '';
+  globalThis.fetch = async (input) => {
+    requestedUrl = String(input);
+    return new Response(new Uint8Array(), {
+      status: 200,
+      headers: {
+        'content-length': '0',
+        'content-disposition': 'attachment; filename="empty.bin"',
+        'content-type': 'application/octet-stream',
+        'x-memstack-file-contract-version': '1',
+        'x-memstack-file-authority': 'native_workspace',
+        'x-memstack-file-isolation': 'not_applicable',
+      },
+    });
+  };
+  const client = createSandboxRuntimeClient(
+    { ...DEFAULT_CONFIG, projectId: 'project-1' },
+    {
+      ...SANDBOX_RUNTIME_CAPABILITIES_UNAVAILABLE,
+      files: availableFiles,
+    },
+  );
+
+  try {
+    const result = await client.downloadFile({ path: '/workspace/empty.bin' });
+    assert.equal(result.status, 'ready');
+    assert.equal(new URL(requestedUrl).searchParams.get('max_bytes'), '16777216');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('sandbox text reads enforce the actual encoded byte limit', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () =>

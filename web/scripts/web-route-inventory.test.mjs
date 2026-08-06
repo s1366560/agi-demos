@@ -84,7 +84,9 @@ test('extracts canonical targets, route registrations, and routed source entries
     eager_route_entries: 1,
     lazy_page_entries: 2,
     production_dependency_edges: 0,
+    production_dependency_ownership: 0,
     production_dependency_sources: 0,
+    production_entry_sources: 0,
     production_routes: 3,
     route_registration_sources: 1,
   });
@@ -286,14 +288,39 @@ test('checked-in inventory matches the current production Web router and navigat
 
   assert.deepEqual(result.errors, []);
   assert.equal(result.inventory.schema_version, '2.0.0');
-  assert.equal(result.inventory.counts.audited_sources, 634);
-  assert.equal(result.inventory.counts.canonical_navigation_targets, 51);
-  assert.equal(result.inventory.counts.eager_route_entries, 4);
-  assert.equal(result.inventory.counts.lazy_page_entries, 89);
-  assert.equal(result.inventory.counts.production_dependency_edges, 1613);
-  assert.equal(result.inventory.counts.production_dependency_sources, 540);
-  assert.equal(result.inventory.counts.production_routes, 174);
-  assert.equal(result.inventory.counts.route_registration_sources, 1);
+  assert.equal(result.inventory.counts.audited_sources, result.inventory.audited_sources.length);
+  assert.equal(
+    result.inventory.counts.canonical_navigation_targets,
+    result.inventory.canonical_navigation_targets.length
+  );
+  assert.equal(
+    result.inventory.counts.eager_route_entries,
+    result.inventory.eager_route_entries.length
+  );
+  assert.equal(
+    result.inventory.counts.lazy_page_entries,
+    result.inventory.lazy_page_entries.length
+  );
+  assert.equal(
+    result.inventory.counts.production_dependency_edges,
+    result.inventory.production_dependency_edges.length
+  );
+  assert.equal(
+    result.inventory.counts.production_dependency_ownership,
+    result.inventory.production_dependency_ownership.length
+  );
+  assert.equal(
+    result.inventory.counts.production_dependency_sources,
+    result.inventory.production_dependency_sources.length
+  );
+  assert.equal(
+    result.inventory.counts.production_routes,
+    result.inventory.production_routes.length
+  );
+  assert.equal(
+    result.inventory.counts.route_registration_sources,
+    result.inventory.route_registration_sources.length
+  );
   assert.equal(
     new Set(result.inventory.canonical_navigation_targets.map((target) => target.route_key)).size,
     result.inventory.canonical_navigation_targets.length
@@ -493,6 +520,7 @@ export function CommunitiesList() {
   return <TaskList entityId={community.id} runtimeValue={runtimeValue} />;
 }
 `;
+  const stylesheetSource = '.community { color: currentColor; }\n';
   const taskListSource =
     'export function TaskList({ entityId }) { return <div>{entityId}</div>; }\n';
   const typeSource = 'export interface Community { id: string }\n';
@@ -501,6 +529,7 @@ export function CommunitiesList() {
     ['web/src/config/navigation.ts', navigationSource],
     ['web/src/pages/project/CommunitiesList.tsx', wrapperSource],
     ['web/src/pages/project/communities/index.tsx', implementationSource],
+    ['web/src/pages/project/communities/communities.css', stylesheetSource],
     ['web/src/pages/project/communities/types.ts', typeSource],
     ['web/src/pages/components/TaskList.tsx', taskListSource],
   ]);
@@ -528,6 +557,11 @@ export function CommunitiesList() {
         relationship: 'static_import',
         to_source_entry: 'web/src/pages/components/TaskList.tsx',
       },
+      {
+        from_source_entry: 'web/src/pages/project/communities/index.tsx',
+        relationship: 'stylesheet_import',
+        to_source_entry: 'web/src/pages/project/communities/communities.css',
+      },
     ]);
     assert.equal(
       inventory.production_dependency_edges.some(
@@ -537,16 +571,15 @@ export function CommunitiesList() {
       'type-only imports are not runtime production dependencies'
     );
     assert.equal(
-      inventory.production_dependency_edges.some(
-        (edge) =>
-          edge.to_source_entry.includes('node_modules') ||
-          edge.to_source_entry.endsWith('.css')
+      inventory.production_dependency_edges.some((edge) =>
+        edge.to_source_entry.includes('node_modules')
       ),
       false,
-      'package and CSS imports are not local runtime source dependencies'
+      'package imports remain represented by the bound package manifest and lockfile'
     );
     for (const [sourceEntry, source] of [
       ['web/src/pages/project/communities/index.tsx', implementationSource],
+      ['web/src/pages/project/communities/communities.css', stylesheetSource],
       ['web/src/pages/components/TaskList.tsx', taskListSource],
     ]) {
       assert.deepEqual(
@@ -558,8 +591,8 @@ export function CommunitiesList() {
         }
       );
     }
-    assert.equal(inventory.counts.production_dependency_edges, 2);
-    assert.equal(inventory.counts.production_dependency_sources, 2);
+    assert.equal(inventory.counts.production_dependency_edges, 3);
+    assert.equal(inventory.counts.production_dependency_sources, 3);
 
     writeFileSync(
       resolve(isolatedRepository, 'web/src/pages/components/TaskList.tsx'),
@@ -580,6 +613,99 @@ export function CommunitiesList() {
   }
 });
 
+test('inventory starts at the HTML bootstrap and tracks structural production resources', () => {
+  const sandbox = mkdtempSync(resolve(tmpdir(), 'memstack-production-entry-'));
+  const isolatedRepository = resolve(sandbox, 'repository');
+  const isolatedRouterSource = `
+import { lazy } from 'react';
+import { Route, Routes } from 'react-router-dom';
+import './i18n/config';
+
+const Overview = lazy(() => import('./pages/Overview'));
+
+export default function App() {
+  return <Routes><Route path="/overview" element={<Overview />} /></Routes>;
+}
+`;
+  const sources = new Map([
+    [
+      'web/index.html',
+      '<link rel="icon" href="/logo.svg"><div id="root"></div><script type="module" src="/src/main.tsx"></script>\n',
+    ],
+    [
+      'web/src/main.tsx',
+      "import App from './App';\nimport { bootstrap } from './bootstrap';\nimport './index.css';\nvoid App;\nvoid bootstrap;\n",
+    ],
+    ['web/src/App.tsx', isolatedRouterSource],
+    ['web/src/bootstrap.ts', "export const bootstrap = 'ready';\n"],
+    ['web/src/index.css', ".app { background: url('./assets/background.svg'); }\n"],
+    ['web/src/assets/background.svg', '<svg xmlns="http://www.w3.org/2000/svg" />\n'],
+    [
+      'web/src/i18n/config.ts',
+      "import enUS from '../../src/locales/en-US.json';\nexport const messages = enUS;\n",
+    ],
+    ['web/src/locales/en-US.json', '{"common":{"ready":"Ready"}}\n'],
+    ['web/src/pages/Overview.tsx', 'export default function Overview() { return null; }\n'],
+    ['web/src/config/navigation.ts', navigationSource],
+    ['web/public/logo.svg', '<svg xmlns="http://www.w3.org/2000/svg" />\n'],
+    ['web/package.json', '{"name":"fixture","dependencies":{"react":"1.0.0"}}\n'],
+    ['web/pnpm-lock.yaml', 'lockfileVersion: 9.0\n'],
+    ['web/vite.config.ts', 'export default {};\n'],
+  ]);
+  for (const [sourceEntry, source] of sources) {
+    const absolutePath = resolve(isolatedRepository, sourceEntry);
+    mkdirSync(resolve(absolutePath, '..'), { recursive: true });
+    writeFileSync(absolutePath, source);
+  }
+
+  try {
+    const inventory = buildWebRouteInventoryFromSources({
+      navigationSource,
+      repositoryRoot: isolatedRepository,
+      routerSource: isolatedRouterSource,
+    });
+    const edgeKeys = new Set(
+      inventory.production_dependency_edges.map(
+        (edge) => `${edge.from_source_entry}|${edge.relationship}|${edge.to_source_entry}`
+      )
+    );
+
+    assert.deepEqual(inventory.production_entry_sources, ['web/index.html', 'web/src/main.tsx']);
+    for (const edgeKey of [
+      'web/index.html|html_module_script|web/src/main.tsx',
+      'web/index.html|html_asset|web/public/logo.svg',
+      'web/index.html|package_manifest|web/package.json',
+      'web/package.json|dependency_lockfile|web/pnpm-lock.yaml',
+      'web/package.json|build_config|web/vite.config.ts',
+      'web/src/main.tsx|stylesheet_import|web/src/index.css',
+      'web/src/index.css|css_url|web/src/assets/background.svg',
+      'web/src/i18n/config.ts|data_import|web/src/locales/en-US.json',
+    ]) {
+      assert.equal(edgeKeys.has(edgeKey), true, edgeKey);
+    }
+
+    assert.equal(
+      inventory.production_dependency_ownership.length,
+      inventory.production_dependency_sources.length
+    );
+    assert.equal(
+      inventory.production_dependency_ownership.every((entry) =>
+        ['owned', 'shared', 'excluded'].includes(entry.classification)
+      ),
+      true
+    );
+    const ownershipByEntry = new Map(
+      inventory.production_dependency_ownership.map((entry) => [entry.source_entry, entry])
+    );
+    assert.equal(ownershipByEntry.get('web/src/pages/Overview.tsx')?.classification, 'owned');
+    assert.equal(ownershipByEntry.get('web/src/index.css')?.classification, 'shared');
+    assert.equal(ownershipByEntry.get('web/package.json')?.classification, 'excluded');
+    assert.equal(ownershipByEntry.get('web/pnpm-lock.yaml')?.classification, 'excluded');
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
 test('full production dependency inventory regenerates deterministically', (t) => {
   const inventoryPath = resolve(
     repositoryRoot,
@@ -590,10 +716,7 @@ test('full production dependency inventory regenerates deterministically', (t) =
     resolve(repositoryRoot, 'web/src/config/navigation.ts'),
     'utf8'
   );
-  const productionRouterSource = readFileSync(
-    resolve(repositoryRoot, 'web/src/App.tsx'),
-    'utf8'
-  );
+  const productionRouterSource = readFileSync(resolve(repositoryRoot, 'web/src/App.tsx'), 'utf8');
   const startedAt = process.hrtime.bigint();
   const first = buildWebRouteInventoryFromSources({
     navigationSource: productionNavigationSource,

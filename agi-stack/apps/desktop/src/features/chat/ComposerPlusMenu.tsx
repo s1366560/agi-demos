@@ -18,6 +18,7 @@ import type {
   ComposerContextItem,
   ComposerContextKind,
 } from '../../types';
+import { openFilesWithDesktopDialog } from '../runtime/nativeFileBridge';
 import {
   loadComposerCatalog,
   type ComposerCatalog,
@@ -86,9 +87,11 @@ export function ComposerPlusMenu({
     useState<DesktopScreenshotPreview | null>(null);
   const [screenshotBusy, setScreenshotBusy] = useState(false);
   const [screenshotError, setScreenshotError] = useState<string | null>(null);
+  const [filePickerBusy, setFilePickerBusy] = useState(false);
+  const [filePickerError, setFilePickerError] = useState<string | null>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachmentButtonRef = useRef<HTMLButtonElement>(null);
   const screenshotButtonRef = useRef<HTMLButtonElement>(null);
   const captureCurrentDisplay = window.__MEMSTACK_DESKTOP__?.captureCurrentDisplay;
 
@@ -259,6 +262,7 @@ export function ComposerPlusMenu({
     setExpanded(null);
     setScreenshotPreview(null);
     setScreenshotError(null);
+    setFilePickerError(null);
     if (restoreFocus) {
       window.requestAnimationFrame(() => triggerRef.current?.focus());
     }
@@ -269,11 +273,20 @@ export function ComposerPlusMenu({
     close();
   }
 
-  function handleFiles(files: FileList | null) {
-    const selectedFiles = Array.from(files ?? []);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    if (!selectedFiles.length) return;
-    void onUploadFiles(selectedFiles);
+  async function pickAttachmentFiles() {
+    setFilePickerBusy(true);
+    setFilePickerError(null);
+    try {
+      const result = await openFilesWithDesktopDialog('attachment');
+      if (result.status === 'selected') {
+        await onUploadFiles([...result.files]);
+      }
+    } catch (caught) {
+      setFilePickerError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setFilePickerBusy(false);
+      window.requestAnimationFrame(() => attachmentButtonRef.current?.focus());
+    }
   }
 
   async function captureScreenshot() {
@@ -345,14 +358,20 @@ export function ComposerPlusMenu({
                   {id === 'attachments' ? (
                     <>
                       <button
+                        ref={attachmentButtonRef}
                         className="plus-menu-item"
                         type="button"
-                        disabled={uploadingFileCount > 0}
-                        onClick={() => fileInputRef.current?.click()}
+                        disabled={filePickerBusy || uploadingFileCount > 0}
+                        onClick={() => void pickAttachmentFiles()}
                       >
                         <b><ImageIcon aria-hidden="true" />{t('composer.filesAndPhotos')}</b>
                         <small>{t('composer.filesAndPhotosDescription')}</small>
                       </button>
+                      {filePickerError ? (
+                        <div className="plus-menu-empty" role="alert">
+                          {t('composer.filePickerFailed', { error: filePickerError })}
+                        </div>
+                      ) : null}
                       <button
                         ref={screenshotButtonRef}
                         className="plus-menu-item"
@@ -444,15 +463,6 @@ export function ComposerPlusMenu({
           ) : null}
         </div>
       ) : null}
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        hidden
-        tabIndex={-1}
-        aria-hidden="true"
-        onChange={(event) => handleFiles(event.target.files)}
-      />
     </div>
   );
 }

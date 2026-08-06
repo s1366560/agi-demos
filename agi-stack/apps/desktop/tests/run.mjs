@@ -63,6 +63,16 @@ copyFileSync(
   ),
   join(compiledNavigationDirectory, 'KeyboardShortcutsDialog.css'),
 );
+copyFileSync(
+  join(
+    desktopRoot,
+    'src',
+    'features',
+    'navigation',
+    'NativeUnavailableRoute.css',
+  ),
+  join(compiledNavigationDirectory, 'NativeUnavailableRoute.css'),
+);
 
 const compiledMyWorkDirectory = join(
   compiledRoot,

@@ -8,11 +8,12 @@ const {
   normalizeAutomationCapabilityContract,
   normalizeLocalSearchCapabilityContract,
   normalizeSearchCapabilityContract,
+  normalizeWorkspaceCollaborationAuthorityContract,
   normalizeWorkspaceCollaborationCapabilityContract,
-} = require(
-  '/tmp/agistack-desktop-test-dist/src/features/runtime/workbenchCapabilityClient.js',
-);
-const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
+} = require('/tmp/agistack-desktop-test-dist/src/features/runtime/workbenchCapabilityClient.js');
+const {
+  DEFAULT_CONFIG,
+} = require('/tmp/agistack-desktop-test-dist/src/types.js');
 
 const searchContract = {
   service_version: '0.1.0',
@@ -110,12 +111,41 @@ const workspaceCollaborationContract = {
   allowed_actions: {},
 };
 
+const workspaceReadActions = workspaceCollaborationContract.read_surfaces.map(
+  (surface) => `${surface}:view`,
+);
+const workspaceCollaborationAuthority = {
+  contract_version: '2.0.0',
+  tenant_id: 'tenant / 1',
+  project_id: 'project / 1',
+  workspace_id: 'workspace / 1',
+  revision: 7,
+  cursor: 'workspace:workspace / 1:revision:7',
+};
+
 const emptyScope = {
   tenant_id: null,
   project_id: null,
   workspace_id: null,
   instance_id: null,
 };
+
+const managementRouteCapabilityIds = [
+  'tenant-tenant-providers',
+  'tenant-tenant-agent-definitions',
+  'tenant-tenant-skills',
+  'tenant-tenant-plugins',
+  'tenant-tenant-mcp-servers',
+];
+
+function managementRouteClients(observe) {
+  return Object.fromEntries(
+    managementRouteCapabilityIds.map((capability) => [
+      capability,
+      Object.freeze({ observe }),
+    ]),
+  );
+}
 
 function availableCapability(allowedActions = []) {
   return {
@@ -129,7 +159,11 @@ function availableCapability(allowedActions = []) {
   };
 }
 
-function degradedCapability(reasonCode, allowedActions = [], authorityRevision = null) {
+function degradedCapability(
+  reasonCode,
+  allowedActions = [],
+  authorityRevision = null,
+) {
   return {
     availability: 'degraded',
     reason_code: reasonCode,
@@ -174,6 +208,42 @@ function withScope(capability, scope) {
   return { ...capability, scope };
 }
 
+function withObservedAuthority(capability, authoritySource) {
+  return {
+    ...capability,
+    authority_source: authoritySource,
+    provenance: 'observed',
+  };
+}
+
+function withDeclaredAuthority(capability) {
+  const active =
+    capability.availability === 'available' ||
+    capability.availability === 'degraded';
+  return {
+    ...(active
+      ? {
+          ...capability,
+          availability: 'unavailable',
+          reason_code: 'renderer_capability_authority_unobserved',
+          allowed_actions: [],
+          authority_revision: null,
+        }
+      : capability),
+    authority_source: 'renderer',
+    provenance: 'declared',
+  };
+}
+
+function withoutAuthorityRevision(capability) {
+  return {
+    ...capability,
+    availability: 'unavailable',
+    reason_code: 'capability_authority_revision_unavailable',
+    allowed_actions: [],
+  };
+}
+
 test('cloud client validates structured Search and Automation authorities', async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
@@ -208,16 +278,21 @@ test('cloud client validates structured Search and Automation authorities', asyn
     };
     assert.deepEqual(
       snapshot.capabilities.search,
-      withScope(
-        availableCapability([
-          'semantic',
-          'advanced',
-          'graph_traversal',
-          'community',
-          'temporal',
-          'faceted',
-        ]),
-        scope,
+      withObservedAuthority(
+        withScope(
+          withoutAuthorityRevision(
+            availableCapability([
+              'semantic',
+              'advanced',
+              'graph_traversal',
+              'community',
+              'temporal',
+              'faceted',
+            ]),
+          ),
+          scope,
+        ),
+        'cloud_service',
       ),
     );
     assert.deepEqual(
@@ -226,185 +301,330 @@ test('cloud client validates structured Search and Automation authorities', asyn
     );
     assert.deepEqual(
       snapshot.capabilities.automation_run,
-      withScope(availableCapability(['run_now']), scope),
+      withObservedAuthority(
+        withScope(withoutAuthorityRevision(availableCapability(['run_now'])), scope),
+        'cloud_service',
+      ),
     );
     assert.deepEqual(
       snapshot.capabilities['project-project-cron-jobs'],
-      withScope(
-        availableCapability([
-          'view',
-          'list',
-          'view-history',
-          'inspect-capabilities',
-          'create',
-          'update',
-          'toggle',
-          'run-now',
-          'delete',
-        ]),
-        scope,
+      withObservedAuthority(
+        withScope(
+          withoutAuthorityRevision(
+            availableCapability([
+              'view',
+              'list',
+              'view-history',
+              'inspect-capabilities',
+              'create',
+              'update',
+              'toggle',
+              'run-now',
+              'delete',
+            ]),
+          ),
+          scope,
+        ),
+        'cloud_service',
       ),
     );
-    assert.deepEqual(snapshot.capabilities['tenant-tenant-tasks'], {
-      availability: 'available',
-      reason_code: null,
-      service_version: '0.1.0',
-      contract_version: '3.0.0',
-      allowed_actions: [
-        'view',
-        'list',
-        'search',
-        'filter',
-        'paginate',
-        'refresh',
-        'retry-task',
-        'stop-task',
-        'retry-pending',
-        'navigate-dead-letter-queue',
-      ],
-      scope: { tenant_id: 'default', project_id: null, workspace_id: null, instance_id: null },
-      authority_revision: null,
-    });
-    assert.deepEqual(snapshot.capabilities['tenant-tenant-pool'], {
-      availability: 'degraded',
-      reason_code: 'global_pool_capacity_not_available_in_tenant_scope',
-      service_version: '0.1.0',
-      contract_version: '3.0.0',
-      allowed_actions: [
-        'view',
-        'refresh',
-        'toggle-auto-refresh',
-        'list-instances',
-        'search-current-page',
-        'filter-by-tier',
-        'paginate-instances',
-        'pause-instance',
-        'resume-instance',
-        'terminate-instance',
-        'retry-list-instances',
-        'inspect-pool-status',
-      ],
-      scope: {
-        tenant_id: 'default',
-        project_id: null,
-        workspace_id: null,
-        instance_id: null,
-      },
-      authority_revision: null,
-    });
-    assert.deepEqual(snapshot.capabilities['tenant-tenant-instances'], {
-      availability: 'degraded',
-      reason_code: 'runtime_instances_nested_routes_partial',
-      service_version: '0.1.0',
-      contract_version: '3.0.0',
-      allowed_actions: [
-        'view',
-        'list',
-        'refresh',
-        'search',
-        'filter-status',
-        'paginate',
-        'restart',
-        'delete',
-      ],
-      scope: {
-        tenant_id: 'default',
-        project_id: null,
-        workspace_id: null,
-        instance_id: null,
-      },
-      authority_revision: null,
-    });
-    assert.deepEqual(snapshot.capabilities['tenant-tenant-clusters'], {
-      availability: 'degraded',
-      reason_code: 'runtime_clusters_detail_and_mutations_partial',
-      service_version: '0.1.0',
-      contract_version: '3.0.0',
-      allowed_actions: [
-        'view',
-        'list',
-        'refresh',
-        'search-current-page',
-        'filter-status-current-page',
-        'paginate',
-        'inspect-health',
-      ],
-      scope: {
-        tenant_id: 'default',
-        project_id: null,
-        workspace_id: null,
-        instance_id: null,
-      },
-      authority_revision: null,
-    });
-    assert.deepEqual(snapshot.capabilities['tenant-tenant-deploy'], {
-      availability: 'degraded',
-      reason_code:
-        'runtime_deployments_mutations_and_instance_discovery_partial',
-      service_version: '0.1.0',
-      contract_version: '3.0.0',
-      allowed_actions: [
-        'view',
-        'list',
-        'refresh',
-        'paginate',
-        'inspect-progress',
-        'reconnect-progress',
-      ],
-      scope: {
-        tenant_id: 'default',
-        project_id: null,
-        workspace_id: null,
-        instance_id: null,
-      },
-      authority_revision: null,
-    });
-    assert.deepEqual(snapshot.capabilities['tenant-tenant-dead-letter-queue'], {
-      availability: 'available',
-      reason_code: null,
-      service_version: '0.1.0',
-      contract_version: '3.0.0',
-      allowed_actions: [
-        'view',
-        'list',
-        'inspect-stats',
-        'inspect-message',
-        'filter',
-        'paginate',
-        'refresh',
-        'retry-message',
-        'retry-batch',
-        'discard',
-        'cleanup',
-      ],
-      scope: {
-        tenant_id: 'default',
-        project_id: null,
-        workspace_id: null,
-        instance_id: null,
-      },
-      authority_revision: null,
-    });
-    assert.deepEqual(snapshot.capabilities['project-support'], {
-      availability: 'available',
-      reason_code: null,
-      service_version: '0.1.0',
-      contract_version: '3.0.0',
-      allowed_actions: ['view', 'list', 'create', 'close', 'retry'],
-      scope: {
-        tenant_id: 'default',
-        project_id: 'project/1',
-        workspace_id: null,
-        instance_id: null,
-      },
-      authority_revision: null,
-    });
+    assert.deepEqual(
+      snapshot.capabilities['tenant-tenant-tasks'],
+      withDeclaredAuthority({
+        availability: 'available',
+        reason_code: null,
+        service_version: '0.1.0',
+        contract_version: '3.0.0',
+        allowed_actions: [
+          'view',
+          'list',
+          'search',
+          'filter',
+          'paginate',
+          'refresh',
+          'retry-task',
+          'stop-task',
+          'retry-pending',
+          'navigate-dead-letter-queue',
+        ],
+        scope: {
+          tenant_id: 'default',
+          project_id: null,
+          workspace_id: null,
+          instance_id: null,
+        },
+        authority_revision: null,
+      }),
+    );
+    assert.deepEqual(
+      snapshot.capabilities['tenant-tenant-pool'],
+      withDeclaredAuthority({
+        availability: 'degraded',
+        reason_code: 'global_pool_capacity_not_available_in_tenant_scope',
+        service_version: '0.1.0',
+        contract_version: '3.0.0',
+        allowed_actions: [
+          'view',
+          'refresh',
+          'toggle-auto-refresh',
+          'list-instances',
+          'search-current-page',
+          'filter-by-tier',
+          'paginate-instances',
+          'pause-instance',
+          'resume-instance',
+          'terminate-instance',
+          'retry-list-instances',
+          'inspect-pool-status',
+        ],
+        scope: {
+          tenant_id: 'default',
+          project_id: null,
+          workspace_id: null,
+          instance_id: null,
+        },
+        authority_revision: null,
+      }),
+    );
+    assert.deepEqual(
+      snapshot.capabilities['tenant-tenant-instances'],
+      withDeclaredAuthority({
+        availability: 'degraded',
+        reason_code: 'runtime_instances_nested_routes_partial',
+        service_version: '0.1.0',
+        contract_version: '3.0.0',
+        allowed_actions: [
+          'view',
+          'list',
+          'refresh',
+          'search',
+          'filter-status',
+          'paginate',
+          'restart',
+          'delete',
+        ],
+        scope: {
+          tenant_id: 'default',
+          project_id: null,
+          workspace_id: null,
+          instance_id: null,
+        },
+        authority_revision: null,
+      }),
+    );
+    assert.deepEqual(
+      snapshot.capabilities['tenant-tenant-clusters'],
+      withDeclaredAuthority({
+        availability: 'degraded',
+        reason_code: 'runtime_clusters_detail_and_mutations_partial',
+        service_version: '0.1.0',
+        contract_version: '3.0.0',
+        allowed_actions: [
+          'view',
+          'list',
+          'refresh',
+          'search-current-page',
+          'filter-status-current-page',
+          'paginate',
+          'inspect-health',
+        ],
+        scope: {
+          tenant_id: 'default',
+          project_id: null,
+          workspace_id: null,
+          instance_id: null,
+        },
+        authority_revision: null,
+      }),
+    );
+    assert.deepEqual(
+      snapshot.capabilities['tenant-tenant-deploy'],
+      withDeclaredAuthority({
+        availability: 'degraded',
+        reason_code:
+          'runtime_deployments_mutations_and_instance_discovery_partial',
+        service_version: '0.1.0',
+        contract_version: '3.0.0',
+        allowed_actions: [
+          'view',
+          'list',
+          'refresh',
+          'paginate',
+          'inspect-progress',
+          'reconnect-progress',
+        ],
+        scope: {
+          tenant_id: 'default',
+          project_id: null,
+          workspace_id: null,
+          instance_id: null,
+        },
+        authority_revision: null,
+      }),
+    );
+    assert.deepEqual(
+      snapshot.capabilities['tenant-tenant-dead-letter-queue'],
+      withDeclaredAuthority({
+        availability: 'available',
+        reason_code: null,
+        service_version: '0.1.0',
+        contract_version: '3.0.0',
+        allowed_actions: [
+          'view',
+          'list',
+          'inspect-stats',
+          'inspect-message',
+          'filter',
+          'paginate',
+          'refresh',
+          'retry-message',
+          'retry-batch',
+          'discard',
+          'cleanup',
+        ],
+        scope: {
+          tenant_id: 'default',
+          project_id: null,
+          workspace_id: null,
+          instance_id: null,
+        },
+        authority_revision: null,
+      }),
+    );
+    assert.deepEqual(
+      snapshot.capabilities['project-support'],
+      withDeclaredAuthority({
+        availability: 'available',
+        reason_code: null,
+        service_version: '0.1.0',
+        contract_version: '3.0.0',
+        allowed_actions: ['view', 'list', 'create', 'close', 'retry'],
+        scope: {
+          tenant_id: 'default',
+          project_id: 'project/1',
+          workspace_id: null,
+          instance_id: null,
+        },
+        authority_revision: null,
+      }),
+    );
     assert.equal(
       calls[0]?.input,
       'https://api.memstack.test/api/v1/search-enhanced/capabilities',
     );
-    assert.equal(calls[0]?.init?.headers.get('Authorization'), 'Bearer session-credential');
+    assert.equal(
+      calls[0]?.init?.headers.get('Authorization'),
+      'Bearer session-credential',
+    );
     assert.equal(calls[0]?.init?.headers.has('X-Agistack-Launch'), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('management routes become observed only after their typed clients read current authority', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify(searchContract), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+
+  try {
+    for (const [mode, authoritySource] of [
+      ['cloud', 'cloud_service'],
+      ['local', 'sidecar'],
+    ]) {
+      const config = {
+        ...DEFAULT_CONFIG,
+        mode,
+        tenantId: mode === 'local' ? 'local' : 'tenant-1',
+        projectId: mode === 'local' ? 'local-project' : 'project-1',
+        localApiToken: 'launch-capability',
+      };
+      const client = createDesktopWorkbenchCapabilityClient(
+        {
+          getAutomationCapabilities: async () => automationContract,
+        },
+        config,
+        {
+          managementRouteClients: managementRouteClients(async (scope) => ({
+            scope,
+            itemCount: 2,
+          })),
+        },
+      );
+      const snapshot = await client.loadSnapshot();
+
+      for (const capability of managementRouteCapabilityIds) {
+        assert.deepEqual(snapshot.capabilities[capability], {
+          availability: 'unavailable',
+          reason_code: 'capability_authority_revision_unavailable',
+          service_version: '0.1.0',
+          contract_version: '4.0.0',
+          allowed_actions: [],
+          scope: {
+            tenant_id: config.tenantId,
+            project_id: config.projectId,
+            workspace_id: null,
+            instance_id: null,
+          },
+          authority_revision: null,
+          authority_source: authoritySource,
+          provenance: 'observed',
+        });
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('management route observation failures stay unavailable and never promote renderer authority', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify(searchContract), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+
+  try {
+    const client = createDesktopWorkbenchCapabilityClient(
+      {
+        getAutomationCapabilities: async () => automationContract,
+      },
+      {
+        ...DEFAULT_CONFIG,
+        mode: 'cloud',
+        tenantId: 'tenant-1',
+        projectId: 'project-1',
+      },
+      {
+        managementRouteClients: managementRouteClients(async () => {
+          throw new Error('authority unavailable');
+        }),
+      },
+    );
+    const snapshot = await client.loadSnapshot();
+
+    for (const capability of managementRouteCapabilityIds) {
+      assert.deepEqual(snapshot.capabilities[capability], {
+        availability: 'unavailable',
+        reason_code: `${capability.replaceAll('-', '_')}_authority_unavailable`,
+        service_version: null,
+        contract_version: null,
+        allowed_actions: [],
+        scope: {
+          tenant_id: 'tenant-1',
+          project_id: 'project-1',
+          workspace_id: null,
+          instance_id: null,
+        },
+        authority_revision: null,
+        authority_source: 'cloud_service',
+        provenance: 'observed',
+      });
+    }
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -460,38 +680,44 @@ test('local workbench capability client consumes the scoped degraded Search cont
 
     assert.deepEqual(
       snapshot.capabilities.search,
-      withScope(
-        degradedCapability(
-          'local_embeddings_unavailable',
-          ['advanced', 'temporal', 'faceted'],
-          7,
+      withObservedAuthority(
+        withScope(
+          degradedCapability(
+            'local_embeddings_unavailable',
+            ['advanced', 'temporal', 'faceted'],
+            7,
+          ),
+          {
+            tenant_id: 'local',
+            project_id: 'local-project',
+            workspace_id: null,
+            instance_id: null,
+          },
         ),
-        {
-          tenant_id: 'local',
-          project_id: 'local-project',
-          workspace_id: null,
-          instance_id: null,
-        },
+        'sidecar',
       ),
     );
     assert.deepEqual(
       snapshot.capabilities['project-project-search'],
       snapshot.capabilities.search,
     );
-    assert.deepEqual(snapshot.capabilities['project-support'], {
-      availability: 'not_applicable',
-      reason_code: 'local_support_service_not_applicable',
-      service_version: null,
-      contract_version: null,
-      allowed_actions: [],
-      scope: {
-        tenant_id: 'local',
-        project_id: 'local-project',
-        workspace_id: null,
-        instance_id: null,
-      },
-      authority_revision: null,
-    });
+    assert.deepEqual(
+      snapshot.capabilities['project-support'],
+      withDeclaredAuthority({
+        availability: 'not_applicable',
+        reason_code: 'local_support_service_not_applicable',
+        service_version: null,
+        contract_version: null,
+        allowed_actions: [],
+        scope: {
+          tenant_id: 'local',
+          project_id: 'local-project',
+          workspace_id: null,
+          instance_id: null,
+        },
+        authority_revision: null,
+      }),
+    );
     const searchCall = calls.find(({ input }) =>
       input.endsWith('/api/v1/search-enhanced/capabilities'),
     );
@@ -501,73 +727,89 @@ test('local workbench capability client consumes the scoped degraded Search cont
       'http://127.0.0.1:4123/api/v1/search-enhanced/capabilities',
     );
     assert.equal(searchCall.init?.headers.get('Authorization'), null);
-    assert.equal(searchCall.init?.headers.get('X-Agistack-Launch'), 'launch-capability');
+    assert.equal(
+      searchCall.init?.headers.get('X-Agistack-Launch'),
+      'launch-capability',
+    );
     assert.deepEqual(
       snapshot.capabilities.automation_run,
-      withScope(
-        unavailableCapability('durable_automation_execution_unavailable', true),
-        {
-          tenant_id: 'local',
-          project_id: 'local-project',
-          workspace_id: null,
-          instance_id: null,
-        },
+      withObservedAuthority(
+        withScope(
+          unavailableCapability(
+            'durable_automation_execution_unavailable',
+            true,
+          ),
+          {
+            tenant_id: 'local',
+            project_id: 'local-project',
+            workspace_id: null,
+            instance_id: null,
+          },
+        ),
+        'sidecar',
       ),
     );
     assert.deepEqual(
       snapshot.capabilities['project-project-cron-jobs'],
-      withScope(
-        degradedCapability(
-          'automation_actions_restricted',
-          [
-            'view',
-            'list',
-            'view-history',
-            'inspect-capabilities',
-            'create',
-            'update',
-            'toggle',
-            'delete',
-          ],
+      withObservedAuthority(
+        withScope(
+          withoutAuthorityRevision(
+            degradedCapability('automation_actions_restricted', [
+              'view',
+              'list',
+              'view-history',
+              'inspect-capabilities',
+              'create',
+              'update',
+              'toggle',
+              'delete',
+            ]),
+          ),
+          {
+            tenant_id: 'local',
+            project_id: 'local-project',
+            workspace_id: null,
+            instance_id: null,
+          },
         ),
-        {
+        'sidecar',
+      ),
+    );
+    assert.deepEqual(
+      snapshot.capabilities['tenant-tenant-tasks'],
+      withDeclaredAuthority({
+        availability: 'degraded',
+        reason_code: 'local_task_dashboard_partial',
+        service_version: '0.1.0',
+        contract_version: '3.0.0',
+        allowed_actions: [
+          'view',
+          'list',
+          'search',
+          'filter',
+          'paginate',
+          'refresh',
+          'open-workspace',
+        ],
+        scope: {
           tenant_id: 'local',
           project_id: 'local-project',
           workspace_id: null,
           instance_id: null,
         },
-      ),
+        authority_revision: null,
+      }),
     );
-    assert.deepEqual(snapshot.capabilities['tenant-tenant-tasks'], {
-      availability: 'degraded',
-      reason_code: 'local_task_dashboard_partial',
-      service_version: '0.1.0',
-      contract_version: '3.0.0',
-      allowed_actions: [
-        'view',
-        'list',
-        'search',
-        'filter',
-        'paginate',
-        'refresh',
-        'open-workspace',
-      ],
-      scope: {
-        tenant_id: 'local',
-        project_id: 'local-project',
-        workspace_id: null,
-        instance_id: null,
-      },
-      authority_revision: null,
-    });
     assert.deepEqual(
       snapshot.capabilities.sandbox_isolation,
-      withScope(notApplicableCapability('local_isolation_not_applicable'), {
-        tenant_id: 'local',
-        project_id: 'local-project',
-        workspace_id: null,
-        instance_id: null,
-      }),
+      withDeclaredAuthority(
+        withScope(notApplicableCapability('local_isolation_not_applicable'), {
+          tenant_id: 'local',
+          project_id: 'local-project',
+          workspace_id: null,
+          instance_id: null,
+        }),
+      ),
     );
   } finally {
     globalThis.fetch = originalFetch;
@@ -658,16 +900,22 @@ test('legacy capability authorities fail closed before payload inference', async
     };
     assert.deepEqual(
       snapshot.capabilities.search,
-      withScope(
-        unavailableCapability('search_capability_contract_unavailable'),
-        scope,
+      withObservedAuthority(
+        withScope(
+          unavailableCapability('search_capability_contract_unavailable'),
+          scope,
+        ),
+        'cloud_service',
       ),
     );
     assert.deepEqual(
       snapshot.capabilities.automation_run,
-      withScope(
-        unavailableCapability('automation_capability_contract_unavailable'),
-        scope,
+      withObservedAuthority(
+        withScope(
+          unavailableCapability('automation_capability_contract_unavailable'),
+          scope,
+        ),
+        'cloud_service',
       ),
     );
   } finally {
@@ -722,9 +970,12 @@ test('cloud client loads the scoped degraded Workspace Collaboration authority',
   const calls = [];
   globalThis.fetch = async (input, init) => {
     calls.push({ input: String(input), init });
-    const payload = String(input).endsWith('/collaboration/capabilities')
+    const url = String(input);
+    const payload = url.endsWith('/collaboration/capabilities')
       ? workspaceCollaborationContract
-      : searchContract;
+      : url.endsWith('/collaboration/authority')
+        ? workspaceCollaborationAuthority
+        : searchContract;
     return new Response(JSON.stringify(payload), {
       status: 200,
       headers: { 'content-type': 'application/json' },
@@ -749,16 +1000,21 @@ test('cloud client loads the scoped degraded Workspace Collaboration authority',
     const snapshot = await client.loadSnapshot();
     assert.deepEqual(
       snapshot.capabilities.workspace_collaboration,
-      withScope(
-        degradedCapability(
-          'workspace_collaboration_mutation_guards_unavailable',
+      withObservedAuthority(
+        withScope(
+          degradedCapability(
+            'workspace_collaboration_mutation_guards_unavailable',
+            workspaceReadActions,
+            7,
+          ),
+          {
+            tenant_id: 'tenant / 1',
+            project_id: 'project / 1',
+            workspace_id: 'workspace / 1',
+            instance_id: null,
+          },
         ),
-        {
-          tenant_id: 'tenant / 1',
-          project_id: 'project / 1',
-          workspace_id: 'workspace / 1',
-          instance_id: null,
-        },
+        'cloud_service',
       ),
     );
 
@@ -775,6 +1031,19 @@ test('cloud client loads the scoped degraded Workspace Collaboration authority',
       'Bearer session-credential',
     );
     assert.equal(authorityCall?.init?.headers.has('X-Agistack-Launch'), false);
+
+    const revisionCall = calls.find(({ input }) =>
+      input.endsWith('/collaboration/authority'),
+    );
+    assert.equal(
+      revisionCall?.input,
+      'https://api.memstack.test/api/v1/tenants/tenant%20%2F%201/projects/' +
+        'project%20%2F%201/workspaces/workspace%20%2F%201/collaboration/authority',
+    );
+    assert.equal(
+      revisionCall?.init?.headers.get('Authorization'),
+      'Bearer session-credential',
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -791,21 +1060,33 @@ test('Workspace Collaboration capability normalization fails closed on contract 
       workspaceCollaborationContract,
       scope,
     ),
-    degradedCapability('workspace_collaboration_mutation_guards_unavailable'),
+    degradedCapability(
+      'workspace_collaboration_mutation_guards_unavailable',
+      workspaceReadActions,
+    ),
   );
 
   const missingSurface = structuredClone(workspaceCollaborationContract);
   missingSurface.read_surfaces.pop();
   assert.deepEqual(
     normalizeWorkspaceCollaborationCapabilityContract(missingSurface, scope),
-    unavailableCapability('workspace_collaboration_capability_contract_invalid', true),
+    unavailableCapability(
+      'workspace_collaboration_capability_contract_invalid',
+      true,
+    ),
   );
 
   const unsafeMutationClaim = structuredClone(workspaceCollaborationContract);
   unsafeMutationClaim.mutations.revision_guarded = true;
   assert.deepEqual(
-    normalizeWorkspaceCollaborationCapabilityContract(unsafeMutationClaim, scope),
-    unavailableCapability('workspace_collaboration_capability_contract_invalid', true),
+    normalizeWorkspaceCollaborationCapabilityContract(
+      unsafeMutationClaim,
+      scope,
+    ),
+    unavailableCapability(
+      'workspace_collaboration_capability_contract_invalid',
+      true,
+    ),
   );
 
   assert.deepEqual(
@@ -813,7 +1094,10 @@ test('Workspace Collaboration capability normalization fails closed on contract 
       { ...workspaceCollaborationContract, workspace_id: 'workspace-other' },
       scope,
     ),
-    unavailableCapability('workspace_collaboration_capability_scope_mismatch', true),
+    unavailableCapability(
+      'workspace_collaboration_capability_scope_mismatch',
+      true,
+    ),
   );
   const legacy = structuredClone(workspaceCollaborationContract);
   delete legacy.contract_version;
@@ -825,6 +1109,35 @@ test('Workspace Collaboration capability normalization fails closed on contract 
       '0.1.0',
       null,
     ),
+  );
+});
+
+test('Workspace Collaboration authority normalization requires exact scoped revision', () => {
+  const scope = {
+    tenantId: 'tenant / 1',
+    projectId: 'project / 1',
+    workspaceId: 'workspace / 1',
+  };
+  assert.equal(
+    normalizeWorkspaceCollaborationAuthorityContract(
+      workspaceCollaborationAuthority,
+      scope,
+    ),
+    7,
+  );
+  assert.equal(
+    normalizeWorkspaceCollaborationAuthorityContract(
+      { ...workspaceCollaborationAuthority, workspace_id: 'workspace-other' },
+      scope,
+    ),
+    null,
+  );
+  assert.equal(
+    normalizeWorkspaceCollaborationAuthorityContract(
+      { ...workspaceCollaborationAuthority, revision: -1 },
+      scope,
+    ),
+    null,
   );
 });
 
@@ -860,16 +1173,19 @@ test('Workspace Collaboration 404 and local mode remain structured unavailable',
     const cloud = await cloudClient.loadSnapshot();
     assert.deepEqual(
       cloud.capabilities.workspace_collaboration,
-      withScope(
-        unavailableCapability(
-          'workspace_collaboration_capability_contract_unavailable',
+      withObservedAuthority(
+        withScope(
+          unavailableCapability(
+            'workspace_collaboration_capability_contract_unavailable',
+          ),
+          {
+            tenant_id: 'tenant-1',
+            project_id: 'project-1',
+            workspace_id: 'workspace-1',
+            instance_id: null,
+          },
         ),
-        {
-          tenant_id: 'tenant-1',
-          project_id: 'project-1',
-          workspace_id: 'workspace-1',
-          instance_id: null,
-        },
+        'cloud_service',
       ),
     );
     assert.equal(capabilityFetchCalls, 1);
@@ -887,78 +1203,86 @@ test('Workspace Collaboration 404 and local mode remain structured unavailable',
     const local = await localClient.loadSnapshot();
     assert.deepEqual(
       local.capabilities.workspace_collaboration,
-      withScope(
-        unavailableCapability('local_workspace_collaboration_unavailable'),
-        {
-          tenant_id: 'local',
-          project_id: 'local-project',
-          workspace_id: 'local-workspace',
-          instance_id: null,
-        },
+      withDeclaredAuthority(
+        withScope(
+          unavailableCapability('local_workspace_collaboration_unavailable'),
+          {
+            tenant_id: 'local',
+            project_id: 'local-project',
+            workspace_id: 'local-workspace',
+            instance_id: null,
+          },
+        ),
       ),
     );
-    assert.deepEqual(local.capabilities['tenant-tenant-pool'], {
-      availability: 'not_applicable',
-      reason_code: 'cloud_runtime_pool_not_applicable',
-      service_version: null,
-      contract_version: null,
-      allowed_actions: [],
-      scope: {
-        tenant_id: 'local',
-        project_id: null,
-        workspace_id: null,
-        instance_id: null,
-      },
-      authority_revision: null,
-    });
-    assert.deepEqual(local.capabilities['tenant-tenant-instances'], {
-      availability: 'degraded',
-      reason_code: 'local_instance_sidecar_projection_partial',
-      service_version: '0.1.0',
-      contract_version: '3.0.0',
-      allowed_actions: [
-        'view',
-        'list',
-        'refresh',
-        'search',
-        'filter-status',
-      ],
-      scope: {
-        tenant_id: 'local',
-        project_id: null,
-        workspace_id: null,
-        instance_id: null,
-      },
-      authority_revision: null,
-    });
-    assert.deepEqual(local.capabilities['tenant-tenant-clusters'], {
-      availability: 'not_applicable',
-      reason_code: 'cloud_cluster_control_not_applicable',
-      service_version: null,
-      contract_version: null,
-      allowed_actions: [],
-      scope: {
-        tenant_id: 'local',
-        project_id: null,
-        workspace_id: null,
-        instance_id: null,
-      },
-      authority_revision: null,
-    });
-    assert.deepEqual(local.capabilities['tenant-tenant-deploy'], {
-      availability: 'not_applicable',
-      reason_code: 'cloud_deployment_authority_not_applicable',
-      service_version: null,
-      contract_version: null,
-      allowed_actions: [],
-      scope: {
-        tenant_id: 'local',
-        project_id: null,
-        workspace_id: null,
-        instance_id: null,
-      },
-      authority_revision: null,
-    });
+    assert.deepEqual(
+      local.capabilities['tenant-tenant-pool'],
+      withDeclaredAuthority({
+        availability: 'not_applicable',
+        reason_code: 'cloud_runtime_pool_not_applicable',
+        service_version: null,
+        contract_version: null,
+        allowed_actions: [],
+        scope: {
+          tenant_id: 'local',
+          project_id: null,
+          workspace_id: null,
+          instance_id: null,
+        },
+        authority_revision: null,
+      }),
+    );
+    assert.deepEqual(
+      local.capabilities['tenant-tenant-instances'],
+      withDeclaredAuthority({
+        availability: 'degraded',
+        reason_code: 'local_instance_sidecar_projection_partial',
+        service_version: '0.1.0',
+        contract_version: '3.0.0',
+        allowed_actions: ['view', 'list', 'refresh', 'search', 'filter-status'],
+        scope: {
+          tenant_id: 'local',
+          project_id: null,
+          workspace_id: null,
+          instance_id: null,
+        },
+        authority_revision: null,
+      }),
+    );
+    assert.deepEqual(
+      local.capabilities['tenant-tenant-clusters'],
+      withDeclaredAuthority({
+        availability: 'not_applicable',
+        reason_code: 'cloud_cluster_control_not_applicable',
+        service_version: null,
+        contract_version: null,
+        allowed_actions: [],
+        scope: {
+          tenant_id: 'local',
+          project_id: null,
+          workspace_id: null,
+          instance_id: null,
+        },
+        authority_revision: null,
+      }),
+    );
+    assert.deepEqual(
+      local.capabilities['tenant-tenant-deploy'],
+      withDeclaredAuthority({
+        availability: 'not_applicable',
+        reason_code: 'cloud_deployment_authority_not_applicable',
+        service_version: null,
+        contract_version: null,
+        allowed_actions: [],
+        scope: {
+          tenant_id: 'local',
+          project_id: null,
+          workspace_id: null,
+          instance_id: null,
+        },
+        authority_revision: null,
+      }),
+    );
     assert.equal(capabilityFetchCalls, 1);
   } finally {
     globalThis.fetch = originalFetch;

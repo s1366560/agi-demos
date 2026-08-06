@@ -271,6 +271,8 @@
       "userAria": "Use user demo credentials"
     },
     "oauth": {
+      "continueWith": "Continue with {{provider}}",
+      "redirectingToProvider": "Opening {{provider}}…",
       "processing": "Completing sign in…",
       "authenticating": "Authenticating…",
       "authenticatingWith": "Authenticating with {{provider}}…",
@@ -280,12 +282,74 @@
       "tryAgain": "Try again",
       "errors": {
         "noCode": "Authorization code not found",
+        "noState": "The sign-in request is missing or expired",
         "noProvider": "OAuth provider not specified",
-        "exchangeFailed": "Failed to complete OAuth authentication"
+        "startFailed": "Unable to start single sign-on. Please try again.",
+        "exchangeFailed": "Failed to complete OAuth authentication",
+        "oauth_callback_state_invalid": "The sign-in request is invalid or has expired.",
+        "oauth_state_store_unavailable": "Single sign-on is temporarily unavailable.",
+        "oauth_provider_exchange_failed": "The identity provider could not complete sign-in.",
+        "oauth_provider_identity_invalid": "The identity provider did not return a verified email.",
+        "oauth_identity_email_unverified": "A verified email is required to sign in.",
+        "oauth_account_not_preprovisioned": "This account has not been invited to MemStack.",
+        "oauth_account_inactive": "This MemStack account is inactive.",
+        "oauth_identity_subject_conflict": "This provider account conflicts with the existing account link.",
+        "oauth_identity_link_conflict": "This provider account is already linked to another user."
       }
     },
     "errors": {
       "invalidCredentials": "Login failed. Please check your credentials."
+    }
+  },
+  "projectAgent": {
+    "eyebrow": "Project Agent",
+    "dashboard": {
+      "title": "Agent dashboard",
+      "description": "Monitor delegated runs using the current project's trace authority.",
+      "activeRuns": "Active runs",
+      "recentRuns": "Recent runs",
+      "viewAll": "View all logs"
+    },
+    "logs": {
+      "title": "Agent logs",
+      "description": "Project-scoped, permission-filtered execution history.",
+      "statusFilter": "Status",
+      "allStatuses": "All statuses",
+      "empty": "No project Agent runs match this view."
+    },
+    "patterns": {
+      "title": "Agent patterns",
+      "degradedBadge": "Tenant-shared authority",
+      "sharedBadge": "Shared across this tenant",
+      "sharedDescription": "Read-only workflow patterns available to this project through its tenant membership. These patterns remain tenant-owned and are shared across projects.",
+      "unavailableTitle": "Shared patterns are unavailable",
+      "unavailableDescription": "The project membership or tenant-shared patterns authority could not be verified. No tenant data is shown without that authority."
+    },
+    "status": {
+      "pending": "Pending",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "timed_out": "Timed out"
+    },
+    "errors": {
+      "project_agent_trace_forbidden": {
+        "title": "Project Agent access denied",
+        "description": "Your current project membership does not allow access to these runs."
+      },
+      "project_agent_trace_unavailable": {
+        "title": "Project Agent data is unavailable",
+        "description": "The project trace authority could not be reached. Retry when the service is available."
+      },
+      "project_agent_trace_scope_conflict": {
+        "title": "Project Agent scope conflict",
+        "description": "The trace authority returned data for a different project, so no run data is shown."
+      },
+      "project_agent_trace_contract_invalid": {
+        "title": "Project Agent contract invalid",
+        "description": "The trace authority returned an invalid or unredacted response, so no run data is shown."
+      }
     }
   },
   "nav": {
@@ -6675,7 +6739,8 @@
       "status": {
         "preferred": "Preferred",
         "active": "Active",
-        "deprecated": "Deprecated"
+        "deprecated": "Deprecated",
+        "unclassified": "Unclassified"
       },
       "columns": {
         "status": "Status",
@@ -10194,7 +10259,8 @@
       "status": {
         "preferred": "Preferred",
         "active": "Active",
-        "deprecated": "Deprecated"
+        "deprecated": "Deprecated",
+        "unclassified": "Unclassified"
       },
       "labels": {
         "status": "Status",

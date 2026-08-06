@@ -5,8 +5,27 @@ import type {
   DesktopNativeCapabilitySnapshot,
   WebControlPlaneRequest,
 } from '../main/webControlPlanePolicy';
+import type {
+  NativeFileIngestRequest,
+  NativeFileIngestResult,
+  NativeFileOpenRequest,
+  NativeFileOpenResult,
+  NativeFileSaveRequest,
+  NativeFileSaveResult,
+} from '../main/nativeFileDialogPolicy';
+import {
+  compactNativeFileIngestRequest,
+  compactNativeFileIngestResult,
+  compactNativeFileOpenResult,
+  compactNativeFileSaveRequest,
+  validateNativeFileOpenRequest,
+  validateNativeFileSaveResult,
+} from './nativeFilePreloadPolicy';
 
 const DESKTOP_COMMAND_CHANNEL = 'agistack:desktop-command';
+const NATIVE_FILE_SAVE_CHANNEL = 'agistack:native-file-save';
+const NATIVE_FILE_OPEN_CHANNEL = 'agistack:native-file-open';
+const NATIVE_FILE_INGEST_CHANNEL = 'agistack:native-file-ingest';
 const SIDECAR_RECOVERED_CHANNEL = 'agistack:sidecar-recovered';
 const allowedCommands = new Set([
   'frontend_ready',
@@ -64,6 +83,43 @@ function focusMainWindow(): Promise<void> {
   return invokeDesktopCommand('focus_main_window');
 }
 
+async function saveNativeFile(
+  request: NativeFileSaveRequest,
+): Promise<NativeFileSaveResult> {
+  const result: unknown = await ipcRenderer.invoke(
+    NATIVE_FILE_SAVE_CHANNEL,
+    compactNativeFileSaveRequest(request),
+  );
+  return validateNativeFileSaveResult(result);
+}
+
+async function openNativeFile(
+  request: NativeFileOpenRequest,
+): Promise<NativeFileOpenResult> {
+  const validatedRequest = validateNativeFileOpenRequest(request);
+  const result: unknown = await ipcRenderer.invoke(
+    NATIVE_FILE_OPEN_CHANNEL,
+    validatedRequest,
+  );
+  return compactNativeFileOpenResult(result, validatedRequest.purpose);
+}
+
+async function ingestNativeFile(
+  request: NativeFileIngestRequest,
+): Promise<NativeFileIngestResult> {
+  const result: unknown = await ipcRenderer.invoke(
+    NATIVE_FILE_INGEST_CHANNEL,
+    compactNativeFileIngestRequest(request),
+  );
+  return compactNativeFileIngestResult(result);
+}
+
+const fileBridge = Object.freeze({
+  save: saveNativeFile,
+  open: openNativeFile,
+  ingest: ingestNativeFile,
+});
+
 function onSidecarRecovered(listener: () => void): () => void {
   if (typeof listener !== 'function') {
     throw new Error('sidecar recovery listener is invalid');
@@ -82,6 +138,7 @@ contextBridge.exposeInMainWorld(
     getCapabilities,
     openWebControlPlane,
     focusMainWindow,
+    files: fileBridge,
     events: Object.freeze({
       onSidecarRecovered,
     }),

@@ -305,6 +305,12 @@ export interface TenantSubAgentRunListDTO {
   total: number;
 }
 
+export interface ProjectSubAgentRunListDTO {
+  project_id: string;
+  runs: SubAgentRunDTO[];
+  total: number;
+}
+
 export interface TraceChainDTO {
   trace_id: string;
   conversation_id: string;
@@ -333,5 +339,10 @@ export interface ActiveRunCountDTO {
 
 export interface TenantActiveRunCountDTO {
   tenant_id: string;
+  active_count: number;
+}
+
+export interface ProjectActiveRunCountDTO {
+  project_id: string;
   active_count: number;
 }

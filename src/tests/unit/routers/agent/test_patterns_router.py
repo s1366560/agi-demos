@@ -27,9 +27,7 @@ def _patch_pattern_repo(monkeypatch: pytest.MonkeyPatch, repo: object) -> None:
     monkeypatch.setattr(
         patterns_router,
         "get_container_with_db",
-        lambda _request, _db: SimpleNamespace(
-            workflow_pattern_repository=lambda: repo
-        ),
+        lambda _request, _db: SimpleNamespace(workflow_pattern_repository=lambda: repo),
     )
 
 
@@ -140,6 +138,66 @@ async def test_list_patterns_uses_requested_tenant_access(
     assert response.patterns[0].tenant_id == "tenant-2"
     require_access.assert_awaited_once_with(db, current_user, "tenant-2")
     repo.list_by_tenant.assert_awaited_once_with("tenant-2")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_project_patterns_derives_tenant_and_requires_both_memberships(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = SimpleNamespace(list_by_tenant=AsyncMock(return_value=[_pattern()]))
+    db = AsyncMock()
+    project_result = MagicMock()
+    project_result.scalar_one_or_none.return_value = "tenant-1"
+    membership_result = MagicMock()
+    membership_result.scalar_one_or_none.return_value = "membership-1"
+    db.execute.side_effect = [project_result, membership_result]
+    _patch_pattern_repo(monkeypatch, repo)
+
+    response = await patterns_router.list_project_shared_patterns(
+        project_id="project-1",
+        request=_request_with_pattern_repo(),
+        page=1,
+        page_size=20,
+        min_success_rate=None,
+        current_user=SimpleNamespace(id="user-1"),
+        db=db,
+    )
+
+    assert response.project_id == "project-1"
+    assert response.tenant_id == "tenant-1"
+    assert response.scope_kind == "tenant_shared"
+    assert response.patterns[0].tenant_id == "tenant-1"
+    repo.list_by_tenant.assert_awaited_once_with("tenant-1")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_project_patterns_rejects_missing_project_membership(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = SimpleNamespace(list_by_tenant=AsyncMock())
+    db = AsyncMock()
+    project_result = MagicMock()
+    project_result.scalar_one_or_none.return_value = "tenant-1"
+    membership_result = MagicMock()
+    membership_result.scalar_one_or_none.return_value = None
+    db.execute.side_effect = [project_result, membership_result]
+    _patch_pattern_repo(monkeypatch, repo)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await patterns_router.list_project_shared_patterns(
+            project_id="project-1",
+            request=_request_with_pattern_repo(),
+            page=1,
+            page_size=20,
+            min_success_rate=None,
+            current_user=SimpleNamespace(id="user-1"),
+            db=db,
+        )
+
+    assert exc_info.value.status_code == 403
+    repo.list_by_tenant.assert_not_awaited()
 
 
 @pytest.mark.unit

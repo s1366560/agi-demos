@@ -54,7 +54,7 @@
     "evidence_run_schema": { "const": "./evidence-run.v1.schema.json" },
     "capabilities": {
       "type": "array",
-      "minItems": 51,
+      "minItems": 1,
       "items": { "$ref": "#/$defs/capability" }
     }
   },

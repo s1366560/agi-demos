@@ -5,15 +5,16 @@ import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const {
+  DESKTOP_CAPABILITY_NAMES,
   desktopCapability,
   parseDesktopCapabilitySnapshot,
 } = require('/tmp/agistack-desktop-test-dist/src/features/runtime/capabilitySnapshot.js');
 const {
   createDesktopWorkbenchCapabilityClient,
-} = require(
-  '/tmp/agistack-desktop-test-dist/src/features/runtime/workbenchCapabilityClient.js',
-);
-const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
+} = require('/tmp/agistack-desktop-test-dist/src/features/runtime/workbenchCapabilityClient.js');
+const {
+  DEFAULT_CONFIG,
+} = require('/tmp/agistack-desktop-test-dist/src/types.js');
 
 const fixture = JSON.parse(
   readFileSync(
@@ -39,242 +40,285 @@ const nullScope = {
   instance_id: null,
 };
 
+function declaredEntry(capability) {
+  return {
+    ...capability,
+    authority_source: 'renderer',
+    provenance: 'declared',
+  };
+}
+
+function declaredSnapshot(snapshot) {
+  return {
+    ...snapshot,
+    version: '4.0.0',
+    capabilities: Object.fromEntries(
+      DESKTOP_CAPABILITY_NAMES.map((name) => [
+        name,
+        declaredEntry(
+          snapshot.capabilities[name] ?? {
+            availability: 'unavailable',
+            reason_code: 'capability_not_declared',
+            service_version: null,
+            contract_version: null,
+            allowed_actions: [],
+            scope: nullScope,
+            authority_revision: null,
+          },
+        ),
+      ]),
+    ),
+  };
+}
+
 test('DesktopCapabilitySnapshot v3 validates authority fields and preserves the App view', () => {
   const snapshot = parseDesktopCapabilitySnapshot(fixture);
-  assert.deepEqual(snapshot, {
-    ...fixture,
-    capabilities: {
-      ...fixture.capabilities,
-      'device-approval': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
+  assert.deepEqual(
+    snapshot,
+    declaredSnapshot({
+      ...fixture,
+      capabilities: {
+        ...fixture.capabilities,
+        'device-approval': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'tenant-creation': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'invitation-acceptance': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'agent-workspace-tenant-agent-workspace': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'tenant-tenant-overview': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'tenant-tenant-projects': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'tenant-tenant-workspaces': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'tenant-tenant-tasks': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'tenant-tenant-analytics': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'tenant-tenant-agent-configuration': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'tenant-tenant-agent-bindings': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'tenant-tenant-pool': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'tenant-tenant-runtimes': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'tenant-tenant-instances': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'tenant-tenant-clusters': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'tenant-tenant-deploy': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'tenant-tenant-instance-templates': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'tenant-tenant-dead-letter-queue': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'project-project-overview': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'project-project-search': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'project-project-cron-jobs': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
+        'project-support': {
+          availability: 'unavailable',
+          reason_code: 'capability_not_declared',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: nullScope,
+          authority_revision: null,
+        },
       },
-      'tenant-creation': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-      'invitation-acceptance': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-      'agent-workspace-tenant-agent-workspace': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-      'tenant-tenant-overview': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-      'tenant-tenant-projects': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-      'tenant-tenant-workspaces': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-      'tenant-tenant-tasks': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-      'tenant-tenant-analytics': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-      'tenant-tenant-agent-configuration': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-      'tenant-tenant-agent-bindings': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-      'tenant-tenant-pool': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-      'tenant-tenant-runtimes': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-      'tenant-tenant-instances': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-      'tenant-tenant-clusters': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-      'tenant-tenant-deploy': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-      'tenant-tenant-instance-templates': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-      'tenant-tenant-dead-letter-queue': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-      'project-project-overview': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-      'project-project-search': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-      'project-project-cron-jobs': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-      'project-support': {
-        availability: 'unavailable',
-        reason_code: 'capability_not_declared',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: nullScope,
-        authority_revision: null,
-      },
-    },
-  });
-  assert.deepEqual(desktopCapability(snapshot, 'search'), {
-    ...fixture.capabilities.search,
-    status: 'degraded',
-    available: true,
-  });
-  assert.deepEqual(desktopCapability(snapshot, 'sandbox_isolation'), {
-    ...fixture.capabilities.sandbox_isolation,
-    status: 'not_applicable',
-    available: false,
-  });
+    }),
+  );
+  assert.deepEqual(
+    desktopCapability(snapshot, 'search'),
+    declaredEntry({
+      ...fixture.capabilities.search,
+      status: 'degraded',
+      available: false,
+    }),
+  );
+  assert.deepEqual(
+    desktopCapability(snapshot, 'sandbox_isolation'),
+    declaredEntry({
+      ...fixture.capabilities.sandbox_isolation,
+      status: 'not_applicable',
+      available: false,
+    }),
+  );
 });
 
 test('DesktopCapabilitySnapshot v2 is read-only input and normalizes missing capabilities closed', () => {
   const snapshot = parseDesktopCapabilitySnapshot(legacyFixture);
-  assert.equal(snapshot?.version, '3.0.0');
-  assert.deepEqual(snapshot?.capabilities.search, {
-    availability: 'degraded',
-    reason_code: 'local_search_keyword_only',
-    service_version: '0.1.0',
-    contract_version: '2.0.0',
-    allowed_actions: [],
-    scope: nullScope,
-    authority_revision: null,
-  });
+  assert.equal(snapshot?.version, '4.0.0');
+  assert.deepEqual(
+    snapshot?.capabilities.search,
+    declaredEntry({
+      availability: 'degraded',
+      reason_code: 'local_search_keyword_only',
+      service_version: '0.1.0',
+      contract_version: '2.0.0',
+      allowed_actions: [],
+      scope: nullScope,
+      authority_revision: null,
+    }),
+  );
 
   const missingCapability = structuredClone(legacyFixture);
   delete missingCapability.capabilities.search;
   assert.deepEqual(
     parseDesktopCapabilitySnapshot(missingCapability)?.capabilities.search,
-    {
+    declaredEntry({
       availability: 'unavailable',
       reason_code: 'capability_not_declared',
       service_version: null,
@@ -282,7 +326,7 @@ test('DesktopCapabilitySnapshot v2 is read-only input and normalizes missing cap
       allowed_actions: [],
       scope: nullScope,
       authority_revision: null,
-    },
+    }),
   );
 });
 
@@ -368,7 +412,7 @@ test('workbench capability client emits scoped v3 authority metadata', async () 
     );
 
     const snapshot = await client.loadSnapshot();
-    assert.equal(snapshot.version, '3.0.0');
+    assert.equal(snapshot.version, '4.0.0');
     assert.deepEqual(snapshot.capabilities.search, {
       availability: 'degraded',
       reason_code: 'local_embeddings_unavailable',
@@ -382,17 +426,19 @@ test('workbench capability client emits scoped v3 authority metadata', async () 
         instance_id: null,
       },
       authority_revision: 21,
+      authority_source: 'sidecar',
+      provenance: 'observed',
     });
     assert.deepEqual(
       snapshot.capabilities['project-project-search'],
       snapshot.capabilities.search,
     );
     assert.deepEqual(snapshot.capabilities.automation_run, {
-      availability: 'available',
-      reason_code: null,
+      availability: 'unavailable',
+      reason_code: 'capability_authority_revision_unavailable',
       service_version: '0.1.0',
       contract_version: '2.0.0',
-      allowed_actions: ['run_now'],
+      allowed_actions: [],
       scope: {
         tenant_id: 'tenant-1',
         project_id: 'project-1',
@@ -400,23 +446,15 @@ test('workbench capability client emits scoped v3 authority metadata', async () 
         instance_id: null,
       },
       authority_revision: null,
+      authority_source: 'sidecar',
+      provenance: 'observed',
     });
     assert.deepEqual(snapshot.capabilities['project-project-cron-jobs'], {
-      availability: 'available',
-      reason_code: null,
+      availability: 'unavailable',
+      reason_code: 'capability_authority_revision_unavailable',
       service_version: '0.1.0',
       contract_version: '2.0.0',
-      allowed_actions: [
-        'view',
-        'list',
-        'view-history',
-        'inspect-capabilities',
-        'create',
-        'update',
-        'toggle',
-        'run-now',
-        'delete',
-      ],
+      allowed_actions: [],
       scope: {
         tenant_id: 'tenant-1',
         project_id: 'project-1',
@@ -424,6 +462,8 @@ test('workbench capability client emits scoped v3 authority metadata', async () 
         instance_id: null,
       },
       authority_revision: null,
+      authority_source: 'sidecar',
+      provenance: 'observed',
     });
   } finally {
     globalThis.fetch = originalFetch;

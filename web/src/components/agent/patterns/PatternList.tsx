@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Trash2, Network } from 'lucide-react';
 
-export type PatternStatus = 'preferred' | 'active' | 'deprecated';
+export type PatternStatus = 'preferred' | 'active' | 'deprecated' | 'unclassified';
 
 export interface PatternDefinition {
   name: string;
@@ -101,16 +101,16 @@ const StatusBadge = memo(function StatusBadge({ status }: { status: PatternStatu
           {t('agent.patternList.status.deprecated', { defaultValue: 'Deprecated' })}
         </span>
       );
+    case 'unclassified':
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+          <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+          {t('agent.patternList.status.unclassified', { defaultValue: 'Unclassified' })}
+        </span>
+      );
   }
 });
 StatusBadge.displayName = 'StatusBadge';
-
-// Memoized success rate color function
-const getSuccessRateColor = (rate: number): string => {
-  if (rate >= 80) return 'bg-emerald-500';
-  if (rate >= 60) return 'bg-amber-500';
-  return 'bg-red-500';
-};
 
 /**
  * PatternList component
@@ -248,7 +248,7 @@ export function PatternList({
               <div className="col-span-3 flex items-center gap-3">
                 <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                   <div
-                    className={`h-full ${getSuccessRateColor(pattern.successRate)} transition-[width] duration-300`}
+                    className="h-full bg-slate-500 transition-[width] duration-300 dark:bg-slate-400"
                     style={{ width: `${String(pattern.successRate)}%` }}
                   />
                 </div>
@@ -257,22 +257,24 @@ export function PatternList({
                 </span>
               </div>
 
-              {/* Actions */}
+              {/* Actions are present only when the caller supplies mutation authority. */}
               <div className="col-span-1 flex justify-end">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    handleDeprecateClick(e, pattern.id);
-                  }}
-                  className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-red-500 transition-colors"
-                  title={t('agent.patternList.deletePattern', { defaultValue: 'Delete pattern' })}
-                  aria-label={t('agent.patternList.deleteAria', {
-                    name: pattern.name,
-                    defaultValue: 'Delete {{name}}',
-                  })}
-                >
-                  <Trash2 size={18} />
-                </button>
+                {onDeprecate && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      handleDeprecateClick(e, pattern.id);
+                    }}
+                    className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-red-500 transition-colors"
+                    title={t('agent.patternList.deletePattern', { defaultValue: 'Delete pattern' })}
+                    aria-label={t('agent.patternList.deleteAria', {
+                      name: pattern.name,
+                      defaultValue: 'Delete {{name}}',
+                    })}
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -297,6 +299,8 @@ export default memo(PatternList, (prevProps, nextProps) => {
   return (
     prevProps.patterns === nextProps.patterns &&
     prevProps.selectedId === nextProps.selectedId &&
+    prevProps.onSelect === nextProps.onSelect &&
+    prevProps.onDeprecate === nextProps.onDeprecate &&
     prevProps.viewMode === nextProps.viewMode &&
     prevProps.selectionPolicy === nextProps.selectionPolicy
   );

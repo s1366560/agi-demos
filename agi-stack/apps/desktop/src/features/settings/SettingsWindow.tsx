@@ -20,7 +20,10 @@ import type {
   ManagedSubAgent,
   AgentWsEvent,
 } from '../../types';
+import type { DesktopRouteModuleLoader } from '../navigation/desktopRouteModule';
 import { RuntimeConfigPanel } from '../runtime/RuntimeConfigPanel';
+import { ProfileSettingsHost } from '../settings-routes/ProfileSettingsHost';
+import { AccountSessionSecurityPage } from './AccountSessionSecurityPage';
 import {
   ManagedResourceWorkspace,
   type ManagedResource,
@@ -78,6 +81,7 @@ type SettingsWindowProps = {
   wsError: string | null;
   runtimeDisabledReason: string | null;
   agentDefinitionEvent: AgentWsEvent | null;
+  profileRouteLoader?: DesktopRouteModuleLoader;
   onClose: () => void;
   onConfigChange: (config: DesktopRuntimeConfig) => void;
   onRuntimeStatusRefresh: () => Promise<void>;
@@ -96,6 +100,7 @@ export function SettingsWindow({
   wsError,
   runtimeDisabledReason,
   agentDefinitionEvent,
+  profileRouteLoader,
   onClose,
   onConfigChange,
   onRuntimeStatusRefresh,
@@ -582,12 +587,27 @@ export function SettingsWindow({
               }`}
             >
               {section === 'account' ? (
-                <AccountSettingsPage
-                  auth={auth}
-                  tenant={selectedTenant}
-                  config={config}
-                  onSignOut={onSignOut}
-                />
+                profileRouteLoader ? (
+                  <>
+                    <ProfileSettingsHost
+                      key={`${config.mode}|${config.apiBaseUrl}`}
+                      config={config}
+                      loader={profileRouteLoader}
+                    />
+                    <AccountSessionSecurityPage
+                      auth={auth}
+                      config={config}
+                      onSignOut={onSignOut}
+                    />
+                  </>
+                ) : (
+                  <AccountSettingsPage
+                    auth={auth}
+                    tenant={selectedTenant}
+                    config={config}
+                    onSignOut={onSignOut}
+                  />
+                )
               ) : null}
               {section === 'workspace' ? (
                 <WorkspaceSettingsPage

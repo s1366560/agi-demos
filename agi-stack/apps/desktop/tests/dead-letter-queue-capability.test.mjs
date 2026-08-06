@@ -13,7 +13,12 @@ test('DLQ capability is Cloud available and Local specifically not-applicable', 
   const context = { tenantId: 'tenant-1' };
   const match = { definition, context, canonicalPath: '/tenant/tenant-1/dead-letter-queue' };
   const permissions = new Set(['authenticated', 'global_admin']);
-  const cloudCapability = deadLetterQueueCapability(runtimeConfig());
+  const cloudCapability = {
+    ...deadLetterQueueCapability(runtimeConfig()),
+    authority_revision: 1,
+    authority_source: 'cloud_service',
+    provenance: 'observed',
+  };
   const localCapability = deadLetterQueueCapability(runtimeConfig({ mode: 'local' }));
 
   assert.equal(cloudCapability.availability, 'available');

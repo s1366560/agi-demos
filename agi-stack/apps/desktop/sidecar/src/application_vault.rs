@@ -21,6 +21,8 @@ use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine as _};
 use rusqlite::{params, Connection, OptionalExtension};
 use zeroize::Zeroize;
 
+use crate::private_file_permissions;
+
 const VAULT_DIRECTORY: &str = "credential-vault";
 const MASTER_KEY_FILE: &str = "master.key";
 const DATABASE_FILE: &str = "records.db";
@@ -380,30 +382,14 @@ fn read_master_key(path: &Path) -> Result<[u8; MASTER_KEY_LENGTH], ApplicationVa
     Ok(master_key)
 }
 
-#[cfg(unix)]
 fn set_private_directory_permissions(path: &Path) -> Result<(), ApplicationVaultError> {
-    use std::os::unix::fs::PermissionsExt;
-
-    fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+    private_file_permissions::set_private_directory_permissions(path)
         .map_err(|_| ApplicationVaultError::Unavailable)
 }
 
-#[cfg(not(unix))]
-fn set_private_directory_permissions(_path: &Path) -> Result<(), ApplicationVaultError> {
-    Ok(())
-}
-
-#[cfg(unix)]
 fn set_private_file_permissions(path: &Path) -> Result<(), ApplicationVaultError> {
-    use std::os::unix::fs::PermissionsExt;
-
-    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+    private_file_permissions::set_private_file_permissions(path)
         .map_err(|_| ApplicationVaultError::Unavailable)
-}
-
-#[cfg(not(unix))]
-fn set_private_file_permissions(_path: &Path) -> Result<(), ApplicationVaultError> {
-    Ok(())
 }
 
 #[cfg(test)]
@@ -549,6 +535,103 @@ mod tests {
         );
         drop(reopened);
         fs::remove_dir_all(root).expect("remove application vault test root");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn reopening_vault_repairs_existing_directory_and_database_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = test_root("repair-directory-database-permissions");
+        let vault = ApplicationCredentialVault::open(&root).expect("create application vault");
+        drop(vault);
+        let vault_directory = root.join("credential-vault");
+        let database_path = vault_directory.join("records.db");
+        fs::set_permissions(&vault_directory, fs::Permissions::from_mode(0o755))
+            .expect("weaken fixture vault directory permissions");
+        fs::set_permissions(&database_path, fs::Permissions::from_mode(0o644))
+            .expect("weaken fixture database permissions");
+
+        let reopened = ApplicationCredentialVault::open(&root).expect("reopen application vault");
+
+        assert_eq!(
+            fs::metadata(&vault_directory)
+                .expect("read repaired vault directory metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+        assert_eq!(
+            fs::metadata(&database_path)
+                .expect("read repaired database metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+        drop(reopened);
+        fs::remove_dir_all(root).expect("remove application vault test root");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_vault_files_use_current_user_only_acl() {
+        use crate::private_file_permissions::path_has_current_user_only_acl;
+
+        let root = test_root("windows-permissions");
+        let vault = ApplicationCredentialVault::open(&root).expect("open application vault");
+        vault.put("record", "secret").expect("store record");
+
+        assert!(
+            path_has_current_user_only_acl(&root.join("credential-vault"), true)
+                .expect("inspect vault directory ACL")
+        );
+        assert!(
+            path_has_current_user_only_acl(&root.join("credential-vault/master.key"), false)
+                .expect("inspect vault key ACL")
+        );
+        assert!(
+            path_has_current_user_only_acl(&root.join("credential-vault/records.db"), false)
+                .expect("inspect vault database ACL")
+        );
+
+        drop(vault);
+        fs::remove_dir_all(root).expect("remove application vault test root");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn opening_existing_windows_vault_repairs_current_user_acl() {
+        use crate::private_file_permissions::path_has_current_user_only_acl;
+
+        let root = test_root("windows-existing-permissions");
+        let vault_directory = root.join("credential-vault");
+        fs::create_dir_all(&vault_directory).expect("create existing vault directory");
+        fs::write(
+            vault_directory.join("master.key"),
+            [7_u8; super::MASTER_KEY_LENGTH],
+        )
+        .expect("create existing master key");
+        fs::File::create(vault_directory.join("records.db"))
+            .expect("create existing vault database");
+
+        let vault =
+            ApplicationCredentialVault::open(&root).expect("open existing application vault");
+
+        assert!(path_has_current_user_only_acl(&vault_directory, true)
+            .expect("inspect existing vault directory ACL"));
+        assert!(
+            path_has_current_user_only_acl(&vault_directory.join("master.key"), false)
+                .expect("inspect existing vault key ACL")
+        );
+        assert!(
+            path_has_current_user_only_acl(&vault_directory.join("records.db"), false)
+                .expect("inspect existing vault database ACL")
+        );
+
+        drop(vault);
+        fs::remove_dir_all(root).expect("remove existing application vault test root");
     }
 
     #[test]

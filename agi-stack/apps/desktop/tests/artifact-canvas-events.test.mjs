@@ -566,7 +566,7 @@ test('artifact view modes, data formatting, download, and save authority remain 
   assert.equal(formatArtifactCanvasData('not-json'), 'not-json');
   assert.deepEqual(artifactCanvasDownloadDescriptor(workspace.tabs[0]), {
     filename: 'unsafe_report.json',
-    mimeType: 'text/plain;charset=utf-8',
+    mimeType: 'application/json',
     content: '{"ready":true,"count":2}',
   });
   assert.deepEqual(ARTIFACT_CANVAS_SAVE_CAPABILITY, {
@@ -587,7 +587,8 @@ test('Desktop folds artifact canvas events out of the timeline and exposes Brows
   assert.match(componentSource, /role="alertdialog"/);
   assert.match(componentSource, /role="radiogroup"/);
   assert.match(componentSource, /navigator\.clipboard\.writeText/);
-  assert.match(componentSource, /URL\.createObjectURL/);
+  assert.match(componentSource, /saveBlobWithDesktopDialog/);
+  assert.doesNotMatch(componentSource, /URL\.createObjectURL|createElement\('a'\)/);
   assert.match(componentSource, /createArtifactSaveCommandV2/);
   assert.match(componentSource, /ArtifactPreviewSurface/);
   assert.match(componentSource, /event\.metaKey \|\| event\.ctrlKey/);

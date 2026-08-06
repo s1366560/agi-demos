@@ -9,7 +9,19 @@ import {
   automationActionAvailability,
   normalizeAutomationCapabilities,
 } from '../automations/automationModel';
-import { agentWorkspaceCapability } from '../agent-workspace/agentWorkspaceCapability';
+import {
+  createAgentWorkspaceAuthorityClient,
+  type AgentWorkspaceAuthorityClient,
+  type AgentWorkspaceAuthorityObservation,
+  type AgentWorkspaceAuthorityScope,
+} from '../agent-workspace/agentWorkspaceAuthorityClient';
+import {
+  AGENT_WORKSPACE_JOURNEY_IDS,
+  createAgentWorkspaceJourneyAuthorityClient,
+  type AgentWorkspaceJourneyAuthorityClient,
+  type AgentWorkspaceJourneyObservation,
+  type AgentWorkspaceJourneySnapshot,
+} from '../agent-workspace/agentWorkspaceJourneyAuthorityClient';
 import { deviceApprovalCapability } from '../device-approval/deviceApprovalCapability';
 import { tenantCreationCapability } from '../tenant-creation/tenantCreationCapability';
 import { invitationAcceptanceCapability } from '../invitation-acceptance/invitationAcceptanceCapability';
@@ -19,9 +31,60 @@ import { runtimeClustersCapability } from '../runtime-clusters/runtimeClustersCa
 import { runtimeDeploymentsCapability } from '../runtime-deployments/runtimeDeploymentsCapability';
 import { runtimeInstancesCapability } from '../runtime-instances/runtimeInstancesCapability';
 import { runtimePoolCapability } from '../runtime-pool/runtimePoolCapability';
+import { createAgentDefinitionsRouteClient } from '../settings-routes/agentDefinitionsRouteClient';
+import type { ChannelsRouteClient } from '../settings-routes/channelsRouteClient';
+import type { EvolutionRouteClient } from '../settings-routes/evolutionRouteClient';
+import {
+  managementRouteObservation,
+  managementRouteReasonPrefix,
+  managementRouteScopeForRuntime,
+  requireManagementRouteRuntimeScope,
+  type ManagementRouteCapability,
+  type ManagementRouteClient,
+  type ManagementRouteObservation,
+} from '../settings-routes/managementRouteTypes';
+import { createMcpServersRouteClient } from '../settings-routes/mcpServersRouteClient';
+import { createPluginsRouteClient } from '../settings-routes/pluginsRouteClient';
+import {
+  createP2ThirdBatchCapabilityClient,
+  type P2ThirdBatchCapabilityClient,
+  type P2ThirdBatchCapabilityProjection,
+} from '../settings-routes/p2ThirdBatchCapabilityClient';
+import type { ProfileRouteClient } from '../settings-routes/profileRouteClient';
+import { createProviderRouteClient } from '../settings-routes/providerRouteClient';
+import { createSkillsRouteClient } from '../settings-routes/skillsRouteClient';
+import type { TemplatesRouteClient } from '../settings-routes/templatesRouteClient';
 import { unifiedRuntimesCapability } from '../unified-runtimes/unifiedRuntimesCapability';
 import { createCloudProjectOverviewClient } from '../project/projectOverviewCloudClient';
 import { createLocalProjectOverviewClient } from '../project/projectOverviewLocalClient';
+import {
+  createProjectBlackboardCloudClient,
+  createProjectBlackboardLocalClient,
+  type ProjectBlackboardClient,
+  type ProjectBlackboardScope,
+  type ProjectBlackboardSnapshot,
+} from '../project-blackboard/projectBlackboardClient';
+import {
+  createProjectKnowledgeCapabilityClients,
+  loadProjectKnowledgeCapabilities,
+  type ProjectKnowledgeCapabilityClients,
+} from '../project-knowledge/projectKnowledgeCapabilityAuthority';
+import {
+  createProjectAgentCapabilityClients,
+  loadProjectAgentCapabilities,
+  type ProjectAgentCapabilityClients,
+} from '../project-agent/projectAgentCapabilityAuthority';
+import {
+  createProjectAdministrationCapabilityClients,
+  loadProjectAdministrationCapabilities,
+  type ProjectAdministrationCapabilityClients,
+} from '../project-administration/projectAdministrationCapabilityAuthority';
+import type {
+  ProjectWorkspacesClient,
+  ProjectWorkspacesScope,
+  ProjectWorkspacesSnapshot,
+} from '../project-workspaces/projectWorkspacesClient';
+import { createProjectWorkspacesHttpClient } from '../project-workspaces/projectWorkspacesHttpClient';
 import { projectSupportCapability } from '../project-support/projectSupportCapability';
 import { loadTenantAnalyticsCapability } from '../tenant/tenantAnalyticsCapability';
 import { loadTenantAgentDashboardCapability } from '../tenant/tenantAgentDashboardCapability';
@@ -30,6 +93,18 @@ import { loadTenantOverviewCapability } from '../tenant/tenantOverviewCapability
 import { loadTenantProjectsCapability } from '../tenant/tenantProjectsCapability';
 import { tenantTasksCapability } from '../tenant/tenantTasksCapability';
 import { tenantWorkspacesCapability } from '../tenant/tenantWorkspacesCapability';
+import type { TenantAuditClient } from '../tenant-admin/tenantAuditClient';
+import {
+  createTenantAdminCapabilityClient,
+  type TenantAdminCapabilityClient,
+} from '../tenant-admin/tenantAdminCapabilityClient';
+import type { TenantBillingClient } from '../tenant-admin/tenantBillingClient';
+import type { TenantGovernanceClient } from '../tenant-admin/tenantGovernanceClient';
+import { type TenantTrustClient } from '../tenant-admin/tenantTrustClient';
+import {
+  createTenantRemainingCapabilityClient,
+  type TenantRemainingCapabilityClient,
+} from '../tenant-admin/tenantRemainingCapabilityClient';
 import { WORKSPACE_HTTP_MUTATION_ACTIONS } from '../workspace/workspaceCollaborationHttpMutations';
 import type { DesktopRuntimeConfig } from '../../types';
 import {
@@ -39,6 +114,7 @@ import {
   type DesktopCapabilityAvailability,
   type DesktopCapabilityScope,
   type DesktopCapabilitySnapshot,
+  type DesktopCapabilitySnapshotEntry,
 } from './capabilitySnapshot';
 import {
   negotiateCapabilityContract,
@@ -49,10 +125,33 @@ export type DesktopWorkbenchCapabilityClient = {
   loadSnapshot(signal?: AbortSignal): Promise<DesktopCapabilitySnapshot>;
 };
 
-type AutomationCapabilityAuthority = Pick<
-  DesktopAutomationApi,
-  'getAutomationCapabilities'
+type ManagementRouteCapabilityClients = Readonly<
+  Record<ManagementRouteCapability, ManagementRouteClient>
 >;
+
+export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
+  managementRouteClients?: ManagementRouteCapabilityClients;
+  agentWorkspaceClient?: AgentWorkspaceAuthorityClient;
+  agentWorkspaceJourneyClient?: AgentWorkspaceJourneyAuthorityClient;
+  projectWorkspacesClient?: Pick<ProjectWorkspacesClient, 'list'>;
+  projectBlackboardClient?: ProjectBlackboardClient;
+  projectKnowledgeClients?: ProjectKnowledgeCapabilityClients;
+  projectAgentClients?: ProjectAgentCapabilityClients;
+  projectAdministrationClients?: ProjectAdministrationCapabilityClients;
+  tenantGovernanceClient?: Pick<TenantGovernanceClient, 'load'>;
+  tenantBillingClient?: Pick<TenantBillingClient, 'load'>;
+  tenantAuditClient?: Pick<TenantAuditClient, 'load'>;
+  tenantTrustClient?: Pick<TenantTrustClient, 'load'>;
+  tenantAdminCapabilityClient?: Pick<TenantAdminCapabilityClient, 'load'>;
+  tenantRemainingCapabilityClient?: Pick<TenantRemainingCapabilityClient, 'load'>;
+  evolutionRouteClient?: Pick<EvolutionRouteClient, 'observe'>;
+  channelsRouteClient?: Pick<ChannelsRouteClient, 'observe'>;
+  templatesRouteClient?: Pick<TemplatesRouteClient, 'observe'>;
+  profileRouteClient?: Pick<ProfileRouteClient, 'observe'>;
+  p2ThirdBatchCapabilityClient?: Pick<P2ThirdBatchCapabilityClient, 'load'>;
+}>;
+
+type AutomationCapabilityAuthority = Pick<DesktopAutomationApi, 'getAutomationCapabilities'>;
 
 type SearchCapabilityDeclaration = {
   endpoint: string;
@@ -69,15 +168,22 @@ const WORKSPACE_COLLABORATION_DEGRADED_REASON =
   'workspace_collaboration_mutation_guards_unavailable';
 const PROJECT_OVERVIEW_SERVICE_VERSION = '0.1.0';
 const PROJECT_OVERVIEW_CONTRACT_VERSION = '3.0.0';
-const LOCAL_SEARCH_SUPPORTED_TYPES = [
-  'advanced',
-  'temporal',
-  'faceted',
-] as const;
-const LOCAL_SEARCH_UNAVAILABLE_TYPES = [
-  'graph_traversal',
-  'community',
-] as const;
+const LOCAL_SEARCH_SUPPORTED_TYPES = ['advanced', 'temporal', 'faceted'] as const;
+const LOCAL_SEARCH_UNAVAILABLE_TYPES = ['graph_traversal', 'community'] as const;
+
+const MANAGEMENT_ROUTE_CAPABILITY_NAMES = Object.freeze([
+  'tenant-tenant-providers',
+  'tenant-tenant-agent-definitions',
+  'tenant-tenant-skills',
+  'tenant-tenant-plugins',
+  'tenant-tenant-mcp-servers',
+] as const satisfies readonly ManagementRouteCapability[]);
+const MANAGEMENT_ROUTE_SERVICE_VERSION = '0.1.0';
+const MANAGEMENT_ROUTE_CONTRACT_VERSION = '4.0.0';
+const PROJECT_WORKSPACES_SERVICE_VERSION = '0.1.0';
+const PROJECT_WORKSPACES_CONTRACT_VERSION = '4.0.0';
+const PROJECT_BLACKBOARD_SERVICE_VERSION = '0.1.0';
+const PROJECT_BLACKBOARD_CONTRACT_VERSION = '4.0.0';
 
 const WORKSPACE_COLLABORATION_READ_SURFACES = [
   'goals',
@@ -116,11 +222,49 @@ const SEARCH_CONTRACT: Readonly<Record<string, SearchCapabilityDeclaration>> = {
 export function createDesktopWorkbenchCapabilityClient(
   automationApi: AutomationCapabilityAuthority,
   config: DesktopRuntimeConfig,
+  options: DesktopWorkbenchCapabilityClientOptions = {},
 ): DesktopWorkbenchCapabilityClient {
+  const managementRouteClients =
+    options.managementRouteClients ?? createManagementRouteClients(config);
+  const injectedAgentWorkspaceClient = options.agentWorkspaceClient ?? null;
+  const agentWorkspaceJourneyClient =
+    options.agentWorkspaceJourneyClient ??
+    (injectedAgentWorkspaceClient
+      ? null
+      : createAgentWorkspaceJourneyClient(config));
+  const agentWorkspaceClient =
+    injectedAgentWorkspaceClient ??
+    (agentWorkspaceJourneyClient ? null : createAgentWorkspaceClient(config));
+  const projectWorkspacesClient =
+    options.projectWorkspacesClient ?? createProjectWorkspacesClient(config);
+  const projectBlackboardClient =
+    options.projectBlackboardClient ?? createProjectBlackboardClient(config);
+  const projectKnowledgeClients =
+    options.projectKnowledgeClients ?? createProjectKnowledgeCapabilityClients(config);
+  const projectAgentClients =
+    options.projectAgentClients ?? createProjectAgentCapabilityClients(config);
+  const projectAdministrationClients =
+    options.projectAdministrationClients ?? createProjectAdministrationCapabilityClients(config);
+  const tenantAdminCapabilityClient =
+    options.tenantAdminCapabilityClient ??
+    createTenantAdminCapabilityClient(config, {
+      governance: options.tenantGovernanceClient,
+      billing: options.tenantBillingClient,
+      audit: options.tenantAuditClient,
+      trust: options.tenantTrustClient,
+    });
+  const tenantRemainingCapabilityClient =
+    options.tenantRemainingCapabilityClient ?? createTenantRemainingCapabilityClient(config);
+  const p2ThirdBatchCapabilityClient =
+    options.p2ThirdBatchCapabilityClient ??
+    createP2ThirdBatchCapabilityClient(config, {
+      evolution: options.evolutionRouteClient,
+      channels: options.channelsRouteClient,
+      templates: options.templatesRouteClient,
+      profile: options.profileRouteClient,
+    });
   return {
-    async loadSnapshot(
-      signal?: AbortSignal,
-    ): Promise<DesktopCapabilitySnapshot> {
+    async loadSnapshot(signal?: AbortSignal): Promise<DesktopCapabilitySnapshot> {
       const [
         search,
         automationCapabilities,
@@ -131,6 +275,16 @@ export function createDesktopWorkbenchCapabilityClient(
         tenantAgentDashboard,
         tenantAgentBindings,
         tenantProjects,
+        managementRouteCapabilities,
+        projectWorkspaces,
+        projectBlackboard,
+        projectKnowledgeCapabilities,
+        projectAgentCapabilities,
+        projectAdministrationCapabilities,
+        agentWorkspace,
+        tenantAdminCapabilities,
+        tenantRemainingCapabilities,
+        p2ThirdBatchCapabilities,
       ] = await Promise.all([
         loadSearchCapability(config, signal),
         loadAutomationCapabilities(automationApi, config.projectId, signal),
@@ -141,62 +295,178 @@ export function createDesktopWorkbenchCapabilityClient(
         loadTenantAgentDashboardCapability(config, signal),
         loadTenantAgentBindingsCapability(config, signal),
         loadTenantProjectsCapability(config, signal),
+        loadManagementRouteCapabilities(managementRouteClients, config, signal),
+        loadProjectWorkspacesCapability(projectWorkspacesClient, config, signal),
+        loadProjectBlackboardCapability(projectBlackboardClient, config, signal),
+        loadProjectKnowledgeCapabilities(projectKnowledgeClients, config, signal),
+        loadProjectAgentCapabilities(projectAgentClients, config, signal),
+        loadProjectAdministrationCapabilities(projectAdministrationClients, config, signal),
+        loadAgentWorkspaceCapability(
+          agentWorkspaceJourneyClient,
+          agentWorkspaceClient,
+          config,
+          signal,
+        ),
+        tenantAdminCapabilityClient.load(signal),
+        tenantRemainingCapabilityClient.load(signal),
+        p2ThirdBatchCapabilityClient.load(signal),
       ]);
       const projectScope = projectCapabilityScope(config);
       const workspaceScope = workspaceCapabilityScope(config);
+      const observed = (
+        capability: DesktopCapabilityAvailability,
+      ): DesktopCapabilitySnapshotEntry => withObservedAuthority(capability, config.mode);
+      const declared = (
+        capability: DesktopCapabilityAvailability,
+      ): DesktopCapabilitySnapshotEntry => withDeclaredAuthority(capability);
+      const snapshotP2ThirdBatchCapability = (
+        projection: P2ThirdBatchCapabilityProjection,
+      ): DesktopCapabilitySnapshotEntry =>
+        projection.provenance === 'observed'
+          ? observed(projection.capability)
+          : declared(projection.capability);
+      const snapshotProjectedCapability = (
+        capability: DesktopCapabilityAvailability,
+      ): DesktopCapabilitySnapshotEntry =>
+        capability.provenance === 'observed'
+          ? observed(capability)
+          : declared(capability);
       const rawSnapshot = {
         version: DESKTOP_CAPABILITY_SNAPSHOT_VERSION,
         mode: config.mode,
         capabilities: {
-          automation_run: withCapabilityScope(
-            automationCapabilities.run,
-            projectScope,
+          automation_run: observed(withCapabilityScope(automationCapabilities.run, projectScope)),
+          'project-project-cron-jobs': observed(
+            withCapabilityScope(automationCapabilities.cronJobs, projectScope),
           ),
-          'project-project-cron-jobs': withCapabilityScope(
-            automationCapabilities.cronJobs,
-            projectScope,
+          search: observed(withCapabilityScope(search, projectScope)),
+          workspace_collaboration: (config.mode === 'local' ? declared : observed)(
+            withCapabilityScope(workspaceCollaboration, workspaceScope),
           ),
-          search: withCapabilityScope(search, projectScope),
-          workspace_collaboration: withCapabilityScope(
-            workspaceCollaboration,
-            workspaceScope,
-          ),
-          sandbox_isolation:
+          sandbox_isolation: declared(
             config.mode === 'local'
-              ? withCapabilityScope(
-                  notApplicable('local_isolation_not_applicable'),
-                  workspaceScope,
-                )
+              ? withCapabilityScope(notApplicable('local_isolation_not_applicable'), workspaceScope)
               : withCapabilityScope(
                   unavailable('sandbox_isolation_capability_not_declared'),
                   workspaceScope,
                 ),
-          'device-approval': deviceApprovalCapability(config),
-          'tenant-creation': tenantCreationCapability(config),
-          'invitation-acceptance': invitationAcceptanceCapability(config),
-          'agent-workspace-tenant-agent-workspace':
-            agentWorkspaceCapability(config),
-          'project-project-overview': withCapabilityScope(
-            projectOverview,
-            projectScope,
           ),
-          'project-project-search': withCapabilityScope(search, projectScope),
-          'project-support': projectSupportCapability(config),
-          'tenant-tenant-overview': tenantOverview,
-          'tenant-tenant-analytics': tenantAnalytics,
-          'tenant-tenant-agent-configuration': tenantAgentDashboard,
-          'tenant-tenant-agent-bindings': tenantAgentBindings,
-          'tenant-tenant-projects': tenantProjects,
-          'tenant-tenant-workspaces': tenantWorkspacesCapability(config),
-          'tenant-tenant-tasks': tenantTasksCapability(config),
-          'tenant-tenant-runtimes': unifiedRuntimesCapability(config),
-          'tenant-tenant-pool': runtimePoolCapability(config),
-          'tenant-tenant-instances': runtimeInstancesCapability(config),
-          'tenant-tenant-clusters': runtimeClustersCapability(config),
-          'tenant-tenant-deploy': runtimeDeploymentsCapability(config),
-          'tenant-tenant-instance-templates':
-            instanceTemplatesCapability(config),
-          'tenant-tenant-dead-letter-queue': deadLetterQueueCapability(config),
+          'device-approval': declared(deviceApprovalCapability(config)),
+          'tenant-creation': declared(tenantCreationCapability(config)),
+          'invitation-acceptance': declared(invitationAcceptanceCapability(config)),
+          'agent-workspace-tenant-agent-workspace': observed(agentWorkspace),
+          'project-project-overview': observed(withCapabilityScope(projectOverview, projectScope)),
+          'project-project-search': observed(withCapabilityScope(search, projectScope)),
+          'project-project-workspaces': observed(projectWorkspaces),
+          'project-blackboard-dynamic-project-blackboard': observed(projectBlackboard),
+          'project-project-team': (config.mode === 'local' ? declared : observed)(
+            projectKnowledgeCapabilities['project-project-team'],
+          ),
+          'project-project-memories': (config.mode === 'local' ? declared : observed)(
+            projectKnowledgeCapabilities['project-project-memories'],
+          ),
+          'project-project-entities': (config.mode === 'local' ? declared : observed)(
+            projectKnowledgeCapabilities['project-project-entities'],
+          ),
+          'project-project-communities': (config.mode === 'local' ? declared : observed)(
+            projectKnowledgeCapabilities['project-project-communities'],
+          ),
+          'project-project-graph': (config.mode === 'local' ? declared : observed)(
+            projectKnowledgeCapabilities['project-project-graph'],
+          ),
+          'project-agent-dashboard': (config.mode === 'local' ? declared : observed)(
+            projectAgentCapabilities['project-agent-dashboard'],
+          ),
+          'project-agent-logs': (config.mode === 'local' ? declared : observed)(
+            projectAgentCapabilities['project-agent-logs'],
+          ),
+          'project-agent-patterns': (config.mode === 'local' ? declared : observed)(
+            projectAgentCapabilities['project-agent-patterns'],
+          ),
+          'project-project-schema': (config.mode === 'local' ? declared : observed)(
+            projectAdministrationCapabilities['project-project-schema'],
+          ),
+          'project-project-maintenance': (config.mode === 'local' ? declared : observed)(
+            projectAdministrationCapabilities['project-project-maintenance'],
+          ),
+          'project-project-settings': (config.mode === 'local' ? declared : observed)(
+            projectAdministrationCapabilities['project-project-settings'],
+          ),
+          'project-support': declared(projectSupportCapability(config)),
+          'tenant-tenant-overview': observed(tenantOverview),
+          'tenant-tenant-analytics': observed(tenantAnalytics),
+          'tenant-tenant-agent-configuration':
+            config.mode === 'local'
+              ? declared(tenantAgentDashboard)
+              : observed(tenantAgentDashboard),
+          'tenant-tenant-agent-bindings': observed(tenantAgentBindings),
+          'tenant-tenant-agent-definitions': observed(
+            managementRouteCapabilities['tenant-tenant-agent-definitions'],
+          ),
+          'tenant-tenant-skills': observed(managementRouteCapabilities['tenant-tenant-skills']),
+          'tenant-tenant-evolution': snapshotP2ThirdBatchCapability(
+            p2ThirdBatchCapabilities['tenant-tenant-evolution'],
+          ),
+          'tenant-tenant-plugins': observed(managementRouteCapabilities['tenant-tenant-plugins']),
+          'tenant-tenant-mcp-servers': observed(
+            managementRouteCapabilities['tenant-tenant-mcp-servers'],
+          ),
+          'tenant-tenant-templates': snapshotP2ThirdBatchCapability(
+            p2ThirdBatchCapabilities['tenant-tenant-templates'],
+          ),
+          'tenant-tenant-providers': observed(
+            managementRouteCapabilities['tenant-tenant-providers'],
+          ),
+          'tenant-tenant-projects': observed(tenantProjects),
+          'tenant-tenant-patterns': snapshotProjectedCapability(
+            tenantRemainingCapabilities['tenant-tenant-patterns'],
+          ),
+          'tenant-tenant-acp': snapshotProjectedCapability(
+            tenantRemainingCapabilities['tenant-tenant-acp'],
+          ),
+          'tenant-tenant-webhooks': snapshotProjectedCapability(
+            tenantRemainingCapabilities['tenant-tenant-webhooks'],
+          ),
+          'tenant-tenant-genes': snapshotProjectedCapability(
+            tenantRemainingCapabilities['tenant-tenant-genes'],
+          ),
+          'tenant-tenant-events': snapshotProjectedCapability(
+            tenantRemainingCapabilities['tenant-tenant-events'],
+          ),
+          'tenant-tenant-decision-records': snapshotProjectedCapability(
+            tenantRemainingCapabilities['tenant-tenant-decision-records'],
+          ),
+          'tenant-tenant-org-settings': snapshotProjectedCapability(
+            tenantRemainingCapabilities['tenant-tenant-org-settings'],
+          ),
+          'tenant-tenant-settings': snapshotProjectedCapability(
+            tenantRemainingCapabilities['tenant-tenant-settings'],
+          ),
+          'tenant-tenant-users': (config.mode === 'local' ? declared : observed)(
+            tenantAdminCapabilities['tenant-tenant-users'],
+          ),
+          'tenant-tenant-billing': (config.mode === 'local' ? declared : observed)(
+            tenantAdminCapabilities['tenant-tenant-billing'],
+          ),
+          'tenant-tenant-audit-logs': (config.mode === 'local' ? declared : observed)(
+            tenantAdminCapabilities['tenant-tenant-audit-logs'],
+          ),
+          'tenant-tenant-trust-policies': (config.mode === 'local' ? declared : observed)(
+            tenantAdminCapabilities['tenant-tenant-trust-policies'],
+          ),
+          'tenant-tenant-workspaces': declared(tenantWorkspacesCapability(config)),
+          'tenant-tenant-tasks': declared(tenantTasksCapability(config)),
+          'tenant-tenant-runtimes': declared(unifiedRuntimesCapability(config)),
+          'tenant-tenant-pool': declared(runtimePoolCapability(config)),
+          'tenant-tenant-instances': declared(runtimeInstancesCapability(config)),
+          'tenant-tenant-clusters': declared(runtimeClustersCapability(config)),
+          'tenant-tenant-deploy': declared(runtimeDeploymentsCapability(config)),
+          'tenant-tenant-instance-templates': declared(instanceTemplatesCapability(config)),
+          'tenant-tenant-dead-letter-queue': declared(deadLetterQueueCapability(config)),
+          'project-project-channels': snapshotP2ThirdBatchCapability(
+            p2ThirdBatchCapabilities['project-project-channels'],
+          ),
+          'user-profile': snapshotP2ThirdBatchCapability(p2ThirdBatchCapabilities['user-profile']),
         },
       };
       const snapshot = parseDesktopCapabilitySnapshot(rawSnapshot);
@@ -206,13 +476,459 @@ export function createDesktopWorkbenchCapabilityClient(
   };
 }
 
-export function normalizeSearchCapabilityContract(
-  input: unknown,
+function projectP2ThirdBatchCapability(
+  projection: P2ThirdBatchCapabilityProjection,
+  mode: DesktopRuntimeConfig['mode'],
+): DesktopCapabilitySnapshotEntry {
+  return projection.provenance === 'observed'
+    ? withObservedAuthority(projection.capability, mode)
+    : withDeclaredAuthority(projection.capability);
+}
+
+function createAgentWorkspaceClient(
+  config: DesktopRuntimeConfig,
+): AgentWorkspaceAuthorityClient | null {
+  try {
+    return createAgentWorkspaceAuthorityClient(config);
+  } catch {
+    return null;
+  }
+}
+
+function createAgentWorkspaceJourneyClient(
+  config: DesktopRuntimeConfig,
+): AgentWorkspaceJourneyAuthorityClient | null {
+  try {
+    return createAgentWorkspaceJourneyAuthorityClient(config);
+  } catch {
+    return null;
+  }
+}
+
+async function loadAgentWorkspaceCapability(
+  journeyClient: AgentWorkspaceJourneyAuthorityClient | null,
+  legacyClient: AgentWorkspaceAuthorityClient | null,
+  config: DesktopRuntimeConfig,
+  signal?: AbortSignal,
+): Promise<DesktopCapabilityAvailability> {
+  const scope = agentWorkspaceScope(config);
+  const capabilityScope = workspaceCapabilityScope(config);
+  if (!scope) {
+    return withCapabilityScope(unavailable('agent_workspace_scope_unavailable'), capabilityScope);
+  }
+  if (!journeyClient && !legacyClient) {
+    return withCapabilityScope(
+      unavailable('agent_workspace_authority_unavailable'),
+      capabilityScope,
+    );
+  }
+  try {
+    if (journeyClient) {
+      const observation = await journeyClient.probe(signal);
+      return agentWorkspaceJourneyObservedCapability(observation, scope);
+    }
+    const observation = await legacyClient!.probe(signal);
+    return agentWorkspaceObservedCapability(observation, scope);
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    const reasonCode =
+      error instanceof DesktopApiError && error.status === 403
+        ? 'agent_workspace_forbidden'
+        : error instanceof DesktopApiError && error.status === 0
+          ? 'agent_workspace_authority_contract_invalid'
+          : 'agent_workspace_authority_unavailable';
+    return withCapabilityScope(unavailable(reasonCode), capabilityScope);
+  }
+}
+
+function agentWorkspaceJourneyObservedCapability(
+  observation: AgentWorkspaceJourneySnapshot,
+  scope: AgentWorkspaceAuthorityScope,
 ): DesktopCapabilityAvailability {
-  const negotiation = negotiateCapabilityContract(
-    input,
-    DESKTOP_MINIMUM_CONTRACT_VERSION,
+  const expectedAuthoritySource =
+    scope.authority === 'local' ? 'sidecar' : 'cloud_service';
+  const observations = AGENT_WORKSPACE_JOURNEY_IDS.map((journeyId) =>
+    Object.hasOwn(observation.journeys, journeyId)
+      ? observation.journeys[journeyId]
+      : null,
   );
+  if (
+    observation.authority !== scope.authority ||
+    observation.authoritySource !== expectedAuthoritySource ||
+    observation.provenance !== 'observed' ||
+    observation.scope.tenantId !== scope.tenantId ||
+    observation.scope.projectId !== scope.projectId ||
+    observation.scope.workspaceId !== scope.workspaceId ||
+    observations.some(
+      (journey) => !isAgentWorkspaceJourneyObservation(journey),
+    )
+  ) {
+    return withCapabilityScope(
+      unavailable('agent_workspace_authority_contract_invalid'),
+      agentWorkspaceCapabilityScope(scope),
+    );
+  }
+  if (
+    observation.authorityRevision === null ||
+    !Number.isSafeInteger(observation.authorityRevision) ||
+    observation.authorityRevision < 0
+  ) {
+    return withCapabilityScope(
+      unavailable('agent_workspace_authority_revision_unavailable'),
+      agentWorkspaceCapabilityScope(scope),
+    );
+  }
+  const allowedActions = [
+    ...new Set(
+      observations.flatMap(
+        (journey) => journey?.observedActions ?? [],
+      ),
+    ),
+  ].sort();
+  if (allowedActions.length === 0) {
+    return {
+      availability: 'unavailable',
+      reason_code: 'agent_workspace_journeys_unavailable',
+      service_version: '0.1.0',
+      contract_version: '4.0.0',
+      allowed_actions: [],
+      scope: agentWorkspaceCapabilityScope(scope),
+      authority_revision: observation.authorityRevision,
+    };
+  }
+  return {
+    availability: 'degraded',
+    reason_code: 'agent_workspace_journeys_partial',
+    service_version: '0.1.0',
+    contract_version: '4.0.0',
+    allowed_actions: allowedActions,
+    scope: agentWorkspaceCapabilityScope(scope),
+    authority_revision: observation.authorityRevision,
+  };
+}
+
+function isAgentWorkspaceJourneyObservation(
+  input: AgentWorkspaceJourneyObservation | null,
+): input is AgentWorkspaceJourneyObservation {
+  return (
+    input !== null &&
+    (input.availability === 'degraded' || input.availability === 'unavailable') &&
+    typeof input.reasonCode === 'string' &&
+    input.reasonCode.length > 0 &&
+    Array.isArray(input.observedActions) &&
+    input.observedActions.every(
+      (action) =>
+        typeof action === 'string' &&
+        action.trim() === action &&
+        action.length > 0,
+    )
+  );
+}
+
+function agentWorkspaceObservedCapability(
+  observation: AgentWorkspaceAuthorityObservation,
+  scope: AgentWorkspaceAuthorityScope,
+): DesktopCapabilityAvailability {
+  if (
+    observation.authority !== scope.authority ||
+    observation.scope.authority !== scope.authority ||
+    observation.scope.tenantId !== scope.tenantId ||
+    observation.scope.projectId !== scope.projectId ||
+    observation.scope.workspaceId !== scope.workspaceId
+  ) {
+    return withCapabilityScope(
+      unavailable('agent_workspace_authority_contract_invalid'),
+      agentWorkspaceCapabilityScope(scope),
+    );
+  }
+  return {
+    availability: observation.availability,
+    reason_code: observation.reasonCode,
+    service_version: observation.serviceVersion,
+    contract_version: observation.contractVersion,
+    allowed_actions: [...observation.allowedActions],
+    scope: agentWorkspaceCapabilityScope(scope),
+    authority_revision: observation.authorityRevision,
+  };
+}
+
+function agentWorkspaceScope(config: DesktopRuntimeConfig): AgentWorkspaceAuthorityScope | null {
+  const tenantId = scopeIdentifier(config.tenantId);
+  const projectId = scopeIdentifier(config.projectId);
+  return tenantId && projectId
+    ? Object.freeze({
+        authority: config.mode,
+        tenantId,
+        projectId,
+        workspaceId: scopeIdentifier(config.workspaceId),
+      })
+    : null;
+}
+
+function agentWorkspaceCapabilityScope(
+  scope: AgentWorkspaceAuthorityScope,
+): DesktopCapabilityScope {
+  return {
+    tenant_id: scope.tenantId,
+    project_id: scope.projectId,
+    workspace_id: scope.workspaceId,
+    instance_id: null,
+  };
+}
+
+function createProjectWorkspacesClient(
+  config: DesktopRuntimeConfig,
+): Pick<ProjectWorkspacesClient, 'list'> | null {
+  try {
+    return createProjectWorkspacesHttpClient(config);
+  } catch {
+    return null;
+  }
+}
+
+function createProjectBlackboardClient(
+  config: DesktopRuntimeConfig,
+): ProjectBlackboardClient | null {
+  try {
+    return config.mode === 'local'
+      ? createProjectBlackboardLocalClient(config)
+      : createProjectBlackboardCloudClient(config);
+  } catch {
+    return null;
+  }
+}
+
+async function loadProjectWorkspacesCapability(
+  client: Pick<ProjectWorkspacesClient, 'list'> | null,
+  config: DesktopRuntimeConfig,
+  signal?: AbortSignal,
+): Promise<DesktopCapabilityAvailability> {
+  const scope = projectWorkspacesScope(config);
+  const capabilityScope = projectCapabilityScope(config);
+  if (!scope) {
+    return withCapabilityScope(
+      unavailable('project_workspaces_scope_unavailable'),
+      capabilityScope,
+    );
+  }
+  if (!client) {
+    return withCapabilityScope(
+      unavailable('project_workspaces_authority_unavailable'),
+      capabilityScope,
+    );
+  }
+  try {
+    const snapshot = await client.list(scope, { signal });
+    return projectWorkspacesCapability(snapshot, scope);
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return withCapabilityScope(
+      unavailable('project_workspaces_authority_unavailable'),
+      capabilityScope,
+    );
+  }
+}
+
+async function loadProjectBlackboardCapability(
+  client: ProjectBlackboardClient | null,
+  config: DesktopRuntimeConfig,
+  signal?: AbortSignal,
+): Promise<DesktopCapabilityAvailability> {
+  const scope = projectBlackboardScope(config);
+  const capabilityScope = workspaceCapabilityScope(config);
+  if (!scope) {
+    return withCapabilityScope(
+      unavailable('project_blackboard_scope_unavailable'),
+      capabilityScope,
+    );
+  }
+  if (!client) {
+    return withCapabilityScope(
+      unavailable('project_blackboard_authority_unavailable'),
+      capabilityScope,
+    );
+  }
+  try {
+    const snapshot = await client.probe(scope, signal);
+    return projectBlackboardCapability(snapshot, scope);
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return withCapabilityScope(
+      unavailable('project_blackboard_authority_unavailable'),
+      capabilityScope,
+    );
+  }
+}
+
+function projectWorkspacesCapability(
+  snapshot: ProjectWorkspacesSnapshot,
+  scope: ProjectWorkspacesScope,
+): DesktopCapabilityAvailability {
+  if (
+    snapshot.authority !== scope.authority ||
+    snapshot.scope.authority !== scope.authority ||
+    snapshot.scope.tenantId !== scope.tenantId ||
+    snapshot.scope.projectId !== scope.projectId
+  ) {
+    return withCapabilityScope(
+      unavailable('project_workspaces_authority_contract_invalid'),
+      projectScope(scope),
+    );
+  }
+  return {
+    availability: snapshot.availability,
+    reason_code: snapshot.reasonCode,
+    service_version: PROJECT_WORKSPACES_SERVICE_VERSION,
+    contract_version: PROJECT_WORKSPACES_CONTRACT_VERSION,
+    allowed_actions: [...snapshot.allowedActions],
+    scope: projectScope(scope),
+    authority_revision: snapshot.authorityRevision,
+  };
+}
+
+function projectBlackboardCapability(
+  snapshot: ProjectBlackboardSnapshot,
+  scope: ProjectBlackboardScope,
+): DesktopCapabilityAvailability {
+  if (
+    snapshot.authority !== scope.authority ||
+    snapshot.scope.authority !== scope.authority ||
+    snapshot.scope.tenantId !== scope.tenantId ||
+    snapshot.scope.projectId !== scope.projectId ||
+    snapshot.scope.workspaceId !== scope.workspaceId
+  ) {
+    return withCapabilityScope(
+      unavailable('project_blackboard_authority_contract_invalid'),
+      blackboardScope(scope),
+    );
+  }
+  return {
+    availability: snapshot.availability,
+    reason_code: snapshot.reasonCode,
+    service_version: PROJECT_BLACKBOARD_SERVICE_VERSION,
+    contract_version: PROJECT_BLACKBOARD_CONTRACT_VERSION,
+    allowed_actions: [...snapshot.allowedActions],
+    scope: blackboardScope(scope),
+    authority_revision: null,
+  };
+}
+
+function projectWorkspacesScope(config: DesktopRuntimeConfig): ProjectWorkspacesScope | null {
+  const tenantId = scopeIdentifier(config.tenantId);
+  const projectId = scopeIdentifier(config.projectId);
+  return tenantId && projectId
+    ? Object.freeze({ authority: config.mode, tenantId, projectId })
+    : null;
+}
+
+function projectBlackboardScope(config: DesktopRuntimeConfig): ProjectBlackboardScope | null {
+  const scope = projectWorkspacesScope(config);
+  const workspaceId = scopeIdentifier(config.workspaceId);
+  return scope && workspaceId ? Object.freeze({ ...scope, workspaceId }) : null;
+}
+
+function projectScope(scope: ProjectWorkspacesScope): DesktopCapabilityScope {
+  return {
+    tenant_id: scope.tenantId,
+    project_id: scope.projectId,
+    workspace_id: null,
+    instance_id: null,
+  };
+}
+
+function blackboardScope(scope: ProjectBlackboardScope): DesktopCapabilityScope {
+  return {
+    ...projectScope(scope),
+    workspace_id: scope.workspaceId,
+  };
+}
+
+function createManagementRouteClients(
+  config: DesktopRuntimeConfig,
+): ManagementRouteCapabilityClients {
+  return Object.freeze({
+    'tenant-tenant-providers': createProviderRouteClient(config),
+    'tenant-tenant-agent-definitions': createAgentDefinitionsRouteClient(config),
+    'tenant-tenant-skills': createSkillsRouteClient(config),
+    'tenant-tenant-plugins': createPluginsRouteClient(config),
+    'tenant-tenant-mcp-servers': createMcpServersRouteClient(config),
+  });
+}
+
+async function loadManagementRouteCapabilities(
+  clients: ManagementRouteCapabilityClients,
+  config: DesktopRuntimeConfig,
+  signal?: AbortSignal,
+): Promise<Record<ManagementRouteCapability, DesktopCapabilityAvailability>> {
+  const entries = await Promise.all(
+    MANAGEMENT_ROUTE_CAPABILITY_NAMES.map(
+      async (capability) =>
+        [
+          capability,
+          await loadManagementRouteCapability(capability, clients[capability], config, signal),
+        ] as const,
+    ),
+  );
+  return Object.fromEntries(entries) as Record<
+    ManagementRouteCapability,
+    DesktopCapabilityAvailability
+  >;
+}
+
+async function loadManagementRouteCapability(
+  capability: ManagementRouteCapability,
+  client: ManagementRouteClient,
+  config: DesktopRuntimeConfig,
+  signal?: AbortSignal,
+): Promise<DesktopCapabilityAvailability> {
+  try {
+    const scope = managementRouteScopeForRuntime(config, config.tenantId);
+    const observation = normalizeManagementRouteObservation(
+      config,
+      scope,
+      await client.observe(scope, { signal }),
+    );
+    return {
+      availability: 'available',
+      reason_code: null,
+      service_version: MANAGEMENT_ROUTE_SERVICE_VERSION,
+      contract_version: MANAGEMENT_ROUTE_CONTRACT_VERSION,
+      allowed_actions: ['view', 'list'],
+      scope: {
+        tenant_id: observation.scope.tenantId,
+        project_id: observation.scope.projectId,
+        workspace_id: null,
+        instance_id: null,
+      },
+      authority_revision: null,
+    };
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return withCapabilityScope(
+      unavailable(`${managementRouteReasonPrefix(capability)}_authority_unavailable`),
+      projectCapabilityScope(config),
+    );
+  }
+}
+
+function normalizeManagementRouteObservation(
+  config: DesktopRuntimeConfig,
+  expectedScope: ManagementRouteObservation['scope'],
+  observation: ManagementRouteObservation,
+): ManagementRouteObservation {
+  const scope = requireManagementRouteRuntimeScope(config, observation.scope);
+  if (
+    scope.authority !== expectedScope.authority ||
+    scope.tenantId !== expectedScope.tenantId ||
+    scope.projectId !== expectedScope.projectId
+  ) {
+    throw new Error('management_route_observation_scope_mismatch');
+  }
+  return managementRouteObservation(scope, observation.itemCount);
+}
+
+export function normalizeSearchCapabilityContract(input: unknown): DesktopCapabilityAvailability {
+  const negotiation = negotiateCapabilityContract(input, DESKTOP_MINIMUM_CONTRACT_VERSION);
   if (!negotiation.compatible) {
     return unavailable(
       negotiation.reason_code ?? 'capability_contract_version_invalid',
@@ -220,12 +936,7 @@ export function normalizeSearchCapabilityContract(
     );
   }
   if (
-    !isExactRecord(input, [
-      'service_version',
-      'contract_version',
-      'search_types',
-      'filters',
-    ]) ||
+    !isExactRecord(input, ['service_version', 'contract_version', 'search_types', 'filters']) ||
     !isExactRecord(input.search_types, Object.keys(SEARCH_CONTRACT)) ||
     !isExactRecord(input.filters, ['entity_types', 'relationship_types']) ||
     !isStringArray(input.filters.entity_types) ||
@@ -256,10 +967,7 @@ export function normalizeLocalSearchCapabilityContract(
   input: unknown,
   scope: { tenantId: string; projectId: string },
 ): DesktopCapabilityAvailability {
-  const negotiation = negotiateCapabilityContract(
-    input,
-    DESKTOP_MINIMUM_CONTRACT_VERSION,
-  );
+  const negotiation = negotiateCapabilityContract(input, DESKTOP_MINIMUM_CONTRACT_VERSION);
   if (!negotiation.compatible) {
     return unavailable(
       negotiation.reason_code ?? 'capability_contract_version_invalid',
@@ -290,14 +998,8 @@ export function normalizeLocalSearchCapabilityContract(
     (input.backfill_cursor !== null &&
       (typeof input.backfill_cursor !== 'string' ||
         !/^timeline_rowid:[1-9][0-9]*$/.test(input.backfill_cursor))) ||
-    !matchesExactStringArray(
-      input.supported_search_types,
-      LOCAL_SEARCH_SUPPORTED_TYPES,
-    ) ||
-    !matchesExactStringArray(
-      input.unavailable_search_types,
-      LOCAL_SEARCH_UNAVAILABLE_TYPES,
-    )
+    !matchesExactStringArray(input.supported_search_types, LOCAL_SEARCH_SUPPORTED_TYPES) ||
+    !matchesExactStringArray(input.unavailable_search_types, LOCAL_SEARCH_UNAVAILABLE_TYPES)
   ) {
     return unavailable('local_search_capability_contract_invalid', negotiation);
   }
@@ -316,10 +1018,7 @@ export function normalizeLocalSearchCapabilityContract(
 export function normalizeAutomationCapabilityContract(
   input: unknown,
 ): DesktopCapabilityAvailability {
-  const negotiation = negotiateCapabilityContract(
-    input,
-    DESKTOP_MINIMUM_CONTRACT_VERSION,
-  );
+  const negotiation = negotiateCapabilityContract(input, DESKTOP_MINIMUM_CONTRACT_VERSION);
   if (!negotiation.compatible) {
     return unavailable(
       negotiation.reason_code ?? 'capability_contract_version_invalid',
@@ -357,10 +1056,7 @@ export function normalizeAutomationCapabilityContract(
 export function normalizeProjectCronJobsCapabilityContract(
   input: unknown,
 ): DesktopCapabilityAvailability {
-  const negotiation = negotiateCapabilityContract(
-    input,
-    DESKTOP_MINIMUM_CONTRACT_VERSION,
-  );
+  const negotiation = negotiateCapabilityContract(input, DESKTOP_MINIMUM_CONTRACT_VERSION);
   if (!negotiation.compatible) {
     return unavailable(
       negotiation.reason_code ?? 'capability_contract_version_invalid',
@@ -380,12 +1076,7 @@ export function normalizeProjectCronJobsCapabilityContract(
     return unavailable('automation_capability_contract_invalid', negotiation);
   }
 
-  const allowedActions = [
-    'view',
-    'list',
-    'view-history',
-    'inspect-capabilities',
-  ];
+  const allowedActions = ['view', 'list', 'view-history', 'inspect-capabilities'];
   const actionContracts = [
     [
       'create',
@@ -439,10 +1130,7 @@ export function normalizeWorkspaceCollaborationCapabilityContract(
   input: unknown,
   scope: WorkspaceCollaborationCapabilityScope,
 ): DesktopCapabilityAvailability {
-  const negotiation = negotiateCapabilityContract(
-    input,
-    DESKTOP_MINIMUM_CONTRACT_VERSION,
-  );
+  const negotiation = negotiateCapabilityContract(input, DESKTOP_MINIMUM_CONTRACT_VERSION);
   if (!negotiation.compatible) {
     return unavailable(
       negotiation.reason_code ?? 'capability_contract_version_invalid',
@@ -450,18 +1138,12 @@ export function normalizeWorkspaceCollaborationCapabilityContract(
     );
   }
   if (!isRecord(input)) {
-    return unavailable(
-      'workspace_collaboration_capability_contract_invalid',
-      negotiation,
-    );
+    return unavailable('workspace_collaboration_capability_contract_invalid', negotiation);
   }
   if (
     input.authority !== 'cloud' ||
     input.canonical_read !== true ||
-    !matchesExactStringArray(
-      input.read_surfaces,
-      WORKSPACE_COLLABORATION_READ_SURFACES,
-    ) ||
+    !matchesExactStringArray(input.read_surfaces, WORKSPACE_COLLABORATION_READ_SURFACES) ||
     input.tenant_id !== scope.tenantId ||
     input.project_id !== scope.projectId ||
     input.workspace_id !== scope.workspaceId
@@ -503,32 +1185,65 @@ export function normalizeWorkspaceCollaborationCapabilityContract(
     input.mutations.revision_guarded === true &&
     input.mutations.idempotency_guarded === true &&
     matchesWorkspaceMutationActions(input.mutations.actions) &&
-    JSON.stringify(input.allowed_actions) ===
-      JSON.stringify(input.mutations.actions)
+    JSON.stringify(input.allowed_actions) === JSON.stringify(input.mutations.actions)
   ) {
     return available(negotiation, {
-      allowedActions: flattenWorkspaceMutationActions(input.mutations.actions),
+      allowedActions: mergeWorkspaceActions(
+        workspaceReadActions(),
+        flattenWorkspaceMutationActions(input.mutations.actions),
+      ),
     });
   }
   if (
     !isExactRecord(input, capabilityKeys) ||
     input.status !== 'degraded' ||
     input.reason_code !== WORKSPACE_COLLABORATION_DEGRADED_REASON ||
-    !isExactRecord(input.mutations, [
-      'allowed',
-      'revision_guarded',
-      'idempotency_guarded',
-    ]) ||
+    !isExactRecord(input.mutations, ['allowed', 'revision_guarded', 'idempotency_guarded']) ||
     input.mutations.allowed !== false ||
     input.mutations.revision_guarded !== false ||
     input.mutations.idempotency_guarded !== false
   ) {
-    return unavailable(
-      'workspace_collaboration_capability_contract_invalid',
-      negotiation,
-    );
+    return unavailable('workspace_collaboration_capability_contract_invalid', negotiation);
   }
-  return degraded(WORKSPACE_COLLABORATION_DEGRADED_REASON, negotiation);
+  return degraded(WORKSPACE_COLLABORATION_DEGRADED_REASON, negotiation, {
+    allowedActions: workspaceReadActions(),
+  });
+}
+
+export function normalizeWorkspaceCollaborationAuthorityContract(
+  input: unknown,
+  scope: WorkspaceCollaborationCapabilityScope,
+): number | null {
+  if (
+    !isExactRecord(input, [
+      'contract_version',
+      'tenant_id',
+      'project_id',
+      'workspace_id',
+      'revision',
+      'cursor',
+    ]) ||
+    input.contract_version !== '2.0.0' ||
+    input.tenant_id !== scope.tenantId ||
+    input.project_id !== scope.projectId ||
+    input.workspace_id !== scope.workspaceId ||
+    !Number.isSafeInteger(input.revision) ||
+    Number(input.revision) < 0 ||
+    typeof input.cursor !== 'string' ||
+    input.cursor.length === 0 ||
+    input.cursor !== input.cursor.trim()
+  ) {
+    return null;
+  }
+  return Number(input.revision);
+}
+
+function workspaceReadActions(): string[] {
+  return WORKSPACE_COLLABORATION_READ_SURFACES.map((surface) => `${surface}:view`);
+}
+
+function mergeWorkspaceActions(...actionGroups: readonly string[][]): string[] {
+  return [...new Set(actionGroups.flat())];
 }
 
 function matchesWorkspaceMutationActions(input: unknown): boolean {
@@ -537,9 +1252,7 @@ function matchesWorkspaceMutationActions(input: unknown): boolean {
   return surfaces.every((surface) =>
     matchesExactStringArray(
       input[surface],
-      WORKSPACE_HTTP_MUTATION_ACTIONS[
-        surface as keyof typeof WORKSPACE_HTTP_MUTATION_ACTIONS
-      ],
+      WORKSPACE_HTTP_MUTATION_ACTIONS[surface as keyof typeof WORKSPACE_HTTP_MUTATION_ACTIONS],
     ),
   );
 }
@@ -565,8 +1278,7 @@ async function loadSearchCapability(
       absoluteUrl(config.apiBaseUrl, '/api/v1/search-enhanced/capabilities'),
       { headers, signal },
     );
-    if (!response.ok)
-      return unavailable('search_capability_contract_unavailable');
+    if (!response.ok) return unavailable('search_capability_contract_unavailable');
     const contentType = response.headers.get('content-type') ?? '';
     if (!contentType.includes('application/json')) {
       return unavailable('search_capability_contract_invalid');
@@ -600,19 +1312,14 @@ async function loadAutomationCapabilities(
     return { run: capability, cronJobs: capability };
   }
   try {
-    const payload = await automationApi.getAutomationCapabilities(
-      projectId,
-      signal,
-    );
+    const payload = await automationApi.getAutomationCapabilities(projectId, signal);
     return {
       run: normalizeAutomationCapabilityContract(payload),
       cronJobs: normalizeProjectCronJobsCapabilityContract(payload),
     };
   } catch (error) {
     if (signal?.aborted) throw error;
-    const capability = unavailable(
-      'automation_capability_contract_unavailable',
-    );
+    const capability = unavailable('automation_capability_contract_unavailable');
     return { run: capability, cronJobs: capability };
   }
 }
@@ -635,31 +1342,82 @@ async function loadWorkspaceCollaborationCapability(
     if (credential) headers.set('Authorization', `Bearer ${credential}`);
     const launchCapability = desktopLaunchCapability(config);
     if (launchCapability) headers.set('X-Agistack-Launch', launchCapability);
-    const path =
+    const scopedPath =
       `/api/v1/tenants/${encodeURIComponent(scope.tenantId)}/projects/` +
       `${encodeURIComponent(scope.projectId)}/workspaces/` +
-      `${encodeURIComponent(scope.workspaceId)}/collaboration/capabilities`;
-    const response = await fetch(absoluteUrl(config.apiBaseUrl, path), {
-      headers,
-      signal,
-    });
+      `${encodeURIComponent(scope.workspaceId)}/collaboration`;
+    const response = await fetch(
+      absoluteUrl(config.apiBaseUrl, `${scopedPath}/capabilities`),
+      {
+        headers,
+        signal,
+      },
+    );
     if (!response.ok) {
-      return unavailable(
-        'workspace_collaboration_capability_contract_unavailable',
-      );
+      return unavailable('workspace_collaboration_capability_contract_unavailable');
     }
     const contentType = response.headers.get('content-type') ?? '';
     if (!contentType.includes('application/json')) {
       return unavailable('workspace_collaboration_capability_contract_invalid');
     }
     const payload = await response.json().catch(() => null);
-    return normalizeWorkspaceCollaborationCapabilityContract(payload, scope);
+    const capability = normalizeWorkspaceCollaborationCapabilityContract(payload, scope);
+    if (
+      capability.availability !== 'available' &&
+      capability.availability !== 'degraded'
+    ) {
+      return capability;
+    }
+
+    const authorityResponse = await fetch(
+      absoluteUrl(config.apiBaseUrl, `${scopedPath}/authority`),
+      {
+        headers,
+        signal,
+      },
+    );
+    if (!authorityResponse.ok) {
+      return closeCapabilityAuthority(
+        capability,
+        'workspace_collaboration_authority_contract_unavailable',
+      );
+    }
+    const authorityContentType = authorityResponse.headers.get('content-type') ?? '';
+    if (!authorityContentType.includes('application/json')) {
+      return closeCapabilityAuthority(
+        capability,
+        'workspace_collaboration_authority_contract_invalid',
+      );
+    }
+    const authorityPayload = await authorityResponse.json().catch(() => null);
+    const authorityRevision = normalizeWorkspaceCollaborationAuthorityContract(
+      authorityPayload,
+      scope,
+    );
+    if (authorityRevision === null) {
+      return closeCapabilityAuthority(
+        capability,
+        'workspace_collaboration_authority_contract_invalid',
+      );
+    }
+    return { ...capability, authority_revision: authorityRevision };
   } catch (error) {
     if (signal?.aborted) throw error;
-    return unavailable(
-      'workspace_collaboration_capability_contract_unavailable',
-    );
+    return unavailable('workspace_collaboration_capability_contract_unavailable');
   }
+}
+
+function closeCapabilityAuthority(
+  capability: DesktopCapabilityAvailability,
+  reasonCode: string,
+): DesktopCapabilityAvailability {
+  return {
+    ...capability,
+    availability: 'unavailable',
+    reason_code: reasonCode,
+    allowed_actions: [],
+    authority_revision: null,
+  };
 }
 
 async function loadProjectOverviewCapability(
@@ -790,6 +1548,48 @@ type CapabilityAuthorityMetadata = {
   authorityRevision?: number | null;
 };
 
+function withObservedAuthority(
+  capability: DesktopCapabilityAvailability,
+  mode: DesktopRuntimeConfig['mode'],
+): DesktopCapabilitySnapshotEntry {
+  const active =
+    capability.availability === 'available' || capability.availability === 'degraded';
+  const revisionBound =
+    active && capability.authority_revision === null
+      ? {
+          ...capability,
+          availability: 'unavailable' as const,
+          reason_code: 'capability_authority_revision_unavailable',
+          allowed_actions: [],
+        }
+      : capability;
+  return {
+    ...revisionBound,
+    authority_source: mode === 'local' ? 'sidecar' : 'cloud_service',
+    provenance: 'observed',
+  };
+}
+
+function withDeclaredAuthority(
+  capability: DesktopCapabilityAvailability,
+): DesktopCapabilitySnapshotEntry {
+  const active = capability.availability === 'available' || capability.availability === 'degraded';
+  const closed: DesktopCapabilityAvailability = active
+    ? {
+        ...capability,
+        availability: 'unavailable',
+        reason_code: 'renderer_capability_authority_unobserved',
+        allowed_actions: [],
+        authority_revision: null,
+      }
+    : capability;
+  return {
+    ...closed,
+    authority_source: 'renderer',
+    provenance: 'declared',
+  };
+}
+
 function withCapabilityScope(
   capability: DesktopCapabilityAvailability,
   scope: DesktopCapabilityScope,
@@ -800,9 +1600,7 @@ function withCapabilityScope(
   };
 }
 
-function projectCapabilityScope(
-  config: DesktopRuntimeConfig,
-): DesktopCapabilityScope {
+function projectCapabilityScope(config: DesktopRuntimeConfig): DesktopCapabilityScope {
   return {
     tenant_id: scopeIdentifier(config.tenantId),
     project_id: scopeIdentifier(config.projectId),
@@ -811,9 +1609,7 @@ function projectCapabilityScope(
   };
 }
 
-function workspaceCapabilityScope(
-  config: DesktopRuntimeConfig,
-): DesktopCapabilityScope {
+function workspaceCapabilityScope(config: DesktopRuntimeConfig): DesktopCapabilityScope {
   return {
     ...projectCapabilityScope(config),
     workspace_id: scopeIdentifier(config.workspaceId),
@@ -844,16 +1640,11 @@ function isExactRecord(
   if (!isRecord(input)) return false;
   const keys = Object.keys(input).sort();
   const expected = [...expectedKeys].sort();
-  return (
-    keys.length === expected.length &&
-    keys.every((key, index) => key === expected[index])
-  );
+  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
 }
 
 function isStringArray(input: unknown): input is string[] {
-  return (
-    Array.isArray(input) && input.every((item) => typeof item === 'string')
-  );
+  return Array.isArray(input) && input.every((item) => typeof item === 'string');
 }
 
 function matchesExactStringRecord(
@@ -866,10 +1657,7 @@ function matchesExactStringRecord(
   );
 }
 
-function matchesExactStringArray(
-  input: unknown,
-  expected: readonly string[],
-): boolean {
+function matchesExactStringArray(input: unknown, expected: readonly string[]): boolean {
   return (
     Array.isArray(input) &&
     input.length === expected.length &&
@@ -885,9 +1673,7 @@ function readWorkspaceCollaborationCapabilityScope(
     projectId: config.projectId,
     workspaceId: config.workspaceId,
   };
-  return Object.values(scope).every(
-    (value) => value.length > 0 && value === value.trim(),
-  )
+  return Object.values(scope).every((value) => value.length > 0 && value === value.trim())
     ? scope
     : null;
 }

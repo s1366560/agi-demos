@@ -13,12 +13,15 @@ from src.infrastructure.adapters.primary.web.dependencies import get_current_use
 from src.infrastructure.adapters.primary.web.routers.agent.schemas import (
     ActiveRunCountResponse,
     DescendantTreeResponse,
+    ProjectActiveRunCountResponse,
+    ProjectSubAgentRunListResponse,
     SubAgentRunListResponse,
     SubAgentRunResponse,
     TraceChainResponse,
 )
 from src.infrastructure.adapters.primary.web.routers.agent.trace_router import (
     _get_accessible_conversation,
+    _list_accessible_project_conversation_ids,
     _list_user_conversation_ids,
     parse_statuses,
     router,
@@ -98,6 +101,7 @@ def _patch_container_helper(
     mock_container: MagicMock,
     mock_get_accessible_conversation: AsyncMock,
     mock_list_accessible_tenant_conversation_ids: AsyncMock,
+    mock_list_accessible_project_conversation_ids: AsyncMock,
     mock_list_user_conversation_ids: AsyncMock,
 ):
     with (
@@ -114,6 +118,10 @@ def _patch_container_helper(
             mock_list_accessible_tenant_conversation_ids,
         ),
         patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.trace_router._list_accessible_project_conversation_ids",
+            mock_list_accessible_project_conversation_ids,
+        ),
+        patch(
             "src.infrastructure.adapters.primary.web.routers.agent.trace_router._list_user_conversation_ids",
             mock_list_user_conversation_ids,
         ),
@@ -128,6 +136,11 @@ def mock_get_accessible_conversation() -> AsyncMock:
 
 @pytest.fixture
 def mock_list_accessible_tenant_conversation_ids() -> AsyncMock:
+    return AsyncMock(return_value=[])
+
+
+@pytest.fixture
+def mock_list_accessible_project_conversation_ids() -> AsyncMock:
     return AsyncMock(return_value=[])
 
 
@@ -219,6 +232,54 @@ class TestTraceRouterHelpers:
 
         executed_query = db.execute.await_args.args[0]
         assert "user_tenants" in str(executed_query)
+
+    @pytest.mark.asyncio
+    async def test_list_project_conversation_ids_requires_project_membership(self) -> None:
+        db = MagicMock()
+        global_role_result = MagicMock()
+        global_role_result.scalar_one_or_none.return_value = None
+        project_result = MagicMock()
+        project_result.one_or_none.return_value = ("tenant-1", "member", "member")
+        conversation_result = MagicMock()
+        conversation_result.scalars.return_value.all.return_value = ["conv-1"]
+        db.execute = AsyncMock(
+            side_effect=[global_role_result, project_result, conversation_result]
+        )
+
+        result = await _list_accessible_project_conversation_ids(
+            db,
+            SimpleNamespace(id="user-1", roles=[]),
+            "project-1",
+        )
+
+        assert result == ["conv-1"]
+        executed_query = db.execute.await_args.args[0]
+        compiled = str(executed_query)
+        assert "conversations.project_id" in compiled
+        assert "conversations.user_id" in compiled
+
+    @pytest.mark.asyncio
+    async def test_list_project_conversation_ids_allows_project_admin_team_view(self) -> None:
+        db = MagicMock()
+        global_role_result = MagicMock()
+        global_role_result.scalar_one_or_none.return_value = None
+        project_result = MagicMock()
+        project_result.one_or_none.return_value = ("tenant-1", "admin", "member")
+        conversation_result = MagicMock()
+        conversation_result.scalars.return_value.all.return_value = ["conv-1", "conv-2"]
+        db.execute = AsyncMock(
+            side_effect=[global_role_result, project_result, conversation_result]
+        )
+
+        result = await _list_accessible_project_conversation_ids(
+            db,
+            SimpleNamespace(id="user-1", roles=[]),
+            "project-1",
+        )
+
+        assert result == ["conv-1", "conv-2"]
+        executed_query = str(db.execute.await_args.args[0])
+        assert "conversations.user_id" not in executed_query
 
     @pytest.mark.asyncio
     async def test_get_accessible_conversation_returns_404_for_revoked_owner(self) -> None:
@@ -341,6 +402,14 @@ class TestSchemaModels:
     def test_active_run_count_response_with_conversation(self) -> None:
         resp = ActiveRunCountResponse(active_count=3, conversation_id="c1")
         assert resp.conversation_id == "c1"
+
+    def test_project_run_list_response(self) -> None:
+        resp = ProjectSubAgentRunListResponse(project_id="project-1", runs=[], total=0)
+        assert resp.project_id == "project-1"
+
+    def test_project_active_run_count_response(self) -> None:
+        resp = ProjectActiveRunCountResponse(project_id="project-1", active_count=2)
+        assert resp.active_count == 2
 
 
 # --- list_runs endpoint ---
@@ -468,6 +537,80 @@ class TestListTenantRunsEndpoint:
         resp = client.get("/api/v1/agent/trace/runs/tenant/t-1")
 
         assert resp.status_code == 403
+
+
+@pytest.mark.unit
+class TestListProjectRunsEndpoint:
+    def test_returns_recent_redacted_runs_for_project(
+        self,
+        client: TestClient,
+        mock_registry: MagicMock,
+        mock_list_accessible_project_conversation_ids: AsyncMock,
+    ) -> None:
+        run = SubAgentRun(
+            run_id="run-1",
+            conversation_id="conv-1",
+            subagent_name="reviewer",
+            task="Review project",
+            status=SubAgentRunStatus.COMPLETED,
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            metadata={"private": "value"},
+            frozen_result_text="private result",
+        )
+        mock_list_accessible_project_conversation_ids.return_value = ["conv-1"]
+        mock_registry.list_runs_for_conversations.return_value = [run]
+
+        response = client.get("/api/v1/agent/trace/runs/project/project-1?limit=10")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "project_id": "project-1",
+            "runs": [
+                {
+                    **run.to_event_data(),
+                    "metadata": {},
+                    "frozen_result_text": None,
+                }
+            ],
+            "total": 1,
+        }
+        mock_registry.list_runs_for_conversations.assert_called_once_with(
+            ["conv-1"], statuses=None, limit=10
+        )
+
+    def test_rejects_inaccessible_project(
+        self,
+        client: TestClient,
+        mock_list_accessible_project_conversation_ids: AsyncMock,
+    ) -> None:
+        mock_list_accessible_project_conversation_ids.side_effect = HTTPException(
+            status_code=403,
+            detail="Project access required",
+        )
+
+        response = client.get("/api/v1/agent/trace/runs/project/project-1")
+
+        assert response.status_code == 403
+
+
+@pytest.mark.unit
+class TestGetProjectActiveRunCountEndpoint:
+    def test_aggregates_active_runs_for_project(
+        self,
+        client: TestClient,
+        mock_registry: MagicMock,
+        mock_list_accessible_project_conversation_ids: AsyncMock,
+    ) -> None:
+        mock_list_accessible_project_conversation_ids.return_value = ["conv-1", "conv-2"]
+        mock_registry.count_active_runs_for_conversations.return_value = 3
+
+        response = client.get("/api/v1/agent/trace/runs/project/project-1/active/count")
+
+        assert response.status_code == 200
+        assert response.json() == {"project_id": "project-1", "active_count": 3}
+        mock_registry.count_active_runs_for_conversations.assert_called_once_with(
+            ["conv-1", "conv-2"]
+        )
 
 
 # --- get_run endpoint ---

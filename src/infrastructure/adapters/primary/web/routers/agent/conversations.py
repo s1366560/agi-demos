@@ -1144,8 +1144,9 @@ async def update_conversation_config(
             raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
         config_patch: dict[str, Any] = {}
-        if data.selected_agent_id is not None:
-            selected_agent_id = data.selected_agent_id.strip()
+        fields = data.model_fields_set
+        if "selected_agent_id" in fields:
+            selected_agent_id = data.selected_agent_id.strip() if data.selected_agent_id else ""
             selected_agent_config = (
                 {"selected_agent_id": selected_agent_id} if selected_agent_id else {}
             )
@@ -1156,11 +1157,13 @@ async def update_conversation_config(
                 project_id=project_id,
             )
             config_patch["selected_agent_id"] = selected_agent_id or None
-        if data.llm_model_override is not None:
-            cleaned = data.llm_model_override.strip()
+        if "llm_model_override" in fields:
+            cleaned = data.llm_model_override.strip() if data.llm_model_override else ""
             config_patch["llm_model_override"] = cleaned or None
-        if data.llm_overrides is not None:
-            cleaned_overrides = {k: v for k, v in data.llm_overrides.items() if v is not None}
+        if "llm_overrides" in fields:
+            cleaned_overrides = {
+                key: value for key, value in (data.llm_overrides or {}).items() if value is not None
+            }
             config_patch["llm_overrides"] = cleaned_overrides or None
 
         conversation.update_agent_config(config_patch)

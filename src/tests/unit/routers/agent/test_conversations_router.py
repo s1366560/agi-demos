@@ -1486,6 +1486,89 @@ async def test_project_scoped_conversation_routes_require_project_access(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_update_conversation_config_distinguishes_omitted_fields_from_explicit_null(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_config = {
+        "selected_agent_id": "agent-1",
+        "llm_model_override": "gpt-reasoning",
+        "llm_overrides": {"temperature": 0.2, "max_tokens": 2048},
+        "capability_mode": "code",
+    }
+    conversation = Conversation(
+        id="conversation-config-clear",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        title="Config clear contract",
+        agent_config=dict(original_config),
+    )
+    conversation_repo = SimpleNamespace(save=AsyncMock())
+    agent_service = SimpleNamespace(
+        get_conversation=AsyncMock(return_value=conversation),
+        _conversation_repo=conversation_repo,
+    )
+    container = SimpleNamespace(agent_service=lambda _llm: agent_service)
+    monkeypatch.setattr(
+        conversations_router,
+        "get_container_with_db",
+        lambda _request, _db: container,
+    )
+    db = _db_with_project_access()
+    omitted = UpdateConversationConfigRequest()
+    explicit_clear = UpdateConversationConfigRequest(
+        selected_agent_id=None,
+        llm_model_override=None,
+        llm_overrides=None,
+    )
+
+    assert omitted.model_fields_set == set()
+    assert explicit_clear.model_fields_set == {
+        "selected_agent_id",
+        "llm_model_override",
+        "llm_overrides",
+    }
+
+    omitted_response = await conversations_router.update_conversation_config(
+        conversation_id=conversation.id,
+        data=omitted,
+        request=MagicMock(),
+        project_id=conversation.project_id,
+        current_user=SimpleNamespace(id=conversation.user_id),
+        tenant_id=conversation.tenant_id,
+        db=db,
+    )
+
+    assert conversation.agent_config == original_config
+    assert omitted_response.agent_config == original_config
+
+    cleared_response = await conversations_router.update_conversation_config(
+        conversation_id=conversation.id,
+        data=explicit_clear,
+        request=MagicMock(),
+        project_id=conversation.project_id,
+        current_user=SimpleNamespace(id=conversation.user_id),
+        tenant_id=conversation.tenant_id,
+        db=db,
+    )
+
+    expected_cleared_config = {
+        "selected_agent_id": None,
+        "llm_model_override": None,
+        "llm_overrides": None,
+        "capability_mode": "code",
+    }
+    assert conversation.agent_config == expected_cleared_config
+    assert cleared_response.agent_config == expected_cleared_config
+    assert conversation_repo.save.await_args_list == [
+        ((conversation,), {}),
+        ((conversation,), {}),
+    ]
+    assert db.commit.await_count == 2
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_conversation_invariant_errors_are_sanitized() -> None:
     conversation = SimpleNamespace(
         conversation_mode="autonomous",

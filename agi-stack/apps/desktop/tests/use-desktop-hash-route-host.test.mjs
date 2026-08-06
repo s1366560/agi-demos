@@ -52,6 +52,8 @@ function capability(tenantId) {
       instance_id: null,
     },
     authority_revision: 1,
+    authority_source: 'cloud_service',
+    provenance: 'observed',
   };
 }
 

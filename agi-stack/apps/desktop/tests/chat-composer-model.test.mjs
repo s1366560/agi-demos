@@ -12,6 +12,7 @@ import {
   workspaceMessageRequiresDefaultAgentLaunch,
 } from '/tmp/agistack-desktop-test-dist/src/features/chat/chatComposerModel.js';
 import {
+  MAX_COMPOSER_ATTACHMENT_BYTES,
   composerFileDragActive,
   composerFileDropAction,
   uploadComposerFilesSequentially,
@@ -345,6 +346,7 @@ test('file drop action distinguishes upload, unsupported, and ignored drops', ()
 });
 
 test('composer uploads files sequentially and preserves partial success', async () => {
+  assert.equal(MAX_COMPOSER_ATTACHMENT_BYTES, 16 * 1_048_576);
   let activeUploads = 0;
   let maximumActiveUploads = 0;
   const uploadedNames = [];
@@ -363,7 +365,7 @@ test('composer uploads files sequentially and preserves partial success', async 
     {
       name: 'too-large.bin',
       type: 'application/octet-stream',
-      size: 100 * 1024 * 1024 + 1,
+      size: MAX_COMPOSER_ATTACHMENT_BYTES + 1,
       arrayBuffer: async () => {
         arrayBufferReads.push('too-large.bin');
         return new ArrayBuffer(0);
@@ -429,6 +431,8 @@ test('Desktop composer wires Web-compatible file drag and drop to sandbox upload
   assert.match(composerFileDropSource, /composerFileDropAction/);
   assert.match(composerFileDropSource, /dataTransfer\.types/);
   assert.match(composerFileDropSource, /dataTransfer\.files/);
+  assert.match(composerFileDropSource, /ingestFilesWithDesktopBridge/);
+  assert.doesNotMatch(composerFileDropSource, /onUploadFiles\(files\)/);
   assert.doesNotMatch(composerFileDropSource, /\.path\b|webkitGetAsEntry|text\/html|text\/uri-list/);
   assert.match(composerFileUploadSource, /uploadComposerFilesSequentially/);
   assert.match(composerFileUploadSource, /api\.uploadSandboxFile/);
@@ -440,9 +444,14 @@ test('Desktop composer wires Web-compatible file drag and drop to sandbox upload
   assert.match(newThreadComposerSource, /useComposerFileUpload/);
   assert.match(newThreadComposerSource, /disabled=\{uploadingAttachments\}/);
   assert.match(composerPlusMenuSource, /onUploadFiles/);
+  assert.match(composerPlusMenuSource, /openFilesWithDesktopDialog/);
+  assert.doesNotMatch(composerPlusMenuSource, /type="file"|fileInputRef/);
   assert.doesNotMatch(composerPlusMenuSource, /MAX_ATTACHMENT_BYTES|api\.uploadSandboxFile/);
   assert.equal(i18nSource.split("'composer.dropFilesToUpload'").length - 1, 2);
   assert.equal(i18nSource.split("'composer.fileDropUnsupported'").length - 1, 2);
+  assert.equal(i18nSource.split("'composer.filePickerFailed'").length - 1, 2);
+  assert.match(i18nSource, /Files must be 16 MiB or smaller\./u);
+  assert.match(i18nSource, /文件大小不能超过 16 MiB。/u);
 });
 
 test('single-slot composer resources replace the prior selection without affecting mentions', () => {

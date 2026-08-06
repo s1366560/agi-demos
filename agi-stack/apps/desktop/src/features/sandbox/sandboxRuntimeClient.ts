@@ -180,7 +180,7 @@ export type KasmProxySession = {
 
 const MAX_LIST_LIMIT = 500;
 const DEFAULT_READ_LIMIT = 1_048_576;
-const DEFAULT_DOWNLOAD_LIMIT = 25 * 1_048_576;
+const DEFAULT_DOWNLOAD_LIMIT = 16 * 1_048_576;
 const JSON_RESPONSE_LIMIT = 2 * 1_048_576;
 
 export function terminalInteractiveCapability(

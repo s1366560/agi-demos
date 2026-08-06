@@ -128,11 +128,14 @@ test('PDF HTML mirrors Web ordering, escaping, filename, and 300-character trunc
   assert.ok(!html.includes('<private>'));
 });
 
-test('Desktop exposes localized, accessible renderer-only Markdown and PDF controls', () => {
+test('Desktop exposes localized, accessible native-dialog Markdown and PDF controls', () => {
   assert.match(chatPanelSource, /createConversationExportSnapshot/);
   assert.match(chatPanelSource, /<ConversationExportMenu/);
   assert.match(exportMenuSource, /downloadConversationMarkdown/);
   assert.match(exportMenuSource, /downloadConversationPdf/);
+  assert.match(exportMenuSource, /saveBlobWithDesktopDialog/);
+  assert.match(exportMenuSource, /outputPdf\('blob'\)/);
+  assert.doesNotMatch(exportMenuSource, /URL\.createObjectURL|createElement\('a'\)|\.save\(\)/);
   assert.match(exportMenuSource, /aria-label=\{t\('chat\.exportConversation'\)\}/);
   assert.match(exportMenuSource, /aria-busy=\{exportingFormat !== null\}/);
   assert.match(exportMenuSource, /role=\{notice\.kind === 'error' \? 'alert' : 'status'\}/);

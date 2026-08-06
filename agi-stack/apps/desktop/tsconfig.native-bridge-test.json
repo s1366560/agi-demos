@@ -5,6 +5,7 @@
   },
   "include": [
     "electron/main/displayCapturePolicy.ts",
+    "electron/main/qaProfilePolicy.ts",
     "electron/main/webControlPlanePolicy.ts"
   ]
 }

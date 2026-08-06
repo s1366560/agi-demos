@@ -82,6 +82,25 @@ describe('PatternList', () => {
       expect(screen.getByText('Deprecated')).toBeInTheDocument();
     });
 
+    it('renders an explicit neutral badge when no agent-authored status exists', () => {
+      render(
+        <PatternList
+          patterns={[
+            {
+              id: 'pattern-unclassified',
+              name: 'Observed Pattern',
+              signature: 'observed_pattern()',
+              status: 'unclassified',
+              usageCount: 1,
+              successRate: 75,
+            },
+          ]}
+        />
+      );
+
+      expect(screen.getByText('Unclassified')).toBeInTheDocument();
+    });
+
     it('should render usage counts in detailed view mode', () => {
       render(<PatternList patterns={mockPatterns} viewMode="detailed" />);
 
@@ -339,14 +358,23 @@ describe('PatternList', () => {
 
   describe('Accessibility', () => {
     it('should have proper button labels for actions', () => {
-      render(<PatternList patterns={mockPatterns} />);
+      render(<PatternList patterns={mockPatterns} onDeprecate={vi.fn()} />);
 
       const deleteButtons = screen.getAllByTitle('Delete pattern');
       expect(deleteButtons.length).toBeGreaterThan(0);
     });
 
+    it('does not render mutation controls without caller-provided authority', () => {
+      const { rerender } = render(<PatternList patterns={mockPatterns} />);
+
+      expect(screen.queryByTitle('Delete pattern')).not.toBeInTheDocument();
+
+      rerender(<PatternList patterns={mockPatterns} onDeprecate={vi.fn()} />);
+      expect(screen.getAllByTitle('Delete pattern')).toHaveLength(mockPatterns.length);
+    });
+
     it('does not nest action buttons inside row buttons', () => {
-      const { container } = render(<PatternList patterns={mockPatterns} />);
+      const { container } = render(<PatternList patterns={mockPatterns} onDeprecate={vi.fn()} />);
 
       expect(container.querySelector('button button')).not.toBeInTheDocument();
     });
@@ -370,16 +398,15 @@ describe('PatternList', () => {
     });
   });
 
-  describe('Success Rate Colors', () => {
-    it('should display high success rate (>=80%) in green', () => {
+  describe('Success Rate Display', () => {
+    it('displays a high success rate without assigning a semantic color verdict', () => {
       render(<PatternList patterns={mockPatterns} />);
 
-      // 95% should be green (emerald)
       const successRateBars = screen.getAllByText('95%');
       expect(successRateBars.length).toBeGreaterThan(0);
     });
 
-    it('should display medium success rate (60-79%) in amber', () => {
+    it('displays a medium success rate without assigning a semantic color verdict', () => {
       const mediumPattern: WorkflowPattern = {
         id: 'pattern-medium',
         name: 'Medium Pattern',
@@ -394,10 +421,9 @@ describe('PatternList', () => {
       expect(screen.getByText('65%')).toBeInTheDocument();
     });
 
-    it('should display low success rate (<60%) in red', () => {
+    it('displays a low success rate without assigning a semantic color verdict', () => {
       render(<PatternList patterns={mockPatterns} />);
 
-      // 45% should be red
       expect(screen.getByText('45%')).toBeInTheDocument();
     });
   });

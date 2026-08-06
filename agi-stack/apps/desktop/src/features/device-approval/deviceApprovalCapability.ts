@@ -24,16 +24,20 @@ export function deviceApprovalCapability(
       allowed_actions: [],
       scope,
       authority_revision: null,
+      authority_source: 'renderer',
+      provenance: 'declared',
     });
   }
   return Object.freeze({
-    availability: 'available',
-    reason_code: null,
-    service_version: '0.1.0',
-    contract_version: '3.0.0',
-    allowed_actions: DEVICE_APPROVAL_CLOUD_ACTIONS,
+    availability: 'unavailable',
+    reason_code: 'renderer_capability_authority_unobserved',
+    service_version: null,
+    contract_version: null,
+    allowed_actions: [],
     scope,
     authority_revision: null,
+    authority_source: 'renderer',
+    provenance: 'declared',
   });
 }
 

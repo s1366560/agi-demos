@@ -35,7 +35,11 @@ const INVENTORY_SOURCES = Object.freeze({
     'reachable route registration modules#relative imports used by JSX or object routes',
   lazy_page_entries: 'reachable route registration modules#lazy(import())',
   production_dependency_entries:
-    'routed source modules#transitive local runtime imports, re-exports, and static import()',
+    'web/index.html#transitive local runtime, stylesheet, data, asset, and build inputs',
+  production_dependency_ownership:
+    'production dependency graph#routed-source reachability or explicit build-input exclusion',
+  production_entry:
+    'web/index.html#module script bootstrap through web/src/main.tsx and web/src/App.tsx',
   production_router:
     'reachable modules registering JSX Route or static react-router-dom route objects',
 });
@@ -181,6 +185,7 @@ function compareSourceEntries(left, right) {
 
 function buildAuditedSources({
   navigationSource,
+  productionEntrySources,
   productionDependencySources,
   reachableSources,
   routeRegistrationSources,
@@ -188,10 +193,9 @@ function buildAuditedSources({
   repositoryRoot,
 }) {
   const sourceByEntry = new Map(
-    [...reachableSources, ...productionDependencySources].map((source) => [
-      source.source_entry,
-      source.source,
-    ])
+    [...reachableSources, ...productionDependencySources, ...productionEntrySources].map(
+      (source) => [source.source_entry, source.source]
+    )
   );
   sourceByEntry.set(NAVIGATION_RELATIVE_PATH, navigationSource);
   const rolesBySource = new Map();
@@ -203,6 +207,9 @@ function buildAuditedSources({
   }
 
   addRole(NAVIGATION_RELATIVE_PATH, 'canonical_navigation_registry');
+  for (const source of productionEntrySources) {
+    addRole(source.source_entry, 'production_entry');
+  }
   for (const source of routeRegistrationSources) {
     addRole(source.source_entry, 'production_router');
   }
@@ -210,7 +217,10 @@ function buildAuditedSources({
     addRole(entry.source_entry, 'routed_page');
   }
   for (const source of productionDependencySources) {
-    addRole(source.source_entry, 'production_dependency');
+    const existingRoles = rolesBySource.get(source.source_entry);
+    if (!existingRoles?.has('routed_page') && !existingRoles?.has('production_router')) {
+      addRole(source.source_entry, 'production_dependency');
+    }
   }
 
   return [...rolesBySource]
@@ -284,6 +294,7 @@ export function buildWebRouteInventoryFromSources({
   const productionRoutes = addProductionRouteKeys(unkeyedProductionRoutes);
   const auditedSources = buildAuditedSources({
     navigationSource,
+    productionEntrySources: productionDependencies.entry_sources,
     productionDependencySources: productionDependencies.dependency_sources,
     reachableSources: sourceGraph.reachable_sources,
     routeRegistrationSources: sourceGraph.route_registration_sources,
@@ -296,7 +307,7 @@ export function buildWebRouteInventoryFromSources({
 
   return {
     schema_version: '2.0.0',
-    checker_version: '2.0.0',
+    checker_version: '2.1.0',
     source_revision: sourceRevision,
     sources: INVENTORY_SOURCES,
     counts: {
@@ -305,7 +316,9 @@ export function buildWebRouteInventoryFromSources({
       eager_route_entries: eagerRouteEntries.length,
       lazy_page_entries: lazyPageEntries.length,
       production_dependency_edges: productionDependencies.dependency_edges.length,
+      production_dependency_ownership: productionDependencies.dependency_ownership.length,
       production_dependency_sources: productionDependencies.dependency_sources.length,
+      production_entry_sources: productionDependencies.production_entry_sources.length,
       production_routes: productionRoutes.length,
       route_registration_sources: routeRegistrationSources.length,
     },
@@ -315,6 +328,11 @@ export function buildWebRouteInventoryFromSources({
     eager_route_entries: eagerRouteEntries,
     lazy_page_entries: lazyPageEntries,
     production_dependency_edges: productionDependencies.dependency_edges,
+    production_dependency_ownership: productionDependencies.dependency_ownership,
+    production_dependency_sources: productionDependencies.dependency_sources.map(
+      (source) => source.source_entry
+    ),
+    production_entry_sources: productionDependencies.production_entry_sources,
     route_registration_sources: routeRegistrationSources,
   };
 }

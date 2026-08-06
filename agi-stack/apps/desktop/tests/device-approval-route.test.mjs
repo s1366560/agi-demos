@@ -14,6 +14,7 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const {
+  DESKTOP_PRODUCTION_ROUTE_IDS,
   DEVICE_APPROVAL_ROUTE_ID,
   createDesktopProductionRouteRegistry,
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js');
@@ -30,7 +31,10 @@ const {
 test('production registry keeps native device approval beside global native routes', async () => {
   const registry = createRegistry();
   assert.equal(DEVICE_APPROVAL_ROUTE_ID, 'device-approval');
-  assert.equal(registry.definitions.length, 55);
+  assert.deepEqual(
+    registry.definitions.map((definition) => definition.id),
+    DESKTOP_PRODUCTION_ROUTE_IDS,
+  );
   const definition = registry.byId.get(DEVICE_APPROVAL_ROUTE_ID);
   assert.equal(definition.path, '/device');
   assert.deepEqual(definition.scope, ['global']);
@@ -43,13 +47,13 @@ test('production registry keeps native device approval beside global native rout
   assert.equal(module.availability, 'available');
 });
 
-test('device approval capability is Cloud available and Local not applicable', () => {
+test('device approval capability is Cloud fail-closed until observed and Local not applicable', () => {
   assert.deepEqual(deviceApprovalCapability({ mode: 'cloud' }), {
-    availability: 'available',
-    reason_code: null,
-    service_version: '0.1.0',
-    contract_version: '3.0.0',
-    allowed_actions: ['enter-code', 'approve', 'navigate-back', 'retry'],
+    availability: 'unavailable',
+    reason_code: 'renderer_capability_authority_unobserved',
+    service_version: null,
+    contract_version: null,
+    allowed_actions: [],
     scope: {
       tenant_id: null,
       project_id: null,
@@ -57,6 +61,8 @@ test('device approval capability is Cloud available and Local not applicable', (
       instance_id: null,
     },
     authority_revision: null,
+    authority_source: 'renderer',
+    provenance: 'declared',
   });
   assert.deepEqual(deviceApprovalCapability({ mode: 'local' }), {
     availability: 'not_applicable',
@@ -71,6 +77,8 @@ test('device approval capability is Cloud available and Local not applicable', (
       instance_id: null,
     },
     authority_revision: null,
+    authority_source: 'renderer',
+    provenance: 'declared',
   });
 });
 

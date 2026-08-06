@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { useI18n } from '../../i18n';
+import { saveBlobWithDesktopDialog } from '../runtime/nativeFileBridge';
 import type { DesktopArtifactClient } from './desktopArtifactClient';
 import { planArtifactPreview, type ArtifactPreviewPlan } from './artifactPreviewModel';
 
@@ -402,21 +403,32 @@ function ArtifactDownloadFallback({
   reasonCode: string;
 }) {
   const { t } = useI18n();
-  const download = () => {
-    const objectUrl = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = objectUrl;
-    anchor.download = safeArtifactFilename(filename);
-    anchor.hidden = true;
-    document.body.append(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(objectUrl);
+  const [downloadFailed, setDownloadFailed] = useState(false);
+  const download = async () => {
+    setDownloadFailed(false);
+    try {
+      const result = await saveBlobWithDesktopDialog({
+        suggestedName: safeArtifactFilename(filename),
+        mimeType: blob.type || 'application/octet-stream',
+        blob,
+      });
+      if (result.status === 'cancelled') return;
+    } catch {
+      setDownloadFailed(true);
+    }
   };
   return (
-    <div className="artifact-preview-state" data-reason-code={reasonCode}>
+    <div
+      className="artifact-preview-state"
+      data-reason-code={reasonCode}
+      data-download-status={downloadFailed ? 'failed' : 'idle'}
+    >
       <span>{t('artifact.previewDownloadFallback')}</span>
-      <button type="button" onClick={download}>
+      <button
+        type="button"
+        title={downloadFailed ? t('artifact.downloadFailed') : undefined}
+        onClick={() => void download()}
+      >
         {t('artifact.download')}
       </button>
     </div>

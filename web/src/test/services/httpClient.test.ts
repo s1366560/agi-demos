@@ -107,11 +107,15 @@ describe('httpClient', () => {
     it('should match no-auth endpoints only on exact or path segment boundaries', () => {
       expect(isNoAuthEndpoint('/auth/token')).toBe(true);
       expect(isNoAuthEndpoint('/api/v1/auth/token?grant=password')).toBe(true);
+      expect(isNoAuthEndpoint('/auth/oauth/providers')).toBe(true);
+      expect(isNoAuthEndpoint('/api/v1/auth/oauth/google/callback')).toBe(true);
       expect(isNoAuthEndpoint('/public')).toBe(true);
       expect(isNoAuthEndpoint('/public/assets/logo.png')).toBe(true);
       expect(isNoAuthEndpoint('/publicly-visible')).toBe(false);
       expect(isNoAuthEndpoint('/public-resource')).toBe(false);
       expect(isNoAuthEndpoint('/auth/tokenized')).toBe(false);
+      expect(isNoAuthEndpoint('/auth/oauthish')).toBe(false);
+      expect(isNoAuthEndpoint('/auth/me')).toBe(false);
     });
 
     it('should require auth for paths that only share a public prefix', async () => {

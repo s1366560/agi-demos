@@ -146,6 +146,10 @@ test("ordinary PR CI runs the complete desktop parity gate", () => {
     makefile,
     /desktop-parity-contract:\s+desktop-deps[\s\S]*generate-parity-manifest-v2\.mjs --check/u,
   );
+  assert.match(
+    makefile,
+    /desktop-parity-contract:\s+desktop-deps[\s\S]*generate-parity-manifest-v3\.mjs --check/u,
+  );
   assert.match(makefile, /desktop-parity-check:[^\n]*desktop-parity-contract/u);
   assert.match(
     makefile,
@@ -354,4 +358,29 @@ test("install roots stay isolated behind pnpm-only lockfiles", () => {
     Object.keys(prototypeLock.importers["."].dependencies).sort(),
     Object.keys(prototypePackage.dependencies).sort(),
   );
+});
+
+test("release matrix runs host-native sidecar permission tests before packaging", () => {
+  assert.deepEqual(
+    releaseWorkflow.jobs.build.strategy.matrix.include.map(({ platform }) => platform),
+    ["macOS", "Windows", "Linux"],
+  );
+  const steps = releaseWorkflow.jobs.build.steps;
+  const testIndex = steps.findIndex(
+    (step) => step.name === "Test native Rust sidecar",
+  );
+  const buildIndex = steps.findIndex(
+    (step) => step.name === "Build native Rust sidecar",
+  );
+  const universalBuildIndex = steps.findIndex(
+    (step) => step.name === "Build universal macOS Rust sidecar",
+  );
+  assert.ok(testIndex >= 0, "every host platform must execute sidecar tests");
+  assert.equal(
+    steps[testIndex].run,
+    "cargo test --manifest-path ../../Cargo.toml -p agistack-desktop-sidecar",
+  );
+  assert.ok(testIndex < buildIndex);
+  assert.ok(testIndex < universalBuildIndex);
+  assert.equal(steps[testIndex].if, undefined);
 });

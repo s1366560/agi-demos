@@ -73,6 +73,9 @@ test('session terminal exposes files and desktop through an optional runtime pro
   assert.match(sandboxToolsSource, /runtime\.fileClient/);
   assert.match(sandboxToolsSource, /onOpenFile=\{setPreviewFile\}/);
   assert.match(sandboxToolsSource, /onDownloadFile=\{downloadSandboxFile\}/);
+  assert.match(sandboxToolsSource, /saveBlobWithDesktopDialog/);
+  assert.doesNotMatch(sandboxToolsSource, /URL\.createObjectURL|createElement\('a'\)/);
+  assert.match(sandboxFilesSource, /await onDownloadFile\?\.\(result\.value\)/);
   assert.match(appSource, /const sandboxRuntime = useSandboxRuntimeSurface/);
   assert.match(appSource, /sandboxRuntime=\{sandboxRuntime\}/);
 });

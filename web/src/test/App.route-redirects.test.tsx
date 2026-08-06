@@ -262,4 +262,20 @@ describe('App route redirects', () => {
       legacyConversationIndex
     );
   });
+
+  it('registers all canonical project Agent destinations as production routes', () => {
+    const appSource = readFileSync('src/App.tsx', 'utf8');
+    const projectRouteIndex = appSource.indexOf('path=":tenantId/project/:projectId"');
+    const agentRouteIndex = appSource.indexOf('path="agent"', projectRouteIndex);
+    const legacyConversationIndex = appSource.indexOf('path=":tenantId/:conversation"');
+
+    expect(projectRouteIndex).toBeGreaterThan(-1);
+    expect(agentRouteIndex).toBeGreaterThan(projectRouteIndex);
+    expect(agentRouteIndex).toBeLessThan(legacyConversationIndex);
+    expect(appSource.indexOf('path="logs"', agentRouteIndex)).toBeGreaterThan(agentRouteIndex);
+    expect(appSource.indexOf('path="patterns"', agentRouteIndex)).toBeGreaterThan(agentRouteIndex);
+    expect(appSource).toContain('<ProjectAgentDashboard />');
+    expect(appSource).toContain('<ProjectAgentLogs />');
+    expect(appSource).toContain('<ProjectAgentPatterns />');
+  });
 });

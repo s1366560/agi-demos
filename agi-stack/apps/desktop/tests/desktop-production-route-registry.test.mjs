@@ -18,16 +18,21 @@ const {
   createAgentWorkspaceRouteModuleLoader,
 } = require('/tmp/agistack-desktop-test-dist/src/features/agent-workspace/agentWorkspaceRouteModule.js');
 const {
+  DESKTOP_IMPLEMENTED_ROUTE_IDS,
+  DESKTOP_PRODUCTION_ROUTE_IDS,
   DEVICE_APPROVAL_ROUTE_ID,
   INVITATION_ACCEPTANCE_ROUTE_ID,
   TENANT_CREATION_ROUTE_ID,
+  PROJECT_BLACKBOARD_ROUTE_ID,
   PROJECT_CRON_JOBS_ROUTE_ID,
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
   PROJECT_SUPPORT_ROUTE_ID,
+  PROJECT_WORKSPACES_ROUTE_ID,
   TENANT_ANALYTICS_ROUTE_ID,
   TENANT_AGENT_DASHBOARD_ROUTE_ID,
   TENANT_AGENT_BINDINGS_ROUTE_ID,
+  TENANT_AGENT_DEFINITIONS_ROUTE_ID,
   TENANT_OVERVIEW_ROUTE_ID,
   TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
   TENANT_CLUSTERS_ROUTE_ID,
@@ -35,10 +40,14 @@ const {
   TENANT_INSTANCE_TEMPLATES_ROUTE_ID,
   TENANT_INSTANCES_ROUTE_ID,
   TENANT_POOL_ROUTE_ID,
+  TENANT_PROVIDERS_ROUTE_ID,
+  TENANT_PLUGINS_ROUTE_ID,
   TENANT_PROJECTS_ROUTE_ID,
   TENANT_RUNTIMES_ROUTE_ID,
+  TENANT_SKILLS_ROUTE_ID,
   TENANT_TASKS_ROUTE_ID,
   TENANT_WORKSPACES_ROUTE_ID,
+  TENANT_MCP_SERVERS_ROUTE_ID,
   createDesktopProductionRouteRegistry,
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js');
 const {
@@ -73,6 +82,11 @@ const globalStylesheet = readFileSync(
   new URL('../src/styles.css', import.meta.url),
   'utf8',
 );
+const productionRoutePolicies = new Map(
+  createDesktopProductionRouteRegistry({ implementedLoaders: {} }).definitions.map(
+    (definition) => [definition.id, definition.localPolicy],
+  ),
+);
 
 function implementedProjectModule(overrides = {}) {
   function ProjectOverviewRoute() {
@@ -86,6 +100,22 @@ function implementedProjectModule(overrides = {}) {
     capability: PROJECT_OVERVIEW_ROUTE_ID,
     localPolicy: 'native_equivalent',
     Surface: ProjectOverviewRoute,
+    ...overrides,
+  });
+}
+
+function implementedCatalogModule(routeId, overrides = {}) {
+  function CatalogRoute() {
+    return React.createElement('section', null, `${routeId} route`);
+  }
+  return Object.freeze({
+    routeId,
+    disposition: 'implemented',
+    availability: 'available',
+    reasonCode: null,
+    capability: routeId,
+    localPolicy: productionRoutePolicies.get(routeId),
+    Surface: CatalogRoute,
     ...overrides,
   });
 }
@@ -439,6 +469,12 @@ function createRegistry(
 ) {
   return createDesktopProductionRouteRegistry({
     implementedLoaders: {
+      ...Object.fromEntries(
+        DESKTOP_IMPLEMENTED_ROUTE_IDS.map((routeId) => [
+          routeId,
+          async () => implementedCatalogModule(routeId),
+        ]),
+      ),
       [AGENT_WORKSPACE_ROUTE_ID]: agentWorkspaceLoader,
       [PROJECT_OVERVIEW_ROUTE_ID]: projectLoader,
       [PROJECT_SEARCH_ROUTE_ID]: searchLoader,
@@ -465,7 +501,7 @@ function createRegistry(
   });
 }
 
-test('production registry requires every implemented project route loader', () => {
+test('production registry downgrades absent App bindings and validates explicit loaders', () => {
   assert.equal(PROJECT_OVERVIEW_ROUTE_ID, 'project-project-overview');
   assert.equal(PROJECT_SEARCH_ROUTE_ID, 'project-project-search');
   assert.equal(PROJECT_CRON_JOBS_ROUTE_ID, 'project-project-cron-jobs');
@@ -479,11 +515,11 @@ test('production registry requires every implemented project route loader', () =
     TENANT_AGENT_DASHBOARD_ROUTE_ID,
     'tenant-tenant-agent-configuration',
   );
+  assert.equal(TENANT_AGENT_BINDINGS_ROUTE_ID, 'tenant-tenant-agent-bindings');
   assert.equal(
-    TENANT_AGENT_BINDINGS_ROUTE_ID,
-    'tenant-tenant-agent-bindings',
+    TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
+    'tenant-tenant-dead-letter-queue',
   );
-  assert.equal(TENANT_DEAD_LETTER_QUEUE_ROUTE_ID, 'tenant-tenant-dead-letter-queue');
   assert.equal(TENANT_POOL_ROUTE_ID, 'tenant-tenant-pool');
   assert.equal(TENANT_RUNTIMES_ROUTE_ID, 'tenant-tenant-runtimes');
   assert.equal(TENANT_INSTANCES_ROUTE_ID, 'tenant-tenant-instances');
@@ -495,12 +531,16 @@ test('production registry requires every implemented project route loader', () =
   );
   assert.equal(DEVICE_APPROVAL_ROUTE_ID, 'device-approval');
   assert.equal(TENANT_CREATION_ROUTE_ID, 'tenant-creation');
-  assert.throws(
-    () =>
-      createDesktopProductionRouteRegistry({
-        implementedLoaders: {},
-      }),
-    /desktop_production_route_loader_missing:project-project-overview/u,
+  const missingBindingRegistry = createDesktopProductionRouteRegistry({
+    implementedLoaders: {},
+  });
+  assert.deepEqual(
+    missingBindingRegistry.byId.get(PROJECT_OVERVIEW_ROUTE_ID)
+      ?.structuralReadiness,
+    {
+      status: 'unavailable',
+      reasonCode: 'desktop_route_structural_app_binding_missing',
+    },
   );
   assert.throws(
     () =>
@@ -561,7 +601,7 @@ test('production registry requires every implemented project route loader', () =
   );
 });
 
-test('all 55 production loaders remain lazy and twenty-two routes are real modules', async () => {
+test('all production loaders remain lazy and implemented routes follow the shared catalog', async () => {
   let projectLoadCount = 0;
   let searchLoadCount = 0;
   let cronJobsLoadCount = 0;
@@ -685,7 +725,10 @@ test('all 55 production loaders remain lazy and twenty-two routes are real modul
     },
   );
 
-  assert.equal(registry.definitions.length, 55);
+  assert.deepEqual(
+    registry.definitions.map((definition) => definition.id),
+    DESKTOP_PRODUCTION_ROUTE_IDS,
+  );
   assert.equal(projectLoadCount, 0);
   assert.equal(searchLoadCount, 0);
   assert.equal(cronJobsLoadCount, 0);
@@ -740,33 +783,10 @@ test('all 55 production loaders remain lazy and twenty-two routes are real modul
   const planned = loaded.filter(
     ({ module }) => module.disposition === 'planned',
   );
-  assert.equal(implemented.length, 22);
+  assert.equal(implemented.length, DESKTOP_IMPLEMENTED_ROUTE_IDS.length);
   assert.deepEqual(
     implemented.map(({ definition }) => definition.id).sort(),
-    [
-      AGENT_WORKSPACE_ROUTE_ID,
-      PROJECT_OVERVIEW_ROUTE_ID,
-      PROJECT_SEARCH_ROUTE_ID,
-      PROJECT_CRON_JOBS_ROUTE_ID,
-      PROJECT_SUPPORT_ROUTE_ID,
-      TENANT_OVERVIEW_ROUTE_ID,
-      TENANT_PROJECTS_ROUTE_ID,
-      TENANT_WORKSPACES_ROUTE_ID,
-      TENANT_TASKS_ROUTE_ID,
-      TENANT_ANALYTICS_ROUTE_ID,
-      TENANT_AGENT_DASHBOARD_ROUTE_ID,
-      TENANT_AGENT_BINDINGS_ROUTE_ID,
-      TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
-      TENANT_POOL_ROUTE_ID,
-      TENANT_RUNTIMES_ROUTE_ID,
-      TENANT_INSTANCES_ROUTE_ID,
-      TENANT_CLUSTERS_ROUTE_ID,
-      TENANT_DEPLOY_ROUTE_ID,
-      TENANT_INSTANCE_TEMPLATES_ROUTE_ID,
-      DEVICE_APPROVAL_ROUTE_ID,
-      TENANT_CREATION_ROUTE_ID,
-      INVITATION_ACCEPTANCE_ROUTE_ID,
-    ].sort(),
+    [...DESKTOP_IMPLEMENTED_ROUTE_IDS].sort(),
   );
   assert.equal(
     implemented.find(
@@ -824,44 +844,48 @@ test('all 55 production loaders remain lazy and twenty-two routes are real modul
   );
   assert.equal(
     implemented.find(
-      ({ definition }) =>
-        definition.id === TENANT_AGENT_BINDINGS_ROUTE_ID,
+      ({ definition }) => definition.id === TENANT_AGENT_BINDINGS_ROUTE_ID,
     ).module,
     tenantAgentBindingsModule,
   );
   assert.equal(
-    implemented.find(({ definition }) => definition.id === TENANT_DEAD_LETTER_QUEUE_ROUTE_ID)
-      .module,
+    implemented.find(
+      ({ definition }) => definition.id === TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
+    ).module,
     deadLetterQueueModule,
   );
   assert.equal(
-    implemented.find(({ definition }) => definition.id === TENANT_POOL_ROUTE_ID).module,
+    implemented.find(({ definition }) => definition.id === TENANT_POOL_ROUTE_ID)
+      .module,
     runtimePoolModule,
   );
   assert.equal(
-    implemented.find(({ definition }) => definition.id === TENANT_RUNTIMES_ROUTE_ID)
-      .module,
+    implemented.find(
+      ({ definition }) => definition.id === TENANT_RUNTIMES_ROUTE_ID,
+    ).module,
     unifiedRuntimesModule,
   );
   assert.equal(
-    implemented.find(({ definition }) => definition.id === TENANT_INSTANCES_ROUTE_ID)
-      .module,
+    implemented.find(
+      ({ definition }) => definition.id === TENANT_INSTANCES_ROUTE_ID,
+    ).module,
     runtimeInstancesModule,
   );
   assert.equal(
-    implemented.find(({ definition }) => definition.id === TENANT_CLUSTERS_ROUTE_ID)
-      .module,
+    implemented.find(
+      ({ definition }) => definition.id === TENANT_CLUSTERS_ROUTE_ID,
+    ).module,
     runtimeClustersModule,
   );
   assert.equal(
-    implemented.find(({ definition }) => definition.id === TENANT_DEPLOY_ROUTE_ID)
-      .module,
+    implemented.find(
+      ({ definition }) => definition.id === TENANT_DEPLOY_ROUTE_ID,
+    ).module,
     runtimeDeploymentsModule,
   );
   assert.equal(
     implemented.find(
-      ({ definition }) =>
-        definition.id === TENANT_INSTANCE_TEMPLATES_ROUTE_ID,
+      ({ definition }) => definition.id === TENANT_INSTANCE_TEMPLATES_ROUTE_ID,
     ).module,
     instanceTemplatesModule,
   );
@@ -877,7 +901,10 @@ test('all 55 production loaders remain lazy and twenty-two routes are real modul
     ).module,
     tenantCreationModule,
   );
-  assert.equal(planned.length, 33);
+  assert.equal(
+    planned.length,
+    registry.definitions.length - DESKTOP_IMPLEMENTED_ROUTE_IDS.length,
+  );
 
   for (const { definition, module } of planned) {
     assert.equal(module.routeId, definition.id);
@@ -933,16 +960,18 @@ test('implemented loader results fail closed when the route module contract drif
   }
 });
 
-test('Local cloud-only and blocked routes stay owned by the Host gate', () => {
+test('Local cloud-only routes stay owned by the Host gate after Web blockers close', () => {
   const registry = createRegistry();
   const cloudOnly = registry.definitions.find(
     (definition) => definition.localPolicy === 'cloud_only',
   );
-  const blocked = registry.definitions.find(
-    (definition) => definition.localPolicy === 'blocked_by_web_contract',
-  );
   assert.ok(cloudOnly);
-  assert.ok(blocked);
+  assert.equal(
+    registry.definitions.some(
+      (definition) => definition.localPolicy === 'blocked_by_web_contract',
+    ),
+    false,
+  );
 
   const localAccess = (definition) =>
     evaluateDesktopRouteAccess({
@@ -966,16 +995,11 @@ test('Local cloud-only and blocked routes stay owned by the Host gate', () => {
     reasonCode: 'desktop_route_local_cloud_only',
     capability: null,
   });
-  assert.deepEqual(localAccess(blocked), {
-    status: 'unavailable',
-    reasonCode: 'desktop_route_local_blocked_by_web_contract',
-    capability: null,
-  });
 });
 
 test('generic unavailable surface renders structured route authority without a Web escape', async () => {
-  const registry = createRegistry();
-  const definition = registry.byId.get('tenant-tenant-agent-definitions');
+  const registry = createDesktopProductionRouteRegistry({ implementedLoaders: {} });
+  const definition = registry.byId.get('tenant-tenant-evolution');
   assert.ok(definition);
   const module = await definition.loader();
   const markup = renderToStaticMarkup(
@@ -987,7 +1011,7 @@ test('generic unavailable surface renders structured route authority without a W
   );
 
   assert.match(markup, /Native route planned/);
-  assert.match(markup, /tenant-tenant-agent-definitions/);
+  assert.match(markup, /tenant-tenant-evolution/);
   assert.match(markup, /desktop_native_route_planned/);
   assert.match(markup, /native_equivalent/);
   assert.match(markup, /Unavailable/);

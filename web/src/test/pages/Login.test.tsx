@@ -1,11 +1,23 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { Login } from '../../pages/Login';
 import { useAuthStore } from '../../stores/auth';
 
+const { listProviders, beginAuthorization } = vi.hoisted(() => ({
+  listProviders: vi.fn(),
+  beginAuthorization: vi.fn(),
+}));
+
 vi.mock('../../stores/auth', () => ({
   useAuthStore: vi.fn(),
+}));
+
+vi.mock('@/services/oauthLoginService', () => ({
+  oauthLoginService: {
+    listProviders,
+    beginAuthorization,
+  },
 }));
 
 vi.mock('@/components/shared/ui/LanguageSwitcher', () => ({
@@ -17,6 +29,7 @@ describe('Login', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    listProviders.mockReturnValue(new Promise(() => {}));
     (useAuthStore as any).mockReturnValue({
       login: mockLogin,
       error: null,
@@ -28,6 +41,16 @@ describe('Login', () => {
     render(<Login />);
     expect(screen.getAllByText('MemStack').length).toBeGreaterThan(0);
     expect(screen.getByText('Sign in to your account')).toBeInTheDocument();
+  });
+
+  it('renders only OAuth providers declared by the server authority', async () => {
+    listProviders.mockResolvedValue([{ id: 'google', display_name: 'Google' }]);
+
+    render(<Login />);
+
+    const providerList = await screen.findByTestId('oauth-provider-list');
+    expect(within(providerList).getAllByRole('button')).toHaveLength(1);
+    expect(listProviders).toHaveBeenCalledOnce();
   });
 
   it('handles input', () => {

@@ -52,4 +52,23 @@ describe('subagentTemplateService', () => {
     expect(mockApiFetch.post).toHaveBeenCalledWith('/subagents/templates/template-1/install');
     expect(result).toMatchObject({ id: 'subagent-1', name: 'reviewer' });
   });
+
+  it('maps the backend created count to the marketplace seeded contract', async () => {
+    mockApiFetch.post.mockResolvedValue(
+      jsonResponse({ created: 3, message: 'Seeded 3 builtin templates' })
+    );
+
+    const result = await subagentTemplateService.seed();
+
+    expect(mockApiFetch.post).toHaveBeenCalledWith('/subagents/templates/seed');
+    expect(result).toEqual({ seeded: 3 });
+  });
+
+  it('fails closed when the backend omits a valid created count', async () => {
+    mockApiFetch.post.mockResolvedValue(jsonResponse({ message: 'seeded' }));
+
+    await expect(subagentTemplateService.seed()).rejects.toThrow(
+      'subagent_template_seed_contract_invalid'
+    );
+  });
 });

@@ -11,19 +11,27 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.auth.user import User
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import (
+    Project as DBProject,
+    UserProject as DBUserProject,
+    UserTenant as DBUserTenant,
+)
 from src.infrastructure.i18n import gettext as _
 
-from .access import require_tenant_access
+from .access import _get_user_id, require_tenant_access
 from .schemas import (
     PatternsListResponse,
     PatternStepResponse,
+    ProjectPatternsListResponse,
     ResetPatternsResponse,
     WorkflowPatternResponse,
 )
@@ -32,6 +40,102 @@ from .utils import get_container_with_db
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.get(
+    "/workflows/patterns/project/{project_id}",
+    response_model=ProjectPatternsListResponse,
+)
+async def list_project_shared_patterns(
+    project_id: str,
+    request: Request,
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    min_success_rate: float | None = Query(
+        None,
+        ge=0,
+        le=1,
+        description="Minimum success rate filter",
+    ),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ProjectPatternsListResponse:
+    """List tenant-shared patterns available to an explicitly authorized project member."""
+    project_result = await db.execute(
+        refresh_select_statement(select(DBProject.tenant_id).where(DBProject.id == project_id))
+    )
+    tenant_id = project_result.scalar_one_or_none()
+    if tenant_id is None:
+        raise HTTPException(status_code=404, detail=_("Project not found"))
+
+    user_id = _get_user_id(current_user)
+    membership_result = await db.execute(
+        refresh_select_statement(
+            select(DBUserProject.id)
+            .join(
+                DBUserTenant,
+                (DBUserTenant.user_id == DBUserProject.user_id)
+                & (DBUserTenant.tenant_id == tenant_id),
+            )
+            .where(
+                DBUserProject.user_id == user_id,
+                DBUserProject.project_id == project_id,
+            )
+            .limit(1)
+        )
+    )
+    if membership_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=403, detail=_("Project access required"))
+
+    try:
+        container = get_container_with_db(request, db)
+        pattern_repo = container.workflow_pattern_repository()
+        all_patterns = await pattern_repo.list_by_tenant(tenant_id)
+        if min_success_rate is not None:
+            all_patterns = [
+                pattern for pattern in all_patterns if pattern.success_rate >= min_success_rate
+            ]
+        total = len(all_patterns)
+        start_idx = (page - 1) * page_size
+        paginated_patterns = all_patterns[start_idx : start_idx + page_size]
+        return ProjectPatternsListResponse(
+            project_id=project_id,
+            tenant_id=tenant_id,
+            patterns=[_pattern_response(pattern) for pattern in paginated_patterns],
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Error listing tenant-shared patterns for project")
+        raise HTTPException(status_code=500, detail=_("Failed to list patterns")) from exc
+
+
+def _pattern_response(pattern: Any) -> WorkflowPatternResponse:  # noqa: ANN401
+    return WorkflowPatternResponse(
+        id=pattern.id,
+        tenant_id=pattern.tenant_id,
+        name=pattern.name,
+        description=pattern.description,
+        steps=[
+            PatternStepResponse(
+                step_number=step.step_number,
+                description=step.description,
+                tool_name=step.tool_name,
+                expected_output_format=step.expected_output_format,
+                similarity_threshold=step.similarity_threshold,
+                tool_parameters=step.tool_parameters,
+            )
+            for step in pattern.steps
+        ],
+        success_rate=pattern.success_rate,
+        usage_count=pattern.usage_count,
+        created_at=pattern.created_at.isoformat(),
+        updated_at=pattern.updated_at.isoformat(),
+        metadata=pattern.metadata,
+    )
 
 
 @router.get("/workflows/patterns", response_model=PatternsListResponse)

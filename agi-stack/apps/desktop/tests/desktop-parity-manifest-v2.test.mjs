@@ -24,6 +24,10 @@ function readJson(relativePath) {
 test("parity manifest v2 separates desired capability contracts from evidence runs", () => {
   const schema = readJson("parity-manifest.v2.schema.json");
   const manifest = readJson("parity-manifest.v2.json");
+  const fragmentRegistry = readJson("parity-capability-fragments.v2.json");
+  const capabilityIds = fragmentRegistry.fragments.flatMap((fileName) =>
+    readJson(fileName).capabilities.map((capability) => capability.id),
+  );
 
   assert.deepEqual(validateJsonSchema(schema, manifest), []);
   assert.equal(manifest.schema_version, "2.0.0");
@@ -33,7 +37,10 @@ test("parity manifest v2 separates desired capability contracts from evidence ru
     manifest.evidence_run_schema,
     /^\.\/evidence-run\.v1\.schema\.json$/,
   );
-  assert.equal(manifest.capabilities.length >= 51, true);
+  assert.deepEqual(
+    manifest.capabilities.map((capability) => capability.id),
+    capabilityIds,
+  );
 });
 
 test("every capability declares all product surfaces and auditable authority metadata", () => {
@@ -941,11 +948,11 @@ test("agent ecosystem capabilities do not overstate missing controls or Local au
   assert.equal(evolution.surfaces.desktop_local.availability, "unavailable");
   assert.equal(
     evolution.surfaces.desktop_local.reason_code,
-    "local_skill_evolution_not_applicable",
+    "local_skill_evolution_authority_unavailable",
   );
   assert.equal(
     evolution.surfaces.desktop_local.intentional_deviation.includes(
-      "legacy contract mismatch",
+      "native evolution authority",
     ),
     true,
   );

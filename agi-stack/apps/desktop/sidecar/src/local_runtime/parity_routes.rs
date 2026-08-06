@@ -8,6 +8,9 @@ mod activity_read_state_tests;
 mod artifact_content;
 #[cfg(test)]
 mod artifact_content_tests;
+mod conversation_title;
+#[cfg(test)]
+mod conversation_title_tests;
 pub(super) mod managed_resources;
 #[cfg(test)]
 mod managed_resources_tests;
@@ -45,6 +48,7 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
     Router::new()
         .merge(artifact_content::router())
         .merge(activity_read_state::router())
+        .merge(conversation_title::router())
         .merge(mcp_apps::router())
         .merge(project_overview::router())
         .merge(tenant_overview::router())
@@ -55,7 +59,63 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
         .merge(workspace_roster::router())
         .merge(managed_resources::router())
         .route(
+            "/api/v1/agent/workflows/patterns",
+            get(managed_read_unavailable),
+        )
+        .route(
+            "/api/v1/agent/workflows/patterns/:pattern_id",
+            delete(managed_mutation_unavailable),
+        )
+        .route(
+            "/api/v1/genes/",
+            get(managed_read_unavailable).post(managed_mutation_unavailable),
+        )
+        .route("/api/v1/genes/genomes", get(managed_read_unavailable))
+        .route("/api/v1/genes/evolution", get(managed_read_unavailable))
+        .route(
+            "/api/v1/genes/instances/:instance_id/install",
+            post(managed_mutation_unavailable),
+        )
+        .route(
+            "/api/v1/genes/:gene_id",
+            put(managed_mutation_unavailable).delete(managed_mutation_unavailable),
+        )
+        .route(
+            "/api/v1/genes/:gene_id/publish",
+            post(managed_mutation_unavailable),
+        )
+        .route(
+            "/api/v1/genes/:gene_id/unpublish",
+            post(managed_mutation_unavailable),
+        )
+        .route(
+            "/api/v1/genes/:gene_id/ratings",
+            post(managed_mutation_unavailable),
+        )
+        .route(
+            "/api/v1/genes/:gene_id/reviews",
+            get(managed_read_unavailable).post(managed_mutation_unavailable),
+        )
+        .route(
+            "/api/v1/genes/:gene_id/reviews/:review_id",
+            delete(managed_mutation_unavailable),
+        )
+        .route("/api/v1/events", get(managed_read_unavailable))
+        .route("/api/v1/events/types", get(managed_read_unavailable))
+        .route(
             "/api/v1/skills/import/zip",
+            post(managed_mutation_unavailable),
+        )
+        .route(
+            "/api/v1/skills/evolution/overview",
+            get(managed_read_unavailable),
+        )
+        .route(
+            "/api/v1/skills/evolution/config",
+            get(managed_read_unavailable).put(managed_mutation_unavailable),
+        )
+        .route(
+            "/api/v1/skills/evolution/run",
             post(managed_mutation_unavailable),
         )
         .route(
@@ -149,6 +209,27 @@ async fn managed_read_unavailable(
 }
 
 fn managed_unavailability(path: &str) -> (&'static str, &'static str, &'static str) {
+    if path.starts_with("/api/v1/agent/workflows/patterns") {
+        return (
+            "tenant_workflow_patterns",
+            "unavailable",
+            "local_workflow_patterns_authority_unavailable",
+        );
+    }
+    if path.starts_with("/api/v1/genes/") {
+        return (
+            "tenant_gene_market",
+            "unavailable",
+            "local_gene_market_authority_unavailable",
+        );
+    }
+    if path == "/api/v1/events" || path == "/api/v1/events/types" {
+        return (
+            "tenant_event_ledger",
+            "unavailable",
+            "local_event_ledger_authority_unavailable",
+        );
+    }
     if path.starts_with("/api/v1/channels/") {
         return (
             "managed_plugins",
@@ -173,8 +254,8 @@ fn managed_unavailability(path: &str) -> (&'static str, &'static str, &'static s
     if path.contains("/evolution") {
         return (
             "managed_skills",
-            "not_applicable",
-            "local_skill_evolution_not_applicable",
+            "unavailable",
+            "local_skill_evolution_authority_unavailable",
         );
     }
     if path.contains("/versions") || path.ends_with("/rollback") || path.ends_with("/export") {

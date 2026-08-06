@@ -12,6 +12,17 @@ export type DesktopRouteLocalPolicy =
 
 export type DesktopRouteLoader<TModule = unknown> = () => Promise<TModule>;
 
+export type DesktopRouteStructuralReadinessReasonCode =
+  | 'desktop_route_structural_loader_missing'
+  | 'desktop_route_structural_app_binding_missing';
+
+export type DesktopRouteStructuralReadiness =
+  | Readonly<{ status: 'ready' }>
+  | Readonly<{
+      status: 'unavailable';
+      reasonCode: DesktopRouteStructuralReadinessReasonCode;
+    }>;
+
 export type DesktopRouteDefinition<TModule = unknown> = Readonly<{
   id: string;
   path: string;
@@ -21,6 +32,7 @@ export type DesktopRouteDefinition<TModule = unknown> = Readonly<{
   requiredPermission: readonly (readonly string[])[];
   localPolicy: DesktopRouteLocalPolicy;
   loader: DesktopRouteLoader<TModule>;
+  structuralReadiness?: DesktopRouteStructuralReadiness;
 }>;
 
 export type DesktopRouteContext = Readonly<{
@@ -372,6 +384,9 @@ function parseDesktopRouteLocation(location: string): ParsedLocation {
 function freezeDefinition<TModule>(
   definition: DesktopRouteDefinition<TModule>,
 ): DesktopRouteDefinition<TModule> {
+  const structuralReadiness = freezeStructuralReadiness(
+    definition.structuralReadiness,
+  );
   return Object.freeze({
     id: definition.id,
     path: definition.path,
@@ -385,7 +400,31 @@ function freezeDefinition<TModule>(
     ),
     localPolicy: definition.localPolicy,
     loader: definition.loader,
+    ...(structuralReadiness === undefined ? {} : { structuralReadiness }),
   });
+}
+
+function freezeStructuralReadiness(
+  input: DesktopRouteStructuralReadiness | undefined,
+): DesktopRouteStructuralReadiness | undefined {
+  if (input === undefined) return undefined;
+  if (typeof input !== 'object' || input === null) {
+    throw new Error('unsupported route structural readiness');
+  }
+  if (input.status === 'ready') {
+    return Object.freeze({ status: 'ready' });
+  }
+  if (
+    input.status === 'unavailable' &&
+    (input.reasonCode === 'desktop_route_structural_loader_missing' ||
+      input.reasonCode === 'desktop_route_structural_app_binding_missing')
+  ) {
+    return Object.freeze({
+      status: 'unavailable',
+      reasonCode: input.reasonCode,
+    });
+  }
+  throw new Error('unsupported route structural readiness');
 }
 
 function scopeForParameter(

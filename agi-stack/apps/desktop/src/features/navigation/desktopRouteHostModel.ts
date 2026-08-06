@@ -142,8 +142,41 @@ export function evaluateDesktopRouteAccess<TModule>({
   ) {
     return unavailable('desktop_route_local_blocked_by_web_contract', null);
   }
+  if (match.definition.structuralReadiness?.status === 'unavailable') {
+    return unavailable(match.definition.structuralReadiness.reasonCode, null);
+  }
   if (!capability) {
     return unavailable('desktop_route_capability_missing', null);
+  }
+  if (isActiveCapability(capability) && capability.provenance !== 'observed') {
+    return unavailable(
+      'desktop_route_capability_authority_unobserved',
+      capability,
+    );
+  }
+  if (
+    isActiveCapability(capability) &&
+    capability.authority_source !== authoritySourceForMode(mode)
+  ) {
+    return unavailable(
+      'desktop_route_capability_authority_source_mismatch',
+      capability,
+    );
+  }
+  if (
+    isActiveCapability(capability) &&
+    !isActiveAuthorityRevision(capability.authority_revision)
+  ) {
+    return unavailable(
+      'desktop_route_capability_authority_revision_invalid',
+      capability,
+    );
+  }
+  if (
+    isActiveCapability(capability) &&
+    capability.allowed_actions.length === 0
+  ) {
+    return unavailable('desktop_route_capability_actions_missing', capability);
   }
   if (!capabilityScopeMatches(match.context, capability)) {
     return unavailable('desktop_route_capability_scope_mismatch', capability);
@@ -167,6 +200,25 @@ export function evaluateDesktopRouteAccess<TModule>({
   });
 }
 
+function isActiveCapability(
+  capability: DesktopCapabilityAvailability,
+): boolean {
+  return (
+    capability.availability === 'available' ||
+    capability.availability === 'degraded'
+  );
+}
+
+function authoritySourceForMode(
+  mode: DesktopRouteRuntimeMode,
+): 'cloud_service' | 'sidecar' {
+  return mode === 'local' ? 'sidecar' : 'cloud_service';
+}
+
+function isActiveAuthorityRevision(input: number | null): input is number {
+  return input !== null && Number.isSafeInteger(input) && input >= 0;
+}
+
 export function desktopRouteScopeKey(context: DesktopRouteContext): string {
   return ROUTE_CONTEXT_KEYS.flatMap((key) => {
     const value = context[key];
@@ -178,12 +230,13 @@ function capabilityScopeMatches(
   context: DesktopRouteContext,
   capability: DesktopCapabilityAvailability,
 ): boolean {
+  const active = isActiveCapability(capability);
   return ROUTE_CONTEXT_KEYS.every((contextKey) => {
     const routeValue = context[contextKey];
     const capabilityValue = capability.scope[CAPABILITY_SCOPE_KEYS[contextKey]];
     return (
       routeValue === undefined ||
-      capabilityValue === null ||
+      (!active && capabilityValue === null) ||
       routeValue === capabilityValue
     );
   });

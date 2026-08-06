@@ -199,7 +199,7 @@ const projectScope = {
   instance_id: null,
 };
 
-test('Cloud workbench reads Project Overview authority from the scoped production adapter', async () => {
+test('Cloud workbench keeps unversioned Overview probes unavailable', async () => {
   const signal = new AbortController().signal;
   const calls = [];
   await withFetch(async (input, init) => {
@@ -217,20 +217,22 @@ test('Cloud workbench reads Project Overview authority from the scoped productio
   }, async () => {
     const snapshot = await createClient(cloudConfig()).loadSnapshot(signal);
     assert.deepEqual(snapshot.capabilities['project-project-overview'], {
-      availability: 'available',
-      reason_code: null,
+      availability: 'unavailable',
+      reason_code: 'capability_authority_revision_unavailable',
       service_version: '0.1.0',
       contract_version: '3.0.0',
-      allowed_actions: ['view', 'inspect-stats'],
+      allowed_actions: [],
       scope: projectScope,
       authority_revision: null,
+      authority_source: 'cloud_service',
+      provenance: 'observed',
     });
     assert.deepEqual(snapshot.capabilities['tenant-tenant-overview'], {
-      availability: 'available',
-      reason_code: null,
+      availability: 'unavailable',
+      reason_code: 'capability_authority_revision_unavailable',
       service_version: '0.1.0',
       contract_version: '3.0.0',
-      allowed_actions: ['view'],
+      allowed_actions: [],
       scope: {
         tenant_id: 'tenant-1',
         project_id: null,
@@ -238,6 +240,8 @@ test('Cloud workbench reads Project Overview authority from the scoped productio
         instance_id: null,
       },
       authority_revision: null,
+      authority_source: 'cloud_service',
+      provenance: 'observed',
     });
   });
 
@@ -285,6 +289,8 @@ test('Cloud workbench does not advertise inspect-stats when stats authority fail
       allowed_actions: [],
       scope: projectScope,
       authority_revision: null,
+      authority_source: 'cloud_service',
+      provenance: 'observed',
     });
   });
 });
@@ -323,6 +329,8 @@ test('Cloud Project Overview failures stay structured and never infer reason fro
         allowed_actions: [],
         scope: projectScope,
         authority_revision: null,
+        authority_source: 'cloud_service',
+        provenance: 'observed',
       });
     });
   }
@@ -350,6 +358,8 @@ test('Local workbench preserves degraded Project Overview authority metadata', a
       allowed_actions: ['view'],
       scope: projectScope,
       authority_revision: 11,
+      authority_source: 'sidecar',
+      provenance: 'observed',
     });
     assert.deepEqual(snapshot.capabilities['tenant-tenant-overview'], {
       availability: 'degraded',
@@ -364,6 +374,8 @@ test('Local workbench preserves degraded Project Overview authority metadata', a
         instance_id: null,
       },
       authority_revision: 13,
+      authority_source: 'sidecar',
+      provenance: 'observed',
     });
   });
 

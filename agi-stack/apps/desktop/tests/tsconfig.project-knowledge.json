@@ -1,0 +1,17 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "ignoreDeprecations": "6.0",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "noEmit": false,
+    "outDir": "/tmp/agistack-project-knowledge-test-dist",
+    "rootDir": "..",
+    "types": ["node"]
+  },
+  "include": [
+    "css.d.ts",
+    "../src/features/project-knowledge/**/*.ts",
+    "../src/features/project-knowledge/**/*.tsx"
+  ]
+}

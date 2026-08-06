@@ -2,6 +2,126 @@
   "contract_version": "desktop-local-route-parity-v1",
   "routes": [
     {
+      "area": "agent_workspace_bootstrap",
+      "method": "GET",
+      "uri": "/api/v1/workspace-context",
+      "source": "client",
+      "source_marker": "/api/v1/workspace-context",
+      "authority": "local_session_scope",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "agent_workspace_bootstrap",
+      "method": "GET",
+      "uri": "/api/v1/tenants?page=1&page_size=100",
+      "source": "client",
+      "source_marker": "/api/v1/tenants",
+      "authority": "local_identity_catalog",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "agent_workspace_bootstrap",
+      "method": "GET",
+      "uri": "/api/v1/projects?tenant_id=local&page=1&page_size=100",
+      "source": "client",
+      "source_marker": "/api/v1/projects",
+      "authority": "local_identity_catalog",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "agent_workspace_conversations",
+      "method": "GET",
+      "uri": "/api/v1/agent/conversations?project_id=local-project&workspace_id=local-workspace&status=active&limit=1&offset=0",
+      "source": "client",
+      "source_marker": "/api/v1/agent/conversations?${conversationParameters.toString()}",
+      "authority": "local_conversation_store",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "agent_workspace_conversations",
+      "method": "GET",
+      "uri": "/api/v1/agent/conversations/route-parity-artifact-conversation/session?tenant_id=local&project_id=local-project&workspace_id=local-workspace",
+      "source": "client",
+      "source_marker": "${conversationPath}/session?${sessionParameters.toString()}",
+      "authority": "local_session_projection",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "agent_workspace_conversations",
+      "method": "GET",
+      "uri": "/api/v1/agent/conversations/route-parity-artifact-conversation/messages?project_id=local-project&limit=50",
+      "source": "client",
+      "source_marker": "${conversationPath}/messages?project_id=${encodeURIComponent(scope.projectId)}",
+      "authority": "local_timeline_store",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "agent_workspace_runs",
+      "method": "GET",
+      "uri": "/api/v1/agent/conversations/route-parity-artifact-conversation/runs",
+      "source": "client",
+      "source_marker": "${conversationPath}/runs",
+      "authority": "local_run_store",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "agent_workspace_sandbox",
+      "method": "GET",
+      "uri": "/api/v1/projects/local-project/sandbox",
+      "source": "client",
+      "source_marker": "/api/v1/projects/${encodedProject}/sandbox",
+      "authority": "local_sandbox",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "agent_workspace_conversations",
+      "method": "PATCH",
+      "uri": "/api/v1/agent/conversations/route-parity-artifact-conversation/mode?project_id=local-project",
+      "source": "client",
+      "source_marker": ")}/mode?project_id=${encodeURIComponent(requiredProjectId)}",
+      "authority": "local_conversation_store",
+      "expected_status": 200,
+      "body": {
+        "capability_mode": "code"
+      }
+    },
+    {
+      "area": "agent_workspace_conversations",
+      "method": "PATCH",
+      "uri": "/api/v1/agent/conversations/route-parity-artifact-conversation/title?project_id=local-project",
+      "source": "client",
+      "source_marker": ")}/title?project_id=${encodeURIComponent(requiredProjectId)}",
+      "authority": "local_conversation_store",
+      "expected_status": 200,
+      "body": {
+        "title": "Route parity renamed conversation"
+      }
+    },
+    {
+      "area": "agent_workspace_conversations",
+      "method": "POST",
+      "uri": "/api/v1/agent/conversations",
+      "source": "client",
+      "source_marker": "this.request<unknown>('/api/v1/agent/conversations'",
+      "authority": "local_conversation_store",
+      "expected_status": 200,
+      "body": {
+        "project_id": "local-project",
+        "title": "Route parity conversation",
+        "agent_config": {
+          "capability_mode": "code"
+        }
+      }
+    },
+    {
       "area": "artifacts",
       "method": "GET",
       "uri": "/api/v1/artifacts/route-parity-artifact-conversation:route-parity/content",
@@ -280,6 +400,16 @@
     },
     {
       "area": "skills",
+      "method": "GET",
+      "uri": "/api/v1/skills/parity-skill?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/skills/${encodeURIComponent(skillId)}?${params.toString()}",
+      "authority": "local_registry",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "skills",
       "method": "PATCH",
       "uri": "/api/v1/skills/parity-skill/status?status=disabled&tenant_id=local",
       "source": "client",
@@ -442,6 +572,8 @@
       "source": "client",
       "source_marker": "/evolution?${params.toString()}",
       "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_skill_evolution_authority_unavailable",
       "body": {}
     },
     {
@@ -451,6 +583,8 @@
       "source": "client",
       "source_marker": "/evolution/run?${params.toString()}",
       "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_skill_evolution_authority_unavailable",
       "body": {}
     },
     {
@@ -460,6 +594,19 @@
       "source": "client",
       "source_marker": "/api/v1/skills/evolution/jobs/${encodeURIComponent(jobId)}/${action}?${params.toString()}",
       "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_skill_evolution_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "skills",
+      "method": "POST",
+      "uri": "/api/v1/skills/evolution/jobs/job-1/reject?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/skills/evolution/jobs/${encodeURIComponent(jobId)}/${action}?${params.toString()}",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_skill_evolution_authority_unavailable",
       "body": {}
     },
     {
@@ -607,6 +754,54 @@
       "body": {}
     },
     {
+      "area": "agent_bindings",
+      "method": "GET",
+      "uri": "/api/v1/agent/bindings?tenant_id=local",
+      "source": "client",
+      "source_marker": "return `/api/v1/agent/bindings?${params}`",
+      "authority": "local_agent_bindings",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "agent_bindings",
+      "method": "POST",
+      "uri": "/api/v1/agent/bindings?tenant_id=local",
+      "source": "client",
+      "source_marker": "tenantMutationPath('/api/v1/agent/bindings', scope)",
+      "authority": "agent_bindings_unavailable",
+      "body": {}
+    },
+    {
+      "area": "agent_bindings",
+      "method": "DELETE",
+      "uri": "/api/v1/agent/bindings/binding-1?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/agent/bindings/${encodeURIComponent(bindingId)}",
+      "authority": "agent_bindings_unavailable",
+      "body": {}
+    },
+    {
+      "area": "agent_bindings",
+      "method": "PATCH",
+      "uri": "/api/v1/agent/bindings/binding-1/enabled?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/agent/bindings/${encodeURIComponent(bindingId)}/enabled",
+      "authority": "agent_bindings_unavailable",
+      "body": {
+        "enabled": false
+      }
+    },
+    {
+      "area": "agent_bindings",
+      "method": "POST",
+      "uri": "/api/v1/agent/bindings/test?tenant_id=local",
+      "source": "client",
+      "source_marker": "tenantMutationPath('/api/v1/agent/bindings/test', scope)",
+      "authority": "agent_bindings_unavailable",
+      "body": {}
+    },
+    {
       "area": "agents",
       "method": "GET",
       "uri": "/api/v1/agent/definitions?tenant_id=local&project_id=local-project",
@@ -637,6 +832,16 @@
         },
         "vault_refs": []
       }
+    },
+    {
+      "area": "agents",
+      "method": "GET",
+      "uri": "/api/v1/agent/definitions/parity-agent?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/agent/definitions/${encodeURIComponent(definitionId)}${",
+      "authority": "local_registry",
+      "expected_status": 200,
+      "body": {}
     },
     {
       "area": "agents",
@@ -856,6 +1061,358 @@
       }
     },
     {
+      "area": "auth",
+      "method": "GET",
+      "uri": "/api/v1/auth/me",
+      "source": "client",
+      "source_marker": "'/api/v1/auth/me'",
+      "authority": "local_session",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "auth",
+      "method": "POST",
+      "uri": "/api/v1/auth/local-session",
+      "source": "client",
+      "source_marker": "'/api/v1/auth/local-session'",
+      "authority": "local_session",
+      "expected_status": 200,
+      "body": {
+        "trusted_device": true
+      }
+    },
+    {
+      "area": "auth",
+      "method": "POST",
+      "uri": "/api/v1/auth/local-session/resume",
+      "source": "client",
+      "source_marker": "'/api/v1/auth/local-session/resume'",
+      "authority": "local_session",
+      "expected_status": 200,
+      "body": {
+        "session_id": "route-parity-session"
+      }
+    },
+    {
+      "area": "my_work",
+      "method": "GET",
+      "uri": "/api/v1/projects/local-project/my-work",
+      "source": "client",
+      "source_marker": "/my-work`",
+      "authority": "local_run_ledger",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "tenant_analytics",
+      "method": "GET",
+      "uri": "/api/v1/tenants/local/analytics?period=30d",
+      "source": "client",
+      "source_marker": "/analytics?${query}`",
+      "authority": "local_tenant_analytics",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "workspace_plan",
+      "method": "GET",
+      "uri": "/api/v1/workspaces/local-workspace/plan",
+      "source": "client",
+      "source_marker": "this.workspaceRoot('/plan')",
+      "authority": "local_plan_ledger",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "providers",
+      "method": "GET",
+      "uri": "/api/v1/llm-providers/?include_inactive=true",
+      "source": "client",
+      "source_marker": "'/api/v1/llm-providers/?include_inactive=true'",
+      "authority": "local_provider_registry",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "providers",
+      "method": "GET",
+      "uri": "/api/v1/llm-providers/types",
+      "source": "client",
+      "source_marker": "'/api/v1/llm-providers/types'",
+      "authority": "local_provider_registry",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "providers",
+      "method": "POST",
+      "uri": "/api/v1/llm-providers/",
+      "source": "client",
+      "source_marker": "this.request<unknown>('/api/v1/llm-providers/'",
+      "authority": "local_provider_registry",
+      "expected_status": 200,
+      "body": {
+        "name": "Route parity provider",
+        "provider_type": "openai_compatible",
+        "base_url": "http://127.0.0.1:9",
+        "auth_method": "none",
+        "llm_model": "route-parity-model",
+        "allowed_models": ["route-parity-model"],
+        "is_active": false
+      }
+    },
+    {
+      "area": "providers",
+      "method": "PUT",
+      "uri": "/api/v1/llm-providers/local-runtime",
+      "source": "client",
+      "source_marker": "/api/v1/llm-providers/${encodeURIComponent(providerId)}",
+      "authority": "local_provider_registry",
+      "expected_status": 200,
+      "body": {
+        "name": "Route parity runtime provider",
+        "provider_type": "openai_compatible",
+        "base_url": "http://127.0.0.1:9",
+        "auth_method": "none",
+        "llm_model": "route-parity-model",
+        "allowed_models": ["route-parity-model"],
+        "is_active": false,
+        "expected_revision": 0
+      }
+    },
+    {
+      "area": "providers",
+      "method": "POST",
+      "uri": "/api/v1/llm-providers/local-runtime/health-check",
+      "source": "client",
+      "source_marker": "/api/v1/llm-providers/${encodedProviderId}/health-check",
+      "authority": "local_provider_registry",
+      "expected_status": 200,
+      "body": {
+        "expected_revision": 1
+      }
+    },
+    {
+      "area": "providers",
+      "method": "POST",
+      "uri": "/api/v1/llm-providers/test-connection",
+      "source": "client",
+      "source_marker": "'/api/v1/llm-providers/test-connection'",
+      "authority": "local_provider_registry",
+      "expected_status": 200,
+      "body": {
+        "name": "Route parity draft",
+        "provider_type": "openai",
+        "base_url": "https://example.invalid/v1",
+        "auth_method": "api_key",
+        "is_active": true
+      }
+    },
+    {
+      "area": "providers",
+      "method": "GET",
+      "uri": "/api/v1/llm-providers/local-runtime/usage",
+      "source": "client",
+      "source_marker": "/api/v1/llm-providers/${encodeURIComponent(normalizedProviderId)}/usage",
+      "authority": "local_provider_registry",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "providers",
+      "method": "GET",
+      "uri": "/api/v1/llm-providers/routing-policy?project_id=local-project&workspace_id=local-workspace",
+      "source": "client",
+      "source_marker": "/api/v1/llm-providers/routing-policy?${params.toString()}",
+      "authority": "local_provider_registry",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "providers",
+      "method": "PUT",
+      "uri": "/api/v1/llm-providers/routing-policy",
+      "source": "client",
+      "source_marker": "'/api/v1/llm-providers/routing-policy'",
+      "authority": "local_provider_registry",
+      "expected_status": 422,
+      "body": {
+        "project_id": "local-project",
+        "workspace_id": "local-workspace",
+        "expected_revision": 0,
+        "roles": {
+          "default": null,
+          "fast": null,
+          "coding": null,
+          "vision": null
+        },
+        "fallbacks": []
+      }
+    },
+    {
+      "area": "providers",
+      "method": "GET",
+      "uri": "/api/v1/llm-providers/models/openai",
+      "source": "client",
+      "source_marker": "/api/v1/llm-providers/models/${encodeURIComponent(normalizedProviderType)}",
+      "authority": "local_provider_registry",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "providers",
+      "method": "POST",
+      "uri": "/api/v1/llm-providers/local-runtime/models/discover",
+      "source": "client",
+      "source_marker": "/api/v1/llm-providers/${encodeURIComponent(normalizedProviderId)}/models/discover",
+      "authority": "local_provider_registry",
+      "body": {
+        "expected_revision": 1
+      }
+    },
+    {
+      "area": "automations",
+      "method": "GET",
+      "uri": "/api/v1/projects/local-project/cron-jobs?include_disabled=true&limit=100&offset=0",
+      "source": "client",
+      "source_marker": "/cron-jobs?${params.toString()}",
+      "authority": "local_automation",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "automations",
+      "method": "GET",
+      "uri": "/api/v1/projects/local-project/cron-jobs/capabilities?workspace_id=local-workspace",
+      "source": "client",
+      "source_marker": "/cron-jobs/capabilities${query}",
+      "authority": "local_automation",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "automations",
+      "method": "POST",
+      "uri": "/api/v1/projects/local-project/cron-jobs",
+      "source": "client",
+      "source_marker": "/cron-jobs`",
+      "authority": "local_automation",
+      "expected_status": 201,
+      "body": {
+        "idempotency_key": "route-parity-automation-create",
+        "name": "Route parity automation",
+        "description": "Executable route parity fixture",
+        "enabled": true,
+        "delete_after_run": false,
+        "schedule": {
+          "kind": "cron",
+          "config": {
+            "expression": "0 9 * * 1-5"
+          }
+        },
+        "payload": {
+          "kind": "agent_turn",
+          "config": {
+            "message": "Exercise route parity"
+          }
+        },
+        "delivery": {
+          "kind": "announce",
+          "config": {}
+        },
+        "conversation_mode": "fresh",
+        "timezone": "Asia/Shanghai",
+        "stagger_seconds": 0,
+        "timeout_seconds": 300,
+        "max_retries": 0
+      }
+    },
+    {
+      "area": "automations",
+      "method": "GET",
+      "uri": "/api/v1/projects/local-project/cron-jobs/route-parity-automation",
+      "source": "client",
+      "source_marker": "/cron-jobs/${encodeURIComponent(",
+      "authority": "local_automation",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "automations",
+      "method": "PATCH",
+      "uri": "/api/v1/projects/local-project/cron-jobs/route-parity-automation",
+      "source": "client",
+      "source_marker": "/cron-jobs/${encodeURIComponent(",
+      "authority": "local_automation",
+      "expected_status": 200,
+      "body": {
+        "idempotency_key": "route-parity-automation-update",
+        "expected_revision": 1,
+        "name": "Updated route parity automation"
+      }
+    },
+    {
+      "area": "automations",
+      "method": "POST",
+      "uri": "/api/v1/projects/local-project/cron-jobs/route-parity-automation/toggle",
+      "source": "client",
+      "source_marker": ")}/toggle`",
+      "authority": "local_automation",
+      "expected_status": 200,
+      "body": {
+        "idempotency_key": "route-parity-automation-toggle",
+        "expected_revision": 2,
+        "enabled": false
+      }
+    },
+    {
+      "area": "automations",
+      "method": "POST",
+      "uri": "/api/v1/projects/local-project/cron-jobs/route-parity-automation/run",
+      "source": "client",
+      "source_marker": ")}/cron-jobs/${encodeURIComponent(resolvedAutomationId)}/run`",
+      "authority": "local_automation",
+      "body": {
+        "contract_version": 2,
+        "idempotency_key": "route-parity-automation-run",
+        "expected_revision": 3
+      }
+    },
+    {
+      "area": "automations",
+      "method": "GET",
+      "uri": "/api/v1/projects/local-project/cron-jobs/route-parity-automation/runs?limit=50&offset=0",
+      "source": "client",
+      "source_marker": ")}/runs?${params.toString()}",
+      "authority": "local_automation",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
+      "area": "automations",
+      "method": "DELETE",
+      "uri": "/api/v1/projects/local-project/cron-jobs/route-parity-automation",
+      "source": "client",
+      "source_marker": "/cron-jobs/${encodeURIComponent(",
+      "authority": "local_automation",
+      "expected_status": 204,
+      "body": {
+        "idempotency_key": "route-parity-automation-delete",
+        "expected_revision": 3
+      }
+    },
+    {
+      "area": "mcp_apps",
+      "method": "GET",
+      "uri": "/api/v1/mcp?project_id=local-project",
+      "source": "client",
+      "source_marker": "/api/v1/mcp?${params.toString()}",
+      "authority": "local_mcp_supervisor",
+      "expected_status": 200,
+      "body": {}
+    },
+    {
       "area": "mcp_apps",
       "method": "GET",
       "uri": "/api/v1/mcp/apps?project_id=local-project",
@@ -1027,6 +1584,784 @@
       "source_marker": "/sandbox/files/download?${query}",
       "authority": "native_workspace",
       "body": {}
+    },
+    {
+      "area": "tenant_patterns",
+      "method": "GET",
+      "uri": "/api/v1/agent/workflows/patterns?tenant_id=local&page=1&page_size=50",
+      "source": "client",
+      "source_marker": "/api/v1/agent/workflows/patterns?${params.toString()}",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_workflow_patterns_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "tenant_patterns",
+      "method": "DELETE",
+      "uri": "/api/v1/agent/workflows/patterns/route-parity-pattern?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/agent/workflows/patterns/${encodeURIComponent(",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_workflow_patterns_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "tenant_genes",
+      "method": "GET",
+      "uri": "/api/v1/genes/?tenant_id=local&page=1&page_size=20",
+      "source": "client",
+      "source_marker": "/api/v1/genes/?${params.toString()}",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_gene_market_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "tenant_genes",
+      "method": "POST",
+      "uri": "/api/v1/genes/?tenant_id=local",
+      "source": "client",
+      "source_marker": "withTenantQuery('/api/v1/genes/', currentScope)",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_gene_market_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "tenant_genes",
+      "method": "PUT",
+      "uri": "/api/v1/genes/route-parity-gene?tenant_id=local",
+      "source": "client",
+      "source_marker": "withTenantQuery(geneResourcePath(geneId), currentScope)",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_gene_market_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "tenant_genes",
+      "method": "DELETE",
+      "uri": "/api/v1/genes/route-parity-gene?tenant_id=local",
+      "source": "client",
+      "source_marker": "withTenantQuery(geneResourcePath(geneId), currentScope)",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_gene_market_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "tenant_genes",
+      "method": "POST",
+      "uri": "/api/v1/genes/route-parity-gene/publish?tenant_id=local",
+      "source": "client",
+      "source_marker": "${geneResourcePath(geneId)}/publish",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_gene_market_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "tenant_genes",
+      "method": "POST",
+      "uri": "/api/v1/genes/route-parity-gene/unpublish?tenant_id=local",
+      "source": "client",
+      "source_marker": "${geneResourcePath(geneId)}/unpublish",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_gene_market_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "tenant_genes",
+      "method": "POST",
+      "uri": "/api/v1/genes/instances/route-parity-instance/install?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/genes/instances/${encodeURIComponent(",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_gene_market_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "tenant_genes",
+      "method": "POST",
+      "uri": "/api/v1/genes/route-parity-gene/ratings?tenant_id=local",
+      "source": "client",
+      "source_marker": "${geneResourcePath(geneId)}/ratings",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_gene_market_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "tenant_genes",
+      "method": "GET",
+      "uri": "/api/v1/genes/genomes?tenant_id=local&page=1&page_size=20",
+      "source": "client",
+      "source_marker": "/api/v1/genes/genomes?${params.toString()}",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_gene_market_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "tenant_genes",
+      "method": "GET",
+      "uri": "/api/v1/genes/evolution?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/genes/evolution?tenant_id=${encodeURIComponent(currentScope.tenantId)}",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_gene_market_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "tenant_genes",
+      "method": "GET",
+      "uri": "/api/v1/genes/route-parity-gene/reviews?tenant_id=local&page=1&page_size=50",
+      "source": "client",
+      "source_marker": "${geneResourcePath(geneId)}/reviews",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_gene_market_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "tenant_genes",
+      "method": "POST",
+      "uri": "/api/v1/genes/route-parity-gene/reviews?tenant_id=local",
+      "source": "client",
+      "source_marker": "${geneResourcePath(geneId)}/reviews",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_gene_market_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "tenant_genes",
+      "method": "DELETE",
+      "uri": "/api/v1/genes/route-parity-gene/reviews/route-parity-review?tenant_id=local",
+      "source": "client",
+      "source_marker": "${geneResourcePath(geneId)}/reviews/${encodeURIComponent(",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_gene_market_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "tenant_events",
+      "method": "GET",
+      "uri": "/api/v1/events?tenant_id=local&page=1&page_size=20",
+      "source": "client",
+      "source_marker": "/api/v1/events?${params.toString()}",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_event_ledger_authority_unavailable",
+      "body": {}
+    },
+    {
+      "area": "tenant_events",
+      "method": "GET",
+      "uri": "/api/v1/events/types?tenant_id=local",
+      "source": "client",
+      "source_marker": "/api/v1/events/types?${new URLSearchParams({ tenant_id: currentScope.tenantId })}",
+      "authority": "structured_unavailable",
+      "expected_availability": "unavailable",
+      "expected_reason_code": "local_event_ledger_authority_unavailable",
+      "body": {}
+    }
+  ],
+  "manifest_pending_routes": [
+    {
+      "method": "DELETE",
+      "path": "/api/v1/agent/conversations/{conversation_id}",
+      "reason_code": "executable_fixture_pending_local_mutation_authority"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/agent/conversations/{conversation_id}/participants/{agent_id}",
+      "reason_code": "executable_fixture_pending_local_roster_authority"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agent/conversations/{conversation_id}/participants",
+      "reason_code": "executable_fixture_pending_local_roster_authority"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agent/runs/{run_id}/changes?expected_revision={run_revision}",
+      "reason_code": "executable_fixture_pending_seeded_run_change_authority"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agent/runs/{run_id}/inputs",
+      "reason_code": "executable_fixture_pending_seeded_run_input_authority"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/attachments?conversation_id={conversation_id}",
+      "reason_code": "executable_fixture_pending_attachment_authority"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/agent/conversations/{conversation_id}/config",
+      "reason_code": "executable_fixture_pending_local_mutation_authority"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/agent/conversations/{conversation_id}/participants/coordinator",
+      "reason_code": "executable_fixture_pending_local_roster_authority"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/conversations/{conversation_id}/participants",
+      "reason_code": "executable_fixture_pending_local_roster_authority"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/hitl/respond",
+      "reason_code": "executable_fixture_pending_seeded_hitl_authority"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/run-inputs/{input_id}/promote-to-plan",
+      "reason_code": "executable_fixture_pending_seeded_run_input_authority"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/runs/{run_id}/inputs",
+      "reason_code": "executable_fixture_pending_seeded_run_input_authority"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/attachments/upload/simple",
+      "reason_code": "executable_fixture_pending_attachment_authority"
+    }
+  ],
+  "router_fixture_not_applicable": [
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/artifact-versions/{artifact_version_id}/deliver",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/artifact-versions/{artifact_version_id}/review",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/conversations/{conversation_id}/messages",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/plan/mode",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agent/plan/mode/{conversation_id}",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agent/plan/tasks/{conversation_id}",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/plans/approve-and-start",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agent/runs/{run_id}",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/runs/{run_id}/cancel",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/runs/{run_id}/fork",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/runs/{run_id}/pause",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/runs/{run_id}/resume",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/runs/{run_id}/review",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agent/templates/{template_id}",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/agent/templates/{template_id}",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agent/ws",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/signout",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/llm-providers/{provider_id}",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/llm-providers/{provider_id}/runtime-selection",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/mcp/{server_id}/health",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/mcp/{server_id}/sync",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/mcp/{server_id}/test",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/mcp/capabilities",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/mcp/create",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/mcp/reconcile/{project_id}",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/mcp/tools/all",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/sandbox",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/sandbox/desktop",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/sandbox/desktop/proxy/",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/sandbox/execute",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/sandbox/proxy-auth-cookie",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/sandbox/terminal",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/sandbox/terminal/proxy/ws",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/skills/evolution/config",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/skills/evolution/config",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/skills/evolution/overview",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/skills/evolution/run",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/subagents/{subagent_id}",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/task-sessions",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agent-policy",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agent-policy",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/messages",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/messages",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/tool-grants",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/tool-grants/{grant_id}",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspace-context/switch",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspaces/{workspace_id}/tasks",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    }
+  ],
+  "catalog_fixture_not_applicable": [
+    {
+      "method": "GET",
+      "path": "/api/v1/artifacts/route-parity-artifact-conversation:route-parity/content",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artifacts/route-parity-artifact-conversation:route-parity/content/bytes",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/artifacts/route-parity-artifact-conversation:route-parity/content",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/local/projects/local-project/workspaces/local-workspace/members?limit=500&offset=0",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/local/projects/local-project/workspaces/local-workspace/agents?active_only=false&limit=500&offset=0",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/search-enhanced/graph-traversal",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/search-enhanced/community",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/skills/import/zip?tenant_id=local",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/channels/tenants/local/plugins/install",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/channels/tenants/local/plugins/reload",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/channels/tenants/local/plugins/local-workspace/uninstall",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/channels/tenants/local/plugins/local-workspace/config-schema",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/channels/tenants/local/plugins/local-workspace/config",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/channels/tenants/local/plugins/local-workspace/config",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/channels/tenants/local/plugins/channel-catalog",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/channels/tenants/local/plugins/channel-catalog/feishu/schema",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/channels/projects/local-project/configs",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/channels/projects/local-project/configs",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/channels/configs/config-1",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/channels/configs/config-1/test",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/channels/configs/config-1",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/acp/tenants/local/external-agents",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agent/templates?tenant_id=local&limit=100&offset=0",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/templates?tenant_id=local",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/agent/templates/parity-template",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/subagents/?tenant_id=local",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/subagents/parity-subagent/enable?enabled=false&tenant_id=local",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/subagents/filesystem/local-worker/import?tenant_id=local&project_id=local-project",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/subagents/parity-subagent?tenant_id=local",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/subagents/parity-subagent?tenant_id=local",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/mcp/apps?project_id=local-project",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/mcp/credentials/provision",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/mcp/apps/app-1/tool-call",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/mcp/tools/call",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/mcp/apps/proxy/tool-call",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/mcp/apps/resources/read",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/mcp/apps/resources/list",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/local-project/sandbox/files?path=%2Fworkspace&limit=20",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/local-project/sandbox/files/content?path=%2Fworkspace%2Froute-parity.txt&max_bytes=1024",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/local-project/sandbox/files/download?path=%2Fworkspace%2Froute-parity.txt",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agent/workflows/patterns?tenant_id=local&page=1&page_size=50",
+      "reason_code": "executable_fixture_native_equivalent_authority_unavailable"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/agent/workflows/patterns/route-parity-pattern?tenant_id=local",
+      "reason_code": "executable_fixture_native_equivalent_authority_unavailable"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/genes/?tenant_id=local&page=1&page_size=20",
+      "reason_code": "executable_fixture_native_equivalent_authority_unavailable"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/genes/?tenant_id=local",
+      "reason_code": "executable_fixture_native_equivalent_authority_unavailable"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/genes/route-parity-gene?tenant_id=local",
+      "reason_code": "executable_fixture_native_equivalent_authority_unavailable"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/genes/route-parity-gene?tenant_id=local",
+      "reason_code": "executable_fixture_native_equivalent_authority_unavailable"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/genes/route-parity-gene/publish?tenant_id=local",
+      "reason_code": "executable_fixture_native_equivalent_authority_unavailable"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/genes/route-parity-gene/unpublish?tenant_id=local",
+      "reason_code": "executable_fixture_native_equivalent_authority_unavailable"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/genes/instances/route-parity-instance/install?tenant_id=local",
+      "reason_code": "executable_fixture_native_equivalent_authority_unavailable"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/genes/route-parity-gene/ratings?tenant_id=local",
+      "reason_code": "executable_fixture_native_equivalent_authority_unavailable"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/genes/genomes?tenant_id=local&page=1&page_size=20",
+      "reason_code": "executable_fixture_native_equivalent_authority_unavailable"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/genes/evolution?tenant_id=local",
+      "reason_code": "executable_fixture_native_equivalent_authority_unavailable"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/genes/route-parity-gene/reviews?tenant_id=local&page=1&page_size=50",
+      "reason_code": "executable_fixture_native_equivalent_authority_unavailable"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/genes/route-parity-gene/reviews?tenant_id=local",
+      "reason_code": "executable_fixture_native_equivalent_authority_unavailable"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/genes/route-parity-gene/reviews/route-parity-review?tenant_id=local",
+      "reason_code": "executable_fixture_native_equivalent_authority_unavailable"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/events?tenant_id=local&page=1&page_size=20",
+      "reason_code": "executable_fixture_native_equivalent_authority_unavailable"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/events/types?tenant_id=local",
+      "reason_code": "executable_fixture_native_equivalent_authority_unavailable"
     }
   ]
 }

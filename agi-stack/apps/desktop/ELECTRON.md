@@ -16,6 +16,28 @@ make -C agi-stack desktop-bundle
 `make -C agi-stack run-desktop-electron` remains only as a compatibility alias for
 `make -C agi-stack run-desktop`.
 
+For native QA that must not read or mutate the normal application vault, create a private
+temporary directory whose basename starts with `agistack-desktop-qa-`, then launch through the
+same canonical target:
+
+```bash
+QA_TEMP_ROOT="${TMPDIR:-/tmp}"
+DESKTOP_QA_PROFILE="$(mktemp -d "${QA_TEMP_ROOT%/}/agistack-desktop-qa-XXXXXX")"
+DESKTOP_QA_WORKSPACE="$(mktemp -d "${QA_TEMP_ROOT%/}/agistack-desktop-qa-workspace-XXXXXX")"
+AGISTACK_DESKTOP_QA_PROFILE_DIR="$DESKTOP_QA_PROFILE" \
+  AGISTACK_WORKSPACE_ROOT="$DESKTOP_QA_WORKSPACE" \
+  make -C agi-stack run-desktop
+```
+
+The main process accepts this override only in an unpackaged build, only beneath the operating
+system temporary directory, and sets it as Electron `userData` before starting the sidecar. While
+the override is active, Electron sends an explicit empty `legacyDataDirectories` collection over
+the private sidecar initialization pipe, so the sidecar neither resolves nor migrates the normal
+`appData/ai.agistack.desktop` vault or runtime databases. Normal launches retain the existing
+one-time legacy migration candidates. The QA harness owns cleanup after Electron and the sidecar
+stop, including the task-owned workspace; never point either variable at a normal user profile,
+an existing vault, or a workspace that the QA run does not own.
+
 Any runtime source remaining under the legacy shell directory is migration residue, not a supported
 runtime or build entry point. The canonical Make targets, CI, icons, and entitlement resources all
 live outside that directory. No clean-checkout build depends on ignored local files under `build/`
@@ -30,6 +52,9 @@ except the sidecar staging directory created by `package:electron`.
   an HMAC challenge. The runtime port and launch token are never passed on the command line.
 - Trusted sessions and Provider API keys are encrypted by the Rust AES-256-GCM application vault
   under the Electron user-data directory.
+- The vault directory, `master.key`, and `records.db` fail closed unless the sidecar can enforce
+  `0700`/`0600` Unix modes or a protected, current-user-only Windows DACL. Vault reopen repairs
+  existing paths, and legacy migration applies the same policy before staged data is renamed.
 - New windows, external navigation, permission requests, and device-authorization URLs are
   constrained by the Electron main process.
 

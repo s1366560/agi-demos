@@ -25,6 +25,13 @@ function send(value) {
 
 input.once('line', (line) => {
   const initialize = JSON.parse(line);
+  const legacyCandidatesPath = process.env.FAKE_SIDECAR_LEGACY_CANDIDATES;
+  if (legacyCandidatesPath) {
+    appendFileSync(
+      legacyCandidatesPath,
+      JSON.stringify(initialize.legacyDataDirectories) + '\n',
+    );
+  }
   const apiBaseUrl = 'http://127.0.0.1:' + (41000 + startCount);
   const apiToken = 'sidecar-token-' + startCount;
   const pid = process.pid;
@@ -77,6 +84,37 @@ input.once('line', (line) => {
   }
 });
 `;
+
+test('sidecar initialization serializes explicit empty legacy migration candidates', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agistack-sidecar-empty-legacy-'));
+  const binaryPath = join(root, 'fake-sidecar.cjs');
+  const counterPath = join(root, 'starts.txt');
+  const legacyCandidatesPath = join(root, 'legacy-candidates.jsonl');
+  await writeFile(binaryPath, fakeSidecarSource, 'utf8');
+  await chmod(binaryPath, 0o700);
+
+  const supervisor = new SidecarSupervisor({
+    binaryPath,
+    dataDirectory: join(root, 'data'),
+    workspaceRoot: root,
+    legacyDataDirectories: [],
+    environment: {
+      FAKE_SIDECAR_COUNTER: counterPath,
+      FAKE_SIDECAR_LEGACY_CANDIDATES: legacyCandidatesPath,
+    },
+  });
+
+  try {
+    await supervisor.start();
+    assert.deepEqual(
+      JSON.parse((await readFile(legacyCandidatesPath, 'utf8')).trim()),
+      [],
+    );
+  } finally {
+    await supervisor.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test('sidecar handshake is authenticated and the supervisor recovers after a crash', async () => {
   const root = await mkdtemp(join(tmpdir(), 'agistack-sidecar-supervisor-'));

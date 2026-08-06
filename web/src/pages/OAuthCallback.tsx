@@ -16,35 +16,15 @@ import { AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 
 import { useAuthStore } from '@/stores/auth';
 
-import { httpClient } from '@/services/client/httpClient';
+import {
+  oauthLoginService,
+  oauthReasonCode,
+  type OAuthLoginUser,
+} from '@/services/oauthLoginService';
 
 import { AuthSplitLayout } from '@/components/auth/AuthSplitLayout';
 
-interface OAuthTokenResponse {
-  access_token: string;
-  token_type: string;
-  user: {
-    user_id: string;
-    email: string;
-    name: string;
-    roles: string[];
-    is_active: boolean;
-    created_at: string;
-    profile?: Record<string, unknown>;
-  };
-}
-
 type CallbackStatus = 'loading' | 'success' | 'error';
-
-function parseRedirectUrl(encodedState: string): string | undefined {
-  try {
-    const stateData = JSON.parse(atob(encodedState)) as { redirect_to?: unknown };
-    return typeof stateData.redirect_to === 'string' ? stateData.redirect_to : undefined;
-  } catch {
-    // State is not encoded JSON, ignore
-    return undefined;
-  }
-}
 
 export const OAuthCallback: React.FC = () => {
   const { provider } = useParams<{ provider: string }>();
@@ -63,15 +43,24 @@ export const OAuthCallback: React.FC = () => {
   const errorDescription = searchParams.get('error_description');
 
   // Map backend response to frontend User format
-  const mapUser = (backendUser: OAuthTokenResponse['user']) => ({
-    id: backendUser.user_id,
-    email: backendUser.email,
-    name: backendUser.name,
-    roles: backendUser.roles,
-    is_active: backendUser.is_active,
-    created_at: backendUser.created_at,
-    profile: backendUser.profile,
-  });
+  const mapUser = (backendUser: OAuthLoginUser) => {
+    const preferredLanguage: 'en-US' | 'zh-CN' | undefined =
+      backendUser.preferred_language === 'en-US' || backendUser.preferred_language === 'zh-CN'
+        ? backendUser.preferred_language
+        : undefined;
+    return {
+      id: backendUser.user_id,
+      email: backendUser.email,
+      name: backendUser.name,
+      roles: backendUser.roles,
+      global_roles: backendUser.global_roles,
+      is_active: backendUser.is_active,
+      is_superuser: backendUser.is_superuser,
+      created_at: backendUser.created_at,
+      profile: backendUser.profile,
+      preferred_language: preferredLanguage,
+    };
+  };
 
   const handleOAuthCallback = useCallback(async () => {
     // Check for OAuth error in URL params
@@ -94,17 +83,16 @@ export const OAuthCallback: React.FC = () => {
       return;
     }
 
-    try {
-      // Exchange code for token via backend API
-      const response = await httpClient.post<OAuthTokenResponse>(
-        `/auth/oauth/${provider}/callback`,
-        {
-          code,
-          state,
-        }
-      );
+    if (!state) {
+      setStatus('error');
+      setErrorMessage(t('login.oauth.errors.noState'));
+      return;
+    }
 
-      const { access_token, user } = response;
+    try {
+      const response = await oauthLoginService.completeAuthorization(provider, code, state);
+
+      const { access_token, redirect_to, user } = response;
 
       // Store token in auth store (this will persist via zustand persist middleware)
       useAuthStore.setState({
@@ -117,32 +105,17 @@ export const OAuthCallback: React.FC = () => {
 
       setStatus('success');
 
-      // Get redirect URL from state or default to home
-      let redirectUrl = '/';
-
-      // Check if state contains a redirect URL (encoded JSON).
-      // Only allow same-origin paths (starting with a single '/') to
-      // prevent open-redirects to external sites.
-      if (state) {
-        const parsed = parseRedirectUrl(state);
-        if (parsed?.startsWith('/') && !parsed.startsWith('//')) {
-          redirectUrl = parsed;
-        }
-      }
-
       // Short delay to show success state before redirect
       setTimeout(() => {
-        void navigate(redirectUrl, { replace: true });
+        void navigate(redirect_to, { replace: true });
       }, 500);
     } catch (err) {
       setStatus('error');
-
-      // Extract error message from API response
-      const apiError = err as { response?: { data?: { detail?: string } } };
-      const detail = apiError.response?.data?.detail;
-
+      const reasonCode = oauthReasonCode(err);
       setErrorMessage(
-        detail || t('login.oauth.errors.exchangeFailed', 'Failed to complete OAuth authentication')
+        reasonCode
+          ? t(`login.oauth.errors.${reasonCode}`, { defaultValue: reasonCode })
+          : t('login.oauth.errors.exchangeFailed')
       );
     }
   }, [code, error, errorDescription, provider, state, navigate, t]);

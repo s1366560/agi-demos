@@ -10,6 +10,7 @@ import type {
   ManagedSkillVersionDetail,
   ManagedSkillZipImportInput,
 } from '../../types';
+import { saveBlobWithDesktopDialog } from '../runtime/nativeFileBridge';
 
 export type SkillImportSubmission = {
   archive: File | null;
@@ -244,7 +245,8 @@ export function useSkillPackageManagement({
         const exportId = skill.source === 'filesystem' ? skill.name : skill.id;
         const exported = await new ManagedResourcesClient(config).exportManagedSkillPackage(exportId);
         if (contextKeyRef.current !== requestContextKey) return;
-        downloadSkillPackage(skill.name, exported);
+        const result = await downloadSkillPackage(skill.name, exported);
+        if (result.status === 'cancelled') return;
       } catch (error) {
         if (contextKeyRef.current === requestContextKey) {
           setPackageActionError(errorMessage(error));
@@ -384,14 +386,16 @@ export function useSkillPackageManagement({
   };
 }
 
-function downloadSkillPackage(skillName: string, value: unknown): void {
+function downloadSkillPackage(
+  skillName: string,
+  value: unknown,
+): Promise<DesktopFileSaveResult> {
   const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${skillName}.agentskill.json`;
-  link.click();
-  URL.revokeObjectURL(url);
+  return saveBlobWithDesktopDialog({
+    suggestedName: `${skillName}.agentskill.json`,
+    mimeType: 'application/json',
+    blob,
+  });
 }
 
 function zipImportInput(input: ManagedSkillImportInput): ManagedSkillZipImportInput {

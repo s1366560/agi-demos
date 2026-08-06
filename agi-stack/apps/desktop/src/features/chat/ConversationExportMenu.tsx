@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronDownIcon, DownloadIcon, FileTextIcon } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
+import { saveBlobWithDesktopDialog } from '../runtime/nativeFileBridge';
 import {
   cloneConversationExportSnapshot,
   conversationExportFilename,
@@ -12,7 +13,6 @@ import type { ConversationExportSnapshot } from './conversationExportModel';
 
 type Html2PdfOptions = {
   margin?: number | [number, number] | [number, number, number, number];
-  filename?: string;
   html2canvas?: Record<string, unknown>;
   jsPDF?: {
     unit?: string;
@@ -29,20 +29,21 @@ type ExportNotice = {
   message: string;
 };
 
-function downloadConversationMarkdown(snapshot: ConversationExportSnapshot): void {
+async function downloadConversationMarkdown(
+  snapshot: ConversationExportSnapshot,
+): Promise<DesktopFileSaveResult> {
   const markdown = conversationExportToMarkdown(snapshot);
   const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = conversationExportFilename(snapshot, 'markdown');
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  return saveBlobWithDesktopDialog({
+    suggestedName: conversationExportFilename(snapshot, 'markdown'),
+    mimeType: 'text/markdown;charset=utf-8',
+    blob,
+  });
 }
 
-async function downloadConversationPdf(snapshot: ConversationExportSnapshot): Promise<void> {
+async function downloadConversationPdf(
+  snapshot: ConversationExportSnapshot,
+): Promise<DesktopFileSaveResult> {
   const { default: html2pdf } = await import('html2pdf.js');
   const container = document.createElement('div');
   container.innerHTML = conversationExportToHtml(snapshot);
@@ -53,12 +54,17 @@ async function downloadConversationPdf(snapshot: ConversationExportSnapshot): Pr
   try {
     const options: Html2PdfOptions = {
       margin: [10, 10, 10, 10],
-      filename: conversationExportFilename(snapshot, 'pdf'),
       html2canvas: { scale: 2, useCORS: true },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
     };
-    await html2pdf().set(options).from(container).save();
+    const pdf = await html2pdf().set(options).from(container).outputPdf('blob');
+    if (!(pdf instanceof Blob)) throw new Error('conversation PDF output is invalid');
+    return await saveBlobWithDesktopDialog({
+      suggestedName: conversationExportFilename(snapshot, 'pdf'),
+      mimeType: 'application/pdf',
+      blob: pdf,
+    });
   } finally {
     document.body.removeChild(container);
   }
@@ -110,11 +116,11 @@ export function ConversationExportMenu({
     setExportingFormat(format);
     setNotice(null);
     try {
-      if (format === 'markdown') {
-        downloadConversationMarkdown(invocationSnapshot);
-      } else {
-        await downloadConversationPdf(invocationSnapshot);
-      }
+      const result =
+        format === 'markdown'
+          ? await downloadConversationMarkdown(invocationSnapshot)
+          : await downloadConversationPdf(invocationSnapshot);
+      if (result.status === 'cancelled') return;
       setNotice({ kind: 'success', message: t('chat.exportReady') });
     } catch {
       setNotice({ kind: 'error', message: t('chat.exportFailed') });

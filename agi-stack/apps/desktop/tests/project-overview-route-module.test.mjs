@@ -29,6 +29,7 @@ const {
 );
 const {
   createDesktopProductionRouteRegistry,
+  DESKTOP_IMPLEMENTED_ROUTE_IDS,
   DEVICE_APPROVAL_ROUTE_ID,
   INVITATION_ACCEPTANCE_ROUTE_ID,
   PROJECT_CRON_JOBS_ROUTE_ID,
@@ -92,6 +93,12 @@ test('factory stays lazy and publishes the exact implemented route module contra
 
   const registry = createDesktopProductionRouteRegistry({
     implementedLoaders: {
+      ...Object.fromEntries(
+        DESKTOP_IMPLEMENTED_ROUTE_IDS.map((routeId) => [
+          routeId,
+          implementedRouteLoader(routeId),
+        ]),
+      ),
       [AGENT_WORKSPACE_ROUTE_ID]: createAgentWorkspaceRouteModuleLoader(),
       [DEVICE_APPROVAL_ROUTE_ID]: implementedRouteLoader(
         DEVICE_APPROVAL_ROUTE_ID,

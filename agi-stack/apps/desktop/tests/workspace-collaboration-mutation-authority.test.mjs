@@ -75,6 +75,9 @@ const mutationActions = {
 const flattenedMutationActions = Object.entries(mutationActions).flatMap(
   ([surface, actions]) => actions.map((action) => `${surface}:${action}`),
 );
+const flattenedReadActions = Object.keys(mutationActions).map(
+  (surface) => `${surface}:view`,
+);
 
 test('available Workspace capability requires exact revision and idempotency action authority', () => {
   const normalized = normalizeWorkspaceCollaborationCapabilityContract(
@@ -105,7 +108,7 @@ test('available Workspace capability requires exact revision and idempotency act
     reason_code: null,
     service_version: '0.2.0',
     contract_version: '2.0.0',
-    allowed_actions: flattenedMutationActions,
+    allowed_actions: [...flattenedReadActions, ...flattenedMutationActions],
     scope: {
       tenant_id: null,
       project_id: null,

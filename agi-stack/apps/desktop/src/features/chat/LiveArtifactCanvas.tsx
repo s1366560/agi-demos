@@ -14,6 +14,7 @@ import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 
 import { useI18n } from '../../i18n';
+import { saveBlobWithDesktopDialog } from '../runtime/nativeFileBridge';
 import {
   ARTIFACT_CANVAS_SAVE_CAPABILITY,
   ARTIFACT_CANVAS_VIEW_MODES,
@@ -239,18 +240,21 @@ export function LiveArtifactCanvas({
   };
 
   const downloadActiveContent = async () => {
+    setNotice(null);
     try {
       if (artifactClient) {
         const blob = await artifactClient.download(active.id);
-        triggerArtifactDownload(blob, active.title);
+        const result = await triggerArtifactDownload(blob, active.title);
+        if (result.status === 'cancelled') return;
         setNotice(t('artifact.downloaded'));
         return;
       }
       const descriptor = artifactCanvasDownloadDescriptor(active);
-      triggerArtifactDownload(
+      const result = await triggerArtifactDownload(
         new Blob([descriptor.content], { type: descriptor.mimeType }),
         descriptor.filename,
       );
+      if (result.status === 'cancelled') return;
       setNotice(t('artifact.downloaded'));
     } catch {
       setNotice(t('artifact.downloadFailed'));
@@ -278,14 +282,20 @@ export function LiveArtifactCanvas({
     }
   };
 
-  const saveConflictCopy = () => {
-    triggerArtifactDownload(
-      new Blob([active.draftContent], {
-        type: activeAuthority?.mime_type ?? 'text/plain;charset=utf-8',
-      }),
-      `${active.title || 'artifact'}.draft`,
-    );
-    setNotice(t('artifact.draftCopySaved'));
+  const saveConflictCopy = async () => {
+    setNotice(null);
+    try {
+      const result = await triggerArtifactDownload(
+        new Blob([active.draftContent], {
+          type: activeAuthority?.mime_type ?? 'text/plain;charset=utf-8',
+        }),
+        `${active.title || 'artifact'}.draft`,
+      );
+      if (result.status === 'cancelled') return;
+      setNotice(t('artifact.draftCopySaved'));
+    } catch {
+      setNotice(t('artifact.downloadFailed'));
+    }
   };
 
   const copyConflictDraft = async () => {
@@ -504,7 +514,7 @@ export function LiveArtifactCanvas({
             <button type="button" onClick={() => void reloadConflictAuthority()}>
               {t('artifact.reloadServer')}
             </button>
-            <button type="button" onClick={saveConflictCopy}>
+            <button type="button" onClick={() => void saveConflictCopy()}>
               {t('artifact.saveCopy')}
             </button>
             <button type="button" onClick={() => void copyConflictDraft()}>
@@ -571,21 +581,21 @@ function artifactSaveIdempotencyKey(
   return `artifact:${revision}:${contentHash.slice('sha256:'.length, 39)}`;
 }
 
-function triggerArtifactDownload(blob: Blob, filename: string): void {
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = objectUrl;
-  anchor.download =
+async function triggerArtifactDownload(
+  blob: Blob,
+  filename: string,
+): Promise<DesktopFileSaveResult> {
+  const suggestedName =
     filename
       .split(/[\\/]/u)
       .filter(Boolean)
       .at(-1)
       ?.replace(/[\u0000-\u001f<>:"/\\|?*]/gu, '_') || 'artifact';
-  anchor.hidden = true;
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(objectUrl);
+  return saveBlobWithDesktopDialog({
+    suggestedName,
+    mimeType: blob.type || 'application/octet-stream',
+    blob,
+  });
 }
 
 function omitArtifactRecord<T>(record: Record<string, T>, artifactId: string): Record<string, T> {

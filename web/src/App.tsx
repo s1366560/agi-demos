@@ -112,6 +112,9 @@ const AgentDashboard = lazy(() =>
     default: m.AgentDashboard,
   }))
 );
+const ProjectAgentDashboard = lazy(() => import('./pages/project/ProjectAgentDashboard'));
+const ProjectAgentLogs = lazy(() => import('./pages/project/ProjectAgentLogs'));
+const ProjectAgentPatterns = lazy(() => import('./pages/project/ProjectAgentPatterns'));
 const WorkflowPatterns = lazy(() => import('./pages/tenant/WorkflowPatterns'));
 const Analytics = lazy(() =>
   import('./pages/tenant/Analytics').then((m) => ({ default: m.Analytics }))
@@ -2001,6 +2004,32 @@ function App() {
                     </Suspense>
                   }
                 />
+                <Route path="agent">
+                  <Route
+                    index
+                    element={
+                      <Suspense fallback={<PageLoader />}>
+                        <ProjectAgentDashboard />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="logs"
+                    element={
+                      <Suspense fallback={<PageLoader />}>
+                        <ProjectAgentLogs />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="patterns"
+                    element={
+                      <Suspense fallback={<PageLoader />}>
+                        <ProjectAgentPatterns />
+                      </Suspense>
+                    }
+                  />
+                </Route>
               </Route>
 
               {/* Legacy tenant workspace/conversation routes must stay after known tenant pages. */}

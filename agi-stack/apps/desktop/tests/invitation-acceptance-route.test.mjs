@@ -14,10 +14,15 @@ const { createInvitationAcceptanceRouteModuleLoader } = require(
 test('invitation acceptance route is native Cloud and cloud-only Local', async () => {
   const cloud = invitationAcceptanceCapability({ mode: 'cloud' });
   const local = invitationAcceptanceCapability({ mode: 'local' });
-  assert.equal(cloud.availability, 'available');
-  assert.deepEqual(cloud.allowed_actions, ['verify', 'sign-in', 'accept', 'open-tenant', 'retry']);
+  assert.equal(cloud.availability, 'unavailable');
+  assert.equal(cloud.reason_code, 'renderer_capability_authority_unobserved');
+  assert.deepEqual(cloud.allowed_actions, []);
+  assert.equal(cloud.authority_source, 'renderer');
+  assert.equal(cloud.provenance, 'declared');
   assert.equal(local.availability, 'not_applicable');
   assert.equal(local.reason_code, 'local_tenant_invitation_not_applicable');
+  assert.equal(local.authority_source, 'renderer');
+  assert.equal(local.provenance, 'declared');
 
   const loader = createInvitationAcceptanceRouteModuleLoader({
     createBinding: () => ({

@@ -14,6 +14,11 @@ test('preview surface uses authenticated bytes and cleans up requests and Blob U
   assert.doesNotMatch(source, /https?:\/\//);
 });
 
+test('preview download fallback uses the native save dialog without a DOM anchor', () => {
+  assert.match(source, /saveBlobWithDesktopDialog/);
+  assert.doesNotMatch(source, /anchor\.download|createElement\('a'\)/);
+});
+
 test('HTML and SVG previews are isolated without arbitrary navigation or script execution', () => {
   assert.match(source, /sandbox=""/);
   assert.match(source, /referrerPolicy="no-referrer"/);

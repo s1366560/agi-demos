@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
+  assertCompleteProductionDependencyOwnership,
   projectReviewedProductionDependencies,
   resolveReviewedProductionDependencies,
 } from "../contracts/desktop-web-parity/web-production-dependency-projection.mjs";
@@ -41,6 +42,59 @@ const productionInventory = JSON.parse(
     "utf8",
   ),
 );
+
+test("checked-in production dependencies have zero unclassified ownership", () => {
+  assert.doesNotThrow(() =>
+    assertCompleteProductionDependencyOwnership({
+      auditedSourceByEntry: new Map(
+        productionInventory.audited_sources.map((source) => [
+          source.source_entry,
+          source,
+        ]),
+      ),
+      dependencyOwnership: productionInventory.production_dependency_ownership,
+      dependencySourceEntries:
+        productionInventory.production_dependency_sources,
+    }),
+  );
+  assert.equal(
+    productionInventory.production_dependency_ownership.length,
+    productionInventory.counts.production_dependency_sources,
+  );
+  assert.equal(
+    productionInventory.production_dependency_ownership.some(
+      (ownership) => ownership.classification === "unclassified",
+    ),
+    false,
+  );
+});
+
+test("production dependency ownership gate rejects an unclassified source", () => {
+  const dependencySource = productionInventory.audited_sources.find((source) =>
+    source.roles.includes("production_dependency"),
+  );
+  assert.ok(dependencySource);
+
+  assert.throws(
+    () =>
+      assertCompleteProductionDependencyOwnership({
+        auditedSourceByEntry: new Map(
+          productionInventory.audited_sources.map((source) => [
+            source.source_entry,
+            source,
+          ]),
+        ),
+        dependencyOwnership:
+          productionInventory.production_dependency_ownership?.filter(
+            (ownership) =>
+              ownership.source_entry !== dependencySource.source_entry,
+          ) ?? [],
+        dependencySourceEntries:
+          productionInventory.production_dependency_sources ?? [],
+      }),
+    /unclassified production dependencies/u,
+  );
+});
 
 test("reviewed production dependencies resolve revision-bound direct and transitive paths", () => {
   assert.deepEqual(

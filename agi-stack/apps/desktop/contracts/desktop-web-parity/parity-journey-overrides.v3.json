@@ -1,0 +1,243 @@
+{
+  "schema_version": "3.0.0",
+  "capabilities": [
+    {
+      "capability_id": "agent-workspace-tenant-agent-workspace",
+      "journeys": [
+        {
+          "id": "bootstrap-and-scope",
+          "title": "Login bootstrap, tenant, project and workspace scope restoration",
+          "mode_policy": {
+            "web": "required",
+            "desktop_cloud": "required",
+            "desktop_local": "required",
+            "native_only": "not_applicable"
+          },
+          "actions": {
+            "web": ["restore-session", "load-system-features", "load-tenants", "select-tenant", "select-project", "resolve-conversation"],
+            "desktop_cloud": ["restore-session", "load-system-features", "load-tenants", "select-tenant", "select-project", "resolve-conversation"],
+            "desktop_local": ["restore-session", "load-tenants", "select-tenant", "select-project", "resolve-conversation"],
+            "native_only": []
+          },
+          "contracts": [
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "GET", "path": "/api/v1/auth/me" },
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "GET", "path": "/api/v1/workspace-context" },
+            { "surfaces": ["web", "desktop_cloud"], "method": "GET", "path": "/api/v1/system/features" },
+            { "surfaces": ["web", "desktop_cloud"], "method": "GET", "path": "/api/v1/tenants/" },
+            { "surfaces": ["desktop_local"], "method": "GET", "path": "/api/v1/tenants" },
+            { "surfaces": ["web", "desktop_cloud"], "method": "GET", "path": "/api/v1/projects/" },
+            { "surfaces": ["desktop_local"], "method": "GET", "path": "/api/v1/projects" },
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "GET", "path": "/api/v1/agent/conversations" }
+          ],
+          "data_states": ["loading", "empty", "ready", "stale", "forbidden", "unavailable", "retry"],
+          "interaction_states": ["bootstrap", "deep-link-restore", "scope-switch", "refresh", "retry"],
+          "evidence_requirements": ["contract", "web_renderer", "desktop_renderer", "native_electron", "sidecar_authority"],
+          "expected_observable_result": "Each surface restores an authenticated session and resolves the same tenant, project, workspace and conversation scope without exposing a browser token or crossing an undeclared authority boundary."
+        },
+        {
+          "id": "conversation-lifecycle",
+          "title": "Conversation creation, history, configuration and lifecycle",
+          "mode_policy": {
+            "web": "required",
+            "desktop_cloud": "required",
+            "desktop_local": "required",
+            "native_only": "not_applicable"
+          },
+          "actions": {
+            "web": ["list-conversations", "get-conversation", "create-conversation", "delete-conversation", "rename-conversation", "set-mode", "update-config", "load-history", "view-summary", "undo-tool", "search-conversations", "compare-conversations"],
+            "desktop_cloud": ["list-conversations", "get-conversation", "create-conversation", "delete-conversation", "rename-conversation", "set-mode", "update-config", "load-history", "view-summary", "undo-tool", "search-conversations", "compare-conversations"],
+            "desktop_local": ["list-conversations", "get-conversation", "create-conversation", "delete-conversation", "rename-conversation", "set-mode", "update-config", "load-history", "view-summary", "undo-tool", "search-conversations", "compare-conversations"],
+            "native_only": []
+          },
+          "contracts": [
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "GET", "path": "/api/v1/agent/conversations" },
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "POST", "path": "/api/v1/agent/conversations" },
+            { "surfaces": ["web", "desktop_cloud"], "method": "GET", "path": "/api/v1/agent/conversations/{conversation_id}?project_id={project_id}" },
+            { "surfaces": ["desktop_local"], "method": "GET", "path": "/api/v1/agent/conversations/{conversation_id}/session?tenant_id={tenant_id}&project_id={project_id}&workspace_id={workspace_id}" },
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "GET", "path": "/api/v1/agent/conversations/{conversation_id}/messages?project_id={project_id}" },
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "PATCH", "path": "/api/v1/agent/conversations/{conversation_id}/title" },
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "PATCH", "path": "/api/v1/agent/conversations/{conversation_id}/config" },
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "PATCH", "path": "/api/v1/agent/conversations/{conversation_id}/mode" },
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "DELETE", "path": "/api/v1/agent/conversations/{conversation_id}" }
+          ],
+          "data_states": ["loading", "empty", "ready", "stale", "conflict", "forbidden", "unavailable", "retry"],
+          "interaction_states": ["navigate", "deep-link-restore", "create", "edit", "delete", "cancel", "refresh", "retry"],
+          "evidence_requirements": ["contract", "web_renderer", "desktop_renderer", "native_electron", "sidecar_authority"],
+          "expected_observable_result": "Conversation lists, history, titles, modes and configuration survive reload and scope changes with equivalent conflict, permission and recovery behavior on every applicable surface."
+        },
+        {
+          "id": "stream-and-run-control",
+          "title": "Streaming, stop, Queue or Steer and queued-input promotion",
+          "mode_policy": {
+            "web": "required",
+            "desktop_cloud": "required",
+            "desktop_local": "required",
+            "native_only": "not_applicable"
+          },
+          "actions": {
+            "web": ["connect-stream", "send-message", "stop-session", "get-active-run", "get-latest-run", "list-run-inputs", "queue-input", "promote-input"],
+            "desktop_cloud": ["connect-stream", "send-message", "stop-session", "get-active-run", "get-latest-run", "list-run-inputs", "queue-input", "promote-input"],
+            "desktop_local": ["connect-stream", "send-message", "stop-session", "get-active-run", "get-latest-run", "list-run-inputs", "queue-input", "promote-input"],
+            "native_only": []
+          },
+          "contracts": [
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "WS", "path": "/api/v1/agent/ws" },
+            { "surfaces": ["web", "desktop_cloud"], "method": "GET", "path": "/api/v1/agent/conversations/{conversation_id}/active-run" },
+            { "surfaces": ["web", "desktop_cloud"], "method": "GET", "path": "/api/v1/agent/conversations/{conversation_id}/latest-run" },
+            { "surfaces": ["desktop_local"], "method": "GET", "path": "/api/v1/agent/conversations/{conversation_id}/session?tenant_id={tenant_id}&project_id={project_id}&workspace_id={workspace_id}" },
+            { "surfaces": ["desktop_local"], "method": "GET", "path": "/api/v1/agent/conversations/{conversation_id}/runs" },
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "GET", "path": "/api/v1/agent/runs/{run_id}/inputs" },
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "POST", "path": "/api/v1/agent/runs/{run_id}/inputs" },
+            { "surfaces": ["web", "desktop_cloud"], "method": "POST", "path": "/api/v1/agent/runs/{run_id}/inputs/{input_id}/promote" },
+            { "surfaces": ["desktop_local"], "method": "POST", "path": "/api/v1/agent/run-inputs/{input_id}/promote-to-plan" }
+          ],
+          "data_states": ["loading", "empty", "ready", "stale", "conflict", "forbidden", "unavailable", "retry"],
+          "interaction_states": ["connect", "send", "queue", "steer", "promote", "stop", "reconnect", "cancel", "concurrent-update", "retry"],
+          "evidence_requirements": ["contract", "web_renderer", "desktop_renderer", "native_electron", "sidecar_authority"],
+          "expected_observable_result": "Streaming and run controls preserve queue order and run authority; promotion and control-channel failures produce stable structured outcomes without silently changing Queue into Steer."
+        },
+        {
+          "id": "hitl-and-a2ui",
+          "title": "HITL, A2UI and encrypted environment-variable responses",
+          "mode_policy": {
+            "web": "required",
+            "desktop_cloud": "required",
+            "desktop_local": "required",
+            "native_only": "not_applicable"
+          },
+          "actions": {
+            "web": ["render-surface", "submit-action", "respond-clarification", "respond-decision", "submit-encrypted-env-var", "respond-permission", "resume-run"],
+            "desktop_cloud": ["render-surface", "submit-action", "respond-clarification", "respond-decision", "submit-encrypted-env-var", "respond-permission", "resume-run"],
+            "desktop_local": ["render-surface", "submit-action", "respond-clarification", "respond-decision", "submit-encrypted-env-var", "respond-permission", "resume-run"],
+            "native_only": []
+          },
+          "contracts": [
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "WS", "path": "/api/v1/agent/ws" },
+            { "surfaces": ["web", "desktop_cloud"], "method": "GET", "path": "/api/v1/agent/hitl/conversations/{conversation_id}/pending" },
+            { "surfaces": ["web", "desktop_cloud"], "method": "GET", "path": "/api/v1/agent/conversations/{conversation_id}/execution" },
+            { "surfaces": ["web", "desktop_cloud"], "method": "GET", "path": "/api/v1/agent/conversations/{conversation_id}/events" },
+            { "surfaces": ["web", "desktop_cloud"], "method": "GET", "path": "/api/v1/agent/conversations/{conversation_id}/status" },
+            { "surfaces": ["desktop_local"], "method": "GET", "path": "/api/v1/agent/conversations/{conversation_id}/session?tenant_id={tenant_id}&project_id={project_id}&workspace_id={workspace_id}" },
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "POST", "path": "/api/v1/agent/hitl/respond" }
+          ],
+          "data_states": ["loading", "ready", "expired", "answered", "rejected", "forbidden", "unavailable", "retry"],
+          "interaction_states": ["render", "submit", "reject", "expire", "resume", "reconnect", "retry"],
+          "evidence_requirements": ["contract", "web_renderer", "desktop_renderer", "native_electron", "sidecar_authority", "vault_persistence"],
+          "expected_observable_result": "HITL and A2UI actions validate persisted allowed actions, encrypted environment responses remain sealed, and answered, expired and rejected states recover identically after reconnect."
+        },
+        {
+          "id": "roster-and-subagents",
+          "title": "Roster, mentions, SubAgent lifecycle and collaboration permissions",
+          "mode_policy": {
+            "web": "required",
+            "desktop_cloud": "required",
+            "desktop_local": "required",
+            "native_only": "not_applicable"
+          },
+          "actions": {
+            "web": ["list-participants", "add-participant", "remove-participant", "update-participant-role", "list-subagents", "mention-subagent", "kill-subagent", "steer-subagent"],
+            "desktop_cloud": ["list-participants", "add-participant", "remove-participant", "update-participant-role", "list-subagents", "mention-subagent", "kill-subagent", "steer-subagent"],
+            "desktop_local": ["list-participants", "add-participant", "remove-participant", "update-participant-role", "list-subagents", "mention-subagent", "kill-subagent", "steer-subagent"],
+            "native_only": []
+          },
+          "contracts": [
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "GET", "path": "/api/v1/agent/conversations/{conversation_id}/participants" },
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "POST", "path": "/api/v1/agent/conversations/{conversation_id}/participants" },
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "DELETE", "path": "/api/v1/agent/conversations/{conversation_id}/participants/{agent_id}" },
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "PATCH", "path": "/api/v1/agent/conversations/{conversation_id}/participants/coordinator" },
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "GET", "path": "/api/v1/subagents/" }
+          ],
+          "data_states": ["loading", "empty", "ready", "stale", "conflict", "forbidden", "unavailable", "retry"],
+          "interaction_states": ["list", "add", "remove", "mention", "kill", "steer", "scope-switch", "concurrent-update", "retry"],
+          "evidence_requirements": ["contract", "web_renderer", "desktop_renderer", "native_electron", "sidecar_authority"],
+          "expected_observable_result": "Participant membership, structured mentions and SubAgent controls respect the same role and scope authority and expose permission or concurrency failures without parsing message text."
+        },
+        {
+          "id": "work-review",
+          "title": "Activity, My Work, read state, run summary, changes and usage",
+          "mode_policy": {
+            "web": "required",
+            "desktop_cloud": "required",
+            "desktop_local": "required",
+            "native_only": "not_applicable"
+          },
+          "actions": {
+            "web": ["list-my-work", "read-activity", "write-read-state", "view-run-summary", "view-run-changes", "view-usage", "view-cost"],
+            "desktop_cloud": ["list-my-work", "read-activity", "write-read-state", "view-run-summary", "view-run-changes", "view-usage", "view-cost"],
+            "desktop_local": ["list-my-work", "read-activity", "write-read-state", "view-run-summary", "view-run-changes", "view-usage", "view-cost"],
+            "native_only": []
+          },
+          "contracts": [
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "GET", "path": "/api/v1/projects/{project_id}/my-work" },
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "GET", "path": "/api/v1/projects/{project_id}/activity/read-state" },
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "PUT", "path": "/api/v1/projects/{project_id}/activity/read-state" },
+            { "surfaces": ["web", "desktop_cloud"], "method": "GET", "path": "/api/v1/agent/runs/{run_id}/summary" },
+            { "surfaces": ["desktop_local"], "method": "GET", "path": "/api/v1/agent/conversations/{conversation_id}/session?tenant_id={tenant_id}&project_id={project_id}&workspace_id={workspace_id}" },
+            { "surfaces": ["web", "desktop_cloud"], "method": "GET", "path": "/api/v1/agent/runs/{run_id}/changes?scope=run&expected_revision={run_revision}" },
+            { "surfaces": ["desktop_local"], "method": "GET", "path": "/api/v1/agent/runs/{run_id}/changes?expected_revision={run_revision}" }
+          ],
+          "data_states": ["loading", "empty", "ready", "stale", "conflict", "forbidden", "unavailable", "retry"],
+          "interaction_states": ["open", "mark-read", "inspect-summary", "inspect-changes", "scope-switch", "refresh", "retry"],
+          "evidence_requirements": ["contract", "web_renderer", "desktop_renderer", "native_electron", "sidecar_authority"],
+          "expected_observable_result": "Activity, My Work, read receipts, run summaries, changes, usage and cost use authoritative run accounting and retain stable empty, stale and unavailable states across reload."
+        },
+        {
+          "id": "content-and-export",
+          "title": "Attachments, artifacts, canvas, search, comparison and native export",
+          "mode_policy": {
+            "web": "required",
+            "desktop_cloud": "required",
+            "desktop_local": "required",
+            "native_only": "not_applicable"
+          },
+          "actions": {
+            "web": ["upload-attachment", "list-attachments", "download-attachment", "delete-attachment", "list-artifacts", "preview-artifact", "download-artifact", "refresh-artifact", "delete-artifact", "categorize-artifact", "save-back-artifact", "open-canvas", "search-content", "compare-content", "export-conversation"],
+            "desktop_cloud": ["upload-attachment", "list-attachments", "download-attachment", "delete-attachment", "list-artifacts", "preview-artifact", "download-artifact", "refresh-artifact", "delete-artifact", "categorize-artifact", "save-back-artifact", "open-canvas", "search-content", "compare-content", "export-conversation"],
+            "desktop_local": ["upload-attachment", "list-attachments", "download-attachment", "delete-attachment", "list-artifacts", "preview-artifact", "download-artifact", "refresh-artifact", "delete-artifact", "categorize-artifact", "save-back-artifact", "open-canvas", "search-content", "compare-content", "export-conversation"],
+            "native_only": []
+          },
+          "contracts": [
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "POST", "path": "/api/v1/attachments/upload/simple" },
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "GET", "path": "/api/v1/attachments?conversation_id={conversation_id}" },
+            { "surfaces": ["web", "desktop_cloud"], "method": "GET", "path": "/api/v1/artifacts?project_id={project_id}&limit=100" },
+            { "surfaces": ["desktop_local"], "method": "GET", "path": "/api/v1/agent/conversations/{conversation_id}/session?tenant_id={tenant_id}&project_id={project_id}&workspace_id={workspace_id}" },
+            { "surfaces": ["desktop_cloud", "desktop_local"], "method": "IPC", "path": "electron://dialog/open-file" },
+            { "surfaces": ["desktop_cloud", "desktop_local"], "method": "IPC", "path": "electron://dialog/save-file" }
+          ],
+          "data_states": ["loading", "empty", "ready", "stale", "conflict", "forbidden", "unavailable", "retry"],
+          "interaction_states": ["upload", "preview", "search", "compare", "download", "save-back", "export", "cancel", "retry"],
+          "evidence_requirements": ["contract", "web_renderer", "desktop_renderer", "native_electron", "sidecar_authority", "native_file_dialog"],
+          "expected_observable_result": "Content flows preserve attachment and artifact authority while Desktop import, download and export cross only the allowlisted Electron dialog and file IPC boundary."
+        },
+        {
+          "id": "local-runtime",
+          "title": "Terminal, remote desktop, sandbox lifecycle and structured unavailability",
+          "mode_policy": {
+            "web": "required",
+            "desktop_cloud": "required",
+            "desktop_local": "required",
+            "native_only": "not_applicable"
+          },
+          "actions": {
+            "web": ["open-terminal", "connect-terminal", "open-remote-desktop", "reconnect-runtime", "close-runtime"],
+            "desktop_cloud": ["open-terminal", "connect-terminal", "open-remote-desktop", "reconnect-runtime", "close-runtime"],
+            "desktop_local": ["open-terminal", "connect-terminal", "open-remote-desktop", "reconnect-runtime", "close-runtime"],
+            "native_only": []
+          },
+          "contracts": [
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "GET", "path": "/api/v1/projects/{project_id}/sandbox" },
+            { "surfaces": ["web", "desktop_cloud", "desktop_local"], "method": "GET", "path": "/api/v1/projects/{project_id}/sandbox/capabilities" },
+            { "surfaces": ["web", "desktop_cloud"], "method": "POST", "path": "/api/v1/projects/{project_id}/sandbox/terminal" },
+            { "surfaces": ["web", "desktop_cloud"], "method": "POST", "path": "/api/v1/projects/{project_id}/sandbox/desktop" },
+            { "surfaces": ["desktop_local"], "method": "IPC", "path": "sidecar://local-runtime/terminal" },
+            { "surfaces": ["desktop_local"], "method": "IPC", "path": "sidecar://local-runtime/desktop" }
+          ],
+          "data_states": ["loading", "empty", "ready", "stale", "forbidden", "unavailable", "retry"],
+          "interaction_states": ["open", "connect", "reconnect", "close", "scope-switch", "cancel", "retry"],
+          "evidence_requirements": ["contract", "web_renderer", "desktop_renderer", "native_electron", "sidecar_authority", "private_control_pipe"],
+          "expected_observable_result": "Terminal, noVNC and sandbox lifecycle use the declared Web, Cloud or private sidecar authority and return structured unavailable states without token-bearing browser URLs."
+        }
+      ]
+    }
+  ]
+}

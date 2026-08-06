@@ -22,7 +22,6 @@ import { PatternInspector } from '../../components/agent/patterns/PatternInspect
 import {
   PatternList,
   type WorkflowPattern as UIWorkflowPattern,
-  type PatternStatus,
 } from '../../components/agent/patterns/PatternList';
 import { PatternStats } from '../../components/agent/patterns/PatternStats';
 import { patternService, PatternServiceError } from '../../services/patternService';
@@ -33,19 +32,11 @@ import type { WorkflowPattern as APIWorkflowPattern } from '../../types/agent';
  * Convert API pattern to UI pattern format
  */
 function toUIPattern(apiPattern: APIWorkflowPattern): UIWorkflowPattern {
-  // Determine status based on success_rate
-  let status: PatternStatus = 'active';
-  if (apiPattern.success_rate >= 80) {
-    status = 'preferred';
-  } else if (apiPattern.success_rate < 50) {
-    status = 'deprecated';
-  }
-
   return {
     id: apiPattern.id,
     name: apiPattern.name,
     signature: apiPattern.id.slice(0, 16), // Use part of ID as signature
-    status,
+    status: 'unclassified',
     usageCount: apiPattern.usage_count,
     successRate: Math.round(apiPattern.success_rate * 100) / 100,
     avgRuntime: apiPattern.metadata?.avg_runtime as number | undefined,

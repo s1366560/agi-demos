@@ -1,9 +1,13 @@
 from datetime import UTC, datetime
 
+import pytest
+from pydantic import ValidationError
+
 from src.domain.model.agent.conversation.conversation import Conversation
 from src.domain.model.agent.conversation.conversation_mode import ConversationMode
 from src.infrastructure.adapters.primary.web.routers.agent.schemas import (
     ConversationResponse,
+    UpdateConversationModeRequest,
 )
 
 
@@ -73,3 +77,13 @@ def test_conversation_response_from_domain_includes_child_session_markers() -> N
         "spawned_by_agent_id": "agent-a",
         "spawned_agent_id": "agent-b",
     }
+
+
+def test_cloud_conversation_mode_request_rejects_local_capability_fields() -> None:
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        UpdateConversationModeRequest.model_validate(
+            {
+                "conversation_mode": "single_agent",
+                "capability_mode": "code",
+            }
+        )

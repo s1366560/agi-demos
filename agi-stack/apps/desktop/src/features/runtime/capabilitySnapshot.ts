@@ -3,7 +3,8 @@ import {
   negotiateCapabilityContract,
 } from './capabilityVersion';
 
-export const DESKTOP_CAPABILITY_SNAPSHOT_VERSION = '3.0.0' as const;
+export const DESKTOP_CAPABILITY_SNAPSHOT_VERSION = '4.0.0' as const;
+export const DESKTOP_PREVIOUS_CAPABILITY_SNAPSHOT_VERSION = '3.0.0' as const;
 export const DESKTOP_LEGACY_CAPABILITY_SNAPSHOT_VERSION = '2.0.0' as const;
 export const DESKTOP_MINIMUM_CONTRACT_VERSION = '2.0.0' as const;
 
@@ -13,34 +14,95 @@ export type DesktopCapabilityStatus =
   | 'degraded'
   | 'unavailable'
   | 'not_applicable';
+export type DesktopCapabilityAuthoritySource =
+  | 'cloud_service'
+  | 'sidecar'
+  | 'native_runtime'
+  | 'renderer';
+export type DesktopCapabilityProvenance = 'observed' | 'declared';
 
-export type DesktopCapabilityName =
-  | 'automation_run'
-  | 'search'
-  | 'workspace_collaboration'
-  | 'sandbox_isolation'
-  | 'device-approval'
-  | 'tenant-creation'
-  | 'invitation-acceptance'
-  | 'agent-workspace-tenant-agent-workspace'
-  | 'tenant-tenant-overview'
-  | 'tenant-tenant-projects'
-  | 'tenant-tenant-workspaces'
-  | 'tenant-tenant-tasks'
-  | 'tenant-tenant-analytics'
-  | 'tenant-tenant-agent-configuration'
-  | 'tenant-tenant-agent-bindings'
-  | 'tenant-tenant-runtimes'
-  | 'tenant-tenant-pool'
-  | 'tenant-tenant-instances'
-  | 'tenant-tenant-clusters'
-  | 'tenant-tenant-deploy'
-  | 'tenant-tenant-instance-templates'
-  | 'tenant-tenant-dead-letter-queue'
-  | 'project-project-overview'
-  | 'project-project-search'
-  | 'project-project-cron-jobs'
-  | 'project-support';
+export const DESKTOP_INTERNAL_CAPABILITY_NAMES = Object.freeze([
+  'automation_run',
+  'search',
+  'workspace_collaboration',
+  'sandbox_isolation',
+] as const);
+
+export const DESKTOP_PARITY_CAPABILITY_NAMES = Object.freeze([
+  'agent-workspace-tenant-agent-workspace',
+  'application-encrypted-vault',
+  'authentication-and-account-entry',
+  'backend-stores',
+  'device-approval',
+  'electron-security-boundary',
+  'forced-password-change',
+  'invitation-acceptance',
+  'not-found',
+  'oauth-callback',
+  'private-sidecar-control-pipe',
+  'project-agent-dashboard',
+  'project-agent-logs',
+  'project-agent-patterns',
+  'project-blackboard-dynamic-project-blackboard',
+  'project-playbooks',
+  'project-project-channels',
+  'project-project-communities',
+  'project-project-cron-jobs',
+  'project-project-entities',
+  'project-project-graph',
+  'project-project-maintenance',
+  'project-project-memories',
+  'project-project-overview',
+  'project-project-schema',
+  'project-project-search',
+  'project-project-settings',
+  'project-project-team',
+  'project-project-workspaces',
+  'project-support',
+  'signed-update-and-release-boundary',
+  'tenant-creation',
+  'tenant-tenant-acp',
+  'tenant-tenant-agent-bindings',
+  'tenant-tenant-agent-configuration',
+  'tenant-tenant-agent-definitions',
+  'tenant-tenant-analytics',
+  'tenant-tenant-audit-logs',
+  'tenant-tenant-billing',
+  'tenant-tenant-clusters',
+  'tenant-tenant-dead-letter-queue',
+  'tenant-tenant-decision-records',
+  'tenant-tenant-deploy',
+  'tenant-tenant-events',
+  'tenant-tenant-evolution',
+  'tenant-tenant-genes',
+  'tenant-tenant-instance-templates',
+  'tenant-tenant-instances',
+  'tenant-tenant-mcp-servers',
+  'tenant-tenant-org-settings',
+  'tenant-tenant-overview',
+  'tenant-tenant-patterns',
+  'tenant-tenant-plugins',
+  'tenant-tenant-pool',
+  'tenant-tenant-projects',
+  'tenant-tenant-providers',
+  'tenant-tenant-runtimes',
+  'tenant-tenant-settings',
+  'tenant-tenant-skills',
+  'tenant-tenant-tasks',
+  'tenant-tenant-templates',
+  'tenant-tenant-trust-policies',
+  'tenant-tenant-users',
+  'tenant-tenant-webhooks',
+  'tenant-tenant-workspaces',
+  'user-profile',
+] as const);
+
+export const DESKTOP_CAPABILITY_NAMES = Object.freeze([
+  ...DESKTOP_INTERNAL_CAPABILITY_NAMES,
+  ...DESKTOP_PARITY_CAPABILITY_NAMES,
+] as const);
+
+export type DesktopCapabilityName = (typeof DESKTOP_CAPABILITY_NAMES)[number];
 
 export type DesktopCapabilityScope = {
   tenant_id: string | null;
@@ -57,9 +119,16 @@ export type DesktopCapabilityAvailability = {
   allowed_actions: readonly string[];
   scope: DesktopCapabilityScope;
   authority_revision: number | null;
+  authority_source?: DesktopCapabilityAuthoritySource;
+  provenance?: DesktopCapabilityProvenance;
 };
 
-type DesktopCapabilityV3View = DesktopCapabilityAvailability & {
+export type DesktopCapabilitySnapshotEntry = DesktopCapabilityAvailability &
+  Required<
+    Pick<DesktopCapabilityAvailability, 'authority_source' | 'provenance'>
+  >;
+
+type DesktopCapabilityV4View = DesktopCapabilityAvailability & {
   status: DesktopCapabilityStatus;
   available: boolean;
 };
@@ -74,51 +143,34 @@ type DesktopCapabilityLegacyView = {
 };
 
 export type DesktopCapabilityView =
-  | DesktopCapabilityV3View
+  | DesktopCapabilityV4View
   | DesktopCapabilityLegacyView;
 
 export type DesktopCapabilitySnapshot = {
   version: typeof DESKTOP_CAPABILITY_SNAPSHOT_VERSION;
   mode: DesktopCapabilityMode;
-  capabilities: Record<DesktopCapabilityName, DesktopCapabilityAvailability>;
+  capabilities: Record<DesktopCapabilityName, DesktopCapabilitySnapshotEntry>;
 };
-
-export const DESKTOP_CAPABILITY_NAMES: readonly DesktopCapabilityName[] =
-  Object.freeze([
-    'automation_run',
-    'search',
-    'workspace_collaboration',
-    'sandbox_isolation',
-    'device-approval',
-    'tenant-creation',
-    'invitation-acceptance',
-    'agent-workspace-tenant-agent-workspace',
-    'tenant-tenant-overview',
-    'tenant-tenant-projects',
-    'tenant-tenant-workspaces',
-    'tenant-tenant-tasks',
-    'tenant-tenant-analytics',
-    'tenant-tenant-agent-configuration',
-    'tenant-tenant-agent-bindings',
-    'tenant-tenant-runtimes',
-    'tenant-tenant-pool',
-    'tenant-tenant-instances',
-    'tenant-tenant-clusters',
-    'tenant-tenant-deploy',
-    'tenant-tenant-instance-templates',
-    'tenant-tenant-dead-letter-queue',
-    'project-project-overview',
-    'project-project-search',
-    'project-project-cron-jobs',
-    'project-support',
-  ]);
 
 const CURRENT_CAPABILITY_CONTRACT_MINIMUMS = [
   DESKTOP_MINIMUM_CONTRACT_VERSION,
+  DESKTOP_PREVIOUS_CAPABILITY_SNAPSHOT_VERSION,
   DESKTOP_CAPABILITY_SNAPSHOT_VERSION,
 ] as const;
 
 const CAPABILITY_ENTRY_KEYS = [
+  'availability',
+  'reason_code',
+  'service_version',
+  'contract_version',
+  'allowed_actions',
+  'scope',
+  'authority_revision',
+  'authority_source',
+  'provenance',
+] as const;
+
+const PREVIOUS_CAPABILITY_ENTRY_KEYS = [
   'availability',
   'reason_code',
   'service_version',
@@ -153,6 +205,7 @@ export function parseDesktopCapabilitySnapshot(
     !isCapabilityMode(input.mode) ||
     !isCapabilityRecord(input.capabilities) ||
     (input.version !== DESKTOP_CAPABILITY_SNAPSHOT_VERSION &&
+      input.version !== DESKTOP_PREVIOUS_CAPABILITY_SNAPSHOT_VERSION &&
       input.version !== DESKTOP_LEGACY_CAPABILITY_SNAPSHOT_VERSION)
   ) {
     return null;
@@ -160,7 +213,7 @@ export function parseDesktopCapabilitySnapshot(
 
   const capabilities = {} as Record<
     DesktopCapabilityName,
-    DesktopCapabilityAvailability
+    DesktopCapabilitySnapshotEntry
   >;
   for (const capabilityName of DESKTOP_CAPABILITY_NAMES) {
     if (!Object.hasOwn(input.capabilities, capabilityName)) {
@@ -169,10 +222,11 @@ export function parseDesktopCapabilitySnapshot(
       );
       continue;
     }
-    const availability =
-      input.version === DESKTOP_CAPABILITY_SNAPSHOT_VERSION
-        ? readAvailability(input.capabilities[capabilityName])
-        : readLegacyAvailability(input.capabilities[capabilityName]);
+    const availability = readSnapshotAvailability(
+      input.version,
+      input.mode,
+      input.capabilities[capabilityName],
+    );
     if (!availability) return null;
     capabilities[capabilityName] = availability;
   }
@@ -196,16 +250,74 @@ export function desktopCapability(
     ...capability,
     status: capability.availability,
     available:
-      capability.availability === 'available' ||
-      capability.availability === 'degraded',
+      capability.provenance === 'observed' &&
+      (capability.availability === 'available' ||
+        capability.availability === 'degraded'),
   };
+}
+
+function readSnapshotAvailability(
+  version:
+    | typeof DESKTOP_CAPABILITY_SNAPSHOT_VERSION
+    | typeof DESKTOP_PREVIOUS_CAPABILITY_SNAPSHOT_VERSION
+    | typeof DESKTOP_LEGACY_CAPABILITY_SNAPSHOT_VERSION,
+  mode: DesktopCapabilityMode,
+  input: unknown,
+): DesktopCapabilitySnapshotEntry | null {
+  if (version === DESKTOP_CAPABILITY_SNAPSHOT_VERSION) {
+    return readAvailability(input, mode);
+  }
+  if (version === DESKTOP_PREVIOUS_CAPABILITY_SNAPSHOT_VERSION) {
+    const availability = readStructuredAvailability(
+      input,
+      PREVIOUS_CAPABILITY_ENTRY_KEYS,
+    );
+    return availability ? declaredAvailability(availability) : null;
+  }
+  return readLegacyAvailability(input);
 }
 
 function readAvailability(
   input: unknown,
-): DesktopCapabilityAvailability | null {
+  mode: DesktopCapabilityMode,
+): DesktopCapabilitySnapshotEntry | null {
   if (
     !isExactRecord(input, CAPABILITY_ENTRY_KEYS) ||
+    !isCapabilityAuthoritySource(input.authority_source) ||
+    !isCapabilityProvenance(input.provenance)
+  ) {
+    return null;
+  }
+
+  const availability = readStructuredAvailability(input, CAPABILITY_ENTRY_KEYS);
+  const active =
+    availability?.availability === 'available' ||
+    availability?.availability === 'degraded';
+  if (
+    !availability ||
+    (active && availability.authority_revision === null) ||
+    !isAuthorityStateValid(
+      mode,
+      availability.availability,
+      input.authority_source,
+      input.provenance,
+    )
+  ) {
+    return null;
+  }
+  return {
+    ...availability,
+    authority_source: input.authority_source,
+    provenance: input.provenance,
+  };
+}
+
+function readStructuredAvailability(
+  input: unknown,
+  expectedKeys: readonly string[],
+): DesktopCapabilityAvailability | null {
+  if (
+    !isExactRecord(input, expectedKeys) ||
     !isCapabilityStatus(input.availability) ||
     !isNullableCapabilityVersion(input.service_version) ||
     !isNullableCapabilityVersion(input.contract_version) ||
@@ -214,10 +326,12 @@ function readAvailability(
   ) {
     return null;
   }
-
   const allowedActions = readAllowedActions(input.allowed_actions);
+  const active =
+    input.availability === 'available' || input.availability === 'degraded';
   if (
     allowedActions === null ||
+    (active && allowedActions.length === 0) ||
     !isAvailabilityStateValid(
       input.availability,
       input.reason_code,
@@ -254,7 +368,7 @@ function readAvailability(
 
 function readLegacyAvailability(
   input: unknown,
-): DesktopCapabilityAvailability | null {
+): DesktopCapabilitySnapshotEntry | null {
   if (
     !isExactRecord(input, LEGACY_CAPABILITY_ENTRY_KEYS) ||
     !isCapabilityStatus(input.status) ||
@@ -270,7 +384,7 @@ function readLegacyAvailability(
   ) {
     return null;
   }
-  return {
+  return declaredAvailability({
     availability: input.status,
     reason_code: input.reason_code,
     service_version: input.service_version,
@@ -278,7 +392,7 @@ function readLegacyAvailability(
     allowed_actions: [],
     scope: emptyCapabilityScope(),
     authority_revision: null,
-  };
+  });
 }
 
 function isAvailabilityStateValid(
@@ -310,7 +424,7 @@ function isAvailabilityStateValid(
 
 function unavailableCapability(
   reasonCode: string,
-): DesktopCapabilityAvailability {
+): DesktopCapabilitySnapshotEntry {
   return {
     availability: 'unavailable',
     reason_code: reasonCode,
@@ -319,6 +433,18 @@ function unavailableCapability(
     allowed_actions: [],
     scope: emptyCapabilityScope(),
     authority_revision: null,
+    authority_source: 'renderer',
+    provenance: 'declared',
+  };
+}
+
+function declaredAvailability(
+  availability: DesktopCapabilityAvailability,
+): DesktopCapabilitySnapshotEntry {
+  return {
+    ...availability,
+    authority_source: 'renderer',
+    provenance: 'declared',
   };
 }
 
@@ -342,6 +468,42 @@ function isCapabilityStatus(input: unknown): input is DesktopCapabilityStatus {
     input === 'unavailable' ||
     input === 'not_applicable'
   );
+}
+
+function isCapabilityAuthoritySource(
+  input: unknown,
+): input is DesktopCapabilityAuthoritySource {
+  return (
+    input === 'cloud_service' ||
+    input === 'sidecar' ||
+    input === 'native_runtime' ||
+    input === 'renderer'
+  );
+}
+
+function isCapabilityProvenance(
+  input: unknown,
+): input is DesktopCapabilityProvenance {
+  return input === 'observed' || input === 'declared';
+}
+
+function isAuthorityStateValid(
+  mode: DesktopCapabilityMode,
+  availability: DesktopCapabilityStatus,
+  source: DesktopCapabilityAuthoritySource,
+  provenance: DesktopCapabilityProvenance,
+): boolean {
+  const active = availability === 'available' || availability === 'degraded';
+  if (provenance === 'declared') return source === 'renderer' && !active;
+  return source === authoritySourceForMode(mode);
+}
+
+function authoritySourceForMode(
+  mode: DesktopCapabilityMode,
+): Exclude<DesktopCapabilityAuthoritySource, 'renderer'> {
+  if (mode === 'cloud') return 'cloud_service';
+  if (mode === 'local') return 'sidecar';
+  return 'native_runtime';
 }
 
 function isNullableCapabilityVersion(input: unknown): input is string | null {

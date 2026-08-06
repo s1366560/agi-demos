@@ -31,6 +31,10 @@ const skillEvolutionDialogSource = readFileSync(
   new URL('../src/features/settings/SkillEvolutionDialog.tsx', import.meta.url),
   'utf8',
 );
+const skillPackageManagementSource = readFileSync(
+  new URL('../src/features/settings/useSkillPackageManagement.ts', import.meta.url),
+  'utf8',
+);
 const providerSettingsQaSource = readFileSync(
   new URL('../src/qa/ProviderSettingsQa.tsx', import.meta.url),
   'utf8',
@@ -150,7 +154,9 @@ test('Desktop skill surfaces expose import, version history, and guarded rollbac
   assert.match(settingsWindowSource, /skillPackageManagement\.openVersions/);
   assert.match(managedResourceViewsSource, /settings\.skillPackages\.importAction/);
   assert.match(managedResourceViewsSource, /settings\.skillPackages\.versionsAction/);
-  assert.match(skillPackageDialogsSource, /accept="\.zip,application\/zip"/);
+  assert.match(skillPackageDialogsSource, /openFilesWithDesktopDialog\('skill_package'\)/);
+  assert.doesNotMatch(skillPackageDialogsSource, /type="file"|fileInputRef/);
+  assert.match(skillPackageDialogsSource, /settings\.skillPackages\.filePickerFailed/);
   assert.match(skillPackageDialogsSource, /settings\.skillPackages\.overwrite/);
   assert.match(skillPackageDialogsSource, /settings\.skillPackages\.rollbackConfirm/);
   assert.match(
@@ -292,4 +298,10 @@ test('Desktop skill detail exposes package export, version preview, and governed
   assert.match(i18nSource, /'settings\.skillEvolution\.action': 'Evolution'/);
   assert.match(i18nSource, /'settings\.skillPackages\.exportAction': '导出'/);
   assert.match(i18nSource, /'settings\.skillEvolution\.action': '演进'/);
+  assert.match(skillPackageManagementSource, /saveBlobWithDesktopDialog/);
+  assert.match(skillPackageManagementSource, /await downloadSkillPackage/);
+  assert.doesNotMatch(
+    skillPackageManagementSource,
+    /URL\.createObjectURL|document\.createElement|\.download\s*=/,
+  );
 });

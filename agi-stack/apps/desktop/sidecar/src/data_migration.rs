@@ -11,6 +11,8 @@ use rusqlite::{backup::Backup, Connection, OpenFlags};
 use serde::Serialize;
 use uuid::Uuid;
 
+use crate::private_file_permissions;
+
 const VAULT_DIRECTORY: &str = "credential-vault";
 const VAULT_MASTER_KEY: &str = "master.key";
 const VAULT_DATABASE: &str = "records.db";
@@ -155,28 +157,12 @@ fn open_new_private_file(path: &Path) -> io::Result<File> {
     options.open(path)
 }
 
-#[cfg(unix)]
 fn set_private_directory_permissions(path: &Path) -> io::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
-    fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+    private_file_permissions::set_private_directory_permissions(path)
 }
 
-#[cfg(not(unix))]
-fn set_private_directory_permissions(_path: &Path) -> io::Result<()> {
-    Ok(())
-}
-
-#[cfg(unix)]
 fn set_private_file_permissions(path: &Path) -> io::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
-    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
-}
-
-#[cfg(not(unix))]
-fn set_private_file_permissions(_path: &Path) -> io::Result<()> {
-    Ok(())
+    private_file_permissions::set_private_file_permissions(path)
 }
 
 #[cfg(test)]
@@ -276,5 +262,39 @@ mod tests {
             read_database(&destination.join("agistack-desktop-sessions.db")),
             "electron"
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn migrated_windows_vault_files_use_current_user_only_acl() {
+        use crate::private_file_permissions::path_has_current_user_only_acl;
+
+        let root = TestDirectory::create("agistack-sidecar-windows-vault-migration");
+        let legacy = root.0.join("legacy");
+        let destination = root.0.join("electron");
+        fs::create_dir_all(&legacy).expect("create legacy data");
+        let legacy_vault =
+            ApplicationCredentialVault::open(&legacy).expect("open legacy credential vault");
+        legacy_vault
+            .put("trusted-session.v1", "secret-session-record")
+            .expect("store legacy secret");
+        drop(legacy_vault);
+
+        migrate_legacy_data(&destination, &[legacy]).expect("migrate vault");
+
+        assert!(
+            path_has_current_user_only_acl(&destination.join(VAULT_DIRECTORY), true)
+                .expect("inspect migrated vault directory ACL")
+        );
+        assert!(path_has_current_user_only_acl(
+            &destination.join(VAULT_DIRECTORY).join(VAULT_MASTER_KEY),
+            false,
+        )
+        .expect("inspect migrated vault key ACL"));
+        assert!(path_has_current_user_only_acl(
+            &destination.join(VAULT_DIRECTORY).join(VAULT_DATABASE),
+            false,
+        )
+        .expect("inspect migrated vault database ACL"));
     }
 }

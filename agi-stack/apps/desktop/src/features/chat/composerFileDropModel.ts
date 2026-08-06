@@ -1,6 +1,6 @@
 import type { AgentInputFileMetadata } from '../../types';
 
-export const MAX_COMPOSER_ATTACHMENT_BYTES = 100 * 1024 * 1024;
+export const MAX_COMPOSER_ATTACHMENT_BYTES = 16 * 1_048_576;
 
 export type ComposerUploadFile = Pick<File, 'name' | 'type' | 'size' | 'arrayBuffer'>;
 

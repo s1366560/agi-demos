@@ -292,9 +292,15 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "NONE",
-          "path": "unavailable:desktop_native_route_planned",
-          "authority": "none"
+          "method": "GET",
+          "path": "/api/v1/invitations/verify/{token}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/invitations/accept/{token}",
+          "authority": "cloud_service"
         },
         {
           "surface": "desktop_local",

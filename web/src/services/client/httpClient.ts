@@ -40,7 +40,7 @@ const client = axios.create({
 /**
  * Endpoints that don't require authentication
  */
-const NO_AUTH_ENDPOINTS = ['/auth/token', '/auth/register', '/public'];
+const NO_AUTH_ENDPOINTS = ['/auth/token', '/auth/register', '/auth/oauth', '/public'];
 
 const normalizeApiPath = (url: string): string => {
   const pathname = new URL(url || '/', 'http://memstack.local').pathname;

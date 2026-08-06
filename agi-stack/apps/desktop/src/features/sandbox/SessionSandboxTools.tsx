@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { DesktopIcon, FileIcon, ReloadIcon } from '@radix-ui/react-icons';
 import { Button, Text } from '@radix-ui/themes';
 
 import { useI18n } from '../../i18n';
+import { saveBlobWithDesktopDialog } from '../runtime/nativeFileBridge';
 import { RemoteDesktopSurface } from './RemoteDesktopSurface';
 import { SandboxFileBrowser } from './SandboxFileBrowser';
 import type { SandboxFileContent, SandboxFileDownload } from './sandboxRuntimeClient';
@@ -17,6 +18,10 @@ export function SessionSandboxTools({ runtime }: SessionSandboxToolsProps) {
   const { t } = useI18n();
   const [activeSurface, setActiveSurface] = useState<'desktop' | 'files'>('desktop');
   const [previewFile, setPreviewFile] = useState<SandboxFileContent | null>(null);
+
+  useLayoutEffect(() => {
+    setPreviewFile(null);
+  }, [runtime.fileClient]);
 
   if (runtime.capabilityStatus !== 'ready') {
     return (
@@ -128,12 +133,11 @@ export function SessionSandboxTools({ runtime }: SessionSandboxToolsProps) {
   );
 }
 
-function downloadSandboxFile(file: SandboxFileDownload): void {
-  const objectUrl = URL.createObjectURL(file.bytes);
-  const anchor = document.createElement('a');
-  anchor.href = objectUrl;
-  anchor.download = file.filename;
-  anchor.rel = 'noopener';
-  anchor.click();
-  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+async function downloadSandboxFile(file: SandboxFileDownload): Promise<void> {
+  const result = await saveBlobWithDesktopDialog({
+    suggestedName: file.filename,
+    mimeType: file.mime_type || file.bytes.type || 'application/octet-stream',
+    blob: file.bytes,
+  });
+  if (result.status === 'cancelled') return;
 }

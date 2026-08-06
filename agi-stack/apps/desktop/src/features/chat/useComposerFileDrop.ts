@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 
+import { ingestFilesWithDesktopBridge } from '../runtime/nativeFileBridge';
 import { composerFileDragActive, composerFileDropAction } from './composerFileDropModel';
 
 type UseComposerFileDropOptions = {
@@ -71,7 +72,9 @@ export function useComposerFileDrop({
       if (action === 'unsupported') {
         onUnsupported();
       } else if (action === 'upload') {
-        void onUploadFiles(files);
+        void ingestFilesWithDesktopBridge(files)
+          .then((ingestedFiles) => onUploadFiles([...ingestedFiles]))
+          .catch(onUnsupported);
       }
     },
     [disabled, onUnsupported, onUploadFiles, supportsUpload],

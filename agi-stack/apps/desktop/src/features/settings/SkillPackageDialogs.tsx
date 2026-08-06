@@ -15,6 +15,7 @@ import type {
   ManagedSkillVersionDetail,
   ProjectSummary,
 } from '../../types';
+import { openFilesWithDesktopDialog } from '../runtime/nativeFileBridge';
 import type { SkillImportSubmission } from './useSkillPackageManagement';
 import { useModalDialog } from './useModalDialog';
 
@@ -49,13 +50,37 @@ export function SkillImportDialog({
   const [overwrite, setOverwrite] = useState(false);
   const [changeSummary, setChangeSummary] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [filePickerBusy, setFilePickerBusy] = useState(false);
+  const [filePickerError, setFilePickerError] = useState<string | null>(null);
+  const filePickerButtonRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useModalDialog({
     active: true,
-    initialFocusRef: fileInputRef,
+    initialFocusRef: filePickerButtonRef,
     nested: true,
     onClose,
   });
+
+  const pickSkillPackage = async () => {
+    setFilePickerBusy(true);
+    setFilePickerError(null);
+    try {
+      const result = await openFilesWithDesktopDialog('skill_package');
+      if (result.status === 'selected') {
+        setArchive(result.files[0] ?? null);
+        setContent('');
+        setValidationError(null);
+      }
+    } catch (caught) {
+      setFilePickerError(
+        t('settings.skillPackages.filePickerFailed', {
+          error: caught instanceof Error ? caught.message : String(caught),
+        }),
+      );
+    } finally {
+      setFilePickerBusy(false);
+      window.requestAnimationFrame(() => filePickerButtonRef.current?.focus());
+    }
+  };
 
   const submit = () => {
     if (!archive && !content.trim()) {
@@ -84,7 +109,7 @@ export function SkillImportDialog({
       className="agent-definition-dialog-backdrop"
       role="presentation"
       onMouseDown={() => {
-        if (!busy) onClose();
+        if (!busy && !filePickerBusy) onClose();
       }}
     >
       <section
@@ -109,7 +134,7 @@ export function SkillImportDialog({
             type="button"
             className="agent-definition-dialog-close"
             aria-label={t('common.close')}
-            disabled={busy}
+            disabled={busy || filePickerBusy}
             onClick={onClose}
           >
             <Cross2Icon />
@@ -117,7 +142,13 @@ export function SkillImportDialog({
         </header>
 
         <div className="agent-definition-dialog-body skill-package-import-body">
-          <label className="skill-package-archive-picker">
+          <button
+            ref={filePickerButtonRef}
+            className="skill-package-archive-picker"
+            type="button"
+            disabled={busy || filePickerBusy}
+            onClick={() => void pickSkillPackage()}
+          >
             <span className="skill-package-archive-icon">
               <FileIcon />
             </span>
@@ -126,19 +157,7 @@ export function SkillImportDialog({
               <small>{t('settings.skillPackages.zipDescription')}</small>
             </span>
             <em>{t('settings.skillPackages.chooseZip')}</em>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".zip,application/zip"
-              disabled={busy}
-              onChange={(event) => {
-                const file = event.target.files?.[0] ?? null;
-                setArchive(file);
-                if (file) setContent('');
-                setValidationError(null);
-              }}
-            />
-          </label>
+          </button>
 
           <div className="skill-package-divider">
             <span>{t('settings.skillPackages.orPaste')}</span>
@@ -220,10 +239,10 @@ export function SkillImportDialog({
           </div>
         </div>
 
-        {validationError || error ? (
+        {validationError || filePickerError || error ? (
           <div className="agent-definition-dialog-error" role="alert">
             <ExclamationTriangleIcon />
-            <span>{validationError || error}</span>
+            <span>{validationError || filePickerError || error}</span>
           </div>
         ) : null}
 

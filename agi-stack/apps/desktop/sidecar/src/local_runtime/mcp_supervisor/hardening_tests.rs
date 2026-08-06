@@ -20,7 +20,11 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
-use tokio::{net::TcpListener, sync::Barrier, task::JoinHandle};
+use tokio::{
+    net::TcpListener,
+    sync::{Barrier, Notify},
+    task::JoinHandle,
+};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 use url::Url;
 use uuid::Uuid;
@@ -49,7 +53,9 @@ enum WebSocketBehavior {
         entered: Arc<Barrier>,
         release: Arc<Barrier>,
     },
-    StallAfterInitialization,
+    StallAfterInitialization {
+        entered: Arc<Notify>,
+    },
 }
 
 struct WebSocketHarness {
@@ -191,8 +197,9 @@ impl WebSocketHarness {
                 let request: Value = serde_json::from_str(&text).expect("parse hardening request");
                 let method = request.get("method").and_then(Value::as_str);
                 if method == Some("notifications/initialized") {
-                    if matches!(behavior, WebSocketBehavior::StallAfterInitialization) {
-                        tokio::time::sleep(Duration::from_secs(5)).await;
+                    if let WebSocketBehavior::StallAfterInitialization { entered } = &behavior {
+                        entered.notify_one();
+                        std::future::pending::<()>().await;
                         return;
                     }
                     continue;
@@ -981,22 +988,40 @@ async fn websocket_enforces_frame_and_message_limits_in_the_protocol_layer() {
 
 #[tokio::test]
 async fn websocket_request_timeout_bounds_a_stalled_send_and_receive_cycle() {
-    let harness = WebSocketHarness::spawn(WebSocketBehavior::StallAfterInitialization).await;
+    let entered = Arc::new(Notify::new());
+    let harness = WebSocketHarness::spawn(WebSocketBehavior::StallAfterInitialization {
+        entered: Arc::clone(&entered),
+    })
+    .await;
     let mut test_limits = limits();
     test_limits.request_timeout = Duration::from_millis(75);
     test_limits.max_request_bytes = 16 * 1024 * 1024;
+    let request_timeout = test_limits.request_timeout;
     let (root, supervisor, active_scope, server_id) =
         websocket_supervisor("stalled-send", &harness, test_limits);
-    let started = tokio::time::Instant::now();
-    let error = supervisor
-        .call_tool(
-            &active_scope,
-            &server_id,
-            "echo",
-            json!({"payload": "x".repeat(8 * 1024 * 1024)}),
-            "stalled-send-key",
-        )
+    let call_supervisor = Arc::clone(&supervisor);
+    let call_scope = active_scope.clone();
+    let call_server_id = server_id.clone();
+    let call = tokio::spawn(async move {
+        call_supervisor
+            .call_tool(
+                &call_scope,
+                &call_server_id,
+                "echo",
+                json!({"payload": "x".repeat(8 * 1024 * 1024)}),
+                "stalled-send-key",
+            )
+            .await
+    });
+    tokio::time::timeout(Duration::from_secs(5), entered.notified())
         .await
+        .expect("WebSocket harness must enter the protocol stall");
+    tokio::time::pause();
+    tokio::task::yield_now().await;
+    tokio::time::advance(request_timeout.saturating_add(Duration::from_millis(1))).await;
+    let error = call
+        .await
+        .expect("stalled tool-call task")
         .expect_err("stalled WebSocket send must time out");
     assert_eq!(error.reason_code(), "local_mcp_tool_call_indeterminate");
     let replay_error = supervisor
@@ -1013,7 +1038,11 @@ async fn websocket_request_timeout_bounds_a_stalled_send_and_receive_cycle() {
         replay_error.reason_code(),
         "local_mcp_tool_call_indeterminate"
     );
-    assert!(started.elapsed() < Duration::from_secs(2));
+    assert_eq!(
+        harness.calls.load(Ordering::SeqCst),
+        0,
+        "an indeterminate call must not reach or replay tools/call after the protocol stall"
+    );
     drop(supervisor);
     fs::remove_dir_all(root).expect("remove stalled-send root");
 }

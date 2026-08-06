@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { DownloadIcon, FileIcon, ReloadIcon } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
+import { createSandboxFileOperationGate } from './sandboxFileOperationGate';
 import type {
   SandboxFileContent,
   SandboxFileDownload,
@@ -17,7 +18,7 @@ type SandboxFileBrowserProps = {
   client: SandboxRuntimeClient;
   rootPath?: string;
   onOpenFile?: (file: SandboxFileContent) => void;
-  onDownloadFile?: (file: SandboxFileDownload) => void;
+  onDownloadFile?: (file: SandboxFileDownload) => void | Promise<void>;
 };
 
 export function SandboxFileBrowser({
@@ -33,6 +34,7 @@ export function SandboxFileBrowser({
   const [authority, setAuthority] = useState<SandboxFileAuthority | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const operationGateRef = useRef(createSandboxFileOperationGate());
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -70,6 +72,16 @@ export function SandboxFileBrowser({
     [capability.availability, client, path],
   );
 
+  useLayoutEffect(() => {
+    operationGateRef.current.invalidate();
+    setPath(rootPath);
+    setEntries([]);
+    setAuthority(null);
+    setStatus('idle');
+    setError(null);
+    return () => operationGateRef.current.invalidate();
+  }, [capability.availability, client, rootPath]);
+
   useEffect(() => {
     const controller = new AbortController();
     void load(controller.signal);
@@ -93,12 +105,14 @@ export function SandboxFileBrowser({
   }
 
   const open = async (entry: SandboxFileEntry) => {
+    if (entry.kind === 'directory') {
+      setPath(entry.path);
+      return;
+    }
+    const operation = operationGateRef.current.begin();
     try {
-      if (entry.kind === 'directory') {
-        setPath(entry.path);
-        return;
-      }
-      const result = await client.readFile({ path: entry.path });
+      const result = await client.readFile({ path: entry.path }, operation.signal);
+      if (!operation.isCurrent()) return;
       if (result.status === 'ready') {
         onOpenFile?.(result.value);
         return;
@@ -106,23 +120,31 @@ export function SandboxFileBrowser({
       setError(result.reason_code);
       setStatus('error');
     } catch (caught) {
+      if (!operation.isCurrent()) return;
       setError(caught instanceof Error ? caught.message : String(caught));
       setStatus('error');
+    } finally {
+      operation.finish();
     }
   };
 
   const download = async (entry: SandboxFileEntry) => {
+    const operation = operationGateRef.current.begin();
     try {
-      const result = await client.downloadFile({ path: entry.path });
+      const result = await client.downloadFile({ path: entry.path }, operation.signal);
+      if (!operation.isCurrent()) return;
       if (result.status === 'ready') {
-        onDownloadFile?.(result.value);
+        await onDownloadFile?.(result.value);
         return;
       }
       setError(result.reason_code);
       setStatus('error');
     } catch (caught) {
+      if (!operation.isCurrent()) return;
       setError(caught instanceof Error ? caught.message : String(caught));
       setStatus('error');
+    } finally {
+      operation.finish();
     }
   };
 

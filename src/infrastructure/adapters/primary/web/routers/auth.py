@@ -4,6 +4,7 @@ Authentication router.
 
 from __future__ import annotations
 
+import hashlib
 import json as _json
 import logging
 import secrets
@@ -12,10 +13,10 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -53,6 +54,16 @@ from src.infrastructure.adapters.secondary.persistence.sql_api_key_repository im
     SqlAPIKeyRepository,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.security.oauth_login import (
+    OAuthIdentity,
+    OAuthLoginError,
+    OAuthProviderExchangeError,
+    OAuthProviderIdentityError,
+    OAuthProviderUnavailableError,
+    OAuthStateInvalidError,
+    OAuthStateStoreUnavailableError,
+    get_oauth_login_service,
+)
 
 if TYPE_CHECKING:
     from redis.asyncio import Redis
@@ -62,10 +73,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Authentication"])
 
 
+class OAuthAuthorizationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    redirect_to: str = "/"
+
+
 class OAuthCallbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     code: str
-    state: str | None = None
-    redirect_uri: str | None = None
+    state: str
+
+
+class OAuthLoginResponse(BaseModel):
+    access_token: str
+    token_type: str
+    redirect_to: str
+    user: UserSchema
 
 
 class DeviceCodeCancelRequest(BaseModel):
@@ -237,13 +262,210 @@ async def sign_out(
     return {"success": True}
 
 
-@router.post("/auth/oauth/{provider}/callback", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def oauth_callback(provider: str, _request: OAuthCallbackRequest) -> None:
-    """Return an explicit unsupported response until OAuth providers are configured."""
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail=_("OAuth login is not configured"),
+@router.get("/auth/oauth/providers")
+async def list_oauth_providers() -> dict[str, list[dict[str, str]]]:
+    """Expose only providers with complete server-side configuration."""
+    providers = get_oauth_login_service().list_providers()
+    return {
+        "providers": [
+            {"id": provider.id, "display_name": provider.display_name} for provider in providers
+        ]
+    }
+
+
+@router.post("/auth/oauth/{provider}/authorize")
+async def begin_oauth_authorization(
+    provider: str,
+    body: OAuthAuthorizationRequest,
+    request: Request,
+) -> dict[str, str | int]:
+    """Create an opaque, one-time OAuth state and PKCE authorization URL."""
+    try:
+        authorization = await get_oauth_login_service().begin_authorization(
+            request.app.state.container.redis(),
+            provider_id=provider,
+            redirect_to=body.redirect_to,
+        )
+    except (OAuthLoginError, ValueError) as exc:
+        raise _oauth_http_error(exc) from exc
+    return {
+        "provider": authorization.provider_id,
+        "authorization_url": authorization.authorization_url,
+        "expires_in": authorization.expires_in,
+    }
+
+
+@router.post("/auth/oauth/{provider}/callback", response_model=OAuthLoginResponse)
+async def oauth_callback(
+    provider: str,
+    body: OAuthCallbackRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> OAuthLoginResponse:
+    """Link a verified provider identity to a pre-provisioned user and issue a session."""
+    try:
+        callback = await get_oauth_login_service().exchange_callback(
+            request.app.state.container.redis(),
+            provider_id=provider,
+            code=body.code,
+            state=body.state,
+        )
+    except OAuthLoginError as exc:
+        raise _oauth_http_error(exc) from exc
+
+    identity = callback.identity
+    if not identity.email_verified:
+        raise _oauth_reason_error(
+            status.HTTP_403_FORBIDDEN,
+            "oauth_identity_email_unverified",
+        )
+
+    await _acquire_oauth_identity_locks(db, identity)
+
+    result = await db.execute(
+        refresh_select_statement(
+            select(DBUser)
+            .where(func.lower(DBUser.email) == identity.email.casefold())
+            .options(selectinload(DBUser.roles).selectinload(UserRole.role))
+        )
     )
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise _oauth_reason_error(
+            status.HTTP_403_FORBIDDEN,
+            "oauth_account_not_preprovisioned",
+        )
+    if not user.is_active:
+        raise _oauth_reason_error(status.HTTP_401_UNAUTHORIZED, "oauth_account_inactive")
+
+    existing_subject = _oauth_subject_for_user(user, identity.provider_id)
+    if existing_subject is not None and existing_subject != identity.subject:
+        raise _oauth_reason_error(
+            status.HTTP_409_CONFLICT,
+            "oauth_identity_subject_conflict",
+        )
+
+    subject_owner_result = await db.execute(
+        refresh_select_statement(
+            select(DBUser).where(
+                DBUser.profile["oauth_identities"][identity.provider_id]["subject"].as_string()
+                == identity.subject
+            )
+        )
+    )
+    subject_owner = subject_owner_result.scalar_one_or_none()
+    if subject_owner is not None and subject_owner.id != user.id:
+        raise _oauth_reason_error(
+            status.HTTP_409_CONFLICT,
+            "oauth_identity_link_conflict",
+        )
+
+    user.profile = _linked_oauth_profile(user, identity)
+    db.add(user)
+    role_names = [assignment.role.name for assignment in user.roles]
+    global_role_names = [
+        assignment.role.name
+        for assignment in user.roles
+        if getattr(assignment, "tenant_id", None) is None
+        and getattr(assignment, "project_id", None) is None
+    ]
+    permissions = ["read", "write"]
+    if user.is_superuser is True or "admin" in role_names:
+        permissions.append("admin")
+    plain_key, _ = await create_api_key(
+        db,
+        user_id=user.id,
+        name=f"OAuth Session {identity.provider_id}",
+        permissions=permissions,
+        expires_in_days=1,
+    )
+    await _ensure_default_project(db, user)
+    await db.commit()
+
+    return OAuthLoginResponse(
+        access_token=plain_key,
+        token_type="bearer",
+        redirect_to=callback.redirect_to,
+        user=UserSchema(
+            user_id=user.id,
+            email=user.email,
+            name=user.full_name or identity.display_name,
+            roles=role_names,
+            global_roles=global_role_names,
+            is_active=user.is_active,
+            is_superuser=user.is_superuser is True,
+            created_at=user.created_at,
+            profile=_user_profile(user),
+            preferred_language=user.preferred_language,
+        ),
+    )
+
+
+def _oauth_subject_for_user(user: DBUser, provider_id: str) -> str | None:
+    identities = _user_profile(user).get("oauth_identities")
+    if not isinstance(identities, dict):
+        return None
+    provider_identity = identities.get(provider_id)
+    if not isinstance(provider_identity, dict):
+        return None
+    subject = provider_identity.get("subject")
+    return subject if isinstance(subject, str) and subject else None
+
+
+def _linked_oauth_profile(user: DBUser, identity: OAuthIdentity) -> dict[str, Any]:
+    profile = _user_profile(user)
+    existing_identities = profile.get("oauth_identities")
+    identities = dict(existing_identities) if isinstance(existing_identities, dict) else {}
+    identities[identity.provider_id] = {
+        "subject": identity.subject,
+        "email": identity.email,
+    }
+    return {**profile, "oauth_identities": identities}
+
+
+async def _acquire_oauth_identity_locks(db: AsyncSession, identity: OAuthIdentity) -> None:
+    """Serialize both identity ownership and per-account provider binding in PostgreSQL."""
+    resources = {
+        f"oauth-identity:{identity.provider_id}:{identity.subject}",
+        f"oauth-account:{identity.provider_id}:{identity.email.casefold()}",
+    }
+    lock_keys = sorted(
+        int.from_bytes(hashlib.sha256(resource.encode("utf-8")).digest()[:8], "big", signed=True)
+        for resource in resources
+    )
+    for lock_key in lock_keys:
+        await db.execute(refresh_select_statement(select(func.pg_advisory_xact_lock(lock_key))))
+
+
+def _oauth_reason_error(status_code: int, reason_code: str) -> HTTPException:
+    return HTTPException(status_code=status_code, detail={"reason_code": reason_code})
+
+
+def _oauth_http_error(error: Exception) -> HTTPException:
+    mappings: tuple[tuple[type[Exception], int, str], ...] = (
+        (OAuthProviderUnavailableError, status.HTTP_404_NOT_FOUND, "oauth_provider_unavailable"),
+        (
+            OAuthStateStoreUnavailableError,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "oauth_state_store_unavailable",
+        ),
+        (OAuthStateInvalidError, status.HTTP_400_BAD_REQUEST, "oauth_callback_state_invalid"),
+        (
+            OAuthProviderIdentityError,
+            status.HTTP_403_FORBIDDEN,
+            "oauth_provider_identity_invalid",
+        ),
+        (
+            OAuthProviderExchangeError,
+            status.HTTP_502_BAD_GATEWAY,
+            "oauth_provider_exchange_failed",
+        ),
+        (ValueError, status.HTTP_400_BAD_REQUEST, "oauth_redirect_invalid"),
+    )
+    for error_type, status_code, reason_code in mappings:
+        if isinstance(error, error_type):
+            return _oauth_reason_error(status_code, reason_code)
+    return _oauth_reason_error(status.HTTP_502_BAD_GATEWAY, "oauth_login_failed")
 
 
 @router.post("/auth/force-change-password", response_model=ForceChangePasswordResponse)

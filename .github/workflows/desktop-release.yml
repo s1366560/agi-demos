@@ -269,6 +269,9 @@ jobs:
       - name: Install dependencies
         run: corepack pnpm install --frozen-lockfile
 
+      - name: Test native Rust sidecar
+        run: cargo test --manifest-path ../../Cargo.toml -p agistack-desktop-sidecar
+
       - name: Build Electron application
         run: corepack pnpm run build:electron
 

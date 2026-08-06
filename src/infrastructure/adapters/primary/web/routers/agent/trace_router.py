@@ -18,6 +18,8 @@ from src.infrastructure.adapters.secondary.common.base_repository import refresh
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     Conversation as DBConversation,
+    Project as DBProject,
+    UserProject as DBUserProject,
     UserTenant as DBUserTenant,
 )
 from src.infrastructure.i18n import gettext as _
@@ -31,6 +33,8 @@ from .access import (
 from .schemas import (
     ActiveRunCountResponse,
     DescendantTreeResponse,
+    ProjectActiveRunCountResponse,
+    ProjectSubAgentRunListResponse,
     SubAgentRunListResponse,
     SubAgentRunResponse,
     TenantActiveRunCountResponse,
@@ -141,6 +145,55 @@ async def _list_accessible_tenant_conversation_ids(
     return list(result.scalars().all())
 
 
+async def _list_accessible_project_conversation_ids(
+    db: AsyncSession,
+    current_user: User,
+    project_id: str,
+) -> list[str]:
+    """List project conversations visible to the caller's persisted role authority."""
+    current_user_id = _get_user_id(current_user)
+    global_admin = await has_global_admin_access(db, current_user)
+    scope_result = await db.execute(
+        refresh_select_statement(
+            select(DBProject.tenant_id, DBUserProject.role, DBUserTenant.role)
+            .outerjoin(
+                DBUserProject,
+                (DBUserProject.project_id == DBProject.id)
+                & (DBUserProject.user_id == current_user_id),
+            )
+            .outerjoin(
+                DBUserTenant,
+                (DBUserTenant.tenant_id == DBProject.tenant_id)
+                & (DBUserTenant.user_id == current_user_id),
+            )
+            .where(DBProject.id == project_id)
+            .limit(1)
+        )
+    )
+    scope = scope_result.one_or_none()
+    if scope is None:
+        raise HTTPException(status_code=404, detail=_("Project not found"))
+
+    _tenant_id, project_role, tenant_role = scope
+    if not global_admin and (project_role is None or tenant_role is None):
+        raise HTTPException(status_code=403, detail=_("Project access required"))
+
+    query = (
+        select(DBConversation.id)
+        .where(DBConversation.project_id == project_id)
+        .order_by(desc(DBConversation.updated_at), desc(DBConversation.created_at))
+    )
+    can_view_project_team = global_admin or project_role in {"owner", "admin"} or tenant_role in {
+        "owner",
+        "admin",
+    }
+    if not can_view_project_team:
+        query = query.where(DBConversation.user_id == current_user_id)
+
+    result = await db.execute(refresh_select_statement(query))
+    return list(result.scalars().all())
+
+
 async def _list_user_conversation_ids(
     db: AsyncSession,
     current_user: User,
@@ -160,6 +213,81 @@ async def _list_user_conversation_ids(
 
 
 # --- Static routes MUST be registered before parameterised routes ---
+
+
+@router.get(
+    "/runs/project/{project_id}/active/count",
+    response_model=ProjectActiveRunCountResponse,
+)
+async def get_project_active_run_count(
+    project_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ProjectActiveRunCountResponse:
+    """Return the active SubAgent run count for one authorized project."""
+    try:
+        container = get_container_with_db(request, db)
+        registry = container.subagent_run_registry()
+        conversation_ids = await _list_accessible_project_conversation_ids(
+            db, current_user, project_id
+        )
+        return ProjectActiveRunCountResponse(
+            project_id=project_id,
+            active_count=registry.count_active_runs_for_conversations(conversation_ids),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(
+            "Error getting active run count for project %s: %s",
+            project_id,
+            exc,
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail=INTERNAL_ERROR_DETAIL) from exc
+
+
+@router.get(
+    "/runs/project/{project_id}",
+    response_model=ProjectSubAgentRunListResponse,
+)
+async def list_project_runs(
+    project_id: str,
+    request: Request,
+    status: str | None = Query(None, description="Comma-separated status filter"),
+    limit: int = Query(
+        DEFAULT_TENANT_TRACE_LIMIT,
+        ge=1,
+        le=MAX_TENANT_TRACE_LIMIT,
+        description="Maximum number of runs to return",
+    ),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ProjectSubAgentRunListResponse:
+    """Return recent redacted SubAgent runs for one authorized project."""
+    try:
+        container = get_container_with_db(request, db)
+        registry = container.subagent_run_registry()
+        conversation_ids = await _list_accessible_project_conversation_ids(
+            db, current_user, project_id
+        )
+        runs = registry.list_runs_for_conversations(
+            conversation_ids,
+            statuses=parse_statuses(status),
+            limit=limit,
+        )
+        response_runs = [run_to_response(run, redact_sensitive_fields=True) for run in runs]
+        return ProjectSubAgentRunListResponse(
+            project_id=project_id,
+            runs=response_runs,
+            total=len(response_runs),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Error listing runs for project %s: %s", project_id, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=INTERNAL_ERROR_DETAIL) from exc
 
 
 @router.get(

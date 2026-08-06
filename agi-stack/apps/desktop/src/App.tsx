@@ -349,26 +349,60 @@ import { KeyboardShortcutsDialog } from './features/navigation/KeyboardShortcuts
 import { createBrowserDesktopHashLocationPort } from './features/navigation/desktopHashRouteHost';
 import {
   createDesktopProductionRouteRegistry,
+  registerDesktopProductionRouteLoaders,
   DEVICE_APPROVAL_ROUTE_ID,
   INVITATION_ACCEPTANCE_ROUTE_ID,
   TENANT_CREATION_ROUTE_ID,
   PROJECT_CRON_JOBS_ROUTE_ID,
+  PROJECT_BLACKBOARD_ROUTE_ID,
+  PROJECT_CHANNELS_ROUTE_ID,
+  PROJECT_COMMUNITIES_ROUTE_ID,
+  PROJECT_ENTITIES_ROUTE_ID,
+  PROJECT_GRAPH_ROUTE_ID,
+  PROJECT_AGENT_DASHBOARD_ROUTE_ID,
+  PROJECT_AGENT_LOGS_ROUTE_ID,
+  PROJECT_AGENT_PATTERNS_ROUTE_ID,
+  PROJECT_SCHEMA_ROUTE_ID,
+  PROJECT_MAINTENANCE_ROUTE_ID,
+  PROJECT_SETTINGS_ROUTE_ID,
+  PROJECT_MEMORIES_ROUTE_ID,
   PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
   PROJECT_SUPPORT_ROUTE_ID,
+  PROJECT_TEAM_ROUTE_ID,
+  PROJECT_WORKSPACES_ROUTE_ID,
   TENANT_OVERVIEW_ROUTE_ID,
   TENANT_ANALYTICS_ROUTE_ID,
   TENANT_AGENT_DASHBOARD_ROUTE_ID,
   TENANT_AGENT_BINDINGS_ROUTE_ID,
+  TENANT_AGENT_DEFINITIONS_ROUTE_ID,
   TENANT_CLUSTERS_ROUTE_ID,
   TENANT_DEPLOY_ROUTE_ID,
   TENANT_INSTANCE_TEMPLATES_ROUTE_ID,
   TENANT_INSTANCES_ROUTE_ID,
   TENANT_POOL_ROUTE_ID,
+  TENANT_PROVIDERS_ROUTE_ID,
+  TENANT_PLUGINS_ROUTE_ID,
   TENANT_PROJECTS_ROUTE_ID,
   TENANT_RUNTIMES_ROUTE_ID,
+  TENANT_SKILLS_ROUTE_ID,
+  TENANT_EVOLUTION_ROUTE_ID,
   TENANT_TASKS_ROUTE_ID,
   TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
+  TENANT_PATTERNS_ROUTE_ID,
+  TENANT_ACP_ROUTE_ID,
+  TENANT_WEBHOOKS_ROUTE_ID,
+  TENANT_GENES_ROUTE_ID,
+  TENANT_EVENTS_ROUTE_ID,
+  TENANT_DECISION_RECORDS_ROUTE_ID,
+  TENANT_ORGANIZATION_SETTINGS_ROUTE_ID,
+  TENANT_SETTINGS_ROUTE_ID,
+  TENANT_MCP_SERVERS_ROUTE_ID,
+  TENANT_TEMPLATES_ROUTE_ID,
+  TENANT_USERS_ROUTE_ID,
+  TENANT_AUDIT_LOGS_ROUTE_ID,
+  TENANT_TRUST_POLICIES_ROUTE_ID,
+  TENANT_BILLING_ROUTE_ID,
   TENANT_WORKSPACES_ROUTE_ID,
 } from './features/navigation/desktopProductionRouteRegistry';
 import { buildDesktopRoutePath } from './features/navigation/desktopRouteRegistry';
@@ -406,6 +440,51 @@ import {
   shortcutChordFor,
 } from './features/navigation/keyboardShortcutModel';
 import { createProjectOverviewRouteModuleLoader } from './features/project/projectOverviewRouteModule';
+import { createProjectAgentDashboardClient } from './features/project-agent/projectAgentDashboardClient';
+import { createProjectAgentDashboardController } from './features/project-agent/projectAgentDashboardController';
+import { createProjectAgentDashboardRouteModuleLoader } from './features/project-agent/projectAgentDashboardRouteModule';
+import { createProjectAgentLogsClient } from './features/project-agent/projectAgentLogsClient';
+import { createProjectAgentLogsController } from './features/project-agent/projectAgentLogsController';
+import { createProjectAgentLogsRouteModuleLoader } from './features/project-agent/projectAgentLogsRouteModule';
+import { createProjectAgentPatternsClient } from './features/project-agent/projectAgentPatternsClient';
+import { createProjectAgentPatternsController } from './features/project-agent/projectAgentPatternsController';
+import { createProjectAgentPatternsRouteModuleLoader } from './features/project-agent/projectAgentPatternsRouteModule';
+import { createProjectMaintenanceClient } from './features/project-administration/projectMaintenanceClient';
+import { createProjectMaintenanceController } from './features/project-administration/projectMaintenanceController';
+import { createProjectMaintenanceRouteModuleLoader } from './features/project-administration/projectMaintenanceRouteModule';
+import { createProjectSchemaClient } from './features/project-administration/projectSchemaClient';
+import { createProjectSchemaController } from './features/project-administration/projectSchemaController';
+import { createProjectSchemaRouteModuleLoader } from './features/project-administration/projectSchemaRouteModule';
+import { createProjectSettingsClient } from './features/project-administration/projectSettingsClient';
+import { createProjectSettingsController } from './features/project-administration/projectSettingsController';
+import { createProjectSettingsRouteModuleLoader } from './features/project-administration/projectSettingsRouteModule';
+import {
+  buildProjectBlackboardCanonicalPath,
+  createProjectBlackboardRouteModuleLoader,
+} from './features/project-blackboard/projectBlackboardRouteModule';
+import {
+  createProjectBlackboardCloudClient,
+  createProjectBlackboardLocalClient,
+} from './features/project-blackboard/projectBlackboardClient';
+import { createProjectBlackboardController } from './features/project-blackboard/projectBlackboardController';
+import { createProjectCommunitiesClient } from './features/project-knowledge/projectCommunitiesClient';
+import { createProjectCommunitiesController } from './features/project-knowledge/projectCommunitiesController';
+import { createProjectCommunitiesRouteModuleLoader } from './features/project-knowledge/projectCommunitiesRouteModule';
+import { createProjectEntitiesClient } from './features/project-knowledge/projectEntitiesClient';
+import { createProjectEntitiesController } from './features/project-knowledge/projectEntitiesController';
+import { createProjectEntitiesRouteModuleLoader } from './features/project-knowledge/projectEntitiesRouteModule';
+import { createProjectGraphClient } from './features/project-knowledge/projectGraphClient';
+import { createProjectGraphController } from './features/project-knowledge/projectGraphController';
+import { createProjectGraphRouteModuleLoader } from './features/project-knowledge/projectGraphRouteModule';
+import { createProjectMemoriesClient } from './features/project-knowledge/projectMemoriesClient';
+import { createProjectMemoriesController } from './features/project-knowledge/projectMemoriesController';
+import { createProjectMemoriesRouteModuleLoader } from './features/project-knowledge/projectMemoriesRouteModule';
+import { createProjectTeamClient } from './features/project-knowledge/projectTeamClient';
+import { createProjectTeamController } from './features/project-knowledge/projectTeamController';
+import { createProjectTeamRouteModuleLoader } from './features/project-knowledge/projectTeamRouteModule';
+import { createProjectWorkspacesController } from './features/project-workspaces/projectWorkspacesController';
+import { createProjectWorkspacesHttpClient } from './features/project-workspaces/projectWorkspacesHttpClient';
+import { createProjectWorkspacesRouteModuleLoader } from './features/project-workspaces/projectWorkspacesRouteModule';
 import { createProjectSupportRouteModuleLoader } from './features/project-support/projectSupportRouteModule';
 import { createProjectSupportRouteBindingForRuntime } from './features/project-support/projectSupportRuntime';
 import { createDeadLetterQueueRouteModuleLoader } from './features/governance/deadLetterQueueRouteModule';
@@ -422,6 +501,35 @@ import { createTenantAgentBindingsRouteModuleLoader } from './features/tenant/te
 import { createTenantProjectsRouteModuleLoader } from './features/tenant/tenantProjectsRouteModule';
 import { createTenantTasksRouteModuleLoader } from './features/tenant/tenantTasksRouteModule';
 import { createTenantWorkspacesRouteModuleLoader } from './features/tenant/tenantWorkspacesRouteModule';
+import { createTenantGovernanceRouteModuleLoader } from './features/tenant-admin/tenantGovernanceRouteModule';
+import { createTenantBillingRouteModuleLoader } from './features/tenant-admin/tenantBillingRouteModule';
+import { createTenantAuditRouteModuleLoader } from './features/tenant-admin/tenantAuditRouteModule';
+import { createTenantTrustRouteModuleLoader } from './features/tenant-admin/tenantTrustRouteModule';
+import { createTenantAcpRouteModuleLoader } from './features/tenant-admin/tenantAcpRouteModule';
+import { createTenantDecisionRecordsRouteModuleLoader } from './features/tenant-admin/tenantDecisionRecordsRouteModule';
+import { readTenantDecisionRecordsRouteQuery } from './features/tenant-admin/tenantDecisionRecordsRouteQuery';
+import { createTenantEventsRouteModuleLoader } from './features/tenant-admin/tenantEventsRouteModule';
+import { createTenantGenesRouteModuleLoader } from './features/tenant-admin/tenantGenesRouteModule';
+import { createTenantOrganizationSettingsRouteModuleLoader } from './features/tenant-admin/tenantOrganizationSettingsRouteModule';
+import { createTenantPatternsRouteModuleLoader } from './features/tenant-admin/tenantPatternsRouteModule';
+import { createTenantSettingsRouteModuleLoader } from './features/tenant-admin/tenantSettingsRouteModule';
+import { createTenantWebhooksRouteModuleLoader } from './features/tenant-admin/tenantWebhooksRouteModule';
+import {
+  createTenantAuditRouteBindingForRuntime,
+  createTenantBillingRouteBindingForRuntime,
+  createTenantGovernanceRouteBindingForRuntime,
+  createTenantTrustRouteBindingForRuntime,
+} from './features/tenant-admin/tenantAdminRouteRuntime';
+import {
+  createTenantAcpRouteBindingForRuntime,
+  createTenantDecisionRecordsRouteBindingForRuntime,
+  createTenantEventsRouteBindingForRuntime,
+  createTenantGenesRouteBindingForRuntime,
+  createTenantOrganizationSettingsRouteBindingForRuntime,
+  createTenantPatternsRouteBindingForRuntime,
+  createTenantSettingsRouteBindingForRuntime,
+  createTenantWebhooksRouteBindingForRuntime,
+} from './features/tenant-admin/tenantRemainingRouteRuntime';
 import { DesktopSearch } from './features/search/DesktopSearch';
 import {
   createProjectSearchRouteModuleLoader,
@@ -447,6 +555,32 @@ import {
   SettingsWindow,
   type SettingsSection,
 } from './features/settings/SettingsWindow';
+import { createAgentDefinitionsRouteModuleLoader } from './features/settings-routes/agentDefinitionsRouteModule';
+import { createChannelsRouteModuleLoader } from './features/settings-routes/channelsRouteModule';
+import { createEvolutionRouteModuleLoader } from './features/settings-routes/evolutionRouteModule';
+import { createMcpServersRouteModuleLoader } from './features/settings-routes/mcpServersRouteModule';
+import { createPluginsRouteModuleLoader } from './features/settings-routes/pluginsRouteModule';
+import { createProvidersRouteModuleLoader } from './features/settings-routes/providersRouteModule';
+import {
+  createProfileFilteredHashLocationPort,
+  matchProfileAuxiliaryRoute,
+} from './features/settings-routes/profileAuxiliaryRoute';
+import { createProfileRouteModuleLoader } from './features/settings-routes/profileRouteModule';
+import {
+  createChannelsRouteBindingForRuntime,
+  createEvolutionRouteBindingForRuntime,
+  createProfileRouteBindingForRuntime,
+  createTemplatesRouteBindingForRuntime,
+} from './features/settings-routes/p2ThirdBatchRouteRuntime';
+import {
+  createAgentDefinitionsRouteBindingForRuntime,
+  createMcpServersRouteBindingForRuntime,
+  createPluginsRouteBindingForRuntime,
+  createProvidersRouteBindingForRuntime,
+  createSkillsRouteBindingForRuntime,
+} from './features/settings-routes/settingsRouteRuntime';
+import { createSkillsRouteModuleLoader } from './features/settings-routes/skillsRouteModule';
+import { createTemplatesRouteModuleLoader } from './features/settings-routes/templatesRouteModule';
 import { latestAgentDefinitionEvent } from './features/settings/agentDefinitionEventModel';
 import { useWorkspaceAgentPolicy } from './features/settings/useWorkspaceAgentPolicy';
 import { useWorkspaceRuntimeProvider } from './features/settings/useWorkspaceRuntimeProvider';
@@ -2066,6 +2200,23 @@ const AUTHENTICATION_PASSTHROUGH_ROUTE_IDS: ReadonlySet<string> = new Set([
   DEVICE_APPROVAL_ROUTE_ID,
   INVITATION_ACCEPTANCE_ROUTE_ID,
 ]);
+
+function createSettingsRouteContent(
+  section: SettingsSection,
+  onOpen: () => void,
+  onUnmount: () => void,
+) {
+  function NativeSettingsRouteContent() {
+    useEffect(() => {
+      onOpen();
+      return onUnmount;
+    }, [onOpen, onUnmount]);
+    return null;
+  }
+  NativeSettingsRouteContent.displayName = `NativeSettingsRouteContent:${section}`;
+  return NativeSettingsRouteContent;
+}
+
 export function App() {
   const runsInNativeDesktop = detectNativeDesktopShell();
   const { t } = useI18n();
@@ -2320,6 +2471,8 @@ export function App() {
   const mcpAppCanvasStateRef = useRef(mcpAppCanvasState);
   const terminalRunScopeKeyRef = useRef('');
   const workbenchRef = useRef<HTMLElement>(null);
+  const settingsRouteCloseNavigationRef = useRef<(() => void) | null>(null);
+  const profileAuxiliaryRouteActiveRef = useRef(false);
   const productionRouteRefreshRef = useRef<
     | ((
         nextConfig: DesktopRuntimeConfig,
@@ -2343,9 +2496,13 @@ export function App() {
     onOpenProjectSettings: () => void;
     onOpenConnection: () => void;
   }> | null>(null);
-  const desktopProductionRouteLocation = useMemo(
+  const desktopBrowserHashLocation = useMemo(
     () => createBrowserDesktopHashLocationPort(),
     [],
+  );
+  const desktopProductionRouteLocation = useMemo(
+    () => createProfileFilteredHashLocationPort(desktopBrowserHashLocation),
+    [desktopBrowserHashLocation],
   );
   const desktopProductionRouteNavigation = useMemo(
     () =>
@@ -2359,10 +2516,77 @@ export function App() {
       }),
     [],
   );
-  const desktopProductionRouteRegistry = useMemo(
+  const profileRouteModuleLoader = useMemo(
     () =>
-      createDesktopProductionRouteRegistry({
-        implementedLoaders: {
+      createProfileRouteModuleLoader({
+        createBinding: () =>
+          createProfileRouteBindingForRuntime(
+            configRef.current,
+            (user) =>
+              setAuth((current) =>
+                current.user?.user_id === user.user_id
+                  ? { ...current, user }
+                  : current,
+              ),
+          ),
+      }),
+    [],
+  );
+
+  useEffect(() => {
+    const synchronizeProfileRoute = () => {
+      const match = matchProfileAuxiliaryRoute(
+        desktopBrowserHashLocation.readHash(),
+      );
+      if (!match) {
+        if (profileAuxiliaryRouteActiveRef.current) {
+          profileAuxiliaryRouteActiveRef.current = false;
+          if (
+            settingsRouteCloseNavigationRef.current ===
+            desktopProductionRouteNavigation.clearHash
+          ) {
+            settingsRouteCloseNavigationRef.current = null;
+          }
+          setSettingsWindowOpen(false);
+        }
+        return;
+      }
+      profileAuxiliaryRouteActiveRef.current = true;
+      settingsRouteCloseNavigationRef.current =
+        desktopProductionRouteNavigation.clearHash;
+      setSettingsInitialSection('account');
+      if (auth.status === 'signed_in') setSettingsWindowOpen(true);
+    };
+    synchronizeProfileRoute();
+    return desktopBrowserHashLocation.subscribe(synchronizeProfileRoute);
+  }, [
+    auth.status,
+    desktopBrowserHashLocation,
+    desktopProductionRouteNavigation.clearHash,
+  ]);
+  const desktopProductionRouteRegistry = useMemo(
+    () => {
+      const settingsRouteContent = (section: SettingsSection) =>
+        createSettingsRouteContent(
+          section,
+          () => {
+            settingsRouteCloseNavigationRef.current =
+              desktopProductionRouteNavigation.clearHash;
+            setSettingsInitialSection(section);
+            setSettingsWindowOpen(true);
+          },
+          () => {
+            if (
+              settingsRouteCloseNavigationRef.current ===
+              desktopProductionRouteNavigation.clearHash
+            ) {
+              settingsRouteCloseNavigationRef.current = null;
+            }
+            setSettingsWindowOpen(false);
+          },
+        );
+      return createDesktopProductionRouteRegistry({
+        implementedLoaders: registerDesktopProductionRouteLoaders({
           [AGENT_WORKSPACE_ROUTE_ID]: createAgentWorkspaceRouteModuleLoader(),
           [DEVICE_APPROVAL_ROUTE_ID]: createDeviceApprovalRouteModuleLoader({
             createBinding: () => {
@@ -2496,6 +2720,126 @@ export function App() {
                   context,
                 ),
             }),
+          [TENANT_PATTERNS_ROUTE_ID]: createTenantPatternsRouteModuleLoader({
+            createBinding: (context) =>
+              createTenantPatternsRouteBindingForRuntime(
+                configRef.current,
+                context,
+              ),
+          }),
+          [TENANT_ACP_ROUTE_ID]: createTenantAcpRouteModuleLoader({
+            createBinding: (context) =>
+              createTenantAcpRouteBindingForRuntime(
+                configRef.current,
+                context,
+              ),
+          }),
+          [TENANT_WEBHOOKS_ROUTE_ID]: createTenantWebhooksRouteModuleLoader({
+            createBinding: (context) =>
+              createTenantWebhooksRouteBindingForRuntime(
+                configRef.current,
+                context,
+              ),
+          }),
+          [TENANT_GENES_ROUTE_ID]: createTenantGenesRouteModuleLoader({
+            createBinding: (context) =>
+              createTenantGenesRouteBindingForRuntime(
+                configRef.current,
+                context,
+              ),
+          }),
+          [TENANT_EVENTS_ROUTE_ID]: createTenantEventsRouteModuleLoader({
+            createBinding: (context) =>
+              createTenantEventsRouteBindingForRuntime(
+                configRef.current,
+                context,
+              ),
+          }),
+          [TENANT_DECISION_RECORDS_ROUTE_ID]:
+            createTenantDecisionRecordsRouteModuleLoader({
+              createBinding: (context) => {
+                const query = readTenantDecisionRecordsRouteQuery(
+                  desktopProductionRouteLocation.readHash(),
+                );
+                return createTenantDecisionRecordsRouteBindingForRuntime(
+                  {
+                    ...configRef.current,
+                    workspaceId: query.status === 'ready' ? query.workspaceId : '',
+                  },
+                  context,
+                );
+              },
+            }),
+          [TENANT_ORGANIZATION_SETTINGS_ROUTE_ID]:
+            createTenantOrganizationSettingsRouteModuleLoader({
+              createBinding: (context) =>
+                createTenantOrganizationSettingsRouteBindingForRuntime(
+                  configRef.current,
+                  context,
+                ),
+            }),
+          [TENANT_SETTINGS_ROUTE_ID]: createTenantSettingsRouteModuleLoader({
+            createBinding: (context) =>
+              createTenantSettingsRouteBindingForRuntime(
+                configRef.current,
+                context,
+              ),
+          }),
+          [TENANT_PROVIDERS_ROUTE_ID]: createProvidersRouteModuleLoader({
+            createBinding: (context) =>
+              createProvidersRouteBindingForRuntime(
+                configRef.current,
+                context,
+                settingsRouteContent('models'),
+              ),
+          }),
+          [TENANT_AGENT_DEFINITIONS_ROUTE_ID]:
+            createAgentDefinitionsRouteModuleLoader({
+              createBinding: (context) =>
+                createAgentDefinitionsRouteBindingForRuntime(
+                  configRef.current,
+                  context,
+                  settingsRouteContent('agents'),
+                ),
+            }),
+          [TENANT_SKILLS_ROUTE_ID]: createSkillsRouteModuleLoader({
+            createBinding: (context) =>
+              createSkillsRouteBindingForRuntime(
+                configRef.current,
+                context,
+                settingsRouteContent('skills'),
+              ),
+          }),
+          [TENANT_EVOLUTION_ROUTE_ID]: createEvolutionRouteModuleLoader({
+            createBinding: (context) =>
+              createEvolutionRouteBindingForRuntime(
+                configRef.current,
+                context,
+              ),
+          }),
+          [TENANT_PLUGINS_ROUTE_ID]: createPluginsRouteModuleLoader({
+            createBinding: (context) =>
+              createPluginsRouteBindingForRuntime(
+                configRef.current,
+                context,
+                settingsRouteContent('plugins'),
+              ),
+          }),
+          [TENANT_MCP_SERVERS_ROUTE_ID]: createMcpServersRouteModuleLoader({
+            createBinding: (context) =>
+              createMcpServersRouteBindingForRuntime(
+                configRef.current,
+                context,
+                settingsRouteContent('mcp'),
+              ),
+          }),
+          [TENANT_TEMPLATES_ROUTE_ID]: createTemplatesRouteModuleLoader({
+            createBinding: (context) =>
+              createTemplatesRouteBindingForRuntime(
+                configRef.current,
+                context,
+              ),
+          }),
           [TENANT_PROJECTS_ROUTE_ID]: createTenantProjectsRouteModuleLoader({
             createBinding: (context) =>
               createTenantProjectsRouteBindingForRuntime(
@@ -2527,9 +2871,297 @@ export function App() {
                   context,
                 ),
             }),
+          [TENANT_USERS_ROUTE_ID]: createTenantGovernanceRouteModuleLoader({
+            createBinding: (context) =>
+              createTenantGovernanceRouteBindingForRuntime(
+                configRef.current,
+                context,
+              ),
+          }),
+          [TENANT_BILLING_ROUTE_ID]: createTenantBillingRouteModuleLoader({
+            createBinding: (context) =>
+              createTenantBillingRouteBindingForRuntime(
+                configRef.current,
+                context,
+              ),
+          }),
+          [TENANT_AUDIT_LOGS_ROUTE_ID]: createTenantAuditRouteModuleLoader({
+            createBinding: (context) =>
+              createTenantAuditRouteBindingForRuntime(
+                configRef.current,
+                context,
+              ),
+          }),
+          [TENANT_TRUST_POLICIES_ROUTE_ID]:
+            createTenantTrustRouteModuleLoader({
+              createBinding: (context) =>
+                createTenantTrustRouteBindingForRuntime(
+                  configRef.current,
+                  context,
+                ),
+            }),
           [PROJECT_OVERVIEW_ROUTE_ID]: createProjectOverviewRouteModuleLoader({
             createBinding: (context) =>
               createProjectOverviewRouteBindingForRuntime(
+                configRef.current,
+                context,
+              ),
+          }),
+          [PROJECT_WORKSPACES_ROUTE_ID]:
+            createProjectWorkspacesRouteModuleLoader({
+              createBinding: (context) => {
+                const currentConfig = configRef.current;
+                const scope = Object.freeze({
+                  authority: currentConfig.mode,
+                  tenantId: context.tenantId,
+                  projectId: context.projectId,
+                });
+                const client = createProjectWorkspacesHttpClient(currentConfig);
+                return Object.freeze({
+                  controller: createProjectWorkspacesController({
+                    authority: currentConfig.mode,
+                    client,
+                    initialScope: scope,
+                  }),
+                  scope,
+                  openBlackboard: (workspaceId: string) =>
+                    desktopProductionRouteNavigation.openPath(
+                      buildProjectBlackboardCanonicalPath({
+                        tenantId: context.tenantId,
+                        projectId: context.projectId,
+                        workspaceId,
+                      }),
+                    ),
+                });
+              },
+            }),
+          [PROJECT_BLACKBOARD_ROUTE_ID]:
+            createProjectBlackboardRouteModuleLoader({
+              createBinding: (context) => {
+                const currentConfig = configRef.current;
+                const scope = Object.freeze({
+                  authority: currentConfig.mode,
+                  tenantId: context.tenantId,
+                  projectId: context.projectId,
+                  workspaceId: context.workspaceId,
+                });
+                const client =
+                  currentConfig.mode === 'local'
+                    ? createProjectBlackboardLocalClient(currentConfig)
+                    : createProjectBlackboardCloudClient(currentConfig);
+                return Object.freeze({
+                  controller: createProjectBlackboardController({
+                    authority: currentConfig.mode,
+                    client,
+                    initialScope: scope,
+                  }),
+                  scope,
+                });
+              },
+            }),
+          [PROJECT_TEAM_ROUTE_ID]: createProjectTeamRouteModuleLoader({
+            createBinding: (context) => {
+              const currentConfig = configRef.current;
+              const scope = Object.freeze({
+                authority: currentConfig.mode,
+                tenantId: context.tenantId,
+                projectId: context.projectId,
+              });
+              return Object.freeze({
+                controller: createProjectTeamController({
+                  authority: currentConfig.mode,
+                  client: createProjectTeamClient(currentConfig),
+                  initialScope: scope,
+                }),
+                scope,
+              });
+            },
+          }),
+          [PROJECT_MEMORIES_ROUTE_ID]: createProjectMemoriesRouteModuleLoader({
+            createBinding: (context) => {
+              const currentConfig = configRef.current;
+              const scope = Object.freeze({
+                authority: currentConfig.mode,
+                tenantId: context.tenantId,
+                projectId: context.projectId,
+              });
+              return Object.freeze({
+                controller: createProjectMemoriesController({
+                  authority: currentConfig.mode,
+                  client: createProjectMemoriesClient(currentConfig),
+                  initialScope: scope,
+                }),
+                scope,
+              });
+            },
+          }),
+          [PROJECT_ENTITIES_ROUTE_ID]: createProjectEntitiesRouteModuleLoader({
+            createBinding: (context) => {
+              const currentConfig = configRef.current;
+              const scope = Object.freeze({
+                authority: currentConfig.mode,
+                tenantId: context.tenantId,
+                projectId: context.projectId,
+              });
+              return Object.freeze({
+                controller: createProjectEntitiesController({
+                  authority: currentConfig.mode,
+                  client: createProjectEntitiesClient(currentConfig),
+                  initialScope: scope,
+                }),
+                scope,
+              });
+            },
+          }),
+          [PROJECT_COMMUNITIES_ROUTE_ID]:
+            createProjectCommunitiesRouteModuleLoader({
+              createBinding: (context) => {
+                const currentConfig = configRef.current;
+                const scope = Object.freeze({
+                  authority: currentConfig.mode,
+                  tenantId: context.tenantId,
+                  projectId: context.projectId,
+                });
+                return Object.freeze({
+                  controller: createProjectCommunitiesController({
+                    authority: currentConfig.mode,
+                    client: createProjectCommunitiesClient(currentConfig),
+                    initialScope: scope,
+                  }),
+                  scope,
+                });
+              },
+            }),
+          [PROJECT_GRAPH_ROUTE_ID]: createProjectGraphRouteModuleLoader({
+            createBinding: (context) => {
+              const currentConfig = configRef.current;
+              const scope = Object.freeze({
+                authority: currentConfig.mode,
+                tenantId: context.tenantId,
+                projectId: context.projectId,
+              });
+              return Object.freeze({
+                controller: createProjectGraphController({
+                  authority: currentConfig.mode,
+                  client: createProjectGraphClient(currentConfig),
+                  initialScope: scope,
+                }),
+                scope,
+              });
+            },
+          }),
+          [PROJECT_AGENT_DASHBOARD_ROUTE_ID]:
+            createProjectAgentDashboardRouteModuleLoader({
+              createBinding: (context) => {
+                const currentConfig = configRef.current;
+                const scope = Object.freeze({
+                  authority: currentConfig.mode,
+                  tenantId: context.tenantId,
+                  projectId: context.projectId,
+                });
+                return Object.freeze({
+                  controller: createProjectAgentDashboardController({
+                    authority: currentConfig.mode,
+                    client: createProjectAgentDashboardClient(currentConfig),
+                    initialScope: scope,
+                  }),
+                  scope,
+                });
+              },
+            }),
+          [PROJECT_AGENT_LOGS_ROUTE_ID]:
+            createProjectAgentLogsRouteModuleLoader({
+              createBinding: (context) => {
+                const currentConfig = configRef.current;
+                const scope = Object.freeze({
+                  authority: currentConfig.mode,
+                  tenantId: context.tenantId,
+                  projectId: context.projectId,
+                });
+                return Object.freeze({
+                  controller: createProjectAgentLogsController({
+                    authority: currentConfig.mode,
+                    client: createProjectAgentLogsClient(currentConfig),
+                    initialScope: scope,
+                  }),
+                  scope,
+                });
+              },
+            }),
+          [PROJECT_AGENT_PATTERNS_ROUTE_ID]:
+            createProjectAgentPatternsRouteModuleLoader({
+              createBinding: (context) => {
+                const currentConfig = configRef.current;
+                const scope = Object.freeze({
+                  authority: currentConfig.mode,
+                  tenantId: context.tenantId,
+                  projectId: context.projectId,
+                });
+                return Object.freeze({
+                  controller: createProjectAgentPatternsController({
+                    authority: currentConfig.mode,
+                    client: createProjectAgentPatternsClient(currentConfig),
+                    initialScope: scope,
+                  }),
+                  scope,
+                });
+              },
+            }),
+          [PROJECT_SCHEMA_ROUTE_ID]: createProjectSchemaRouteModuleLoader({
+            createBinding: (context) => {
+              const currentConfig = configRef.current;
+              const scope = Object.freeze({
+                authority: currentConfig.mode,
+                tenantId: context.tenantId,
+                projectId: context.projectId,
+              });
+              return Object.freeze({
+                controller: createProjectSchemaController({
+                  client: createProjectSchemaClient(currentConfig),
+                  initialScope: scope,
+                }),
+                scope,
+              });
+            },
+          }),
+          [PROJECT_MAINTENANCE_ROUTE_ID]:
+            createProjectMaintenanceRouteModuleLoader({
+              createBinding: (context) => {
+                const currentConfig = configRef.current;
+                const scope = Object.freeze({
+                  authority: currentConfig.mode,
+                  tenantId: context.tenantId,
+                  projectId: context.projectId,
+                });
+                return Object.freeze({
+                  controller: createProjectMaintenanceController({
+                    client: createProjectMaintenanceClient(currentConfig),
+                    initialScope: scope,
+                  }),
+                  scope,
+                });
+              },
+            }),
+          [PROJECT_SETTINGS_ROUTE_ID]: createProjectSettingsRouteModuleLoader({
+            createBinding: (context) => {
+              const currentConfig = configRef.current;
+              const scope = Object.freeze({
+                authority: currentConfig.mode,
+                tenantId: context.tenantId,
+                projectId: context.projectId,
+              });
+              return Object.freeze({
+                controller: createProjectSettingsController({
+                  client: createProjectSettingsClient(currentConfig),
+                  initialScope: scope,
+                }),
+                scope,
+              });
+            },
+          }),
+          [PROJECT_CHANNELS_ROUTE_ID]: createChannelsRouteModuleLoader({
+            createBinding: (context) =>
+              createChannelsRouteBindingForRuntime(
                 configRef.current,
                 context,
               ),
@@ -2631,8 +3263,9 @@ export function App() {
               });
             },
           }),
-        },
-      }),
+        }),
+      });
+    },
     [],
   );
 
@@ -10371,7 +11004,13 @@ export function App() {
           wsError={socket.error}
           runtimeDisabledReason={runtimeDisabledReason}
           agentDefinitionEvent={agentDefinitionEvent}
-          onClose={() => setSettingsWindowOpen(false)}
+          profileRouteLoader={profileRouteModuleLoader}
+          onClose={() => {
+            const closeRoute = settingsRouteCloseNavigationRef.current;
+            settingsRouteCloseNavigationRef.current = null;
+            setSettingsWindowOpen(false);
+            closeRoute?.();
+          }}
           onConfigChange={handleConfigChange}
           onRuntimeStatusRefresh={refreshLocalRuntimeStatus}
           onRefreshRuntime={() => void refreshRuntime()}

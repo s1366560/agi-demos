@@ -80,6 +80,10 @@ import {
   tenantOverviewZhCN,
 } from './features/tenant/locales/tenantOverviewMessages';
 import {
+  tenantAdminEnUS,
+  tenantAdminZhCN,
+} from './features/tenant-admin/locales/tenantAdminMessages';
+import {
   tenantProjectsEnUS,
   tenantProjectsZhCN,
 } from './features/tenant/locales/tenantProjectsMessages';
@@ -118,6 +122,7 @@ const enUS: Record<string, string> = {
   ...runtimeDeploymentsEnUS,
   ...runtimeInstancesEnUS,
   ...runtimePoolEnUS,
+  ...tenantAdminEnUS,
   ...unifiedRuntimesEnUS,
   ...tenantAnalyticsEnUS,
   ...tenantAgentDashboardEnUS,
@@ -767,6 +772,8 @@ const enUS: Record<string, string> = {
   'settings.skillPackages.zipDescription':
     'The archive must contain exactly one SKILL.md.',
   'settings.skillPackages.chooseZip': 'Choose ZIP',
+  'settings.skillPackages.filePickerFailed':
+    'Could not open the Skill ZIP: {error}',
   'settings.skillPackages.orPaste': 'or paste SKILL.md',
   'settings.skillPackages.skillMd': 'Complete SKILL.md',
   'settings.skillPackages.scope': 'Scope',
@@ -3848,7 +3855,8 @@ const enUS: Record<string, string> = {
   'composer.fileUploadUnavailable':
     'File upload is unavailable in this runtime.',
   'composer.fileUploadFailed': 'Could not upload {filename}: {error}',
-  'composer.fileTooLarge': 'Files must be 100 MB or smaller.',
+  'composer.fileTooLarge': 'Files must be 16 MiB or smaller.',
+  'composer.filePickerFailed': 'Could not select attachments: {error}',
   'composer.dropFilesToUpload': 'Drop files to upload',
   'composer.fileDropUnsupported': 'File drop is unavailable in this runtime.',
   'composer.attachmentOnlyMessage': 'Attached files: {filenames}',
@@ -4105,6 +4113,7 @@ const zhCN: Record<string, string> = {
   ...tenantAgentDashboardZhCN,
   ...tenantAgentBindingsZhCN,
   ...tenantOverviewZhCN,
+  ...tenantAdminZhCN,
   ...tenantProjectsZhCN,
   ...tenantTasksZhCN,
   ...tenantWorkspacesZhCN,
@@ -4683,6 +4692,8 @@ const zhCN: Record<string, string> = {
   'settings.skillPackages.zipDescription':
     '压缩包中必须且只能包含一个 SKILL.md。',
   'settings.skillPackages.chooseZip': '选择 ZIP',
+  'settings.skillPackages.filePickerFailed':
+    '无法打开技能 ZIP：{error}',
   'settings.skillPackages.orPaste': '或粘贴 SKILL.md',
   'settings.skillPackages.skillMd': '完整 SKILL.md',
   'settings.skillPackages.scope': '作用域',
@@ -7563,7 +7574,8 @@ const zhCN: Record<string, string> = {
   'composer.uploadingFiles': '正在向项目沙箱上传 {count} 个文件…',
   'composer.fileUploadUnavailable': '当前运行时无法上传文件。',
   'composer.fileUploadFailed': '无法上传 {filename}：{error}',
-  'composer.fileTooLarge': '文件大小不能超过 100 MB。',
+  'composer.fileTooLarge': '文件大小不能超过 16 MiB。',
+  'composer.filePickerFailed': '无法选择附件：{error}',
   'composer.dropFilesToUpload': '松开以上传文件',
   'composer.fileDropUnsupported': '当前运行时无法拖拽上传文件。',
   'composer.attachmentOnlyMessage': '已附加文件：{filenames}',

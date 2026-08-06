@@ -271,6 +271,8 @@
       "userAria": "使用普通用户演示凭据"
     },
     "oauth": {
+      "continueWith": "使用 {{provider}} 继续",
+      "redirectingToProvider": "正在打开 {{provider}}…",
       "processing": "正在完成登录…",
       "authenticating": "正在认证…",
       "authenticatingWith": "正在通过 {{provider}} 认证…",
@@ -280,12 +282,74 @@
       "tryAgain": "重试",
       "errors": {
         "noCode": "未找到授权码",
+        "noState": "登录请求缺失或已过期",
         "noProvider": "未指定 OAuth 提供商",
-        "exchangeFailed": "OAuth 认证失败"
+        "startFailed": "无法启动单点登录，请重试。",
+        "exchangeFailed": "OAuth 认证失败",
+        "oauth_callback_state_invalid": "登录请求无效或已过期。",
+        "oauth_state_store_unavailable": "单点登录暂时不可用。",
+        "oauth_provider_exchange_failed": "身份提供商无法完成登录。",
+        "oauth_provider_identity_invalid": "身份提供商未返回已验证的邮箱。",
+        "oauth_identity_email_unverified": "必须使用已验证的邮箱登录。",
+        "oauth_account_not_preprovisioned": "此账户尚未受邀加入 MemStack。",
+        "oauth_account_inactive": "此 MemStack 账户已停用。",
+        "oauth_identity_subject_conflict": "此身份提供商账户与现有绑定冲突。",
+        "oauth_identity_link_conflict": "此身份提供商账户已绑定到其他用户。"
       }
     },
     "errors": {
       "invalidCredentials": "登录失败，请检查您的凭据"
+    }
+  },
+  "projectAgent": {
+    "eyebrow": "项目 Agent",
+    "dashboard": {
+      "title": "Agent 仪表盘",
+      "description": "通过当前项目的追踪权威监控委派运行。",
+      "activeRuns": "活跃运行",
+      "recentRuns": "最近运行",
+      "viewAll": "查看全部日志"
+    },
+    "logs": {
+      "title": "Agent 日志",
+      "description": "按项目范围和权限过滤的执行历史。",
+      "statusFilter": "状态",
+      "allStatuses": "全部状态",
+      "empty": "当前视图没有匹配的项目 Agent 运行。"
+    },
+    "patterns": {
+      "title": "Agent 模式",
+      "degradedBadge": "租户共享权威",
+      "sharedBadge": "在当前租户内共享",
+      "sharedDescription": "通过项目的租户成员关系提供只读工作流模式。这些模式仍归租户所有，并在项目间共享。",
+      "unavailableTitle": "共享模式不可用",
+      "unavailableDescription": "无法验证项目成员关系或租户共享模式权威。在权威未确认前不会展示租户数据。"
+    },
+    "status": {
+      "pending": "等待中",
+      "running": "运行中",
+      "completed": "已完成",
+      "failed": "失败",
+      "cancelled": "已取消",
+      "timed_out": "已超时"
+    },
+    "errors": {
+      "project_agent_trace_forbidden": {
+        "title": "无权访问项目 Agent",
+        "description": "当前项目成员权限不允许访问这些运行。"
+      },
+      "project_agent_trace_unavailable": {
+        "title": "项目 Agent 数据不可用",
+        "description": "无法连接项目追踪权威，请在服务恢复后重试。"
+      },
+      "project_agent_trace_scope_conflict": {
+        "title": "项目 Agent 范围冲突",
+        "description": "追踪权威返回了其他项目的数据，因此不会展示任何运行数据。"
+      },
+      "project_agent_trace_contract_invalid": {
+        "title": "项目 Agent 契约无效",
+        "description": "追踪权威返回了无效或未脱敏的响应，因此不会展示任何运行数据。"
+      }
     }
   },
   "nav": {
@@ -6698,7 +6762,8 @@
       "status": {
         "preferred": "优先",
         "active": "活跃",
-        "deprecated": "已弃用"
+        "deprecated": "已弃用",
+        "unclassified": "未分类"
       },
       "columns": {
         "status": "状态",
@@ -10215,7 +10280,8 @@
       "status": {
         "preferred": "首选",
         "active": "活跃",
-        "deprecated": "已弃用"
+        "deprecated": "已弃用",
+        "unclassified": "未分类"
       },
       "labels": {
         "status": "状态",

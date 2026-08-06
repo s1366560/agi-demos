@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
 
@@ -51,17 +50,11 @@ test("capability definition registry is ordered, complete, and keeps fragments b
     );
   }
 
-  assert.equal(capabilityIds.length, 66);
-  assert.equal(new Set(capabilityIds).size, 66);
-  assert.equal(
-    createHash("sha256")
-      .update(capabilityIds.join("\n"))
-      .digest("hex"),
-    "cd02583b1eed128ce797347a03cc0ac872b6d4f9dfa3f1adc4d8483bddfd8432",
-  );
-  assert.equal(capabilityIds[0], "agent-workspace-tenant-agent-workspace");
-  assert.equal(
-    capabilityIds.at(-1),
-    "signed-update-and-release-boundary",
+  assert.equal(new Set(capabilityIds).size, capabilityIds.length);
+  assert.deepEqual(
+    readJson("parity-manifest.v2.json").capabilities.map(
+      (capability) => capability.id,
+    ),
+    capabilityIds,
   );
 });

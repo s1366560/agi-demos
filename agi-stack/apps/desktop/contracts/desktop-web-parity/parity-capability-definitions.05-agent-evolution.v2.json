@@ -243,15 +243,15 @@
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_skill_evolution_not_applicable",
-      "local_deviation": "The existing Local sidecar stub still reports not_applicable. This is a legacy contract mismatch, not a cloud-only product decision; it must migrate to unavailable while authority is incomplete and to available when native evolution ships.",
+      "local_reason_code": "local_skill_evolution_authority_unavailable",
+      "local_deviation": "Local keeps the native evolution route and returns a structured unavailable state until a real native evolution authority is implemented.",
       "local_entries": [
         "agi-stack/apps/desktop/src/features/settings/SkillEvolutionDialog.tsx",
         "agi-stack/apps/desktop/src/features/settings/useSkillPackageManagement.ts",
         "agi-stack/apps/desktop/src/api/managedResourcesClient.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs"
       ],
-      "judgment_rationale": "The Web tenant overview reads evolution status and configuration, while tenant-scoped configuration and runs require tenant administration. Apply and reject use scope-sensitive authorization: tenant-scoped jobs require tenant administration, while the project contributor branch permits owner, admin, and member skill writers and excludes project viewers. Cloud Desktop exposes a per-skill evolution dialog whose project-scoped jobs use that same branch for run and review, but it lacks the canonical tenant overview, configuration, and complete routed state matrix. Local Desktop already has a native dialog, client calls, and sidecar route stubs, but the stubs still return the legacy not_applicable state instead of the native-equivalent unavailable or available contract required by this plan."
+      "judgment_rationale": "The Web tenant overview reads evolution status and configuration, while tenant-scoped configuration and runs require tenant administration. Apply and reject use scope-sensitive authorization: tenant-scoped jobs require tenant administration, while the project contributor branch permits owner, admin, and member skill writers and excludes project viewers. Cloud Desktop exposes a per-skill evolution dialog whose project-scoped jobs use that same branch for run and review, but it lacks the canonical tenant overview, configuration, and complete routed state matrix. Local Desktop has a native route, client calls, and sidecar route stubs, so it is applicable; until a real native evolution authority exists, those stubs must fail closed as unavailable with a stable authority reason."
     },
     {
       "id": "tenant-tenant-patterns",

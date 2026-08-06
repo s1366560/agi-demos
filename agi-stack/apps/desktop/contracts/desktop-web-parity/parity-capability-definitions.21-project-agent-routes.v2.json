@@ -12,31 +12,141 @@
       "web_route_ids": [
         "project-agent-dashboard"
       ],
-      "web_missing": true,
-      "api_method": "NONE",
-      "api_path": "not_applicable:web-route-not-registered/project-agent-dashboard",
+      "api_method": "GET",
+      "api_path": "/api/v1/agent/trace/runs/project/{project_id}",
       "permissions": [
-        "authenticated"
+        "authenticated",
+        "project_member"
       ],
       "actions": [
-        "view"
+        "view",
+        "list-runs",
+        "inspect-active-count",
+        "refresh",
+        "navigate-logs",
+        "navigate-patterns"
+      ],
+      "web_actions": [
+        "view",
+        "list-runs",
+        "inspect-active-count",
+        "refresh",
+        "navigate-logs",
+        "navigate-patterns"
+      ],
+      "cloud_actions": [
+        "view",
+        "list-runs",
+        "inspect-active-count"
+      ],
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/agent/trace/runs/project/{project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/agent/trace/runs/project/{project_id}/active/count",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/agent/trace/runs/project/{project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/agent/trace/runs/project/{project_id}/active/count",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "unavailable:local_project_agent_dashboard_authority_unavailable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/project-agent-dashboard",
+          "authority": "none"
+        }
       ],
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": [],
+          "actions": [
+            "view",
+            "list-runs",
+            "inspect-active-count",
+            "refresh",
+            "navigate-logs",
+            "navigate-patterns"
+          ],
           "authentication": "authenticated",
-          "authorization": [],
-          "enforcement": "not_applicable",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list-runs",
+            "inspect-active-count"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
           "feature_gate": null
         }
       ],
-      "cloud_status": "blocked",
-      "local_status": "blocked",
-      "local_policy": "blocked_by_web_contract",
-      "local_reason_code": "web_route_not_registered",
-      "local_deviation": "The canonical navigation contract names this destination, but no production Web route establishes its behavior or authority; Desktop must not invent parity from the label alone.",
-      "judgment_rationale": "Project Agent Dashboard exists only as a canonical navigation target. The audited production route inventory has no corresponding registration or routed source, so Web, Cloud Desktop, and Local Desktop are all recorded unavailable with web_route_not_registered."
+      "cloud_status": "partial",
+      "cloud_reason_code": "desktop_project_agent_dashboard_navigation_partial",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/ProjectAgentPage.tsx",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentClient.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentController.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentDashboardClient.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentDashboardController.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentDashboardPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentDashboardRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentRuns.ts"
+      ],
+      "local_status": "unavailable",
+      "local_authority": "none",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_project_agent_dashboard_authority_unavailable",
+      "local_deviation": "Local preserves the native Project Agent Dashboard route but has no sidecar trace or active-count authority, so it fails closed before network access.",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/ProjectAgentPage.tsx",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentClient.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentDashboardClient.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentDashboardRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentRouteModule.tsx"
+      ],
+      "judgment_rationale": "Web has a registered project Dashboard route and authenticated project trace/count authority with scope validation and stable errors. Cloud Desktop has a real native loader, typed client/controller/presentation, trusted-session transport, observed workspace-context revision and fail-closed scope checks, but its native page lacks the Web canonical navigation and success-state refresh and has no route-specific current-commit Electron proof. Local has no sidecar trace/count authority and correctly returns the stable local unavailable reason before network access."
     },
     {
       "id": "project-agent-logs",
@@ -50,31 +160,121 @@
       "web_route_ids": [
         "project-agent-logs"
       ],
-      "web_missing": true,
-      "api_method": "NONE",
-      "api_path": "not_applicable:web-route-not-registered/project-agent-logs",
+      "api_method": "GET",
+      "api_path": "/api/v1/agent/trace/runs/project/{project_id}",
       "permissions": [
-        "authenticated"
+        "authenticated",
+        "project_member"
       ],
       "actions": [
-        "view"
+        "view",
+        "list-runs",
+        "filter-status",
+        "refresh"
+      ],
+      "web_actions": [
+        "view",
+        "list-runs",
+        "filter-status",
+        "refresh"
+      ],
+      "cloud_actions": [
+        "view",
+        "list-runs"
+      ],
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/agent/trace/runs/project/{project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/agent/trace/runs/project/{project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "unavailable:local_project_agent_logs_authority_unavailable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/project-agent-logs",
+          "authority": "none"
+        }
       ],
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": [],
+          "actions": [
+            "view",
+            "list-runs",
+            "filter-status",
+            "refresh"
+          ],
           "authentication": "authenticated",
-          "authorization": [],
-          "enforcement": "not_applicable",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list-runs"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
           "feature_gate": null
         }
       ],
-      "cloud_status": "blocked",
-      "local_status": "blocked",
-      "local_policy": "blocked_by_web_contract",
-      "local_reason_code": "web_route_not_registered",
-      "local_deviation": "The canonical navigation contract names this destination, but no production Web route establishes its behavior or authority; Desktop must not infer an activity-log contract from unrelated session history.",
-      "judgment_rationale": "Project Agent Activity Logs exists only as a canonical navigation target. No production Web registration or routed source owns it, so all product surfaces remain explicitly unavailable with web_route_not_registered."
+      "cloud_status": "partial",
+      "cloud_reason_code": "desktop_project_agent_logs_filter_status_partial",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/ProjectAgentPage.tsx",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentClient.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentController.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentLogsClient.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentLogsController.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentLogsPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentLogsRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentRuns.ts"
+      ],
+      "local_status": "unavailable",
+      "local_authority": "none",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_project_agent_logs_authority_unavailable",
+      "local_deviation": "Local preserves the native Project Agent Logs route but has no sidecar trace authority, so it fails closed before network access.",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/ProjectAgentPage.tsx",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentClient.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentLogsClient.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentLogsRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentRouteModule.tsx"
+      ],
+      "judgment_rationale": "Web has a registered project Logs route and bounded project trace list with status filtering, member-scoped visibility and stable forbidden/unavailable states. Cloud Desktop has a real native loader and observed scoped authority; its typed client can send a status query and controllers now normalize backend-shaped 403/outage errors, but the native presentation cannot invoke the filter or success-state refresh and lacks current-commit Electron proof. Local has no sidecar trace authority and returns its stable unavailable reason before network access."
     },
     {
       "id": "project-agent-patterns",
@@ -88,33 +288,154 @@
       "web_route_ids": [
         "project-agent-patterns"
       ],
-      "web_missing": true,
-      "api_method": "NONE",
-      "api_path": "not_applicable:web-route-not-registered/project-agent-patterns",
+      "api_method": "GET",
+      "api_path": "/api/v1/agent/workflows/patterns/project/{project_id}",
       "permissions": [
-        "authenticated"
+        "authenticated",
+        "project_member"
       ],
       "actions": [
-        "view"
+        "view",
+        "list-patterns",
+        "inspect-shared-scope",
+        "select-pattern",
+        "inspect-pattern",
+        "copy-pattern-json",
+        "refresh"
+      ],
+      "web_actions": [
+        "view",
+        "list-patterns",
+        "inspect-shared-scope",
+        "select-pattern",
+        "inspect-pattern",
+        "copy-pattern-json",
+        "refresh"
+      ],
+      "cloud_actions": [
+        "view",
+        "list-patterns",
+        "inspect-shared-scope"
+      ],
+      "api_contracts": [
+        {
+          "surface": "web",
+          "method": "GET",
+          "path": "/api/v1/agent/workflows/patterns/project/{project_id}",
+          "authority": "web_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/agent/workflows/patterns/project/{project_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "NONE",
+          "path": "unavailable:local_project_agent_patterns_authority_unavailable",
+          "authority": "none"
+        },
+        {
+          "surface": "native_only",
+          "method": "NONE",
+          "path": "not_applicable:no-native-only-api/project-agent-patterns",
+          "authority": "none"
+        }
       ],
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": [],
+          "actions": [
+            "view",
+            "list-patterns",
+            "inspect-shared-scope",
+            "select-pattern",
+            "inspect-pattern",
+            "copy-pattern-json",
+            "refresh"
+          ],
           "authentication": "authenticated",
-          "authorization": [],
-          "enforcement": "not_applicable",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list-patterns",
+            "inspect-shared-scope"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
           "feature_gate": null
         }
       ],
-      "cloud_status": "blocked",
-      "local_status": "blocked",
-      "local_policy": "blocked_by_web_contract",
-      "local_reason_code": "web_route_not_registered",
-      "local_deviation": "The canonical navigation contract names this destination, but no production Web route establishes its behavior or authority; the separate Playbook Library route must not be relabeled as Project Agent Patterns.",
-      "judgment_rationale": "Project Agent Patterns exists only as a canonical navigation target. Playbook Library is a separate route-only source and cannot be used to fabricate production coverage, so all surfaces remain unavailable with web_route_not_registered."
+      "cloud_status": "partial",
+      "cloud_reason_code": "desktop_project_agent_patterns_inspector_partial",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/ProjectAgentPage.tsx",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentClient.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentController.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentPatternsClient.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentPatternsController.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentPatternsPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentPatternsRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentRouteModule.tsx"
+      ],
+      "local_status": "unavailable",
+      "local_authority": "none",
+      "local_policy": "native_equivalent",
+      "local_reason_code": "local_project_agent_patterns_authority_unavailable",
+      "local_deviation": "Local preserves the native Project Agent Patterns route but has no sidecar pattern repository projection, so it fails closed before network access.",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/ProjectAgentPage.tsx",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentClient.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentPatternsClient.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentPatternsRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentRouteModule.tsx"
+      ],
+      "judgment_rationale": "Web has a registered route and project-authorized tenant-shared read-only authority. Pattern status is fail-closed as unclassified, selection/inspector/copy are reachable, and mutation controls render only when a caller supplies mutation authority. Cloud Desktop has a real native loader, observed trusted-session scope and stable errors, but the client/presentation drops pattern steps, updated time and metadata and exposes no selection, inspector or copy action; current-commit Electron proof is also absent. Local has no sidecar pattern repository/projection and returns its stable unavailable reason before network access."
     }
   ],
-  "source_ownership": {},
-  "route_owner_overrides": {}
+  "source_ownership": {
+    "project-agent-dashboard": [
+      "ProjectAgentDashboard"
+    ],
+    "project-agent-logs": [
+      "ProjectAgentLogs"
+    ],
+    "project-agent-patterns": [
+      "ProjectAgentPatterns"
+    ]
+  },
+  "route_owner_overrides": {
+    "project-agent-dashboard": [
+      "production-route-path-tenant-tenantid-project-projectid-agent",
+      "production-route-index-tenant-tenantid-project-projectid-agent"
+    ],
+    "project-agent-logs": [
+      "production-route-path-tenant-tenantid-project-projectid-agent-logs"
+    ],
+    "project-agent-patterns": [
+      "production-route-path-tenant-tenantid-project-projectid-agent-patterns"
+    ]
+  }
 }

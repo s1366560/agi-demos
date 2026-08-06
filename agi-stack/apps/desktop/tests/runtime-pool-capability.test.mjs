@@ -16,7 +16,12 @@ test('Runtime Pool is Cloud global-admin-only and Local specifically not-applica
   const definition = catalog().byId.get('tenant-tenant-pool');
   const context = { tenantId: 'tenant-1' };
   const match = { definition, context, canonicalPath: '/tenant/tenant-1/pool' };
-  const cloudCapability = runtimePoolCapability(runtimeConfig());
+  const cloudCapability = {
+    ...runtimePoolCapability(runtimeConfig()),
+    authority_revision: 1,
+    authority_source: 'cloud_service',
+    provenance: 'observed',
+  };
   const localCapability = runtimePoolCapability(
     runtimeConfig({ mode: 'local' }),
   );

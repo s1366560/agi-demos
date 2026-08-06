@@ -42,6 +42,45 @@ type DesktopDisplayCapture = {
   width: number;
 };
 
+type DesktopFileOpenPurpose = 'attachment' | 'skill_package';
+
+type DesktopFilePayload = Readonly<{
+  filename: string;
+  mimeType: string;
+  bytes: Uint8Array;
+}>;
+
+type DesktopFileSaveRequest = Readonly<{
+  suggestedName: string;
+  mimeType: string;
+  bytes: Uint8Array;
+}>;
+
+type DesktopFileSaveResult =
+  | Readonly<{ status: 'cancelled' }>
+  | Readonly<{ status: 'saved'; bytesWritten: number }>;
+
+type DesktopFileOpenRequest = Readonly<{
+  purpose: DesktopFileOpenPurpose;
+}>;
+
+type DesktopFileOpenResult =
+  | Readonly<{ status: 'cancelled' }>
+  | Readonly<{
+      status: 'selected';
+      files: readonly DesktopFilePayload[];
+    }>;
+
+type DesktopFileIngestRequest = Readonly<{
+  purpose: 'attachment';
+  files: readonly DesktopFilePayload[];
+}>;
+
+type DesktopFileIngestResult = Readonly<{
+  status: 'ingested';
+  files: readonly DesktopFilePayload[];
+}>;
+
 interface Window {
   __MEMSTACK_DESKTOP__?: {
     runtime: 'electron';
@@ -49,6 +88,11 @@ interface Window {
     getCapabilities?: () => Promise<DesktopNativeCapabilitySnapshot>;
     openWebControlPlane?: (request: WebControlPlaneRequest) => Promise<void>;
     focusMainWindow?: () => Promise<void>;
+    files?: Readonly<{
+      save(request: DesktopFileSaveRequest): Promise<DesktopFileSaveResult>;
+      open(request: DesktopFileOpenRequest): Promise<DesktopFileOpenResult>;
+      ingest(request: DesktopFileIngestRequest): Promise<DesktopFileIngestResult>;
+    }>;
     core?: {
       invoke?: DesktopInvoke;
     };

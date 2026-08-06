@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -7,6 +7,7 @@ import { Eye, EyeOff, AlertCircle, Share2, Database, ShieldCheck } from 'lucide-
 
 import { AuthSplitLayout } from '@/components/auth/AuthSplitLayout';
 import { LanguageSwitcher } from '@/components/shared/ui/LanguageSwitcher';
+import { oauthLoginService, type OAuthProviderDescriptor } from '@/services/oauthLoginService';
 
 import { useAuthStore } from '../stores/auth';
 
@@ -16,11 +17,29 @@ export const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [oauthProviders, setOauthProviders] = useState<OAuthProviderDescriptor[]>([]);
+  const [oauthProviderLoading, setOauthProviderLoading] = useState<string | null>(null);
+  const [oauthError, setOauthError] = useState<string | null>(null);
   const passwordVisibilityLabel = showPassword
     ? t('login.form.hide_password')
     : t('login.form.show_password');
 
   const { login, error, isLoading: authLoading } = useAuthStore();
+
+  useEffect(() => {
+    let active = true;
+    void oauthLoginService
+      .listProviders()
+      .then((providers) => {
+        if (active) setOauthProviders(providers);
+      })
+      .catch(() => {
+        if (active) setOauthProviders([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,6 +80,23 @@ export const Login: React.FC = () => {
     } else {
       setEmail('user@memstack.ai');
       setPassword('userpassword');
+    }
+  };
+
+  const handleOAuthLogin = async (provider: OAuthProviderDescriptor) => {
+    const requestedRedirect = new URLSearchParams(window.location.search).get('redirect');
+    const safeRedirect =
+      requestedRedirect?.startsWith('/') && !requestedRedirect.startsWith('//')
+        ? requestedRedirect
+        : '/';
+    setOauthProviderLoading(provider.id);
+    setOauthError(null);
+    try {
+      const authorization = await oauthLoginService.beginAuthorization(provider.id, safeRedirect);
+      window.location.assign(authorization.authorization_url);
+    } catch {
+      setOauthError(t('login.oauth.errors.startFailed'));
+      setOauthProviderLoading(null);
     }
   };
 
@@ -110,13 +146,13 @@ export const Login: React.FC = () => {
           <p className="mt-2 text-sm text-gray-600 dark:text-slate-400">{t('login.subtitle')}</p>
         </div>
 
-        {error && (
+        {(error || oauthError) && (
           <div
             role="alert"
             className="mb-6 flex items-center p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-lg"
           >
             <AlertCircle className="h-5 w-5 text-red-500 dark:text-red-400 mr-3 flex-shrink-0" />
-            <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
+            <span className="text-sm text-red-700 dark:text-red-300">{error || oauthError}</span>
           </div>
         )}
 
@@ -150,7 +186,7 @@ export const Login: React.FC = () => {
                 className="block w-full px-4 py-3 text-gray-900 dark:text-white border border-gray-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-[color,background-color,border-color,box-shadow,opacity,transform] bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-900"
                 placeholder={t('login.form.email_placeholder')}
                 required
-                disabled={isLoading || authLoading}
+                disabled={isLoading || authLoading || oauthProviderLoading !== null}
                 data-testid="email-input"
                 data-parity-target-id="email_entry"
               />
@@ -194,7 +230,7 @@ export const Login: React.FC = () => {
                 className="block w-full px-4 py-3 pr-10 text-gray-900 dark:text-white border border-gray-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-[color,background-color,border-color,box-shadow,opacity,transform] bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-900"
                 placeholder={t('login.form.password_placeholder')}
                 required
-                disabled={isLoading || authLoading}
+                disabled={isLoading || authLoading || oauthProviderLoading !== null}
                 aria-describedby="password-help"
                 data-testid="password-input"
               />
@@ -204,7 +240,7 @@ export const Login: React.FC = () => {
                   setShowPassword(!showPassword);
                 }}
                 className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                disabled={isLoading || authLoading}
+                disabled={isLoading || authLoading || oauthProviderLoading !== null}
                 data-testid="toggle-password-visibility"
                 aria-label={passwordVisibilityLabel}
                 title={passwordVisibilityLabel}
@@ -221,7 +257,7 @@ export const Login: React.FC = () => {
           <button
             type="submit"
             className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 transition-[color,background-color,border-color,box-shadow,opacity,transform] disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={isLoading || authLoading}
+            disabled={isLoading || authLoading || oauthProviderLoading !== null}
             data-testid="login-submit-button"
           >
             {isLoading || authLoading ? (
@@ -246,6 +282,26 @@ export const Login: React.FC = () => {
               </span>
             </div>
           </div>
+
+          {oauthProviders.length > 0 && (
+            <div className="mt-6 grid gap-3" data-testid="oauth-provider-list">
+              {oauthProviders.map((provider) => (
+                <button
+                  key={provider.id}
+                  type="button"
+                  onClick={() => {
+                    void handleOAuthLogin(provider);
+                  }}
+                  disabled={oauthProviderLoading !== null || isLoading || authLoading}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+                >
+                  {oauthProviderLoading === provider.id
+                    ? t('login.oauth.redirectingToProvider', { provider: provider.display_name })
+                    : t('login.oauth.continueWith', { provider: provider.display_name })}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="mt-8 text-center">
             <p className="text-sm text-gray-600 dark:text-slate-400">

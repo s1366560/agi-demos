@@ -109,6 +109,7 @@ test("authorization predicates use a closed vocabulary without tightening legacy
 });
 
 test("canonical capabilities declare reviewed route-entry alternatives separately", () => {
+  const inventory = readJson("web-route-inventory.v2.json");
   const fragmentRegistry = readJson("parity-capability-fragments.v2.json");
   const fragments = fragmentRegistry.fragments.map(readJson);
   const canonical = fragments
@@ -122,8 +123,14 @@ test("canonical capabilities declare reviewed route-entry alternatives separatel
     ]),
   );
 
-  assert.equal(canonical.length, 51);
-  assert.equal(routeEntries.size, 51);
+  const canonicalRouteIds = inventory.canonical_navigation_targets.map(
+    (target) => target.route_key,
+  );
+  assert.deepEqual(
+    canonical.map((capability) => capability.id).sort(),
+    [...canonicalRouteIds].sort(),
+  );
+  assert.deepEqual([...routeEntries.keys()].sort(), [...canonicalRouteIds].sort());
   for (const capability of canonical) {
     assert.equal(routeEntries.has(capability.id), true, capability.id);
     assert.equal(
@@ -140,6 +147,7 @@ test("canonical capabilities declare reviewed route-entry alternatives separatel
 
 test("all capability definitions declare reviewed authorization requirements explicitly", () => {
   const schema = readJson("parity-manifest.v2.schema.json");
+  const manifest = readJson("parity-manifest.v2.json");
   const allowedPredicates = new Set(schema.$defs.authorizationPredicate.enum);
   const fragmentRegistry = readJson("parity-capability-fragments.v2.json");
   const fragments = fragmentRegistry.fragments.map(readJson);
@@ -170,7 +178,7 @@ test("all capability definitions declare reviewed authorization requirements exp
     }
   }
 
-  assert.equal(capabilityCount, 66);
+  assert.equal(capabilityCount, manifest.capabilities.length);
   assert.match(
     generatorSource,
     /must declare reviewed permission_requirements/u,

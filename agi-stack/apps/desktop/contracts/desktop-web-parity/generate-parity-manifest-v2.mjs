@@ -20,7 +20,10 @@ import {
   bindProductionEntrySurfaces,
   validateProductionEntryIntegrity,
 } from "./production-entry-integrity.mjs";
-import { projectReviewedProductionDependencies } from "./web-production-dependency-projection.mjs";
+import {
+  assertCompleteProductionDependencyOwnership,
+  projectReviewedProductionDependencies,
+} from "./web-production-dependency-projection.mjs";
 import { resolveCapabilityWebEntries } from "./web-production-entry-projection.mjs";
 
 const contractRoot = dirname(fileURLToPath(import.meta.url));
@@ -97,6 +100,11 @@ const auditedSourceByEntry = new Map(
 if (auditedSourceByEntry.size !== inventory.audited_sources.length) {
   throw new Error("Web route inventory contains duplicate audited sources.");
 }
+assertCompleteProductionDependencyOwnership({
+  auditedSourceByEntry,
+  dependencyOwnership: inventory.production_dependency_ownership,
+  dependencySourceEntries: inventory.production_dependency_sources,
+});
 const productionRouteByKey = new Map(
   inventory.production_routes.map((route) => [route.route_key, route]),
 );
@@ -106,26 +114,10 @@ if (productionRouteByKey.size !== inventory.production_routes.length) {
   );
 }
 
-assertCount(
-  inventory.canonical_navigation_targets,
-  definitions.expected_counts.canonical_navigation_targets,
-  "canonical navigation targets",
-);
-assertCount(
-  inventory.production_routes,
-  definitions.expected_counts.production_routes,
-  "production routes",
-);
-assertCount(
-  inventory.lazy_page_entries,
-  definitions.expected_counts.lazy_page_entries,
-  "lazy page entries",
-);
-assertCount(
-  inventory.eager_route_entries,
-  definitions.expected_counts.eager_route_entries,
-  "eager route entries",
-);
+assertInventoryCount(inventory, "canonical_navigation_targets");
+assertInventoryCount(inventory, "production_routes");
+assertInventoryCount(inventory, "lazy_page_entries");
+assertInventoryCount(inventory, "eager_route_entries");
 
 const normalizedDefinitions = definitions.capabilities.map((definition) => {
   const normalized = normalizeDefinition({
@@ -423,9 +415,16 @@ console.log(
 function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
-function assertCount(items, expected, label) {
-  if (items.length !== expected) {
-    throw new Error(`Expected ${expected} ${label}; received ${items.length}.`);
+function assertInventoryCount(sourceInventory, key) {
+  const items = sourceInventory[key];
+  const count = sourceInventory.counts?.[key];
+  if (!Array.isArray(items) || !Number.isInteger(count)) {
+    throw new Error(`Web route inventory count ${key} is missing or invalid.`);
+  }
+  if (items.length !== count) {
+    throw new Error(
+      `Web route inventory count ${key} is stale: declared ${count}, actual ${items.length}.`,
+    );
   }
 }
 function assertExactKeys(actualMap, expectedKeys, label) {

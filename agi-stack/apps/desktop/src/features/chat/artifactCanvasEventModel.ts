@@ -504,11 +504,12 @@ export function artifactCanvasDownloadDescriptor(
   return {
     filename: artifactCanvasDownloadFilename(tab.title),
     mimeType:
-      tab.viewMode === 'markdown'
+      tab.mimeType ??
+      (tab.contentType === 'markdown'
         ? 'text/markdown;charset=utf-8'
-        : tab.viewMode === 'data'
-          ? 'application/json;charset=utf-8'
-          : 'text/plain;charset=utf-8',
+        : tab.contentType === 'data'
+          ? 'application/json'
+          : 'text/plain;charset=utf-8'),
     content: tab.draftContent,
   };
 }

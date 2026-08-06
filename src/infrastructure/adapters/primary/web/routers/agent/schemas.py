@@ -6,7 +6,7 @@ All request/response models for the Agent API endpoints.
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.domain.model.agent import Conversation
 
@@ -63,6 +63,8 @@ class UpdateConversationModeRequest(BaseModel):
     accepts a ``goal_contract`` payload — set ``workspace_id`` (and
     optionally ``linked_workspace_task_id``) instead.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     conversation_mode: str | None = Field(
         default=None,
@@ -271,6 +273,18 @@ class WorkflowPatternResponse(BaseModel):
 class PatternsListResponse(BaseModel):
     """Response model for patterns list."""
 
+    patterns: list[WorkflowPatternResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class ProjectPatternsListResponse(BaseModel):
+    """Tenant-shared patterns visible through an authorized project context."""
+
+    project_id: str
+    tenant_id: str
+    scope_kind: Literal["tenant_shared"] = "tenant_shared"
     patterns: list[WorkflowPatternResponse]
     total: int
     page: int
@@ -732,6 +746,14 @@ class TenantSubAgentRunListResponse(BaseModel):
     total: int
 
 
+class ProjectSubAgentRunListResponse(BaseModel):
+    """List of redacted SubAgent runs aggregated for an authorized project."""
+
+    project_id: str
+    runs: list[SubAgentRunResponse]
+    total: int
+
+
 class TraceChainResponse(BaseModel):
     """Execution chain grouped by trace_id."""
 
@@ -761,4 +783,11 @@ class TenantActiveRunCountResponse(BaseModel):
     """Active run count aggregated for a tenant."""
 
     tenant_id: str
+    active_count: int
+
+
+class ProjectActiveRunCountResponse(BaseModel):
+    """Active run count aggregated for an authorized project."""
+
+    project_id: str
     active_count: int

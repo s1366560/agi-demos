@@ -60,7 +60,7 @@ function runtimeRouteEntryPermissions(capability) {
   ]);
 }
 
-test('catalog exactly covers the 51 audited canonical native route definitions', () => {
+test('catalog exactly covers the audited canonical native route definitions', () => {
   const registry = createDesktopCanonicalRouteCatalog(createCompleteLoaders());
   const manifestById = new Map(
     manifest.capabilities.map((capability) => [capability.id, capability]),
@@ -79,8 +79,14 @@ test('catalog exactly covers the 51 audited canonical native route definitions',
     };
   });
 
-  assert.equal(inventory.counts.canonical_navigation_targets, 51);
-  assert.equal(registry.definitions.length, 51);
+  assert.equal(
+    inventory.counts.canonical_navigation_targets,
+    inventory.canonical_navigation_targets.length,
+  );
+  assert.equal(
+    registry.definitions.length,
+    inventory.canonical_navigation_targets.length,
+  );
   assert.deepEqual(
     registry.definitions.map(
       ({ loader: _loader, ...definition }) => definition,

@@ -88,6 +88,10 @@ interface BackendSubAgentTemplateListResponse {
   total: number;
 }
 
+interface BackendSubAgentTemplateSeedResponse {
+  created: number;
+}
+
 export const subagentTemplateService = {
   list: async (params?: {
     category?: string | undefined;
@@ -154,6 +158,10 @@ export const subagentTemplateService = {
 
   seed: async (): Promise<{ seeded: number }> => {
     const response = await apiFetch.post('/subagents/templates/seed');
-    return (await response.json()) as { seeded: number };
+    const data = (await response.json()) as Partial<BackendSubAgentTemplateSeedResponse>;
+    if (!Number.isSafeInteger(data.created) || (data.created ?? -1) < 0) {
+      throw new Error('subagent_template_seed_contract_invalid');
+    }
+    return { seeded: data.created as number };
   },
 };

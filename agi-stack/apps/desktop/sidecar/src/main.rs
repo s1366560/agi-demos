@@ -4,6 +4,7 @@ mod application_vault;
 mod control;
 mod data_migration;
 mod local_runtime;
+mod private_file_permissions;
 mod trusted_session;
 
 fn main() {
