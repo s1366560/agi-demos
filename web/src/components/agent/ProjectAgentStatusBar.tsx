@@ -292,7 +292,7 @@ const execStateConfig: Record<AgentExecState, ExecStateConfig> = {
   idle: {
     icon: CheckCircle2,
     iconAnimate: '',
-    color: 'text-slate-400 dark:text-slate-500',
+    color: 'text-content-tertiary',
     bgColor: 'bg-slate-100 dark:bg-slate-800/50',
     borderColor: 'border-slate-200 dark:border-slate-700',
   },

@@ -152,7 +152,7 @@ export const AgentSwitcher: React.FC<AgentSwitcherProps> = ({
         }
         className={`group flex h-8 items-center gap-1.5 px-2 text-sm rounded-lg transition-colors ${
           disabled
-            ? 'cursor-not-allowed text-slate-400 dark:text-slate-500 opacity-40'
+            ? 'cursor-not-allowed text-content-tertiary opacity-40'
             : `text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900 ${
                 isOpen ? 'text-primary bg-primary/5' : ''
               }`
@@ -162,7 +162,7 @@ export const AgentSwitcher: React.FC<AgentSwitcherProps> = ({
       >
         <Bot
           size={16}
-          className={`shrink-0 ${disabled ? 'text-slate-400 dark:text-slate-500' : 'text-current'}`}
+          className={`shrink-0 ${disabled ? 'text-content-tertiary' : 'text-current'}`}
         />
         <span className="hidden max-w-[152px] truncate min-w-0 text-xs font-medium min-[1024px]:inline">
           {activeAgent

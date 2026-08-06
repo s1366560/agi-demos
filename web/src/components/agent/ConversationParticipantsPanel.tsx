@@ -118,7 +118,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
         </header>
 
         {participant_agents.length === 0 ? (
-          <p className="text-sm text-slate-400 dark:text-slate-500">
+          <p className="text-sm text-content-tertiary">
             {t('agent.participants.empty', { defaultValue: 'No agents in this conversation.' })}
           </p>
         ) : (
@@ -257,7 +257,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
                     >
                       <button
                         type="button"
-                        className="rounded px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-red-400"
+                        className="rounded px-2 py-0.5 text-xs text-content-tertiary hover:bg-slate-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:hover:bg-slate-800 dark:hover:text-red-400"
                         aria-label={t('agent.participants.remove', {
                           name: participantLabel,
                           defaultValue: `Remove ${participantLabel}`,
@@ -294,7 +294,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
           )}
         <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">
           {availableToAdd.length === 0 ? (
-            <p className="text-xs text-slate-400 dark:text-slate-500">
+            <p className="text-xs text-content-tertiary">
               {t('agent.participants.noneAvailable', {
                 defaultValue:
                   'No more agents available. Add agents to the linked workspace to see them here.',

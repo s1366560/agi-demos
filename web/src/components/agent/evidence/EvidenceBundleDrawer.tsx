@@ -50,7 +50,7 @@ const ItemRow: React.FC<ItemRowProps> = ({ artifact }) => {
           {artifact.sourceTool ? ` · ${artifact.sourceTool}` : ''}
         </div>
       </div>
-      <span className="text-[11px] text-slate-400 dark:text-slate-500 shrink-0">
+      <span className="text-[11px] text-content-tertiary shrink-0">
         {formatTimeOnly(artifact.createdAt)}
       </span>
     </>

@@ -59,7 +59,7 @@ const LANES: LaneDef[] = [
     label: 'Backlog',
     statuses: ['pending'],
     icon: Circle,
-    color: 'text-slate-400 dark:text-slate-500',
+    color: 'text-content-tertiary',
     accent: 'bg-slate-400/70',
   },
   {
@@ -81,11 +81,11 @@ const LANES: LaneDef[] = [
 ];
 
 const STATUS_ICON: Record<TaskStatus, { icon: typeof Circle; color: string }> = {
-  pending: { icon: Circle, color: 'text-slate-400 dark:text-slate-500' },
+  pending: { icon: Circle, color: 'text-content-tertiary' },
   in_progress: { icon: Loader2, color: 'text-blue-500 dark:text-blue-400' },
   completed: { icon: CheckCircle2, color: 'text-emerald-500 dark:text-emerald-400' },
   failed: { icon: XCircle, color: 'text-rose-500 dark:text-rose-400' },
-  cancelled: { icon: Ban, color: 'text-slate-400 dark:text-slate-500' },
+  cancelled: { icon: Ban, color: 'text-content-tertiary' },
 };
 
 const PRIORITY_DOT: Record<string, string> = {
@@ -165,7 +165,7 @@ const LaneTaskRow = memo<{ task: AgentTask }>(({ task }) => {
       <span
         className={`min-w-0 flex-1 text-xs leading-snug ${
           isDone
-            ? 'text-slate-400 line-through dark:text-slate-500'
+            ? 'text-content-tertiary line-through'
             : 'text-slate-700 dark:text-slate-200'
         }`}
       >
@@ -234,7 +234,7 @@ export const TaskLanePanel = memo<TaskLanePanelProps>(({ tasks, conversationId }
               label: 'Other',
               statuses: [] as TaskStatus[],
               icon: Circle,
-              color: 'text-slate-400 dark:text-slate-500',
+              color: 'text-content-tertiary',
               accent: 'bg-slate-400/70',
               tasks: tasks.filter((t) => !allowed.has(t.status)),
             },
@@ -307,7 +307,7 @@ export const TaskLanePanel = memo<TaskLanePanelProps>(({ tasks, conversationId }
                 className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
                 aria-expanded={!isCollapsed}
               >
-                <span className="text-slate-400 dark:text-slate-500">
+                <span className="text-content-tertiary">
                   {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
                 </span>
                 <span className={`h-1.5 w-1.5 rounded-full ${lane.accent}`} />
@@ -351,7 +351,7 @@ export const TaskLanePanel = memo<TaskLanePanelProps>(({ tasks, conversationId }
                     );
                   })()}
                   {lane.tasks.length === 0 ? (
-                    <p className="px-3 pb-2 text-[11px] text-slate-400 dark:text-slate-500">
+                    <p className="px-3 pb-2 text-[11px] text-content-tertiary">
                       {t('agent.taskLanePanel.emptyLane', { defaultValue: 'Empty.' })}
                     </p>
                   ) : (

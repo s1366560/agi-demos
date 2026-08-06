@@ -62,7 +62,7 @@ const StatsCard: React.FC<StatsCardProps> = ({
       <div>
         <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-1">{title}</p>
         <p className={`text-2xl font-bold tabular-nums ${textColor}`}>{value}</p>
-        {subtitle && <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{subtitle}</p>}
+        {subtitle && <p className="text-xs text-content-tertiary mt-1">{subtitle}</p>}
       </div>
       <div
         className={`w-12 h-12 rounded-lg ${iconBg} flex items-center justify-center flex-shrink-0 transition-opacity duration-200 group-hover:opacity-90`}

@@ -21,13 +21,14 @@ export const tokens = {
     panel: '#121212',
     panel2: '#181818',
     panel3: '#1f1f1f',
-    border: '#2b2b2b',
+    border: '#333333',
     borderStrong: '#404040',
 
     // Text (neutral)
     text: '#ededed',
     textMuted: '#9c9c9c',
-    textMuted2: '#6e6e6e',
+    // WCAG AA on panel (#121212): 5.4:1. Previously #6e6e6e (3.5:1, below AA).
+    textMuted2: '#8a8a8a',
 
     // Accent — monochrome (near-white on dark); `cyan` key kept for compatibility.
     cyan: '#f2f2f2',
@@ -111,7 +112,7 @@ export const neutralDarkScale = {
   100: '#dbdbdb',
   200: '#bdbdbd',
   300: '#9c9c9c',
-  400: '#6e6e6e',
+  400: '#8a8a8a',
   500: '#404040',
   600: '#262626',
   700: '#1f1f1f',

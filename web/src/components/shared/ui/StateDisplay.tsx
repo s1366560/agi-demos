@@ -132,7 +132,7 @@ const EmptyComponent: FC<StateEmptyProps> = ({
       </div>
       <h3 className="text-base font-medium text-slate-700 dark:text-slate-300 mb-1">{title}</h3>
       {description && (
-        <p className="text-sm text-slate-400 dark:text-slate-500 max-w-sm mb-4">{description}</p>
+        <p className="text-sm text-content-tertiary max-w-sm mb-4">{description}</p>
       )}
       {action}
     </div>
@@ -207,7 +207,7 @@ const ErrorComponent: FC<StateErrorProps> = ({
         {resolvedTitle}
       </h3>
       {message && (
-        <p className="text-sm text-slate-400 dark:text-slate-500 max-w-sm mb-4">{message}</p>
+        <p className="text-sm text-content-tertiary max-w-sm mb-4">{message}</p>
       )}
       <div className="flex items-center gap-2">
         {onRetry && (

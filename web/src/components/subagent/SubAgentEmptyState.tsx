@@ -26,7 +26,7 @@ export const SubAgentEmptyState = memo<SubAgentEmptyStateProps>(({ hasFilters, o
           ? t('tenant.subagents.empty.noResults', 'No matching subagents')
           : t('tenant.subagents.empty.title', 'No subagents yet')}
       </h3>
-      <p className="text-sm text-slate-400 dark:text-slate-500 mb-5 max-w-sm">
+      <p className="text-sm text-content-tertiary mb-5 max-w-sm">
         {hasFilters
           ? t('tenant.subagents.empty.noResultsHint', 'Try adjusting your search or filters.')
           : t('tenant.subagents.empty.hint', 'Create your first SubAgent to specialize AI tasks.')}

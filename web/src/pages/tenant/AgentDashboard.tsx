@@ -320,7 +320,7 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
             {t('tenant.agentDashboard.scopeDescription')}
           </p>
           {tenantId ? (
-            <p className="mt-3 font-mono text-xs break-all text-slate-400 dark:text-slate-500">
+            <p className="mt-3 font-mono text-xs break-all text-content-tertiary">
               {t('tenant.agentDashboard.scopeTenant', {
                 id: tenantId,
                 defaultValue: 'Tenant: {{id}}',
@@ -375,7 +375,7 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
                 </div>
                 <div className="flex items-center gap-3">
                   {tracesLastUpdatedAt ? (
-                    <span className="text-xs tabular-nums text-slate-400 dark:text-slate-500">
+                    <span className="text-xs tabular-nums text-content-tertiary">
                       {t('tenant.agentDashboard.lastUpdated', {
                         time: formatTimeOnly(tracesLastUpdatedAt),
                         defaultValue: 'Updated {{time}}',

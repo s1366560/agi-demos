@@ -97,7 +97,7 @@ const DebugDetails = memo<{ children: ReactNode }>(({ children }) => {
   const { t } = useTranslation();
   return (
     <details className="mt-1">
-      <summary className="cursor-pointer select-none text-xs-plus text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300">
+      <summary className="cursor-pointer select-none text-xs-plus text-slate-400 hover:text-content-tertiary dark:hover:text-slate-300">
         {tFallback(t, 'agent.rightPanel.insights.debugDetails', 'Debug details')}
       </summary>
       {children}
@@ -460,7 +460,7 @@ const AgentSessionMessagesPanel = memo<{
                     <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                       {agentEventRole(event, t)}
                     </span>
-                    <span className="ml-auto shrink-0 text-[11px] text-slate-400 dark:text-slate-500">
+                    <span className="ml-auto shrink-0 text-[11px] text-content-tertiary">
                       {agentEventTimestamp(event, i18n.language || 'en')}
                     </span>
                   </div>

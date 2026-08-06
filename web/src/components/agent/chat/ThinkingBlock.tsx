@@ -83,9 +83,13 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
       [expanded]
     );
 
+    // Reasoning payloads often start with a blank line; whitespace-pre-wrap would
+    // render it as a phantom gap between the header and the text.
+    const trimmedContent = content.trim();
+
     // Truncate content for collapsed preview
-    const previewText = content
-      ? content.slice(0, 100).replace(/\n/g, ' ').trim() + (content.length > 100 ? '…' : '')
+    const previewText = trimmedContent
+      ? trimmedContent.slice(0, 100).replace(/\n/g, ' ') + (trimmedContent.length > 100 ? '…' : '')
       : t('agent.thinking.analyzing', 'Analyzing your request…');
 
     // Calculate progress percentage
@@ -158,14 +162,14 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
 
               {/* Collapsed preview text */}
               {!expanded && (
-                <span className="text-xs text-slate-400 dark:text-slate-500 truncate min-w-0">
+                <span className="text-xs text-content-tertiary truncate min-w-0">
                   {previewText}
                 </span>
               )}
 
               {/* Duration badge (hidden when no timing data is available) */}
               {(duration > 0 || isStreaming) && (
-                <span className="ml-auto text-xs text-slate-400 dark:text-slate-500 flex-shrink-0 tabular-nums">
+                <span className="ml-auto text-xs text-content-tertiary flex-shrink-0 tabular-nums">
                   {formatDurationSeconds(duration || 0)}
                 </span>
               )}
@@ -208,7 +212,7 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
                             ? 'text-primary font-medium'
                             : idx < currentStep
                               ? 'text-slate-500 dark:text-slate-400 line-through'
-                              : 'text-slate-400 dark:text-slate-500'
+                              : 'text-content-tertiary'
                         }`}
                       >
                         <span
@@ -217,7 +221,7 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
                               ? 'bg-primary/20 text-primary'
                               : idx < currentStep
                                 ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
+                                : 'bg-slate-100 dark:bg-slate-800 text-content-tertiary'
                           }`}
                         >
                           {idx < currentStep ? '✓' : idx + 1}
@@ -229,8 +233,8 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
                 )}
 
                 {/* Content */}
-                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed whitespace-pre-wrap font-mono">
-                  {content}
+                <p className="text-xs leading-5 text-slate-500 dark:text-slate-400 whitespace-pre-wrap">
+                  {trimmedContent}
                 </p>
               </div>
             </div>

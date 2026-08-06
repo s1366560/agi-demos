@@ -377,7 +377,7 @@ export const ArtifactCreatedItem = memo(
                   </button>
                 )}
                 {!url && artifactStatus === 'uploading' && (
-                  <span className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
+                  <span className="flex items-center gap-1 text-xs text-content-tertiary">
                     <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
                     {t('agent.artifact.uploading', 'Uploading…')}
                   </span>

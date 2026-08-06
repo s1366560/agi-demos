@@ -191,7 +191,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
               }}
             >
               <span>{mention.name}</span>
-              <span className="text-xs text-slate-400 capitalize dark:text-slate-500">
+              <span className="text-xs text-content-tertiary capitalize">
                 {mentionTypeLabels[mention.type]}
               </span>
             </button>

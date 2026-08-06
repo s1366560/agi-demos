@@ -80,7 +80,7 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({ tool, isExpanded, 
                   {tool.description}
                 </p>
               ) : (
-                <p className="text-xs text-slate-400 dark:text-slate-500 italic mt-0.5">
+                <p className="text-xs text-content-tertiary italic mt-0.5">
                   {t('mcp.toolItem.noDescription')}
                 </p>
               )}

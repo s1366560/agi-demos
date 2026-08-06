@@ -89,7 +89,7 @@ function InvestBadge({
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="border-t border-slate-200/70 py-2 dark:border-slate-700/50">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-content-tertiary">
         {label}
       </div>
       <div className="mt-1 text-xs leading-5 text-slate-700 dark:text-slate-200">{children}</div>
@@ -99,7 +99,7 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
 
 function StringList({ items, empty }: { items: string[]; empty: string }) {
   if (items.length === 0) {
-    return <span className="text-slate-400 dark:text-slate-500">{empty}</span>;
+    return <span className="text-content-tertiary">{empty}</span>;
   }
   return (
     <ul className="space-y-0.5">
@@ -145,12 +145,12 @@ const ParsedStoryView: FC<{
         className="flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-900/70"
         aria-expanded={open}
       >
-        <span className="mt-0.5 shrink-0 text-slate-400 dark:text-slate-500">
+        <span className="mt-0.5 shrink-0 text-content-tertiary">
           {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </span>
         <span className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-content-tertiary">
               {tFallback(t, 'agent.canonicalStory.story', 'Story')} · v{String(story.version)}
             </span>
             {!dependencyOk ? (
@@ -201,7 +201,7 @@ const ParsedStoryView: FC<{
             )}
           >
             {story.acceptance_criteria.length === 0 ? (
-              <span className="text-slate-400 dark:text-slate-500">{noneLabel}</span>
+              <span className="text-content-tertiary">{noneLabel}</span>
             ) : (
               <ul className="space-y-1">
                 {story.acceptance_criteria.map((ac) => (

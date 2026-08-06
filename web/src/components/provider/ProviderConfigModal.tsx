@@ -1602,7 +1602,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs">
                       <div>
-                        <span className="text-slate-400 dark:text-slate-500">
+                        <span className="text-content-tertiary">
                           {t('components.provider.config.context', { defaultValue: 'Context' })}
                         </span>
                         <div className="font-medium text-slate-700 dark:text-slate-300">
@@ -1610,7 +1610,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         </div>
                       </div>
                       <div>
-                        <span className="text-slate-400 dark:text-slate-500">
+                        <span className="text-content-tertiary">
                           {t('components.provider.config.maxOutput', {
                             defaultValue: 'Max Output',
                           })}
@@ -1620,7 +1620,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         </div>
                       </div>
                       <div>
-                        <span className="text-slate-400 dark:text-slate-500">
+                        <span className="text-content-tertiary">
                           {t('components.provider.config.costPerMillion', {
                             defaultValue: 'Cost ($/1M)',
                           })}
@@ -1666,7 +1666,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                       )}
                     </div>
                     {selectedModelMeta.knowledge_cutoff && (
-                      <div className="text-2xs text-slate-400 dark:text-slate-500">
+                      <div className="text-2xs text-content-tertiary">
                         Knowledge cutoff: {selectedModelMeta.knowledge_cutoff}
                       </div>
                     )}

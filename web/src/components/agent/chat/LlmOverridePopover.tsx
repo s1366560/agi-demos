@@ -110,7 +110,7 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
               {tFallback(t, 'agent.llmOverride.title', 'LLM Parameters')}
             </span>
             {modelName && (
-              <span className="text-2xs text-slate-400 dark:text-slate-500 truncate max-w-50">
+              <span className="text-2xs text-content-tertiary truncate max-w-50">
                 {modelName}
               </span>
             )}
@@ -291,7 +291,7 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
 
           {/* No controls available message */}
           {!hasAnyControl && (
-            <div className="text-xs text-slate-400 dark:text-slate-500 text-center py-2">
+            <div className="text-xs text-content-tertiary text-center py-2">
               {tFallback(
                 t,
                 'agent.llmOverride.noTunableParameters',

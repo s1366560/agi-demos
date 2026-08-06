@@ -65,12 +65,12 @@ function SourceRow({ source }: { source: Source }) {
 
   return (
     <li className="flex items-start gap-2 py-1.5">
-      <Icon size={13} className="mt-0.5 flex-shrink-0 text-slate-400 dark:text-slate-500" />
+      <Icon size={13} className="mt-0.5 flex-shrink-0 text-content-tertiary" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           {titleNode}
           {typeof source.score === 'number' ? (
-            <span className="text-[10px] tabular-nums text-slate-400 dark:text-slate-500">
+            <span className="text-[10px] tabular-nums text-content-tertiary">
               {source.score.toFixed(2)}
             </span>
           ) : null}
@@ -105,7 +105,7 @@ function GroupBlock({ group, defaultOpen }: { group: SourceGroup; defaultOpen: b
           <span className="font-medium normal-case text-slate-700 dark:text-slate-200">
             {group.label}
           </span>
-          <span className="text-[10px] text-slate-400 dark:text-slate-500">
+          <span className="text-[10px] text-content-tertiary">
             {group.sources.length}
           </span>
         </span>

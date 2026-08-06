@@ -177,7 +177,7 @@ export function UserMessage({ content, forcedSkillName, fileMetadata }: UserMess
                 <span className="text-xs text-slate-700 dark:text-slate-300 truncate max-w-50">
                   {file.filename}
                 </span>
-                <span className="text-2xs text-slate-400 dark:text-slate-500 whitespace-nowrap">
+                <span className="text-2xs text-content-tertiary whitespace-nowrap">
                   {formatFileSize(file.size_bytes)}
                 </span>
               </div>
@@ -265,7 +265,7 @@ export function ReasoningLogCard({
             </span>
           )}
         </summary>
-        <div className="mt-3 space-y-2 border-l border-slate-200 pl-4 text-sm leading-relaxed text-slate-500 dark:border-border-dark dark:text-text-muted">
+        <div className="mt-3 space-y-2 border-l border-slate-200 pl-4 text-xs leading-5 text-slate-500 dark:border-border-dark dark:text-text-muted">
           {steps.map((step, index) => (
             <p key={index}>{step}</p>
           ))}
@@ -812,7 +812,7 @@ export function ToolExecutionCardDisplay({
             <Wrench size={18} />
           </div>
           <div className="min-w-0 truncate">
-            <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
               {t('components.messageStream.toolTitle', {
                 defaultValue: 'Tool: {{tool}}',
                 tool: toolName,

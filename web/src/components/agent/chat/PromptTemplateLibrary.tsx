@@ -473,7 +473,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
                             className="opacity-0 group-hover:opacity-100 transition-opacity text-primary"
                           />
                         </div>
-                        <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 line-clamp-1">
+                        <div className="text-xs text-content-tertiary mt-0.5 line-clamp-1">
                           {t(tmpl.promptKey, tmpl.promptFallback)}
                         </div>
                       </div>
@@ -524,7 +524,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
                             className="opacity-0 group-hover:opacity-100 transition-opacity text-primary"
                           />
                         </div>
-                        <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 line-clamp-1">
+                        <div className="text-xs text-content-tertiary mt-0.5 line-clamp-1">
                           {tmpl.content}
                         </div>
                       </div>

@@ -83,7 +83,7 @@ export const QueuedPromptStrip = memo<QueuedPromptStripProps>(({ conversationId,
       className="flex flex-wrap items-center gap-1 px-3 pb-1 pt-2"
       data-testid="queued-prompt-strip"
     >
-      <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-content-tertiary">
         {t('agent.queuedPrompt.count', {
           defaultValue: 'Queued · {{count}}',
           count: queue.length,

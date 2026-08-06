@@ -446,7 +446,7 @@ const ClarificationContent: React.FC<{
                       className={`text-xs ml-6 mt-1 leading-relaxed ${
                         isSelected
                           ? 'text-slate-500 dark:text-slate-400'
-                          : 'text-slate-400 dark:text-slate-500'
+                          : 'text-content-tertiary'
                       }`}
                     >
                       {optionDescription}
@@ -483,7 +483,7 @@ const ClarificationContent: React.FC<{
             {t('agent.hitl.none.no_preset_answer', 'No preset options - enter your answer below')}
           </p>
         ) : (
-          <p className="text-sm text-slate-400 dark:text-slate-500">
+          <p className="text-sm text-content-tertiary">
             {t('agent.hitl.none.no_options', 'No options available')}
           </p>
         )}
@@ -706,7 +706,7 @@ const DecisionContent: React.FC<{
                             className={`text-xs mt-1.5 leading-relaxed ${
                               isOptionSelected
                                 ? 'text-slate-500 dark:text-slate-400'
-                                : 'text-slate-400 dark:text-slate-500'
+                                : 'text-content-tertiary'
                             }`}
                           >
                             {optionDescription}
@@ -804,7 +804,7 @@ const DecisionContent: React.FC<{
             )}
           </p>
         ) : (
-          <p className="text-sm text-slate-400 dark:text-slate-500">
+          <p className="text-sm text-content-tertiary">
             {t('agent.hitl.none.no_options', 'No options available')}
           </p>
         )}
@@ -1338,7 +1338,7 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
               </div>
               {isAnswered ? (
                 createdTimeInfo ? (
-                  <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
+                  <span className="shrink-0 text-xs text-content-tertiary">
                     {t(createdTimeInfo.key, createdTimeInfo.fallback, createdTimeInfo.params ?? {})}
                   </span>
                 ) : null

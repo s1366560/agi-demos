@@ -41,6 +41,6 @@ export function StatusIcon({ status, size = 16 }: { status: string; size?: numbe
     case 'cancelled':
       return <XCircle size={size} className="text-amber-600 dark:text-amber-400" />;
     default:
-      return <Clock size={size} className="text-slate-400 dark:text-slate-500" />;
+      return <Clock size={size} className="text-content-tertiary" />;
   }
 }

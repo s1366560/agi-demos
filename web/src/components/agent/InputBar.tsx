@@ -607,20 +607,6 @@ export const InputBar = memo<InputBarProps>(
 
     return (
       <div className="h-full min-w-0 flex flex-col p-2 sm:p-4">
-        {/* Plan Mode indicator */}
-        {isPlanMode && (
-          <div className="mb-2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 text-blue-700 dark:text-blue-300 text-sm">
-            <ListChecks size={14} />
-            <span className="font-medium">{t('agent.inputBar.planModeLabel', 'Plan Mode')}</span>
-            <span className="text-blue-500 dark:text-blue-400 text-xs">
-              {t(
-                'agent.inputBar.planModeHint',
-                'Read-only analysis. Agent will plan without making changes.'
-              )}
-            </span>
-          </div>
-        )}
-
         {/* Hidden file input */}
         <input
           ref={fileInputRef}
@@ -649,13 +635,52 @@ export const InputBar = memo<InputBarProps>(
             ${
               isDragging
                 ? 'border-primary/55 ring-2 ring-primary/15 shadow-[0_1px_5px_rgba(0,112,243,0.08)]'
-                : isFocused
-                  ? 'border-primary/25 shadow-[0_1px_4px_rgba(0,112,243,0.045)] ring-2 ring-primary/5'
-                  : 'border-slate-200/45 dark:border-slate-700/45 shadow-[0_1px_3px_rgba(15,23,42,0.035)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.12)]'
+                : isPlanMode
+                  ? 'border-primary/40 ring-2 ring-primary/10 shadow-[0_1px_4px_rgba(0,112,243,0.06)]'
+                  : isFocused
+                    ? 'border-primary/25 shadow-[0_1px_4px_rgba(0,112,243,0.045)] ring-2 ring-primary/5'
+                    : 'border-slate-200/45 dark:border-slate-700/45 shadow-[0_1px_3px_rgba(15,23,42,0.035)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.12)]'
             }
             ${disabled ? 'opacity-60 pointer-events-none' : ''}
           `}
         >
+          {/* Plan Mode pill (integrated into the composer card) */}
+          {isPlanMode && (
+            <div className="flex-shrink-0 px-3 pt-2 sm:px-4">
+              <div
+                data-testid="plan-mode-strip"
+                className="flex items-center gap-2 rounded-md border border-primary/25 bg-primary/5 px-2.5 py-1.5"
+              >
+                <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-primary/10 text-primary">
+                  <ListChecks size={12} />
+                </span>
+                <span className="flex-shrink-0 text-xs font-semibold text-primary">
+                  {t('agent.inputBar.planModeLabel', 'Plan Mode')}
+                </span>
+                <span className="hidden min-w-0 flex-1 truncate text-xs text-primary/70 sm:inline">
+                  {t(
+                    'agent.inputBar.planModeHint',
+                    'Read-only analysis. Agent will plan without making changes.'
+                  )}
+                </span>
+                {onTogglePlanMode && (
+                  <LazyTooltip
+                    title={t('agent.inputBar.exitPlanMode', 'Exit Plan Mode (Shift+Tab)')}
+                  >
+                    <button
+                      type="button"
+                      onClick={onTogglePlanMode}
+                      aria-label={t('agent.inputBar.exitPlanMode', 'Exit Plan Mode (Shift+Tab)')}
+                      className="ml-auto flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-primary/60 transition-colors hover:bg-primary/10 hover:text-primary"
+                    >
+                      <X size={12} />
+                    </button>
+                  </LazyTooltip>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Drag overlay */}
           {isDragging && (
             <div className="absolute inset-0 z-20 rounded-md bg-primary/5 dark:bg-primary/10 flex items-center justify-center pointer-events-none">
@@ -689,7 +714,7 @@ export const InputBar = memo<InputBarProps>(
               className="flex flex-shrink-0 flex-wrap items-center gap-1.5 px-3 pt-2 sm:px-4"
               data-testid="run-input-delivery"
             >
-              <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-content-tertiary">
                 {t('agent.runInput.delivery', { defaultValue: 'Delivery' })}
               </span>
               {runInputDeliveryOptions.map((delivery) => (
@@ -814,9 +839,7 @@ export const InputBar = memo<InputBarProps>(
             <div
               data-testid="chat-input-surface"
               className="
-                flex h-full min-h-11 w-full min-w-0 flex-wrap content-start items-start gap-1.5 rounded px-2 py-1.5
-                bg-slate-50/70 dark:bg-slate-900/40
-                transition-colors
+                flex h-full min-h-11 w-full min-w-0 flex-wrap content-start items-start gap-1.5 px-2 py-1.5
               "
             >
               {selectedSkill && (
@@ -889,7 +912,7 @@ export const InputBar = memo<InputBarProps>(
                 className="
                   h-auto min-w-40 flex-1 bg-transparent px-1 py-1
                   text-sm leading-relaxed text-slate-800 dark:text-slate-100
-                  placeholder:text-slate-400 dark:placeholder:text-slate-500
+                  placeholder:text-content-tertiary
                   focus:outline-none
                   overflow-y-auto overflow-x-hidden
                   break-words font-sans

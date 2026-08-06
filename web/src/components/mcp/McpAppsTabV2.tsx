@@ -202,7 +202,7 @@ export const McpAppsTabV2: React.FC = () => {
           className={`flex flex-col items-center justify-center py-12 text-center ${CARD_STYLES.base} border-dashed`}
         >
           <div className="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-700/50 flex items-center justify-center mb-4">
-            <LayoutGrid size={32} className="text-slate-300 dark:text-slate-500" />
+            <LayoutGrid size={32} className="text-content-tertiary" />
           </div>
           <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-1">
             {t('mcp.apps.empty')}

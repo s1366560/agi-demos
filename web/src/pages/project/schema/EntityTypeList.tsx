@@ -973,7 +973,7 @@ const LoadingInternal: React.FC = () => {
   const { t } = useTranslation();
 
   return (
-    <div className="p-8 text-center text-slate-500 dark:text-gray-500">
+    <div className="p-8 text-center text-content-tertiary">
       {entityText(t, 'loading', TEXTS.loading)}
     </div>
   );

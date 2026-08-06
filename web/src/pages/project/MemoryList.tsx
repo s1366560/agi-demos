@@ -830,7 +830,7 @@ const ToolbarInternal: React.FC<ToolbarProps> = ({
                   className={`rounded-full px-1.5 text-[11px] leading-5 ${
                     isActive
                       ? 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200'
-                      : 'bg-white text-slate-400 dark:bg-slate-900 dark:text-slate-500'
+                      : 'bg-white text-content-tertiary dark:bg-slate-900'
                   }`}
                 >
                   {option.count}

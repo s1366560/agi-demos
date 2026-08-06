@@ -350,7 +350,7 @@ export default function SchemaOverview() {
 
   if (isLoading) {
     return (
-      <div className="p-8 text-center text-slate-500 dark:text-gray-500" role="status">
+      <div className="p-8 text-center text-content-tertiary" role="status">
         {t('common.loading')}
       </div>
     );

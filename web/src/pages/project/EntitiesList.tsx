@@ -589,7 +589,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                           className={`rounded-full px-1.5 text-[11px] leading-5 ${
                             isActive
                               ? 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200'
-                              : 'bg-white text-slate-400 dark:bg-slate-900 dark:text-slate-500'
+                              : 'bg-white text-content-tertiary dark:bg-slate-900'
                           }`}
                         >
                           {formatEntityCount(option.count)}
@@ -678,7 +678,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                   </div>
                   <p
                     id="entity-search-scope-hint"
-                    className="mt-1 text-xs text-slate-400 dark:text-slate-500"
+                    className="mt-1 text-xs text-content-tertiary"
                   >
                     {t(
                       'project.graph.entities.filter.search_scope_hint',

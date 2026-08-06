@@ -419,7 +419,7 @@ export const AgentDefinitions: React.FC = () => {
               defaultValue: '{{count}} project',
             })}
           </span>
-          <span className="text-xs text-slate-400 dark:text-slate-500">
+          <span className="text-xs text-content-tertiary">
             {t('tenant.agentDefinitions.stats.currentPageNote', { defaultValue: '(current page)' })}
           </span>
         </span>
@@ -670,7 +670,7 @@ export const AgentDefinitions: React.FC = () => {
                   )}
                 </div>
 
-                <div className="flex items-center justify-between text-xs-plus text-slate-400 dark:text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-700">
+                <div className="flex items-center justify-between text-xs-plus text-content-tertiary pt-1 border-t border-slate-100 dark:border-slate-700">
                   <span>
                     {t('tenant.agentDefinitions.metrics.invocations', {
                       count: def.total_invocations,

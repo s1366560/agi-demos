@@ -176,7 +176,7 @@ export const WorkspaceGroupChatPanel: React.FC<WorkspaceGroupChatPanelProps> = (
                               {w.name}
                             </span>
                             {w.description && (
-                              <span className="block truncate text-xs text-slate-400 dark:text-slate-500">
+                              <span className="block truncate text-xs text-content-tertiary">
                                 {w.description}
                               </span>
                             )}

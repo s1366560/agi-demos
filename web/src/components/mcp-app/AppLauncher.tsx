@@ -228,7 +228,7 @@ export const AppLauncher: FC<AppLauncherProps> = ({ variant = 'header' }) => {
             {pinnedApps.length > 0 && (
               <>
                 <div className="px-2 py-1">
-                  <span className="text-2xs font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                  <span className="text-2xs font-medium text-content-tertiary uppercase tracking-wider">
                     {t('components.mcpApp.launcher.pinned', 'Pinned')}
                   </span>
                 </div>
@@ -333,7 +333,7 @@ const AppLauncherItem: FC<{
         <div className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
           {title}
         </div>
-        <div className="text-2xs text-slate-400 dark:text-slate-500 truncate">
+        <div className="text-2xs text-content-tertiary truncate">
           {app.server_name}
         </div>
       </button>

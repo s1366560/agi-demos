@@ -995,7 +995,7 @@ ${content}`;
         </div>
         <div
           className="relative flex flex-shrink-0 flex-col border-t border-slate-200/45 bg-white shadow-[0_-1px_2px_rgba(15,23,42,0.025)] dark:border-slate-800/55 dark:bg-slate-900"
-          style={{ height: inputHeight }}
+          style={{ minHeight: inputHeight }}
         >
           <div className="absolute -top-2 left-0 right-0 z-40 flex justify-center">
             <Resizer

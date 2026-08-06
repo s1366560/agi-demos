@@ -88,7 +88,7 @@ function getStateConfig(
       return {
         icon: <CheckCircle2 size={14} />,
         label: t('agent.state.idle', 'Ready'),
-        color: 'text-slate-400 dark:text-slate-500',
+        color: 'text-content-tertiary',
         bgColor: 'bg-slate-50 dark:bg-slate-800/50',
         borderColor: 'border-slate-200 dark:border-slate-700',
       };
@@ -141,7 +141,7 @@ export const AgentStatePill: React.FC<AgentStatePillProps> = memo(({ className =
           {config.label}
         </span>
         {currentTool && state === 'acting' && (
-          <span className="text-xs text-slate-400 dark:text-slate-500 truncate max-w-[120px]">
+          <span className="text-xs text-content-tertiary truncate max-w-[120px]">
             {currentTool}
           </span>
         )}

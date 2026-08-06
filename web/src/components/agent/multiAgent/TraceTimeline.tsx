@@ -94,7 +94,7 @@ const RunItem: FC<RunItemProps> = memo(({ run, onSelect, selected }) => {
 
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 line-clamp-2">{run.task}</p>
 
-      <div className="mt-2 flex items-center gap-3 text-2xs text-slate-400 dark:text-slate-500">
+      <div className="mt-2 flex items-center gap-3 text-2xs text-content-tertiary">
         <span className="flex items-center gap-1">
           <Clock size={10} />
           {formatTimestamp(run.created_at)}
@@ -230,12 +230,12 @@ const EmptyTraceState: FC = memo(() => {
   return (
     <div className="flex flex-col items-center justify-center p-8 text-center">
       <div className="w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3">
-        <Activity size={24} className="text-slate-400 dark:text-slate-500" />
+        <Activity size={24} className="text-content-tertiary" />
       </div>
       <p className="text-sm text-slate-500 dark:text-slate-400">
         {t('agent.multiAgent.traceTimeline.emptyTitle', { defaultValue: 'No execution traces' })}
       </p>
-      <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+      <p className="text-xs text-content-tertiary mt-1">
         {t('agent.multiAgent.traceTimeline.emptyDescription', {
           defaultValue: 'SubAgent execution traces will appear here when agents run tasks.',
         })}

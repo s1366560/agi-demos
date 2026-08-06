@@ -590,7 +590,7 @@ const TimelineStepItem = memo<{
           )}
         </div>
         {step.duration != null && (
-          <span className="mt-0.5 max-w-10 truncate text-center text-[10px] leading-none tabular-nums text-slate-400 dark:text-slate-500">
+          <span className="mt-0.5 max-w-10 truncate text-center text-[10px] leading-none tabular-nums text-content-tertiary">
             {formatDuration(step.duration)}
           </span>
         )}
@@ -622,10 +622,10 @@ const TimelineStepItem = memo<{
               className="flex min-w-0 flex-1 items-center gap-2 text-left cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
             >
               <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                <span className="min-w-0 truncate text-sm font-normal text-slate-800 dark:text-slate-200">
+                <span className="min-w-0 truncate text-xs font-normal text-slate-700 dark:text-slate-300">
                   {toolPreview}
                 </span>
-                <span className="shrink-0 text-2xs font-normal text-slate-400 dark:text-slate-500">
+                <span className="shrink-0 text-2xs font-normal text-content-tertiary">
                   {stepLabel}
                 </span>
               </span>
@@ -799,13 +799,13 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
             {summary.detailActions.slice(0, 7).map((action, index) => (
               <div
                 key={`${action}-${String(index)}`}
-                className="truncate text-sm leading-6 text-slate-500 dark:text-slate-400"
+                className="truncate text-xs leading-5 text-slate-500 dark:text-slate-400"
               >
                 {action}
               </div>
             ))}
             {summary.hiddenActions > 0 && (
-              <div className="truncate text-sm leading-6 text-slate-400 dark:text-slate-500">
+              <div className="truncate text-xs leading-5 text-content-tertiary">
                 {t('agent.timeline.moreActions', 'More {{count}} actions', {
                   count: summary.hiddenActions,
                 })}

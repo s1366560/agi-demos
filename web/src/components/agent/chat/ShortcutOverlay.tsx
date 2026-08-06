@@ -178,7 +178,7 @@ export const ShortcutOverlay = memo(() => {
         <div className="px-6 py-4 space-y-5 max-h-[60vh] overflow-y-auto">
           {sections.map((section) => (
             <div key={section.title}>
-              <h3 className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2.5">
+              <h3 className="text-xs font-semibold text-content-tertiary uppercase tracking-wider mb-2.5">
                 {section.title}
               </h3>
               <div className="space-y-1.5">
@@ -209,7 +209,7 @@ export const ShortcutOverlay = memo(() => {
 
         {/* Footer */}
         <div className="px-6 py-3 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30">
-          <p id={footerId} className="text-xs text-slate-400 dark:text-slate-500 text-center">
+          <p id={footerId} className="text-xs text-content-tertiary text-center">
             {t('agent.shortcuts.footer', 'Press {{key}} to toggle this overlay', {
               key: `${mod}+/`,
             })}

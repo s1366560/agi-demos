@@ -210,7 +210,7 @@ export const ModelSwitchPopover = memo<ModelSwitchPopoverProps>(
               {tFallback(t, 'agent.modelSwitch.title', 'Model')}
             </span>
             {effectiveModel && (
-              <span className="text-2xs text-slate-400 dark:text-slate-500 truncate max-w-[220px]">
+              <span className="text-2xs text-content-tertiary truncate max-w-[220px]">
                 {effectiveModel}
               </span>
             )}

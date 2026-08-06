@@ -250,7 +250,7 @@ export const ConversationCompareView = memo(
               !rightConversationId ? (
                 <div className="flex flex-col items-center justify-center h-full gap-3">
                   <GitCompareArrows size={32} className="text-slate-300 dark:text-slate-600" />
-                  <p className="text-sm text-slate-400 dark:text-slate-500">
+                  <p className="text-sm text-content-tertiary">
                     {t('comparison.selectConversation', 'Select conversation to compare')}
                   </p>
                   <button

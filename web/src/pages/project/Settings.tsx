@@ -216,7 +216,7 @@ const SaveButton: React.FC<SaveButtonProps> = ({ isSaving, label, savingLabel, o
 const Header: React.FC<ProjectSettingsHeaderProps> = ({ title }) => (
   <div className="flex flex-col gap-2 border-b border-gray-100 pb-5 dark:border-slate-800 sm:flex-row sm:items-end sm:justify-between">
     <div className="min-w-0">
-      <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-normal text-gray-500 dark:text-slate-500">
+      <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-normal text-content-tertiary">
         <SettingsIcon className="h-4 w-4" />
         MemStack
       </div>
@@ -694,7 +694,7 @@ const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => {
     sandboxInfo?.status === 'running'
       ? 'text-green-600 dark:text-green-400'
       : sandboxInfo?.status === 'terminated'
-        ? 'text-gray-500 dark:text-slate-500'
+        ? 'text-content-tertiary'
         : sandboxInfo?.status === 'error'
           ? 'text-red-600 dark:text-red-400'
           : 'text-yellow-600 dark:text-yellow-400';
@@ -1040,7 +1040,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
           <div className={`${panelClass} overflow-hidden`}>
             <div className="border-b border-gray-100 px-4 py-4 dark:border-slate-800">
               <p className="truncate text-sm font-semibold text-gray-950 dark:text-white">{name}</p>
-              <p className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-slate-500">
+              <p className="mt-1 line-clamp-2 text-xs text-content-tertiary">
                 {description || t('project.settings.basicDescription')}
               </p>
             </div>

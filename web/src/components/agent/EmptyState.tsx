@@ -132,7 +132,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         </h2>
 
         {/* Subtitle */}
-        <p className="text-slate-400 dark:text-slate-500 max-w-md mx-auto mb-8 text-sm leading-relaxed">
+        <p className="text-content-tertiary max-w-md mx-auto mb-8 text-sm leading-relaxed">
           {t('agent.emptyState.subtitle', 'Start a conversation or pick a suggestion below.')}
         </p>
 
@@ -191,7 +191,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
                 {lastConversation.title}
               </p>
               {lastConversation.updated_at && (
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                <p className="text-xs text-content-tertiary mt-0.5">
                   {formatRelativeTime(lastConversation.updated_at)}
                 </p>
               )}
@@ -252,7 +252,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
                 {card.title}
               </h3>
 
-              <p className="mt-0.5 text-xs leading-relaxed text-slate-400 dark:text-slate-500">
+              <p className="mt-0.5 text-xs leading-relaxed text-content-tertiary">
                 {card.description}
               </p>
             </div>
@@ -266,7 +266,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 
       {/* Footer tips */}
       <div className="mt-10 text-center relative z-10">
-        <p className="text-xs text-slate-400 dark:text-slate-500 flex items-center justify-center gap-3 flex-wrap">
+        <p className="text-xs text-content-tertiary flex items-center justify-center gap-3 flex-wrap">
           <span className="flex items-center gap-1.5">
             <MessageSquare size={12} />
             {t('agent.emptyState.naturalLanguage', 'Natural language conversations')}

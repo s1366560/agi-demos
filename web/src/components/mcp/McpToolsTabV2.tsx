@@ -162,7 +162,7 @@ export const McpToolsTabV2: React.FC = () => {
           className={`flex flex-col items-center justify-center py-16 text-center ${CARD_STYLES.base} border-dashed`}
         >
           <div className="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-700/50 flex items-center justify-center mb-4">
-            <Wrench size={28} className="text-slate-300 dark:text-slate-500" />
+            <Wrench size={28} className="text-content-tertiary" />
           </div>
           <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-1">
             {allTools.length === 0 ? t('mcp.tools.emptyNoTools') : t('mcp.tools.emptyNoMatch')}
@@ -189,7 +189,7 @@ export const McpToolsTabV2: React.FC = () => {
             );
           })}
           {filteredTools.length > TOOL_RENDER_CAP && (
-            <p className="pt-1 text-center text-xs text-slate-400 dark:text-slate-500">
+            <p className="pt-1 text-center text-xs text-content-tertiary">
               {t('mcp.tools.renderCapNote', {
                 shown: TOOL_RENDER_CAP,
                 total: filteredTools.length,

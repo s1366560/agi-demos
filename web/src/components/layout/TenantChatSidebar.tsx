@@ -22,7 +22,6 @@ import {
   Trash2,
   Edit3,
   Bot,
-  FolderOpen,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
@@ -102,6 +101,7 @@ const SIDEBAR_MAX_WIDTH = 400;
 const SIDEBAR_DEFAULT_WIDTH = 256;
 const SIDEBAR_COLLAPSED_WIDTH = 80;
 const COLLAPSE_THRESHOLD = 120; // Width below which sidebar collapses
+const SIDEBAR_DRAG_FLOOR = 60; // Lowest pointer position tracked while dragging
 const PROJECT_SWITCHER_PAGE_SIZE = 25;
 const PROJECT_SEARCH_PAGE_SIZE = 100;
 const PROJECT_SEARCH_DEBOUNCE_MS = 250;
@@ -426,7 +426,7 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
             <p className="w-full truncate text-sm font-medium" title={primaryTitle}>
               {primaryTitle}
             </p>
-            <div className="mt-1 flex min-w-0 items-center justify-between gap-2 text-[11px] leading-4 text-slate-400">
+            <div className="mt-1 flex min-w-0 items-center justify-between gap-2 text-xs-plus leading-4 text-slate-400">
               {contextParts.length > 0 ? (
                 <div className="flex min-w-0 items-center gap-1.5">
                   {contextParts.map((part, index) => (
@@ -527,14 +527,14 @@ const ConversationGroupHeader: React.FC<{
         </span>
         <span className="min-w-0 flex-1">
           <span
-            className="block truncate text-[12px] font-medium leading-5 text-slate-700 dark:text-slate-300"
+            className="block truncate text-xs font-medium leading-5 text-slate-700 dark:text-slate-300"
             title={workspaceTitle}
           >
             {workspaceTitle}
           </span>
         </span>
         <span
-          className="shrink-0 rounded-full bg-slate-100 px-1.5 text-[10px] leading-4 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+          className="shrink-0 rounded-full bg-slate-100 px-1.5 text-2xs leading-4 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
           aria-label={t('agent.sidebar.conversationCount', {
             count: conversationCount,
             defaultValue: '{{count}} conversations',
@@ -1540,8 +1540,8 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     resolvedTenantId,
   ]);
 
-  // Get current width for render
-  const currentWidth = collapsed ? SIDEBAR_COLLAPSED_WIDTH : sidebarWidth;
+  // Get current width for render (collapsed state hides the sidebar entirely)
+  const currentWidth = sidebarWidth;
   const conversationCountLabel = t('agent.sidebar.conversationCount', {
     count: visibleConversations.length,
     defaultValue: '{{count}} conversations',
@@ -1579,6 +1579,12 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       ? t('agent.sidebar.projectsLoadFailed', 'Failed to load projects')
       : t('agent.sidebar.noProjectsAvailable', 'No projects available in this tenant');
 
+  // Collapsing hides the sidebar entirely; the header toggle re-opens it.
+  // (Placed after all hooks; the mobile drawer is never collapsed.)
+  if (collapsed && !mobile) {
+    return null;
+  }
+
   return (
     <aside
       ref={sidebarRef}
@@ -1590,71 +1596,66 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       `}
       style={{ width: mobile ? '100%' : currentWidth }}
     >
-      {/* Resize Handle - only show when not collapsed */}
-      {!collapsed && !mobile && (
-        <Resizer
-          direction="horizontal"
-          currentSize={sidebarWidth}
-          minSize={SIDEBAR_MIN_WIDTH}
-          maxSize={SIDEBAR_MAX_WIDTH}
-          onResize={(newWidth) => {
-            setIsDragging(true);
-            setSidebarWidth(newWidth);
-            widthRef.current = newWidth;
-            if (sidebarRef.current) {
-              sidebarRef.current.style.width = `${String(newWidth)}px`;
-            }
-          }}
-          onResizeEnd={(finalSize) => {
-            if (finalSize < COLLAPSE_THRESHOLD) {
-              setCollapsed(true);
-              setSidebarWidth(SIDEBAR_DEFAULT_WIDTH);
-              setPersistedWidth(SIDEBAR_DEFAULT_WIDTH);
-              widthRef.current = SIDEBAR_DEFAULT_WIDTH;
+      {/* Resize Handle */}
+      {!mobile && (
+        <div className="absolute right-0 top-0 bottom-0 z-30 w-0">
+          <Resizer
+            direction="horizontal"
+            currentSize={sidebarWidth}
+            minSize={SIDEBAR_DRAG_FLOOR}
+            maxSize={SIDEBAR_MAX_WIDTH}
+            onResize={(newWidth) => {
+              // Keep the panel visually within bounds while dragging; dropping
+              // below COLLAPSE_THRESHOLD hides the sidebar on release.
+              const appliedWidth = Math.max(SIDEBAR_MIN_WIDTH, newWidth);
+              setIsDragging(true);
+              setSidebarWidth(appliedWidth);
+              widthRef.current = appliedWidth;
               if (sidebarRef.current) {
-                sidebarRef.current.style.width = `${String(SIDEBAR_COLLAPSED_WIDTH)}px`;
+                sidebarRef.current.style.width = `${String(appliedWidth)}px`;
               }
-            } else {
-              setCollapsed(false);
-              setSidebarWidth(finalSize);
-              setPersistedWidth(finalSize);
-              widthRef.current = finalSize;
-            }
-            setIsDragging(false);
-          }}
-          position="right"
-        />
+            }}
+            onResizeEnd={(finalSize) => {
+              if (finalSize < COLLAPSE_THRESHOLD) {
+                setCollapsed(true);
+                setSidebarWidth(SIDEBAR_DEFAULT_WIDTH);
+                setPersistedWidth(SIDEBAR_DEFAULT_WIDTH);
+                widthRef.current = SIDEBAR_DEFAULT_WIDTH;
+                if (sidebarRef.current) {
+                  sidebarRef.current.style.width = `${String(SIDEBAR_COLLAPSED_WIDTH)}px`;
+                }
+              } else {
+                setCollapsed(false);
+                setSidebarWidth(finalSize);
+                setPersistedWidth(finalSize);
+                widthRef.current = finalSize;
+              }
+              setIsDragging(false);
+            }}
+            position="right"
+          />
+        </div>
       )}
 
       {/* Header */}
       <div
-        className={`
-        h-16 flex items-center px-4 border-b border-slate-100 dark:border-slate-800/50 shrink-0
-        ${collapsed ? 'justify-center' : ''}
-      `}
+        className="h-16 flex items-center px-4 border-b border-slate-100 dark:border-slate-800/50 shrink-0"
       >
-        {collapsed ? (
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Bot className="text-primary" size={24} />
+        <div className="flex items-center gap-3 w-full min-w-0">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-900 dark:bg-slate-100">
+            <Bot className="text-slate-50 dark:text-slate-900" size={24} />
           </div>
-        ) : (
-          <div className="flex items-center gap-3 w-full min-w-0">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-900 dark:bg-slate-100">
-              <Bot className="text-slate-50 dark:text-slate-900" size={24} />
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-slate-900 dark:text-slate-100 truncate text-sm">
+              {t('agent.sidebar.workspaceTitle', 'Agent Workspace')}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-semibold text-slate-900 dark:text-slate-100 truncate text-sm">
-                {t('agent.sidebar.workspaceTitle', 'Agent Workspace')}
-              </div>
-              <p className="text-xs text-slate-500">{conversationCountText}</p>
-            </div>
+            <p className="text-xs text-slate-500">{conversationCountText}</p>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Project Selector */}
-      {!collapsed && (
-        <div className="space-y-2 border-b border-slate-100 p-3 dark:border-slate-800/50">
+      <div className="space-y-2 border-b border-slate-100 p-3 dark:border-slate-800/50">
           <div
             className="relative"
             title={projectSwitcherDisabled ? projectSwitcherDisabledReason : undefined}
@@ -1749,7 +1750,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                       {isSelectedProject ? (
                         <span
                           aria-hidden="true"
-                          className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary"
+                          className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-xs-plus font-medium text-primary"
                         >
                           {selectedProjectBadge}
                         </span>
@@ -1804,61 +1805,27 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             </div>
           ) : null}
         </div>
-      )}
-
-      {/* Collapsed Project Indicator */}
-      {collapsed && selectedProjectId && (
-        <div className="px-2 pb-2 flex justify-center">
-          <LazyTooltip
-            placement="right"
-            title={
-              projectById.get(selectedProjectId)?.name ||
-              t('agent.sidebar.selectProjectTitle', 'Select Project')
-            }
-          >
-            <button
-              type="button"
-              onClick={() => {
-                setCollapsed(false);
-              }}
-              aria-label={t('agent.sidebar.expandProjectSidebar', {
-                project:
-                  projectById.get(selectedProjectId)?.name ||
-                  t('agent.sidebar.selectProjectTitle', 'Select Project'),
-                defaultValue: 'Expand project sidebar for {{project}}',
-              })}
-              className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
-            >
-              <FolderOpen size={20} className="text-slate-500" />
-            </button>
-          </LazyTooltip>
-        </div>
-      )}
 
       {/* New Chat Button */}
-      <div className={collapsed ? 'px-2 flex justify-center' : 'p-3'}>
-        <LazyTooltip title={newChatDisabledReason ?? ''} placement={collapsed ? 'right' : 'top'}>
-          <span className={collapsed ? 'inline-flex' : 'block w-full'}>
+      <div className="p-3">
+        <LazyTooltip title={newChatDisabledReason ?? ''} placement="top">
+          <span className="block w-full">
             <LazyButton
               type="primary"
-              icon={<Plus size={collapsed ? 20 : 18} />}
+              icon={<Plus size={18} />}
               onClick={handleNewConversation}
               disabled={!isAgentWorkspaceRoute || !selectedProjectId}
               aria-label={t('agent.sidebar.newChat', 'New Chat')}
-              className={`
-                ${collapsed ? 'w-10 h-10 p-0' : 'w-full h-10'}
-                bg-primary hover:bg-primary-600 shadow-sm
-                rounded-xl flex items-center justify-center gap-2
-              `}
+              className="w-full h-10 bg-primary hover:bg-primary-600 shadow-sm rounded-xl flex items-center justify-center gap-2"
             >
-              {!collapsed && <span>{t('agent.sidebar.newChat', 'New Chat')}</span>}
+              <span>{t('agent.sidebar.newChat', 'New Chat')}</span>
             </LazyButton>
           </span>
         </LazyTooltip>
       </div>
 
       {/* Conversation filter */}
-      {!collapsed && isAgentWorkspaceRoute && (
+      {isAgentWorkspaceRoute && (
         <div className="px-3 pb-2">
           <LazyInput
             aria-label={t('agent.sidebar.filterConversations', 'Filter conversations by title')}
@@ -1878,8 +1845,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         className="flex-1 overflow-y-auto custom-scrollbar"
         onScroll={handleConversationScroll}
       >
-        {!collapsed && (
-          <div className="px-3">
+        <div className="px-3">
             {conversationsLoading ? (
               <div className="flex items-center justify-center py-8" role="status">
                 <div
@@ -1977,7 +1943,6 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
               </>
             )}
           </div>
-        )}
       </div>
 
       {/* Mobile Navigation Links - shown only in mobile drawer */}

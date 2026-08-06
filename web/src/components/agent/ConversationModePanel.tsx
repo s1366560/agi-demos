@@ -262,7 +262,7 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
               className="w-full"
               data-testid="conversation-task-select"
             />
-            <div className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+            <div className="mt-1 text-[11px] text-content-tertiary">
               {t(
                 'agent.workspace.task.hint',
                 'Goal, budget and termination are driven by the linked task.'

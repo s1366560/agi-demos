@@ -140,7 +140,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
             ))}
           </select>
           {user.role === 'owner' && (
-            <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
+            <p className="mt-1 text-xs text-content-tertiary">
               {t('tenant.users.owner_role_immutable')}
             </p>
           )}
@@ -155,7 +155,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
         <div className="pt-4 border-t border-gray-200 dark:border-slate-800">
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <p className="text-gray-500 dark:text-slate-500">
+              <p className="text-content-tertiary">
                 {t('tenant.users.joined_at_label')}
               </p>
               <p className="text-gray-900 dark:text-white font-medium">
@@ -163,7 +163,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
               </p>
             </div>
             <div>
-              <p className="text-gray-500 dark:text-slate-500">
+              <p className="text-content-tertiary">
                 {t('tenant.users.last_login_label')}
               </p>
               <p className="text-gray-900 dark:text-white font-medium">

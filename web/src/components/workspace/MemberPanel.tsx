@@ -64,7 +64,7 @@ export const MemberPanel: FC<MemberPanelProps> = ({ tenantId, projectId, workspa
           </h4>
           <ul className="space-y-1">
             {members.length === 0 ? (
-              <li className="text-sm text-slate-400 dark:text-slate-500">
+              <li className="text-sm text-content-tertiary">
                 {t('workspaceDetail.members.noMembers', { defaultValue: 'No members yet' })}
               </li>
             ) : (
@@ -97,7 +97,7 @@ export const MemberPanel: FC<MemberPanelProps> = ({ tenantId, projectId, workspa
           </div>
           <ul className="space-y-1">
             {agents.length === 0 ? (
-              <li className="text-sm text-slate-400 dark:text-slate-500">
+              <li className="text-sm text-content-tertiary">
                 {t('workspaceDetail.members.noAgents', { defaultValue: 'No agents yet' })}
               </li>
             ) : (

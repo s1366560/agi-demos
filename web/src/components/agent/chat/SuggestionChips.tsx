@@ -29,7 +29,7 @@ export const SuggestionChips: React.FC<SuggestionChipsProps> = memo(
         <div className="w-8 flex-shrink-0" />
 
         <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
-          <p className="text-xs text-slate-400 dark:text-slate-500 mb-2 font-medium">
+          <p className="text-xs text-content-tertiary mb-2 font-medium">
             {t('agent.suggestions.label', 'Suggested follow-ups')}
           </p>
           <div className="flex flex-wrap gap-2">

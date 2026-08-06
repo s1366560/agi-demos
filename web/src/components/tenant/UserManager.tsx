@@ -328,7 +328,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
                 ? t('tenant.users.workspace_users')
                 : t('tenant.users.project_users')}
             </h3>
-            <span className="text-sm text-gray-500 dark:text-slate-500">
+            <span className="text-sm text-content-tertiary">
               {t('tenant.users.users_count', { count: filteredUsers.length })}
             </span>
           </div>
@@ -344,7 +344,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
 
         <div className="flex flex-col gap-3 sm:flex-row">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-content-tertiary" />
             <input
               type="text"
               aria-label={t('tenant.users.searchPlaceholder')}
@@ -353,7 +353,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
               onChange={(e) => {
                 setSearchTerm(e.target.value);
               }}
-              className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
+              className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder:text-content-tertiary"
             />
           </div>
           <div>
@@ -473,7 +473,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
                     onClick={() => {
                       handleEditUser(user);
                     }}
-                    className="p-2 text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                    className="p-2 text-content-tertiary hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                     title={t('tenant.users.actions.edit')}
                     aria-label={t('tenant.users.actions.editUser', {
                       name: user.name,
@@ -489,7 +489,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
                         void handleRemoveUser(user.id);
                       }}
                       disabled={removingUserId === user.id}
-                      className="p-2 text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="p-2 text-content-tertiary hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
                       title={t('tenant.users.actions.remove')}
                       aria-label={t('tenant.users.actions.removeUser', {
                         name: user.name,
@@ -558,7 +558,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
               onChange={(e) => {
                 setInviteEmail(e.target.value);
               }}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder:text-content-tertiary"
               placeholder={t('tenant.users.invite_modal.email_placeholder')}
               required
             />
@@ -600,7 +600,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
               onChange={(e) => {
                 setInviteMessage(e.target.value);
               }}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder:text-content-tertiary"
               placeholder={t('tenant.users.invite_modal.message_placeholder')}
               rows={3}
             />

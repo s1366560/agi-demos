@@ -813,7 +813,7 @@ const FacetedFilters = memo<FacetedFiltersProps>(
               onClick={() => {
                 setIsAddingTag(true);
               }}
-              className="px-2 py-1 rounded-md bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-dashed border-slate-300 dark:border-slate-600 hover:border-blue-600/50 hover:text-blue-600 text-2xs font-medium transition-colors flex items-center gap-1"
+              className="px-2 py-1 rounded-md bg-white dark:bg-slate-800 text-content-tertiary border border-dashed border-slate-300 dark:border-slate-600 hover:border-blue-600/50 hover:text-blue-600 text-2xs font-medium transition-colors flex items-center gap-1"
             >
               <Plus className="w-3 h-3" /> {t('project.search.filters.add_tag')}
             </button>

@@ -713,12 +713,12 @@ export const ProviderList: React.FC = () => {
                               {provider.llm_model}
                             </code>
                             {provider.embedding_model && (
-                              <code className="text-xs text-slate-500 dark:text-slate-500 font-mono">
+                              <code className="text-xs text-content-tertiary font-mono">
                                 {provider.embedding_model}
                               </code>
                             )}
                             {provider.reranker_model && (
-                              <code className="text-xs text-slate-500 dark:text-slate-500 font-mono">
+                              <code className="text-xs text-content-tertiary font-mono">
                                 {provider.reranker_model}
                               </code>
                             )}

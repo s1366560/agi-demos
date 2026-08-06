@@ -403,7 +403,7 @@ export const McpServerTabV2: React.FC = () => {
           className={`flex flex-col items-center justify-center py-16 text-center ${CARD_STYLES.base} border-dashed`}
         >
           <div className="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-700/50 flex items-center justify-center mb-4">
-            <Server size={28} className="text-slate-300 dark:text-slate-500" />
+            <Server size={28} className="text-content-tertiary" />
           </div>
           <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-1">
             {t('mcp.servers.emptyTitle')}
@@ -419,7 +419,7 @@ export const McpServerTabV2: React.FC = () => {
       ) : filteredServers.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-slate-700/50 flex items-center justify-center mb-3">
-            <Search size={20} className="text-slate-300 dark:text-slate-500" />
+            <Search size={20} className="text-content-tertiary" />
           </div>
           <p className="text-sm text-slate-500 dark:text-slate-400">{t('mcp.servers.noMatch')}</p>
           <button

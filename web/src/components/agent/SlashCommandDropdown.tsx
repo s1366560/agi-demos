@@ -211,7 +211,7 @@ export const SlashCommandDropdown = memo(
                     {isFirstCommand && (
                       <div
                         role="presentation"
-                        className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-slate-800/50"
+                        className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-content-tertiary bg-slate-50/50 dark:bg-slate-800/50"
                       >
                         {t('agent.slashCommand.groupCommands', 'Commands')}
                       </div>
@@ -219,7 +219,7 @@ export const SlashCommandDropdown = memo(
                     {isFirstSkill && (
                       <div
                         role="presentation"
-                        className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-slate-800/50"
+                        className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-content-tertiary bg-slate-50/50 dark:bg-slate-800/50"
                       >
                         {t('agent.slashCommand.groupSkills', 'Skills')}
                       </div>

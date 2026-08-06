@@ -225,7 +225,7 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({ onComplete }) =>
               }`}
             />
           ))}
-          <span className="ml-auto text-xs text-slate-400 dark:text-slate-500 tabular-nums">
+          <span className="ml-auto text-xs text-content-tertiary tabular-nums">
             {step + 1} {ofLabel} {TOUR_STEPS.length}
           </span>
         </div>

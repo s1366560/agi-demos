@@ -849,7 +849,7 @@ const OfficeDownloadFallback = memo<{ src: string; title: string; message: strin
         <div className="flex flex-col items-center gap-4 p-8 text-center">
           <FileText size={48} className="text-slate-300 dark:text-slate-600" />
           <div className="text-sm text-slate-500 dark:text-slate-400">{title}</div>
-          <div className="text-xs text-slate-400 dark:text-slate-500 max-w-xs">{message}</div>
+          <div className="text-xs text-content-tertiary max-w-xs">{message}</div>
           <a
             href={src}
             target="_blank"
@@ -1534,7 +1534,7 @@ const CanvasFormPreview = memo<{ fields: CanvasFormField[] }>(({ fields }) => {
             </div>
           );
         })}
-        <p className="pt-1 text-2xs text-slate-400 dark:text-slate-500">
+        <p className="pt-1 text-2xs text-content-tertiary">
           {t('agent.canvas.readOnlyFormPreview', { defaultValue: 'Read-only form preview' })}
         </p>
       </div>

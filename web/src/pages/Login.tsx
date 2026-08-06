@@ -246,9 +246,9 @@ export const Login: React.FC = () => {
                 title={passwordVisibilityLabel}
               >
                 {showPassword ? (
-                  <EyeOff className="h-5 w-5 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 transition-colors" />
+                  <EyeOff className="h-5 w-5 text-content-tertiary hover:text-gray-600 dark:hover:text-slate-300 transition-colors" />
                 ) : (
-                  <Eye className="h-5 w-5 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 transition-colors" />
+                  <Eye className="h-5 w-5 text-content-tertiary hover:text-gray-600 dark:hover:text-slate-300 transition-colors" />
                 )}
               </button>
             </div>
@@ -277,7 +277,7 @@ export const Login: React.FC = () => {
               <div className="w-full border-t border-gray-200 dark:border-slate-800" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-white dark:bg-slate-900 text-gray-500 dark:text-slate-500">
+              <span className="px-4 bg-white dark:bg-slate-900 text-content-tertiary">
                 {t('login.form.or')}
               </span>
             </div>

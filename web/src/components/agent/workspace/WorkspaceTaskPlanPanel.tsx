@@ -40,7 +40,7 @@ const WORKSPACE_STATUS_CONFIG: Record<
   todo: {
     icon: Circle,
     label: 'Todo',
-    color: 'text-slate-400 dark:text-slate-500',
+    color: 'text-content-tertiary',
     bar: 'bg-slate-300 dark:bg-slate-600',
   },
   blocked: {
@@ -148,7 +148,7 @@ const WorkspaceTaskPlanRowItem = memo<{ row: WorkspaceTaskPlanRow; locale: strin
                 {row.title}
               </p>
               {timestamp ? (
-                <span className="shrink-0 text-[11px] text-slate-400 dark:text-slate-500">
+                <span className="shrink-0 text-[11px] text-content-tertiary">
                   {timestamp}
                 </span>
               ) : null}

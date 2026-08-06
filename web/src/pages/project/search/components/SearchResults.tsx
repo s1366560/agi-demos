@@ -420,7 +420,7 @@ const EmptyResultView = memo<{ viewMode: 'grid' | 'list' }>(({ viewMode }) => {
         ${viewMode === 'grid' ? 'col-span-full' : ''}
     `}
     >
-      <div className="mb-4 rounded-md bg-slate-100 p-3 text-slate-400 dark:bg-slate-900 dark:text-slate-500">
+      <div className="mb-4 rounded-md bg-slate-100 p-3 text-content-tertiary dark:bg-slate-900">
         <Target className="h-6 w-6" />
       </div>
       <h3 className="text-sm font-semibold text-slate-950 dark:text-slate-50">

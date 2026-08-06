@@ -216,7 +216,7 @@ export const JitContextCard: FC<JitContextCardProps> = ({ event, conversationId 
                     <span className="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                       {m.category}
                     </span>
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                    <span className="text-[10px] text-content-tertiary">
                       {t('components.jitContext.viaSource', {
                         defaultValue: 'via {{source}}',
                         source: m.source,

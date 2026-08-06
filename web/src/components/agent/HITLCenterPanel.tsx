@@ -217,7 +217,7 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
         )}
 
         {!loading && !error && visible.length === 0 && (
-          <p className="text-sm text-slate-400 dark:text-slate-500">
+          <p className="text-sm text-content-tertiary">
             {t('agent.hitl.center.empty', { defaultValue: 'No pending requests.' })}
           </p>
         )}
@@ -284,7 +284,7 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
                   <p className="line-clamp-2 text-sm text-slate-900 dark:text-slate-100">
                     {req.question}
                   </p>
-                  <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+                  <p className="mt-1 text-[11px] text-content-tertiary">
                     {formatDateTime(req.created_at)}
                   </p>
                 </button>

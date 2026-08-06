@@ -286,7 +286,7 @@ export const OrgGenes: React.FC = () => {
           <p className="text-slate-500 dark:text-slate-400 mb-2">
             {t('tenant.orgSettings.genes.empty')}
           </p>
-          <p className="text-sm text-slate-400 dark:text-slate-500">
+          <p className="text-sm text-content-tertiary">
             {t('tenant.orgSettings.genes.emptyHint')}
           </p>
         </div>
@@ -313,7 +313,7 @@ export const OrgGenes: React.FC = () => {
                   <pre className="text-xs bg-slate-50 dark:bg-slate-900 rounded-lg p-3 text-slate-700 dark:text-slate-300 overflow-x-auto max-h-32">
                     {JSON.stringify(policy.policy_value, null, 2)}
                   </pre>
-                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
+                  <p className="text-xs text-content-tertiary mt-2">
                     {t('tenant.orgSettings.genes.updatedAt')}:{' '}
                     {formatDateTime(policy.updated_at ?? policy.created_at)}
                   </p>

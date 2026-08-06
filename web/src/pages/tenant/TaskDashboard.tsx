@@ -326,7 +326,7 @@ const TaskDashboardInner: React.FC<{
         </div>
         <div className="flex items-center gap-3">
           {lastUpdatedAt ? (
-            <span className="text-xs tabular-nums text-slate-400 dark:text-slate-500">
+            <span className="text-xs tabular-nums text-content-tertiary">
               {t('tenant.tasks.lastUpdated', {
                 time: formatTimeOnly(lastUpdatedAt),
                 defaultValue: 'Updated {{time}}',
@@ -395,7 +395,7 @@ const TaskDashboardInner: React.FC<{
             <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">
               {t('tenant.tasks.stats.total')}
             </p>
-            <ListTodo className="text-slate-400 dark:text-slate-500 size-5" />
+            <ListTodo className="text-content-tertiary size-5" />
           </div>
           <div className="flex items-end gap-2 mt-2">
             <p className="text-slate-900 dark:text-white text-2xl font-bold leading-none tabular-nums">
@@ -410,7 +410,7 @@ const TaskDashboardInner: React.FC<{
             <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">
               {t('tenant.tasks.stats.throughput')}
             </p>
-            <Gauge className="text-slate-400 dark:text-slate-500 size-5" />
+            <Gauge className="text-content-tertiary size-5" />
           </div>
           <div className="flex items-end gap-2 mt-2">
             <p className="text-slate-900 dark:text-white text-2xl font-bold leading-none tabular-nums">
@@ -425,7 +425,7 @@ const TaskDashboardInner: React.FC<{
             <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">
               {t('tenant.tasks.stats.pending')}
             </p>
-            <Hourglass className="text-slate-400 dark:text-slate-500 size-5" />
+            <Hourglass className="text-content-tertiary size-5" />
           </div>
           <div className="flex items-end gap-2 mt-2">
             <p className="text-slate-900 dark:text-white text-2xl font-bold leading-none tabular-nums">

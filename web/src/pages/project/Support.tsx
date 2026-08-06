@@ -465,7 +465,7 @@ export const Support: React.FC = () => {
           <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-8 text-center">
             <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50 text-gray-400" />
             <p className="text-gray-600 dark:text-gray-400">{t('project.support.tickets.empty')}</p>
-            <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
+            <p className="text-sm text-content-tertiary mt-1">
               {t('project.support.tickets.empty_desc')}
             </p>
           </div>

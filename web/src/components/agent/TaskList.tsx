@@ -22,7 +22,7 @@ const STATUS_CONFIG: Record<TaskStatus, { icon: typeof Circle; color: string; la
   {
     pending: {
       icon: Circle,
-      color: 'text-slate-400 dark:text-slate-500',
+      color: 'text-content-tertiary',
       labelKey: 'agent.taskList.status.pending',
     },
     in_progress: {
@@ -42,7 +42,7 @@ const STATUS_CONFIG: Record<TaskStatus, { icon: typeof Circle; color: string; la
     },
     cancelled: {
       icon: Ban,
-      color: 'text-slate-400 dark:text-slate-500',
+      color: 'text-content-tertiary',
       labelKey: 'agent.taskList.status.cancelled',
     },
   };
@@ -81,7 +81,7 @@ const TaskItem = memo<{ task: AgentTask }>(({ task }) => {
         <p
           className={`text-sm leading-snug ${
             isCompleted
-              ? 'line-through text-slate-400 dark:text-slate-500'
+              ? 'line-through text-content-tertiary'
               : 'text-slate-700 dark:text-slate-200'
           }`}
         >

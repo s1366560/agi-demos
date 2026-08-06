@@ -216,7 +216,7 @@ export const GeneImportModal: React.FC<GeneImportModalProps> = ({
                           </Typography.Paragraph>
                         )}
                       </div>
-                      <div className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
+                      <div className="shrink-0 text-xs text-content-tertiary">
                         <span className="tabular-nums">
                           ↓ {compactNumber.format(gene.install_count)}
                         </span>

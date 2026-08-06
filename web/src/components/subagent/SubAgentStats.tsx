@@ -18,7 +18,7 @@ const StatsCard = memo<StatsCardProps>(({ title, value, icon }) => (
   <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700">
     <div className="flex items-center justify-between">
       <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{title}</p>
-      <div className="text-slate-400 dark:text-slate-500">{icon}</div>
+      <div className="text-content-tertiary">{icon}</div>
     </div>
     <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-white mt-2">{value}</p>
   </div>

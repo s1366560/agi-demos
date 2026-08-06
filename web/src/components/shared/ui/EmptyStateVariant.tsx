@@ -195,7 +195,7 @@ const EmptyStateSimpleComponent: FC<EmptyStateSimpleProps> = ({
       )}
       <h3 className="text-base font-medium text-slate-700 dark:text-slate-300 mb-1">{title}</h3>
       {description && (
-        <p className="text-sm text-slate-400 dark:text-slate-500 max-w-sm mb-5">{description}</p>
+        <p className="text-sm text-content-tertiary max-w-sm mb-5">{description}</p>
       )}
       {action}
     </div>
@@ -314,7 +314,7 @@ const EmptyStateCardsComponent: FC<EmptyStateCardsProps> = ({
                   {card.title}
                 </h3>
 
-                <p className="text-xs text-slate-400 dark:text-slate-500 leading-relaxed">
+                <p className="text-xs text-content-tertiary leading-relaxed">
                   {card.description}
                 </p>
               </button>

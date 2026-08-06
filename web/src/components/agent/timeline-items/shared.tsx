@@ -45,7 +45,7 @@ export function TimeBadge({ timestamp }: { timestamp: number }) {
   return (
     <time
       dateTime={isoDateTime}
-      className="text-2xs text-slate-400 dark:text-slate-500 select-none"
+      className="text-2xs text-content-tertiary select-none"
       title={formatDateTime(timestamp)}
     >
       {naturalTime} · {readableTime}

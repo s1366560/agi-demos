@@ -667,7 +667,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
         <div className="mx-4 mt-2 rounded-md bg-slate-50/75 dark:bg-slate-800/40 px-3 py-2 text-xs text-slate-600 dark:text-slate-400 font-mono leading-relaxed animate-fade-in border border-slate-200/40 dark:border-slate-700/35">
           <div className="flex items-center gap-1.5 mb-1">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
-            <span className="text-slate-500 dark:text-slate-500 text-2xs uppercase tracking-wider font-sans">
+            <span className="text-content-tertiary text-2xs uppercase tracking-wider font-sans">
               {t('agent.subagent.live_preview')}
             </span>
           </div>
@@ -706,7 +706,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
 
           {/* Routing reason */}
           {group.reason && (
-            <p className="max-w-[76ch] text-xs-plus text-slate-400 dark:text-slate-500 italic break-words [overflow-wrap:anywhere]">
+            <p className="max-w-[76ch] text-xs-plus text-content-tertiary italic break-words [overflow-wrap:anywhere]">
               {group.reason}
             </p>
           )}
@@ -758,7 +758,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
           {group.status === 'running' &&
             activeConversationId &&
             expectedRunRevision === null && (
-              <p className="text-2xs text-slate-400 dark:text-slate-500">
+              <p className="text-2xs text-content-tertiary">
                 {t(
                   'agent.subagent.controlAuthorityUnavailable',
                   'Sub-agent controls are unavailable until the run authority revision is received.'

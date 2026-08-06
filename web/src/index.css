@@ -80,7 +80,7 @@ html:not(.app-ready) * {
 
   /* Border Colors — dark #2b2b2b */
   --color-border-light: #e3e3e3;
-  --color-border-dark: #2b2b2b;
+  --color-border-dark: #333333;
   --color-border-subtle: #f2f2f2;
 
   /* Text Colors — dark text #ededed, muted #9c9c9c */
@@ -89,6 +89,15 @@ html:not(.app-ready) * {
   --color-text-muted: #6b6b6b;
   --color-text-muted-light: #6b6b6b;
   --color-text-inverse: #ededed;
+
+  /* Semantic content text — theme-aware utilities (text-content[-secondary|-tertiary]).
+   * Use these instead of `text-slate-* dark:text-slate-*` pairs: the same class
+   * resolves per theme via the .dark overrides below, and every step meets
+   * WCAG AA (>= 4.5:1) on its theme's surfaces. Mirrors tokens.light/dark
+   * text / textMuted / textMuted2. */
+  --color-content: #141414;
+  --color-content-secondary: #4f4f4f;
+  --color-content-tertiary: #6b6b6b;
 
   /* Surface Variants */
   --color-surface-alt: #f2f2f2;
@@ -765,6 +774,11 @@ body {
   --color-text: #ededed;
   --color-muted: #9c9c9c;
   --color-overlay-backdrop: rgba(0, 0, 0, 0.8);
+
+  /* Semantic content text — dark overrides (mirrors tokens.dark text family). */
+  --color-content: #ededed;
+  --color-content-secondary: #9c9c9c;
+  --color-content-tertiary: #8a8a8a;
 }
 
 /* ============================================================================
@@ -808,7 +822,7 @@ body {
   --color-slate-100: #dbdbdb;
   --color-slate-200: #bdbdbd;
   --color-slate-300: #9c9c9c;
-  --color-slate-400: #6e6e6e;
+  --color-slate-400: #8a8a8a;
   --color-slate-500: #404040;
   --color-slate-600: #262626;
   --color-slate-700: #1f1f1f;
@@ -821,7 +835,7 @@ body {
   --color-gray-100: #dbdbdb;
   --color-gray-200: #bdbdbd;
   --color-gray-300: #9c9c9c;
-  --color-gray-400: #6e6e6e;
+  --color-gray-400: #8a8a8a;
   --color-gray-500: #404040;
   --color-gray-600: #262626;
   --color-gray-700: #1f1f1f;

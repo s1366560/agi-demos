@@ -128,7 +128,7 @@ export const SubAgentCard = memo<SubAgentCardProps>(
                   {subagent.display_name}
                 </h3>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-xs text-slate-400 dark:text-slate-500 truncate">
+                  <span className="text-xs text-content-tertiary truncate">
                     @{subagent.name}
                   </span>
                   <span
@@ -189,7 +189,7 @@ export const SubAgentCard = memo<SubAgentCardProps>(
                                 disabled: true,
                                 label: (
                                   <Tooltip title={subagent.file_path}>
-                                    <span className="text-xs-plus text-slate-400 dark:text-slate-500">
+                                    <span className="text-xs-plus text-content-tertiary">
                                       {subagent.file_path}
                                     </span>
                                   </Tooltip>
@@ -280,7 +280,7 @@ export const SubAgentCard = memo<SubAgentCardProps>(
         )}
 
         {/* Capabilities */}
-        <div className="px-4 pb-3 flex items-center gap-3 text-xs-plus text-slate-400 dark:text-slate-500">
+        <div className="px-4 pb-3 flex items-center gap-3 text-xs-plus text-content-tertiary">
           <span className="flex items-center gap-1">
             <Wrench size={11} /> {toolCount}
           </span>
@@ -321,7 +321,7 @@ export const SubAgentCard = memo<SubAgentCardProps>(
             )}
           </div>
           {subagent.updated_at && (
-            <span className="text-slate-400 dark:text-slate-500">
+            <span className="text-content-tertiary">
               {formatTimeAgo(subagent.updated_at)}
             </span>
           )}
