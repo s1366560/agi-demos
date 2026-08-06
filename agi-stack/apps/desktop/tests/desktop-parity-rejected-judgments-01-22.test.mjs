@@ -551,12 +551,15 @@ test("ACP records only controls bound by AcpDashboard", () => {
   );
 });
 
-test("Template Marketplace records the native Cloud route but fails closed without revision", () => {
+test("Template Marketplace keeps Web available while native Cloud fails closed", () => {
   const capability = readCapability(
     "parity-capability-definitions.07-extension-protocols.v2.json",
     "tenant-tenant-templates",
   );
 
+  assert.equal(Object.hasOwn(capability, "web_status"), false);
+  assert.equal(Object.hasOwn(capability, "web_reason_code"), false);
+  assert.match(capability.judgment_rationale, /created.*seeded/iu);
   assert.deepEqual(contractKeys(capability, "desktop_cloud"), [
     "GET /api/v1/subagents/templates/list",
     "GET /api/v1/subagents/templates/categories",

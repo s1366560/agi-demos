@@ -729,8 +729,6 @@
           "feature_gate": null
         }
       ],
-      "web_status": "partial",
-      "web_reason_code": "web_template_seed_response_contract_mismatch",
       "cloud_status": "unavailable",
       "cloud_reason_code": "capability_authority_revision_unavailable",
       "cloud_entries": [
@@ -766,7 +764,7 @@
         "agi-stack/apps/desktop/src/features/settings-routes/p2ThirdBatchRouteRuntime.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs"
       ],
-      "judgment_rationale": "The Template Marketplace uses SubAgent template list, category, detail, install and seed contracts. The current Web seed flow is degraded because its client reads a seeded count while the authority returns created; seed is tenant-member authorized rather than tenant-admin-only. Desktop now has a real production loader, App binding, typed client, controller and native marketplace page. The Cloud observation does not carry the authority_revision required by Snapshot v4, so it fails closed to capability_authority_revision_unavailable even though its reviewed contracts and actions remain recorded. Local uses the same native route and exposes structured local_subagent_registry_unavailable authority rather than a fabricated registry."
+      "judgment_rationale": "The Template Marketplace uses SubAgent template list, category, detail, install and seed contracts. The Web client validates the authority's created count and maps it to the marketplace seeded response, so the reviewed Web list, category, detail, install and seed flows are implemented for tenant members. Desktop now has a real production loader, App binding, typed client, controller and native marketplace page. The Cloud observation does not carry the authority_revision required by Snapshot v4, so it fails closed to capability_authority_revision_unavailable even though its reviewed contracts and actions remain recorded. Local uses the same native route and exposes structured local_subagent_registry_unavailable authority rather than a fabricated registry."
     }
   ],
   "source_ownership": {
