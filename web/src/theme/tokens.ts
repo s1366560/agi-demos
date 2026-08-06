@@ -63,6 +63,15 @@ export const tokens = {
   radius: { sm: 2, md: 6, lg: 8, xl: 8 },
   controlHeight: { sm: 28, md: 32, lg: 36 },
 
+  // Motion — strong custom easing curves; durations follow AntD scale.
+  motion: {
+    durationFast: '0.1s',
+    durationMid: '0.2s',
+    durationSlow: '0.3s',
+    easeOut: 'cubic-bezier(0.23, 1, 0.32, 1)',
+    easeInOut: 'cubic-bezier(0.77, 0, 0.175, 1)',
+  },
+
   // Typography
   fontFamilySans:
     '"Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',

@@ -272,7 +272,7 @@ const InternalLoading: React.FC<
   return (
     <div className="h-full flex items-center justify-center">
       <div className="text-center">
-        <Loader2 className="animate-spin text-4xl text-primary mb-4" size={16} />
+        <Loader2 className="animate-spin motion-reduce:animate-none text-4xl text-primary mb-4" size={16} />
         <p className="text-slate-500">
           {message ||
             t('components.messageArea.loadingConversation', {
@@ -722,7 +722,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
               data-testid="scroll-indicator"
             >
               <div className="flex items-center px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200/70 dark:border-slate-700/70 opacity-80">
-                <Loader2 className="animate-spin text-primary mr-2" size={16} />
+                <Loader2 className="animate-spin motion-reduce:animate-none text-primary mr-2" size={16} />
                 <span className="text-xs text-slate-500">
                   {scrollIndicatorChild?.props.label ||
                     t('components.messageArea.loading', { defaultValue: 'Loading…' })}
@@ -795,7 +795,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                           onClick={() => {
                             if (event.id) togglePinEvent(event.id);
                           }}
-                          className="touch-target flex-shrink-0 p-1.5 rounded text-slate-400 hover:text-red-500 active:text-red-600 opacity-100 md:opacity-0 md:group-hover/pin:opacity-100 md:group-focus-within/pin:opacity-100 transition-[color,background-color,border-color,box-shadow,opacity] duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
+                          className="touch-target flex-shrink-0 p-1.5 rounded text-slate-400 hover:text-red-500 active:text-red-600 opacity-100 md:opacity-0 md:group-hover/pin:opacity-100 md:group-focus-within/pin:opacity-100 transition-[color,opacity] duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
                           aria-label={t('agent.actions.unpin', 'Unpin')}
                         >
                           <PinOff size={12} />
@@ -1107,7 +1107,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
             <button
               type="button"
               onClick={contextValue.scroll.scrollToBottom}
-              className="touch-target absolute bottom-6 right-6 z-10 flex items-center justify-center w-11 h-11 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-md border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 hover:shadow-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 animate-fade-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
+              className="touch-target absolute bottom-6 right-6 z-10 flex items-center justify-center w-11 h-11 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-md border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 hover:shadow-lg transition-[color,background-color,box-shadow] duration-150 animate-fade-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
               title={
                 scrollButtonChild?.props.title ||
                 t('components.messageArea.scrollToBottom', {

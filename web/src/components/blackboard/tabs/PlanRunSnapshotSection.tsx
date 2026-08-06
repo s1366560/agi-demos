@@ -783,7 +783,7 @@ function DeliveryPanel({
                     className="mt-2 inline-flex max-w-full items-center gap-1 truncate text-xs font-medium text-status-text-info hover:underline"
                   >
                     {previewOpeningUrl === previewUrl ? (
-                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden />
                     ) : (
                       <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden />
                     )}
@@ -1602,7 +1602,7 @@ export function PlanRunSnapshotSection({
             <h3 className="text-lg font-semibold leading-6 text-text-primary dark:text-text-inverse">
               {t('blackboard.planRunTitle', 'Plan run')}
             </h3>
-            {isLoading && <Loader2 className="h-4 w-4 animate-spin text-text-muted" />}
+            {isLoading && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none text-text-muted" />}
           </div>
           <div className="mt-2 flex flex-wrap gap-2 text-xs text-text-secondary dark:text-text-muted">
             <span>{stage}</span>
@@ -1682,7 +1682,7 @@ export function PlanRunSnapshotSection({
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-info-border bg-info-bg px-3 text-sm font-medium text-status-text-info transition-colors hover:bg-info-bg/80 disabled:cursor-not-allowed disabled:opacity-60 dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark lg:min-h-9 lg:text-xs"
           >
             {isTickPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
             ) : (
               <Zap className="h-4 w-4" aria-hidden />
             )}
@@ -1714,7 +1714,7 @@ export function PlanRunSnapshotSection({
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-border-light bg-surface-light px-3 text-sm font-medium text-text-primary transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60 dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse dark:hover:bg-surface-dark-alt lg:min-h-9 lg:text-xs"
           >
             {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
             ) : (
               <RefreshCw className="h-4 w-4" aria-hidden />
             )}

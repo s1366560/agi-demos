@@ -292,7 +292,7 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undef
                         defaultValue: 'Pin {{title}}',
                       })
                 }
-                className={`ml-0.5 p-0.5 rounded transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
+                className={`ml-0.5 p-0.5 rounded transition-[color,background-color,opacity] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
                   tab.pinned
                     ? 'text-primary opacity-100'
                     : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700'
@@ -315,7 +315,7 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undef
                     title: tab.title,
                     defaultValue: 'Close {{title}}',
                   })}
-                  className="ml-0.5 p-0.5 rounded opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  className="ml-0.5 p-0.5 rounded opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700 transition-[color,background-color,opacity] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 >
                   <X size={12} />
                 </button>

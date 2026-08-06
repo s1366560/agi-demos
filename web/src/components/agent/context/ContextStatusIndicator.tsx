@@ -140,8 +140,10 @@ export const ContextStatusIndicator: FC = () => {
           {/* Mini progress bar */}
           <div className="w-12 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
             <div
-              className={`h-full rounded-full transition-[width] duration-500 ${barColorClass}`}
-              style={{ width: `${String(Math.min(occupancy, 100))}%` }}
+              className={`h-full w-full rounded-full transition-transform duration-300 origin-left ${barColorClass}`}
+              style={{
+                transform: `scaleX(${String(Math.min(Math.max(occupancy, 0), 100) / 100)})`,
+              }}
             />
           </div>
 

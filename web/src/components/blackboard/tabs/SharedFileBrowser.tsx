@@ -477,7 +477,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
             disabled={loading}
             className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-error/25 bg-surface-light px-3 text-sm font-medium transition hover:bg-error/15 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white/5"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin motion-reduce:animate-none' : ''}`} />
             {t('common.retry', 'Retry')}
           </button>
         </div>
@@ -526,7 +526,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
           className="inline-flex items-center gap-1.5 rounded-lg border border-border-light px-3 py-1.5 text-sm text-text-secondary transition hover:bg-surface-muted disabled:opacity-50 dark:border-border-dark dark:text-text-muted dark:hover:bg-surface-elevated"
         >
           {uploading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
           ) : (
             <Upload className="h-4 w-4" />
           )}
@@ -567,7 +567,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
             className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-slate-50 transition hover:bg-primary/90 disabled:opacity-50"
           >
             {creating ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
             ) : (
               t('blackboard.files.create', 'Create')
             )}
@@ -654,7 +654,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
               disabled={actionSubmitting}
               className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-slate-50 transition hover:bg-primary/90 disabled:opacity-50"
             >
-              {actionSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {actionSubmitting && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />}
               {pendingAction.kind === 'rename'
                 ? t('blackboard.files.rename', 'Rename')
                 : pendingAction.kind === 'move'
@@ -670,7 +670,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         <div className="flex items-center justify-center py-12" role="status">
           <Loader2
             aria-hidden="true"
-            className="h-6 w-6 animate-spin text-text-secondary dark:text-text-muted"
+            className="h-6 w-6 animate-spin motion-reduce:animate-none text-text-secondary dark:text-text-muted"
           />
           <span className="sr-only">{t('common.loading', 'Loading…')}</span>
         </div>
@@ -818,7 +818,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
                           title={t('blackboard.files.delete', 'Delete')}
                         >
                           {deletingId === item.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
                           ) : (
                             <Trash2 className="h-4 w-4" />
                           )}
@@ -867,7 +867,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         <div className="max-h-[calc(85vh-56px)] overflow-auto p-5">
           {previewLoading ? (
             <div className="flex items-center justify-center py-20">
-              <Loader2 className="h-8 w-8 animate-spin text-text-secondary dark:text-text-muted" />
+              <Loader2 className="h-8 w-8 animate-spin motion-reduce:animate-none text-text-secondary dark:text-text-muted" />
             </div>
           ) : previewFile?.content_type.startsWith('image/') ? (
             <img

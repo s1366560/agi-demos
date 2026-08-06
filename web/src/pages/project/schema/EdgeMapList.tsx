@@ -263,7 +263,7 @@ export default function EdgeMapList() {
               <div className="flex flex-col gap-2 rounded-lg border border-slate-200 dark:border-border-dark bg-slate-50 dark:bg-surface-dark p-4 hover:border-blue-400 dark:hover:border-primary/50 transition-colors group">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
-                    <ArrowRight className="text-blue-600 dark:text-primary group-hover:translate-x-1 transition-transform w-5 h-5" />
+                    <ArrowRight className="text-blue-600 dark:text-primary pointer-fine:group-hover:translate-x-1 transition-transform w-5 h-5" />
                     <h2 className="text-sm font-bold">
                       {t('project.schema.mappings.filter_source.title')}
                     </h2>
@@ -293,7 +293,7 @@ export default function EdgeMapList() {
               <div className="flex flex-col gap-2 rounded-lg border border-slate-200 dark:border-border-dark bg-slate-50 dark:bg-surface-dark p-4 hover:border-blue-400 dark:hover:border-primary/50 transition-colors group">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
-                    <ArrowDown className="text-blue-600 dark:text-primary group-hover:translate-y-1 transition-transform w-5 h-5" />
+                    <ArrowDown className="text-blue-600 dark:text-primary pointer-fine:group-hover:translate-y-1 transition-transform w-5 h-5" />
                     <h2 className="text-sm font-bold">
                       {t('project.schema.mappings.filter_target.title')}
                     </h2>

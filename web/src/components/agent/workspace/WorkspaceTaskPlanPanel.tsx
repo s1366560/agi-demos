@@ -139,7 +139,9 @@ const WorkspaceTaskPlanRowItem = memo<{ row: WorkspaceTaskPlanRow; locale: strin
         }`}
       >
         <div className="flex items-start gap-2.5">
-          <span className={`mt-0.5 shrink-0 ${config.color}`}>
+          <span
+            className={`mt-0.5 shrink-0 ${config.color} ${row.status === 'done' ? 'animate-status-pill-in' : ''}`}
+          >
             <Icon size={15} className={isActive ? 'animate-spin motion-reduce:animate-none' : ''} />
           </span>
           <div className="min-w-0 flex-1">
@@ -192,8 +194,10 @@ const WorkspaceTaskPlanRowItem = memo<{ row: WorkspaceTaskPlanRow; locale: strin
                 )}
               >
                 <div
-                  className={`h-full rounded-full transition-[width] duration-500 ${config.bar}`}
-                  style={{ width: `${String(Math.max(0, Math.min(100, row.progressPercent)))}%` }}
+                  className={`h-full w-full rounded-full transition-transform duration-300 origin-left ${config.bar}`}
+                  style={{
+                    transform: `scaleX(${String(Math.max(0, Math.min(100, row.progressPercent)) / 100)})`,
+                  }}
                 />
               </div>
             ) : null}
@@ -392,8 +396,8 @@ export const WorkspaceTaskPlanPanel = memo<WorkspaceTaskPlanPanelProps>(
                 )}
               >
                 <div
-                  className="h-full rounded-full bg-emerald-500 transition-[width] duration-500 dark:bg-emerald-400"
-                  style={{ width: `${String(stats.completion)}%` }}
+                  className="h-full w-full rounded-full bg-emerald-500 transition-transform duration-300 origin-left dark:bg-emerald-400"
+                  style={{ transform: `scaleX(${String(stats.completion / 100)})` }}
                 />
               </div>
             </div>

@@ -69,6 +69,16 @@ export const colors = {
   tileRose: '#ff6978',
 };
 
+// Motion tokens shared by both themes (values from tokens.ts).
+const motionTokens = {
+  motion: true,
+  motionDurationFast: tokens.motion.durationFast,
+  motionDurationMid: tokens.motion.durationMid,
+  motionDurationSlow: tokens.motion.durationSlow,
+  motionEaseInOut: tokens.motion.easeInOut,
+  motionEaseOut: tokens.motion.easeOut,
+} as const;
+
 // Light Theme Configuration
 export const lightTheme: ThemeConfig = {
   token: {
@@ -153,12 +163,7 @@ export const lightTheme: ThemeConfig = {
     controlHeightSM: 28,
 
     // Motion
-    motion: true,
-    motionDurationFast: '0.1s',
-    motionDurationMid: '0.2s',
-    motionDurationSlow: '0.3s',
-    motionEaseInOut: 'cubic-bezier(0.4, 0, 0.2, 1)',
-    motionEaseOut: 'cubic-bezier(0, 0, 0.2, 1)',
+    ...motionTokens,
   },
   components: {
     Layout: {
@@ -356,7 +361,7 @@ export const darkTheme: ThemeConfig = {
     controlHeightSM: 28,
 
     // Motion
-    motion: true,
+    ...motionTokens,
   },
   components: {
     Layout: {

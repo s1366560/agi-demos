@@ -355,7 +355,7 @@ const TreeNode = memo<{
               <Folder size={14} />
             )
           ) : opening ? (
-            <Loader2 size={13} className="animate-spin" />
+            <Loader2 size={13} className="animate-spin motion-reduce:animate-none" />
           ) : (
             getNodeIcon(node)
           )}
@@ -740,7 +740,7 @@ export const CanvasFileExplorer = memo<CanvasFileExplorerProps>(({ projectId }) 
           className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
           disabled={activeState.loading}
         >
-          <RefreshCw size={14} className={activeState.loading ? 'animate-spin' : undefined} />
+          <RefreshCw size={14} className={activeState.loading ? 'animate-spin motion-reduce:animate-none' : undefined} />
         </button>
         <button
           type="button"
@@ -783,7 +783,7 @@ export const CanvasFileExplorer = memo<CanvasFileExplorerProps>(({ projectId }) 
       <div className="min-h-0 flex-1 overflow-auto py-1">
         {activeState.loading ? (
           <div className="flex h-full min-h-32 items-center justify-center gap-2 px-4 text-xs text-slate-500 dark:text-slate-400">
-            <Loader2 size={14} className="animate-spin" />
+            <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
             {t('agent.canvas.fileExplorer.loading', { defaultValue: 'Loading files…' })}
           </div>
         ) : activeState.error ? (

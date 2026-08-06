@@ -304,7 +304,7 @@ const EmptyStateCardsComponent: FC<EmptyStateCardsProps> = ({
                     className="
                       text-slate-300 dark:text-slate-600
                       opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100
-                      group-hover:translate-x-0.5 group-focus-visible:translate-x-0.5
+                      pointer-fine:group-hover:translate-x-0.5 group-focus-visible:translate-x-0.5
                       transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200
                     "
                   />

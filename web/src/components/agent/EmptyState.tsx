@@ -232,6 +232,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
               handleCardClick(card.prompt);
             }}
             className="
+              empty-state-card-enter
               group flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left
               last:border-b-0 hover:bg-slate-50 dark:border-slate-700/60 dark:hover:bg-slate-700/30
               transition-[color,background-color,border-color,box-shadow,opacity] duration-150

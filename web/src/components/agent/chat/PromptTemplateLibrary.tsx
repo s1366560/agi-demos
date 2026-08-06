@@ -535,7 +535,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
                         onClick={(e) => {
                           handleDeleteCustom(e, tmpl.id);
                         }}
-                        className="mt-2 mr-3 p-1 rounded-md opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-[color,background-color,border-color,box-shadow,opacity,transform]"
+                        className="mt-2 mr-3 p-1 rounded-md opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-[color,background-color,opacity]"
                         aria-label={t('common.delete', 'Delete')}
                       >
                         <Trash2 size={12} />

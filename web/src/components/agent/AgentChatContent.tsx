@@ -1371,6 +1371,7 @@ ${content}`;
           handleAccentColor="violet"
           leftMinWidth="280px"
           rightMinWidth="320px"
+          rightClassName="canvas-pane-enter"
           className={className}
           statusBar={statusBarWithLayout}
         />

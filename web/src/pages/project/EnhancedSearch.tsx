@@ -809,7 +809,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
               {includeGraph && (
                 <section
                   className={`
-                group relative min-w-0 overflow-hidden rounded-md bg-white shadow-[0_0_0_1px_rgba(15,23,42,0.10)] transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 ease-in-out dark:bg-surface-dark dark:shadow-[0_0_0_1px_rgba(148,163,184,0.16)]
+                group relative min-w-0 overflow-hidden rounded-md bg-white shadow-[0_0_0_1px_rgba(15,23,42,0.10)] transition-colors duration-300 ease-in-out dark:bg-surface-dark dark:shadow-[0_0_0_1px_rgba(148,163,184,0.16)]
                 ${isResultsCollapsed ? 'flex-1' : 'h-[54%] min-h-[360px]'}
               `}
                 >

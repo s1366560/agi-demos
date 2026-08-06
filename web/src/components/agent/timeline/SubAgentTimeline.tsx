@@ -407,13 +407,19 @@ const ProgressPhaseBar = memo<{ group: SubAgentGroup }>(({ group }) => {
   return (
     <div className="w-full px-4 pt-2 pb-1">
       <div className="flex justify-between items-center mb-1.5 text-2xs text-slate-500 font-medium">
-        <span className="animate-pulse motion-reduce:animate-none">{phaseLabel}</span>
+        <span className="inline-flex items-center gap-1.5">
+          <span
+            className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none"
+            aria-hidden="true"
+          />
+          <span>{phaseLabel}</span>
+        </span>
         {parallelText && <span>{parallelText}</span>}
       </div>
       <div className="w-full bg-slate-200/60 dark:bg-slate-700/60 rounded-full h-1 overflow-hidden">
         <div
-          className="bg-blue-500 h-1 rounded-full transition-[width] duration-500 ease-out"
-          style={{ width: `${String(percent)}%` }}
+          className="bg-blue-500 h-1 w-full rounded-full transition-transform duration-300 ease-out origin-left"
+          style={{ transform: `scaleX(${String(percent / 100)})` }}
         />
       </div>
     </div>

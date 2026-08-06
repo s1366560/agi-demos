@@ -104,7 +104,7 @@ function RelatedSurfaceCard({ title, description, path, icon: Icon }: RelatedSur
           <span className="text-sm font-semibold text-slate-900 dark:text-white">{title}</span>
           <ArrowUpRight
             size={14}
-            className="text-slate-400 transition-transform duration-150 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-slate-600 dark:group-hover:text-slate-300"
+            className="text-slate-400 transition-transform duration-150 pointer-fine:group-hover:-translate-y-0.5 pointer-fine:group-hover:translate-x-0.5 group-hover:text-slate-600 dark:group-hover:text-slate-300"
           />
         </div>
         <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">{description}</p>

@@ -127,8 +127,8 @@ export const ObjectiveCard: React.FC<ObjectiveCardProps> = ({
 
       <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-border-light dark:bg-border-dark">
         <div
-          className={`h-full rounded-full transition-[width,background-color] duration-500 ease-out ${progressColor}`}
-          style={{ width: `${String(progressPct)}%` }}
+          className={`h-full w-full rounded-full transition-[transform,background-color] duration-300 ease-out origin-left ${progressColor}`}
+          style={{ transform: `scaleX(${String(progressPct / 100)})` }}
         />
       </div>
     </article>

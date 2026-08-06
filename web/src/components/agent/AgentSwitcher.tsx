@@ -191,7 +191,7 @@ export const AgentSwitcher: React.FC<AgentSwitcherProps> = ({
             {enabledDefinitions.length === 0 ? (
               <div className="px-3 py-4 text-sm text-slate-500 dark:text-slate-400 italic text-center">
                 {isLoadingDefinitions ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-slate-400 mx-auto my-2" />
+                  <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none text-slate-400 mx-auto my-2" />
                 ) : (
                   loadError || t('agent.noAgentsAvailable', 'No agents available')
                 )}

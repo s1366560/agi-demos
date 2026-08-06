@@ -531,12 +531,12 @@ const TaskDashboardInner: React.FC<{
                 </div>
                 <div className="h-2 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                   <div
-                    className={`h-full ${item.color} rounded-full transition-[width] duration-500`}
+                    className={`h-full ${item.color} w-full rounded-full transition-transform duration-300 origin-left`}
                     style={{
-                      width:
-                        item.value === 0
-                          ? '0%'
-                          : `${Math.max(2, (item.value / item.total) * 100).toString()}%`,
+                      transform: `scaleX(${(item.value === 0
+                        ? 0
+                        : Math.max(2, (item.value / item.total) * 100) / 100
+                      ).toString()})`,
                     }}
                   ></div>
                 </div>

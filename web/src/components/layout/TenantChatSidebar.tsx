@@ -412,7 +412,7 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
         aria-current={isActive ? 'page' : undefined}
         className={`
         group relative block w-full p-3 rounded-xl mb-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset
-        transition-[color,background-color,border-color,box-shadow,opacity,transform,width] duration-200 border no-underline
+        transition-colors duration-200 border no-underline
         ${
           isActive
             ? 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100'
@@ -1579,20 +1579,31 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       ? t('agent.sidebar.projectsLoadFailed', 'Failed to load projects')
       : t('agent.sidebar.noProjectsAvailable', 'No projects available in this tenant');
 
-  // Collapsing hides the sidebar entirely; the header toggle re-opens it.
+  // Collapsing slides the sidebar off-canvas; it stays mounted so the exit
+  // transition can play, and leaves the flex flow (absolute) so the main
+  // content reclaims the width. The header toggle re-opens it.
   // (Placed after all hooks; the mobile drawer is never collapsed.)
-  if (collapsed && !mobile) {
-    return null;
-  }
+  const isCollapsed = collapsed && !mobile;
 
   return (
     <aside
       ref={sidebarRef}
+      aria-hidden={isCollapsed || undefined}
+      inert={isCollapsed}
       className={`
         ${mobile ? 'flex' : 'hidden md:flex'}
-        flex-col bg-surface-light dark:bg-surface-dark border-r border-slate-200 dark:border-border-dark 
-        flex-none z-20 h-full relative
-        ${isDragging ? '' : 'transition-[color,background-color,border-color,box-shadow,opacity,transform,width] duration-300 ease-in-out'}
+        flex-col bg-surface-light dark:bg-surface-dark border-r border-slate-200 dark:border-border-dark
+        flex-none z-20 h-full
+        ${
+          isCollapsed
+            ? 'absolute inset-y-0 left-0 -translate-x-full pointer-events-none motion-reduce:translate-x-0 motion-reduce:opacity-0'
+            : 'relative'
+        }
+        ${
+          isDragging
+            ? ''
+            : 'transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-[color,background-color,border-color,opacity] motion-reduce:duration-150'
+        }
       `}
       style={{ width: mobile ? '100%' : currentWidth }}
     >

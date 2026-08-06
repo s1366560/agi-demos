@@ -775,7 +775,7 @@ export function ToolExecutionCardDisplay({
       case 'running':
         return (
           <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-2xs font-bold uppercase tracking-wider">
-            <Loader2 size={12} className="animate-spin" />
+            <Loader2 size={12} className="animate-spin motion-reduce:animate-none" />
             {t('components.messageStream.status.running', { defaultValue: 'Running' })}
           </div>
         );
@@ -911,7 +911,7 @@ export function ToolExecutionCardDisplay({
                 <div className="border border-dashed border-slate-200 dark:border-border-dark rounded-md p-6 flex flex-col items-center justify-center gap-2 text-center bg-slate-50/50 dark:bg-background-dark/20">
                   <Loader2
                     size={30}
-                    className="text-slate-300 dark:text-border-dark animate-spin"
+                    className="text-slate-300 dark:text-border-dark animate-spin motion-reduce:animate-none"
                   />
                   <p className="text-xs text-text-muted italic">
                     {t('components.messageStream.executing', { defaultValue: 'Executing…' })}

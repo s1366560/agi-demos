@@ -100,10 +100,7 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
       <div className="flex items-start gap-3 pb-2 animate-fade-in-up">
         {/* Icon */}
         <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
-          <Brain
-            size={16}
-            className={`text-slate-500 dark:text-slate-400 ${isStreaming ? 'animate-pulse motion-reduce:animate-none' : ''}`}
-          />
+          <Brain size={16} className="text-slate-500 dark:text-slate-400" />
         </div>
 
         {/* Content */}
@@ -179,8 +176,8 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
             {steps && steps.length > 0 && (
               <div className="w-full h-0.5 bg-slate-200 dark:bg-slate-700">
                 <div
-                  className="h-full bg-primary transition-[width] duration-300 ease-in-out"
-                  style={{ width: `${String(progressPercentage)}%` }}
+                  className="h-full w-full bg-primary transition-transform duration-300 ease-in-out origin-left"
+                  style={{ transform: `scaleX(${String(progressPercentage / 100)})` }}
                   role="progressbar"
                   aria-valuenow={progressPercentage}
                   aria-valuemin={0}
@@ -196,7 +193,7 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
               role="region"
               aria-labelledby={labelId}
               className={`
-                overflow-hidden transition-[color,background-color,border-color,box-shadow,opacity,transform,max-height] duration-300 ease-in-out
+                overflow-hidden transition-[max-height] duration-300 ease-out
                 ${expanded ? 'max-h-[400px]' : 'max-h-0'}
               `}
             >

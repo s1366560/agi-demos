@@ -181,7 +181,7 @@ export const ChatSearch = memo<ChatSearchProps>(({ timeline, onClose, visible })
   if (!visible) return null;
 
   return (
-    <div className="absolute top-2 right-4 z-50 flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg shadow-slate-200/40 dark:shadow-slate-950/20 px-3 py-2 animate-fade-in-up focus-within:ring-2 focus-within:ring-primary/50">
+    <div className="absolute top-2 right-4 z-50 flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg shadow-slate-200/40 dark:shadow-slate-950/20 px-3 py-2 animate-search-panel-fade focus-within:ring-2 focus-within:ring-primary/50">
       <Search size={14} className="text-slate-400 flex-shrink-0" aria-hidden="true" />
       <input
         ref={inputRef}

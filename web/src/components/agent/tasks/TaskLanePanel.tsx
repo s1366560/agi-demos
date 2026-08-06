@@ -283,8 +283,8 @@ export const TaskLanePanel = memo<TaskLanePanelProps>(({ tasks, conversationId }
           aria-label={t('agent.taskLanePanel.progressAria', 'Task completion progress')}
         >
           <div
-            className="h-full rounded-full bg-emerald-500 transition-[width] duration-500 dark:bg-emerald-400"
-            style={{ width: `${String(pct)}%` }}
+            className="h-full w-full rounded-full bg-emerald-500 transition-transform duration-300 origin-left dark:bg-emerald-400"
+            style={{ transform: `scaleX(${String(pct / 100)})` }}
           />
         </div>
       </div>

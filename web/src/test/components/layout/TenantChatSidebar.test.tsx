@@ -840,12 +840,18 @@ describe('TenantChatSidebar', () => {
     expect(formatDistanceToNowMock).toHaveBeenCalledWith('2026-04-18T00:00:00.000Z');
   });
 
-  it('does not render conversation icons or tooltips when collapsed', () => {
-    render(<TenantChatSidebar tenantId="tenant-1" collapsed />, {
+  it('keeps the sidebar mounted but off-canvas when collapsed', () => {
+    const { container } = render(<TenantChatSidebar tenantId="tenant-1" collapsed />, {
       route: '/tenant/tenant-1/agent-workspace',
     });
 
-    expect(screen.queryByText('Conversation One')).not.toBeInTheDocument();
+    // The sidebar stays in the DOM (slide-out transition) but is moved
+    // off-canvas and removed from the accessibility tree.
+    const aside = container.querySelector('aside');
+    expect(aside).not.toBeNull();
+    expect(aside?.className).toContain('-translate-x-full');
+    expect(aside?.className).toContain('absolute');
+    expect(aside).toHaveAttribute('aria-hidden', 'true');
     expect(screen.queryByRole('button', { name: /Conversation One/ })).not.toBeInTheDocument();
   });
 

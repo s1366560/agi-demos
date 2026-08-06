@@ -69,7 +69,7 @@ const TaskItem = memo<{ task: AgentTask }>(({ task }) => {
       }`}
     >
       <div
-        className={`mt-0.5 flex-shrink-0 ${config.color}`}
+        className={`mt-0.5 flex-shrink-0 ${config.color} ${isCompleted ? 'animate-status-pill-in' : ''}`}
         role="img"
         aria-label={t(config.labelKey, {
           defaultValue: task.status.replace(/_/g, ' '),
@@ -156,8 +156,8 @@ export const TaskList = memo<TaskListProps>(({ tasks }) => {
           aria-label={t('agent.taskList.progressAria', 'Task completion progress')}
         >
           <div
-            className="h-full bg-emerald-500 dark:bg-emerald-400 rounded-full transition-[width] duration-500"
-            style={{ width: `${String(stats.pct)}%` }}
+            className="h-full w-full bg-emerald-500 dark:bg-emerald-400 rounded-full transition-transform duration-300 origin-left"
+            style={{ transform: `scaleX(${String(stats.pct / 100)})` }}
           />
         </div>
         {stats.active > 0 && (
