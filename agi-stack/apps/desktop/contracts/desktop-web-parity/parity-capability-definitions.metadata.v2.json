@@ -1,19 +1,13 @@
 {
-  "expected_counts": {
-    "canonical_navigation_targets": 51,
-    "production_routes": 174,
-    "lazy_page_entries": 89,
-    "eager_route_entries": 4
-  },
   "production_entry_integrity": {
     "hash_algorithm": "sha256",
     "verification_scope": "source_content_integrity_only",
     "execution_evidence": false
   },
   "references": {
-    "audit_revision": "c8904343c71bf8d6fc52c2b888581fc9ac931143",
+    "audit_revision": "aea41e851912f6494c73a2e24d85a3572f25058b",
     "prototype_revision": "61454b2ead1cedda584e95afee9f471aac7851fb",
-    "web_revision": "c8904343c71bf8d6fc52c2b888581fc9ac931143",
-    "desktop_revision": "c8904343c71bf8d6fc52c2b888581fc9ac931143"
+    "web_revision": "aea41e851912f6494c73a2e24d85a3572f25058b",
+    "desktop_revision": "aea41e851912f6494c73a2e24d85a3572f25058b"
   }
 }

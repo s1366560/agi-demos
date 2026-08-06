@@ -494,6 +494,72 @@ test("Not Found is available in both Desktop modes without a service authority",
   }
 });
 
+test("renderer-declared Cloud capabilities stay unavailable despite native loaders", () => {
+  const manifest = readJson("parity-manifest.v2.json");
+  const byId = new Map(
+    manifest.capabilities.map((capability) => [capability.id, capability]),
+  );
+  const declaredCapabilityIds = [
+    "device-approval",
+    "invitation-acceptance",
+    "project-support",
+    "tenant-creation",
+    "tenant-tenant-clusters",
+    "tenant-tenant-dead-letter-queue",
+    "tenant-tenant-deploy",
+    "tenant-tenant-instance-templates",
+    "tenant-tenant-instances",
+    "tenant-tenant-pool",
+    "tenant-tenant-runtimes",
+    "tenant-tenant-tasks",
+    "tenant-tenant-workspaces",
+  ];
+
+  for (const capabilityId of declaredCapabilityIds) {
+    const capability = byId.get(capabilityId);
+    assert.ok(capability, capabilityId);
+    assert.deepEqual(
+      capability.surfaces.desktop_cloud,
+      {
+        disposition: "native_equivalent",
+        implementation_status: "partial",
+        availability: "unavailable",
+        reason_code: "renderer_capability_authority_unobserved",
+        authority: "cloud_service",
+        allowed_actions: [],
+        intentional_deviation: null,
+      },
+      capabilityId,
+    );
+    assert.equal(
+      capability.production_entries.desktop_cloud.some(
+        (entry) => entry.entry_type === "source",
+      ),
+      true,
+      `${capabilityId}: native loader/source entries must remain auditable`,
+    );
+  }
+
+  for (const capabilityId of [
+    "tenant-tenant-instances",
+    "tenant-tenant-runtimes",
+    "tenant-tenant-tasks",
+    "tenant-tenant-workspaces",
+  ]) {
+    const surface = byId.get(capabilityId)?.surfaces.desktop_local;
+    assert.ok(surface, capabilityId);
+    assert.equal(surface.implementation_status, "partial", capabilityId);
+    assert.equal(surface.availability, "unavailable", capabilityId);
+    assert.equal(
+      surface.reason_code,
+      "renderer_capability_authority_unobserved",
+      capabilityId,
+    );
+    assert.equal(surface.authority, "sidecar", capabilityId);
+    assert.deepEqual(surface.allowed_actions, [], capabilityId);
+  }
+});
+
 test("governance and runtime capabilities preserve audited Web actions and enforcement state", () => {
   const manifest = readJson("parity-manifest.v2.json");
   const byId = new Map(
@@ -707,7 +773,11 @@ test("identity routes preserve their real multi-step authorities and per-surface
   assert.ok(profile);
   assert.ok(tenantCreation);
   assert.ok(orgSettings);
-  assert.deepEqual(auth.surfaces.web.allowed_actions, ["sign-in"]);
+  assert.deepEqual(auth.surfaces.web.allowed_actions, [
+    "sign-in",
+    "list-oauth-providers",
+    "start-oauth-authorization",
+  ]);
   assert.deepEqual(auth.surfaces.desktop_local.allowed_actions, [
     "start-local-session",
     "resume-local-session",
@@ -722,7 +792,24 @@ test("identity routes preserve their real multi-step authorities and per-surface
       "GET /api/v1/auth/me",
     ],
   );
-  assert.equal(oauth.surfaces.web.availability, "unavailable");
+  assert.equal(oauth.surfaces.web.availability, "available");
+  assert.deepEqual(oauth.surfaces.web.allowed_actions, [
+    "read-redirect-target",
+    "validate-state",
+    "exchange-code",
+    "complete-sign-in",
+    "retry",
+  ]);
+  assert.equal(oauth.surfaces.desktop_cloud.availability, "unavailable");
+  assert.equal(
+    oauth.surfaces.desktop_cloud.reason_code,
+    "desktop_native_route_planned",
+  );
+  assert.equal(invitation.surfaces.desktop_cloud.availability, "unavailable");
+  assert.equal(
+    invitation.surfaces.desktop_cloud.reason_code,
+    "renderer_capability_authority_unobserved",
+  );
   assert.deepEqual(
     invitation.api_contracts
       .filter((contract) => contract.surface === "web")
@@ -734,9 +821,32 @@ test("identity routes preserve their real multi-step authorities and per-surface
   );
   assert.deepEqual(
     profile.api_contracts
+      .filter((contract) => contract.surface === "desktop_cloud")
+      .map(({ method, path }) => `${method} ${path}`),
+    [
+      "GET /api/v1/auth/me",
+      "PUT /api/v1/users/me",
+      "POST /api/v1/auth/force-change-password",
+    ],
+  );
+  assert.deepEqual(
+    profile.api_contracts
       .filter((contract) => contract.surface === "desktop_local")
       .map(({ method, path }) => `${method} ${path}`),
     ["GET /api/v1/auth/me"],
+  );
+  for (const surface of ["desktop_cloud", "desktop_local"]) {
+    assert.equal(profile.surfaces[surface].availability, "unavailable");
+    assert.equal(
+      profile.surfaces[surface].reason_code,
+      "capability_authority_revision_unavailable",
+    );
+    assert.deepEqual(profile.surfaces[surface].allowed_actions, []);
+  }
+  assert.equal(tenantCreation.surfaces.desktop_cloud.availability, "unavailable");
+  assert.equal(
+    tenantCreation.surfaces.desktop_cloud.reason_code,
+    "renderer_capability_authority_unobserved",
   );
   assert.equal(
     tenantCreation.production_entries.web.includes(
@@ -961,6 +1071,19 @@ test("agent ecosystem capabilities do not overstate missing controls or Local au
     acp.surfaces.desktop_local.reason_code,
     "local_external_acp_not_applicable",
   );
+  assert.equal(templates.surfaces.web.implementation_status, "implemented");
+  assert.equal(templates.surfaces.web.availability, "available");
+  assert.equal(templates.surfaces.web.reason_code, null);
+  assert.deepEqual(templates.surfaces.web.allowed_actions, [
+    "view",
+    "list",
+    "search",
+    "filter",
+    "view-detail",
+    "install",
+    "seed",
+    "retry",
+  ]);
   assert.equal(templates.surfaces.desktop_local.availability, "unavailable");
   assert.equal(
     templates.surfaces.desktop_local.reason_code,
