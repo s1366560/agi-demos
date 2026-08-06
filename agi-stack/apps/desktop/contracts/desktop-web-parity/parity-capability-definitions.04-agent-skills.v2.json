@@ -537,21 +537,49 @@
           "feature_gate": null
         }
       ],
-      "cloud_status": "partial",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "capability_authority_revision_unavailable",
       "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/skillsRouteClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/skillsRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRouteController.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/ManagementRoutePage.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRoutePresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/settingsRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx",
         "agi-stack/apps/desktop/src/features/settings/ManagedResourceViews.tsx",
         "agi-stack/apps/desktop/src/features/settings/SkillEvolutionDialog.tsx",
         "agi-stack/apps/desktop/src/features/settings/useSkillPackageManagement.ts",
         "agi-stack/apps/desktop/src/api/managedResourcesClient.ts"
       ],
-      "local_status": "partial",
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_skill_authority_partial",
+      "local_reason_code": "capability_authority_revision_unavailable",
+      "local_deviation": "Local retains the sidecar-backed native Skill manager, but Snapshot v4 keeps it unavailable until the observed package authority is revision-bound; ZIP import and evolution also remain outside the safe Local subset.",
       "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/skillsRouteClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/skillsRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRouteController.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/ManagementRoutePage.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRoutePresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/settingsRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx",
         "agi-stack/apps/desktop/src/features/settings/ManagedResourceViews.tsx",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/managed_resources.rs"
       ],
-      "judgment_rationale": "Web SkillDetail binds getEvolution to the skill evolution read contract in addition to revision-aware CRUD, content, package, export, version, and rollback flows. Cloud Desktop exposes that per-skill evolution view through its native Skill Evolution dialog; the broader evolution run and review workflow is also tracked by the dedicated Evolution capability. Web and Cloud tenant-scope writes require tenant administration, while project-scope writes use the project contributor branch for owners, admins, and members and exclude project viewers; reads likewise keep tenant-member and project-member branches distinct. Local authority uses tenant roles and has no project-role gate. The canonical Skills route and complete Web state matrix remain partial, and Local ZIP import and evolution remain outside the current safe sidecar subset."
+      "judgment_rationale": "Web SkillDetail binds getEvolution to the skill evolution read contract in addition to revision-aware CRUD, content, package, export, version, and rollback flows. Desktop now has a real canonical loader, App binding, management state controller and native Skill manager in both modes. Web and Cloud tenant-scope writes require tenant administration, while project-scope writes use the project contributor branch; Local authority uses tenant roles without a separate project-role gate. The management observation used by Snapshot v4 has no authority revision, so both Desktop surfaces must remain capability_authority_revision_unavailable even though the native content and sidecar endpoints exist. ZIP import and Local evolution remain outside the current safe sidecar subset."
     }
   ],
   "source_ownership": {

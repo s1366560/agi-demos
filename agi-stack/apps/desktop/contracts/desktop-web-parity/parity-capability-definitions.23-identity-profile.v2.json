@@ -129,17 +129,16 @@
         "return-to-tenant-list",
         "retry"
       ],
-      "cloud_actions": [
-        "create",
-        "cancel",
-        "return-to-tenant-list",
-        "retry"
-      ],
-      "cloud_status": "implemented",
+      "cloud_actions": [],
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "renderer_capability_authority_unobserved",
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/navigation/DesktopProductionRouter.tsx",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-creation/tenantCreationRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/tenant-creation/TenantCreationPage.tsx",
         "agi-stack/apps/desktop/src/features/tenant-creation/tenantCreationClient.ts",
@@ -221,7 +220,7 @@
         "retry"
       ],
       "expected_observable_result": "Cloud Desktop opens an authenticated global /tenants/new route without changing the active tenant, project, workspace, or conversation; validates and submits the native form through POST /api/v1/tenants/; displays the plan actually returned by authority; and refreshes the tenant catalog before returning to the workbench. Local Desktop returns local_tenant_creation_not_applicable before loading the module or making a Cloud request.",
-      "judgment_rationale": "NewTenant is a production-only Web page backed by POST /api/v1/tenants/. Cloud Desktop now registers a native global route with an isolated strict 201 client, Web-compatible name, description, and plan inputs, deterministic dirty-cancel behavior, duplicate-submit prevention, request cancellation, structured HTTP reason codes, an immutable catalog upsert, and an authoritative catalog refresh. The backend create handler currently persists name and description but comments out requested plan and quota persistence, so Desktop reports a returned-plan mismatch instead of claiming the requested plan was saved. Local mode intentionally keeps a fixed application tenant and is stopped by the capability gate with local_tenant_creation_not_applicable."
+      "judgment_rationale": "NewTenant is a production-only Web page backed by POST /api/v1/tenants/. Cloud Desktop registers a native global route with an isolated strict 201 client, Web-compatible name, description, and plan inputs, deterministic dirty-cancel behavior, duplicate-submit prevention, request cancellation, structured HTTP reason codes, an immutable catalog upsert, and an authoritative catalog refresh. The backend create handler currently persists name and description but comments out requested plan and quota persistence, so Desktop reports a returned-plan mismatch instead of claiming the requested plan was saved. workbenchCapabilityClient still wraps tenantCreationCapability with declared renderer provenance, and Snapshot v4 therefore closes every action to renderer_capability_authority_unobserved despite the real loader and App binding. Local mode intentionally keeps a fixed application tenant and is stopped by the capability gate with local_tenant_creation_not_applicable."
     },
     {
       "id": "user-profile",
@@ -250,23 +249,48 @@
         "change-password"
       ],
       "cloud_actions": [
-        "view"
+        "view",
+        "update",
+        "change-language",
+        "change-password"
       ],
-      "cloud_status": "partial",
-      "cloud_reason_code": "desktop_profile_update_route_partial",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "capability_authority_revision_unavailable",
       "cloud_entries": [
-        "agi-stack/apps/desktop/src/features/settings/SettingsCorePages.tsx",
-        "agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx"
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/ProfileSettingsHost.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/profileAuxiliaryRoute.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/profileRouteClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/profileRouteController.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/profileRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/ProfileRoutePage.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/profileRoutePresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/p2ThirdBatchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/p2ThirdBatchRouteRuntime.ts"
       ],
-      "local_status": "partial",
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_profile_mutation_authority_unavailable",
+      "local_reason_code": "capability_authority_revision_unavailable",
       "local_actions": [
         "view"
       ],
       "local_entries": [
-        "agi-stack/apps/desktop/src/features/settings/SettingsCorePages.tsx",
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/ProfileSettingsHost.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/profileAuxiliaryRoute.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/profileRouteClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/profileRouteController.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/profileRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/ProfileRoutePage.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/profileRoutePresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/p2ThirdBatchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/p2ThirdBatchRouteRuntime.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
       ],
       "api_contracts": [
@@ -292,6 +316,18 @@
           "surface": "desktop_cloud",
           "method": "GET",
           "path": "/api/v1/auth/me",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/users/me",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/auth/force-change-password",
           "authority": "cloud_service"
         },
         {
@@ -324,7 +360,10 @@
         {
           "surface": "desktop_cloud",
           "actions": [
-            "view"
+            "view",
+            "update",
+            "change-language",
+            "change-password"
           ],
           "authentication": "authenticated",
           "authorization": [],
@@ -351,8 +390,8 @@
         "scope-switch",
         "retry"
       ],
-      "expected_observable_result": "Cloud Desktop renders and updates the authenticated global user profile through Cloud authority. Local Desktop renders the same native read-only identity projection through sidecar auth-me and returns a stable unavailable state for mutation; neither mode caches secret credentials or falls back to Web UI.",
-      "judgment_rationale": "UserProfile owns two tenant-nested production route registrations, but its authority is the global authenticated user. The page reads useAuthStore.user; authAPI.login and authAPI.verifyToken hydrate that store through GET /auth/me, while profile and language mutations use PUT /users/me and password change uses POST /auth/force-change-password. Desktop Account Settings currently projects identity details but lacks the routed profile edit lifecycle. Local mode also implements the read projection through auth-me while profile mutation remains unavailable."
+      "expected_observable_result": "Cloud Desktop renders and updates the authenticated global user profile through Cloud authority. Local Desktop renders the same native read-only identity projection through sidecar auth-me and returns a stable unavailable state for mutation; neither mode caches secret credentials or falls back to Web UI. Until the observed authority carries a current revision, Snapshot v4 keeps both surfaces unavailable at the capability gate.",
+      "judgment_rationale": "UserProfile owns two tenant-nested production route registrations, but its authority is the global authenticated user. The page reads useAuthStore.user; authAPI.login and authAPI.verifyToken hydrate that store through GET /auth/me, while profile and language mutations use PUT /users/me and password change uses POST /auth/force-change-password. Desktop now binds profileRouteClient, profileRouteController, profileRouteModule, ProfileRoutePage, and the auxiliary deep-link host through App and SettingsWindow. The observed Cloud client exposes all four actions, and the observed Local client exposes read-only auth-me with local_profile_mutation_authority_unavailable for mutation. Both P2 projections still publish authority_revision null, so Snapshot v4 fails both surfaces closed to capability_authority_revision_unavailable rather than promoting the native route from source declarations alone."
     }
   ],
   "source_ownership": {

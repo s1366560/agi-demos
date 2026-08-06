@@ -290,16 +290,62 @@
           ],
           "enforcement": "missing",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "inspect-stats",
+            "inspect-smtp"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "manage-registries",
+            "update-smtp",
+            "delete-smtp",
+            "test-smtp",
+            "manage-gene-policies"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
       "web_status": "partial",
       "web_reason_code": "organization_registry_gene_policy_authorization_and_cluster_route_tenant_scope_incomplete",
-      "cloud_status": "planned",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "tenant_org_settings_authority_contract_invalid",
+      "cloud_actions": [],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantManagementRouteModuleFactory.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantOrganizationSettingsRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantOrganizationSettingsClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantOrganizationSettingsController.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantOrganizationSettingsPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantOrganizationSettingsPage.tsx"
+      ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_organization_governance_not_applicable",
       "local_deviation": "Organization membership, registries, SMTP credentials, clusters, audit, and Gene policies require Cloud tenant authority. Local renderer state never stores registry or SMTP secrets.",
-      "judgment_rationale": "OrgSettingsLayout and its information, member, cluster, audit, registry, SMTP, and Gene-policy children form one canonical organization settings area. Organization Info is read-only and links to Tenant Settings. Registry and Gene-policy endpoints lack tenant membership and administration enforcement. In addition, OrgClusters calls the unscoped cluster collection while the backend resolves get_current_user_tenant from the user's first membership, so list-clusters and inspect-cluster-status are not enforced against a non-default route tenant. Cluster and SMTP controls, registry controls, and Gene-policy controls remain present, but these authorization and scope defects make Web degraded. Desktop has no native routed implementation, and the multi-user organization authority is not replicated locally."
+      "judgment_rationale": "OrgSettingsLayout and its information, member, cluster, audit, registry, SMTP and Gene-policy children form one canonical Web area; its registry, Gene-policy and non-default cluster authorization defects keep Web degraded. Desktop now has a real Cloud route, App binding and typed page for tenant information and stats, registries, SMTP and Gene policies with role checks, but it does not reproduce the member, cluster and audit child navigation. More importantly, the active observation omits authorityRevision and is normalized to tenant_org_settings_authority_contract_invalid, so no Cloud action is currently route-reachable. Local organization governance remains not applicable."
     },
     {
       "id": "tenant-tenant-settings",
@@ -412,14 +458,56 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "inspect-usage"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "update",
+            "delete"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_owner"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "tenant_settings_authority_contract_invalid",
+      "cloud_actions": [],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantManagementRouteModuleFactory.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantSettingsRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantSettingsClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantSettingsController.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantSettingsPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantSettingsPage.tsx"
+      ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_settings_not_applicable",
       "local_deviation": "Desktop application, runtime, and vault preferences remain separate native settings. Local mode does not present them as Cloud tenant metadata, quota, or deletion authority.",
-      "judgment_rationale": "TenantSettings owns tenant metadata, usage, and deletion. Reads and usage require tenant membership while update and deletion require the tenant owner; no tenant:read permission exists. The existing Desktop Settings window manages application and runtime concerns, not this canonical tenant contract; Cloud is planned and Local tenant governance is not applicable."
+      "judgment_rationale": "TenantSettings owns tenant metadata, usage and deletion. Desktop now has a distinct canonical Cloud route, App binding, typed client, controller and page; reads and usage remain tenant-member operations while update and deletion remain tenant-owner operations. The active authority result omits the revision required by tenantRemainingCapabilityClient, so it is observed as tenant_settings_authority_contract_invalid and cannot be promoted into route availability. Application and vault settings stay separate, and Local tenant governance remains not applicable."
     }
   ],
   "source_ownership": {

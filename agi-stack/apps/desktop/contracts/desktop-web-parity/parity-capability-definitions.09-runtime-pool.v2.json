@@ -105,15 +105,7 @@
         "inspect-pool",
         "inspect-sandbox"
       ],
-      "cloud_actions": [
-        "view",
-        "list",
-        "refresh",
-        "toggle-auto-refresh",
-        "filter",
-        "inspect-pool",
-        "inspect-sandbox"
-      ],
+      "cloud_actions": [],
       "local_actions": [
         "view",
         "list",
@@ -201,33 +193,37 @@
       ],
       "web_status": "partial",
       "web_reason_code": "global_pool_capacity_not_available_in_tenant_scope",
-      "cloud_status": "partial",
-      "cloud_reason_code": "global_pool_capacity_not_available_in_tenant_scope",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "renderer_capability_authority_unobserved",
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesCapability.ts",
         "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesClient.ts",
         "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesController.ts",
         "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/unified-runtimes/UnifiedRuntimesPage.tsx"
       ],
-      "local_status": "partial",
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_pool_not_applicable_sidecar_projection",
+      "local_reason_code": "renderer_capability_authority_unobserved",
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesCapability.ts",
         "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesClient.ts",
         "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesController.ts",
         "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/unified-runtimes/UnifiedRuntimesPage.tsx"
       ],
-      "local_deviation": "Local Desktop projects the supervised sidecar and sandbox capability authority while returning local_pool_not_applicable_sidecar_projection for the Cloud pool portion. It does not invent multi-tenant pool instances, capacity, billing, host paths, API endpoints or launch credentials.",
-      "judgment_rationale": "Unified Runtimes combines tenant-scoped Cloud pool status and instances with project sandbox inventory in one native route. Cloud Desktop binds the authenticated pool and sandbox contracts, preserves independent loading, stale, error and retry states, and retains the Web degraded reason for tenant-scoped global capacity. Local Desktop reads only the redacted Electron-owned sidecar status and project sandbox capability contract, explicitly marks Cloud pool resources not applicable and never projects the launch token, API endpoint or host workspace path."
+      "local_deviation": "The Local helper reads only redacted Electron-owned sidecar status and sandbox capability contracts, but its workbench wrapper still marks the active result as renderer-declared. Snapshot v4 promotes no Local runtime action until observed sidecar provenance is carried end to end.",
+      "judgment_rationale": "Unified Runtimes combines tenant-scoped Cloud pool status and instances with project sandbox inventory in one native route. Desktop has a real loader, App binding, typed Cloud and Local clients and a shared controller for those contracts, but workbenchCapabilityClient still wraps both active capability helpers with declared renderer provenance. Snapshot v4 therefore closes both modes to renderer_capability_authority_unobserved and promotes no action while retaining their auditable desired actions and production entries."
     },
     {
       "id": "tenant-tenant-pool",
@@ -348,20 +344,7 @@
         "inspect-pool-status",
         "inspect-resource-usage"
       ],
-      "cloud_actions": [
-        "view",
-        "refresh",
-        "toggle-auto-refresh",
-        "list-instances",
-        "search-current-page",
-        "filter-by-tier",
-        "paginate-instances",
-        "pause-instance",
-        "resume-instance",
-        "terminate-instance",
-        "retry-list-instances",
-        "inspect-pool-status"
-      ],
+      "cloud_actions": [],
       "permission_requirements": [
         {
           "surface": "web",
@@ -413,12 +396,14 @@
       ],
       "web_status": "partial",
       "web_reason_code": "global_pool_capacity_not_available_in_tenant_scope",
-      "cloud_status": "partial",
-      "cloud_reason_code": "global_pool_capacity_not_available_in_tenant_scope",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "renderer_capability_authority_unobserved",
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/runtime-pool/runtimePoolCapability.ts",
         "agi-stack/apps/desktop/src/features/runtime-pool/runtimePoolClient.ts",
         "agi-stack/apps/desktop/src/features/runtime-pool/runtimePoolController.ts",
@@ -429,7 +414,7 @@
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_runtime_pool_not_applicable",
       "local_deviation": "A single supervised Local sidecar is not a multi-tenant resource pool. The native page must return this stable cloud-only disposition without emulating capacity or billing controls.",
-      "judgment_rationale": "PoolDashboard calls tenant-scoped pool status, instance list, pause, resume, terminate and JSON metrics endpoints. The router enforces authentication, global administration, tenant scoping, cross-tenant 404 behavior, lifecycle conflicts and audit logging. Tenant scope intentionally withholds global capacity, so resource usage and prewarm remain degraded. Cloud Desktop now provides the native status, filtering, pagination, lifecycle and retry surface with the same stable degraded reason and without claiming unavailable capacity. Local Desktop stops before network, scope switching or module loading and returns cloud_runtime_pool_not_applicable because a single supervised sidecar is not a multi-tenant resource pool."
+      "judgment_rationale": "PoolDashboard calls tenant-scoped pool status, instance list, pause, resume, terminate and JSON metrics endpoints. The router enforces authentication, global administration, tenant scoping, cross-tenant 404 behavior, lifecycle conflicts and audit logging. Cloud Desktop has a real native loader, App binding, typed client and controller for the status, filtering, pagination and lifecycle slice, but workbenchCapabilityClient still wraps runtimePoolCapability with declared renderer provenance. Snapshot v4 therefore closes Cloud to renderer_capability_authority_unobserved and promotes no action. Local Desktop remains cloud-only because a single supervised sidecar is not a multi-tenant resource pool."
     }
   ],
   "source_ownership": {

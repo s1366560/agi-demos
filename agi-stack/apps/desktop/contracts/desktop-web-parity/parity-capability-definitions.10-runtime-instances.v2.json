@@ -382,22 +382,13 @@
       ],
       "web_status": "partial",
       "web_reason_code": "runtime_instance_contract_and_authorization_incomplete",
-      "cloud_status": "partial",
-      "local_status": "partial",
+      "cloud_status": "unavailable",
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_instance_sidecar_projection_partial",
-      "local_deviation": "Local Desktop projects exactly one supervised sidecar with view, list, refresh, search, and status filtering. It never exposes arbitrary host paths, endpoints, credentials, Provider details, Cloud replicas, clusters, or lifecycle mutations.",
-      "judgment_rationale": "The Web Instances capability still owns list, create, nested overview, files, channels, members, installed genes, settings, and evolution pages, and retains documented authorization defects. Member role update still passes a user identifier to the member-identifier route, while the selected tenant scope is still overridden by the default tenant chosen from the earliest membership. Cloud Desktop now implements only the native tenant list slice with server-side search, status filtering, pagination, restart, and delete; create and every nested instance page remain partial. Local Desktop projects the supervised sidecar through private Electron IPC and exposes only safe read fields, with Cloud lifecycle actions absent. The manifest therefore records both Desktop surfaces as partial and lists only production entries, actions, and contracts actually consumed by this slice.",
-      "cloud_actions": [
-        "view",
-        "list",
-        "refresh",
-        "search",
-        "filter-status",
-        "paginate",
-        "restart",
-        "delete"
-      ],
+      "local_reason_code": "renderer_capability_authority_unobserved",
+      "local_deviation": "The Local helper projects exactly one supervised sidecar with safe read fields, but its workbench wrapper still marks the active result as renderer-declared. Snapshot v4 promotes no Local instance action until observed sidecar provenance is carried end to end.",
+      "judgment_rationale": "The Web Instances capability still owns list, create, nested overview, files, channels, members, installed genes, settings and evolution pages, and retains documented authorization defects. Member role update still passes a user identifier to the member-identifier route, while the selected tenant scope is still overridden by the default tenant chosen from the earliest membership. Desktop has real native Cloud and Local loaders, App bindings, typed clients and a shared controller for their reviewed slices. However, workbenchCapabilityClient still wraps both runtimeInstancesCapability results with declared renderer provenance, so Snapshot v4 closes both modes to renderer_capability_authority_unobserved and promotes no action while retaining their auditable desired actions and entries.",
+      "cloud_actions": [],
       "local_actions": [
         "view",
         "list",
@@ -409,6 +400,8 @@
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/runtime-instances/runtimeInstancesCapability.ts",
         "agi-stack/apps/desktop/src/features/runtime-instances/runtimeInstancesClient.ts",
         "agi-stack/apps/desktop/src/features/runtime-instances/runtimeInstancesController.ts",
@@ -419,13 +412,15 @@
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/runtime-instances/runtimeInstancesCapability.ts",
         "agi-stack/apps/desktop/src/features/runtime-instances/runtimeInstancesClient.ts",
         "agi-stack/apps/desktop/src/features/runtime-instances/runtimeInstancesController.ts",
         "agi-stack/apps/desktop/src/features/runtime-instances/runtimeInstancesRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/runtime-instances/RuntimeInstancesPage.tsx"
       ],
-      "cloud_reason_code": "runtime_instances_nested_routes_partial"
+      "cloud_reason_code": "renderer_capability_authority_unobserved"
     }
   ],
   "source_ownership": {

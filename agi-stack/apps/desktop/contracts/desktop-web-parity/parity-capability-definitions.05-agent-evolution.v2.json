@@ -53,13 +53,25 @@
         {
           "surface": "desktop_cloud",
           "method": "GET",
-          "path": "/api/v1/skills/{skill_id}/evolution",
+          "path": "/api/v1/skills/evolution/overview",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/skills/evolution/config",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/skills/evolution/config",
           "authority": "cloud_service"
         },
         {
           "surface": "desktop_cloud",
           "method": "POST",
-          "path": "/api/v1/skills/{skill_id}/evolution/run",
+          "path": "/api/v1/skills/evolution/run",
           "authority": "cloud_service"
         },
         {
@@ -77,13 +89,25 @@
         {
           "surface": "desktop_local",
           "method": "GET",
-          "path": "/api/v1/skills/{skill_id}/evolution",
+          "path": "/api/v1/skills/evolution/overview",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "GET",
+          "path": "/api/v1/skills/evolution/config",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "PUT",
+          "path": "/api/v1/skills/evolution/config",
           "authority": "sidecar"
         },
         {
           "surface": "desktop_local",
           "method": "POST",
-          "path": "/api/v1/skills/{skill_id}/evolution/run",
+          "path": "/api/v1/skills/evolution/run",
           "authority": "sidecar"
         },
         {
@@ -127,6 +151,7 @@
       ],
       "cloud_actions": [
         "view",
+        "configure",
         "run",
         "apply-job",
         "reject-job"
@@ -199,18 +224,7 @@
         {
           "surface": "desktop_cloud",
           "actions": [
-            "view"
-          ],
-          "authentication": "authenticated",
-          "authorization": [
-            "project_member"
-          ],
-          "enforcement": "enforced",
-          "feature_gate": null
-        },
-        {
-          "surface": "desktop_cloud",
-          "actions": [
+            "configure",
             "run",
             "apply-job",
             "reject-job"
@@ -221,24 +235,23 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
-        },
-        {
-          "surface": "desktop_cloud",
-          "actions": [
-            "run",
-            "apply-job",
-            "reject-job"
-          ],
-          "authentication": "authenticated",
-          "authorization": [
-            "project_contributor"
-          ],
-          "enforcement": "enforced",
-          "feature_gate": null
         }
       ],
-      "cloud_status": "partial",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "capability_authority_revision_unavailable",
       "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/evolutionRouteClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/evolutionRouteController.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/evolutionRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/EvolutionRoutePage.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/evolutionRoutePresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/p2ThirdBatchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/p2ThirdBatchRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/settings/SkillEvolutionDialog.tsx"
       ],
       "local_status": "unavailable",
@@ -246,12 +259,24 @@
       "local_reason_code": "local_skill_evolution_authority_unavailable",
       "local_deviation": "Local keeps the native evolution route and returns a structured unavailable state until a real native evolution authority is implemented.",
       "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/evolutionRouteClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/evolutionRouteController.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/evolutionRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/EvolutionRoutePage.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/evolutionRoutePresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/p2ThirdBatchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/p2ThirdBatchRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/settings/SkillEvolutionDialog.tsx",
         "agi-stack/apps/desktop/src/features/settings/useSkillPackageManagement.ts",
         "agi-stack/apps/desktop/src/api/managedResourcesClient.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs"
       ],
-      "judgment_rationale": "The Web tenant overview reads evolution status and configuration, while tenant-scoped configuration and runs require tenant administration. Apply and reject use scope-sensitive authorization: tenant-scoped jobs require tenant administration, while the project contributor branch permits owner, admin, and member skill writers and excludes project viewers. Cloud Desktop exposes a per-skill evolution dialog whose project-scoped jobs use that same branch for run and review, but it lacks the canonical tenant overview, configuration, and complete routed state matrix. Local Desktop has a native route, client calls, and sidecar route stubs, so it is applicable; until a real native evolution authority exists, those stubs must fail closed as unavailable with a stable authority reason."
+      "judgment_rationale": "Web and Cloud Desktop now both bind the tenant Evolution overview, configuration, run, apply and reject contracts; tenant reads require membership and tenant mutations require administration. Desktop has a real canonical loader, typed client/controller/presentation model, App binding and native page, while the per-skill dialog remains an adjacent native entry. The observed P2 Snapshot projection does not yet carry a valid authority revision, so Cloud must stay capability_authority_revision_unavailable despite the completed renderer path. Local calls the same sidecar route family and remains observed unavailable under local_skill_evolution_authority_unavailable until a real revision-bound evolution authority exists."
     },
     {
       "id": "tenant-tenant-patterns",
@@ -281,15 +306,27 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "NONE",
-          "path": "not_applicable:desktop_native_route_planned",
-          "authority": "none"
+          "method": "GET",
+          "path": "/api/v1/agent/workflows/patterns",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/agent/workflows/patterns/{pattern_id}",
+          "authority": "cloud_service"
         },
         {
           "surface": "desktop_local",
-          "method": "NONE",
-          "path": "not_applicable:local_native_authority_planned",
-          "authority": "none"
+          "method": "GET",
+          "path": "/api/v1/agent/workflows/patterns",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
+          "method": "DELETE",
+          "path": "/api/v1/agent/workflows/patterns/{pattern_id}",
+          "authority": "sidecar"
         },
         {
           "surface": "native_only",
@@ -313,7 +350,11 @@
         "list",
         "delete"
       ],
-      "cloud_actions": [],
+      "cloud_actions": [
+        "view",
+        "list",
+        "delete"
+      ],
       "local_actions": [],
       "permission_requirements": [
         {
@@ -340,12 +381,96 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "delete"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": [
+            "view",
+            "list"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_local",
+          "actions": [
+            "delete"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
-      "local_status": "planned",
+      "web_status": "partial",
+      "web_reason_code": "web_pattern_delete_affordance_permission_partial",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "tenant_patterns_authority_contract_invalid",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantPatternsPage.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantPatternsClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantPatternsController.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantPatternsPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantPatternsRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingRouteRuntime.ts"
+      ],
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "judgment_rationale": "WorkflowPatterns lists patterns, inspects the selected list item, and exposes delete. Although detail and reset service endpoints exist, the routed page does not call them, so they are not production surface actions. No audited native Desktop route currently owns this capability, so both Desktop modes remain planned."
+      "local_reason_code": "local_workflow_patterns_authority_unavailable",
+      "local_deviation": "Local keeps the native Workflow Patterns route and probes its private sidecar endpoints, which fail closed until a revision-bound local pattern store exists.",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantPatternsPage.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantPatternsClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantPatternsController.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantPatternsPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantPatternsRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingRouteRuntime.ts",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs"
+      ],
+      "judgment_rationale": "WorkflowPatterns lists and inspects patterns, but it unconditionally supplies the delete callback to tenant members while the DELETE authority requires tenant administration; Web therefore remains partial until that affordance is role-gated. Desktop now has a real canonical loader, App binding, typed client/controller/presentation model and native list/delete page. The current Cloud observation omits authorityRevision and is rejected by tenantRemainingCapabilityClient as tenant_patterns_authority_contract_invalid, so the route cannot be promoted. Local reaches the private sidecar and returns local_workflow_patterns_authority_unavailable instead of fabricating a pattern store."
     }
   ],
   "source_ownership": {

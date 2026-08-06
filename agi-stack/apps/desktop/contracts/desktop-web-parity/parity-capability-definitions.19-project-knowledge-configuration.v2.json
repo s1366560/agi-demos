@@ -111,68 +111,20 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/projects/{project_id}/schema/entities",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "PUT",
-          "path": "/api/v1/projects/{project_id}/schema/entities/{entity_type_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "DELETE",
-          "path": "/api/v1/projects/{project_id}/schema/entities/{entity_type_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
           "method": "GET",
           "path": "/api/v1/projects/{project_id}/schema/edges",
           "authority": "cloud_service"
         },
         {
           "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/projects/{project_id}/schema/edges",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "PUT",
-          "path": "/api/v1/projects/{project_id}/schema/edges/{edge_type_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "DELETE",
-          "path": "/api/v1/projects/{project_id}/schema/edges/{edge_type_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
           "method": "GET",
           "path": "/api/v1/projects/{project_id}/schema/mappings",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/projects/{project_id}/schema/mappings",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "DELETE",
-          "path": "/api/v1/projects/{project_id}/schema/mappings/{mapping_id}",
           "authority": "cloud_service"
         },
         {
           "surface": "desktop_local",
           "method": "NONE",
-          "path": "unavailable:local_schema_authority_planned",
+          "path": "unavailable:local_project_schema_authority_unavailable",
           "authority": "none"
         },
         {
@@ -208,11 +160,45 @@
           "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
-      "local_status": "planned",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "project_schema_authority_unavailable",
+      "cloud_actions": [],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationClient.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-administration/projectSchemaRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectSchemaClient.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectSchemaController.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectSchemaPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/ProjectAdministrationPage.tsx",
+        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts"
+      ],
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_schema_authority_planned",
-      "judgment_rationale": "SchemaLayout and its overview, entity, edge, and mapping children are one canonical project capability. SchemaOverview performs client-side JSON copy and download export from the loaded entity, edge, and mapping projection without a separate export API. Desktop has no audited native schema route or mutation authority in either mode."
+      "local_reason_code": "local_project_schema_authority_unavailable",
+      "local_authority": "none",
+      "local_actions": [],
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationClient.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-administration/projectSchemaRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectSchemaClient.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectSchemaController.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectSchemaPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/ProjectAdministrationPage.tsx",
+        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts"
+      ],
+      "judgment_rationale": "SchemaLayout and its overview, entity, edge, and mapping children are one canonical Web capability, and SchemaOverview performs client-side JSON copy and download export without a separate export API. Desktop now has a real production loader, App binding, typed client, controller and native list page. However every Project Administration client first calls /api/v1/auth/me through observeProjectAdministrationScope; production returns user_id while the client reads userPayload.id. The resulting project_administration_scope_contract_invalid exception is normalized to the observed project_schema_authority_unavailable terminal state before entity, edge or mapping data can reach the route. Local uses the same real route but its renderer-declared static result remains closed with local_project_schema_authority_unavailable until a sidecar authority is observed."
     },
     {
       "id": "project-project-channels",
@@ -667,7 +653,7 @@
         {
           "surface": "desktop_cloud",
           "method": "POST",
-          "path": "/api/v1/maintenance/refresh/incremental",
+          "path": "/api/v1/maintenance/incremental-refresh",
           "authority": "cloud_service"
         },
         {
@@ -685,13 +671,7 @@
         {
           "surface": "desktop_cloud",
           "method": "POST",
-          "path": "/api/v1/graph/communities/rebuild?project_id={project_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/data/export",
+          "path": "/api/v1/maintenance/communities/rebuild",
           "authority": "cloud_service"
         },
         {
@@ -703,7 +683,7 @@
         {
           "surface": "desktop_local",
           "method": "NONE",
-          "path": "unavailable:local_knowledge_maintenance_authority_planned",
+          "path": "unavailable:local_project_maintenance_authority_unavailable",
           "authority": "none"
         },
         {
@@ -736,11 +716,45 @@
           "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
-      "local_status": "planned",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "project_maintenance_authority_unavailable",
+      "cloud_actions": [],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationClient.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-administration/projectMaintenanceRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectMaintenanceClient.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectMaintenanceController.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectMaintenancePresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/ProjectAdministrationPage.tsx",
+        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts"
+      ],
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_knowledge_maintenance_authority_planned",
-      "judgment_rationale": "Project Maintenance reads maintenance, graph and embedding status and exposes incremental refresh, duplicate dry-run/merge, stale-edge dry-run/delete, community rebuild, data export and embedding rebuild. The page does not invoke the generic optimize-graph endpoint. Desktop has no audited native route or Local graph-maintenance authority, so both remain planned."
+      "local_reason_code": "local_project_maintenance_authority_unavailable",
+      "local_authority": "none",
+      "local_actions": [],
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationClient.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-administration/projectMaintenanceRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectMaintenanceClient.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectMaintenanceController.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectMaintenancePresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/ProjectAdministrationPage.tsx",
+        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts"
+      ],
+      "judgment_rationale": "Project Maintenance reads maintenance, graph and embedding status and the Web page exposes incremental refresh, duplicate dry-run/merge, stale-edge dry-run/delete, community rebuild, data export and embedding rebuild. Desktop now has a real production loader, App binding, typed client, controller and native list page. Its Cloud authority is nevertheless unavailable: observeProjectAdministrationScope reads userPayload.id while production /api/v1/auth/me returns user_id, so every load fails before revision authority is established and normalizes to project_maintenance_authority_unavailable. The typed client also calls /maintenance/incremental-refresh instead of the production /maintenance/refresh/incremental route and /maintenance/communities/rebuild instead of /graph/communities/rebuild; its page exposes no maintenance mutations or export. Local binds the same real route but remains renderer-declared and closed with local_project_maintenance_authority_unavailable."
     }
   ],
   "source_ownership": {

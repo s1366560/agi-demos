@@ -579,19 +579,46 @@
           "feature_gate": null
         }
       ],
-      "cloud_status": "partial",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "capability_authority_revision_unavailable",
       "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/pluginsRouteClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/pluginsRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRouteController.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/ManagementRoutePage.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRoutePresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/settingsRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx",
         "agi-stack/apps/desktop/src/features/settings/PluginManagementDialogs.tsx"
       ],
-      "local_status": "partial",
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_channel_runtime_not_applicable",
-      "local_deviation": "Local Desktop supports registry list and enablement state only. Install, reload, uninstall, catalog, schema, plugin configuration, and channel configuration routes return local_channel_runtime_not_applicable.",
+      "local_reason_code": "capability_authority_revision_unavailable",
+      "local_deviation": "Local Desktop keeps registry list and enablement UI, but Snapshot v4 closes the route until the observed sidecar response is revision-bound. Install, reload, uninstall, catalog, schema, plugin configuration and channel configuration remain outside the Local authority.",
       "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/pluginsRouteClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/pluginsRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRouteController.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/ManagementRoutePage.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRoutePresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/settingsRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx",
         "agi-stack/apps/desktop/src/features/settings/PluginManagementDialogs.tsx",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
       ],
-      "judgment_rationale": "Web tenant plugin reads and mutations are authorized independently from project channel configuration reads, tests, and mutations. Cloud Desktop preserves that separation: tenant plugin actions do not inherit project roles, while the shared Channel Connections UI applies its tenant admin-or-owner gate together with project member or project admin-or-owner authority. Cloud Desktop has native dialogs and clients for the audited contracts but lacks the canonical routed hub and complete state matrix. Local authority is deliberately limited to list and admin-or-owner enable or disable."
+      "judgment_rationale": "Web tenant plugin reads and mutations are authorized independently from project channel configuration reads, tests and mutations. Desktop now has a real canonical loader, App binding, management state controller and the existing native plugin dialogs in both modes. Cloud preserves the tenant and project role separation, while Local remains limited to registry list and admin-or-owner enable or disable. The management observation used by Snapshot v4 has no authority revision, so neither Desktop surface may be promoted and both remain capability_authority_revision_unavailable until the typed authority becomes revision-bound."
     }
   ],
   "source_ownership": {

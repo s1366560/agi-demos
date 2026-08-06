@@ -144,14 +144,14 @@
         {
           "surface": "desktop_cloud",
           "method": "NONE",
-          "path": "not_applicable:desktop_native_route_planned",
-          "authority": "none"
+          "path": "unavailable:tenant_genes_authority_contract_invalid",
+          "authority": "cloud_service"
         },
         {
           "surface": "desktop_local",
           "method": "NONE",
-          "path": "not_applicable:local_gene_market_authority_planned",
-          "authority": "none"
+          "path": "unavailable:local_gene_market_authority_unavailable",
+          "authority": "sidecar"
         },
         {
           "surface": "native_only",
@@ -239,14 +239,82 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list",
+            "inspect-genome",
+            "inspect-evolution",
+            "list-reviews",
+            "rate",
+            "create-review",
+            "delete-own-review"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "create",
+            "update",
+            "delete",
+            "publish",
+            "unpublish",
+            "install"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
-      "local_status": "planned",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "tenant_genes_authority_contract_invalid",
+      "cloud_actions": [],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantManagementRouteModuleFactory.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantGenesRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantGenesClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantGenesController.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantGenesPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantGenesPage.tsx"
+      ],
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_gene_market_authority_planned",
+      "local_reason_code": "local_gene_market_authority_unavailable",
+      "local_actions": [],
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantManagementRouteModuleFactory.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantGenesRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantGenesClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantGenesController.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantGenesPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantGenesPage.tsx",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs"
+      ],
       "local_deviation": "Local Desktop may manage and import local Gene and Genome packages, but organization publication, global market visibility, and remote ratings require a declared Cloud authority.",
-      "judgment_rationale": "GeneMarket, GeneDetail, and GenomeDetail directly implement the canonical Gene capability, including package installation from both detail views. GeneDetail also calls listGeneEvolutionEvents and renders the returned evolution history for tenant members. Desktop has neither a native market route nor an audited local Gene or Genome package authority, so both native surfaces remain explicitly planned with Local market deviations."
+      "judgment_rationale": "GeneMarket, GeneDetail, and GenomeDetail directly implement the canonical Web capability. Desktop now has a real production loader, App binding, typed Gene client, controller and native management page. The Cloud client exposes the reviewed member and administrator operations, but its active snapshot omits the authorityRevision required by tenantRemainingCapabilityClient, so v4 normalizes it to the observed tenant_genes_authority_contract_invalid terminal state and no action may be promoted. Local uses the same native route and calls the private sidecar, whose registered Gene contracts return local_gene_market_authority_unavailable; this is an observed structured-unavailable boundary, not a planned route or a fabricated market authority."
     }
   ],
   "source_ownership": {

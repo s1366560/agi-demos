@@ -91,51 +91,9 @@
           "authority": "cloud_service"
         },
         {
-          "surface": "desktop_cloud",
-          "method": "GET",
-          "path": "/api/v1/graph/communities/{community_id}/members",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/graph/communities/rebuild?background=true&project_id={project_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "GET",
-          "path": "/api/v1/tasks/{task_id}/stream",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/tasks/{task_id}/cancel",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "GET",
-          "path": "/api/v1/tasks/recent",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/tasks/{task_id}/retry",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/tasks/{task_id}/stop",
-          "authority": "cloud_service"
-        },
-        {
           "surface": "desktop_local",
           "method": "NONE",
-          "path": "unavailable:local_community_projection_authority_planned",
+          "path": "unavailable:local_project_communities_authority_unavailable",
           "authority": "none"
         },
         {
@@ -162,15 +120,65 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
       "web_status": "partial",
       "web_reason_code": "web_community_rebuild_task_history_scope_mismatch",
-      "cloud_status": "planned",
-      "local_status": "planned",
+      "cloud_status": "partial",
+      "cloud_reason_code": "desktop_project_communities_actions_partial",
+      "cloud_actions": [
+        "view",
+        "list"
+      ],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectCommunitiesRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectCommunitiesClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectCommunitiesController.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectCommunitiesPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/ProjectKnowledgePage.tsx",
+        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts"
+      ],
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_community_projection_authority_planned",
-      "judgment_rationale": "The auditable routed module CommunitiesList.tsx re-exports communities/index.tsx, which lists communities, inspects members, starts a project-scoped rebuild, streams progress from the returned task ID, and cancels that active task. The selected-community detail also embeds TaskList.tsx with entity_id=selectedCommunity.uuid and entity_type=community, so it still calls /tasks/recent on mount and every five seconds. Project-wide rebuild_communities task records have no entity_id and /tasks/recent applies both filters, leaving an empty history whose retry and stop controls are unreachable from this page; Web is therefore partial and degraded. The structured dependency graph still proves both implementation files are reachable from the routed wrapper, and the inventory binds every reviewed path node to the audited revision with SHA-256; source-content integrity remains distinct from execution evidence. Desktop has no native communities management route, and Local needs a real community projection rather than a textual search approximation."
+      "local_reason_code": "local_project_communities_authority_unavailable",
+      "local_authority": "none",
+      "local_actions": [],
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectCommunitiesRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectCommunitiesClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectCommunitiesController.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectCommunitiesPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/ProjectKnowledgePage.tsx",
+        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts"
+      ],
+      "judgment_rationale": "The auditable routed module CommunitiesList.tsx re-exports communities/index.tsx, which lists communities, inspects members, starts a project-scoped rebuild, streams progress from the returned task ID, and cancels that active task. The selected-community detail also embeds TaskList.tsx with entity_id=selectedCommunity.uuid and entity_type=community, so it still calls /tasks/recent on mount and every five seconds. Project-wide rebuild_communities task records have no entity_id and /tasks/recent applies both filters, leaving an empty history whose retry and stop controls are unreachable from this page; Web is therefore partial and degraded. The structured dependency graph still proves both implementation files are reachable from the routed wrapper, and the inventory binds every reviewed path node to the audited revision with SHA-256; source-content integrity remains distinct from execution evidence. Desktop now has a real production loader, App binding, typed client, controller and revision-bound Cloud authority, but ProjectKnowledgePage only renders the community list and exposes none of the inspect, rebuild, stream or cancellation controls. Cloud therefore remains partial with view and list only. Local binds the real route but the renderer-declared result stays closed with local_project_communities_authority_unavailable."
     },
     {
       "id": "project-project-graph",
@@ -220,7 +228,7 @@
         {
           "surface": "desktop_local",
           "method": "NONE",
-          "path": "unavailable:local_graph_projection_authority_planned",
+          "path": "unavailable:local_project_graph_authority_unavailable",
           "authority": "none"
         },
         {
@@ -246,13 +254,61 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
-      "local_status": "planned",
+      "cloud_status": "partial",
+      "cloud_reason_code": "desktop_project_graph_actions_partial",
+      "cloud_actions": [
+        "view"
+      ],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectGraphRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectGraphClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectGraphController.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectGraphPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/ProjectKnowledgePage.tsx",
+        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts"
+      ],
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_graph_projection_authority_planned",
-      "judgment_rationale": "The Web MemoryGraph source provides a project knowledge-graph explorer. Its Cytoscape toolbar is enabled by default and downloads a client-side PNG through exportImage, so export-png is a project-member action with no server API contract. Session execution graphs in Desktop have a different authority and data model, so they are not evidence of this capability; Cloud and Local native equivalents remain planned."
+      "local_reason_code": "local_project_graph_authority_unavailable",
+      "local_authority": "none",
+      "local_actions": [],
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectGraphRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectGraphClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectGraphController.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectGraphPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/ProjectKnowledgePage.tsx",
+        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts"
+      ],
+      "judgment_rationale": "The Web MemoryGraph source provides a project knowledge-graph explorer. Its Cytoscape toolbar is enabled by default and downloads a client-side PNG through exportImage, so export-png is a project-member action with no server API contract. Session execution graphs in Desktop have a different authority and data model, so they are not evidence of this capability. Desktop now has a real production loader, App binding, typed graph client, controller and revision-bound Cloud authority, but ProjectKnowledgePage renders only a flat node list and exposes no navigation, node/edge inspection or PNG export interaction. Cloud therefore remains partial with view only. Local binds the real route but its renderer-declared result stays unavailable with local_project_graph_authority_unavailable until a sidecar graph authority is observed."
     },
     {
       "id": "project-project-search",

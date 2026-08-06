@@ -442,16 +442,7 @@
       ],
       "actions": ["view","list","inspect-summary","create","open-blackboard"],
       "web_actions": ["view","list","inspect-summary","create","open-blackboard"],
-      "cloud_actions": [
-        "view",
-        "list",
-        "create",
-        "open-blackboard",
-        "update",
-        "manage-members",
-        "bind-agent",
-        "unbind-agent"
-      ],
+      "cloud_actions": [],
       "local_actions": ["view","list","create","open-blackboard"],
       "permission_requirements": [
         {
@@ -519,13 +510,15 @@
           "feature_gate": null
         }
       ],
-      "cloud_status": "partial",
-      "cloud_reason_code": "desktop_tenant_workspaces_advanced_management_partial",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "renderer_capability_authority_unobserved",
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/api/client.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant/tenantWorkspacesRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/tenant/TenantWorkspacesPage.tsx",
         "agi-stack/apps/desktop/src/features/tenant/tenantWorkspacesController.ts",
@@ -538,14 +531,16 @@
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceAgentBindingsPanel.tsx",
         "agi-stack/apps/desktop/src/features/workspace/workspaceAgentBindingsModel.ts"
       ],
-      "local_status": "partial",
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_workspace_lifecycle_partial",
-      "local_deviation": "The sidecar supports native workspace list and create authority. Workspace update, delete, member management, and Agent binding operations remain unavailable until the revisioned Local workspace contract is completed.",
+      "local_reason_code": "renderer_capability_authority_unobserved",
+      "local_deviation": "The sidecar has reviewed native workspace list and create contracts, but the workbench wrapper still marks their active helper result as renderer-declared. Snapshot v4 therefore promotes no Local action until observed sidecar provenance is carried end to end.",
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant/tenantWorkspacesRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/tenant/TenantWorkspacesPage.tsx",
         "agi-stack/apps/desktop/src/features/tenant/tenantWorkspacesController.ts",
@@ -554,7 +549,7 @@
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceCreateDialog.tsx",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
       ],
-      "judgment_rationale": "The previous route verdict is stale. Web workspace summary inspection reads objectives, then a plan snapshot, then tasks as its fallback before Blackboard navigation. Desktop now mounts a native Tenant Workspaces route with selected-project scope, request cancellation, loading, empty, ready, degraded, conflict, forbidden, unavailable and retry states. Cloud and Local both bind their production list and create authorities through the same page-level client port. The route remains partial because the compact catalog does not yet expose Web workspace summary inspection or Blackboard navigation, while update, member management and Agent bindings remain in the existing Cloud workbench surfaces. Local update, delete, member management and Agent bindings remain structurally unavailable under the stable local_workspace_lifecycle_partial reason."
+      "judgment_rationale": "Web workspace summary inspection reads objectives, then a plan snapshot, then tasks as its fallback before Blackboard navigation. Desktop has a real native Tenant Workspaces loader, App binding, typed Cloud and Local clients and production settings surfaces, but workbenchCapabilityClient still wraps both active capability helpers with declared renderer provenance. Snapshot v4 therefore closes both modes to renderer_capability_authority_unobserved and promotes no action despite the auditable source, API and sidecar contracts."
     },
     {
       "id": "tenant-tenant-tasks",
@@ -676,7 +671,7 @@
         "retry-pending",
         "navigate-dead-letter-queue"
       ],
-      "cloud_actions": ["view","list","search","filter","paginate","refresh","retry-task","stop-task","retry-pending","navigate-dead-letter-queue"],
+      "cloud_actions": [],
       "local_actions": ["view","list","search","filter","paginate","refresh","open-workspace"],
       "permission_requirements": [
         {
@@ -715,14 +710,15 @@
           "feature_gate": null
         }
       ],
-      "cloud_status": "implemented",
-      "cloud_entries": ["agi-stack/apps/desktop/src/App.tsx","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts","agi-stack/apps/desktop/src/features/tenant/tenantTasksRouteModule.tsx","agi-stack/apps/desktop/src/features/tenant/TenantTasksPage.tsx","agi-stack/apps/desktop/src/features/tenant/tenantTasksController.ts","agi-stack/apps/desktop/src/features/tenant/tenantTasksHttpClient.ts"],
-      "local_status": "partial",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "renderer_capability_authority_unobserved",
+      "cloud_entries": ["agi-stack/apps/desktop/src/App.tsx","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts","agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts","agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts","agi-stack/apps/desktop/src/features/tenant/tenantTasksRouteModule.tsx","agi-stack/apps/desktop/src/features/tenant/TenantTasksPage.tsx","agi-stack/apps/desktop/src/features/tenant/tenantTasksController.ts","agi-stack/apps/desktop/src/features/tenant/tenantTasksHttpClient.ts"],
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_task_dashboard_partial",
-      "local_deviation": "Local Desktop uses the project-scoped My Work authority for native task discovery, search, filtering, pagination, refresh and Workspace navigation. The sidecar does not expose tenant-wide task statistics, queue-depth history, retry, stop or retry-pending authority, so those actions remain unavailable under the stable local_task_dashboard_partial reason.",
-      "local_entries": ["agi-stack/apps/desktop/src/App.tsx","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts","agi-stack/apps/desktop/src/features/tenant/tenantTasksRouteModule.tsx","agi-stack/apps/desktop/src/features/tenant/TenantTasksPage.tsx","agi-stack/apps/desktop/src/features/tenant/tenantTasksController.ts","agi-stack/apps/desktop/src/features/tenant/tenantTasksHttpClient.ts","agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"],
-      "judgment_rationale": "Cloud Desktop mounts the native Tenant Tasks route and binds Cloud task statistics, queue-depth history, recent-task search, status filtering, pagination, automatic and manual refresh, individual retry and stop, bounded retry-pending, and native navigation to the implemented Dead Letter Queue route. Tenant-wide results remain tenant-scoped instead of being mislabeled as the selected project. The shared controller covers loading, empty, ready, stale, conflict, forbidden, unavailable, retry and scope-switch states without remounting the active workbench. Local Desktop uses the sidecar My Work authority for native project-scoped discovery, search, filtering, pagination, refresh and Workspace navigation, but tenant-wide statistics, queue history and task mutations remain unavailable under local_task_dashboard_partial."
+      "local_reason_code": "renderer_capability_authority_unobserved",
+      "local_deviation": "The sidecar has a reviewed project-scoped My Work contract, but the workbench wrapper still marks its active helper result as renderer-declared. Snapshot v4 promotes no Local task action until observed sidecar provenance is carried end to end.",
+      "local_entries": ["agi-stack/apps/desktop/src/App.tsx","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts","agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts","agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts","agi-stack/apps/desktop/src/features/tenant/tenantTasksRouteModule.tsx","agi-stack/apps/desktop/src/features/tenant/TenantTasksPage.tsx","agi-stack/apps/desktop/src/features/tenant/tenantTasksController.ts","agi-stack/apps/desktop/src/features/tenant/tenantTasksHttpClient.ts","agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"],
+      "judgment_rationale": "Desktop has a real Tenant Tasks loader, App binding, typed Cloud and Local clients and a shared controller for the reviewed task journeys. However, workbenchCapabilityClient still wraps both active capability helpers with declared renderer provenance, so Snapshot v4 closes both modes to renderer_capability_authority_unobserved and promotes no action. The Local desired-action set continues to document project-scoped My Work discovery and Workspace navigation without claiming route reachability."
     },
     {
       "id": "tenant-tenant-analytics",

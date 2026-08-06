@@ -201,6 +201,7 @@
       "native_authority": "sidecar",
       "native_entries": [
         "agi-stack/apps/desktop/sidecar/src/application_vault.rs",
+        "agi-stack/apps/desktop/sidecar/src/private_file_permissions.rs",
         "agi-stack/apps/desktop/sidecar/src/trusted_session.rs",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/provider_credentials.rs",
         "agi-stack/apps/desktop/sidecar/src/data_migration.rs",
@@ -220,7 +221,7 @@
         "migrate"
       ],
       "native_status": "partial",
-      "native_reason_code": "vault_filesystem_permissions_not_enforced_on_windows",
+      "native_reason_code": "windows_vault_acl_runtime_evidence_missing",
       "current_actions": [
         "seal",
         "load",
@@ -228,7 +229,7 @@
         "clear",
         "migrate"
       ],
-      "native_deviation": "Secret payloads remain vault-owned, while a non-secret trusted-session reference is persisted in SQLite metadata and Windows filesystem permission hardening is not yet enforced.",
+      "native_deviation": "Secret payloads remain vault-owned while a non-secret trusted-session reference is persisted in SQLite metadata. Unix private modes and the protected current-user Windows DACL are implemented, but current-HEAD Windows native execution evidence is not available from this macOS closeout.",
       "api_contracts": [
         {
           "surface": "web",
@@ -281,14 +282,14 @@
         "clear",
         "corrupt-or-unavailable"
       ],
-      "expected_observable_result": "The sidecar stores trusted-session secret material and provider credentials in the application-managed encrypted vault, uses atomic replacement, fails closed on corrupt records, and never returns secret material to persistent renderer state or logs. Platform-private filesystem permission enforcement remains explicit and testable per OS.",
+      "expected_observable_result": "The sidecar stores trusted-session secret material and provider credentials in the application-managed encrypted vault, uses atomic replacement, fails closed on corrupt records, and never returns secret material to persistent renderer state or logs. Vault directories and files use private Unix modes or a protected current-user Windows DACL; current-HEAD cross-platform native execution remains required before promotion.",
       "evidence_requirements": [
         "contract",
         "native_electron",
         "sidecar_authority",
         "desktop_bundle"
       ],
-      "judgment_rationale": "The Rust vault, trusted-session broker, provider credential store, migration path, and control wiring form the native authority. The current implementation is degraded rather than fully available because Windows permission hardening is a no-op and the non-secret trusted-session reference remains SQLite metadata."
+      "judgment_rationale": "The Rust vault, trusted-session broker, provider credential store, migration path, and control wiring form the native authority. private_file_permissions now applies 0700/0600 on Unix and a protected current-user DACL on Windows, including existing-vault repair and migration paths; Windows-only Rust tests and the release workflow contract cover the ACL code path. This macOS closeout cannot execute those Windows cfg tests or prove the installed Windows application and vault path at current-HEAD, so the capability remains partial under windows_vault_acl_runtime_evidence_missing rather than claiming cross-platform runtime completion."
     },
     {
       "id": "signed-update-and-release-boundary",

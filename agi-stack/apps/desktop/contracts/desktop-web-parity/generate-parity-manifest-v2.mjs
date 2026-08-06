@@ -660,6 +660,16 @@ function cloudSurface(definition) {
       definition.cloud_actions ?? definition.current_actions ?? ["view"],
     );
   }
+  if (status === "unavailable") {
+    return surface(
+      "native_equivalent",
+      "partial",
+      "unavailable",
+      definition.cloud_reason_code,
+      definition.cloud_authority ?? "cloud_service",
+      [],
+    );
+  }
   if (status === "planned") {
     return surface(
       "native_equivalent",

@@ -140,21 +140,13 @@
           "feature_gate": null
         }
       ],
-      "cloud_status": "partial",
+      "cloud_status": "unavailable",
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_cluster_control_not_applicable",
       "local_deviation": "Cluster and ACP runner-pool administration remain visible as a native route contract in Local mode but require Cloud authority; registration tokens are never synthesized or cached by the renderer.",
-      "judgment_rationale": "Cluster list and detail pages are direct sources for the canonical cluster control plane. Reads require tenant membership while cluster create, update, delete, ACP runner-pool creation, and registration-token actions require tenant administration; the uncalled runner-pool update service method is not surface authority, and no cluster:read permission exists. Cloud Desktop now implements a native tenant-member slice with paginated list reads, current-page search and status filtering, refresh, and health inspection. It does not expose cluster detail, mutations, ACP runner-pool management, or registration-token authority, and its strict client projection discards encrypted credentials, Provider configuration, and token fields. Local Desktop keeps the native route shell but returns the stable not-applicable authority instead of simulating a cluster topology.",
-      "cloud_actions": [
-        "view",
-        "list",
-        "refresh",
-        "search-current-page",
-        "filter-status-current-page",
-        "paginate",
-        "inspect-health"
-      ],
+      "judgment_rationale": "Cluster list and detail pages are direct sources for the canonical cluster control plane. Reads require tenant membership while cluster create, update, delete, ACP runner-pool creation and registration-token actions require tenant administration; the uncalled runner-pool update service method is not surface authority, and no cluster:read permission exists. Cloud Desktop has a real native loader, App binding, typed client and controller for paginated list reads, current-page search, filtering, refresh and health inspection, but workbenchCapabilityClient still wraps runtimeClustersCapability with declared renderer provenance. Snapshot v4 therefore closes Cloud to renderer_capability_authority_unobserved and promotes no action. Local Desktop keeps the native route shell but returns the stable not-applicable authority instead of simulating a cluster topology.",
+      "cloud_actions": [],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
@@ -167,7 +159,7 @@
         "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/runtime-clusters/RuntimeClustersPage.tsx"
       ],
-      "cloud_reason_code": "runtime_clusters_detail_and_mutations_partial"
+      "cloud_reason_code": "renderer_capability_authority_unobserved"
     },
     {
       "id": "tenant-tenant-deploy",
@@ -305,20 +297,14 @@
       ],
       "web_status": "partial",
       "web_reason_code": "web_deploy_contract_mismatch",
-      "cloud_status": "partial",
+      "cloud_status": "unavailable",
+      "cloud_authority": "none",
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_deployment_authority_not_applicable",
       "local_deviation": "Local Desktop may run supervised local work but does not expose the Cloud deployment authority. It must render a stable cloud-only state instead of launching an external control plane.",
-      "judgment_rationale": "DeployProgress is shared by tenant deployment routes and nested instance deployment routes, so one audited Deployments capability owns the source. The routed Web page calls list, create, detail, progress, success, failed, and cancel, but not getLatestForInstance. Web stays degraded because the backend list field deploys is read as deployments, finished_at and message are rendered as completed_at and error_message, success sends no required body, failed supplies no required non-empty message, and the running status is tested as in_progress for cancellation. Cloud Desktop now implements a native instance-scoped read slice with paginated history, detail refresh, authenticated SSE progress observation, explicit disconnect state, and reconnect. It does not expose instance discovery, nested deployment aliases, latest, create, cancel, success, or failed mutations. Its strict renderer projection excludes config_snapshot, message, triggered_by, encrypted credentials, and unknown fields. Local Desktop retains the native route contract and returns the stable cloud-only reason without network access or a simulated deployment authority.",
-      "cloud_actions": [
-        "view",
-        "list",
-        "refresh",
-        "paginate",
-        "inspect-progress",
-        "reconnect-progress"
-      ],
+      "judgment_rationale": "DeployProgress is shared by tenant deployment routes and nested instance deployment routes, so one audited Deployments capability owns the source. The routed Web page calls list, create, detail, progress, success, failed, and cancel, but not getLatestForInstance. Web stays degraded because the backend list field deploys is read as deployments, finished_at and message are rendered as completed_at and error_message, success sends no required body, failed supplies no required non-empty message, and the running status is tested as in_progress for cancellation. Desktop has a real native loader, App binding, typed Cloud client, controller and read-oriented deployment page, but workbenchCapabilityClient still wraps runtimeDeploymentsCapability with declared renderer provenance. Snapshot v4 closes every declared active capability to renderer_capability_authority_unobserved, so no Cloud deployment action is currently route-reachable. Local remains a declared cloud-only not-applicable surface and never calls a simulated deployment authority.",
+      "cloud_actions": [],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
@@ -331,7 +317,7 @@
         "agi-stack/apps/desktop/src/features/runtime-deployments/runtimeDeploymentsRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/runtime-deployments/RuntimeDeploymentsPage.tsx"
       ],
-      "cloud_reason_code": "runtime_deployments_mutations_and_instance_discovery_partial"
+      "cloud_reason_code": "renderer_capability_authority_unobserved"
     },
     {
       "id": "tenant-tenant-instance-templates",
@@ -519,25 +505,15 @@
       ],
       "web_status": "partial",
       "web_reason_code": "web_instance_template_route_tenant_scope_mismatch",
-      "cloud_status": "partial",
+      "cloud_status": "unavailable",
+      "cloud_authority": "none",
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
       "local_reason_code": "local_instance_template_authority_unavailable",
+      "local_authority": "none",
       "local_deviation": "Local Desktop keeps the native route and stable zero-network unavailable state until a sidecar template authority can safely describe only supported resources and keep imported files within the workspace root and declared size and MIME limits.",
-      "judgment_rationale": "InstanceTemplateList and TemplateDetail form a dedicated canonical lifecycle distinct from the general template marketplace. The production pages expose list, create, detail, list-items, delete, publish, clone, and deploy-from-template, and do not call update, unpublish, add-item, or remove-item APIs. Deploy-from-template only navigates to instance creation, whose production authority requires an authenticated tenant member rather than tenant administration. Web is degraded because template calls and instance creation do not carry the route tenant while the backend resolves get_current_user_tenant from the user's first membership, so non-default tenant routes read and mutate the first tenant; route-selected tenant member and admin enforcement is therefore missing. Cloud Desktop now implements the native tenant route with strict list and detail projections, pagination, current-page search, published-state filtering, items, create, delete, publish, and clone. It remains partial because nested detail deep links and deploy-from-template are not implemented. Local Desktop exposes the same native page contract but returns local_instance_template_authority_unavailable without issuing template requests or fabricating a sidecar authority.",
-      "cloud_actions": [
-        "view",
-        "list",
-        "list-items",
-        "create",
-        "delete",
-        "publish",
-        "clone",
-        "refresh",
-        "paginate",
-        "search-current-page",
-        "filter-status"
-      ],
+      "judgment_rationale": "InstanceTemplateList and TemplateDetail form a dedicated canonical lifecycle distinct from the general template marketplace. The production pages expose list, create, detail, list-items, delete, publish, clone, and deploy-from-template, and do not call update, unpublish, add-item, or remove-item APIs. Web is degraded because template calls and instance creation do not carry the route tenant while the backend resolves get_current_user_tenant from the user's first membership. Desktop has a real native loader, App binding, typed client, controller and lifecycle page, but workbenchCapabilityClient still wraps instanceTemplatesCapability with declared renderer provenance. Snapshot v4 therefore closes the active Cloud declaration to renderer_capability_authority_unobserved and exposes no route-reachable actions. Local renders the stable local_instance_template_authority_unavailable terminal state from the same declared renderer boundary; it has no observed sidecar template authority.",
+      "cloud_actions": [],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
@@ -550,7 +526,7 @@
         "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/instance-templates/InstanceTemplatesPage.tsx"
       ],
-      "cloud_reason_code": "instance_templates_nested_deep_link_and_deploy_partial",
+      "cloud_reason_code": "renderer_capability_authority_unobserved",
       "local_actions": [],
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",

@@ -514,19 +514,46 @@
           "feature_gate": null
         }
       ],
-      "cloud_status": "partial",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "capability_authority_revision_unavailable",
       "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/providerRouteClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/providersRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRouteController.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/ManagementRoutePage.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRoutePresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/settingsRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx",
         "agi-stack/apps/desktop/src/features/settings/ModelProviderWorkspace.tsx"
       ],
-      "local_status": "partial",
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_provider_authority_partial",
+      "local_reason_code": "capability_authority_revision_unavailable",
       "local_deviation": "Local provider secrets remain exclusively in the application-managed vault and must never be cached or echoed by the renderer.",
       "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/providerRouteClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/providersRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRouteController.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/ManagementRoutePage.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRoutePresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/settingsRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx",
         "agi-stack/apps/desktop/src/features/settings/ModelProviderWorkspace.tsx",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/provider_credentials.rs"
       ],
-      "judgment_rationale": "Web owns the provider list-backed CRUD controls, assignments, system resilience, model catalog, and environment detection exposed by ProviderList and its production component closure. ProviderConfigModal binds listTypes across Web, Cloud Desktop, and Local Desktop, while model search filters the fetched catalog client-side; uncalled get-by-id, tenant-provider, and server-search service methods are not surface authority. Provider usage requires tenant membership for regular users, while global admins may inspect usage without tenant scoping. Tenant members may read their tenant assignment while assignment mutations, provider mutations, health checks, test connections, system status, and environment detection require global administration. Cloud Desktop uses the service model catalog and renders a read-only routing projection; it does not call provider discovery or routing-policy mutation authority. Local Desktop retains vault-safe discovery and revision-aware routing. Neither Desktop mode claims delete, tenant assignment, system authority, or OAuth without a callback contract."
+      "judgment_rationale": "Web owns the provider list-backed CRUD controls, assignments, system resilience, model catalog and environment detection exposed by ProviderList and its production component closure. ProviderConfigModal binds listTypes across Web, Cloud Desktop and Local Desktop, while model search filters the fetched catalog client-side; uncalled get-by-id, tenant-provider and server-search service methods are not surface authority. Provider usage requires tenant membership for regular users, while global admins may inspect usage without tenant scoping. Desktop now has a real production loader, App binding and native provider settings surface. Its management Snapshot observations omit the authority_revision required by Snapshot v4, so both modes fail closed to capability_authority_revision_unavailable while retaining the reviewed Cloud and vault-safe Local contracts. Neither Desktop mode claims delete, tenant assignment, system authority or OAuth without a callback contract."
     },
     {
       "id": "tenant-tenant-webhooks",
@@ -638,6 +665,15 @@
         "delete",
         "copy-secret"
       ],
+      "cloud_actions": [
+        "view",
+        "list",
+        "list-event-types",
+        "create",
+        "update",
+        "delete",
+        "copy-secret"
+      ],
       "permission_requirements": [
         {
           "surface": "web",
@@ -667,14 +703,59 @@
           ],
           "enforcement": "enforced",
           "feature_gate": "events"
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list",
+            "create",
+            "update",
+            "delete",
+            "copy-secret"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "list-event-types"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": "events"
         }
       ],
-      "cloud_status": "planned",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "tenant_webhooks_authority_contract_invalid",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantManagementRouteModuleFactory.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantWebhooksRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantWebhooksClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantWebhooksController.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantWebhooksPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantWebhooksPage.tsx"
+      ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_webhook_authority_required",
       "local_deviation": "Tenant webhook registration and secret rotation require an addressable Cloud service authority. Local Desktop keeps the native route contract but does not create an unaudited host callback service.",
-      "judgment_rationale": "Webhooks is a registered canonical tenant route backed by the tenant webhook service. Creation requires an event selected from the event type catalog, and that catalog is served by /events/types behind the events feature gate; a disabled or failed catalog is therefore a structured unavailable or error state for creation rather than an ungated tenant-admin action. Webhook CRUD and secret copy remain tenant-admin operations without that feature gate. Desktop has no audited native management surface; Local automation also declares webhook delivery unavailable, so Local is explicitly cloud-only rather than an external-browser fallback."
+      "judgment_rationale": "Webhooks is a registered canonical tenant route backed by the tenant webhook service. Creation requires an event selected from the event type catalog, and that catalog is served by /events/types behind the events feature gate; a disabled or failed catalog is therefore a structured unavailable or error state for creation rather than an ungated tenant-admin action. Webhook CRUD and secret copy remain tenant-admin operations without that feature gate. Desktop now has a real production loader, App binding, typed client, controller and native Cloud management page with the reviewed CRUD and event-catalog contracts. Its active client snapshot omits the authorityRevision required by tenantRemainingCapabilityClient, so Snapshot v4 normalizes it to tenant_webhooks_authority_contract_invalid and promotes no action. Local remains explicitly cloud-only rather than an external-browser fallback."
     }
   ],
   "source_ownership": {

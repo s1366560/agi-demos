@@ -43,8 +43,7 @@ function permissionActionsForAuthorization(capability, surface, authorization) {
 function permissionRequirementsForAction(capability, surface, action) {
   return capability.permission_requirements.filter(
     (requirement) =>
-      requirement.surface === surface &&
-      requirement.actions.includes(action),
+      requirement.surface === surface && requirement.actions.includes(action),
   );
 }
 
@@ -118,14 +117,16 @@ test("Tenant Workspaces records the production summary and Blackboard navigation
     "open-blackboard",
     "view",
   ]);
-  for (const surface of ["desktop_cloud", "desktop_local"]) {
-    const surfaceActions =
-      surface === "desktop_cloud"
-        ? capability.cloud_actions
-        : capability.local_actions;
-    assert.ok(surfaceActions.includes("open-blackboard"), surface);
-    assert.ok(permissionActions(capability, surface).includes("open-blackboard"));
-  }
+  assert.equal(capability.cloud_status, "unavailable");
+  assert.equal(
+    capability.cloud_reason_code,
+    "renderer_capability_authority_unobserved",
+  );
+  assert.deepEqual(capability.cloud_actions, []);
+  assert.ok(capability.local_actions.includes("open-blackboard"));
+  assert.ok(
+    permissionActions(capability, "desktop_local").includes("open-blackboard"),
+  );
   assert.match(capability.judgment_rationale, /objectives.*plan.*tasks/u);
 });
 
@@ -208,7 +209,7 @@ test("Tenant Workspaces binds native settings entries, contracts, and permission
   );
 });
 
-test("Tenant Tasks records implemented Cloud and explicit Local degradation boundaries", () => {
+test("Tenant Tasks records fail-closed Cloud and explicit Local degradation boundaries", () => {
   const capability = readCapability(
     "parity-capability-definitions.02-tenant-operations.v2.json",
     "tenant-tenant-tasks",
@@ -216,11 +217,17 @@ test("Tenant Tasks records implemented Cloud and explicit Local degradation boun
 
   assert.equal(Object.hasOwn(capability, "web_status"), false);
   assert.equal(Object.hasOwn(capability, "web_reason_code"), false);
-  assert.equal(capability.cloud_status, "implemented");
-  assert.equal(Object.hasOwn(capability, "cloud_reason_code"), false);
-  assert.equal(capability.local_status, "partial");
-  assert.equal(capability.local_reason_code, "local_task_dashboard_partial");
-  assert.deepEqual(capability.cloud_actions, capability.web_actions);
+  assert.equal(capability.cloud_status, "unavailable");
+  assert.equal(
+    capability.cloud_reason_code,
+    "renderer_capability_authority_unobserved",
+  );
+  assert.equal(capability.local_status, "unavailable");
+  assert.equal(
+    capability.local_reason_code,
+    "renderer_capability_authority_unobserved",
+  );
+  assert.deepEqual(capability.cloud_actions, []);
   assert.deepEqual(capability.local_actions, [
     "view",
     "list",
@@ -232,9 +239,12 @@ test("Tenant Tasks records implemented Cloud and explicit Local degradation boun
   ]);
   assert.match(
     capability.judgment_rationale,
-    /native navigation to the implemented Dead Letter Queue route/u,
+    /renderer_capability_authority_unobserved/u,
   );
-  assert.match(capability.judgment_rationale, /local_task_dashboard_partial/u);
+  assert.match(
+    capability.judgment_rationale,
+    /both modes.*renderer_capability_authority_unobserved/u,
+  );
   assertPermissionCoverage(
     capability,
     "desktop_cloud",
@@ -264,9 +274,71 @@ test("Workflow Patterns excludes unbound detail and reset authorities", () => {
     "list",
     "view",
   ]);
+  assert.equal(capability.web_status, "partial");
+  assert.equal(
+    capability.web_reason_code,
+    "web_pattern_delete_affordance_permission_partial",
+  );
+  assert.equal(capability.cloud_status, "unavailable");
+  assert.equal(
+    capability.cloud_reason_code,
+    "tenant_patterns_authority_contract_invalid",
+  );
+  assert.equal(capability.local_status, "unavailable");
+  assert.equal(
+    capability.local_reason_code,
+    "local_workflow_patterns_authority_unavailable",
+  );
 });
 
-test("Skill Evolution records scope-sensitive job review permissions", () => {
+test("management route capabilities fail closed when authority revisions are absent", () => {
+  const cases = [
+    [
+      "parity-capability-definitions.03-agent-core.v2.json",
+      "tenant-tenant-agent-definitions",
+      "capability_authority_revision_unavailable",
+    ],
+    [
+      "parity-capability-definitions.04-agent-skills.v2.json",
+      "tenant-tenant-skills",
+      "capability_authority_revision_unavailable",
+    ],
+    [
+      "parity-capability-definitions.05-agent-evolution.v2.json",
+      "tenant-tenant-evolution",
+      "local_skill_evolution_authority_unavailable",
+    ],
+    [
+      "parity-capability-definitions.06-plugins.v2.json",
+      "tenant-tenant-plugins",
+      "capability_authority_revision_unavailable",
+    ],
+  ];
+
+  for (const [fragment, capabilityId, localReason] of cases) {
+    const capability = readCapability(fragment, capabilityId);
+    assert.equal(capability.cloud_status, "unavailable", capabilityId);
+    assert.equal(
+      capability.cloud_reason_code,
+      "capability_authority_revision_unavailable",
+      capabilityId,
+    );
+    assert.equal(capability.local_status, "unavailable", capabilityId);
+    assert.equal(capability.local_reason_code, localReason, capabilityId);
+    for (const entry of [
+      "agi-stack/apps/desktop/src/App.tsx",
+      "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+      "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+    ]) {
+      assert.ok(
+        capability.cloud_entries.includes(entry),
+        `${capabilityId}: ${entry}`,
+      );
+    }
+  }
+});
+
+test("Skill Evolution records tenant-native and adjacent Web review permissions", () => {
   const capability = readCapability(
     "parity-capability-definitions.05-agent-evolution.v2.json",
     "tenant-tenant-evolution",
@@ -295,13 +367,19 @@ test("Skill Evolution records scope-sensitive job review permissions", () => {
       permissionRequirementsForAction(capability, "desktop_cloud", action).map(
         (requirement) => requirement.authorization,
       ),
-      [["tenant_admin"], ["project_contributor"]],
+      [["tenant_admin"]],
       `desktop_cloud ${action}`,
     );
   }
-  assert.match(capability.judgment_rationale, /project-scoped jobs/u);
-  assert.match(capability.judgment_rationale, /scope-sensitive/u);
-  assert.match(capability.judgment_rationale, /excludes project viewers/u);
+  assert.match(capability.judgment_rationale, /tenant Evolution/u);
+  assert.match(
+    capability.judgment_rationale,
+    /tenant mutations require administration/u,
+  );
+  assert.match(
+    capability.judgment_rationale,
+    /capability_authority_revision_unavailable/u,
+  );
 });
 
 test("Skills records the evolution read bound by SkillDetail", () => {
@@ -309,8 +387,7 @@ test("Skills records the evolution read bound by SkillDetail", () => {
     "parity-capability-definitions.04-agent-skills.v2.json",
     "tenant-tenant-skills",
   );
-  const evolutionContract =
-    "GET /api/v1/skills/{skill_id}/evolution";
+  const evolutionContract = "GET /api/v1/skills/{skill_id}/evolution";
 
   assert.ok(contractKeys(capability, "web").includes(evolutionContract));
   assert.equal(capability.actions.includes("view-evolution"), true);
@@ -321,11 +398,9 @@ test("Skills records the evolution read bound by SkillDetail", () => {
     contractKeys(capability, "desktop_cloud").includes(evolutionContract),
   );
   assert.deepEqual(
-    permissionRequirementsForAction(
-      capability,
-      "web",
-      "view-evolution",
-    ).map((requirement) => requirement.authorization),
+    permissionRequirementsForAction(capability, "web", "view-evolution").map(
+      (requirement) => requirement.authorization,
+    ),
     [["tenant_member"], ["project_member"]],
   );
   assert.match(capability.judgment_rationale, /SkillDetail/u);
@@ -342,10 +417,31 @@ test("Desktop MCP actions match the list and create settings UI", () => {
 
   assert.deepEqual(capability.cloud_actions, expectedActions);
   assert.deepEqual(capability.local_actions, expectedActions);
-  assert.deepEqual(contractKeys(capability, "desktop_cloud"), expectedContracts);
-  assert.deepEqual(contractKeys(capability, "desktop_local"), expectedContracts);
+  assert.deepEqual(
+    contractKeys(capability, "desktop_cloud"),
+    expectedContracts,
+  );
+  assert.deepEqual(
+    contractKeys(capability, "desktop_local"),
+    expectedContracts,
+  );
   assertPermissionCoverage(capability, "desktop_cloud", expectedActions);
   assertPermissionCoverage(capability, "desktop_local", expectedActions);
+  for (const surface of ["cloud", "local"]) {
+    assert.equal(capability[`${surface}_status`], "unavailable");
+    assert.equal(
+      capability[`${surface}_reason_code`],
+      "capability_authority_revision_unavailable",
+    );
+  }
+  for (const entry of [
+    "agi-stack/apps/desktop/src/App.tsx",
+    "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+    "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+    "agi-stack/apps/desktop/src/features/settings-routes/mcpServersRouteModule.ts",
+  ]) {
+    assert.ok(capability.cloud_entries.includes(entry), entry);
+  }
 });
 
 test("Web MCP Servers records the directly rendered MCP Apps tab without proxy overclaim", () => {
@@ -437,6 +533,58 @@ test("ACP records only controls bound by AcpDashboard", () => {
     "POST /api/v1/acp/tenants/{tenant_id}/external-agents/{agent_key}/test",
   ]);
   assertPermissionCoverage(capability, "web", expectedActions);
+  assert.deepEqual(
+    contractKeys(capability, "desktop_cloud"),
+    contractKeys(capability, "web"),
+  );
+  assert.deepEqual(capability.cloud_actions, expectedActions);
+  assertPermissionCoverage(capability, "desktop_cloud", expectedActions);
+  assert.equal(capability.cloud_status, "unavailable");
+  assert.equal(
+    capability.cloud_reason_code,
+    "tenant_acp_authority_contract_invalid",
+  );
+  assert.ok(
+    capability.cloud_entries.includes(
+      "agi-stack/apps/desktop/src/features/tenant-admin/tenantAcpRouteModule.tsx",
+    ),
+  );
+});
+
+test("Template Marketplace records the native Cloud route but fails closed without revision", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.07-extension-protocols.v2.json",
+    "tenant-tenant-templates",
+  );
+
+  assert.deepEqual(contractKeys(capability, "desktop_cloud"), [
+    "GET /api/v1/subagents/templates/list",
+    "GET /api/v1/subagents/templates/categories",
+    "GET /api/v1/subagents/templates/{template_id}",
+    "POST /api/v1/subagents/templates/{template_id}/install",
+    "POST /api/v1/subagents/templates/seed",
+  ]);
+  assert.deepEqual(capability.cloud_actions, capability.web_actions);
+  assertPermissionCoverage(
+    capability,
+    "desktop_cloud",
+    capability.cloud_actions,
+  );
+  assert.equal(capability.cloud_status, "unavailable");
+  assert.equal(
+    capability.cloud_reason_code,
+    "capability_authority_revision_unavailable",
+  );
+  assert.ok(
+    capability.cloud_entries.includes(
+      "agi-stack/apps/desktop/src/features/settings-routes/templatesRouteModule.ts",
+    ),
+  );
+  assert.ok(
+    capability.local_entries.includes(
+      "agi-stack/apps/desktop/src/features/settings-routes/TemplatesRoutePage.tsx",
+    ),
+  );
 });
 
 test("Agent Dashboard records the admin-only runtime hook catalog", () => {
@@ -454,11 +602,7 @@ test("Agent Dashboard records the admin-only runtime hook catalog", () => {
     false,
   );
   assert.deepEqual(
-    permissionActionsForAuthorization(
-      capability,
-      "web",
-      "tenant_admin",
-    ).sort(),
+    permissionActionsForAuthorization(capability, "web", "tenant_admin").sort(),
     ["update-config", "view-hook-catalog"],
   );
   assert.match(capability.judgment_rationale, /hook catalog.*tenant admin/iu);
@@ -471,7 +615,10 @@ test("Agent Bindings records tenant-only scope and member-readable testing", () 
   );
 
   assert.deepEqual(capability.scope, ["tenant"]);
-  assert.equal(capability.permissions.includes("project_access_when_scoped"), false);
+  assert.equal(
+    capability.permissions.includes("project_access_when_scoped"),
+    false,
+  );
   for (const requirement of capability.permission_requirements.filter(
     ({ surface }) => surface === "web",
   )) {
@@ -486,11 +633,7 @@ test("Agent Bindings records tenant-only scope and member-readable testing", () 
     ["list", "test", "view"],
   );
   assert.deepEqual(
-    permissionActionsForAuthorization(
-      capability,
-      "web",
-      "tenant_admin",
-    ).sort(),
+    permissionActionsForAuthorization(capability, "web", "tenant_admin").sort(),
     ["create", "delete", "set-enabled"],
   );
   assert.match(capability.judgment_rationale, /tenant-(?:level|scoped)/iu);
@@ -533,11 +676,7 @@ test("Webhooks records the gated event type catalog used by creation", () => {
   assert.ok(capability.actions.includes("list-event-types"));
   assert.ok(capability.web_actions.includes("list-event-types"));
   assert.deepEqual(
-    permissionRequirementsForAction(
-      capability,
-      "web",
-      "list-event-types",
-    ),
+    permissionRequirementsForAction(capability, "web", "list-event-types"),
     [
       {
         surface: "web",
@@ -564,6 +703,26 @@ test("Webhooks records the gated event type catalog used by creation", () => {
   );
   assert.match(capability.judgment_rationale, /event type catalog/u);
   assert.match(capability.judgment_rationale, /feature gate/u);
+  assert.equal(capability.cloud_status, "unavailable");
+  assert.equal(
+    capability.cloud_reason_code,
+    "tenant_webhooks_authority_contract_invalid",
+  );
+  assert.deepEqual(capability.cloud_actions, capability.web_actions);
+  assert.deepEqual(
+    contractKeys(capability, "desktop_cloud"),
+    contractKeys(capability, "web"),
+  );
+  assertPermissionCoverage(
+    capability,
+    "desktop_cloud",
+    capability.cloud_actions,
+  );
+  assert.ok(
+    capability.cloud_entries.includes(
+      "agi-stack/apps/desktop/src/features/tenant-admin/tenantWebhooksRouteModule.tsx",
+    ),
+  );
 });
 
 test("Provider types are bound by ProviderConfigModal across all three product surfaces", () => {
@@ -617,12 +776,7 @@ test("Provider types are bound by ProviderConfigModal across all three product s
                   "search-models",
                 ]
               : surface === "desktop_cloud"
-                ? [
-                    "view",
-                    "list",
-                    "list-provider-types",
-                    "list-models",
-                  ]
+                ? ["view", "list", "list-provider-types", "list-models"]
                 : [
                     "view",
                     "list",
@@ -648,6 +802,18 @@ test("Provider types are bound by ProviderConfigModal across all three product s
   assert.ok(webContracts.includes("GET /api/v1/llm-providers/models/catalog"));
   assert.match(capability.judgment_rationale, /ProviderConfigModal/u);
   assert.match(capability.judgment_rationale, /listTypes/u);
+  for (const surface of ["cloud", "local"]) {
+    assert.equal(capability[`${surface}_status`], "unavailable");
+    assert.equal(
+      capability[`${surface}_reason_code`],
+      "capability_authority_revision_unavailable",
+    );
+  }
+  assert.ok(
+    capability.cloud_entries.includes(
+      "agi-stack/apps/desktop/src/features/settings-routes/providersRouteModule.ts",
+    ),
+  );
 });
 
 test("Cloud Provider usage requires tenant membership unless the user is a global admin", () => {
@@ -680,14 +846,91 @@ test("Cloud Provider usage requires tenant membership unless the user is a globa
     );
   }
   assert.ok(
-    capability.permissions.includes(
-      "tenant_member_or_global_admin_for_usage",
-    ),
+    capability.permissions.includes("tenant_member_or_global_admin_for_usage"),
   );
   assert.match(
     capability.judgment_rationale,
     /usage.*tenant membership.*global admin/iu,
   );
+});
+
+test("renderer-declared Cloud route slices retain entries but expose no actions", () => {
+  const cases = [
+    [
+      "parity-capability-definitions.02-tenant-operations.v2.json",
+      "tenant-tenant-workspaces",
+      true,
+    ],
+    [
+      "parity-capability-definitions.02-tenant-operations.v2.json",
+      "tenant-tenant-tasks",
+      true,
+    ],
+    [
+      "parity-capability-definitions.09-runtime-pool.v2.json",
+      "tenant-tenant-runtimes",
+      true,
+    ],
+    [
+      "parity-capability-definitions.09-runtime-pool.v2.json",
+      "tenant-tenant-pool",
+      false,
+    ],
+    [
+      "parity-capability-definitions.10-runtime-instances.v2.json",
+      "tenant-tenant-instances",
+      true,
+    ],
+    [
+      "parity-capability-definitions.11-runtime-deployment.v2.json",
+      "tenant-tenant-clusters",
+      false,
+    ],
+  ];
+
+  for (const [fragment, capabilityId, localDeclared] of cases) {
+    const capability = readCapability(fragment, capabilityId);
+    assert.equal(capability.cloud_status, "unavailable", capabilityId);
+    assert.equal(
+      capability.cloud_reason_code,
+      "renderer_capability_authority_unobserved",
+      capabilityId,
+    );
+    assert.deepEqual(capability.cloud_actions, [], capabilityId);
+    for (const entry of [
+      "agi-stack/apps/desktop/src/App.tsx",
+      "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+      "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+    ]) {
+      assert.ok(
+        capability.cloud_entries.includes(entry),
+        `${capabilityId}: ${entry}`,
+      );
+    }
+    assert.match(
+      capability.judgment_rationale,
+      /renderer_capability_authority_unobserved/u,
+      capabilityId,
+    );
+    if (localDeclared) {
+      assert.equal(capability.local_status, "unavailable", capabilityId);
+      assert.equal(
+        capability.local_reason_code,
+        "renderer_capability_authority_unobserved",
+        capabilityId,
+      );
+      assert.notDeepEqual(capability.local_actions, [], capabilityId);
+      for (const entry of [
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+      ]) {
+        assert.ok(
+          capability.local_entries.includes(entry),
+          `${capabilityId}: ${entry}`,
+        );
+      }
+    }
+  }
 });
 
 test("Runtime Instances excludes the unbound general config contract", () => {
@@ -708,8 +951,12 @@ test("Runtime Instances excludes the unbound general config contract", () => {
     );
   }
   const webContracts = contractKeys(capability, "web");
-  assert.ok(webContracts.includes("GET /api/v1/instances/{instance_id}/llm-config"));
-  assert.ok(webContracts.includes("PUT /api/v1/instances/{instance_id}/llm-config"));
+  assert.ok(
+    webContracts.includes("GET /api/v1/instances/{instance_id}/llm-config"),
+  );
+  assert.ok(
+    webContracts.includes("PUT /api/v1/instances/{instance_id}/llm-config"),
+  );
   assert.ok(capability.actions.includes("configure"));
   assert.ok(permissionActions(capability, "web").includes("configure"));
 });
@@ -772,7 +1019,10 @@ test("Clusters excludes the unbound runner-pool update contract", () => {
     "PUT /api/v1/clusters/{cluster_id}/acp-runner-pools/{pool_key}";
 
   for (const surface of ["web", "desktop_cloud"]) {
-    assert.equal(contractKeys(capability, surface).includes(updateContract), false);
+    assert.equal(
+      contractKeys(capability, surface).includes(updateContract),
+      false,
+    );
   }
   assert.ok(
     contractKeys(capability, "web").includes(
@@ -817,5 +1067,8 @@ test("Project Search binds every Cloud action to project membership", () => {
       feature_gate: null,
     },
   ]);
-  assert.equal(permissionActions(capability, "desktop_cloud").includes("export"), false);
+  assert.equal(
+    permissionActions(capability, "desktop_cloud").includes("export"),
+    false,
+  );
 });

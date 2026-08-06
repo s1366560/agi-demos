@@ -296,18 +296,45 @@
       ],
       "web_status": "partial",
       "web_reason_code": "web_mcp_app_canvas_context_incomplete",
-      "cloud_status": "partial",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "capability_authority_revision_unavailable",
       "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/mcpServersRouteClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/mcpServersRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRouteController.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/ManagementRoutePage.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRoutePresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/settingsRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx",
         "agi-stack/apps/desktop/src/features/settings/MCPServerSettingsPage.tsx"
       ],
-      "local_status": "partial",
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_mcp_host_partial",
+      "local_reason_code": "capability_authority_revision_unavailable",
       "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/mcpServersRouteClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/mcpServersRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRouteController.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/ManagementRoutePage.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/managementRoutePresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/settingsRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx",
         "agi-stack/apps/desktop/src/features/settings/MCPServerSettingsPage.tsx",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/mcp_apps.rs"
       ],
-      "judgment_rationale": "Web owns the complete MCP server lifecycle plus tool, prompt, and log authority. McpAppsTabV2 directly binds MCP Apps list, search, delete, refresh, and open-in-Canvas interactions, while the Canvas resource and tool-call context remains incomplete and therefore Web stays partial without claiming unbound proxy APIs. MCPServerSettingsPage and useMCPServerManagement expose refresh/list and create in both Desktop modes. Additional client and sidecar detail, sync, test, reconcile, discovery, and tool-call endpoints are not counted as native surface actions until a production UI binds them; elicitation, client requests, and the complete routed state matrix also remain incomplete."
+      "judgment_rationale": "Web owns the complete MCP server lifecycle plus tool, prompt, and log authority. McpAppsTabV2 directly binds MCP Apps list, search, delete, refresh, and open-in-Canvas interactions, while the Canvas resource and tool-call context remains incomplete and therefore Web stays partial without claiming unbound proxy APIs. Desktop now has a real production loader, App binding and native settings management surface for refresh/list and create in both modes. The management Snapshot observations do not carry the authority_revision required by Snapshot v4, so Cloud and Local both fail closed to capability_authority_revision_unavailable even though their reviewed view, list and create contracts remain recorded. Additional detail, sync, test, reconcile, discovery and tool-call endpoints are not counted as native surface actions until a production UI binds them."
     },
     {
       "id": "tenant-tenant-acp",
@@ -361,9 +388,39 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "NONE",
-          "path": "not_applicable:desktop_native_route_planned",
-          "authority": "none"
+          "method": "GET",
+          "path": "/api/v1/acp/tenants/{tenant_id}/status",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/acp/tenants/{tenant_id}/runner-pools",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/acp/tenants/{tenant_id}/external-agents",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/acp/tenants/{tenant_id}/external-agents/{agent_key}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/acp/tenants/{tenant_id}/external-agents/{agent_key}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/acp/tenants/{tenant_id}/external-agents/{agent_key}/test",
+          "authority": "cloud_service"
         },
         {
           "surface": "desktop_local",
@@ -405,7 +462,17 @@
         "test-agent",
         "list-sessions"
       ],
-      "cloud_actions": [],
+      "cloud_actions": [
+        "view",
+        "view-status",
+        "list-runner-pools",
+        "list-agents",
+        "create-agent",
+        "update-agent",
+        "delete-agent",
+        "test-agent",
+        "list-sessions"
+      ],
       "local_actions": [],
       "permission_requirements": [
         {
@@ -438,14 +505,61 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "view-status",
+            "list-runner-pools",
+            "list-agents",
+            "list-sessions"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "create-agent",
+            "update-agent",
+            "delete-agent",
+            "test-agent"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "tenant_acp_authority_contract_invalid",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantManagementRouteModuleFactory.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantAcpRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantAcpClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantAcpController.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantAcpPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantAcpPage.tsx"
+      ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "local_external_acp_not_applicable",
       "local_deviation": "External ACP runner pools, agents, and sessions require Cloud connection and governance authority; Local Desktop returns the stable cloud-only reason instead of fabricating an offline service.",
-      "judgment_rationale": "AcpDashboard reads status and runner pools, renders the Agent and session summaries embedded in status, and exposes external-Agent create, update, delete, and test controls. Separate runner-instance, Agent-list, session-list, and session lifecycle service methods are not called by the production page and are excluded from its API authority. No audited native Cloud route exists, and external ACP authority remains intentionally cloud-only for Local Desktop."
+      "judgment_rationale": "AcpDashboard reads status and runner pools, renders the Agent and session summaries embedded in status, and exposes external-Agent create, update, delete and test controls. Separate runner-instance, Agent-list, session-list and session lifecycle service methods are not called by the production page and are excluded from its API authority. Desktop now has a real production loader, App binding, typed client, controller and native Cloud management page with the same reviewed member and administrator actions. Its active client snapshot omits the authorityRevision required by tenantRemainingCapabilityClient, so Snapshot v4 normalizes it to tenant_acp_authority_contract_invalid and promotes no action. External ACP authority remains intentionally cloud-only for Local Desktop."
     },
     {
       "id": "tenant-tenant-templates",
@@ -493,9 +607,33 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "NONE",
-          "path": "not_applicable:desktop_native_route_planned",
-          "authority": "none"
+          "method": "GET",
+          "path": "/api/v1/subagents/templates/list",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/subagents/templates/categories",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/subagents/templates/{template_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/subagents/templates/{template_id}/install",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/subagents/templates/seed",
+          "authority": "cloud_service"
         },
         {
           "surface": "desktop_local",
@@ -540,7 +678,16 @@
         "seed",
         "retry"
       ],
-      "cloud_actions": [],
+      "cloud_actions": [
+        "view",
+        "list",
+        "search",
+        "filter",
+        "view-detail",
+        "install",
+        "seed",
+        "retry"
+      ],
       "local_actions": [],
       "permission_requirements": [
         {
@@ -561,19 +708,65 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list",
+            "search",
+            "filter",
+            "view-detail",
+            "install",
+            "seed",
+            "retry"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
       "web_status": "partial",
       "web_reason_code": "web_template_seed_response_contract_mismatch",
-      "cloud_status": "planned",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "capability_authority_revision_unavailable",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/templatesRouteClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/templatesRouteController.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/templatesRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/TemplatesRoutePage.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/templatesRoutePresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/p2ThirdBatchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/p2ThirdBatchRouteRuntime.ts"
+      ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
       "local_reason_code": "local_subagent_registry_unavailable",
       "local_deviation": "The Local sidecar owns explicit list and install endpoints, but both return local_subagent_registry_unavailable until a safe local template registry exists.",
       "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/templatesRouteClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/templatesRouteController.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/templatesRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/TemplatesRoutePage.tsx",
+        "agi-stack/apps/desktop/src/features/settings-routes/templatesRoutePresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/p2ThirdBatchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/settings-routes/p2ThirdBatchRouteRuntime.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs"
       ],
-      "judgment_rationale": "The Template Marketplace uses SubAgent template list, category, detail, install, and seed contracts. The current Web seed flow is degraded because its client reads a seeded count while the authority returns created; seed is tenant-member authorized rather than tenant-admin-only. Cloud Desktop has no audited native marketplace; Local exposes structured unavailable authority rather than a fabricated registry."
+      "judgment_rationale": "The Template Marketplace uses SubAgent template list, category, detail, install and seed contracts. The current Web seed flow is degraded because its client reads a seeded count while the authority returns created; seed is tenant-member authorized rather than tenant-admin-only. Desktop now has a real production loader, App binding, typed client, controller and native marketplace page. The Cloud observation does not carry the authority_revision required by Snapshot v4, so it fails closed to capability_authority_revision_unavailable even though its reviewed contracts and actions remain recorded. Local uses the same native route and exposes structured local_subagent_registry_unavailable authority rather than a fabricated registry."
     }
   ],
   "source_ownership": {

@@ -224,6 +224,41 @@ test("Project Channels Cloud contract matches the native connection dialog", () 
   }
 });
 
+test("Project Maintenance closes its production scope and endpoint mismatches", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.19-project-knowledge-configuration.v2.json",
+    "project-project-maintenance",
+  );
+
+  assert.equal(capability.cloud_status, "unavailable");
+  assert.equal(
+    capability.cloud_reason_code,
+    "project_maintenance_authority_unavailable",
+  );
+  assert.deepEqual(capability.cloud_actions, []);
+  assert.deepEqual(contractKeys(capability, "desktop_cloud"), [
+    "GET /api/v1/maintenance/status?project_id={project_id}",
+    "GET /api/v1/data/stats?project_id={project_id}",
+    "GET /api/v1/maintenance/embeddings/status?project_id={project_id}",
+    "POST /api/v1/maintenance/incremental-refresh",
+    "POST /api/v1/maintenance/deduplicate",
+    "POST /api/v1/maintenance/invalidate-edges",
+    "POST /api/v1/maintenance/communities/rebuild",
+    "POST /api/v1/maintenance/embeddings/rebuild?project_id={project_id}",
+  ]);
+  assert.equal(capability.local_status, "unavailable");
+  assert.equal(capability.local_authority, "none");
+  assert.equal(
+    capability.local_reason_code,
+    "local_project_maintenance_authority_unavailable",
+  );
+  assert.match(capability.judgment_rationale, /auth\/me/u);
+  assert.match(capability.judgment_rationale, /user_id/u);
+  assert.match(capability.judgment_rationale, /userPayload\.id/u);
+  assert.match(capability.judgment_rationale, /refresh\/incremental/u);
+  assert.match(capability.judgment_rationale, /graph\/communities\/rebuild/u);
+});
+
 test("Project Cron Jobs separates effective Web reads from unavailable mutations", () => {
   const capability = readCapability(
     "parity-capability-definitions.20-project-automation-settings.v2.json",
@@ -397,13 +432,30 @@ test("Project Settings records only the routed page sandbox operations and autho
   ]);
   assert.deepEqual(contractKeys(capability, "desktop_cloud"), [
     "GET /api/v1/projects/{project_id}",
-    "PUT /api/v1/projects/{project_id}",
+    "PATCH /api/v1/projects/{project_id}",
     "DELETE /api/v1/projects/{project_id}",
     "GET /api/v1/projects/{project_id}/sandbox",
     "GET /api/v1/projects/{project_id}/sandbox/stats",
     "POST /api/v1/projects/{project_id}/sandbox/restart",
     "DELETE /api/v1/projects/{project_id}/sandbox",
   ]);
+  assert.equal(capability.cloud_status, "unavailable");
+  assert.equal(
+    capability.cloud_reason_code,
+    "project_settings_authority_unavailable",
+  );
+  assert.deepEqual(capability.cloud_actions, []);
+  assert.equal(capability.local_status, "unavailable");
+  assert.equal(capability.local_authority, "none");
+  assert.equal(
+    capability.local_reason_code,
+    "local_project_settings_authority_unavailable",
+  );
+  assert.match(capability.judgment_rationale, /auth\/me/u);
+  assert.match(capability.judgment_rationale, /user_id/u);
+  assert.match(capability.judgment_rationale, /userPayload\.id/u);
+  assert.match(capability.judgment_rationale, /PATCH/u);
+  assert.match(capability.judgment_rationale, /PUT/u);
 
   for (const action of [
     "view",
@@ -447,7 +499,7 @@ test("Project Settings records only the routed page sandbox operations and autho
   }
 });
 
-test("User Profile reads the authenticated identity from auth-me", () => {
+test("User Profile records the observed native route while Snapshot v4 fails closed", () => {
   const capability = readCapability(
     "parity-capability-definitions.23-identity-profile.v2.json",
     "user-profile",
@@ -458,15 +510,152 @@ test("User Profile reads the authenticated identity from auth-me", () => {
     "PUT /api/v1/users/me",
     "POST /api/v1/auth/force-change-password",
   ]);
+  assert.deepEqual(contractKeys(capability, "desktop_cloud"), [
+    "GET /api/v1/auth/me",
+    "PUT /api/v1/users/me",
+    "POST /api/v1/auth/force-change-password",
+  ]);
+  assert.deepEqual(contractKeys(capability, "desktop_local"), [
+    "GET /api/v1/auth/me",
+  ]);
   assert.equal(
     contractKeys(capability, "web").includes("GET /api/v1/users/me"),
     false,
   );
+  assert.equal(capability.cloud_status, "unavailable");
+  assert.equal(
+    capability.cloud_reason_code,
+    "capability_authority_revision_unavailable",
+  );
+  assert.deepEqual(capability.cloud_actions, [
+    "view",
+    "update",
+    "change-language",
+    "change-password",
+  ]);
+  assert.equal(capability.local_status, "unavailable");
+  assert.equal(
+    capability.local_reason_code,
+    "capability_authority_revision_unavailable",
+  );
+  assert.deepEqual(capability.local_actions, ["view"]);
+  for (const entry of [
+    "agi-stack/apps/desktop/src/App.tsx",
+    "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+    "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+    "agi-stack/apps/desktop/src/features/settings-routes/profileRouteClient.ts",
+    "agi-stack/apps/desktop/src/features/settings-routes/profileRouteController.ts",
+    "agi-stack/apps/desktop/src/features/settings-routes/profileRouteModule.ts",
+    "agi-stack/apps/desktop/src/features/settings-routes/ProfileRoutePage.tsx",
+    "agi-stack/apps/desktop/src/features/settings-routes/p2ThirdBatchCapabilityClient.ts",
+    "agi-stack/apps/desktop/src/features/settings-routes/p2ThirdBatchRouteRuntime.ts",
+  ]) {
+    assert.ok(capability.cloud_entries.includes(entry), `missing Cloud ${entry}`);
+    assert.ok(capability.local_entries.includes(entry), `missing Local ${entry}`);
+  }
   assert.match(capability.judgment_rationale, /UserProfile/u);
   assert.match(capability.judgment_rationale, /useAuthStore/u);
   assert.match(capability.judgment_rationale, /authAPI\.(?:login|verifyToken)/u);
   assert.match(capability.judgment_rationale, /\/auth\/me/u);
   assert.match(capability.judgment_rationale, /\/users\/me/u);
+  assert.match(capability.judgment_rationale, /profileRouteClient/u);
+  assert.match(capability.judgment_rationale, /authority_revision/u);
+});
+
+test("declared Tenant Creation and Project Support loaders stay unavailable", () => {
+  const cases = [
+    {
+      fragment:
+        "parity-capability-definitions.23-identity-profile.v2.json",
+      id: "tenant-creation",
+      entries: [
+        "agi-stack/apps/desktop/src/features/tenant-creation/tenantCreationCapability.ts",
+        "agi-stack/apps/desktop/src/features/tenant-creation/tenantCreationClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-creation/tenantCreationRouteModule.tsx",
+      ],
+    },
+    {
+      fragment:
+        "parity-capability-definitions.24-native-product-auxiliary.v2.json",
+      id: "project-support",
+      entries: [
+        "agi-stack/apps/desktop/src/features/project-support/projectSupportCapability.ts",
+        "agi-stack/apps/desktop/src/features/project-support/projectSupportClient.ts",
+        "agi-stack/apps/desktop/src/features/project-support/projectSupportController.ts",
+        "agi-stack/apps/desktop/src/features/project-support/projectSupportRouteModule.tsx",
+      ],
+    },
+  ];
+
+  for (const { fragment, id, entries } of cases) {
+    const capability = readCapability(fragment, id);
+    assert.equal(capability.cloud_status, "unavailable", id);
+    assert.equal(
+      capability.cloud_reason_code,
+      "renderer_capability_authority_unobserved",
+      id,
+    );
+    assert.deepEqual(capability.cloud_actions, [], id);
+    for (const entry of [
+      "agi-stack/apps/desktop/src/App.tsx",
+      "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+      "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+      "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+      ...entries,
+    ]) {
+      assert.ok(capability.cloud_entries.includes(entry), `${id}: missing ${entry}`);
+    }
+    assert.match(capability.judgment_rationale, /declared renderer provenance/u);
+  }
+});
+
+test("native vault status records Windows ACL source without claiming runtime proof", () => {
+  const vault = readCapability(
+    "parity-capability-definitions.25-native-boundaries.v2.json",
+    "application-encrypted-vault",
+  );
+  const release = readCapability(
+    "parity-capability-definitions.25-native-boundaries.v2.json",
+    "signed-update-and-release-boundary",
+  );
+
+  assert.equal(vault.native_status, "partial");
+  assert.equal(
+    vault.native_reason_code,
+    "windows_vault_acl_runtime_evidence_missing",
+  );
+  assert.ok(
+    vault.native_entries.includes(
+      "agi-stack/apps/desktop/sidecar/src/private_file_permissions.rs",
+    ),
+  );
+  assert.match(vault.judgment_rationale, /protected current-user DACL/u);
+  assert.match(vault.judgment_rationale, /Windows-only/u);
+  assert.match(vault.judgment_rationale, /current-HEAD/u);
+  assert.doesNotMatch(vault.judgment_rationale, /no-op/u);
+
+  assert.equal(release.native_status, "partial");
+  assert.equal(
+    release.native_reason_code,
+    "production_install_update_rollback_evidence_missing",
+  );
+  assert.match(release.judgment_rationale, /does not prove installation/u);
+});
+
+test("unimplemented backend-store and playbook routes remain planned", () => {
+  for (const capabilityId of ["backend-stores", "project-playbooks"]) {
+    const capability = readCapability(
+      "parity-capability-definitions.24-native-product-auxiliary.v2.json",
+      capabilityId,
+    );
+    assert.equal(capability.cloud_status, "planned", capabilityId);
+    assert.equal(capability.local_status, "planned", capabilityId);
+    assert.equal(
+      capability.cloud_entries,
+      undefined,
+      `${capabilityId}: must not claim a native route entry`,
+    );
+  }
 });
 
 test("Not Found is an implemented renderer-owned route without service authority", () => {

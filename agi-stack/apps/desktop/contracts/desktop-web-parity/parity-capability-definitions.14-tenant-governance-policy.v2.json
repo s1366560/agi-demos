@@ -99,16 +99,58 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "create",
+            "revoke"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
       "web_status": "partial",
       "web_reason_code": "web_trust_policy_default_workspace_scope_invalid",
-      "cloud_status": "planned",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "capability_authority_revision_unavailable",
+      "cloud_actions": [],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminRouteModuleFactory.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantTrustRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantTrustClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantTrustController.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantTrustPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantTrustPage.tsx"
+      ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_trust_governance_not_applicable",
       "local_deviation": "Local execution permissions remain governed by explicit sidecar and Electron capability contracts; they do not create an offline copy of tenant trust policy authority.",
-      "judgment_rationale": "TrustPolicies is the canonical tenant policy administration surface. Web is degraded because an empty workspace filter is serialized as workspace_id 'default', while the backend requires a real WorkspaceModel ID in the selected tenant and provides no default-workspace resolver, so the initial list returns 404. With a valid workspace ID, list, create, and revoke remain available and tenant-member and tenant-admin enforcement remains intact, so the production actions are retained. Existing Desktop permission gates are enforcement consumers, not a policy management implementation; the Cloud route is planned and Local tenant governance is intentionally not applicable."
+      "judgment_rationale": "TrustPolicies is the canonical tenant policy administration surface. Web remains degraded because its empty workspace filter becomes the invalid workspace_id 'default'. Desktop now has a real Cloud loader, App binding, typed policy client, controller and create/revoke page that require an explicit workspace scope. The observation still omits authorityRevision, so snapshot v4 closes the active result to capability_authority_revision_unavailable and no Cloud action is currently route-reachable. Local tenant trust governance remains intentionally not applicable."
     },
     {
       "id": "tenant-tenant-decision-records",
@@ -140,12 +182,6 @@
           "surface": "desktop_cloud",
           "method": "GET",
           "path": "/api/v1/tenants/{tenant_id}/trust/decision-records",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "GET",
-          "path": "/api/v1/tenants/{tenant_id}/trust/decision-records/{record_id}",
           "authority": "cloud_service"
         },
         {
@@ -205,16 +241,59 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list",
+            "filter",
+            "inspect"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "resolve-approval"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
       "web_status": "partial",
       "web_reason_code": "web_decision_records_default_workspace_scope_invalid",
-      "cloud_status": "planned",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "tenant_decisions_authority_contract_invalid",
+      "cloud_actions": [],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantManagementRouteModuleFactory.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantDecisionRecordsRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantDecisionRecordsClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantDecisionRecordsController.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantDecisionRecordsPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantDecisionRecordsPage.tsx"
+      ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_decision_ledger_not_applicable",
       "local_deviation": "Local HITL responses and sealed replay metadata remain scoped runtime records; they must not be promoted into the Cloud tenant decision ledger without its authority.",
-      "judgment_rationale": "DecisionRecords lists persisted trust decisions and approval outcomes, inspects the selected list record without a detail GET, and resolves pending approvals as allow-once, allow-always, or deny. Web is degraded because an empty workspace filter is serialized as workspace_id 'default', while the backend requires a real workspace ID in the selected tenant and has no default-workspace resolver, so the initial list returns 404. With a valid workspace ID, list, filter, inspect, and resolution remain available and tenant-member and tenant-admin enforcement remains intact, so all actions are retained. Desktop HITL UI does not provide this searchable governance ledger, and Local mode must distinguish runtime decisions from Cloud tenant records."
+      "judgment_rationale": "DecisionRecords lists persisted trust decisions and approval outcomes, inspects the selected list record without a detail GET, and resolves pending approvals. Web remains degraded because its default workspace placeholder is not a valid tenant workspace. Desktop now has a real Cloud route, scoped list/filter/inspect UI and resolution controller, but the authority snapshot omits the required authorityRevision and is normalized to tenant_decisions_authority_contract_invalid. Local HITL records remain distinct from this Cloud ledger and the Local surface stays not applicable."
     },
     {
       "id": "tenant-tenant-billing",
@@ -311,14 +390,56 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "inspect-usage",
+            "list-invoices"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "upgrade-plan"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_owner"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "capability_authority_revision_unavailable",
+      "cloud_actions": [],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminRouteModuleFactory.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantBillingRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantBillingClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantBillingController.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantBillingPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantBillingPage.tsx"
+      ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_billing_authority_not_applicable",
       "local_deviation": "Billing, invoices, payment methods, and plan upgrades are held by the Cloud service authority. Local Desktop never caches or emulates payment data.",
-      "judgment_rationale": "Billing is a canonical commercial route with tenant usage, invoice, and upgrade authority. The billing response embeds the invoice rows and invoice_url used by the page, so the unused standalone invoice-list service method is not production authority. Desktop has no native page; Local billing has no single-machine equivalent and must present a stable not-applicable state."
+      "judgment_rationale": "Billing is a canonical commercial route with tenant usage, invoice and upgrade authority. Desktop now has a real Cloud loader, App binding, typed billing and invoice client, controller and role-gated page; invoice download is intentionally absent until the allowlisted native file IPC is connected. The observed active snapshot still has no authorityRevision, so v4 closes it to capability_authority_revision_unavailable before any Cloud action can be promoted. Local billing has no single-machine equivalent and remains not applicable."
     }
   ],
   "source_ownership": {

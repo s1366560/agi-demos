@@ -138,14 +138,69 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "invite",
+            "inspect-pending-invitation-count"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "change-role",
+            "remove-member"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_owner"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "capability_authority_revision_unavailable",
+      "cloud_actions": [],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminRouteModuleFactory.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantGovernanceRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantGovernanceClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantGovernanceController.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantGovernancePresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantGovernancePage.tsx"
+      ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_membership_not_applicable",
       "local_deviation": "A Local Desktop runtime has one application user and does not create a parallel offline tenant membership or invitation authority.",
-      "judgment_rationale": "UserList owns tenant members and pending invitations. Invitation acceptance remains a separate route-only capability. Desktop has no native tenant roster route, and Local must not invent multi-user governance."
+      "judgment_rationale": "UserList owns tenant members and pending invitations; invitation acceptance remains a separate route-only capability. Desktop now has a real Cloud route loader, App binding, typed membership and invitation client, controller, page and role-aware permission checks. Its authority observation does not publish an authorityRevision, so workbenchCapabilityClient closes the otherwise active snapshot to capability_authority_revision_unavailable and no Cloud action is currently route-reachable. Local remains deliberately not applicable because it must not invent multi-user governance."
     },
     {
       "id": "tenant-tenant-audit-logs",
@@ -216,12 +271,6 @@
           "authority": "cloud_service"
         },
         {
-          "surface": "desktop_cloud",
-          "method": "GET",
-          "path": "/api/v1/tenants/{tenant_id}/audit-logs/export",
-          "authority": "cloud_service"
-        },
-        {
           "surface": "desktop_local",
           "method": "NONE",
           "path": "not_applicable:cloud_tenant_audit_authority_not_applicable",
@@ -259,14 +308,48 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "filter",
+            "inspect-runtime-hooks"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
+      "cloud_status": "partial",
+      "cloud_reason_code": "tenant_audit_export_file_ipc_unavailable",
+      "cloud_actions": [
+        "view",
+        "filter",
+        "inspect-runtime-hooks"
+      ],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminRouteModuleFactory.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantAuditRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantAuditClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantAuditController.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantAuditPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantAuditPage.tsx"
+      ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_audit_authority_not_applicable",
       "local_deviation": "Local security and lifecycle diagnostics remain native-only evidence and do not masquerade as the Cloud tenant audit ledger or export authority.",
-      "judgment_rationale": "AuditLogs owns the canonical tenant audit route and the legacy global redirect. The organization audit card is retained under Org Settings because it is a compatibility path to this ledger. Desktop lacks the native filtered and export surface; Local tenant audit governance is not applicable."
+      "judgment_rationale": "AuditLogs owns the canonical tenant audit route and legacy global redirect. Desktop now has a real Cloud loader, App binding and revision-bound authority that renders audit rows, filters, runtime-hook summaries, pagination and retry. The native file bridge does not yet implement audit export, so export is neither advertised nor listed as a Desktop API contract and Cloud remains degraded with tenant_audit_export_file_ipc_unavailable. Local tenant audit governance remains not applicable."
     },
     {
       "id": "tenant-tenant-events",
@@ -309,8 +392,8 @@
         {
           "surface": "desktop_local",
           "method": "NONE",
-          "path": "not_applicable:local_event_ledger_planned",
-          "authority": "none"
+          "path": "unavailable:local_event_ledger_authority_unavailable",
+          "authority": "sidecar"
         },
         {
           "surface": "native_only",
@@ -346,14 +429,65 @@
           ],
           "enforcement": "enforced",
           "feature_gate": "events"
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list",
+            "filter",
+            "paginate"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": "events"
         }
       ],
-      "cloud_status": "planned",
-      "local_status": "planned",
+      "cloud_status": "implemented",
+      "cloud_actions": [
+        "view",
+        "list",
+        "filter",
+        "paginate"
+      ],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantManagementRouteModuleFactory.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantEventsRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantEventsClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantEventsController.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantEventsPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantEventsPage.tsx"
+      ],
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_event_ledger_planned",
+      "local_reason_code": "local_event_ledger_authority_unavailable",
+      "local_actions": [],
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantManagementRouteModuleFactory.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantEventsRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantEventsClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantEventsController.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/tenantEventsPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantEventsPage.tsx",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs"
+      ],
       "local_deviation": "A Local event ledger should contain only sidecar-owned lifecycle events with stable provenance; it must not merge renderer logs or infer Cloud tenant events.",
-      "judgment_rationale": "Events is a direct tenant route backed by the service event log. Desktop consumes several event streams inside workbenches but has no authoritative routed event ledger; a sidecar-owned Local ledger remains useful and is planned."
+      "judgment_rationale": "Events is a direct tenant route backed by the service event log. Desktop now has a real App-bound route with a typed client, controller and page for revision-bound Cloud list, event-type filtering, pagination, refresh and structured error states, so the reviewed Cloud slice is implemented. Local uses the same native route but the private sidecar contracts deliberately return local_event_ledger_authority_unavailable; the Local surface is a real observed terminal state rather than a planned ledger."
     },
     {
       "id": "tenant-tenant-dead-letter-queue",
@@ -571,7 +705,10 @@
           "feature_gate": null
         }
       ],
-      "cloud_status": "implemented",
+      "cloud_status": "unavailable",
+      "cloud_authority": "none",
+      "cloud_reason_code": "renderer_capability_authority_unobserved",
+      "cloud_actions": [],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/governance/DeadLetterQueuePage.tsx",
@@ -588,7 +725,7 @@
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_message_bus_dlq_not_applicable",
       "local_deviation": "The Cloud message-bus DLQ has no Local equivalent. Local retry and recovery remain owned by their specific sidecar outbox contracts rather than a fabricated global queue.",
-      "judgment_rationale": "Cloud Desktop now mounts a native global-admin Dead Letter Queue route with strict Cloud DTO validation, separate message and statistics loading/error/retry states, empty and stale preservation, status/event/error/routing filters, pagination, manual and visible-tab 30-second refresh, authoritative detail reads, single and batch retry, reason-required single and batch discard, cleanup confirmation, conflict and forbidden handling, and scope-aware cancellation. The renderer advertises only actions granted by the capability snapshot and route entry remains gated by the structured global_admin permission. Local does not call Cloud APIs and retains the stable cloud_message_bus_dlq_not_applicable disposition because retry and recovery remain owned by their specific sidecar outbox contracts."
+      "judgment_rationale": "Desktop has a real global-admin Dead Letter Queue loader, App binding, strict DTO client, controller and complete native page. However workbenchCapabilityClient still wraps deadLetterQueueCapability with declared renderer provenance. Snapshot v4 closes that active declaration to renderer_capability_authority_unobserved, so the route cannot currently advertise or execute any Cloud DLQ action despite the implemented module. Local does not call Cloud APIs and retains the stable cloud_message_bus_dlq_not_applicable disposition."
     }
   ],
   "source_ownership": {

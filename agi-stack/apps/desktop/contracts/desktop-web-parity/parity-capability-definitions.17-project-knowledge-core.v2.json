@@ -83,38 +83,14 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/tenants/{tenant_id}/invitations",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "PATCH",
-          "path": "/api/v1/projects/{project_id}/members/{user_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "DELETE",
-          "path": "/api/v1/projects/{project_id}/members/{user_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
           "method": "GET",
           "path": "/api/v1/agent/definitions?project_id={project_id}",
           "authority": "cloud_service"
         },
         {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/agent/conversations",
-          "authority": "cloud_service"
-        },
-        {
           "surface": "desktop_local",
           "method": "NONE",
-          "path": "unavailable:local_project_team_authority_planned",
+          "path": "unavailable:local_project_team_authority_unavailable",
           "authority": "none"
         },
         {
@@ -157,14 +133,66 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list-members",
+            "list-agent-teammates"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
-      "local_status": "planned",
+      "cloud_status": "partial",
+      "cloud_reason_code": "desktop_project_team_actions_partial",
+      "cloud_actions": [
+        "view",
+        "list-members",
+        "list-agent-teammates"
+      ],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectTeamRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectTeamClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectTeamController.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectTeamPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/ProjectKnowledgePage.tsx",
+        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts"
+      ],
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_project_team_authority_planned",
+      "local_reason_code": "local_project_team_authority_unavailable",
+      "local_authority": "none",
+      "local_actions": [],
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectTeamRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectTeamClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectTeamController.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectTeamPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/ProjectKnowledgePage.tsx",
+        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts"
+      ],
       "local_deviation": "A Local implementation may manage local agent teammates; human invitation and organization membership actions must remain structurally unavailable when no cloud membership authority exists.",
-      "judgment_rationale": "The Web Team page combines project human membership with project-scoped agent teammates. Its UserManager lists, updates and removes project members, but the visible invitation form sends POST /tenants/{tenant_id}/invitations through invitationService rather than adding a project member. Invitation therefore requires tenant-admin authority, while role changes and removal retain project-admin authority. Desktop has workspace member projections but no audited project Team route or equivalent project membership authority, so neither mode is marked implemented."
+      "judgment_rationale": "The Web Team page combines project human membership with project-scoped agent teammates. Its UserManager lists, updates and removes project members, but the visible invitation form sends POST /tenants/{tenant_id}/invitations through invitationService rather than adding a project member. Invitation therefore requires tenant-admin authority, while role changes and removal retain project-admin authority. Desktop now has a real production loader, App binding and revision-bound Cloud authority, but ProjectKnowledgePage only renders the member and Agent teammate lists and exposes no invitation, role, removal or start-chat control. Cloud is therefore partial with only view, list-members and list-agent-teammates. Local uses the same real route but workbenchCapabilityClient deliberately treats the static Local result as a renderer declaration, so it remains closed with local_project_team_authority_unavailable and no action authority."
     },
     {
       "id": "project-project-memories",
@@ -251,39 +279,9 @@
           "authority": "cloud_service"
         },
         {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/memories/",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "GET",
-          "path": "/api/v1/memories/{memory_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "PATCH",
-          "path": "/api/v1/memories/{memory_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "DELETE",
-          "path": "/api/v1/memories/{memory_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/memories/{memory_id}/reprocess",
-          "authority": "cloud_service"
-        },
-        {
           "surface": "desktop_local",
           "method": "NONE",
-          "path": "unavailable:local_memory_management_authority_planned",
+          "path": "unavailable:local_project_memories_authority_unavailable",
           "authority": "none"
         },
         {
@@ -345,13 +343,63 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
-      "local_status": "planned",
+      "cloud_status": "partial",
+      "cloud_reason_code": "desktop_project_memories_actions_partial",
+      "cloud_actions": [
+        "view",
+        "list"
+      ],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectMemoriesRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectMemoriesClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectMemoriesController.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectMemoriesPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/ProjectKnowledgePage.tsx",
+        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts"
+      ],
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_memory_management_authority_planned",
-      "judgment_rationale": "Memory list, creation, detail, client-side JSON export, copy-link and reprocessing are one canonical project knowledge capability. The visible detail-page control uses navigator.clipboard to copy window.location.href; the routed production pages do not call the memory-share APIs, so no server sharing authority is claimed. Project viewers can read but cannot create memories; creation requires a project contributor. The production Web page has no memory-import action. Desktop memory timeline cards are conversation projections rather than this management surface, so they do not establish route parity."
+      "local_reason_code": "local_project_memories_authority_unavailable",
+      "local_authority": "none",
+      "local_actions": [],
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectMemoriesRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectMemoriesClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectMemoriesController.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectMemoriesPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/ProjectKnowledgePage.tsx",
+        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts"
+      ],
+      "judgment_rationale": "Memory list, creation, detail, client-side JSON export, copy-link and reprocessing are one canonical project knowledge capability. The visible detail-page control uses navigator.clipboard to copy window.location.href; the routed production pages do not call the memory-share APIs, so no server sharing authority is claimed. Project viewers can read but cannot create memories; creation requires a project contributor. The production Web page has no memory-import action. Desktop now has a real production loader, App binding, typed client, controller and revision-bound Cloud authority, but ProjectKnowledgePage only renders the memory list and exposes no create, update, delete, reprocess, export or copy-link interaction. Cloud therefore retains only view and list and remains partial. Local binds the same native route but its renderer-declared static result is closed to local_project_memories_authority_unavailable until a sidecar observation exists."
     },
     {
       "id": "project-project-entities",
@@ -415,21 +463,9 @@
           "authority": "cloud_service"
         },
         {
-          "surface": "desktop_cloud",
-          "method": "GET",
-          "path": "/api/v1/graph/entities/{entity_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "GET",
-          "path": "/api/v1/graph/entities/{entity_id}/relationships",
-          "authority": "cloud_service"
-        },
-        {
           "surface": "desktop_local",
           "method": "NONE",
-          "path": "unavailable:local_entity_projection_authority_planned",
+          "path": "unavailable:local_project_entities_authority_unavailable",
           "authority": "none"
         },
         {
@@ -454,13 +490,63 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
-      "local_status": "planned",
+      "cloud_status": "partial",
+      "cloud_reason_code": "desktop_project_entities_actions_partial",
+      "cloud_actions": [
+        "view",
+        "list"
+      ],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectEntitiesRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectEntitiesClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectEntitiesController.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectEntitiesPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/ProjectKnowledgePage.tsx",
+        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts"
+      ],
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_entity_projection_authority_planned",
-      "judgment_rationale": "The Web Entities page is a distinct project-scoped graph projection. It lists entities and types, uses the selected list record for detail presentation, and loads that record's relationships without calling the standalone entity detail service method. No audited Desktop native entity-management route exists; a Local equivalent remains planned behind a sidecar graph authority."
+      "local_reason_code": "local_project_entities_authority_unavailable",
+      "local_authority": "none",
+      "local_actions": [],
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectEntitiesRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectEntitiesClient.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectEntitiesController.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/projectEntitiesPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-knowledge/ProjectKnowledgePage.tsx",
+        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts"
+      ],
+      "judgment_rationale": "The Web Entities page is a distinct project-scoped graph projection. It lists entities and types, uses the selected list record for detail presentation, and loads that record's relationships without calling the standalone entity detail service method. Desktop now has a real production loader, App binding, typed client, controller and revision-bound Cloud authority. ProjectKnowledgePage renders only the entity list and does not expose filtering or relationship inspection, so Cloud remains partial with view and list only. Local binds the real route but workbenchCapabilityClient closes its renderer-declared result to local_project_entities_authority_unavailable until a sidecar authority is observed."
     }
   ],
   "source_ownership": {

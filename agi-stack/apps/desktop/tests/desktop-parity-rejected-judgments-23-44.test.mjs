@@ -110,7 +110,7 @@ test("Instance Templates limits APIs to production page callers", () => {
     "clone",
     "deploy-from-template",
   ]);
-  assert.deepEqual(templates.cloud_actions, [
+  assert.deepEqual(templates.actions, [
     "view",
     "list",
     "list-items",
@@ -118,11 +118,19 @@ test("Instance Templates limits APIs to production page callers", () => {
     "delete",
     "publish",
     "clone",
+    "deploy-from-template",
     "refresh",
     "paginate",
     "search-current-page",
     "filter-status",
   ]);
+  assert.equal(templates.cloud_status, "unavailable");
+  assert.equal(
+    templates.cloud_reason_code,
+    "renderer_capability_authority_unobserved",
+  );
+  assert.equal(templates.cloud_authority, "none");
+  assert.deepEqual(templates.cloud_actions, []);
   const webRequirements = templates.permission_requirements.filter(
     (requirement) => requirement.surface === "web",
   );
@@ -148,7 +156,14 @@ test("Gene Market records the evolution history shown by Gene Detail", () => {
       "inspect-evolution",
     ),
   );
-  assert.match(genes.judgment_rationale, /evolution history/u);
+  assert.equal(genes.cloud_status, "unavailable");
+  assert.equal(
+    genes.cloud_reason_code,
+    "tenant_genes_authority_contract_invalid",
+  );
+  assert.deepEqual(genes.cloud_actions, []);
+  assert.match(genes.judgment_rationale, /authorityRevision/u);
+  assert.match(genes.judgment_rationale, /tenant_genes_authority_contract_invalid/u);
 });
 
 test("Dead Letter Queue does not claim its unused single-message API", () => {
@@ -219,9 +234,14 @@ test("Decision Records inspects the selected list row without a detail GET", () 
       .filter((requirement) => requirement.surface === "web")
       .every((requirement) => requirement.enforcement === "enforced"),
   );
-  assert.match(decisions.judgment_rationale, /workspace_id 'default'/u);
-  assert.match(decisions.judgment_rationale, /real workspace ID/u);
-  assert.match(decisions.judgment_rationale, /404/u);
+  assert.match(decisions.judgment_rationale, /default workspace placeholder/u);
+  assert.match(decisions.judgment_rationale, /valid tenant workspace/u);
+  assert.equal(decisions.cloud_status, "unavailable");
+  assert.equal(
+    decisions.cloud_reason_code,
+    "tenant_decisions_authority_contract_invalid",
+  );
+  assert.deepEqual(decisions.cloud_actions, []);
 });
 
 test("Trust Policies records its invalid default workspace projection", () => {
@@ -247,8 +267,13 @@ test("Trust Policies records its invalid default workspace projection", () => {
       .every((requirement) => requirement.enforcement === "enforced"),
   );
   assert.match(policies.judgment_rationale, /workspace_id 'default'/u);
-  assert.match(policies.judgment_rationale, /real WorkspaceModel ID/u);
-  assert.match(policies.judgment_rationale, /404/u);
+  assert.match(policies.judgment_rationale, /explicit workspace scope/u);
+  assert.equal(policies.cloud_status, "unavailable");
+  assert.equal(
+    policies.cloud_reason_code,
+    "capability_authority_revision_unavailable",
+  );
+  assert.deepEqual(policies.cloud_actions, []);
 });
 
 test("Billing derives invoice rows from the billing response", () => {
@@ -264,7 +289,13 @@ test("Billing derives invoice rows from the billing response", () => {
   ]);
   assert.ok(billing.actions.includes("list-invoices"));
   assert.ok(billing.actions.includes("download-invoice"));
-  assert.match(billing.judgment_rationale, /embeds.*invoice/u);
+  assert.equal(billing.cloud_status, "unavailable");
+  assert.equal(
+    billing.cloud_reason_code,
+    "capability_authority_revision_unavailable",
+  );
+  assert.deepEqual(billing.cloud_actions, []);
+  assert.match(billing.judgment_rationale, /authorityRevision/u);
 });
 
 test("Organization Settings records the cluster status projection", () => {
@@ -312,8 +343,13 @@ test("Organization Settings records the cluster status projection", () => {
     generalMemberRequirement.actions.includes("list-clusters"),
     false,
   );
-  assert.match(orgSettings.judgment_rationale, /first membership/u);
-  assert.match(orgSettings.judgment_rationale, /non-default route tenant/u);
+  assert.match(orgSettings.judgment_rationale, /non-default cluster authorization/u);
+  assert.equal(orgSettings.cloud_status, "unavailable");
+  assert.equal(
+    orgSettings.cloud_reason_code,
+    "tenant_org_settings_authority_contract_invalid",
+  );
+  assert.deepEqual(orgSettings.cloud_actions, []);
 });
 
 test("Project Workspaces records the production summary projection", () => {
@@ -481,6 +517,24 @@ test("Project Team records the tenant invitation used by its production form", (
     "update-role",
     "remove",
   ]);
+  assert.equal(team.cloud_status, "partial");
+  assert.equal(team.cloud_reason_code, "desktop_project_team_actions_partial");
+  assert.deepEqual(team.cloud_actions, [
+    "view",
+    "list-members",
+    "list-agent-teammates",
+  ]);
+  assert.deepEqual(contractKeys(team, "desktop_cloud"), [
+    "GET /api/v1/projects/{project_id}/members",
+    "GET /api/v1/agent/definitions?project_id={project_id}",
+  ]);
+  assert.deepEqual(
+    permissionActions(team, "desktop_cloud", "project_member"),
+    team.cloud_actions,
+  );
+  assert.equal(team.local_status, "unavailable");
+  assert.equal(team.local_authority, "none");
+  assert.equal(team.local_reason_code, "local_project_team_authority_unavailable");
 });
 
 test("Project Memories records copy-link as a client-side action", () => {
@@ -509,6 +563,25 @@ test("Project Memories records copy-link as a client-side action", () => {
   ]);
   assert.ok(memories.permissions.includes("project_contributor"));
   assert.match(memories.judgment_rationale, /navigator\.clipboard/u);
+  assert.equal(memories.cloud_status, "partial");
+  assert.equal(
+    memories.cloud_reason_code,
+    "desktop_project_memories_actions_partial",
+  );
+  assert.deepEqual(memories.cloud_actions, ["view", "list"]);
+  assert.deepEqual(contractKeys(memories, "desktop_cloud"), [
+    "GET /api/v1/memories/?project_id={project_id}",
+  ]);
+  assert.deepEqual(
+    permissionActions(memories, "desktop_cloud", "project_member"),
+    memories.cloud_actions,
+  );
+  assert.equal(memories.local_status, "unavailable");
+  assert.equal(memories.local_authority, "none");
+  assert.equal(
+    memories.local_reason_code,
+    "local_project_memories_authority_unavailable",
+  );
 });
 
 test("Project Entities does not claim its unused entity detail API", () => {
@@ -531,6 +604,26 @@ test("Project Entities does not claim its unused entity detail API", () => {
     permissionActions(entities, "web", "project_member").includes(
       "inspect-relationships",
     ),
+  );
+  assert.equal(entities.cloud_status, "partial");
+  assert.equal(
+    entities.cloud_reason_code,
+    "desktop_project_entities_actions_partial",
+  );
+  assert.deepEqual(entities.cloud_actions, ["view", "list"]);
+  assert.deepEqual(contractKeys(entities, "desktop_cloud"), [
+    "GET /api/v1/graph/entities/?project_id={project_id}",
+    "GET /api/v1/graph/entities/types?project_id={project_id}",
+  ]);
+  assert.deepEqual(
+    permissionActions(entities, "desktop_cloud", "project_member"),
+    entities.cloud_actions,
+  );
+  assert.equal(entities.local_status, "unavailable");
+  assert.equal(entities.local_authority, "none");
+  assert.equal(
+    entities.local_reason_code,
+    "local_project_entities_authority_unavailable",
   );
 });
 
@@ -600,6 +693,25 @@ test("Project Communities degrades unreachable rebuild history controls", () => 
   assert.match(communities.judgment_rationale, /\/tasks\/recent/u);
   assert.match(communities.judgment_rationale, /empty history/u);
   assert.match(communities.judgment_rationale, /source-content/u);
+  assert.equal(communities.cloud_status, "partial");
+  assert.equal(
+    communities.cloud_reason_code,
+    "desktop_project_communities_actions_partial",
+  );
+  assert.deepEqual(communities.cloud_actions, ["view", "list"]);
+  assert.deepEqual(contractKeys(communities, "desktop_cloud"), [
+    "GET /api/v1/graph/communities/?project_id={project_id}",
+  ]);
+  assert.deepEqual(
+    permissionActions(communities, "desktop_cloud", "project_member"),
+    communities.cloud_actions,
+  );
+  assert.equal(communities.local_status, "unavailable");
+  assert.equal(communities.local_authority, "none");
+  assert.equal(
+    communities.local_reason_code,
+    "local_project_communities_authority_unavailable",
+  );
 });
 
 test("Project Knowledge Graph records its client-side PNG export", () => {
@@ -615,6 +727,41 @@ test("Project Knowledge Graph records its client-side PNG export", () => {
   );
   assert.match(graph.judgment_rationale, /Cytoscape/u);
   assert.match(graph.judgment_rationale, /client-side PNG/u);
+  assert.equal(graph.cloud_status, "partial");
+  assert.equal(graph.cloud_reason_code, "desktop_project_graph_actions_partial");
+  assert.deepEqual(graph.cloud_actions, ["view"]);
+  assert.deepEqual(contractKeys(graph, "desktop_cloud"), [
+    "GET /api/v1/graph/memory/graph?project_id={project_id}",
+  ]);
+  assert.deepEqual(
+    permissionActions(graph, "desktop_cloud", "project_member"),
+    graph.cloud_actions,
+  );
+  assert.equal(graph.local_status, "unavailable");
+  assert.equal(graph.local_authority, "none");
+  assert.equal(graph.local_reason_code, "local_project_graph_authority_unavailable");
+});
+
+test("Project Schema closes the production auth-me contract mismatch", () => {
+  const schema = readCapability(
+    "parity-capability-definitions.19-project-knowledge-configuration.v2.json",
+    "project-project-schema",
+  );
+
+  assert.equal(schema.cloud_status, "unavailable");
+  assert.equal(schema.cloud_reason_code, "project_schema_authority_unavailable");
+  assert.deepEqual(schema.cloud_actions, []);
+  assert.deepEqual(contractKeys(schema, "desktop_cloud"), [
+    "GET /api/v1/projects/{project_id}/schema/entities",
+    "GET /api/v1/projects/{project_id}/schema/edges",
+    "GET /api/v1/projects/{project_id}/schema/mappings",
+  ]);
+  assert.equal(schema.local_status, "unavailable");
+  assert.equal(schema.local_authority, "none");
+  assert.equal(schema.local_reason_code, "local_project_schema_authority_unavailable");
+  assert.match(schema.judgment_rationale, /auth\/me/u);
+  assert.match(schema.judgment_rationale, /user_id/u);
+  assert.match(schema.judgment_rationale, /userPayload\.id/u);
 });
 
 test("Project Search records copy-result-id on every implemented surface", () => {

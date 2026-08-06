@@ -398,7 +398,7 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "PUT",
+          "method": "PATCH",
           "path": "/api/v1/projects/{project_id}",
           "authority": "cloud_service"
         },
@@ -435,7 +435,7 @@
         {
           "surface": "desktop_local",
           "method": "NONE",
-          "path": "unavailable:local_project_settings_authority_planned",
+          "path": "unavailable:local_project_settings_authority_unavailable",
           "authority": "none"
         },
         {
@@ -490,12 +490,46 @@
           "feature_gate": null
         }
       ],
-      "cloud_status": "planned",
-      "local_status": "planned",
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "project_settings_authority_unavailable",
+      "cloud_actions": [],
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationClient.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-administration/projectSettingsRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectSettingsClient.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectSettingsController.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectSettingsPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/ProjectAdministrationPage.tsx",
+        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts"
+      ],
+      "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "local_project_settings_authority_planned",
+      "local_reason_code": "local_project_settings_authority_unavailable",
+      "local_authority": "none",
+      "local_actions": [],
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationCapabilityAuthority.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationClient.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-administration/projectSettingsRouteModule.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectSettingsClient.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectSettingsController.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/projectSettingsPresentationModel.ts",
+        "agi-stack/apps/desktop/src/features/project-administration/ProjectAdministrationPage.tsx",
+        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts"
+      ],
       "local_deviation": "Local project settings may configure bounded workspace and sandbox resources, but secrets and arbitrary host paths must remain outside renderer state and outside the page contract.",
-      "judgment_rationale": "The production Web Project Settings page updates or deletes project metadata, reads the sandbox and its stats, and exposes restart and terminate controls. Sandbox reads are project-member safe, update, restart and terminate require project admin or owner authority, and delete remains project-owner only. Ensure, health, sync, execute, terminal, desktop and proxy-cookie endpoints are not called by this routed page and belong to a wider sandbox capability instead. Desktop has no complete routed Project Settings page, so Cloud and Local remain planned rather than claiming page parity."
+      "judgment_rationale": "The production Web Project Settings page updates or deletes project metadata, reads the sandbox and its stats, and exposes restart and terminate controls. Sandbox reads are project-member safe, update, restart and terminate require project admin or owner authority, and delete remains project-owner only. Ensure, health, sync, execute, terminal, desktop and proxy-cookie endpoints are not called by this routed page and belong to a wider sandbox capability instead. Desktop now has a real production loader, App binding, typed client, controller and native list page. Its Cloud authority remains unavailable because observeProjectAdministrationScope reads userPayload.id while production /api/v1/auth/me returns user_id, so the load is normalized to project_settings_authority_unavailable before revision authority is established. The Desktop update client also sends PATCH while the production project route accepts PUT, and ProjectAdministrationPage exposes no update, delete, restart or terminate interaction. Local binds the same real route but remains renderer-declared and closed with local_project_settings_authority_unavailable."
     }
   ],
   "source_ownership": {
