@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "checker_version": "2.1.0",
-  "source_revision": "aea41e851912f6494c73a2e24d85a3572f25058b",
+  "source_revision": "eb83696fe706e096ea54183c5f7e9dabbd1bc223",
   "sources": {
     "canonical_navigation_registry": "web/src/config/navigation.ts#CANONICAL_NAVIGATION_DESTINATIONS",
     "eager_route_entries": "reachable route registration modules#relative imports used by JSX or object routes",
@@ -12,13 +12,13 @@
     "production_router": "reachable modules registering JSX Route or static react-router-dom route objects"
   },
   "counts": {
-    "audited_sources": 659,
+    "audited_sources": 660,
     "canonical_navigation_targets": 51,
     "eager_route_entries": 4,
     "lazy_page_entries": 92,
-    "production_dependency_edges": 1759,
-    "production_dependency_ownership": 658,
-    "production_dependency_sources": 658,
+    "production_dependency_edges": 1789,
+    "production_dependency_ownership": 659,
+    "production_dependency_sources": 659,
     "production_entry_sources": 2,
     "production_routes": 178,
     "route_registration_sources": 1
@@ -57,7 +57,7 @@
       "roles": [
         "production_router"
       ],
-      "sha256": "sha256:7a1ebf66aaeede934499574b1b83c9b26ce76eceaa3f318aeb542df54d9fd0f3"
+      "sha256": "sha256:92f15b7c83a9a22add5327a4eee88b07148a69b147e5f2bb6b10c945e68584c8"
     },
     {
       "source_entry": "web/src/components/agent/AgentBindingModal.tsx",
@@ -71,7 +71,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:5e4cc185ee2f751a95b08b4be18bec73a92e8e3d78bb8411f708bacce5a20611"
+      "sha256": "sha256:4a830ae58b6ad279f06b8199e97e10fc1702033b76e72abf667b4984db859ebd"
     },
     {
       "source_entry": "web/src/components/agent/AgentDefinitionModal.tsx",
@@ -92,7 +92,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:d15aef772a5636435d9679fbdb13d6d84385a6bfff985998b177e711558c1c68"
+      "sha256": "sha256:0b0b99d5f72a129f898e90230e2ba0def8a1ec6917568516f1fbcac49863bb4c"
     },
     {
       "source_entry": "web/src/components/agent/BackgroundSubAgentPanel.tsx",
@@ -127,7 +127,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:bf642d78a1967125f347f73c73afe183e45b1bbd2d9ba715f5c6292ac4a6f120"
+      "sha256": "sha256:9e5ba318c73f4265d0e1d1e9de4c213d9e59ebdec66b29ae8b1992c48f4a2fdc"
     },
     {
       "source_entry": "web/src/components/agent/FileUploader.tsx",
@@ -176,7 +176,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:c19e28996095ffcf68f8eafa5a59baff58d255423f2efe419f1ae6088c904115"
+      "sha256": "sha256:f87985cc7f3bfdfbcbe2d9a5a8526608d6fea473d88d4f0c3b94ead9caeb9095"
     },
     {
       "source_entry": "web/src/components/agent/MessageBubble.tsx",
@@ -232,14 +232,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:58a06b960a37bfc8bd155f7b35c1b547f1fe96d0eff09f50f7e8ec527ea5b37f"
+      "sha256": "sha256:8779aeed0c87d31966069c321e0f05f6117c8f39f49d6d63224a5ee12871bbd6"
     },
     {
       "source_entry": "web/src/components/agent/TenantAgentConfigEditor.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:34a4baf488061a8ef886cc5b60740921a17eeaca1859241a4c8b3ea42f485fe3"
+      "sha256": "sha256:68f6827854b82ee609f808f0e0fac25c59eab47830be9eb7645653e3664f7077"
     },
     {
       "source_entry": "web/src/components/agent/TenantAgentConfigView.tsx",
@@ -253,7 +253,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:4a55b0e0565ed24e1a5eeb4d486fba2b6a3293d99e387c3dd1d2359c37cd14fe"
+      "sha256": "sha256:abdf826bb777b3be62dcc5d13699a4ab93da3e7966ee12225d5c2075ebf584bf"
     },
     {
       "source_entry": "web/src/components/agent/activity/projectActivityModel.ts",
@@ -337,14 +337,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:0be03f5bd25ffd6795b77d97c9e8ffa98c3f8be3f4040699287effb87922346d"
+      "sha256": "sha256:61501e0d873bd2785b1d25eebaa40b2b4ce7b99a1edabae1b061921e825a53a5"
     },
     {
       "source_entry": "web/src/components/agent/canvas/CanvasPanel.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:a16b08c2232ea80d6db4c190e4dffa196a660eac5a03e74b9a35b01d2ce0c1c3"
+      "sha256": "sha256:41cd50ebffde3559c6dbd10b8b49c96f6a8fc13a2cd2c41f560aaf8a2dbee85c"
     },
     {
       "source_entry": "web/src/components/agent/canvas/MemStackA2UIViewer.tsx",
@@ -393,7 +393,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:64f92e42ef88dc50f79651f2f183af03e318392078f2de2806c7bada874ec803"
+      "sha256": "sha256:655b448eafd0a7d9d8b7a35c25b77ca808c29fc7fd3b7c465aa519c8225a6020"
     },
     {
       "source_entry": "web/src/components/agent/chat/CodeBlock.tsx",
@@ -449,14 +449,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:350b02537eb948a0dbdf19a81f8a2ef0d5f60a3400a73aa4b72c85004fca76d8"
+      "sha256": "sha256:83aebd369a8d071f8ad2995add127b2e3913972fd0432991521d9358d2657ee9"
     },
     {
       "source_entry": "web/src/components/agent/chat/MobileSidebarDrawer.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:2a570c869dad1bae3a930594fa4f6f3d07fa8dd31ffcee0de17b216fb1fed5bd"
+      "sha256": "sha256:0dec9e28379073b3b568e1408f18da5f0cb41a7139f98f82749ab7425ebbdcc3"
     },
     {
       "source_entry": "web/src/components/agent/chat/ModelSwitchPopover.tsx",
@@ -484,7 +484,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:003e89657266904996d151c0af2fa25811d361bd8e6e9edb05706b27a449b500"
+      "sha256": "sha256:be090b774df0ab4fd555ac051fd245ec1154b23e02c01e5266988cbae7e9cbad"
     },
     {
       "source_entry": "web/src/components/agent/chat/RecentSkills.tsx",
@@ -519,7 +519,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:23b6bef92ad785873a47ea1b5e559de511b4fad009a27cd9fd9be4cde0545d19"
+      "sha256": "sha256:986193464fb3fbc85ae73ecdb546c10ca3b384ac1a4cf1503df1aaf15b753f33"
     },
     {
       "source_entry": "web/src/components/agent/chat/TrendingEntities.tsx",
@@ -610,14 +610,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:eabb55b2abded6df944aee633803d52182bb3d1c6ee62a27dadf85835fe91519"
+      "sha256": "sha256:bf019e3f58018145d4798d9f85714cfac645ee5ac2d73702da4ebad89861d535"
     },
     {
       "source_entry": "web/src/components/agent/context/ContextStatusIndicator.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:06634d3173022082061dd1c0b9e7dce397ad67f624c8bcccf86bc3cbfc5d9d6f"
+      "sha256": "sha256:ffee0c32dc8100cee61cc8834927dc70da27071ec6004fd24bd5694e1095b9ae"
     },
     {
       "source_entry": "web/src/components/agent/evidence/EvidenceBundleDrawer.tsx",
@@ -820,14 +820,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:a5fd2dab9219b3095bdc7185afb702ae708ddb08fdd47dea06e75fff5ae03a5a"
+      "sha256": "sha256:6944957d266f3a2125e7b75ce833de643878c3eea70391c0a88fa4035c333743"
     },
     {
       "source_entry": "web/src/components/agent/sandbox/KasmVNCViewer.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:352707b59b5f5bfdb7ea36322ad5f1945a91ba2fcdae95fdc34c6e4d72ffed28"
+      "sha256": "sha256:5f321e97df1e539e4fa0ed569978866cb200a3904832ec2129ba0c26d402e40d"
     },
     {
       "source_entry": "web/src/components/agent/sandbox/RemoteDesktopViewer.tsx",
@@ -848,7 +848,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:1529a542a8183a38393be3bb5a297359c1b90e2eb66882748a0f6cb679276277"
+      "sha256": "sha256:be25f9dcfa8e85589df2d82c93f40e5577eb9d8038ab746a1d3772c22abff25b"
     },
     {
       "source_entry": "web/src/components/agent/sandbox/TerminalImpl.tsx",
@@ -869,7 +869,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:e40d67b07c16fe6fc7bde48afc828086409f0b0bf3a63b9532b4fe4cb6942b4e"
+      "sha256": "sha256:b08d02621959078cb5ef3df1561889bcd866019ea07f2370c4635e4ab16b7398"
     },
     {
       "source_entry": "web/src/components/agent/tasks/taskProgressDerivation.ts",
@@ -918,7 +918,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:42a6f191a6b13b760c9b5f8d07cd0a9df228a2c16bc12f4f03aa2cf716dfcdfd"
+      "sha256": "sha256:175bca08c7ae1c5f3a6507b7ccd22089057fd9291f24b42d4d60104283f6eb31"
     },
     {
       "source_entry": "web/src/components/agent/timeline/JitContextCard.tsx",
@@ -953,7 +953,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:0c99ac2d4871d03585cac002f9f67ed3cca48ec37627e131305c53c2c90cbaf3"
+      "sha256": "sha256:4eb3b2e2ada1cad8ecf91b349548ca23c4d9faef309573a64974e0ab250a0d18"
     },
     {
       "source_entry": "web/src/components/agent/timeline/subagentControlModel.ts",
@@ -1002,7 +1002,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:da8ca6c1d03ebbe1fc44d7dd52ff35c23079fbde10914884b975f2cd6f5d18c9"
+      "sha256": "sha256:ae25e58f4caec683ac6a93e34f9008b259bd54a3b32c73ebe4d17600b25822c6"
     },
     {
       "source_entry": "web/src/components/agent/workspace/WorkspaceTaskPlanPanelModel.ts",
@@ -1198,14 +1198,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:0c11faf5e63ae963aee2e95b4541318af1e2d7a78f4f573aae7aaf1e174b7411"
+      "sha256": "sha256:f59b57954c59a0d5775ee501160722dcbfd01c0a2c37832ea4b5f04f4ac62730"
     },
     {
       "source_entry": "web/src/components/blackboard/tabs/SharedFileBrowser.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:5c2bd794c3f42f5cd81f73ff17e0b447f693cabe98606de7e2d16aca3068448a"
+      "sha256": "sha256:380dd925ef823825c4383ac90717795bc80ec4e63af74b000dad3a8eca3dc2e0"
     },
     {
       "source_entry": "web/src/components/blackboard/tabs/StatusTab.tsx",
@@ -1282,7 +1282,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:ab0ac9649affa71e2e06f940d6e58eca7410af257e965863a15b4ae2f6c13928"
+      "sha256": "sha256:78ee57c0b98b7426cfa21992c4df09d55c7f2acae57af0ba0196bfc4cb0679f0"
     },
     {
       "source_entry": "web/src/components/common/RouteErrorBoundary.tsx",
@@ -1297,6 +1297,13 @@
         "production_dependency"
       ],
       "sha256": "sha256:3514257a8a7da4b997d72400eb4e51cb41a0283a03dbbb417f1199a930362f32"
+    },
+    {
+      "source_entry": "web/src/components/common/Spinner.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:8e95fad950525fd823c6e76f893fe43616f5fed22e3289f107378baec8a7e645"
     },
     {
       "source_entry": "web/src/components/common/StatusTag.tsx",
@@ -1443,7 +1450,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:fd6e73e8e2aeb098e427ae27f6f4c3ca0c0f8c1b01c996987bac74bd8ab7fdaa"
+      "sha256": "sha256:c8c7c2ad26be9bd15da2dd41db1c0860b593b69156250bb453dd8bf4c2297dcf"
     },
     {
       "source_entry": "web/src/components/layout/TenantHeader.tsx",
@@ -1513,14 +1520,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:243b3accde54bae07632ed3984ef5ec6a52289e9d52cc6a5ce9ca2ee43851e86"
+      "sha256": "sha256:5099a4b97a17d8fc0f561e6b032c76088f37f70382d6acbb3afb2068f90ae458"
     },
     {
       "source_entry": "web/src/components/mcp-app/StandardMCPAppRenderer.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:281283b5295e1d4a7b41ab2f391a18a3841d719a88779ea9c88085d57e671f7f"
+      "sha256": "sha256:473d3010ba620170a426a98ec23997df680c0cdbcebe13959f4d050e84389ba5"
     },
     {
       "source_entry": "web/src/components/mcp-app/hostStyles.ts",
@@ -1541,21 +1548,21 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:b0891cacfcc4d903b3f144f446397f8196afc970cbc803b6ed4674f896c88ca7"
+      "sha256": "sha256:1d7d572c9325668b3eb9541ba0995c4a92f12c333763f59d0c999147f6f693fc"
     },
     {
       "source_entry": "web/src/components/mcp/McpLogsTabV2.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:c1d97fb2fde65f3f790687d02c36851ee1a5e63e0987297f0b95a91b93fcd54b"
+      "sha256": "sha256:36cf0c7b42928ffb0226dba954f8ee3ac4d3d26a6ae1780e446b5542c2c867ae"
     },
     {
       "source_entry": "web/src/components/mcp/McpPromptsTabV2.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:b425f7627771e2a5e3718276c8dec94e4b33ce66aa4f320ac72e9d1ce48dc9fd"
+      "sha256": "sha256:2533655be202b7363be920fcf1d6d528390ec53fc4756c7dbdbc828485e12634"
     },
     {
       "source_entry": "web/src/components/mcp/McpServerCardV2.tsx",
@@ -1583,7 +1590,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:07cf6214fee769890d686856496601847767d9af0fbee61dc31e7a4ea519c5d8"
+      "sha256": "sha256:79f6cbb47799324d34a8cd7c02c0451bf0ea0bc3f889bb835c71579c87ff8e39"
     },
     {
       "source_entry": "web/src/components/mcp/McpToolItemV2.tsx",
@@ -1604,7 +1611,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:7771ec419fb71babed242504990f7d3bde2cb16d4a7718d5ac09e1cf5745d4f9"
+      "sha256": "sha256:97c09270890a2187606cafbad7b3680cf22f937bd7d037203060193f0a399158"
     },
     {
       "source_entry": "web/src/components/mcp/styles.ts",
@@ -1632,7 +1639,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:70f8a245dfec705923808936a6833c22ee24114abb2d68df78b40a776858c35a"
+      "sha256": "sha256:eafa5c709a16f97d6c0d1064cc005c16ccbeed03a9c14b76d68ebce6856125ea"
     },
     {
       "source_entry": "web/src/components/project/BackendStoreSelectors.tsx",
@@ -1751,7 +1758,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:12d22bc43a6d5ed7da5e759984a58c50d4000cff2c27fcc5ce71c93cd1377db6"
+      "sha256": "sha256:6a6cf533b549bd2d3c72064750f3bf1973f08041d92f48ba1ef41c2906ccd961"
     },
     {
       "source_entry": "web/src/components/shared/ui/LanguageSwitcher.tsx",
@@ -1842,7 +1849,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:d0b3e3234e4e7a12aa0c1f2dbe6698fadf63fed1c60eef4ee87011e3506b351f"
+      "sha256": "sha256:d48535819ab1097bdffa77d2912da2493dc132397ea524385b14ba313823f87f"
     },
     {
       "source_entry": "web/src/components/workspace/AddAgentModal.tsx",
@@ -1891,7 +1898,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:1bc62909d7ff1da46b1a58fa934c550f5dccdfe736db21636ba53d050d419197"
+      "sha256": "sha256:db6dfba011aa3bbcece2425a7f3e4cd6fdc071116ddc9c6412ea49133974062b"
     },
     {
       "source_entry": "web/src/components/workspace/chat/MentionInput.tsx",
@@ -1940,7 +1947,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:8c7a6e7439f0ebf641e97e82fb4e0ebcc609b55fe5555b45a2e6c075d4d53dc0"
+      "sha256": "sha256:2c06d86d78c12646f3d5408350bb9507bcea2ff00dc35bb9322713d45c79f060"
     },
     {
       "source_entry": "web/src/components/workspace/genes/GeneList.tsx",
@@ -2024,7 +2031,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:07c034432fea508d37106e5d78b62ddbeea19f2e8ab3d134f0af8fef9a179c34"
+      "sha256": "sha256:7965208579560e0627f9bc3c43bef7020a1bd467d1adaf05047e3ac5416397f3"
     },
     {
       "source_entry": "web/src/components/workspace/objectives/ObjectiveCreateModal.tsx",
@@ -2207,7 +2214,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:fc50e753d646b4c641773b1d3ffbfc07077481a949a4d791c1a368425eb81437"
+      "sha256": "sha256:39429c53fa500d964dac5e5f6f620a42ed6784d1df661132eafdc38af3498208"
     },
     {
       "source_entry": "web/src/hooks/useSwr.ts",
@@ -2291,7 +2298,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:19175a90e57bcfd9694bc802f48440ec025ed0bd260bf5015dfc39c8fa5258a8"
+      "sha256": "sha256:692f61d1776e848b58a91c11b9b2b0a2dfbf36ac13dafd15eaeea803da84fbd7"
     },
     {
       "source_entry": "web/src/layouts/SchemaLayout.tsx",
@@ -2333,7 +2340,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:2dc8c069b651bddea4c6e7388ca1004c2bfb74759f5fc7defd3330efc6a2c8c4"
+      "sha256": "sha256:18e6068df703c1ddd76c8496ffedd5a642818b74bc4801c92002aaa5cbc26928"
     },
     {
       "source_entry": "web/src/pages/ForceChangePassword.tsx",
@@ -2354,7 +2361,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:9f6a112c5fd1da948f5de16d84881144e397ed95e533cd4bc754b74abb93546e"
+      "sha256": "sha256:2d955b4c150c6d6111188c2156ca0240032f3e279c1c0f11faba802d60b2a0d9"
     },
     {
       "source_entry": "web/src/pages/NotFound.tsx",
@@ -2382,14 +2389,14 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:58a43ae7c7c80a0a5c1a3919b79713df7cbcde0d7e462ddb6220afb4098185ce"
+      "sha256": "sha256:b5863470034131f3a01e51017490e9d5ca1842fc8e8cae0ec8ce35ab298646f9"
     },
     {
       "source_entry": "web/src/pages/admin/PoolDashboard.tsx",
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:77be507956f443602d0735885f877b9e8db185bb45a1eb10f4081822211c5c87"
+      "sha256": "sha256:b7d8394b770507600118571aeb9e8b33678d8f67b07078920a802889c823124a"
     },
     {
       "source_entry": "web/src/pages/project/Blackboard.tsx",
@@ -2417,7 +2424,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:e243a6205480409bbc8371d6c78c7de96568862af2ef391324be9d26b234faf5"
+      "sha256": "sha256:2c68213346cc6847270638037daa124b62c3156dae82319f16b58cc54026310d"
     },
     {
       "source_entry": "web/src/pages/project/EntitiesList.tsx",
@@ -2550,7 +2557,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:60aa84203274826db893bca3a1fa075538f3c9f38444f3145771edbeb2f55da7"
+      "sha256": "sha256:3ad67d05c6eb6dad2ce5767cb688c6756996744ee981e3b729580f6c67721f13"
     },
     {
       "source_entry": "web/src/pages/project/schema/EdgeTypeList.tsx",
@@ -2606,21 +2613,21 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:1a6ada23532e18d019f6620b9da63efb33b1fc22343b16d5f83bf5c7064ca2d0"
+      "sha256": "sha256:1bd0ce7eac895e96dc833e10933b9b6ca1124b9a222357e5592b106b94f1cfe4"
     },
     {
       "source_entry": "web/src/pages/tenant/AgentBindings.tsx",
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:e41d1f51a47e6ec97766a07b8fdf6adc14f4db9179477f28cedc361a25c84f6b"
+      "sha256": "sha256:defb9ce3abcd338437055e6c5b9bbe1bf855dee11217d2448dad7cff40de6712"
     },
     {
       "source_entry": "web/src/pages/tenant/AgentDashboard.tsx",
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:3c94ba021cbac639fefd128a35e32b969a0109017cc4dcaec78edf6625c9ba01"
+      "sha256": "sha256:4bbd820cd4068dfbda8574e3c112e5b9c752755e1a304508c0448f5ff7c975da"
     },
     {
       "source_entry": "web/src/pages/tenant/AgentDefinitionDetail.tsx",
@@ -2634,7 +2641,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:6436690e9525cea5366a4bd0c8d9fbb7713af78525929214d5285299597c2367"
+      "sha256": "sha256:1ae959e3e87dd1cbe0b44848d2abf8c1cdbd3b3a458bc561beab13008dd8a2ff"
     },
     {
       "source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
@@ -2655,7 +2662,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:b0c49f13c08c3494dcbc1d904c57a1fa0887d55267e766fb1e73a8f695f12d69"
+      "sha256": "sha256:e21935f059c556cafd354c086d5ff0cfb4d7d097e72ab0ec2b2bc6889dcff0a9"
     },
     {
       "source_entry": "web/src/pages/tenant/BackendStores.tsx",
@@ -2683,7 +2690,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:2e704618552757b2dbd20e817b20067f526a32b050bb6d0ab548eb0870dde39e"
+      "sha256": "sha256:c440789eed488e2546b77f7a0df339fb3efe0622a30c74b0b83d374bf7b5ceb3"
     },
     {
       "source_entry": "web/src/pages/tenant/ClusterList.tsx",
@@ -2711,7 +2718,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:de5a0466b2bf2c0bbe6cf976fb5ff4a52ab7f025663c5aac4b515d4165ac243f"
+      "sha256": "sha256:d078df3e5e2b9d5e8faebabb490886e053fe191b8963fe056b96bd658f32065a"
     },
     {
       "source_entry": "web/src/pages/tenant/EditProject.tsx",
@@ -2732,7 +2739,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:ba0b161478fd79d66c710f5b3e22a3dee6d87516a357f88bd4ac2ab24bd8ea97"
+      "sha256": "sha256:41b512be461dc2e975c9c3d6d2b65735da5898c1e73be6d03ddde1d6854a846d"
     },
     {
       "source_entry": "web/src/pages/tenant/GeneDetail.tsx",
@@ -2753,7 +2760,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:dda1fdcab9a3ce6b7c087e563bca53cf4d3b2feb4b01159d1ce8945126330616"
+      "sha256": "sha256:35267fac7630d4b6262bf738e1ac97398d76ddc15298b82cab2c3cc71e566c73"
     },
     {
       "source_entry": "web/src/pages/tenant/InstanceChannels.tsx",
@@ -2767,7 +2774,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:432de879eeea179142897c8f9c32b23b7f894a872726075f44d040e6508a75fb"
+      "sha256": "sha256:849a3d48c4b2bef126b2861dfb7eed24362498391caa92c9b56f4b0412c0648d"
     },
     {
       "source_entry": "web/src/pages/tenant/InstanceGenes.tsx",
@@ -2809,7 +2816,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:d2dbdd24c44c02d5e458ec7d940d95a5be00964a8c87a61829a5f1ed33df2af9"
+      "sha256": "sha256:96c3c846b834ac0c61686049aaaf53175ba481bce1214459bfdbf0cff3d95208"
     },
     {
       "source_entry": "web/src/pages/tenant/InstanceTemplateList.tsx",
@@ -2837,14 +2844,14 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:010c6af3ff2c0c5bcd6ec6ff38be6511b4cb2f9637776bc122a08528015d9883"
+      "sha256": "sha256:43bbc14d49450edd664a5e47b8fb4cec42b5d0dec19ee34dc2017f35baea3a4a"
     },
     {
       "source_entry": "web/src/pages/tenant/PluginHub.tsx",
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:da48c05628473cc1e93fd9ba1d67a5a99caa66a9f73d482a6bf8882bc28fd528"
+      "sha256": "sha256:9bd105924a4afb428ea70e52330bff66d64223d83829c746a2c55baed93f3c58"
     },
     {
       "source_entry": "web/src/pages/tenant/ProjectList.tsx",
@@ -2893,7 +2900,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:f7f188c41e2bfa1a1cac7f2b88f8c30ed06b0bb515172b2d52ef976ccf01c22c"
+      "sha256": "sha256:bae9ef025dd532ded0c52bba3bee26b66044a14ffc5d53625761b43ee0a892ac"
     },
     {
       "source_entry": "web/src/pages/tenant/TemplateDetail.tsx",
@@ -2907,7 +2914,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:c3ce9eac0282c9d76ea59a65b5cc4416c0f588f490a35072df681da460fe1024"
+      "sha256": "sha256:c1caa4d8be7aa141c404e9b0c069c03e5e9a8ac515badbf09bb6a098431ea905"
     },
     {
       "source_entry": "web/src/pages/tenant/TenantCreate.tsx",
@@ -2942,7 +2949,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:5163e268f2e8397e9af4cb51dbc27d29813301a896560ffc58fe9955fb29c9aa"
+      "sha256": "sha256:77b957d2e56f2775ec51e5f09d4902deb32758df6b48298ff40aff4d8b17be7c"
     },
     {
       "source_entry": "web/src/pages/tenant/UserList.tsx",
@@ -2956,7 +2963,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:a53cddf606f87196175e041923468113a2260d883fab38fdfe4900ba58dec904"
+      "sha256": "sha256:eb8c9d9966c592b4d3bb4901fa91a842c322da9635f0384fb25e721edc6df514"
     },
     {
       "source_entry": "web/src/pages/tenant/WorkflowPatterns.tsx",
@@ -2984,7 +2991,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:bcaa23a4dec9671ce21a59fa0f632ee55af0777dcd2ebedb2f0667108c0f0260"
+      "sha256": "sha256:44c26a887e42c3f6b2af032266c7b4edd02342e82eb353c808277e6ced8ec530"
     },
     {
       "source_entry": "web/src/pages/tenant/WorkspaceSettingsPrimitives.tsx",
@@ -3026,7 +3033,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:090926d30204bf7a800cd358df094577e8a211b0c6e5551e6afe1b80c8b547a5"
+      "sha256": "sha256:967fe729ee89a2a9160b6c25fd77bd116f96ed8a3d0594c23537c25077a1a378"
     },
     {
       "source_entry": "web/src/pages/tenant/org-settings/OrgInfo.tsx",
@@ -3047,7 +3054,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:7ca66526853421ea1c598889ab2e22c92bec03118f9e25586cffeca2e1e659ec"
+      "sha256": "sha256:d561c5598fae9bcee5366e2e9133167483db6d95634e710f9b816c9a498990a8"
     },
     {
       "source_entry": "web/src/pages/tenant/org-settings/OrgSettingsLayout.tsx",
@@ -3061,7 +3068,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:8a5de3c5f62e42adbe6ec67691c42e61cf09ed9d4e444f08214293c8c62081bc"
+      "sha256": "sha256:0902fdc77adffa80402134b23f7b5e82930eddd6e17fe893cbedb8ede8e23d91"
     },
     {
       "source_entry": "web/src/pages/tenant/pluginSchemaForm.tsx",
@@ -4034,7 +4041,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:8efa65b2c558eee2b9c5a7713d1b52a1af6276588d9d083b479cf8d17214d935"
+      "sha256": "sha256:ff64301da0a5d66aa55355d7db7fcf272497802a75c8492241ac28b3a4248702"
     },
     {
       "source_entry": "web/src/theme/index.ts",
@@ -4048,7 +4055,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:2504091f614b41a1b404dd5efacc66e41cae82e904b17e0afa4b93f1bb6f1893"
+      "sha256": "sha256:efd707590aab45ba548e284ca46e3a83d0dafc26ffdf5e761d0fbfb5dfbec30c"
     },
     {
       "source_entry": "web/src/types/acp.ts",
@@ -9217,13 +9224,13 @@
     },
     {
       "from_source_entry": "web/src/App.tsx",
-      "relationship": "dynamic_import",
-      "to_source_entry": "web/src/components/mcp/McpServerListV2.tsx"
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
     },
     {
       "from_source_entry": "web/src/App.tsx",
-      "relationship": "static_import",
-      "to_source_entry": "web/src/components/ui/lazyAntd.tsx"
+      "relationship": "dynamic_import",
+      "to_source_entry": "web/src/components/mcp/McpServerListV2.tsx"
     },
     {
       "from_source_entry": "web/src/App.tsx",
@@ -10558,6 +10565,11 @@
     {
       "from_source_entry": "web/src/components/agent/TenantAgentConfigEditor.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/TenantAgentConfigEditor.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/services/agentConfigService.ts"
     },
     {
@@ -10584,6 +10596,11 @@
       "from_source_entry": "web/src/components/agent/activity/ProjectActivityInbox.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/components/agent/activity/projectActivityModel.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/activity/ProjectActivityInbox.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
     },
     {
       "from_source_entry": "web/src/components/agent/activity/ProjectActivityInbox.tsx",
@@ -11253,6 +11270,11 @@
     {
       "from_source_entry": "web/src/components/agent/review/RunReviewDrawer.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/review/RunReviewDrawer.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/services/runReviewService.ts"
     },
     {
@@ -11304,6 +11326,11 @@
       "from_source_entry": "web/src/components/agent/sandbox/SandboxTerminal.tsx",
       "relationship": "dynamic_import",
       "to_source_entry": "web/src/components/agent/sandbox/TerminalImpl.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/sandbox/SandboxTerminal.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
     },
     {
       "from_source_entry": "web/src/components/agent/sandbox/TerminalImpl.tsx",
@@ -12058,6 +12085,11 @@
     {
       "from_source_entry": "web/src/components/common/OrgSetupGuard.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/common/OrgSetupGuard.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/stores/auth.ts"
     },
     {
@@ -12403,6 +12435,11 @@
     {
       "from_source_entry": "web/src/components/mcp-app/AppLauncher.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/mcp-app/AppLauncher.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/components/mcp/useMcpProjectScope.ts"
     },
     {
@@ -12429,6 +12466,11 @@
       "from_source_entry": "web/src/components/mcp-app/StandardMCPAppRenderer.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/components/common/ErrorBoundary.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/mcp-app/StandardMCPAppRenderer.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
     },
     {
       "from_source_entry": "web/src/components/mcp-app/StandardMCPAppRenderer.tsx",
@@ -12488,6 +12530,11 @@
     {
       "from_source_entry": "web/src/components/mcp/McpAppsTabV2.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/mcp/McpAppsTabV2.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/components/mcp/McpAppCardV2.tsx"
     },
     {
@@ -12523,6 +12570,11 @@
     {
       "from_source_entry": "web/src/components/mcp/McpLogsTabV2.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/mcp/McpLogsTabV2.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/components/mcp/styles.ts"
     },
     {
@@ -12544,6 +12596,11 @@
       "from_source_entry": "web/src/components/mcp/McpLogsTabV2.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/utils/date.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/mcp/McpPromptsTabV2.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
     },
     {
       "from_source_entry": "web/src/components/mcp/McpPromptsTabV2.tsx",
@@ -12643,6 +12700,11 @@
     {
       "from_source_entry": "web/src/components/mcp/McpServerTabV2.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/mcp/McpServerTabV2.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/components/mcp/McpServerCardV2.tsx"
     },
     {
@@ -12694,6 +12756,11 @@
       "from_source_entry": "web/src/components/mcp/McpToolItemV2.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/components/shared/DynamicIcon.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/mcp/McpToolsTabV2.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
     },
     {
       "from_source_entry": "web/src/components/mcp/McpToolsTabV2.tsx",
@@ -13066,6 +13133,11 @@
       "to_source_entry": "web/src/utils/date.ts"
     },
     {
+      "from_source_entry": "web/src/components/ui/lazyAntd.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
+    },
+    {
       "from_source_entry": "web/src/components/workspace/AddAgentModal.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/stores/agentDefinitions.ts"
@@ -13158,6 +13230,11 @@
     {
       "from_source_entry": "web/src/components/workspace/chat/ChatPanel.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/chat/ChatPanel.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/components/ui/lazyAntd.tsx"
     },
     {
@@ -13224,6 +13301,11 @@
       "from_source_entry": "web/src/components/workspace/genes/GeneEditorModal.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/types/geneConfig.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/genes/GeneImportModal.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
     },
     {
       "from_source_entry": "web/src/components/workspace/genes/GeneImportModal.tsx",
@@ -14518,6 +14600,11 @@
     {
       "from_source_entry": "web/src/pages/tenant/AgentBindings.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/AgentBindings.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/services/agent/bindingsService.ts"
     },
     {
@@ -14629,6 +14716,11 @@
       "from_source_entry": "web/src/pages/tenant/AgentDefinitions.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/components/agent/AgentDefinitionModal.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/AgentDefinitions.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
     },
     {
       "from_source_entry": "web/src/pages/tenant/AgentDefinitions.tsx",
@@ -14758,6 +14850,11 @@
     {
       "from_source_entry": "web/src/pages/tenant/AuditLogs.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/AuditLogs.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/components/ui/lazyAntd.tsx"
     },
     {
@@ -14839,6 +14936,11 @@
       "from_source_entry": "web/src/pages/tenant/Billing.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/utils/logger.ts"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/ClusterDetail.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
     },
     {
       "from_source_entry": "web/src/pages/tenant/ClusterDetail.tsx",
@@ -14968,6 +15070,11 @@
     {
       "from_source_entry": "web/src/pages/tenant/DeployProgress.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/DeployProgress.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/components/ui/lazyAntd.tsx"
     },
     {
@@ -15039,6 +15146,11 @@
       "from_source_entry": "web/src/pages/tenant/Events.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/utils/logger.ts"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/EvolutionLog.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
     },
     {
       "from_source_entry": "web/src/pages/tenant/EvolutionLog.tsx",
@@ -15168,6 +15280,11 @@
     {
       "from_source_entry": "web/src/pages/tenant/GenomeDetail.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/GenomeDetail.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/components/marketplace/InstallEntityModal.tsx"
     },
     {
@@ -15229,6 +15346,11 @@
       "from_source_entry": "web/src/pages/tenant/InstanceChannels.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/services/instanceChannelService.ts"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/InstanceFiles.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
     },
     {
       "from_source_entry": "web/src/pages/tenant/InstanceFiles.tsx",
@@ -15358,6 +15480,11 @@
     {
       "from_source_entry": "web/src/pages/tenant/InstanceSettings.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/InstanceSettings.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/components/ui/lazyAntd.tsx"
     },
     {
@@ -15459,6 +15586,11 @@
       "from_source_entry": "web/src/pages/tenant/PluginDetail.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/components/common/SkeletonLoader.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/PluginDetail.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
     },
     {
       "from_source_entry": "web/src/pages/tenant/PluginDetail.tsx",
@@ -15808,6 +15940,11 @@
     {
       "from_source_entry": "web/src/pages/tenant/TemplateMarketplace.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/TemplateMarketplace.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/components/marketplace/SubAgentTemplateDetailDrawer.tsx"
     },
     {
@@ -16123,6 +16260,11 @@
     {
       "from_source_entry": "web/src/pages/tenant/WorkspaceSettings.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/WorkspaceSettings.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/components/ui/lazyAntd.tsx"
     },
     {
@@ -16178,6 +16320,11 @@
     {
       "from_source_entry": "web/src/pages/tenant/org-settings/OrgGenes.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/org-settings/OrgGenes.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/components/ui/lazyAntd.tsx"
     },
     {
@@ -16223,6 +16370,11 @@
     {
       "from_source_entry": "web/src/pages/tenant/org-settings/OrgRegistry.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/org-settings/OrgRegistry.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/components/ui/lazyAntd.tsx"
     },
     {
@@ -16244,6 +16396,11 @@
       "from_source_entry": "web/src/pages/tenant/org-settings/OrgSettingsLayout.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/stores/tenant.ts"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/org-settings/OrgSmtp.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/common/Spinner.tsx"
     },
     {
       "from_source_entry": "web/src/pages/tenant/org-settings/OrgSmtp.tsx",
@@ -19526,6 +19683,54 @@
       ],
       "reason_code": "multiple_routed_source_reachability",
       "source_entry": "web/src/components/common/SkeletonLoader.tsx"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/src/components/common/OrgSetupGuard.tsx",
+        "web/src/components/mcp/McpServerListV2.tsx",
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/Login.tsx",
+        "web/src/pages/project/Blackboard.tsx",
+        "web/src/pages/project/MemoryDetail.tsx",
+        "web/src/pages/project/schema/SchemaOverview.tsx",
+        "web/src/pages/tenant/AgentBindings.tsx",
+        "web/src/pages/tenant/AgentDashboard.tsx",
+        "web/src/pages/tenant/AgentDefinitions.tsx",
+        "web/src/pages/tenant/AgentWorkspace.tsx",
+        "web/src/pages/tenant/AuditLogs.tsx",
+        "web/src/pages/tenant/BackendStores.tsx",
+        "web/src/pages/tenant/ClusterDetail.tsx",
+        "web/src/pages/tenant/CreateInstance.tsx",
+        "web/src/pages/tenant/DecisionRecords.tsx",
+        "web/src/pages/tenant/DeployProgress.tsx",
+        "web/src/pages/tenant/EditProject.tsx",
+        "web/src/pages/tenant/EvolutionLog.tsx",
+        "web/src/pages/tenant/GenomeDetail.tsx",
+        "web/src/pages/tenant/InstanceChannels.tsx",
+        "web/src/pages/tenant/InstanceFiles.tsx",
+        "web/src/pages/tenant/InstanceGenes.tsx",
+        "web/src/pages/tenant/InstanceLayout.tsx",
+        "web/src/pages/tenant/InstanceList.tsx",
+        "web/src/pages/tenant/InstanceMembers.tsx",
+        "web/src/pages/tenant/InstanceOverview.tsx",
+        "web/src/pages/tenant/InstanceSettings.tsx",
+        "web/src/pages/tenant/InstanceTemplateList.tsx",
+        "web/src/pages/tenant/NewTenant.tsx",
+        "web/src/pages/tenant/PluginDetail.tsx",
+        "web/src/pages/tenant/ProjectList.tsx",
+        "web/src/pages/tenant/SkillDetail.tsx",
+        "web/src/pages/tenant/SkillEvolution.tsx",
+        "web/src/pages/tenant/SkillList.tsx",
+        "web/src/pages/tenant/TemplateMarketplace.tsx",
+        "web/src/pages/tenant/TrustPolicies.tsx",
+        "web/src/pages/tenant/WorkflowPatterns.tsx",
+        "web/src/pages/tenant/org-settings/OrgGenes.tsx",
+        "web/src/pages/tenant/org-settings/OrgRegistry.tsx",
+        "web/src/pages/tenant/org-settings/OrgSmtp.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/components/common/Spinner.tsx"
     },
     {
       "classification": "shared",
@@ -24874,6 +25079,7 @@
     "web/src/components/common/OrgSetupGuard.tsx",
     "web/src/components/common/RouteErrorBoundary.tsx",
     "web/src/components/common/SkeletonLoader.tsx",
+    "web/src/components/common/Spinner.tsx",
     "web/src/components/common/StatusTag.tsx",
     "web/src/components/common/VirtualGrid.tsx",
     "web/src/components/common/index.ts",
