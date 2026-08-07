@@ -343,6 +343,10 @@ async function executeDesktopCommand(
       if (action === 'minimize') mainWindow.minimize();
       else if (action === 'maximize') mainWindow.maximize();
       else if (action === 'unmaximize') mainWindow.unmaximize();
+      else if (action === 'toggle_maximize') {
+        if (mainWindow.isMaximized()) mainWindow.unmaximize();
+        else mainWindow.maximize();
+      } else if (action === 'is_maximized') return mainWindow.isMaximized();
       else if (action === 'close') mainWindow.close();
       else throw new Error('window control action is not supported');
       return undefined;
@@ -526,12 +530,18 @@ function installNavigationPolicy(window: BrowserWindow, developmentUrl: URL | nu
 async function createMainWindow(): Promise<void> {
   const developmentUrl = rendererDevelopmentUrl();
   // Frameless window: the renderer draws its own titlebar. macOS keeps the
-  // native traffic lights inset into the drag region, Windows hides the
-  // native titlebar, and Linux drops the frame entirely.
+  // native traffic lights via `titleBarStyle: 'hidden'`, Windows hides the
+  // native titlebar, and Linux drops the frame entirely. `hiddenInset` is
+  // deliberately avoided: it keeps an invisible native titlebar strip whose
+  // AppKit drag/zoom handling overlaps the renderer's `-webkit-app-region:
+  // drag` strip, so a press engages two window-move drivers that fight each
+  // other (visible shake while dragging) and double-click zoom lands in the
+  // wrong geometry. With 'hidden' there is a single drag driver and Chromium
+  // handles double-click maximize consistently.
   const framelessWindowOptions =
     process.platform === 'darwin'
       ? {
-          titleBarStyle: 'hiddenInset' as const,
+          titleBarStyle: 'hidden' as const,
           trafficLightPosition: { x: 12, y: 10 },
         }
       : process.platform === 'win32'

@@ -93,6 +93,8 @@ interface Window {
       minimize(): Promise<void>;
       maximize(): Promise<void>;
       unmaximize(): Promise<void>;
+      toggleMaximize(): Promise<void>;
+      isMaximized(): Promise<boolean>;
       close(): Promise<void>;
     }>;
     files?: Readonly<{

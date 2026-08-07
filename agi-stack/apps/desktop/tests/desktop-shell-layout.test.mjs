@@ -91,7 +91,11 @@ test('app shell mounts the desktop titlebar and status bar exactly once', () => 
 });
 
 test('main window is frameless with platform-specific titlebar styles', () => {
-  assert.match(mainProcessSource, /titleBarStyle:\s*'hiddenInset'/);
+  // macOS uses 'hidden' (not 'hiddenInset'): the inset variant keeps an
+  // invisible native titlebar strip whose AppKit drag/zoom handling fights
+  // the renderer's -webkit-app-region drag strip (window shakes while
+  // dragging, double-click maximize lands wrong).
+  assert.doesNotMatch(mainProcessSource, /titleBarStyle:\s*'hiddenInset'/);
   assert.match(mainProcessSource, /trafficLightPosition:\s*\{\s*x:\s*12,\s*y:\s*10\s*\}/);
   assert.match(mainProcessSource, /titleBarStyle:\s*'hidden'/);
   assert.match(mainProcessSource, /frame:\s*false/);
@@ -146,8 +150,10 @@ test('titlebar is a drag region with no-drag interactive controls', () => {
   assert.match(titlebarSource, /<WindowControls\s*\/>/);
   assert.match(windowControlsSource, /__MEMSTACK_DESKTOP__\?\.windowControls/);
   assert.match(windowControlsSource, /bridge\.minimize\(\)/);
-  assert.match(windowControlsSource, /bridge\.maximize\(\)/);
-  assert.match(windowControlsSource, /bridge\.unmaximize\(\)/);
+  // Maximize state is authoritative in the main process: the renderer toggles
+  // and confirms through the bridge instead of tracking clicks locally.
+  assert.match(windowControlsSource, /bridge\.toggleMaximize\(\)/);
+  assert.match(windowControlsSource, /bridge\.isMaximized\(\)/);
   assert.match(windowControlsSource, /bridge\.close\(\)/);
 });
 

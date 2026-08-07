@@ -91,6 +91,12 @@ const windowControls = Object.freeze({
     invokeDesktopCommand('window_controls', { action: 'maximize' }),
   unmaximize: (): Promise<void> =>
     invokeDesktopCommand('window_controls', { action: 'unmaximize' }),
+  toggleMaximize: (): Promise<void> =>
+    invokeDesktopCommand('window_controls', { action: 'toggle_maximize' }),
+  isMaximized: (): Promise<boolean> =>
+    invokeDesktopCommand('window_controls', { action: 'is_maximized' }).then(
+      (result: unknown) => result === true,
+    ),
   close: (): Promise<void> =>
     invokeDesktopCommand('window_controls', { action: 'close' }),
 });
