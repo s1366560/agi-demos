@@ -25,6 +25,18 @@ const sessionWorkspaceSource = readFileSync(
   new URL('../src/features/session/SessionWorkspace.tsx', import.meta.url),
   'utf8'
 );
+const contextRailSource = readFileSync(
+  new URL('../src/features/session/SessionContextRail.tsx', import.meta.url),
+  'utf8'
+);
+const rightSidebarSource = readFileSync(
+  new URL('../src/features/chrome/DesktopRightSidebar.tsx', import.meta.url),
+  'utf8'
+);
+const rightSidebarStyles = readFileSync(
+  new URL('../src/features/chrome/DesktopRightSidebar.css', import.meta.url),
+  'utf8'
+);
 const sessionChangesSource = readFileSync(
   new URL('../src/features/session/SessionChangesCanvas.tsx', import.meta.url),
   'utf8'
@@ -484,7 +496,12 @@ test('notifications never open a standalone workspace review route', () => {
 });
 
 test('sidebar bell opens the real Activity inbox workbench section', () => {
-  assert.match(sidebarSource, /onNavigate\('activity'\)/);
+  // The bell now lives in the primary view nav and navigates via onNavigate(id).
+  assert.match(
+    sidebarSource,
+    /\{ id: 'activity', labelKey: 'sidebar\.activity', icon: BellIcon \}/,
+  );
+  assert.match(sidebarSource, /onNavigate\(id\)/);
   assert.doesNotMatch(sidebarSource, /<i \/>/);
   assert.match(sidebarSource, /activityUnreadCount > 0 \? <small>\{activityUnreadCount\}<\/small> : null/);
   assert.match(
@@ -581,13 +598,17 @@ test('connection recovery cannot bypass governed model or workspace settings', (
 });
 
 test('conversation detail restores the mission-control context rail without duplicating authority', () => {
-  assert.match(sessionWorkspaceSource, /className="session-context-rail"/);
-  assert.match(sessionWorkspaceSource, /panes\.contextRail/);
-  assert.match(sessionWorkspaceSource, /session\.runSnapshot/);
-  assert.match(sessionWorkspaceSource, /session\.workSurfaces/);
-  assert.match(sessionWorkspaceSource, /session\.latestEvidence/);
-  assert.match(sessionStyles, /grid-template-columns:\s*minmax\(0, 1fr\) var\(--session-context-rail-width, 248px\)/);
-  assert.match(sessionWorkspaceSource, /surface !== 'conversation'/);
+  // The rail markup lives in SessionContextRail, hosted by the right sidebar.
+  assert.match(contextRailSource, /className="session-context-rail"/);
+  assert.match(rightSidebarSource, /<SessionContextRail/);
+  assert.match(contextRailSource, /session\.runSnapshot/);
+  assert.match(contextRailSource, /session\.workSurfaces/);
+  assert.match(contextRailSource, /session\.latestEvidence/);
+  assert.match(contextRailSource, /session-context-card/);
+  assert.match(contextRailSource, /session-context-rows/);
+  // The banner no longer shares a surface with the rail, so it always shows.
+  assert.match(sessionWorkspaceSource, /statusPresentation !== null/);
+  assert.doesNotMatch(sessionWorkspaceSource, /surface !== 'conversation'/);
 });
 
 test('conversation header and thread chrome follow the prototype hierarchy', () => {
@@ -767,8 +788,9 @@ test('session chrome never renders raw placeholder or mislabeled copy', () => {
     /viewModel\.workspaceLabel \?\? t\('session\.notAvailable'\)/,
   );
   // The run snapshot labels the execution-mode row as a mode, not as the stage.
-  assert.match(sessionWorkspaceSource, /<dt>\{t\('session\.runMode'\)\}<\/dt>/);
-  assert.doesNotMatch(sessionWorkspaceSource, /<dt>\{t\('session\.currentStage'\)\}<\/dt>/);
+  // (The snapshot rows moved to SessionContextRail with the rail migration.)
+  assert.match(contextRailSource, /<span>\{t\('session\.runMode'\)\}<\/span>/);
+  assert.doesNotMatch(contextRailSource, /<span>\{t\('session\.currentStage'\)\}<\/span>/);
   // An untitled session falls back to localized copy instead of a hardcoded English literal.
   assert.match(sessionWorkspaceSource, /viewModel\.title \|\| t\('session\.untitled'\)/);
   for (const key of ['session.runMode', 'session.untitled', 'chat.modelNotConfigured']) {
@@ -800,13 +822,11 @@ test('sidebar and context rail widths are user resizable', () => {
     /--desktop-sidebar-width:\s*min\(\s*var\(--desktop-sidebar-preferred-width,\s*220px\),\s*200px\s*\)/,
   );
   assert.match(appSource, /<ResizeHandle/);
-  assert.match(sessionWorkspaceSource, /useResizablePanelWidth\(/);
-  assert.match(sessionWorkspaceSource, /--session-context-rail-preferred-width/);
-  assert.match(
-    sessionStyles,
-    /--session-context-rail-width:\s*min\(\s*var\(--session-context-rail-preferred-width,\s*248px\),\s*208px\s*\)/,
-  );
-  assert.match(sessionWorkspaceSource, /<ResizeHandle/);
+  // The resizable rail moved to the right sidebar, which owns its own width.
+  assert.match(rightSidebarSource, /useResizablePanelWidth\(/);
+  assert.match(rightSidebarSource, /agistack\.desktop\.rightSidebarWidth/);
+  assert.match(rightSidebarSource, /<ResizeHandle/);
+  assert.match(rightSidebarStyles, /\.desktop-right-sidebar-panel\s*\{/);
 });
 
 test('workspace rows no longer render a decorative capability icon', () => {

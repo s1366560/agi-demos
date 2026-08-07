@@ -3,15 +3,15 @@
 
 :root {
   color-scheme: dark;
-  --desktop-bg: #0d0d0d;
-  --desktop-panel: #161616;
-  --desktop-panel-2: #1d1d1d;
-  --desktop-panel-raised: #1d1d1d;
-  --desktop-border: #2d2d2d;
-  --desktop-border-soft: #252525;
-  --desktop-text: #efefef;
-  --desktop-muted: #a8a8a8;
-  --desktop-faint: #777777;
+  --desktop-bg: #0a0a0a;
+  --desktop-panel: #171717;
+  --desktop-panel-2: #1a1a1a;
+  --desktop-panel-raised: #1a1a1a;
+  --desktop-border: #242424;
+  --desktop-border-soft: #1e1e1e;
+  --desktop-text: #f4f4f4;
+  --desktop-muted: #a1a1a1;
+  --desktop-faint: #737373;
   --desktop-cyan: #ededed;
   --desktop-accent: #ededed;
   --desktop-green: #35d399;
@@ -25,31 +25,31 @@
   --desktop-sidebar-preferred-width: 220px;
   --desktop-sidebar-width: 220px;
   /* Surface ladder (dark to light by luminance) */
-  --desktop-surface-1: #0c0c0c;
-  --desktop-surface-2: #0e0e0e;
-  --desktop-surface-3: #0f0f0f;
-  --desktop-surface-4: #101010;
-  --desktop-surface-5: #101010;
-  --desktop-surface-6: #111111;
-  --desktop-surface-7: #111111;
-  --desktop-surface-8: #121212;
-  --desktop-surface-9: #121212;
-  --desktop-surface-10: #121212;
-  --desktop-surface-11: #141414;
-  --desktop-surface-12: #141414;
-  --desktop-surface-13: #151515;
-  --desktop-surface-14: #181818;
-  --desktop-surface-15: #1a1a1a;
+  --desktop-surface-1: #0a0a0a;
+  --desktop-surface-2: #0c0c0c;
+  --desktop-surface-3: #0d0d0d;
+  --desktop-surface-4: #0e0e0e;
+  --desktop-surface-5: #0e0e0e;
+  --desktop-surface-6: #0f0f0f;
+  --desktop-surface-7: #0f0f0f;
+  --desktop-surface-8: #101010;
+  --desktop-surface-9: #101010;
+  --desktop-surface-10: #101010;
+  --desktop-surface-11: #121212;
+  --desktop-surface-12: #121212;
+  --desktop-surface-13: #131313;
+  --desktop-surface-14: #161616;
+  --desktop-surface-15: #171717;
   /* Tinted surfaces */
   --desktop-surface-red: #241419;
   --desktop-surface-cyan: #1e1e1e;
   /* Border ladder (dark to light by luminance) */
-  --desktop-border-1: #2b2b2b;
-  --desktop-border-2: #2b2b2b;
-  --desktop-border-3: #2d2d2d;
-  --desktop-border-4: #2f2f2f;
-  --desktop-border-5: #363636;
-  --desktop-border-6: #434343;
+  --desktop-border-1: #232323;
+  --desktop-border-2: #232323;
+  --desktop-border-3: #252525;
+  --desktop-border-4: #282828;
+  --desktop-border-5: #2e2e2e;
+  --desktop-border-6: #3a3a3a;
   /* Gray ladder (dark to light by luminance) */
   --desktop-gray-1: #646464;
   --desktop-gray-2: #6a6a6a;
@@ -102,22 +102,22 @@
   --desktop-amber-alt-rgb: 245, 158, 11;
   --desktop-amber-soft-rgb: 245, 183, 71;
   /* Phase-2 surface ladder extension (dark to light by luminance) */
-  --desktop-surface-16: #0d0d0d;
-  --desktop-surface-17: #0e0e0e;
-  --desktop-surface-18: #0f0f0f;
-  --desktop-surface-19: #111111;
-  --desktop-surface-20: #121212;
-  --desktop-surface-21: #151515;
-  --desktop-surface-22: #191919;
-  --desktop-surface-23: #191919;
-  --desktop-surface-24: #1a1a1a;
-  --desktop-surface-25: #1b1b1b;
-  --desktop-surface-26: #1b1b1b;
-  --desktop-surface-27: #1d1d1d;
-  --desktop-surface-28: #1e1e1e;
-  --desktop-surface-29: #1e1e1e;
-  --desktop-surface-30: #1f1f1f;
-  --desktop-surface-31: #232323;
+  --desktop-surface-16: #0b0b0b;
+  --desktop-surface-17: #0c0c0c;
+  --desktop-surface-18: #0d0d0d;
+  --desktop-surface-19: #0f0f0f;
+  --desktop-surface-20: #101010;
+  --desktop-surface-21: #131313;
+  --desktop-surface-22: #171717;
+  --desktop-surface-23: #171717;
+  --desktop-surface-24: #181818;
+  --desktop-surface-25: #191919;
+  --desktop-surface-26: #191919;
+  --desktop-surface-27: #1b1b1b;
+  --desktop-surface-28: #1c1c1c;
+  --desktop-surface-29: #1c1c1c;
+  --desktop-surface-30: #1d1d1d;
+  --desktop-surface-31: #212121;
   /* Phase-2 tinted surfaces */
   --desktop-surface-purple: #211c37;
   --desktop-surface-cyan-2: #1e1e1e;
@@ -128,21 +128,21 @@
   --desktop-surface-amber: #2a2014;
   --desktop-surface-amber-2: #231d15;
   /* Phase-2 border ladder extension (dark to light by luminance) */
-  --desktop-border-7: #262626;
-  --desktop-border-8: #303030;
-  --desktop-border-9: #333333;
-  --desktop-border-10: #333333;
-  --desktop-border-11: #343434;
-  --desktop-border-12: #353535;
-  --desktop-border-13: #363636;
-  --desktop-border-14: #363636;
-  --desktop-border-15: #373737;
-  --desktop-border-16: #373737;
-  --desktop-border-17: #3a3a3a;
-  --desktop-border-18: #3a3a3a;
-  --desktop-border-19: #424242;
-  --desktop-border-20: #444444;
-  --desktop-border-21: #4d4d4d;
+  --desktop-border-7: #202020;
+  --desktop-border-8: #282828;
+  --desktop-border-9: #2b2b2b;
+  --desktop-border-10: #2b2b2b;
+  --desktop-border-11: #2c2c2c;
+  --desktop-border-12: #2d2d2d;
+  --desktop-border-13: #2e2e2e;
+  --desktop-border-14: #2e2e2e;
+  --desktop-border-15: #2f2f2f;
+  --desktop-border-16: #2f2f2f;
+  --desktop-border-17: #323232;
+  --desktop-border-18: #323232;
+  --desktop-border-19: #3a3a3a;
+  --desktop-border-20: #3c3c3c;
+  --desktop-border-21: #454545;
   /* Phase-2 tinted borders */
   --desktop-border-green: #375a4d;
   --desktop-border-green-2: #265943;
@@ -233,7 +233,7 @@
   --desktop-cyan-soft: #a1a1a1;
   --desktop-gray-37: #ababab;
   --desktop-red-pale-3: #fca5a5;
-  --desktop-border-22: #343434;
+  --desktop-border-22: #2c2c2c;
   /* Phase-3 RGB channel tokens for rgba(var(...), alpha) usage */
   --desktop-cyan-frost-rgb: 176, 176, 176;
   --desktop-sky-rgb: 56, 189, 248;
@@ -250,7 +250,7 @@
   --desktop-steel-5-rgb: 76, 76, 76;
   --desktop-amber-deep-rgb: 120, 53, 15;
   /* Phase-4 neutral surface channels (translucent panels/gradient stops, flip light) */
-  --desktop-surface-26-rgb: 27, 27, 27;
+  --desktop-surface-26-rgb: 25, 25, 25;
   --desktop-surface-32-rgb: 10, 10, 10;
   --desktop-surface-33-rgb: 16, 16, 16;
   --desktop-surface-34-rgb: 19, 19, 19;
@@ -391,12 +391,12 @@
    here; tests/theme.test.mjs enforces parity between the two blocks. */
 :root[data-theme='light'] {
   color-scheme: light;
-  --desktop-bg: #f9f9f9;
+  --desktop-bg: #ffffff;
   --desktop-panel: #ffffff;
-  --desktop-panel-2: #f4f4f4;
+  --desktop-panel-2: #f5f5f5;
   --desktop-panel-raised: #ffffff;
-  --desktop-border: #dfdfdf;
-  --desktop-border-soft: #eaeaea;
+  --desktop-border: #e5e5e5;
+  --desktop-border-soft: #ebebeb;
   --desktop-text: #222222;
   --desktop-muted: #666666;
   --desktop-faint: #7e7e7e;
@@ -408,31 +408,31 @@
   --desktop-sidebar-preferred-width: 220px;
   --desktop-sidebar-width: 220px;
   /* Surface ladder (light to dark by luminance) */
-  --desktop-surface-1: #eeeeee;
-  --desktop-surface-2: #eeeeee;
-  --desktop-surface-3: #ededed;
-  --desktop-surface-4: #ededed;
-  --desktop-surface-5: #ededed;
-  --desktop-surface-6: #ececec;
-  --desktop-surface-7: #ececec;
-  --desktop-surface-8: #ebebeb;
-  --desktop-surface-9: #ebebeb;
-  --desktop-surface-10: #eaeaea;
-  --desktop-surface-11: #eaeaea;
-  --desktop-surface-12: #eaeaea;
-  --desktop-surface-13: #eaeaea;
-  --desktop-surface-14: #e9e9e9;
-  --desktop-surface-15: #e8e8e8;
+  --desktop-surface-1: #f4f4f4;
+  --desktop-surface-2: #f4f4f4;
+  --desktop-surface-3: #f3f3f3;
+  --desktop-surface-4: #f3f3f3;
+  --desktop-surface-5: #f3f3f3;
+  --desktop-surface-6: #f2f2f2;
+  --desktop-surface-7: #f2f2f2;
+  --desktop-surface-8: #f1f1f1;
+  --desktop-surface-9: #f1f1f1;
+  --desktop-surface-10: #f0f0f0;
+  --desktop-surface-11: #f0f0f0;
+  --desktop-surface-12: #f0f0f0;
+  --desktop-surface-13: #f0f0f0;
+  --desktop-surface-14: #efefef;
+  --desktop-surface-15: #eeeeee;
   /* Tinted surfaces */
   --desktop-surface-red: #fbeef0;
   --desktop-surface-cyan: #ededed;
   /* Border ladder (light to dark by luminance) */
-  --desktop-border-1: #e3e3e3;
-  --desktop-border-2: #e1e1e1;
-  --desktop-border-3: #dedede;
-  --desktop-border-4: #d9d9d9;
-  --desktop-border-5: #d3d3d3;
-  --desktop-border-6: #c6c6c6;
+  --desktop-border-1: #e7e7e7;
+  --desktop-border-2: #e5e5e5;
+  --desktop-border-3: #e2e2e2;
+  --desktop-border-4: #dedede;
+  --desktop-border-5: #d8d8d8;
+  --desktop-border-6: #cbcbcb;
   /* Gray ladder (muted text/icons on light surfaces) */
   --desktop-gray-1: #808080;
   --desktop-gray-2: #7d7d7d;
@@ -487,22 +487,22 @@
   --desktop-amber-soft-rgb: 196, 122, 30;
 
   /* Phase-2 surface ladder extension (light to dark by luminance) */
-  --desktop-surface-16: #e8e8e8;
-  --desktop-surface-17: #e8e8e8;
-  --desktop-surface-18: #e7e7e7;
-  --desktop-surface-19: #e7e7e7;
-  --desktop-surface-20: #e7e7e7;
-  --desktop-surface-21: #e6e6e6;
-  --desktop-surface-22: #e6e6e6;
-  --desktop-surface-23: #e5e5e5;
-  --desktop-surface-24: #e5e5e5;
-  --desktop-surface-25: #e5e5e5;
-  --desktop-surface-26: #e4e4e4;
-  --desktop-surface-27: #e4e4e4;
-  --desktop-surface-28: #e3e3e3;
-  --desktop-surface-29: #e3e3e3;
-  --desktop-surface-30: #e3e3e3;
-  --desktop-surface-31: #e3e3e3;
+  --desktop-surface-16: #eeeeee;
+  --desktop-surface-17: #eeeeee;
+  --desktop-surface-18: #ededed;
+  --desktop-surface-19: #ededed;
+  --desktop-surface-20: #ededed;
+  --desktop-surface-21: #ececec;
+  --desktop-surface-22: #ececec;
+  --desktop-surface-23: #ebebeb;
+  --desktop-surface-24: #ebebeb;
+  --desktop-surface-25: #ebebeb;
+  --desktop-surface-26: #eaeaea;
+  --desktop-surface-27: #eaeaea;
+  --desktop-surface-28: #e9e9e9;
+  --desktop-surface-29: #e9e9e9;
+  --desktop-surface-30: #e9e9e9;
+  --desktop-surface-31: #e9e9e9;
   /* Phase-2 tinted surfaces */
   --desktop-surface-purple: #efecf9;
   --desktop-surface-cyan-2: #ededed;
@@ -513,21 +513,21 @@
   --desktop-surface-amber: #f8f0e2;
   --desktop-surface-amber-2: #f7efe3;
   /* Phase-2 border ladder extension (light to dark by luminance) */
-  --desktop-border-7: #e3e3e3;
-  --desktop-border-8: #d8d8d8;
-  --desktop-border-9: #d6d6d6;
-  --desktop-border-10: #d5d5d5;
-  --desktop-border-11: #d4d4d4;
-  --desktop-border-12: #d3d3d3;
-  --desktop-border-13: #d3d3d3;
-  --desktop-border-14: #d3d3d3;
-  --desktop-border-15: #d2d2d2;
-  --desktop-border-16: #d1d1d1;
-  --desktop-border-17: #cfcfcf;
-  --desktop-border-18: #cfcfcf;
-  --desktop-border-19: #c7c7c7;
-  --desktop-border-20: #c6c6c6;
-  --desktop-border-21: #c6c6c6;
+  --desktop-border-7: #e7e7e7;
+  --desktop-border-8: #dcdcdc;
+  --desktop-border-9: #dadada;
+  --desktop-border-10: #d9d9d9;
+  --desktop-border-11: #d8d8d8;
+  --desktop-border-12: #d7d7d7;
+  --desktop-border-13: #d7d7d7;
+  --desktop-border-14: #d7d7d7;
+  --desktop-border-15: #d6d6d6;
+  --desktop-border-16: #d5d5d5;
+  --desktop-border-17: #d3d3d3;
+  --desktop-border-18: #d3d3d3;
+  --desktop-border-19: #cbcbcb;
+  --desktop-border-20: #cacaca;
+  --desktop-border-21: #cacaca;
   /* Phase-2 tinted borders */
   --desktop-border-green: #a3c9b8;
   --desktop-border-green-2: #97bfa9;
@@ -619,7 +619,7 @@
   --desktop-cyan-soft: #686868;
   --desktop-gray-37: #5b5b5b;
   --desktop-red-pale-3: #a43043;
-  --desktop-border-22: #d4d4d4;
+  --desktop-border-22: #d8d8d8;
   /* Phase-3 RGB channel tokens (overlays stay dark translucent) */
   --desktop-cyan-frost-rgb: 93, 93, 93;
   --desktop-sky-rgb: 2, 132, 199;
@@ -637,7 +637,7 @@
   --desktop-amber-deep-rgb: 146, 64, 14;
 
   /* Phase-4 neutral surface channels (light = near-white translucent panels) */
-  --desktop-surface-26-rgb: 228, 228, 228;
+  --desktop-surface-26-rgb: 234, 234, 234;
   --desktop-surface-32-rgb: 239, 239, 239;
   --desktop-surface-33-rgb: 241, 241, 241;
   --desktop-surface-34-rgb: 242, 242, 242;

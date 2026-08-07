@@ -6,7 +6,6 @@ import {
   ChatBubbleIcon,
   CodeIcon,
   CubeIcon,
-  FileTextIcon,
   GearIcon,
   GridIcon,
   HomeIcon,
@@ -97,7 +96,6 @@ function SessionRecoveryQa() {
             liveError="Runtime heartbeat expired"
             onRunAction={() => undefined}
             onOpenCanvas={() => undefined}
-            onCloseCanvas={() => undefined}
             thread={
               <div className="session-recovery-qa-thread">
                 <article className="from-user">
@@ -118,22 +116,6 @@ function SessionRecoveryQa() {
                     <small>Last confirmed at revision r7</small>
                   </span>
                 </section>
-              </div>
-            }
-            canvas={
-              <div className="session-recovery-qa-canvas">
-                <header>
-                  <FileTextIcon />
-                  <span>
-                    <strong>Run evidence</strong>
-                    <small>Last verified snapshot</small>
-                  </span>
-                </header>
-                <dl>
-                  <div><dt>Changes</dt><dd>4 files · +92 −18</dd></div>
-                  <div><dt>Checks</dt><dd>109 UI · 71 Rust</dd></div>
-                  <div><dt>Base</dt><dd>8f19c6e</dd></div>
-                </dl>
               </div>
             }
           />

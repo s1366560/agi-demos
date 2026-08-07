@@ -1,0 +1,195 @@
+/* Session context rail, hosted by the desktop right sidebar. Rules moved
+   verbatim from SessionWorkspace.css; the rail width is owned by the right
+   sidebar host now. */
+
+.session-context-rail {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 12px 12px 16px 10px;
+  scrollbar-width: thin;
+}
+
+.session-context-card {
+  display: grid;
+  min-width: 0;
+  padding: 6px 14px 8px;
+  background: var(--desktop-surface-6);
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 16px;
+}
+
+.session-context-section {
+  display: grid;
+  gap: 3px;
+  padding: 11px 0 10px;
+  border-bottom: 1px solid var(--desktop-border-soft);
+}
+
+.session-context-card > .session-context-section:last-child {
+  padding-bottom: 4px;
+  border-bottom: 0;
+}
+
+.session-context-attention {
+  --context-tone: var(--amber-9);
+  display: grid;
+  gap: 9px;
+  margin-bottom: 10px;
+  padding: 11px;
+  color: var(--context-tone);
+  background: color-mix(in srgb, var(--context-tone) 8%, var(--desktop-surface-12));
+  border: 1px solid color-mix(in srgb, var(--context-tone) 30%, var(--desktop-border-soft));
+  border-radius: 12px;
+}
+
+.session-context-attention.tone-danger { --context-tone: var(--red-9); }
+.session-context-attention.tone-success { --context-tone: var(--green-9); }
+.session-context-attention.tone-warning { --context-tone: var(--amber-9); }
+
+.session-context-attention header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.session-context-attention header svg { width: 13px; height: 13px; }
+.session-context-attention header strong { color: var(--desktop-text); font-size: 10px; }
+.session-context-attention p {
+  margin: 0;
+  color: var(--desktop-muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.session-context-attention-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.session-context-feedback { display: grid; gap: 6px; }
+.session-context-feedback label {
+  color: var(--desktop-faint);
+  font-size: 9px;
+}
+.session-context-feedback textarea {
+  min-height: 66px;
+  resize: vertical;
+  padding: 7px;
+  color: var(--desktop-text);
+  font: inherit;
+  font-size: 9px;
+  background: var(--desktop-surface-17);
+  border: 1px solid var(--desktop-border);
+  border-radius: 6px;
+}
+.session-context-feedback > div { display: flex; justify-content: flex-end; gap: 5px; }
+
+.session-context-section h2 {
+  margin: 0 0 4px;
+  color: var(--desktop-faint);
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: 0.01em;
+}
+
+.session-context-rows {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.session-context-rows > li {
+  display: flex;
+  min-width: 0;
+  min-height: 30px;
+  align-items: center;
+  gap: 9px;
+}
+
+.session-context-rows svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--desktop-muted);
+}
+
+.session-context-rows span {
+  overflow: hidden;
+  color: var(--desktop-text-pale);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-context-rows strong {
+  overflow: hidden;
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--desktop-muted);
+  font-size: 11px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-context-surfaces { gap: 1px; }
+.session-context-surfaces h2 { margin-bottom: 4px; }
+.session-context-surfaces > button {
+  display: flex;
+  width: calc(100% + 12px);
+  min-height: 32px;
+  align-items: center;
+  gap: 9px;
+  margin: 0 -6px;
+  padding: 0 6px;
+  color: var(--desktop-faint);
+  font: inherit;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+}
+
+.session-context-surfaces > button:hover,
+.session-context-surfaces > button:focus-visible {
+  color: var(--desktop-muted);
+  background: var(--desktop-surface-14);
+  outline: none;
+}
+
+.session-context-surfaces > button > svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.session-context-surfaces > button > svg:last-child {
+  width: 12px;
+  height: 12px;
+  color: var(--desktop-faint);
+}
+
+.session-context-surfaces strong {
+  overflow: hidden;
+  color: var(--desktop-text-pale);
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-context-surfaces small {
+  overflow: hidden;
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--desktop-faint);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

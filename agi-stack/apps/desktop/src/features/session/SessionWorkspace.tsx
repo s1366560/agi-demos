@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AlertDialog, Badge, Button } from '@radix-ui/themes';
 import {
   ActivityLogIcon,
-  ArchiveIcon,
   CheckCircledIcon,
   ChevronRightIcon,
   ClockIcon,
@@ -24,23 +23,11 @@ import {
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
-import { ResizeHandle, useResizablePanelWidth } from '../../components/ResizeHandle';
 import {
   ConversationLifecycleDialogs,
   type ConversationLifecycleMode,
 } from '../workspace/ConversationLifecycleDialogs';
-import {
-  defaultSessionCanvasTab,
-  type SessionCanvasTabId,
-} from './sessionCanvasModel';
-import {
-  sessionSurfaceForSession,
-  sessionSurfacePanes,
-  transitionSessionSurface,
-  type SessionSurfaceAction,
-  type SessionSurfaceState,
-} from './sessionLayoutModel';
-import type { SessionCanvasControls } from './workspaceReviewPanelModel';
+import type { SessionCanvasTabId } from './sessionCanvasModel';
 import {
   sessionLiveIndicator,
   sessionRecoveryPresentation,
@@ -54,10 +41,7 @@ import './SessionWorkspace.css';
 type SessionWorkspaceProps = {
   viewModel: SessionDetailViewModel;
   thread: ReactNode;
-  canvas: ReactNode | ((controls: SessionCanvasControls) => ReactNode) | null;
-  canvasRevealKey?: string | null;
   onOpenCanvas: (tab?: SessionCanvasTabId) => void;
-  onCloseCanvas: () => void;
   runActionPending: SessionRunAction | null;
   liveConnected: boolean;
   liveError: string | null;
@@ -74,16 +58,10 @@ const stageLabels: Array<{ id: Exclude<SessionStage, 'unavailable'>; label: stri
   { id: 'review', label: 'session.stageReview' },
 ];
 
-const CONTEXT_RAIL_WIDTH_STORAGE_KEY = 'agistack.desktop.contextRailWidth';
-const CONTEXT_RAIL_WIDTH_CONSTRAINTS = { min: 200, max: 480, default: 248 } as const;
-
 export function SessionWorkspace({
   viewModel,
   thread,
-  canvas,
-  canvasRevealKey,
   onOpenCanvas,
-  onCloseCanvas,
   runActionPending,
   liveConnected,
   liveError,
@@ -93,21 +71,10 @@ export function SessionWorkspace({
   onDeleteConversation,
 }: SessionWorkspaceProps) {
   const { t } = useI18n();
-  const contextRailWidth = useResizablePanelWidth(
-    CONTEXT_RAIL_WIDTH_STORAGE_KEY,
-    CONTEXT_RAIL_WIDTH_CONSTRAINTS,
-  );
-  const hasCanvas = Boolean(canvas);
-  const [surfaceState, setSurfaceState] = useState<SessionSurfaceState>(() => ({
-    sessionId: viewModel.id,
-    surface: 'conversation',
-  }));
-  const surface = sessionSurfaceForSession(surfaceState, viewModel.id);
   const [reviewFeedbackOpen, setReviewFeedbackOpen] = useState(false);
   const [reviewFeedback, setReviewFeedback] = useState('');
   const [recoveryConfirmOpen, setRecoveryConfirmOpen] = useState(false);
   const [lifecycleMode, setLifecycleMode] = useState<ConversationLifecycleMode>(null);
-  const canvasTriggerRef = useRef<string | null>(null);
   const moreActionsRef = useRef<HTMLDetailsElement>(null);
   const moreActionsSummaryRef = useRef<HTMLElement>(null);
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
@@ -118,10 +85,10 @@ export function SessionWorkspace({
   const forkPresentation = sessionRecoveryPresentation('fork');
   const actionDisabled = runActionPending !== null || viewModel.runRevision === null;
 
-  const panes = sessionSurfacePanes(surface, hasCanvas);
-  const showStatusBanner = statusPresentation !== null && surface !== 'conversation';
+  // The context rail lives in the right sidebar now, so the banner is the
+  // only attention surface inside the thread column and must always show.
+  const showStatusBanner = statusPresentation !== null;
   const conversationModePresentation = conversationModeLabel(viewModel.conversationMode, t);
-  const evidenceSurface = viewModel.capabilityMode === 'code' ? 'checks' : 'verification';
 
   const closeMoreActions = (restoreFocus = false) => {
     moreActionsRef.current?.removeAttribute('open');
@@ -150,23 +117,6 @@ export function SessionWorkspace({
     };
   }, [moreActionsOpen]);
 
-  const transitionSurface = (action: SessionSurfaceAction) => {
-    setSurfaceState((current) => transitionSessionSurface(current, viewModel.id, action));
-  };
-
-  useEffect(() => {
-    if (!hasCanvas) {
-      transitionSurface('close_canvas');
-    }
-  }, [hasCanvas, viewModel.id]);
-
-  useEffect(() => {
-    if (!canvasRevealKey || !hasCanvas) return;
-    setSurfaceState((current) =>
-      transitionSessionSurface(current, viewModel.id, 'open_canvas'),
-    );
-  }, [canvasRevealKey, hasCanvas, viewModel.id]);
-
   useEffect(() => {
     if (viewModel.status !== 'ready_review') {
       setReviewFeedbackOpen(false);
@@ -174,50 +124,11 @@ export function SessionWorkspace({
     }
   }, [viewModel.status]);
 
-  const revealCanvas = () => {
-    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
-      canvasTriggerRef.current =
-        document.activeElement.dataset.sessionCanvasTrigger ?? canvasTriggerRef.current;
-    }
-    transitionSurface('open_canvas');
-  };
-
-  const openCanvas = (tab?: SessionCanvasTabId) => {
-    revealCanvas();
-    onOpenCanvas(tab ?? defaultSessionCanvasTab(viewModel.status, viewModel.capabilityMode));
-  };
-
-  const closeCanvas = () => {
-    const triggerId = canvasTriggerRef.current;
-    transitionSurface('close_canvas');
-    onCloseCanvas();
-    if (triggerId && typeof window !== 'undefined') {
-      window.requestAnimationFrame(() => {
-        const triggers = document.querySelectorAll<HTMLButtonElement>(
-          '[data-session-canvas-trigger]',
-        );
-        for (const trigger of triggers) {
-          if (trigger.dataset.sessionCanvasTrigger !== triggerId) continue;
-          trigger.focus();
-          break;
-        }
-      });
-    }
-  };
   const closeLifecycleDialog = () => {
     setLifecycleMode(null);
     if (typeof window === 'undefined') return;
     window.requestAnimationFrame(() => moreActionsSummaryRef.current?.focus());
   };
-
-  const canvasControls: SessionCanvasControls = {
-    layout: surface === 'canvas' ? 'focus' : 'split',
-    onLayoutChange: (layout) => {
-      transitionSurface(layout === 'focus' ? 'focus_canvas' : 'show_split');
-    },
-    onClose: closeCanvas,
-  };
-  const canvasContent = typeof canvas === 'function' ? canvas(canvasControls) : canvas;
 
   return (
     <section
@@ -416,7 +327,7 @@ export function SessionWorkspace({
                 type="button"
                 onClick={() => {
                   closeMoreActions();
-                  openCanvas('overview');
+                  onOpenCanvas('overview');
                 }}
               >
                 <ReaderIcon /> {t('session.canvasOverview')}
@@ -556,16 +467,8 @@ export function SessionWorkspace({
         </div>
       ) : null}
 
-      <div
-        className={`session-workspace-body surface-${surface}`}
-        style={
-          {
-            '--session-context-rail-preferred-width': `${Math.round(contextRailWidth.width)}px`,
-          } as CSSProperties
-        }
-      >
-        {panes.thread ? (
-          <section className="session-workspace-thread" aria-label={t('session.thread')}>
+      <div className="session-workspace-body">
+        <section className="session-workspace-thread" aria-label={t('session.thread')}>
             <div className="session-pane-label">
               <span>
                 <ActivityLogIcon /> {t('session.sessionLog')}
@@ -584,253 +487,24 @@ export function SessionWorkspace({
               <em title={liveError ?? undefined} data-live-tone={liveIndicator.tone}>
                 {t(liveIndicator.labelKey)}
               </em>
-              {surface === 'conversation' ? (
-                <button
-                  type="button"
-                  data-session-canvas-trigger="default"
-                  aria-label={t('session.openCanvas')}
-                  title={t('session.openCanvas')}
-                  onClick={() => openCanvas()}
-                >
-                  {t('session.openCanvas')} <ReaderIcon />
-                </button>
-              ) : null}
+              <button
+                type="button"
+                data-session-canvas-trigger="default"
+                aria-label={t('session.openCanvas')}
+                title={t('session.openCanvas')}
+                onClick={() => onOpenCanvas()}
+              >
+                {t('session.openCanvas')} <ReaderIcon />
+              </button>
             </div>
             {thread}
           </section>
-        ) : null}
-        {panes.contextRail ? (
-          <aside className="session-context-rail" aria-label={t('session.runContext')}>
-            <ResizeHandle
-              side="leading"
-              width={contextRailWidth.width}
-              constraints={CONTEXT_RAIL_WIDTH_CONSTRAINTS}
-              label={t('layout.resizeContextRail')}
-              onResize={contextRailWidth.resize}
-              onReset={contextRailWidth.reset}
-            />
-            {statusPresentation ? (
-              <section className={`session-context-attention tone-${statusPresentation.tone}`}>
-                <header>
-                  <ExclamationTriangleIcon />
-                  <strong>{t(statusPresentation.titleKey)}</strong>
-                </header>
-                <p>
-                  {statusPresentation.tone === 'danger' && viewModel.error
-                    ? viewModel.error
-                    : t(statusPresentation.descriptionKey)}
-                </p>
-                <div className="session-context-attention-actions">
-                  {runActions.includes('request_changes') ? (
-                    <Button
-                      size="1"
-                      variant="surface"
-                      disabled={actionDisabled}
-                      onClick={() => setReviewFeedbackOpen(true)}
-                    >
-                      <Pencil2Icon /> {t('session.requestChanges')}
-                    </Button>
-                  ) : null}
-                  {runActions.includes('approve') ? (
-                    <Button
-                      size="1"
-                      color="green"
-                      disabled={actionDisabled}
-                      onClick={() => onRunAction('approve')}
-                    >
-                      <CheckCircledIcon />
-                      {runActionPending === 'approve'
-                        ? t('session.approvingRun')
-                        : t('session.approveRun')}
-                    </Button>
-                  ) : null}
-                  {!runActions.includes('approve') && !runActions.includes('request_changes') ? (
-                    <Button size="1" variant="surface" onClick={() => openCanvas('plan')}>
-                      {t('session.reviewCanvas')}
-                    </Button>
-                  ) : null}
-                </div>
-                {reviewFeedbackOpen && runActions.includes('request_changes') ? (
-                  <form
-                    className="session-context-feedback"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      const feedback = reviewFeedback.trim();
-                      if (!feedback) return;
-                      onRunAction('request_changes', feedback);
-                    }}
-                  >
-                    <label htmlFor="session-context-review-feedback">
-                      {t('session.changeRequestLabel')}
-                    </label>
-                    <textarea
-                      id="session-context-review-feedback"
-                      value={reviewFeedback}
-                      placeholder={t('session.changeRequestPlaceholder')}
-                      onChange={(event) => setReviewFeedback(event.target.value)}
-                    />
-                    <div>
-                      <Button
-                        size="1"
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setReviewFeedbackOpen(false)}
-                      >
-                        {t('session.cancelAction')}
-                      </Button>
-                      <Button
-                        size="1"
-                        type="submit"
-                        disabled={!reviewFeedback.trim() || runActionPending !== null}
-                      >
-                        {runActionPending === 'request_changes'
-                          ? t('session.sendingChanges')
-                          : t('session.sendChanges')}
-                      </Button>
-                    </div>
-                  </form>
-                ) : null}
-              </section>
-            ) : null}
-
-            <section className="session-context-section">
-              <h2>{t('session.runSnapshot')}</h2>
-              <dl>
-                <div>
-                  <dt>{t('session.overviewStatus')}</dt>
-                  <dd>{statusLabel(viewModel.status, t)}</dd>
-                </div>
-                <div>
-                  <dt>{t('session.conversation')}</dt>
-                  <dd>
-                    {viewModel.capabilityMode === 'unavailable'
-                      ? t('session.notAvailable')
-                      : viewModel.capabilityMode === 'code'
-                        ? t('session.code')
-                        : t('session.work')}
-                  </dd>
-                </div>
-                <div>
-                  <dt>{t('session.runMode')}</dt>
-                  <dd>
-                    {viewModel.executionMode === 'unavailable'
-                      ? t('session.notAvailable')
-                      : executionModeLabel(viewModel.executionMode, t)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>{t('session.elapsed')}</dt>
-                  <dd>{viewModel.elapsedLabel ?? t('session.notAvailable')}</dd>
-                </div>
-                {viewModel.environmentLabel ? (
-                  <div className="wide">
-                    <dt>{t('session.overviewEnvironment')}</dt>
-                    <dd title={viewModel.environmentLabel}>{viewModel.environmentLabel}</dd>
-                  </div>
-                ) : null}
-              </dl>
-            </section>
-
-            <section className="session-context-section session-context-surfaces">
-              <h2>{t('session.workSurfaces')}</h2>
-              <button
-                type="button"
-                data-session-canvas-trigger="plan"
-                onClick={() => openCanvas('plan')}
-              >
-                <ActivityLogIcon />
-                <span>
-                  <strong>{t('session.canvasPlan')}</strong>
-                  <small>{viewModel.hasPlan ? t('session.planReady') : t('session.noPlanShort')}</small>
-                </span>
-                <ChevronRightIcon />
-              </button>
-              <button
-                type="button"
-                data-session-canvas-trigger="output"
-                onClick={() =>
-                  openCanvas(viewModel.capabilityMode === 'code' ? 'changes' : 'artifacts')
-                }
-              >
-                {viewModel.capabilityMode === 'code' ? <CodeIcon /> : <ArchiveIcon />}
-                <span>
-                  <strong>
-                    {viewModel.capabilityMode === 'code'
-                      ? t('session.canvasChanges')
-                      : t('session.canvasArtifacts')}
-                  </strong>
-                  <small>
-                    {viewModel.artifactCount === null
-                      ? t('session.notAvailable')
-                      : t('session.evidence.recordCount', { count: viewModel.artifactCount })}
-                  </small>
-                </span>
-                <ChevronRightIcon />
-              </button>
-              <button
-                type="button"
-                data-session-canvas-trigger="evidence"
-                onClick={() => openCanvas(evidenceSurface)}
-              >
-                <CheckCircledIcon />
-                <span>
-                  <strong>
-                    {evidenceSurface === 'checks'
-                      ? t('session.canvasChecks')
-                      : t('session.canvasVerification')}
-                  </strong>
-                  <small>
-                    {viewModel.verificationCount === null
-                      ? t('session.notAvailable')
-                      : t('session.evidence.recordCount', {
-                          count: viewModel.verificationCount,
-                        })}
-                  </small>
-                </span>
-                <ChevronRightIcon />
-              </button>
-            </section>
-
-            <section className="session-context-section session-context-evidence">
-              <h2>{t('session.latestEvidence')}</h2>
-              <dl>
-                <div>
-                  <dt>{t('session.toolActivity')}</dt>
-                  <dd>
-                    {viewModel.toolActivityCount === null
-                      ? t('session.notAvailable')
-                      : viewModel.toolActivityCount}
-                  </dd>
-                </div>
-                <div>
-                  <dt>{t('session.failedShort')}</dt>
-                  <dd>
-                    {viewModel.failedToolActivityCount === null
-                      ? t('session.notAvailable')
-                      : viewModel.failedToolActivityCount}
-                  </dd>
-                </div>
-                <div>
-                  <dt>{t('session.canvasSources')}</dt>
-                  <dd>
-                    {viewModel.sourceCount === null ? t('session.notAvailable') : viewModel.sourceCount}
-                  </dd>
-                </div>
-              </dl>
-            </section>
-          </aside>
-        ) : null}
-        {panes.canvas && canvasContent ? (
-          <aside className="session-workspace-canvas" aria-label={t('session.canvas')}>
-            {canvasContent}
-          </aside>
-        ) : null}
       </div>
     </section>
   );
 }
 
-function executionModeLabel(
+export function executionModeLabel(
   mode: Exclude<SessionDetailViewModel['executionMode'], 'unavailable'>,
   t: (key: string) => string,
 ) {
@@ -839,10 +513,7 @@ function executionModeLabel(
   return t('session.buildMode');
 }
 
-function conversationModeLabel(
-  mode: string | null,
-  t: (key: string) => string,
-): string | null {
+function conversationModeLabel(mode: string | null, t: (key: string) => string): string | null {
   if (mode === 'single_agent' || mode === 'multi_agent_isolated') {
     return t('session.privateConversation');
   }
@@ -851,7 +522,7 @@ function conversationModeLabel(
   return null;
 }
 
-function statusLabel(status: string, t: (key: string) => string): string {
+export function statusLabel(status: string, t: (key: string) => string): string {
   const normalized = status.trim().toLowerCase();
   const labels: Record<string, string> = {
     unavailable: 'session.notAvailable',

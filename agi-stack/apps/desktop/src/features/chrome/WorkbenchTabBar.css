@@ -1,0 +1,91 @@
+/* Workbench tab row: 32px strip above the content layer. Placement of the
+   row itself is owned by the .workbench grid in styles/chrome.css. */
+
+.workbench-tab-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 32px;
+  min-width: 0;
+  padding: 4px 8px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 1px solid var(--desktop-border-soft);
+  background: var(--desktop-surface-7);
+  scrollbar-width: none;
+}
+
+.workbench-tab-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.workbench-tab {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 180px;
+  flex: 0 1 auto;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  color: var(--desktop-faint);
+}
+
+.workbench-tab:hover {
+  color: var(--desktop-muted);
+}
+
+.workbench-tab.active {
+  border-color: var(--desktop-border-soft);
+  background: var(--desktop-bg);
+  color: var(--desktop-text);
+}
+
+.workbench-tab button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.workbench-tab-activate {
+  min-width: 0;
+  padding: 0 4px 0 10px;
+  font-size: 11px;
+}
+
+.workbench-tab-activate span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workbench-tab-close {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  margin-right: 4px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--desktop-faint);
+  opacity: 0;
+}
+
+.workbench-tab:hover .workbench-tab-close,
+.workbench-tab.active .workbench-tab-close,
+.workbench-tab-close:focus-visible {
+  opacity: 1;
+}
+
+.workbench-tab-close:hover {
+  background: rgba(var(--desktop-slate-rgb), 0.12);
+  color: var(--desktop-text);
+}
+
+.workbench-tab-close svg {
+  width: 10px;
+  height: 10px;
+}

@@ -77,6 +77,7 @@ const primaryItems = [
   { id: 'my-work', labelKey: 'nav.myWork', icon: DashboardIcon },
   { id: 'automations', labelKey: 'nav.automations', icon: RocketIcon },
   { id: 'search', labelKey: 'nav.search', icon: MagnifyingGlassIcon },
+  { id: 'activity', labelKey: 'sidebar.activity', icon: BellIcon },
 ] as const;
 
 export function DesktopSidebar({
@@ -141,24 +142,13 @@ export function DesktopSidebar({
 
   return (
     <aside className="desktop-design-sidebar" aria-label={t('sidebar.primaryNavigation')}>
+      {/* Brand: one compact row. */}
       <div className="desktop-design-brand">
         <img src="/icon-192.png" alt="" />
-        <div>
-          <strong>MemStack</strong>
-          <span>{t('sidebar.agentWorkspace')}</span>
-        </div>
+        <strong>MemStack</strong>
       </div>
 
-      <button
-        className="desktop-design-new-task"
-        type="button"
-        disabled={Boolean(newTaskDisabledReason)}
-        title={newTaskDisabledReason ?? undefined}
-        onClick={onNewTask}
-      >
-        <PlusIcon /> {t('overview.newTask')}
-      </button>
-
+      {/* View navigation: every workbench section in one column. */}
       <nav className="desktop-design-primary-nav">
         {primaryItems.map(({ id, labelKey, icon: Icon }) => (
           <button
@@ -170,12 +160,23 @@ export function DesktopSidebar({
             <Icon />
             <span>{t(labelKey)}</span>
             {id === 'my-work' && taskCount > 0 ? <small>{taskCount}</small> : null}
+            {id === 'activity' && activityUnreadCount > 0 ? <small>{activityUnreadCount}</small> : null}
           </button>
         ))}
       </nav>
 
-      <section className="desktop-design-workspaces">
-        <header>
+      {/* Header: the primary create action and the project/workspace heading. */}
+      <div className="desktop-design-header">
+        <button
+          className="desktop-design-new-task"
+          type="button"
+          disabled={Boolean(newTaskDisabledReason)}
+          title={newTaskDisabledReason ?? undefined}
+          onClick={onNewTask}
+        >
+          <PlusIcon /> {t('overview.newTask')}
+        </button>
+        <header className="desktop-design-header-row">
           <strong>{projectName}</strong>
           <div className="desktop-workspace-heading-actions">
             <span>{t('workspaceTree.workspaces')}</span>
@@ -192,6 +193,10 @@ export function DesktopSidebar({
             ) : null}
           </div>
         </header>
+      </div>
+
+      {/* Core list: the workspace tree owns the remaining scrollable space. */}
+      <section className="desktop-design-workspaces">
         <WorkspaceDock
           workspaces={workspaces}
           conversationsByWorkspace={conversationsByWorkspace}
@@ -214,21 +219,17 @@ export function DesktopSidebar({
         />
       </section>
 
-      <div className="desktop-design-sidebar-bottom">
-        <nav className="desktop-design-footer-nav">
-          <button
-            className={activeSection === 'activity' ? 'active' : ''}
-            type="button"
-            onClick={() => onNavigate('activity')}
-          >
-            <BellIcon /> <span>{t('sidebar.activity')}</span>
-            {activityUnreadCount > 0 ? <small>{activityUnreadCount}</small> : null}
-          </button>
-          <button type="button" onClick={onOpenAccountSettings}>
-            <GearIcon /> <span>{t('settings.title')}</span>
-          </button>
-        </nav>
-
+      {/* Bottom toolbar: settings entry plus the profile menu trigger. */}
+      <div className="desktop-design-toolbar">
+        <button
+          className="desktop-design-toolbar-button"
+          type="button"
+          aria-label={t('settings.title')}
+          title={t('settings.title')}
+          onClick={onOpenAccountSettings}
+        >
+          <GearIcon />
+        </button>
         <div ref={profileMenuRef} className="desktop-design-profile-wrap">
           {profileOpen ? (
             <div

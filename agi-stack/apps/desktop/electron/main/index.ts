@@ -337,6 +337,16 @@ async function executeDesktopCommand(
         mainWindow.focus();
       }
       return undefined;
+    case 'window_controls': {
+      if (!mainWindow) return undefined;
+      const action = args?.action;
+      if (action === 'minimize') mainWindow.minimize();
+      else if (action === 'maximize') mainWindow.maximize();
+      else if (action === 'unmaximize') mainWindow.unmaximize();
+      else if (action === 'close') mainWindow.close();
+      else throw new Error('window control action is not supported');
+      return undefined;
+    }
     default:
       if (SIDECAR_COMMANDS.has(command)) {
         if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
@@ -515,6 +525,18 @@ function installNavigationPolicy(window: BrowserWindow, developmentUrl: URL | nu
 
 async function createMainWindow(): Promise<void> {
   const developmentUrl = rendererDevelopmentUrl();
+  // Frameless window: the renderer draws its own titlebar. macOS keeps the
+  // native traffic lights inset into the drag region, Windows hides the
+  // native titlebar, and Linux drops the frame entirely.
+  const framelessWindowOptions =
+    process.platform === 'darwin'
+      ? {
+          titleBarStyle: 'hiddenInset' as const,
+          trafficLightPosition: { x: 12, y: 10 },
+        }
+      : process.platform === 'win32'
+        ? { titleBarStyle: 'hidden' as const }
+        : { frame: false as const };
   const window = new BrowserWindow({
     title: 'agi-stack Desktop',
     width: 1728,
@@ -523,6 +545,7 @@ async function createMainWindow(): Promise<void> {
     minHeight: 720,
     center: true,
     show: false,
+    ...framelessWindowOptions,
     webPreferences: {
       preload: join(currentDirectory, '../preload/index.cjs'),
       contextIsolation: true,

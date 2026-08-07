@@ -1,0 +1,84 @@
+/* Frameless titlebar: the strip itself drags the window, interactive
+   elements opt out. Grid placement lives in styles/chrome.css. */
+
+.desktop-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  min-width: 0;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--desktop-border-soft);
+  background: var(--desktop-surface-7);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.desktop-titlebar-traffic-pad {
+  flex: 0 0 80px;
+  width: 80px;
+  height: 100%;
+}
+
+.desktop-titlebar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--desktop-muted);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.desktop-titlebar-button:hover {
+  background: rgba(var(--desktop-white-rgb), 0.08);
+  color: var(--desktop-text);
+}
+
+.desktop-titlebar-button[aria-pressed='false'] {
+  color: var(--desktop-faint);
+}
+
+.desktop-titlebar-button:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.desktop-titlebar-button:disabled:hover {
+  background: transparent;
+  color: var(--desktop-faint);
+}
+
+.desktop-titlebar-close-button:hover {
+  background: rgba(var(--desktop-red-rgb), 0.82);
+  color: var(--desktop-text);
+}
+
+.desktop-titlebar-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--desktop-muted);
+  font-size: 12px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-titlebar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.desktop-titlebar-window-buttons {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+}

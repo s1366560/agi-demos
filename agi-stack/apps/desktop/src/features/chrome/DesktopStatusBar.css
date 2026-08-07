@@ -1,0 +1,42 @@
+/* Bottom status bar. Grid placement lives in styles/chrome.css. */
+
+.desktop-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 24px;
+  min-width: 0;
+  padding: 0 10px;
+  overflow: hidden;
+  border-top: 1px solid var(--desktop-border-soft);
+  background: var(--desktop-surface-7);
+  color: var(--desktop-faint);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.desktop-status-bar-segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.desktop-status-bar-segment[data-tone='ready'] {
+  color: var(--desktop-muted);
+}
+
+.desktop-status-bar-segment[data-tone='error'] {
+  color: var(--desktop-red-blush);
+}
+
+.desktop-status-bar-spacer {
+  flex: 1 1 auto;
+}
+
+.desktop-status-bar-context {
+  flex: 0 1 auto;
+  color: var(--desktop-muted);
+}

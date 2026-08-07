@@ -43,6 +43,7 @@ const allowedCommands = new Set([
   'local_runtime_configure',
   'request_microphone_access',
   'focus_main_window',
+  'window_controls',
 ]);
 
 async function invokeDesktopCommand<T = unknown>(
@@ -82,6 +83,17 @@ function openWebControlPlane({
 function focusMainWindow(): Promise<void> {
   return invokeDesktopCommand('focus_main_window');
 }
+
+const windowControls = Object.freeze({
+  minimize: (): Promise<void> =>
+    invokeDesktopCommand('window_controls', { action: 'minimize' }),
+  maximize: (): Promise<void> =>
+    invokeDesktopCommand('window_controls', { action: 'maximize' }),
+  unmaximize: (): Promise<void> =>
+    invokeDesktopCommand('window_controls', { action: 'unmaximize' }),
+  close: (): Promise<void> =>
+    invokeDesktopCommand('window_controls', { action: 'close' }),
+});
 
 async function saveNativeFile(
   request: NativeFileSaveRequest,
@@ -133,11 +145,13 @@ contextBridge.exposeInMainWorld(
   '__MEMSTACK_DESKTOP__',
   Object.freeze({
     runtime: 'electron',
+    platform: process.platform,
     core: commandBridge,
     captureCurrentDisplay,
     getCapabilities,
     openWebControlPlane,
     focusMainWindow,
+    windowControls,
     files: fileBridge,
     events: Object.freeze({
       onSidecarRecovered,

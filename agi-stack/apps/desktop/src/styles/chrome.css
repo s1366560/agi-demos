@@ -7,40 +7,40 @@
   display: grid;
   width: 100vw;
   height: 100vh;
-  grid-template-columns: var(--desktop-sidebar-width) minmax(0, 1fr);
-  grid-template-rows: 44px minmax(0, 1fr);
+  grid-template-columns: var(--desktop-sidebar-width) minmax(0, 1fr) auto;
+  grid-template-rows: 0 minmax(0, 1fr) 24px;
   background: var(--desktop-bg);
 }
 
 .app-shell.desktop-window {
-  grid-template-rows: 44px minmax(0, 1fr);
+  grid-template-rows: 36px minmax(0, 1fr) 24px;
 }
 
 .app-shell.sidebar-collapsed {
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: 44px minmax(0, 1fr) auto;
 }
 
 .app-shell.desktop-window.sidebar-collapsed {
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: 44px minmax(0, 1fr) auto;
 }
 
-.app-shell .window-dots,
-.app-shell .window-controls,
-.app-shell .traffic-lights,
-.app-shell .traffic-buttons,
-.app-shell .traffic-light,
-.app-shell .window-control-dot,
-.app-shell .macos-window-controls,
-.app-shell .mac-window-controls,
-.app-shell .titlebar-window-controls,
-.app-shell [aria-label="Window controls"],
-.app-shell [data-window-controls],
-.app-shell [data-desktop-window-controls],
-.app-shell [class*="traffic-light"],
-.app-shell [class*="window-control"],
-.app-shell [class*="window-dot"],
-html[data-desktop-window] .app-shell [class*="traffic-light"],
-html[data-desktop-window] .app-shell [class*="window-dot"] {
+/* Legacy prototype window chrome stays suppressed in the browser shell only;
+   the native shell draws its own desktop-titlebar window buttons. */
+.app-shell.browser-window .window-dots,
+.app-shell.browser-window .window-controls,
+.app-shell.browser-window .traffic-lights,
+.app-shell.browser-window .traffic-buttons,
+.app-shell.browser-window .traffic-light,
+.app-shell.browser-window .window-control-dot,
+.app-shell.browser-window .macos-window-controls,
+.app-shell.browser-window .mac-window-controls,
+.app-shell.browser-window .titlebar-window-controls,
+.app-shell.browser-window [aria-label="Window controls"],
+.app-shell.browser-window [data-window-controls],
+.app-shell.browser-window [data-desktop-window-controls],
+.app-shell.browser-window [class*="traffic-light"],
+.app-shell.browser-window [class*="window-control"],
+.app-shell.browser-window [class*="window-dot"] {
   display: none !important;
   width: 0 !important;
   height: 0 !important;
@@ -50,14 +50,24 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   pointer-events: none !important;
 }
 
-.app-shell .window-dots *,
-.app-shell .window-controls *,
-.app-shell .traffic-lights *,
-.app-shell .traffic-buttons *,
-.app-shell .macos-window-controls *,
-.app-shell .mac-window-controls *,
-.app-shell .titlebar-window-controls * {
+.app-shell.browser-window .window-dots *,
+.app-shell.browser-window .window-controls *,
+.app-shell.browser-window .traffic-lights *,
+.app-shell.browser-window .traffic-buttons *,
+.app-shell.browser-window .macos-window-controls *,
+.app-shell.browser-window .mac-window-controls *,
+.app-shell.browser-window .titlebar-window-controls * {
   display: none !important;
+}
+
+.desktop-titlebar {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.desktop-status-bar {
+  grid-column: 1 / -1;
+  grid-row: 3;
 }
 
 .titlebar {
@@ -124,9 +134,17 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   display: grid;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: 32px minmax(0, 1fr);
   overflow: hidden;
   background: var(--desktop-bg);
+}
+
+.workbench-content {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .workbench-layout {
@@ -249,11 +267,11 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
 .app-shell,
 .app-shell.desktop-window {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 44px minmax(0, 1fr);
+    grid-template-rows: 0 minmax(0, 1fr) 24px;
   }
 
 .app-shell.desktop-window {
-    grid-template-rows: 44px minmax(0, 1fr);
+    grid-template-rows: 36px minmax(0, 1fr) 24px;
   }
 
 .titlebar {
@@ -263,6 +281,10 @@ html[data-desktop-window] .app-shell [class*="window-dot"] {
   }
 
 .copilot-sidebar {
+    display: none;
+  }
+
+.desktop-right-sidebar {
     display: none;
   }
 

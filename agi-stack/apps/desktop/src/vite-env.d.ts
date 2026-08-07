@@ -84,10 +84,17 @@ type DesktopFileIngestResult = Readonly<{
 interface Window {
   __MEMSTACK_DESKTOP__?: {
     runtime: 'electron';
+    platform?: string;
     captureCurrentDisplay?: () => Promise<DesktopDisplayCapture>;
     getCapabilities?: () => Promise<DesktopNativeCapabilitySnapshot>;
     openWebControlPlane?: (request: WebControlPlaneRequest) => Promise<void>;
     focusMainWindow?: () => Promise<void>;
+    windowControls?: Readonly<{
+      minimize(): Promise<void>;
+      maximize(): Promise<void>;
+      unmaximize(): Promise<void>;
+      close(): Promise<void>;
+    }>;
     files?: Readonly<{
       save(request: DesktopFileSaveRequest): Promise<DesktopFileSaveResult>;
       open(request: DesktopFileOpenRequest): Promise<DesktopFileOpenResult>;

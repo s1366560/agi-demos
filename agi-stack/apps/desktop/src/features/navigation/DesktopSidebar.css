@@ -2,12 +2,12 @@
   position: relative;
   display: grid;
   grid-column: 1;
-  grid-row: 1;
+  grid-row: 2;
   grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
-  gap: 14px;
-  padding: 16px 12px 12px;
+  gap: 10px;
+  padding: 10px 12px;
   overflow: hidden;
   border-right: 1px solid var(--desktop-border-soft);
   background: var(--desktop-surface-18);
@@ -17,29 +17,19 @@
 .desktop-design-brand {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 7px;
   padding: 0 6px;
 }
 
 .desktop-design-brand img {
-  width: 30px;
-  height: 30px;
+  width: 18px;
+  height: 18px;
   object-fit: contain;
-}
-
-.desktop-design-brand > div {
-  display: grid;
-  gap: 2px;
 }
 
 .desktop-design-brand strong {
   color: var(--desktop-text);
-  font-size: 13px;
-}
-
-.desktop-design-brand span {
-  color: var(--desktop-faint);
-  font-size: 8px;
+  font-size: 12px;
 }
 
 .desktop-design-sidebar button {
@@ -50,12 +40,62 @@
   cursor: pointer;
 }
 
+.desktop-design-primary-nav {
+  display: grid;
+  gap: 2px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--desktop-border-soft);
+}
+
+.desktop-design-primary-nav button {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  text-align: left;
+}
+
+.desktop-design-primary-nav button:hover,
+.desktop-design-primary-nav button.active {
+  background: rgba(var(--desktop-slate-rgb), 0.07);
+  color: var(--desktop-text);
+}
+
+.desktop-design-primary-nav svg {
+  width: 13px;
+  height: 13px;
+}
+
+.desktop-design-primary-nav span {
+  font-size: 10px;
+}
+
+.desktop-design-primary-nav small {
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(var(--desktop-cyan-rgb), 0.12);
+  color: var(--desktop-cyan);
+  font-size: 8px;
+}
+
+.desktop-design-header {
+  display: grid;
+  gap: 8px;
+}
+
 .desktop-design-new-task {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 36px;
+  min-height: 32px;
   border: 1px solid rgba(var(--desktop-cyan-rgb), 0.56) !important;
   border-radius: 7px;
   background: rgba(var(--desktop-cyan-rgb), 0.1) !important;
@@ -75,73 +115,16 @@
   cursor: not-allowed;
 }
 
-.desktop-design-primary-nav,
-.desktop-design-footer-nav {
-  display: grid;
-  gap: 3px;
-}
-
-.desktop-design-primary-nav button,
-.desktop-design-footer-nav button {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  min-height: 31px;
-  padding: 0 8px;
-  border-radius: 6px;
-  text-align: left;
-}
-
-.desktop-design-primary-nav button:hover,
-.desktop-design-primary-nav button.active,
-.desktop-design-footer-nav button:hover,
-.desktop-design-footer-nav button.active {
-  background: rgba(var(--desktop-slate-rgb), 0.07);
-  color: var(--desktop-text);
-}
-
-.desktop-design-primary-nav svg,
-.desktop-design-footer-nav svg {
-  width: 13px;
-  height: 13px;
-}
-
-.desktop-design-primary-nav span,
-.desktop-design-footer-nav span {
-  font-size: 10px;
-}
-
-.desktop-design-primary-nav small,
-.desktop-design-footer-nav small {
-  display: grid;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  place-items: center;
-  border-radius: 999px;
-  background: rgba(var(--desktop-cyan-rgb), 0.12);
-  color: var(--desktop-cyan);
-  font-size: 8px;
-}
-
-.desktop-design-workspaces {
-  display: grid;
-  min-height: 0;
-  grid-template-rows: auto minmax(0, 1fr);
-  overflow: hidden;
-}
-
-.desktop-design-workspaces > header {
+.desktop-design-header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 5px 8px 8px;
+  padding: 2px 8px 0;
 }
 
-.desktop-design-workspaces > header strong,
-.desktop-design-workspaces > header span {
+.desktop-design-header-row strong,
+.desktop-design-header-row span {
   overflow: hidden;
   color: var(--desktop-faint);
   font-size: 8px;
@@ -152,7 +135,7 @@
   white-space: nowrap;
 }
 
-.desktop-design-workspaces > header strong {
+.desktop-design-header-row strong {
   max-width: 120px;
 }
 
@@ -195,11 +178,11 @@
   height: 10px;
 }
 
-.desktop-design-sidebar-bottom {
+.desktop-design-workspaces {
   display: grid;
-  gap: 9px;
-  border-top: 1px solid var(--desktop-border-soft);
-  padding-top: 10px;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .desktop-design-mode-switcher {
@@ -228,13 +211,38 @@
   box-shadow: inset 0 0 0 1px var(--desktop-border);
 }
 
-.desktop-design-footer-nav {
-  padding-bottom: 7px;
-  border-bottom: 1px solid var(--desktop-border-soft);
+.desktop-design-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--desktop-border-soft);
+}
+
+.desktop-design-toolbar-button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--desktop-muted);
+}
+
+.desktop-design-toolbar-button:hover {
+  background: rgba(var(--desktop-slate-rgb), 0.07);
+  color: var(--desktop-text);
+}
+
+.desktop-design-toolbar-button svg {
+  width: 13px;
+  height: 13px;
 }
 
 .desktop-design-profile-wrap {
   position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .desktop-design-profile {
@@ -244,7 +252,12 @@
   gap: 8px;
   width: 100%;
   padding: 4px;
+  border-radius: 6px;
   text-align: left;
+}
+
+.desktop-design-profile:hover {
+  background: rgba(var(--desktop-slate-rgb), 0.07);
 }
 
 .desktop-design-profile-avatar {
@@ -354,19 +367,16 @@
   color: var(--desktop-red-muted);
 }
 
+/* The hierarchy shell keeps the chrome.css titlebar/status-bar rows; only
+   the sidebar column is redeclared here, and the workbench stays on row 2. */
 .app-shell.hierarchy-shell,
 .app-shell.desktop-window.hierarchy-shell {
-  grid-template-rows: minmax(0, 1fr);
-  grid-template-columns: var(--desktop-sidebar-width) minmax(0, 1fr);
+  grid-template-columns: var(--desktop-sidebar-width) minmax(0, 1fr) auto;
 }
 
 .app-shell.hierarchy-shell .titlebar,
 .app-shell.hierarchy-shell .copilot-sidebar {
   display: none;
-}
-
-.app-shell.hierarchy-shell .workbench {
-  grid-row: 1;
 }
 
 .app-shell.hierarchy-shell .pane-stage.single-stage {
