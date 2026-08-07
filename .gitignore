@@ -155,3 +155,8 @@ agi-stack/apps/run-os-prototype/.npm-cache/
 # root-level <project-id>/.memstack/workspace-manifest.json files.
 /*/.memstack/workspace-manifest.json
 .pnpm-store/
+
+# TypeScript incremental build caches and tsc outputs of vite.config.ts (web/tsconfig.node.json, composite)
+*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts
