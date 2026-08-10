@@ -6,10 +6,10 @@ process.env.NODE_PATH = new URL('../node_modules', import.meta.url).pathname;
 Module._initPaths();
 
 const require = createRequire(import.meta.url);
-const compiled = '/tmp/agistack-project-agent-test-dist/src/features/project-agent';
+const compiled = '/tmp/agistack-desktop-test-dist/src/features/project-agent';
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
-const { I18nProvider } = require('/tmp/agistack-project-agent-test-dist/src/i18n.js');
+const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 
 const { createProjectAgentDashboardClient, PROJECT_AGENT_DASHBOARD_LOCAL_REASON } = require(
   `${compiled}/projectAgentDashboardClient.js`,

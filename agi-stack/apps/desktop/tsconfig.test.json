@@ -322,6 +322,8 @@
     "src/features/project-blackboard/ProjectBlackboardPage.tsx",
     "src/features/project-blackboard/projectBlackboardRouteModule.tsx",
     "src/features/project-blackboard/useProjectBlackboardController.ts",
+    "src/features/project-agent/**/*.ts",
+    "src/features/project-agent/**/*.tsx",
     "src/features/project-knowledge/**/*.ts",
     "src/features/project-knowledge/**/*.tsx",
     "src/features/project-playbooks/**/*.ts",

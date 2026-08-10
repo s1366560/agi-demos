@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const compiled = '/tmp/agistack-project-agent-test-dist/src/features/project-agent';
+const compiled = '/tmp/agistack-desktop-test-dist/src/features/project-agent';
 const { PROJECT_AGENT_CAPABILITY_IDS, loadProjectAgentCapabilities } = require(
   `${compiled}/projectAgentCapabilityAuthority.js`,
 );
