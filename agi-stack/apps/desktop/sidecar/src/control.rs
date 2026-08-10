@@ -19,7 +19,8 @@ use zeroize::Zeroize;
 use crate::{
     application_vault::ApplicationCredentialVault,
     data_migration::migrate_legacy_data,
-    local_runtime::{LocalRuntimeConfig, LocalRuntimeService},
+    local_runtime::{browser_bridge, LocalRuntimeConfig, LocalRuntimeService},
+    native_host,
     trusted_session::{
         deserialize_local_record, serialize_local_record, TrustedSessionBroker,
         TrustedSessionRecord,
@@ -289,6 +290,27 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
             task::block_in_place(|| state.runtime.clear_local_trusted_session())
                 .map(|()| Value::Null)
         }
+        "browser_bridge_install" => task::block_in_place(native_host::install_manifests)
+            .and_then(|result| serde_json::to_value(result).map_err(|error| error.to_string())),
+        "browser_bridge_uninstall" => task::block_in_place(native_host::uninstall_manifests)
+            .and_then(|result| serde_json::to_value(result).map_err(|error| error.to_string())),
+        "browser_bridge_status" => browser_bridge_status_payload(&state.runtime),
+        "browser_bridge_dev_call" => match parse_arg::<String>(request.args.as_ref(), "method") {
+            Ok(method) => {
+                let params = request
+                    .args
+                    .as_ref()
+                    .and_then(Value::as_object)
+                    .and_then(|object| object.get("params"))
+                    .cloned()
+                    .unwrap_or(Value::Null);
+                state
+                    .runtime
+                    .browser_bridge_dev_call(&method, params)
+                    .await
+            }
+            Err(error) => Err(error),
+        },
         _ => Err("desktop command is not supported".to_string()),
     };
 
@@ -311,6 +333,22 @@ fn parse_arg<T: DeserializeOwned>(args: Option<&Value>, key: &str) -> Result<T, 
         .cloned()
         .ok_or_else(|| "desktop command arguments are invalid".to_string())?;
     serde_json::from_value(value).map_err(|_| "desktop command arguments are invalid".to_string())
+}
+
+/// `browser_bridge_status` payload: runtime state (from the local runtime)
+/// plus manifest probes and the registry location. Keys are camelCase per the
+/// bridge contract.
+fn browser_bridge_status_payload(runtime: &LocalRuntimeService) -> Result<Value, String> {
+    let status = runtime.status();
+    let registry_path = browser_bridge::registry_path()?;
+    Ok(serde_json::json!({
+        "enabled": status.browser_bridge.enabled,
+        "port": status.browser_bridge.port,
+        "brokerConnected": status.browser_bridge.broker_connected,
+        "manifests": native_host::manifest_statuses(),
+        "registryPath": registry_path,
+        "extensionIds": status.browser_bridge.extension_ids,
+    }))
 }
 
 fn failure(id: String, error: &str) -> ControlResponse {

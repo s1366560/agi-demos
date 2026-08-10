@@ -4,6 +4,7 @@ mod application_vault;
 mod control;
 mod data_migration;
 mod local_runtime;
+mod native_host;
 mod private_file_permissions;
 mod trusted_session;
 
@@ -27,7 +28,16 @@ fn main() {
             std::process::exit(1);
         }
     };
-    if let Err(error) = runtime.block_on(control::run()) {
+    let result = runtime.block_on(async {
+        match std::env::args().nth(1).as_deref() {
+            // Chrome native messaging manifests cannot carry arguments: Chrome
+            // launches the host with the extension origin as argv[1] instead.
+            Some("--native-host") => native_host::run().await,
+            Some(arg) if arg.starts_with("chrome-extension://") => native_host::run().await,
+            _ => control::run().await,
+        }
+    });
+    if let Err(error) = result {
         tracing::error!(error = %error, "desktop sidecar stopped");
         std::process::exit(1);
     }

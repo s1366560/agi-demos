@@ -8,6 +8,7 @@ use std::{
     },
 };
 
+use agistack_adapters_browser::host::BrowserToolHost;
 use agistack_adapters_device::SqliteCheckpointStore;
 use agistack_adapters_http_llm::{AnthropicLlm, HttpLlm};
 use agistack_adapters_local_tools::LocalToolHost;
@@ -76,8 +77,11 @@ mod automation_store;
 mod automation_worker;
 #[cfg(test)]
 mod automation_worker_tests;
+pub(crate) mod browser_bridge;
+mod browser_run_tool_host;
 mod changes;
 mod composer_context;
+mod fan_out_tool_host;
 #[cfg(test)]
 mod local_route_parity_tests;
 #[cfg(test)]
@@ -118,10 +122,10 @@ use auth_context::{
     TrustedSessionResumeRequest,
 };
 use authority_store::{
-    DesktopArtifactStatus, DesktopArtifactVersion, DesktopAuthorityError,
-    DesktopExecutionEnvironment, DesktopExecutionEnvironmentKind, DesktopHitlRequest,
-    DesktopHitlStatus, DesktopPermissionProfile, DesktopRun, DesktopRunStatus, WorkspaceToolGrant,
-    HITL_PENDING_AUTHORITY_REVISION,
+    BrowserOriginDecision, BrowserOriginGrant, DesktopArtifactStatus, DesktopArtifactVersion,
+    DesktopAuthorityError, DesktopExecutionEnvironment, DesktopExecutionEnvironmentKind,
+    DesktopHitlRequest, DesktopHitlStatus, DesktopPermissionProfile, DesktopRun, DesktopRunStatus,
+    WorkspaceToolGrant, BROWSER_ORIGIN_TARGET_KIND, HITL_PENDING_AUTHORITY_REVISION,
 };
 use authorized_tool_host::AuthorizedRunToolHost;
 use changes::{ChangeLineKind, ChangeSnapshot, ChangeSnapshotStatus, GitChangesInspector};
@@ -216,6 +220,7 @@ impl LocalRuntimeService {
 
     pub(crate) async fn shutdown(&self) {
         self.state.stop_automation_worker().await;
+        self.state.stop_browser_bridge();
     }
 
     pub(crate) fn save_local_trusted_session(&self, value: &str) -> Result<(), String> {
@@ -228,6 +233,31 @@ impl LocalRuntimeService {
 
     pub(crate) fn clear_local_trusted_session(&self) -> Result<(), String> {
         self.state.session_store.clear_local_trusted_session()
+    }
+
+    /// Dev/diagnostic hook: forward a raw JSON-RPC request to the connected
+    /// browser bridge broker (used by the bridge smoke test).
+    pub(crate) async fn browser_bridge_dev_call(
+        &self,
+        method: &str,
+        params: Value,
+    ) -> Result<Value, String> {
+        let server = {
+            let runtime = self
+                .state
+                .browser_bridge
+                .lock()
+                .expect("browser bridge runtime");
+            let bridge = runtime
+                .as_ref()
+                .filter(|bridge| bridge.broker_connected())
+                .ok_or_else(|| "browser bridge broker is not connected".to_string())?;
+            bridge.server()
+        };
+        server
+            .request(method, params)
+            .await
+            .map_err(|error| error.to_string())
     }
 
     pub fn status(&self) -> LocalRuntimeStatus {
@@ -288,8 +318,9 @@ impl LocalRuntimeService {
             workspace_root,
             tool_count: tools.len(),
             tools,
-            config,
             runtime_providers,
+            browser_bridge: self.state.browser_bridge_status(&config.browser_bridge),
+            config,
         }
     }
 
@@ -310,9 +341,96 @@ impl LocalRuntimeState {
             *self.workspace_root.lock().expect("local workspace root") = root;
             *self.tool_host.lock().expect("local tool host") = host;
         }
+        self.reconcile_browser_bridge(&config.browser_bridge)?;
         let mut current = self.config.lock().expect("local runtime config");
         *current = config;
         Ok(())
+    }
+
+    /// Start/stop the browser bridge so the running service matches `config`.
+    /// Every (re)start regenerates the token and rewrites the registry file.
+    fn reconcile_browser_bridge(
+        &self,
+        config: &browser_bridge::BrowserBridgeConfig,
+    ) -> Result<(), String> {
+        let mut slot = self.browser_bridge.lock().expect("browser bridge runtime");
+        match (config.enabled, slot.take()) {
+            (true, Some(current)) => {
+                if current.matches(config) {
+                    *slot = Some(current);
+                } else {
+                    current.stop();
+                    *slot = Some(browser_bridge::BrowserBridgeRuntime::start(config)?);
+                }
+            }
+            (true, None) => {
+                *slot = Some(browser_bridge::BrowserBridgeRuntime::start(config)?);
+            }
+            (false, Some(runtime)) => runtime.stop(),
+            (false, None) => {}
+        }
+        Ok(())
+    }
+
+    fn stop_browser_bridge(&self) {
+        if let Some(runtime) = self
+            .browser_bridge
+            .lock()
+            .expect("browser bridge runtime")
+            .take()
+        {
+            runtime.stop();
+        }
+    }
+
+    fn browser_bridge_status(
+        &self,
+        config: &browser_bridge::BrowserBridgeConfig,
+    ) -> browser_bridge::BrowserBridgeStatus {
+        let runtime = self.browser_bridge.lock().expect("browser bridge runtime");
+        browser_bridge::BrowserBridgeStatus {
+            enabled: config.enabled,
+            port: runtime
+                .as_ref()
+                .map_or(config.port, |runtime| runtime.port()),
+            broker_connected: runtime
+                .as_ref()
+                .is_some_and(|runtime| runtime.broker_connected()),
+            extension_ids: config.extension_ids.clone(),
+        }
+    }
+
+    /// The concrete browser tool host while the bridge is enabled *and* a
+    /// broker is connected; `None` otherwise, so browser tools never reach
+    /// the engine when the extension is offline. The concrete type is
+    /// exposed (not `Arc<dyn ToolHost>`) so the run wrapper can drive the
+    /// inherent `current_url` / `turn_ended` helpers.
+    fn connected_browser_tool_host(
+        &self,
+    ) -> Option<Arc<BrowserToolHost<browser_bridge::BrowserBridgeEndpoint>>> {
+        self.browser_bridge
+            .lock()
+            .expect("browser bridge runtime")
+            .as_ref()
+            .filter(|runtime| runtime.broker_connected())
+            .map(|runtime| runtime.browser_tool_host())
+    }
+
+    /// Turn-end cleanup for a run that reached a terminal status: ship the
+    /// run's tab leases to the extension (`turn_ended`, best-effort) and drop
+    /// the run's once-consent cache entries. No-op for non-terminal statuses
+    /// and while the bridge is offline.
+    async fn browser_run_cleanup(&self, run_id: &str, status: DesktopRunStatus) {
+        if !status.is_terminal() {
+            return;
+        }
+        if let Some(host) = self.connected_browser_tool_host() {
+            host.turn_ended(run_id).await;
+        }
+        self.browser_once_consents
+            .lock()
+            .expect("browser once consents")
+            .retain(|(consent_run_id, _)| consent_run_id != run_id);
     }
 }
 
@@ -321,6 +439,8 @@ impl LocalRuntimeState {
 pub struct LocalRuntimeConfig {
     #[serde(default)]
     pub workspace_root: String,
+    #[serde(default)]
+    pub browser_bridge: browser_bridge::BrowserBridgeConfig,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -342,6 +462,7 @@ pub struct LocalRuntimeStatus {
     pub tools: Vec<String>,
     pub config: LocalRuntimeConfig,
     pub runtime_providers: Vec<RuntimeProviderProjection>,
+    pub browser_bridge: browser_bridge::BrowserBridgeStatus,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -736,6 +857,10 @@ const PLAN_MODE_TOOL_NAMES: &[&str] = &[
     "preview_edit",
     "git_diff",
     "git_log",
+    "browser_list_tabs",
+    "browser_snapshot",
+    "browser_screenshot",
+    "browser_console_logs",
 ];
 const SUBMIT_PLAN_TOOL_NAME: &str = "submit_plan";
 
@@ -752,14 +877,14 @@ struct SubmitPlanTaskInput {
 
 #[derive(Clone)]
 struct PlanModeToolHost {
-    inner: LocalToolHost,
+    inner: Arc<dyn ToolHost>,
     session_store: DesktopSessionStore,
     conversation_id: String,
 }
 
 impl PlanModeToolHost {
     fn new(
-        inner: LocalToolHost,
+        inner: Arc<dyn ToolHost>,
         session_store: DesktopSessionStore,
         conversation_id: String,
     ) -> Self {
@@ -867,6 +992,8 @@ struct LocalRuntimeState {
     terminal_sessions: Mutex<HashMap<String, TerminalSessionLease>>,
     agent_runs: Mutex<HashMap<String, ActiveAgentRun>>,
     automation_worker: Mutex<Option<automation_worker::AutomationWorkerHandle>>,
+    browser_bridge: Mutex<Option<browser_bridge::BrowserBridgeRuntime>>,
+    browser_once_consents: browser_run_tool_host::BrowserOnceConsents,
     #[cfg(test)]
     agent_run_claim_attempts: AtomicU64,
     #[cfg(test)]
@@ -1189,6 +1316,8 @@ impl LocalRuntimeState {
             terminal_sessions: Mutex::new(HashMap::new()),
             agent_runs: Mutex::new(HashMap::new()),
             automation_worker: Mutex::new(None),
+            browser_bridge: Mutex::new(None),
+            browser_once_consents: browser_run_tool_host::new_browser_once_consents(),
             #[cfg(test)]
             agent_run_claim_attempts: AtomicU64::new(0),
             #[cfg(test)]
@@ -1655,8 +1784,16 @@ impl LocalRuntimeState {
                 };
             }
         }
-        self.session_store
-            .transition_run(&run.id, run.revision, status, error, now)
+        let outcome = self
+            .session_store
+            .transition_run(&run.id, run.revision, status, error, now);
+        if outcome.is_ok() {
+            // Turn-end cleanup (browser tab leases + once-consent cache) on
+            // every authoritative terminal transition; covers both
+            // run_agent_message and continue_after_hitl finalization paths.
+            self.browser_run_cleanup(&run.id, status).await;
+        }
+        outcome
     }
 
     async fn reconcile_recovered_runs_from_checkpoints(&self) -> Result<(), String> {
@@ -1674,6 +1811,10 @@ impl LocalRuntimeState {
                 quarantined.status,
                 &quarantined.updated_at,
             )?;
+            // Runs recovered as terminal at startup get the same turn-end
+            // cleanup best-effort (orphan tabs from a crashed run).
+            self.browser_run_cleanup(&quarantined.id, quarantined.status)
+                .await;
             self.delete_checkpoint_and_authority(&quarantined.conversation_id, None)
                 .await?;
         }
@@ -1708,6 +1849,8 @@ impl LocalRuntimeState {
                     Some(RECOVERED_CHECKPOINT_AUTHORITY_ERROR.to_string()),
                     &now_iso(),
                 )?;
+                self.browser_run_cleanup(&reconciled.id, reconciled.status)
+                    .await;
                 self.delete_checkpoint_and_authority(&run.conversation_id, None)
                     .await?;
                 self.publish_run_status(&reconciled);
@@ -1735,6 +1878,8 @@ impl LocalRuntimeState {
                 error,
                 &now_iso(),
             )?;
+            self.browser_run_cleanup(&reconciled.id, reconciled.status)
+                .await;
             self.publish_run_status(&reconciled);
         }
         Ok(())
@@ -2071,22 +2216,40 @@ impl LocalRuntimeState {
     ) -> Result<ReActEngine, String> {
         #[cfg(test)]
         self.agent_engine_attempts.fetch_add(1, Ordering::SeqCst);
-        let local_tool_host = match run.and_then(|run| run.environment.as_ref()) {
+        let local_tool_host: Arc<dyn ToolHost> = match run.and_then(|run| run.environment.as_ref())
+        {
             Some(environment) => {
                 self.worktree_manager().validate(environment)?;
-                LocalToolHost::new(&environment.workspace_path)
-                    .map_err(|error| error.to_string())?
+                Arc::new(
+                    LocalToolHost::new(&environment.workspace_path)
+                        .map_err(|error| error.to_string())?,
+                )
             }
-            None => self.tool_host.lock().expect("local tool host").clone(),
+            None => Arc::new(self.tool_host.lock().expect("local tool host").clone()),
+        };
+        // The browser bridge joins the tool surface only while its broker is
+        // connected; offline, the model never sees browser tools. The run
+        // wrapper injects `_run_id` and enforces origin consent (§4.3).
+        let combined_tool_host: Arc<dyn ToolHost> = match self.connected_browser_tool_host() {
+            Some(browser_host) => Arc::new(fan_out_tool_host::FanOutToolHost::new(vec![
+                local_tool_host,
+                Arc::new(browser_run_tool_host::BrowserRunToolHost::new(
+                    browser_host,
+                    self.session_store.clone(),
+                    run.cloned(),
+                    Arc::clone(&self.browser_once_consents),
+                )),
+            ])),
+            None => local_tool_host,
         };
         let tool_host: Arc<dyn ToolHost> = match conversation.current_mode {
             ConversationRunMode::Plan => Arc::new(PlanModeToolHost::new(
-                local_tool_host,
+                combined_tool_host,
                 self.session_store.clone(),
                 conversation.id.clone(),
             )),
             ConversationRunMode::Build => Arc::new(AuthorizedRunToolHost::new(
-                local_tool_host,
+                combined_tool_host,
                 self.session_store.clone(),
                 run.cloned().ok_or_else(|| {
                     "build mode requires an authoritative run for tool execution".to_string()
@@ -2622,6 +2785,14 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         .route(
             "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/tool-grants/:grant_id",
             delete(revoke_workspace_tool_grant),
+        )
+        .route(
+            "/api/v1/browser-bridge/origin-grants",
+            get(list_browser_origin_grants),
+        )
+        .route(
+            "/api/v1/browser-bridge/origin-grants/:grant_id",
+            delete(revoke_browser_origin_grant),
         )
         .route(
             "/api/v1/llm-providers/:provider_id/runtime-selection",
@@ -3866,6 +4037,49 @@ async fn revoke_workspace_tool_grant(
             )
         })?;
     Ok(Json(json!(grant)))
+}
+
+fn browser_origin_grant_json(grant: &BrowserOriginGrant) -> Value {
+    json!({
+        "id": grant.id,
+        "host": grant.host,
+        "decision": grant.decision.as_str(),
+        "source_hitl_request_id": grant.source_hitl_request_id,
+        "created_at": grant.created_at,
+    })
+}
+
+async fn list_browser_origin_grants(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(_authenticated): Extension<AuthenticatedContext>,
+) -> LocalJsonResult {
+    let grants = state
+        .session_store
+        .list_active_browser_origin_grants()
+        .map_err(local_store_error)?;
+    let grants: Vec<Value> = grants.iter().map(browser_origin_grant_json).collect();
+    Ok(Json(json!({ "grants": grants })))
+}
+
+async fn revoke_browser_origin_grant(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(_authenticated): Extension<AuthenticatedContext>,
+    Path(grant_id): Path<String>,
+) -> LocalJsonResult {
+    let grant = state
+        .session_store
+        .revoke_browser_origin_grant(&grant_id, &now_iso())
+        .map_err(local_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "detail": "browser origin grant not found" })),
+            )
+        })?;
+    Ok(Json(json!({
+        "success": true,
+        "grant": browser_origin_grant_json(&grant),
+    })))
 }
 
 fn normalized_routing_policy(
@@ -7527,7 +7741,9 @@ async fn respond_to_hitl(
             })),
         ));
     }
-    if request.kind == HitlKind::Permission && !valid_permission_response(&body.response_data) {
+    if request.kind == HitlKind::Permission
+        && !valid_permission_response(&request, &body.response_data)
+    {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(json!({ "detail": "invalid permission response" })),
@@ -7760,6 +7976,7 @@ async fn respond_to_hitl(
         &conversation,
         &body.response_data,
     )?;
+    let browser_origin_consent = browser_origin_grant_from_hitl(&request, &body.response_data)?;
     let engine = state
         .agent_engine(&conversation, engine_run.as_ref())
         .map_err(execution_environment_error)?;
@@ -7814,6 +8031,26 @@ async fn respond_to_hitl(
             return Err(hitl_response_commit_error(error));
         }
     };
+    // The HITL response is committed; apply the browser-origin consent.
+    // Persisted scopes go to the grant table; `once` joins the run-scoped
+    // in-memory cache only (never persisted). A duplicate response replays
+    // the first application, so nothing happens here on the duplicate path.
+    if let Some(consent) = browser_origin_consent {
+        match consent {
+            BrowserOriginConsent::Persist(grant) => {
+                if let Err(error) = state.session_store.insert_browser_origin_grant(&grant) {
+                    eprintln!("failed to persist browser origin grant: {error}");
+                }
+            }
+            BrowserOriginConsent::Once { run_id, host } => {
+                state
+                    .browser_once_consents
+                    .lock()
+                    .expect("browser once consents")
+                    .insert((run_id, host));
+            }
+        }
+    }
     let answered_timeline_type = if request.kind == HitlKind::A2uiAction {
         "a2ui_action_answered"
     } else {
@@ -8066,7 +8303,7 @@ fn hitl_response_commit_error(error: HitlResponseCommitError) -> (StatusCode, Js
     }
 }
 
-fn valid_permission_response(response_data: &Value) -> bool {
+fn valid_permission_response(request: &DesktopHitlRequest, response_data: &Value) -> bool {
     let Some(object) = response_data.as_object() else {
         return false;
     };
@@ -8083,12 +8320,28 @@ fn valid_permission_response(response_data: &Value) -> bool {
         return false;
     }
     let scope = object.get("scope").and_then(Value::as_str);
+    if is_browser_origin_permission(request) {
+        // Browser-origin consent: allow with once/site/all scopes; deny maps
+        // to a persisted decline decision.
+        return matches!(
+            (action, granted, scope),
+            ("allow", true, Some("once" | "site" | "all")) | ("deny", false, Some("once"))
+        );
+    }
     matches!(
         (action, granted, scope),
         ("allow", true, Some("once"))
             | ("allow_always", true, Some("workspace_tool"))
             | ("deny", false, Some("once"))
     )
+}
+
+fn is_browser_origin_permission(request: &DesktopHitlRequest) -> bool {
+    request.kind == HitlKind::Permission
+        && request
+            .decision
+            .as_ref()
+            .is_some_and(|decision| decision.target.kind == BROWSER_ORIGIN_TARGET_KIND)
 }
 
 fn validate_a2ui_action_response(
@@ -8282,6 +8535,64 @@ fn workspace_tool_grant_from_hitl(
         revoked_by: None,
         revoked_at: None,
     }))
+}
+
+/// The browser-origin consent derived from a permission HITL response, if
+/// the pending request targets `browser_origin`. Persisted scopes (`site`,
+/// `all`, `decline`) become grant rows; `once` stays in the run-scoped
+/// in-memory cache and is never persisted.
+enum BrowserOriginConsent {
+    Persist(BrowserOriginGrant),
+    Once { run_id: String, host: String },
+}
+
+fn browser_origin_grant_from_hitl(
+    request: &DesktopHitlRequest,
+    response_data: &Value,
+) -> Result<Option<BrowserOriginConsent>, (StatusCode, Json<Value>)> {
+    if !is_browser_origin_permission(request) {
+        return Ok(None);
+    }
+    let Some(decision) = request.decision.as_ref() else {
+        return Ok(None);
+    };
+    let host = decision.target.id.trim().to_lowercase();
+    if host.is_empty() {
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({ "detail": "browser origin permission context has no origin host" })),
+        ));
+    }
+    let action = response_data.get("action").and_then(Value::as_str);
+    let scope = response_data.get("scope").and_then(Value::as_str);
+    let grant = |host: String, decision: BrowserOriginDecision| {
+        BrowserOriginConsent::Persist(BrowserOriginGrant {
+            id: format!("local-browser-origin-grant-{}", Uuid::new_v4()),
+            host,
+            decision,
+            source_hitl_request_id: request.id.clone(),
+            created_at: now_iso(),
+            revoked_at: None,
+        })
+    };
+    match (action, scope) {
+        (Some("allow"), Some("site")) => Ok(Some(grant(host, BrowserOriginDecision::Site))),
+        // Scope `all` is the global '*' row.
+        (Some("allow"), Some("all")) => {
+            Ok(Some(grant("*".to_string(), BrowserOriginDecision::All)))
+        }
+        (Some("deny"), _) => Ok(Some(grant(host, BrowserOriginDecision::Decline))),
+        (Some("allow"), Some("once")) => {
+            let run_id = request.run_id.clone().ok_or_else(|| {
+                (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    Json(json!({ "detail": "browser origin once consent requires an active run" })),
+                )
+            })?;
+            Ok(Some(BrowserOriginConsent::Once { run_id, host }))
+        }
+        _ => Ok(None),
+    }
 }
 
 fn hitl_response_answer(kind: HitlKind, response_data: &Value) -> Option<String> {
@@ -8957,7 +9268,16 @@ async fn sandbox_execute(
 
 async fn mcp_tools_list(State(state): State<Arc<LocalRuntimeState>>) -> Json<Value> {
     let tool_host = state.tool_host.lock().expect("local tool host").clone();
-    Json(tool_host.mcp_tools_list_result())
+    let mut result = tool_host.mcp_tools_list_result();
+    // The engine consumes tool *names* via ToolHost::list_tools; schemas are
+    // served only through this listing, so the browser bridge merges its
+    // metadata here under the same broker-connected gate the engine uses.
+    if state.connected_browser_tool_host().is_some() {
+        if let Some(tools) = result.get_mut("tools").and_then(Value::as_array_mut) {
+            tools.extend(agistack_adapters_browser::list_tool_metadata());
+        }
+    }
+    Json(result)
 }
 
 #[derive(Deserialize)]
@@ -9007,7 +9327,7 @@ async fn mcp_tools_call(
         .map_err(execution_environment_error)?;
     let inner = LocalToolHost::new(&environment.workspace_path)
         .map_err(|error| execution_environment_error(error.to_string()))?;
-    let host = AuthorizedRunToolHost::new(inner, state.session_store.clone(), run);
+    let host = AuthorizedRunToolHost::new(Arc::new(inner), state.session_store.clone(), run);
     let input_json = serde_json::to_string(&body.arguments).map_err(|error| {
         (
             StatusCode::BAD_REQUEST,
@@ -9926,6 +10246,326 @@ mod tests {
                 digest: Some("sha256:test".to_string()),
             }],
         }
+    }
+
+    fn browser_origin_hitl_request(run_id: Option<&str>) -> DesktopHitlRequest {
+        let mut decision = test_decision_context();
+        decision.target.kind = BROWSER_ORIGIN_TARGET_KIND.to_string();
+        decision.target.id = "Example.COM".to_string();
+        DesktopHitlRequest {
+            id: "browser-origin-hitl".to_string(),
+            conversation_id: "conversation-browser-origin".to_string(),
+            run_id: run_id.map(ToString::to_string),
+            round: 1,
+            kind: HitlKind::Permission,
+            prompt: "Allow the agent to interact with example.com?".to_string(),
+            decision: Some(decision),
+            a2ui_action: None,
+            status: DesktopHitlStatus::Pending,
+            authority_revision: 1,
+            created_at: now_iso(),
+            responded_at: None,
+            response_data: None,
+            response_actor: None,
+            response_revision: None,
+            idempotency_key: None,
+        }
+    }
+
+    #[test]
+    fn browser_origin_permission_response_accepts_once_site_all_and_deny() {
+        let request = browser_origin_hitl_request(Some("run-1"));
+        for response in [
+            json!({"action": "allow", "granted": true, "scope": "once"}),
+            json!({"action": "allow", "granted": true, "scope": "site"}),
+            json!({"action": "allow", "granted": true, "scope": "all"}),
+            json!({"action": "deny", "granted": false, "scope": "once"}),
+        ] {
+            assert!(
+                valid_permission_response(&request, &response),
+                "response must be valid: {response}"
+            );
+        }
+        for response in [
+            // workspace_tool scope stays reserved for tool grants.
+            json!({"action": "allow_always", "granted": true, "scope": "workspace_tool"}),
+            json!({"action": "allow", "granted": true, "scope": "workspace_tool"}),
+            json!({"action": "deny", "granted": false, "scope": "site"}),
+            json!({"action": "allow", "granted": true, "scope": "bogus"}),
+            json!({"action": "allow", "granted": true}),
+            json!({"action": "allow", "scope": "once"}),
+            json!({"action": "allow", "granted": true, "scope": "once", "tool": "browser_navigate"}),
+        ] {
+            assert!(
+                !valid_permission_response(&request, &response),
+                "response must be rejected: {response}"
+            );
+        }
+        // Existing non-browser semantics are unchanged.
+        let mut other = browser_origin_hitl_request(Some("run-1"));
+        other.decision.as_mut().unwrap().target.kind = "worktree".to_string();
+        assert!(valid_permission_response(
+            &other,
+            &json!({"action": "allow_always", "granted": true, "scope": "workspace_tool"})
+        ));
+        assert!(!valid_permission_response(
+            &other,
+            &json!({"action": "allow", "granted": true, "scope": "site"})
+        ));
+        assert!(!valid_permission_response(
+            &other,
+            &json!({"action": "allow", "granted": true, "scope": "all"})
+        ));
+    }
+
+    #[test]
+    fn browser_origin_grant_from_hitl_maps_each_scope() {
+        let request = browser_origin_hitl_request(Some("run-1"));
+
+        let Some(BrowserOriginConsent::Persist(grant)) = browser_origin_grant_from_hitl(
+            &request,
+            &json!({"action": "allow", "granted": true, "scope": "site"}),
+        )
+        .expect("site consent") else {
+            panic!("site scope must persist a grant");
+        };
+        assert_eq!(grant.host, "example.com");
+        assert_eq!(grant.decision, BrowserOriginDecision::Site);
+        assert_eq!(grant.source_hitl_request_id, request.id);
+
+        let Some(BrowserOriginConsent::Persist(grant)) = browser_origin_grant_from_hitl(
+            &request,
+            &json!({"action": "allow", "granted": true, "scope": "all"}),
+        )
+        .expect("all consent") else {
+            panic!("all scope must persist a grant");
+        };
+        assert_eq!(grant.host, "*");
+        assert_eq!(grant.decision, BrowserOriginDecision::All);
+
+        let Some(BrowserOriginConsent::Persist(grant)) = browser_origin_grant_from_hitl(
+            &request,
+            &json!({"action": "deny", "granted": false, "scope": "once"}),
+        )
+        .expect("deny consent") else {
+            panic!("deny must persist a decline grant");
+        };
+        assert_eq!(grant.host, "example.com");
+        assert_eq!(grant.decision, BrowserOriginDecision::Decline);
+
+        // `once` is run-scoped only and never becomes a grant row.
+        let Some(BrowserOriginConsent::Once { run_id, host }) = browser_origin_grant_from_hitl(
+            &request,
+            &json!({"action": "allow", "granted": true, "scope": "once"}),
+        )
+        .expect("once consent") else {
+            panic!("once scope must stay in the run-scoped cache");
+        };
+        assert_eq!(run_id, "run-1");
+        assert_eq!(host, "example.com");
+
+        // `once` without an active run cannot be honored.
+        let without_run = browser_origin_hitl_request(None);
+        assert!(browser_origin_grant_from_hitl(
+            &without_run,
+            &json!({"action": "allow", "granted": true, "scope": "once"}),
+        )
+        .is_err());
+
+        // Non-browser permission requests produce no origin consent.
+        let mut other = browser_origin_hitl_request(Some("run-1"));
+        other.decision.as_mut().unwrap().target.kind = "worktree".to_string();
+        assert!(browser_origin_grant_from_hitl(
+            &other,
+            &json!({"action": "allow", "granted": true, "scope": "site"}),
+        )
+        .expect("non-browser request")
+        .is_none());
+    }
+
+    #[tokio::test]
+    async fn browser_run_cleanup_clears_once_consents_only_on_terminal_status() {
+        let state = test_state("browser-cleanup-secret");
+        {
+            let mut consents = state.browser_once_consents.lock().unwrap();
+            consents.insert(("run-x".to_string(), "a.test".to_string()));
+            consents.insert(("run-x".to_string(), "b.test".to_string()));
+            consents.insert(("run-y".to_string(), "a.test".to_string()));
+        }
+        // Non-terminal: nothing happens.
+        state
+            .browser_run_cleanup("run-x", DesktopRunStatus::ReadyReview)
+            .await;
+        assert_eq!(state.browser_once_consents.lock().unwrap().len(), 3);
+        // Terminal: the run's entries are dropped, other runs keep theirs.
+        state
+            .browser_run_cleanup("run-x", DesktopRunStatus::Completed)
+            .await;
+        let consents = state.browser_once_consents.lock().unwrap();
+        assert_eq!(consents.len(), 1);
+        assert!(consents.contains(&("run-y".to_string(), "a.test".to_string())));
+    }
+
+    #[tokio::test]
+    async fn persist_authoritative_run_outcome_clears_once_consents_on_terminal_transition() {
+        let state = test_state("browser-finalize-secret");
+        let conversation_id = "conversation-browser-finalize";
+        seed_plan_conversation(&state, conversation_id);
+        state
+            .session_store
+            .replace_agent_plan_tasks(
+                conversation_id,
+                &[json!({
+                    "id": "browser-finalize-task",
+                    "conversation_id": conversation_id,
+                    "content": "Exercise browser turn-end cleanup",
+                    "status": "pending",
+                    "priority": "high",
+                    "order_index": 0,
+                    "created_at": now_iso(),
+                    "updated_at": now_iso(),
+                })],
+            )
+            .expect("store plan");
+        let plan = state
+            .session_store
+            .latest_draft_plan(conversation_id)
+            .expect("load plan")
+            .expect("plan");
+        let outcome = state
+            .session_store
+            .approve_plan_and_start_in_environment(session_store::ApprovePlanStartInput {
+                conversation_id,
+                project_id: "local-project",
+                plan_version_id: &plan.id,
+                expected_plan_version: plan.version,
+                idempotency_key: "browser-finalize-run",
+                message_id: "browser-finalize-message",
+                request_message: "Run with browser consent",
+                environment: None,
+                requested_environment_kind: DesktopExecutionEnvironmentKind::Local,
+                permission_profile: DesktopPermissionProfile::FullAccess,
+                now: &now_iso(),
+            })
+            .expect("approve and start");
+        state
+            .ensure_authoritative_launch_checkpoint(&outcome.run)
+            .await
+            .expect("launch checkpoint");
+        let run = state
+            .session_store
+            .prepare_run_for_execution(&outcome.run.id, &now_iso())
+            .expect("prepare run")
+            .expect("run started");
+        state
+            .browser_once_consents
+            .lock()
+            .unwrap()
+            .insert((run.id.clone(), "example.com".to_string()));
+
+        state
+            .persist_authoritative_run_outcome(
+                &run,
+                DesktopRunStatus::Failed,
+                Some("browser run failed".to_string()),
+                &now_iso(),
+            )
+            .await
+            .expect("terminal outcome persisted");
+
+        assert!(
+            state.browser_once_consents.lock().unwrap().is_empty(),
+            "terminal transition must clear the run's once consents"
+        );
+    }
+
+    #[tokio::test]
+    async fn browser_origin_grant_routes_list_and_revoke() {
+        let state = test_state("browser-grant-secret");
+        for (host, decision) in [
+            ("example.com", BrowserOriginDecision::Site),
+            ("*", BrowserOriginDecision::Decline),
+        ] {
+            state
+                .session_store
+                .insert_browser_origin_grant(&BrowserOriginGrant {
+                    id: format!("grant-{host}"),
+                    host: host.to_string(),
+                    decision,
+                    source_hitl_request_id: "hitl-1".to_string(),
+                    created_at: now_iso(),
+                    revoked_at: None,
+                })
+                .expect("insert grant");
+        }
+        let app = local_router(Arc::clone(&state));
+
+        let list = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/browser-bridge/origin-grants")
+                    .header("authorization", "Bearer browser-grant-secret")
+                    .body(Body::empty())
+                    .expect("list request"),
+            )
+            .await
+            .expect("list response");
+        assert_eq!(list.status(), StatusCode::OK);
+        let body = response_json(list).await;
+        let grants = body["grants"].as_array().expect("grants array");
+        assert_eq!(grants.len(), 2);
+        assert!(grants.iter().all(|grant| grant["id"].is_string()
+            && grant["host"].is_string()
+            && grant["decision"].is_string()
+            && grant["source_hitl_request_id"].is_string()
+            && grant["created_at"].is_string()));
+
+        let revoke = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/api/v1/browser-bridge/origin-grants/grant-example.com")
+                    .header("authorization", "Bearer browser-grant-secret")
+                    .body(Body::empty())
+                    .expect("revoke request"),
+            )
+            .await
+            .expect("revoke response");
+        assert_eq!(revoke.status(), StatusCode::OK);
+        let body = response_json(revoke).await;
+        assert_eq!(body["success"], true);
+        assert_eq!(body["grant"]["host"], "example.com");
+
+        let list = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/browser-bridge/origin-grants")
+                    .header("authorization", "Bearer browser-grant-secret")
+                    .body(Body::empty())
+                    .expect("list request"),
+            )
+            .await
+            .expect("list response");
+        let body = response_json(list).await;
+        let grants = body["grants"].as_array().expect("grants array");
+        assert_eq!(grants.len(), 1);
+        assert_eq!(grants[0]["host"], "*");
+
+        let missing = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/api/v1/browser-bridge/origin-grants/grant-unknown")
+                    .header("authorization", "Bearer browser-grant-secret")
+                    .body(Body::empty())
+                    .expect("revoke request"),
+            )
+            .await
+            .expect("revoke response");
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
@@ -12950,7 +13590,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("migrated schema version");
-        assert_eq!(version, 21);
+        assert_eq!(version, 22);
         let selection_table: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
@@ -13039,13 +13679,13 @@ mod tests {
             let connection =
                 rusqlite::Connection::open(&future_path).expect("open future database");
             connection
-                .execute_batch("PRAGMA user_version = 22;")
+                .execute_batch("PRAGMA user_version = 23;")
                 .expect("mark future schema version");
         }
         let error = DesktopSessionStore::open(&future_path)
             .err()
             .expect("future schema must be rejected");
-        assert!(error.contains("newer than supported schema version 21"));
+        assert!(error.contains("newer than supported schema version 22"));
 
         std::fs::remove_dir_all(root).expect("remove schema test root");
     }
@@ -13871,7 +14511,7 @@ mod tests {
         let schema_version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("schema version");
-        assert_eq!(schema_version, 21);
+        assert_eq!(schema_version, 22);
         drop(connection);
         std::fs::remove_dir_all(root).expect("remove test root");
     }
@@ -15323,6 +15963,18 @@ mod tests {
         );
     }
 
+    #[test]
+    fn plan_mode_allows_the_read_only_browser_tools() {
+        for tool in [
+            "browser_list_tabs",
+            "browser_snapshot",
+            "browser_screenshot",
+            "browser_console_logs",
+        ] {
+            assert!(PlanModeToolHost::is_allowed(tool));
+        }
+    }
+
     #[tokio::test]
     async fn plan_mode_tool_host_allows_inspection_and_rejects_workspace_mutation() {
         let root = test_root();
@@ -15330,7 +15982,7 @@ mod tests {
         std::fs::write(root.join("notes.txt"), "plan context").expect("write fixture");
         let store = DesktopSessionStore::in_memory().expect("session store");
         let host = PlanModeToolHost::new(
-            LocalToolHost::new(&root).expect("tool host"),
+            Arc::new(LocalToolHost::new(&root).expect("tool host")),
             store.clone(),
             "conversation-plan".to_string(),
         );
@@ -19155,6 +19807,11 @@ mod tests {
                 &now_iso(),
             )
             .expect("ready review");
+        state
+            .browser_once_consents
+            .lock()
+            .unwrap()
+            .insert((ready.id.clone(), "example.com".to_string()));
 
         let response = local_router(Arc::clone(&state))
             .oneshot(
@@ -19181,6 +19838,10 @@ mod tests {
         assert_eq!(completed.status, DesktopRunStatus::Completed);
         assert_eq!(completed.id, ready.id);
         assert_eq!(completed.revision, ready.revision + 1);
+        assert!(
+            state.browser_once_consents.lock().unwrap().is_empty(),
+            "review approval must clear the run's once consents"
+        );
     }
 
     #[tokio::test]
@@ -19212,6 +19873,11 @@ mod tests {
             .session_store
             .bind_checkpoint_authority(&paused, &now_iso())
             .expect("bind paused checkpoint authority");
+        state
+            .browser_once_consents
+            .lock()
+            .unwrap()
+            .insert((paused.id.clone(), "example.com".to_string()));
 
         let response = local_router(Arc::clone(&state))
             .oneshot(
@@ -19237,6 +19903,10 @@ mod tests {
             .expect("run");
         assert_eq!(cancelled.status, DesktopRunStatus::Cancelled);
         assert!(cancelled.completed_at.is_some());
+        assert!(
+            state.browser_once_consents.lock().unwrap().is_empty(),
+            "cancel must clear the run's once consents"
+        );
     }
 
     #[tokio::test]

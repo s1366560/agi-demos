@@ -457,19 +457,12 @@ async fn registered_axum_routes_are_closed_over_the_executable_catalog() {
             registered_contracts.insert((method.to_string(), manifest_pattern.clone()));
             let covered = contract.routes.iter().any(|probe| {
                 probe.method == method && route_path_matches(&manifest_pattern, &probe.uri)
+            }) || contract.manifest_pending_routes.iter().any(|pending| {
+                pending.method == method && route_path_matches(&manifest_pattern, &pending.path)
             }) || contract
-                .manifest_pending_routes
+                .router_fixture_not_applicable
                 .iter()
-                .any(|pending| {
-                    pending.method == method
-                        && route_path_matches(&manifest_pattern, &pending.path)
-                })
-                || contract
-                    .router_fixture_not_applicable
-                    .iter()
-                    .any(|exception| {
-                        exception.method == method && exception.path == manifest_pattern
-                    });
+                .any(|exception| exception.method == method && exception.path == manifest_pattern);
             if !covered {
                 missing_catalog_contracts.push(format!("{method} {manifest_pattern}"));
             }

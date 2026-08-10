@@ -670,6 +670,9 @@ pub(super) async fn cancel_run(
         state.release_agent_run_if_control(&run.conversation_id, &control);
         let cancelled = cancelled.map_err(local_store_error)?;
         state.publish_run_status(&cancelled);
+        state
+            .browser_run_cleanup(&cancelled.id, cancelled.status)
+            .await;
         return Ok(Json(json!({
             "accepted": true,
             "status": "cancelled",
@@ -716,6 +719,9 @@ pub(super) async fn cancel_run(
     state.release_agent_run_if_control(&conversation.id, &control);
     let cancelled = cancelled.map_err(local_store_error)?;
     state.publish_run_status(&cancelled);
+    state
+        .browser_run_cleanup(&cancelled.id, cancelled.status)
+        .await;
     Ok(Json(json!({
         "accepted": true,
         "status": "cancelled",
@@ -770,6 +776,9 @@ pub(super) async fn review_run(
                 )
                 .map_err(local_store_error)?;
             state.publish_run_status(&completed);
+            state
+                .browser_run_cleanup(&completed.id, completed.status)
+                .await;
             append_review_decision(&state, &completed, &decision, &body.action, None);
             Ok(Json(json!({
                 "accepted": true,

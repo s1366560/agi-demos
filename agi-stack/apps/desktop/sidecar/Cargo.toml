@@ -38,6 +38,7 @@ uuid = { version = "1", features = ["v4", "v5"] }
 zeroize = "1"
 
 agistack-core = { path = "../../../crates/core" }
+agistack-adapters-browser = { path = "../../../crates/adapters-browser" }
 agistack-adapters-device = { path = "../../../crates/adapters-device" }
 agistack-adapters-http-llm = { path = "../../../crates/adapters-http-llm" }
 agistack-adapters-local-tools = { path = "../../../crates/adapters-local-tools" }

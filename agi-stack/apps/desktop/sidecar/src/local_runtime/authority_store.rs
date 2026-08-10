@@ -234,6 +234,50 @@ pub(super) struct WorkspaceToolGrant {
     pub revoked_at: Option<String>,
 }
 
+/// Persisted origin consent for the browser bridge (see
+/// `docs/design/browser-extension-bridge.md` §4.3). `host == "*"` is the
+/// global row written by scope `all` responses (or a global decline).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(super) struct BrowserOriginGrant {
+    pub id: String,
+    pub host: String,
+    pub decision: BrowserOriginDecision,
+    pub source_hitl_request_id: String,
+    pub created_at: String,
+    pub revoked_at: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum BrowserOriginDecision {
+    Site,
+    All,
+    Decline,
+}
+
+impl BrowserOriginDecision {
+    pub(super) fn as_str(self) -> &'static str {
+        match self {
+            Self::Site => "site",
+            Self::All => "all",
+            Self::Decline => "decline",
+        }
+    }
+
+    pub(super) fn from_str(value: &str) -> Result<Self, String> {
+        match value {
+            "site" => Ok(Self::Site),
+            "all" => Ok(Self::All),
+            "decline" => Ok(Self::Decline),
+            other => Err(format!("unknown browser origin decision: {other}")),
+        }
+    }
+}
+
+/// The HITL permission target kind carrying a browser-origin consent request.
+/// The target id is the origin host the agent asked about.
+pub(super) const BROWSER_ORIGIN_TARGET_KIND: &str = "browser_origin";
+
 #[derive(Debug)]
 pub(super) enum DesktopAuthorityError {
     ConversationNotFound,

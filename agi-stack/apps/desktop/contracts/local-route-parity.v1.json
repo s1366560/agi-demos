@@ -1971,6 +1971,16 @@
       "reason_code": "executable_fixture_registered_route_not_catalogued"
     },
     {
+      "method": "GET",
+      "path": "/api/v1/browser-bridge/origin-grants",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/browser-bridge/origin-grants/{grant_id}",
+      "reason_code": "executable_fixture_registered_route_not_catalogued"
+    },
+    {
       "method": "PATCH",
       "path": "/api/v1/llm-providers/{provider_id}",
       "reason_code": "executable_fixture_registered_route_not_catalogued"

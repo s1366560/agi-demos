@@ -1,8 +1,10 @@
 //! Fail-closed, run-scoped tool execution for the local desktop runtime.
 
-use std::{collections::BTreeSet, sync::LazyLock};
+use std::{
+    collections::BTreeSet,
+    sync::{Arc, LazyLock},
+};
 
-use agistack_adapters_local_tools::LocalToolHost;
 use agistack_core::ports::{CoreError, CoreResult, ToolHost};
 use async_trait::async_trait;
 use chrono::Utc;
@@ -21,14 +23,14 @@ const PROFILE_GRANT_TTL_MS: i64 = 5 * 60 * 1_000;
 
 #[derive(Clone)]
 pub(super) struct AuthorizedRunToolHost {
-    inner: LocalToolHost,
+    inner: Arc<dyn ToolHost>,
     session_store: DesktopSessionStore,
     run: DesktopRun,
 }
 
 impl AuthorizedRunToolHost {
     pub(super) fn new(
-        inner: LocalToolHost,
+        inner: Arc<dyn ToolHost>,
         session_store: DesktopSessionStore,
         run: DesktopRun,
     ) -> Self {
@@ -91,6 +93,17 @@ impl ToolHost for AuthorizedRunToolHost {
             return Err(CoreError::Tool(format!(
                 "tool '{tool}' is outside the approved permission profile"
             )));
+        }
+        // Browser tools are remote side effects authorized by the
+        // origin-consent layer (persisted origin grants + the run-scoped once
+        // cache), not the workspace invocation ledger. They bypass the
+        // digest-based replay/dedup path entirely: a consent-gated
+        // short-circuit result (origin_consent_required / origin_declined) is
+        // deliberately an Ok tool result, and ledgering it as Completed would
+        // trap a byte-identical retry after the user grants consent behind
+        // the "already completed" replay.
+        if tool.starts_with("browser_") {
+            return self.inner.call(tool, input_json).await;
         }
         let input: Value = serde_json::from_str(input_json)
             .map_err(|error| CoreError::Tool(format!("invalid tool input: {error}")))?;
@@ -279,6 +292,10 @@ const READ_ONLY_TOOLS: &[&str] = &[
     "get_terminal_status",
     "get_desktop_status",
     "deps_check",
+    "browser_list_tabs",
+    "browser_snapshot",
+    "browser_screenshot",
+    "browser_console_logs",
 ];
 
 const WORKSPACE_WRITE_TOOLS: &[&str] = &[
@@ -318,6 +335,13 @@ const MUTATING_TOOLS: &[&str] = &[
     "import_file",
     "import_files_batch",
     "deps_install",
+    "browser_navigate",
+    "browser_click",
+    "browser_type",
+    "browser_scroll",
+    "browser_new_tab",
+    "browser_claim_tab",
+    "browser_mark_tab",
 ];
 
 #[cfg(test)]
@@ -330,6 +354,7 @@ mod tests {
         session_store::ApprovePlanStartInput,
         ConversationCapabilityMode, ConversationRunMode, LocalConversation,
     };
+    use agistack_adapters_local_tools::LocalToolHost;
     use uuid::Uuid;
 
     fn running_host(
@@ -408,7 +433,7 @@ mod tests {
             return Err("run is not active".to_string());
         }
         let inner = LocalToolHost::new(&root).map_err(|error| error.to_string())?;
-        let host = AuthorizedRunToolHost::new(inner, store.clone(), run.clone());
+        let host = AuthorizedRunToolHost::new(Arc::new(inner), store.clone(), run.clone());
         Ok((root, store, run, host))
     }
 
@@ -421,6 +446,37 @@ mod tests {
         assert!(!tools.contains(&"bash".to_string()));
         std::fs::remove_dir_all(root).map_err(|error| error.to_string())?;
         Ok(())
+    }
+
+    #[test]
+    fn browser_tools_are_classified_read_only() {
+        for tool in [
+            "browser_list_tabs",
+            "browser_snapshot",
+            "browser_screenshot",
+            "browser_console_logs",
+        ] {
+            assert_eq!(tool_effect(tool), Some(ToolEffect::Read));
+        }
+    }
+
+    #[test]
+    fn browser_mutation_tools_are_classified_mutating_and_excluded_from_plan_mode() {
+        for tool in [
+            "browser_navigate",
+            "browser_click",
+            "browser_type",
+            "browser_scroll",
+            "browser_new_tab",
+            "browser_claim_tab",
+            "browser_mark_tab",
+        ] {
+            assert_eq!(tool_effect(tool), Some(ToolEffect::Mutate), "tool {tool}");
+            assert!(
+                !super::super::PLAN_MODE_TOOL_NAMES.contains(&tool),
+                "mutating browser tool {tool} must stay out of plan mode"
+            );
+        }
     }
 
     #[tokio::test]

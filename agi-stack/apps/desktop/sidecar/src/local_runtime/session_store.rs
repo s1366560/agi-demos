@@ -16,8 +16,9 @@ use super::{
         is_recovered_unstarted_run, query_conversation, query_latest_draft_plan,
         query_plan_version, query_run, query_run_by_idempotency, recover_interrupted_runs,
         typed_rows, update_conversation_in_transaction, update_plan_version, update_run,
-        ApprovePlanOutcome, DesktopArtifactDelivery, DesktopArtifactStatus, DesktopArtifactVersion,
-        DesktopAuthorityError, DesktopExecutionEnvironment, DesktopHitlRequest, DesktopHitlStatus,
+        ApprovePlanOutcome, BrowserOriginDecision, BrowserOriginGrant, DesktopArtifactDelivery,
+        DesktopArtifactStatus, DesktopArtifactVersion, DesktopAuthorityError,
+        DesktopExecutionEnvironment, DesktopHitlRequest, DesktopHitlStatus,
         DesktopPermissionProfile, DesktopPlanStatus, DesktopPlanVersion, DesktopRun,
         DesktopRunStatus, WorkspaceToolGrant, HITL_PENDING_AUTHORITY_REVISION,
     },
@@ -35,7 +36,7 @@ use super::{
     ConversationCapabilityMode, ConversationRunMode, LocalConversation,
 };
 
-const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 21;
+const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 22;
 const INSTALLATION_ID_METADATA_KEY: &str = "installation_id";
 const LOCAL_TRUSTED_SESSION_METADATA_KEY: &str = "local_trusted_session_v1";
 const MAX_TIMELINE_PAGE_LIMIT: usize = 500;
@@ -586,6 +587,14 @@ impl DesktopSessionStore {
                    revoked_at TEXT,
                    value_json TEXT NOT NULL
                  );
+                 CREATE TABLE IF NOT EXISTS desktop_browser_origin_grants (
+                   id TEXT PRIMARY KEY,
+                   host TEXT NOT NULL,
+                   decision TEXT NOT NULL CHECK (decision IN ('site', 'all', 'decline')),
+                   source_hitl_request_id TEXT NOT NULL,
+                   created_at TEXT NOT NULL,
+                   revoked_at TEXT
+                 );
                  CREATE TABLE IF NOT EXISTS desktop_tool_invocations (
                    id TEXT PRIMARY KEY,
                    run_id TEXT NOT NULL,
@@ -643,6 +652,8 @@ impl DesktopSessionStore {
                    ON desktop_workspace_tool_grants(
                      workspace_id, canonical_tool_name, revoked_at, created_at DESC
                    );
+                 CREATE INDEX IF NOT EXISTS idx_desktop_browser_origin_grants_host
+                   ON desktop_browser_origin_grants(host, revoked_at, created_at DESC);
                  CREATE INDEX IF NOT EXISTS idx_desktop_tool_invocations_run
                    ON desktop_tool_invocations(run_id, prepared_at_ms DESC);
                  CREATE INDEX IF NOT EXISTS idx_desktop_tool_invocations_status
@@ -4018,6 +4029,118 @@ impl DesktopSessionStore {
         Ok(Some(grant))
     }
 
+    /// Insert a browser origin grant, superseding (revoking) any active row
+    /// for the same host so a host has at most one active decision.
+    pub(super) fn insert_browser_origin_grant(
+        &self,
+        grant: &BrowserOriginGrant,
+    ) -> Result<(), String> {
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        transaction
+            .execute(
+                "UPDATE desktop_browser_origin_grants
+                 SET revoked_at = ?2 WHERE host = ?1 AND revoked_at IS NULL",
+                params![grant.host, grant.created_at],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction
+            .execute(
+                "INSERT INTO desktop_browser_origin_grants(
+                   id, host, decision, source_hitl_request_id, created_at, revoked_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, NULL)",
+                params![
+                    grant.id,
+                    grant.host,
+                    grant.decision.as_str(),
+                    grant.source_hitl_request_id,
+                    grant.created_at,
+                ],
+            )
+            .map(|_| ())
+            .map_err(|error| error.to_string())?;
+        transaction.commit().map_err(|error| error.to_string())
+    }
+
+    pub(super) fn list_active_browser_origin_grants(
+        &self,
+    ) -> Result<Vec<BrowserOriginGrant>, String> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, host, decision, source_hitl_request_id, created_at, revoked_at
+                 FROM desktop_browser_origin_grants
+                 WHERE revoked_at IS NULL
+                 ORDER BY created_at DESC, id DESC",
+            )
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map([], browser_origin_grant_from_row)
+            .map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())
+    }
+
+    /// Active decisions relevant to `host`: the host-specific row (if any)
+    /// and the global `'*'` row (if any). The caller applies the decision
+    /// matrix (decline > global all > site).
+    pub(super) fn active_browser_origin_decisions(
+        &self,
+        host: &str,
+    ) -> Result<Vec<BrowserOriginGrant>, String> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, host, decision, source_hitl_request_id, created_at, revoked_at
+                 FROM desktop_browser_origin_grants
+                 WHERE revoked_at IS NULL AND (host = ?1 OR host = '*')
+                 ORDER BY created_at DESC, id DESC",
+            )
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map([host], browser_origin_grant_from_row)
+            .map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())
+    }
+
+    pub(super) fn revoke_browser_origin_grant(
+        &self,
+        grant_id: &str,
+        revoked_at: &str,
+    ) -> Result<Option<BrowserOriginGrant>, String> {
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        let grant = transaction
+            .query_row(
+                "SELECT id, host, decision, source_hitl_request_id, created_at, revoked_at
+                 FROM desktop_browser_origin_grants
+                 WHERE id = ?1 AND revoked_at IS NULL",
+                [grant_id],
+                browser_origin_grant_from_row,
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        let Some(mut grant) = grant else {
+            transaction.commit().map_err(|error| error.to_string())?;
+            return Ok(None);
+        };
+        grant.revoked_at = Some(revoked_at.to_string());
+        transaction
+            .execute(
+                "UPDATE desktop_browser_origin_grants
+                 SET revoked_at = ?2 WHERE id = ?1 AND revoked_at IS NULL",
+                params![grant_id, revoked_at],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction.commit().map_err(|error| error.to_string())?;
+        Ok(Some(grant))
+    }
+
     pub(super) fn authorize_and_prepare_tool_invocation(
         &self,
         invocation_id: &str,
@@ -5149,6 +5272,24 @@ pub(super) fn required_string(value: &Value, key: &str) -> Result<String, String
         .ok_or_else(|| format!("missing required {key}"))
 }
 
+fn browser_origin_grant_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<BrowserOriginGrant> {
+    let decision: String = row.get(2)?;
+    Ok(BrowserOriginGrant {
+        id: row.get(0)?,
+        host: row.get(1)?,
+        decision: BrowserOriginDecision::from_str(&decision).map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(
+                decision.len(),
+                rusqlite::types::Type::Text,
+                Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, error)),
+            )
+        })?,
+        source_hitl_request_id: row.get(3)?,
+        created_at: row.get(4)?,
+        revoked_at: row.get(5)?,
+    })
+}
+
 fn optional_string(value: &Value, key: &str) -> Option<String> {
     value
         .get(key)
@@ -5968,6 +6109,96 @@ mod tests {
             assert!(!store
                 .workspace_tool_grant_active("grant-conversation-b", "write")
                 .expect("revoked grant"));
+        }
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn browser_origin_grants_supersede_revoke_and_survive_reopen() {
+        let path = std::env::temp_dir().join(format!(
+            "agistack-browser-origin-grant-{}.db",
+            Uuid::new_v4()
+        ));
+        let grant = |id: &str, host: &str, decision: BrowserOriginDecision, created_at: &str| {
+            BrowserOriginGrant {
+                id: id.to_string(),
+                host: host.to_string(),
+                decision,
+                source_hitl_request_id: "hitl-1".to_string(),
+                created_at: created_at.to_string(),
+                revoked_at: None,
+            }
+        };
+        {
+            let store = DesktopSessionStore::open(&path).expect("session store");
+            store
+                .insert_browser_origin_grant(&grant(
+                    "grant-1",
+                    "example.com",
+                    BrowserOriginDecision::Site,
+                    "2026-08-07T00:00:01Z",
+                ))
+                .expect("insert site grant");
+            store
+                .insert_browser_origin_grant(&grant(
+                    "grant-2",
+                    "*",
+                    BrowserOriginDecision::Decline,
+                    "2026-08-07T00:00:02Z",
+                ))
+                .expect("insert global decline");
+            let decisions = store
+                .active_browser_origin_decisions("example.com")
+                .expect("decisions for host");
+            assert_eq!(decisions.len(), 2);
+            let decisions = store
+                .active_browser_origin_decisions("other.test")
+                .expect("decisions for other host");
+            assert_eq!(decisions.len(), 1);
+            assert_eq!(decisions[0].host, "*");
+
+            // A newer decision for the same host supersedes the active one.
+            store
+                .insert_browser_origin_grant(&grant(
+                    "grant-3",
+                    "example.com",
+                    BrowserOriginDecision::Decline,
+                    "2026-08-07T00:00:03Z",
+                ))
+                .expect("supersede site grant");
+            let decisions = store
+                .active_browser_origin_decisions("example.com")
+                .expect("decisions after supersede");
+            assert_eq!(decisions.len(), 2);
+            assert!(
+                decisions
+                    .iter()
+                    .filter(|grant| grant.host == "example.com")
+                    .all(|grant| grant.decision == BrowserOriginDecision::Decline),
+                "superseded site grant must be revoked"
+            );
+        }
+        {
+            let store = DesktopSessionStore::open(&path).expect("reopen session store");
+            let active = store
+                .list_active_browser_origin_grants()
+                .expect("list active grants");
+            assert_eq!(active.len(), 2);
+            assert!(active.iter().all(|grant| grant.revoked_at.is_none()));
+            let revoked = store
+                .revoke_browser_origin_grant("grant-3", "2026-08-07T00:00:04Z")
+                .expect("revoke grant")
+                .expect("active grant");
+            assert_eq!(revoked.revoked_at.as_deref(), Some("2026-08-07T00:00:04Z"));
+            assert!(store
+                .revoke_browser_origin_grant("grant-3", "2026-08-07T00:00:05Z")
+                .expect("second revoke")
+                .is_none());
+            let decisions = store
+                .active_browser_origin_decisions("example.com")
+                .expect("decisions after revoke");
+            assert_eq!(decisions.len(), 1);
+            assert_eq!(decisions[0].host, "*");
         }
         let _ = std::fs::remove_file(path);
     }
