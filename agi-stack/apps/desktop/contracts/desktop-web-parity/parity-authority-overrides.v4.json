@@ -90,6 +90,132 @@
       "path": "sidecar://local-runtime/desktop",
       "authority": "sidecar",
       "authority_role": "primary"
+    },
+    {
+      "capability_id": "authentication-and-account-entry",
+      "journey_id": null,
+      "surface": "desktop_cloud",
+      "method": "IPC",
+      "path": "electron://cloud-authentication",
+      "authority": "electron",
+      "authority_role": "supporting"
+    },
+    {
+      "capability_id": "authentication-and-account-entry",
+      "journey_id": null,
+      "surface": "desktop_cloud",
+      "method": "IPC",
+      "path": "electron://oauth-authorization",
+      "authority": "electron",
+      "authority_role": "supporting"
+    },
+    {
+      "capability_id": "authentication-and-account-entry",
+      "journey_id": null,
+      "surface": "desktop_cloud",
+      "method": "IPC",
+      "path": "sidecar://trusted-session-vault",
+      "authority": "sidecar",
+      "authority_role": "supporting"
+    },
+    {
+      "capability_id": "authentication-and-account-entry",
+      "journey_id": "primary",
+      "surface": "desktop_cloud",
+      "method": "IPC",
+      "path": "electron://cloud-authentication",
+      "authority": "electron",
+      "authority_role": "supporting"
+    },
+    {
+      "capability_id": "authentication-and-account-entry",
+      "journey_id": "primary",
+      "surface": "desktop_cloud",
+      "method": "IPC",
+      "path": "electron://oauth-authorization",
+      "authority": "electron",
+      "authority_role": "supporting"
+    },
+    {
+      "capability_id": "authentication-and-account-entry",
+      "journey_id": "primary",
+      "surface": "desktop_cloud",
+      "method": "IPC",
+      "path": "sidecar://trusted-session-vault",
+      "authority": "sidecar",
+      "authority_role": "supporting"
+    },
+    {
+      "capability_id": "oauth-callback",
+      "journey_id": null,
+      "surface": "desktop_cloud",
+      "method": "IPC",
+      "path": "electron://oauth-callback",
+      "authority": "electron",
+      "authority_role": "supporting"
+    },
+    {
+      "capability_id": "oauth-callback",
+      "journey_id": null,
+      "surface": "desktop_cloud",
+      "method": "IPC",
+      "path": "sidecar://oauth-pending-attempt",
+      "authority": "sidecar",
+      "authority_role": "supporting"
+    },
+    {
+      "capability_id": "oauth-callback",
+      "journey_id": null,
+      "surface": "local_online",
+      "method": "IPC",
+      "path": "electron://oauth-callback",
+      "authority": "electron",
+      "authority_role": "supporting"
+    },
+    {
+      "capability_id": "oauth-callback",
+      "journey_id": null,
+      "surface": "local_online",
+      "method": "IPC",
+      "path": "sidecar://oauth-pending-attempt",
+      "authority": "sidecar",
+      "authority_role": "supporting"
+    },
+    {
+      "capability_id": "oauth-callback",
+      "journey_id": "primary",
+      "surface": "desktop_cloud",
+      "method": "IPC",
+      "path": "electron://oauth-callback",
+      "authority": "electron",
+      "authority_role": "supporting"
+    },
+    {
+      "capability_id": "oauth-callback",
+      "journey_id": "primary",
+      "surface": "desktop_cloud",
+      "method": "IPC",
+      "path": "sidecar://oauth-pending-attempt",
+      "authority": "sidecar",
+      "authority_role": "supporting"
+    },
+    {
+      "capability_id": "oauth-callback",
+      "journey_id": "primary",
+      "surface": "local_online",
+      "method": "IPC",
+      "path": "electron://oauth-callback",
+      "authority": "electron",
+      "authority_role": "supporting"
+    },
+    {
+      "capability_id": "oauth-callback",
+      "journey_id": "primary",
+      "surface": "local_online",
+      "method": "IPC",
+      "path": "sidecar://oauth-pending-attempt",
+      "authority": "sidecar",
+      "authority_role": "supporting"
     }
   ]
 }

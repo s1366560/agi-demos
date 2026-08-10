@@ -134,6 +134,36 @@ test('Agent Workspace declares Electron support without replacing service author
   );
 });
 
+test('Cloud OAuth keeps service authority with Electron and vault support', () => {
+  const manifest = readJson('parity-manifest.v4.json');
+  const auth = manifest.capabilities.find(
+    ({ id }) => id === 'authentication-and-account-entry',
+  );
+  const oauth = manifest.capabilities.find(({ id }) => id === 'oauth-callback');
+
+  assert.ok(auth);
+  assert.ok(oauth);
+  assert.equal(auth.surfaces.desktop_cloud.authority, 'cloud_service');
+  assert.deepEqual(auth.surfaces.desktop_cloud.supporting_authorities, [
+    'electron',
+    'sidecar',
+  ]);
+  for (const surfaceName of ['desktop_cloud', 'local_online']) {
+    assert.equal(oauth.surfaces[surfaceName].authority, 'cloud_service');
+    assert.deepEqual(oauth.surfaces[surfaceName].supporting_authorities, [
+      'electron',
+      'sidecar',
+    ]);
+  }
+  assert.equal(oauth.surfaces.local_offline.availability, 'not_applicable');
+  assert.equal(
+    oauth.api_contracts
+      .filter(({ method }) => method === 'IPC')
+      .every(({ authority_role }) => authority_role === 'supporting'),
+    true,
+  );
+});
+
 test('Browser Bridge is the 67th native-only compound-authority capability', () => {
   const manifest = readJson('parity-manifest.v4.json');
   const capability = manifest.capabilities.at(-1);

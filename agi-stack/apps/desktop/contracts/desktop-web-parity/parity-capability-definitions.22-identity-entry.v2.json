@@ -31,6 +31,8 @@
       ],
       "cloud_actions": [
         "sign-in",
+        "list-oauth-providers",
+        "start-oauth-authorization",
         "start-device-authorization",
         "restore-trusted-session"
       ],
@@ -40,10 +42,17 @@
       ],
       "cloud_status": "implemented",
       "cloud_entries": [
-        "agi-stack/apps/desktop/src/features/auth/LoginScreen.tsx",
+        "agi-stack/apps/desktop/electron/main/index.ts",
+        "agi-stack/apps/desktop/electron/main/cloudAuthenticationAuthority.ts",
+        "agi-stack/apps/desktop/electron/main/oauthCallbackAuthority.ts",
+        "agi-stack/apps/desktop/electron/preload/index.ts",
         "agi-stack/apps/desktop/src/App.tsx",
-        "agi-stack/apps/desktop/src/api/client.ts",
-        "agi-stack/apps/desktop/src/api/trustedSession.ts"
+        "agi-stack/apps/desktop/src/api/cloudSessionProjectionClient.ts",
+        "agi-stack/apps/desktop/src/api/nativeCloudAuthClient.ts",
+        "agi-stack/apps/desktop/src/api/nativeOAuthClient.ts",
+        "agi-stack/apps/desktop/src/features/auth/LoginScreen.tsx",
+        "agi-stack/apps/desktop/src/features/auth/nativeOAuthSessionModel.ts",
+        "agi-stack/apps/desktop/src/hooks/useCloudSessionAuth.ts"
       ],
       "local_status": "implemented",
       "local_policy": "native_equivalent",
@@ -108,6 +117,36 @@
           "authority": "cloud_service"
         },
         {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/auth/oauth/providers",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/auth/oauth/{provider}/authorize",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "IPC",
+          "path": "electron://cloud-authentication",
+          "authority": "electron"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "IPC",
+          "path": "electron://oauth-authorization",
+          "authority": "electron"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "IPC",
+          "path": "sidecar://trusted-session-vault",
+          "authority": "sidecar"
+        },
+        {
           "surface": "desktop_local",
           "method": "POST",
           "path": "/api/v1/auth/local-session",
@@ -149,6 +188,8 @@
           "surface": "desktop_cloud",
           "actions": [
             "sign-in",
+            "list-oauth-providers",
+            "start-oauth-authorization",
             "start-device-authorization"
           ],
           "authentication": "anonymous",
@@ -188,7 +229,7 @@
         "retry"
       ],
       "expected_observable_result": "Cloud Desktop presents native account entry, restores only an application-vault trusted session, and reports authentication errors without a WebView. Local Desktop creates or resumes its sidecar-owned local session through the same native entry shell.",
-      "judgment_rationale": "Login is an eager production Web route without a canonical navigation target. In addition to password sign-in, the d91 Web page discovers configured OAuth providers and starts a server-issued, same-origin OAuth authorization flow. Cloud Desktop has a separate native password, device-authorization, and trusted-session flow; Local mode has distinct local-session, resume, and auth-me authorities and therefore is a native equivalent rather than not-applicable."
+      "judgment_rationale": "Login is an eager production Web route without a canonical navigation target. In addition to password sign-in, the Web page discovers configured OAuth providers and starts a server-issued, same-origin OAuth authorization flow. Cloud Desktop now keeps password, device authorization, OAuth provider discovery and authorization, trusted-session vault access, and the credential-free session projection behind main-owned Electron authorities; nativeCloudAuthClient, nativeOAuthClient, cloudSessionProjectionClient, and useCloudSessionAuth expose only sanitized commands and state to the renderer. Local mode retains distinct sidecar local-session, resume, and auth-me authorities and therefore remains a native equivalent rather than not-applicable."
     },
     {
       "id": "oauth-callback",
@@ -218,7 +259,22 @@
         "complete-sign-in",
         "retry"
       ],
-      "cloud_status": "planned",
+      "cloud_status": "implemented",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/electron-builder.yml",
+        "agi-stack/apps/desktop/electron/main/index.ts",
+        "agi-stack/apps/desktop/electron/main/cloudAuthenticationAuthority.ts",
+        "agi-stack/apps/desktop/electron/main/oauthCallbackAuthority.ts",
+        "agi-stack/apps/desktop/electron/main/oauthDeepLinkPolicy.ts",
+        "agi-stack/apps/desktop/electron/preload/index.ts",
+        "agi-stack/apps/desktop/sidecar/src/oauth_pending_attempt.rs",
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/api/cloudSessionProjectionClient.ts",
+        "agi-stack/apps/desktop/src/api/nativeOAuthClient.ts",
+        "agi-stack/apps/desktop/src/features/auth/LoginScreen.tsx",
+        "agi-stack/apps/desktop/src/features/auth/nativeOAuthSessionModel.ts",
+        "agi-stack/apps/desktop/src/hooks/useCloudSessionAuth.ts"
+      ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "local_oauth_callback_not_applicable",
@@ -232,9 +288,21 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "NONE",
-          "path": "unavailable:desktop_oauth_callback_authority_planned",
-          "authority": "none"
+          "method": "POST",
+          "path": "/api/v1/auth/oauth/{provider}/callback",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "IPC",
+          "path": "electron://oauth-callback",
+          "authority": "electron"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "IPC",
+          "path": "sidecar://oauth-pending-attempt",
+          "authority": "sidecar"
         },
         {
           "surface": "desktop_local",
@@ -263,6 +331,20 @@
           "authorization": [],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "read-redirect-target",
+            "validate-state",
+            "exchange-code",
+            "complete-sign-in",
+            "retry"
+          ],
+          "authentication": "anonymous",
+          "authorization": [],
+          "enforcement": "enforced",
+          "feature_gate": "native_oauth_callback"
         }
       ],
       "interaction_states": [
@@ -273,7 +355,7 @@
         "retry"
       ],
       "expected_observable_result": "Cloud Desktop consumes an allowlisted native OAuth callback, validates provider and state, exchanges the code through Cloud authority, and resumes the intended native route without rendering Web UI. Local Desktop returns a stable not-applicable result.",
-      "judgment_rationale": "OAuthCallback is a production Web route that validates provider, code, and state inputs, exchanges them through POST /api/v1/auth/oauth/{provider}/callback, accepts only a strict bearer/user/same-origin redirect response, updates authenticated state, and resumes the returned route. The d91 backend owns one-time expiring state and provider exchange authority rather than returning HTTP 501. Desktop has no audited native callback/deep-link route, so Cloud remains planned and Local Cloud-identity callback semantics are not applicable."
+      "judgment_rationale": "OAuthCallback is a production Web route that validates provider, code, and state inputs, exchanges them through POST /api/v1/auth/oauth/{provider}/callback, accepts only a strict bearer/user/same-origin redirect response, updates authenticated state, and resumes the returned route. Cloud Desktop now registers the dedicated agistack-auth protocol, validates the deep link and one-time state in the main process, stores pending attempts and trusted sessions through the application vault, exchanges the code through Cloud authority, emits only a sanitized session event, and restores a canonical native route. Local-offline mode has no Cloud identity-provider callback authority and remains explicitly not applicable; local-online projects the Cloud contract without duplicating identity authority in the sidecar."
     },
     {
       "id": "invitation-acceptance",

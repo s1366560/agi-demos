@@ -32,10 +32,21 @@
         "delete",
         "test"
       ],
-      "cloud_status": "planned",
-      "local_status": "planned",
-      "local_policy": "native_equivalent",
-      "local_reason_code": "local_backend_store_authority_planned",
+      "cloud_status": "implemented",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/api/cloudRequestBroker.ts",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/backend-stores/BackendStoresPage.tsx",
+        "agi-stack/apps/desktop/src/features/backend-stores/backendStoresClient.ts",
+        "agi-stack/apps/desktop/src/features/backend-stores/backendStoresController.ts",
+        "agi-stack/apps/desktop/src/features/backend-stores/backendStoresRouteModule.tsx"
+      ],
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "local_backend_stores_cloud_only",
+      "local_deviation": "Local-online projects the Cloud store authority through the native broker. Local-offline keeps the route discoverable but cannot manage tenant Cloud stores and does not duplicate store credentials or governance in the sidecar.",
       "api_contracts": [
         {
           "surface": "web",
@@ -123,14 +134,92 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "NONE",
-          "path": "unavailable:desktop_native_route_planned",
-          "authority": "none"
+          "method": "GET",
+          "path": "/api/v1/graph-stores/types",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/graph-stores?tenant_id={tenant_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/graph-stores?tenant_id={tenant_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/graph-stores/{store_id}?tenant_id={tenant_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/graph-stores/{store_id}?tenant_id={tenant_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/graph-stores/test?tenant_id={tenant_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/graph-stores/{store_id}/test?tenant_id={tenant_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/retrieval-stores/types",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/retrieval-stores?tenant_id={tenant_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/retrieval-stores?tenant_id={tenant_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/retrieval-stores/{store_id}?tenant_id={tenant_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/retrieval-stores/{store_id}?tenant_id={tenant_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/retrieval-stores/test?tenant_id={tenant_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/retrieval-stores/{store_id}/test?tenant_id={tenant_id}",
+          "authority": "cloud_service"
         },
         {
           "surface": "desktop_local",
           "method": "NONE",
-          "path": "unavailable:local_backend_store_authority_planned",
+          "path": "not_applicable:local_backend_stores_cloud_only",
           "authority": "none"
         },
         {
@@ -150,6 +239,34 @@
           "authentication": "authenticated",
           "authorization": [
             "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "create",
+            "update",
+            "delete",
+            "test"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_admin"
           ],
           "enforcement": "enforced",
           "feature_gate": null
@@ -180,8 +297,8 @@
         "scope-switch",
         "retry"
       ],
-      "expected_observable_result": "Cloud Desktop natively manages graph and retrieval stores with the same scoped authority, secret-once behavior, test results, and errors as Web. Local Desktop uses a sidecar-owned store contract or returns its stable unavailable reason without exposing credentials.",
-      "judgment_rationale": "BackendStores owns legacy and tenant-ID production routes but is absent from the canonical navigation inventory. No native Desktop route currently covers the graph and retrieval store lifecycle in either mode."
+      "expected_observable_result": "Cloud Desktop and Local-online natively manage graph and retrieval stores with the same tenant-scoped Cloud authority, secret-once behavior, test results, and structured errors as Web. Local-offline keeps the route discoverable and returns a stable not-applicable result without exposing credentials.",
+      "judgment_rationale": "BackendStores owns legacy and tenant-ID production routes but is absent from the canonical navigation inventory. Desktop now registers the tenant route and implements the graph and retrieval store list, create, edit, delete, and test lifecycle through the vault-bound Cloud request broker, typed client, controller, and native route module. Local-online projects that Cloud authority; Local-offline does not duplicate tenant store authority or secrets in the sidecar."
     },
     {
       "id": "project-support",
@@ -380,10 +497,21 @@
         "refresh",
         "review-verdicts"
       ],
-      "cloud_status": "planned",
-      "local_status": "planned",
-      "local_policy": "native_equivalent",
-      "local_reason_code": "local_playbook_authority_planned",
+      "cloud_status": "implemented",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/api/cloudRequestBroker.ts",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/project-playbooks/ProjectPlaybooksPage.tsx",
+        "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksClient.ts",
+        "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksController.ts",
+        "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksRouteModule.tsx"
+      ],
+      "local_status": "not_applicable",
+      "local_policy": "cloud_only",
+      "local_reason_code": "local_project_playbooks_cloud_only",
+      "local_deviation": "Local-online projects the Cloud project playbook authority. Local-offline keeps the project route discoverable but cannot fabricate playbooks or reflection verdicts without Cloud authority.",
       "api_contracts": [
         {
           "surface": "web",
@@ -405,14 +533,26 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "NONE",
-          "path": "unavailable:desktop_native_route_planned",
-          "authority": "none"
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/playbooks?limit={limit}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "GET",
+          "path": "/api/v1/projects/{project_id}/reflection-verdicts?limit={limit}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "WS",
+          "path": "/api/v1/agent/ws",
+          "authority": "cloud_service"
         },
         {
           "surface": "desktop_local",
           "method": "NONE",
-          "path": "unavailable:local_playbook_authority_planned",
+          "path": "not_applicable:local_project_playbooks_cloud_only",
           "authority": "none"
         },
         {
@@ -437,6 +577,21 @@
           ],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "view",
+            "list",
+            "refresh",
+            "review-verdicts"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "project_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
       "interaction_states": [
@@ -446,8 +601,8 @@
         "scope-switch",
         "retry"
       ],
-      "expected_observable_result": "Cloud Desktop natively presents project playbooks and reflection verdicts from Cloud authority with the same project scope and states as Web. Local Desktop uses an explicit sidecar playbook authority or returns its stable unavailable reason.",
-      "judgment_rationale": "PlaybookLibrary is a read-only project production route absent from the canonical navigation inventory. It loads playbooks and reflection verdicts under project membership and refreshes after reflection_complete events; Desktop prompt templates are a different model and cannot be counted as parity, so both Cloud and Local routes remain planned."
+      "expected_observable_result": "Cloud Desktop and Local-online natively present project playbooks and reflection verdicts from Cloud authority with the same project scope, refresh behavior, and structured states as Web. Local-offline keeps the route discoverable and returns a stable not-applicable result.",
+      "judgment_rationale": "PlaybookLibrary is a read-only project production route absent from the canonical navigation inventory. Desktop now registers the project-scoped route and loads playbooks and reflection verdicts through the vault-bound Cloud request broker, typed client, controller, and native route module, including refresh after reflection-complete events. Local-online projects that Cloud authority; Local-offline does not fabricate playbook or verdict data in the sidecar."
     },
     {
       "id": "not-found",

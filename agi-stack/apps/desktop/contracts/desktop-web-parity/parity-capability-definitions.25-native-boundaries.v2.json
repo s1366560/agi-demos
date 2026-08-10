@@ -203,6 +203,7 @@
         "agi-stack/apps/desktop/sidecar/src/application_vault.rs",
         "agi-stack/apps/desktop/sidecar/src/private_file_permissions.rs",
         "agi-stack/apps/desktop/sidecar/src/trusted_session.rs",
+        "agi-stack/apps/desktop/sidecar/src/oauth_pending_attempt.rs",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/provider_credentials.rs",
         "agi-stack/apps/desktop/sidecar/src/data_migration.rs",
         "agi-stack/apps/desktop/sidecar/src/control.rs"

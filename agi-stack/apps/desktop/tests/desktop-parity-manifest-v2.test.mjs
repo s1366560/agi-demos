@@ -778,6 +778,13 @@ test("identity routes preserve their real multi-step authorities and per-surface
     "list-oauth-providers",
     "start-oauth-authorization",
   ]);
+  assert.deepEqual(auth.surfaces.desktop_cloud.allowed_actions, [
+    "sign-in",
+    "list-oauth-providers",
+    "start-oauth-authorization",
+    "start-device-authorization",
+    "restore-trusted-session",
+  ]);
   assert.deepEqual(auth.surfaces.desktop_local.allowed_actions, [
     "start-local-session",
     "resume-local-session",
@@ -800,11 +807,27 @@ test("identity routes preserve their real multi-step authorities and per-surface
     "complete-sign-in",
     "retry",
   ]);
-  assert.equal(oauth.surfaces.desktop_cloud.availability, "unavailable");
-  assert.equal(
-    oauth.surfaces.desktop_cloud.reason_code,
-    "desktop_native_route_planned",
+  assert.equal(oauth.surfaces.desktop_cloud.availability, "available");
+  assert.equal(oauth.surfaces.desktop_cloud.reason_code, null);
+  assert.equal(oauth.surfaces.desktop_cloud.authority, "cloud_service");
+  assert.deepEqual(oauth.surfaces.desktop_cloud.allowed_actions, [
+    "read-redirect-target",
+    "validate-state",
+    "exchange-code",
+    "complete-sign-in",
+    "retry",
+  ]);
+  assert.deepEqual(
+    oauth.api_contracts
+      .filter((contract) => contract.surface === "desktop_cloud")
+      .map(({ method, path, authority }) => `${method} ${path} ${authority}`),
+    [
+      "POST /api/v1/auth/oauth/{provider}/callback cloud_service",
+      "IPC electron://oauth-callback electron",
+      "IPC sidecar://oauth-pending-attempt sidecar",
+    ],
   );
+  assert.equal(oauth.surfaces.desktop_local.availability, "not_applicable");
   assert.equal(invitation.surfaces.desktop_cloud.availability, "unavailable");
   assert.equal(
     invitation.surfaces.desktop_cloud.reason_code,

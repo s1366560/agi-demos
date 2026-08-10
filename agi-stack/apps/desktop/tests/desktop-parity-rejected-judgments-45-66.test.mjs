@@ -629,6 +629,11 @@ test("native vault status records Windows ACL source without claiming runtime pr
       "agi-stack/apps/desktop/sidecar/src/private_file_permissions.rs",
     ),
   );
+  assert.ok(
+    vault.native_entries.includes(
+      "agi-stack/apps/desktop/sidecar/src/oauth_pending_attempt.rs",
+    ),
+  );
   assert.match(vault.judgment_rationale, /protected current-user DACL/u);
   assert.match(vault.judgment_rationale, /Windows-only/u);
   assert.match(vault.judgment_rationale, /current-HEAD/u);
@@ -642,19 +647,54 @@ test("native vault status records Windows ACL source without claiming runtime pr
   assert.match(release.judgment_rationale, /does not prove installation/u);
 });
 
-test("unimplemented backend-store and playbook routes remain planned", () => {
+test("backend-store and playbook routes use Cloud authority and fail closed offline", () => {
+  const expectedEntries = {
+    "backend-stores": [
+      "agi-stack/apps/desktop/src/features/backend-stores/BackendStoresPage.tsx",
+      "agi-stack/apps/desktop/src/features/backend-stores/backendStoresClient.ts",
+      "agi-stack/apps/desktop/src/features/backend-stores/backendStoresController.ts",
+      "agi-stack/apps/desktop/src/features/backend-stores/backendStoresRouteModule.tsx",
+    ],
+    "project-playbooks": [
+      "agi-stack/apps/desktop/src/features/project-playbooks/ProjectPlaybooksPage.tsx",
+      "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksClient.ts",
+      "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksController.ts",
+      "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksRouteModule.tsx",
+    ],
+  };
+
   for (const capabilityId of ["backend-stores", "project-playbooks"]) {
     const capability = readCapability(
       "parity-capability-definitions.24-native-product-auxiliary.v2.json",
       capabilityId,
     );
-    assert.equal(capability.cloud_status, "planned", capabilityId);
-    assert.equal(capability.local_status, "planned", capabilityId);
+    assert.equal(capability.cloud_status, "implemented", capabilityId);
+    assert.equal(capability.local_status, "not_applicable", capabilityId);
+    assert.equal(capability.local_policy, "cloud_only", capabilityId);
+    for (const entry of expectedEntries[capabilityId]) {
+      assert.ok(capability.cloud_entries.includes(entry), `${capabilityId}: missing ${entry}`);
+    }
     assert.equal(
-      capability.cloud_entries,
-      undefined,
-      `${capabilityId}: must not claim a native route entry`,
+      capability.api_contracts.some(
+        (contract) =>
+          contract.surface === "desktop_cloud" && contract.authority === "cloud_service",
+      ),
+      true,
+      capabilityId,
     );
+    assert.equal(
+      capability.api_contracts.some(
+        (contract) => contract.surface === "desktop_cloud" && contract.method === "NONE",
+      ),
+      false,
+      capabilityId,
+    );
+    for (const action of capability.actions) {
+      assert.ok(
+        requirementsForAction(capability, "desktop_cloud", action).length > 0,
+        `${capabilityId}: missing desktop_cloud permission for ${action}`,
+      );
+    }
   }
 });
 
