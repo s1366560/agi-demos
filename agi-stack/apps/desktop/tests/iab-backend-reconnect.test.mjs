@@ -77,6 +77,43 @@ test('reconnect loop keeps cycling against an unreachable bridge', async (t) => 
   assert.equal(attempts, stoppedAt, 'no attempts may run after stop()');
 });
 
+test('stop suppresses a retry from an in-flight failed connect', async (t) => {
+  const { root, registryPath } = makeStaleRegistry();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  let rejectConnect;
+  let markConnectStarted;
+  let attempts = 0;
+  const connectStarted = new Promise((resolve) => {
+    markConnectStarted = resolve;
+  });
+  const backend = new IabBackend({
+    pool: {},
+    registryPath,
+    retryDelaysMs: [5],
+    log: () => {},
+    connectBridgeSocket: () =>
+      new Promise((_resolve, reject) => {
+        rejectConnect = reject;
+        markConnectStarted();
+      }),
+    onRetry: () => {
+      attempts += 1;
+    },
+  });
+  t.after(async () => {
+    await backend.stop();
+  });
+
+  backend.start();
+  await connectStarted;
+  await backend.stop();
+  rejectConnect(new Error('connect settled after stop'));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.equal(backend.status, 'disabled');
+  assert.equal(attempts, 0, 'an in-flight connect may not retry after stop()');
+});
+
 test('stop() interrupts a long backoff sleep promptly', async () => {
   const { root, registryPath } = makeStaleRegistry();
   const backend = new IabBackend({

@@ -50,6 +50,8 @@ export type IabBackendOptions = Readonly<{
   registryPath?: string;
   /** Test seam (same pattern as SidecarSupervisor.restartDelaysMs). */
   retryDelaysMs?: readonly number[];
+  /** Test seam for deterministic connect and stop races. */
+  connectBridgeSocket?: typeof connectIabBridgeSocket;
   log?: (message: string) => void;
   /** Fires on every failed connect attempt, before the backoff sleep. */
   onRetry?: (failures: number, error: string) => void;
@@ -164,7 +166,9 @@ export class IabBackend {
           const closed = new Promise<string>((resolve) => {
             signalClosed = resolve;
           });
-          const socket = await connectIabBridgeSocket(transport, registry.token, {
+          const connectBridgeSocket =
+            this.#options.connectBridgeSocket ?? connectIabBridgeSocket;
+          const socket = await connectBridgeSocket(transport, registry.token, {
             onMessage: (text) => void this.#handleMessage(text),
             onClose: (reason) => {
               if (activeSocket !== null && this.#socket === activeSocket) {
@@ -174,6 +178,10 @@ export class IabBackend {
               signalClosed(reason);
             },
           });
+          if (!this.#shouldRun) {
+            socket.close();
+            break;
+          }
           activeSocket = socket;
           this.#socket = socket;
           this.#status = 'connected';
@@ -184,6 +192,7 @@ export class IabBackend {
           // Serve this socket until it closes (or stop() tears it down).
           await closed;
         } catch (error) {
+          if (!this.#shouldRun) break;
           const message = error instanceof Error ? error.message : String(error);
           // Throttled offline logging: first failure, then every Nth — a
           // down bridge must not spam the main-process log forever.
