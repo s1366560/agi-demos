@@ -12,6 +12,7 @@
 //! | `browser_console_logs` | `attach` → `Runtime/Log.enable` → ring buffer | `{entries: [...]}` |
 //! | `browser_navigate` / `browser_click` / `browser_type` / `browser_scroll` | see [`crate::actions`] | compact JSON |
 //! | `browser_new_tab` / `browser_claim_tab` / `browser_mark_tab` | tab-group bridge methods + leases | compact JSON |
+//! | `browser_cdp_raw` | `attach` → full-access policy check → `executeCdp` | `{result}` (capped at 4000 chars) |
 //!
 //! Console events are collected continuously from `onCDPEvent` notifications
 //! into a per-tab ring buffer (capacity 500) by a background feeder task. The
@@ -31,6 +32,7 @@ use agistack_core::ports::{CoreError, CoreResult, ToolHost};
 use crate::actions::{
     TOOL_CLAIM_TAB, TOOL_CLICK, TOOL_MARK_TAB, TOOL_NAVIGATE, TOOL_NEW_TAB, TOOL_SCROLL, TOOL_TYPE,
 };
+use crate::cdp_policy::{check_cdp_allowed_with_mode, CdpPolicyMode};
 use crate::protocol::{
     BridgeNotification, LeaseOrigin, OnCdpDetachParams, OnCdpEventParams, TabMark, METHOD_ATTACH,
     METHOD_EXECUTE_CDP, METHOD_GET_TABS, METHOD_MOVE_MOUSE, METHOD_TURN_ENDED,
@@ -43,10 +45,14 @@ pub const TOOL_LIST_TABS: &str = "browser_list_tabs";
 pub const TOOL_SNAPSHOT: &str = "browser_snapshot";
 pub const TOOL_SCREENSHOT: &str = "browser_screenshot";
 pub const TOOL_CONSOLE_LOGS: &str = "browser_console_logs";
+pub const TOOL_CDP_RAW: &str = "browser_cdp_raw";
 
 const DEFAULT_MAX_CHARS: usize = 20_000;
 const DEFAULT_CONSOLE_LIMIT: usize = 100;
 const CONSOLE_RING_CAPACITY: usize = 500;
+/// Serialized-output cap for `browser_cdp_raw`; oversized results are
+/// truncated with a marker.
+const CDP_RAW_MAX_OUTPUT_CHARS: usize = 4000;
 
 pub(crate) fn tool_err(message: impl Into<String>) -> CoreError {
     CoreError::Tool(message.into())
@@ -623,6 +629,68 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
             .unwrap_or_default();
         Ok(json!({ "entries": entries }))
     }
+
+    /// M3 raw-CDP escape hatch: run one CDP method under FullAccess policy.
+    /// Consent gating (desktop full-CDP enablement, per-origin approval) lives
+    /// in the sidecar wrapper; this crate only enforces the policy deny-list.
+    async fn cdp_raw(&self, input: &Value) -> CoreResult<Value> {
+        let tab_id = required_tab_id(input)?;
+        if tab_id == 0 {
+            return Err(tool_err("invalid 'tabId' (expected a positive integer)"));
+        }
+        let method = input
+            .get("method")
+            .and_then(Value::as_str)
+            .ok_or_else(|| tool_err("missing or invalid 'method' (expected a string)"))?;
+        if !is_valid_cdp_method_name(method) {
+            return Err(tool_err(format!(
+                "invalid 'method' (expected '<Domain>.<method>', e.g. \"Runtime.evaluate\"): {method}"
+            )));
+        }
+        let params = input.get("params").cloned().unwrap_or(Value::Null);
+
+        self.ensure_attached(tab_id).await?;
+        check_cdp_allowed_with_mode(CdpPolicyMode::FullAccess, method, &params)
+            .map_err(|e| tool_err(e.to_string()))?;
+        let result = self.execute_cdp(tab_id, method, params).await?;
+
+        let serialized = result.to_string();
+        if let Some(truncated) = truncate_cdp_raw_output(&serialized) {
+            Ok(json!({ "result": truncated, "truncated": true }))
+        } else {
+            Ok(json!({ "result": result }))
+        }
+    }
+}
+
+/// `browser_cdp_raw` accepts only `<Domain>.<method>` CDP names matching
+/// `^[A-Z][A-Za-z]+\.[A-Za-z]+$`.
+fn is_valid_cdp_method_name(method: &str) -> bool {
+    let Some((domain, name)) = method.split_once('.') else {
+        return false;
+    };
+    let mut chars = domain.chars();
+    let valid_domain = matches!(chars.next(), Some(c) if c.is_ascii_uppercase())
+        && matches!(chars.next(), Some(c) if c.is_ascii_alphabetic())
+        && chars.all(|c| c.is_ascii_alphabetic());
+    let valid_name = !name.is_empty() && name.chars().all(|c| c.is_ascii_alphabetic());
+    valid_domain && valid_name
+}
+
+/// Cap a serialized `browser_cdp_raw` result at [`CDP_RAW_MAX_OUTPUT_CHARS`],
+/// returning the truncated string (with marker) or `None` when it fits.
+fn truncate_cdp_raw_output(serialized: &str) -> Option<String> {
+    if serialized.len() <= CDP_RAW_MAX_OUTPUT_CHARS {
+        return None;
+    }
+    let mut end = CDP_RAW_MAX_OUTPUT_CHARS;
+    while !serialized.is_char_boundary(end) {
+        end -= 1;
+    }
+    Some(format!(
+        "{}\n… [truncated at {CDP_RAW_MAX_OUTPUT_CHARS} chars]",
+        &serialized[..end]
+    ))
 }
 
 pub(crate) fn required_tab_id(input: &Value) -> CoreResult<u64> {
@@ -668,6 +736,7 @@ impl<E: BridgeEndpoint> ToolHost for BrowserToolHost<E> {
             TOOL_NEW_TAB.to_string(),
             TOOL_CLAIM_TAB.to_string(),
             TOOL_MARK_TAB.to_string(),
+            TOOL_CDP_RAW.to_string(),
         ]
     }
 
@@ -690,6 +759,7 @@ impl<E: BridgeEndpoint> ToolHost for BrowserToolHost<E> {
             TOOL_NEW_TAB => self.new_tab(&input).await?,
             TOOL_CLAIM_TAB => self.claim_tab(&input).await?,
             TOOL_MARK_TAB => self.mark_tab(&input).await?,
+            TOOL_CDP_RAW => self.cdp_raw(&input).await?,
             other => return Err(tool_err(format!("unknown browser tool: {other}"))),
         };
         Ok(output.to_string())
@@ -871,6 +941,28 @@ pub fn list_tool_metadata() -> Vec<Value> {
                 "required": ["tabId", "mark"],
             },
         }),
+        json!({
+            "name": TOOL_CDP_RAW,
+            "description": "Execute a raw Chrome DevTools Protocol method on a tab \
+                (mutating escape hatch for advanced use). Requires the desktop's \
+                full-CDP enablement and per-origin approval (enforced by the \
+                sidecar); even in full-access mode a hard policy denylist still \
+                applies (e.g. the Storage / CacheStorage / Database / Target / \
+                WebAuthn / Browser domains, Page.setBypassCSP, \
+                Network.clearBrowserCookies). Returns {result}; serialized output \
+                is capped at 4000 chars and oversized results are truncated with a \
+                marker — truncating base64 payloads is acceptable because \
+                browser_screenshot is the supported path for screenshots.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "tabId": { "type": "integer", "description": "Target tab id from browser_list_tabs" },
+                    "method": { "type": "string", "description": "CDP method, e.g. \"Runtime.evaluate\"" },
+                    "params": { "type": "object", "description": "Optional CDP params object" },
+                },
+                "required": ["tabId", "method"],
+            },
+        }),
     ]);
     tools
 }
@@ -976,7 +1068,7 @@ mod tests {
         let out = host.call(TOOL_LIST_TABS, "{}").await.unwrap();
         let out: Value = serde_json::from_str(&out).unwrap();
         assert_eq!(out["tabs"][0]["tabId"], 7);
-        assert_eq!(host.list_tools().len(), 11);
+        assert_eq!(host.list_tools().len(), 12);
     }
 
     #[tokio::test]
@@ -1194,7 +1286,7 @@ mod tests {
     #[test]
     fn metadata_covers_all_tools_and_never_exposes_run_id() {
         let metadata = list_tool_metadata();
-        assert_eq!(metadata.len(), 11);
+        assert_eq!(metadata.len(), 12);
         let names: Vec<&str> = metadata
             .iter()
             .map(|m| m["name"].as_str().unwrap())
@@ -1213,6 +1305,7 @@ mod tests {
                 crate::actions::TOOL_NEW_TAB,
                 crate::actions::TOOL_CLAIM_TAB,
                 crate::actions::TOOL_MARK_TAB,
+                TOOL_CDP_RAW,
             ]
         );
         for m in &metadata {
@@ -1226,5 +1319,136 @@ mod tests {
         for m in &metadata[..4] {
             assert!(m["description"].as_str().unwrap().contains("read-only"));
         }
+    }
+
+    #[tokio::test]
+    async fn cdp_raw_round_trips_an_allowed_method() {
+        let endpoint = MockEndpoint::new()
+            .script(METHOD_ATTACH, vec![ok(json!({}))])
+            .script(
+                "cdp:Runtime.evaluate",
+                vec![ok(
+                    json!({"result": {"result": {"type": "number", "value": 2}}}),
+                )],
+            );
+        let host = BrowserToolHost::new(endpoint);
+        let out = host
+            .call(
+                TOOL_CDP_RAW,
+                r#"{"tabId": 7, "method": "Runtime.evaluate", "params": {"expression": "1+1"}}"#,
+            )
+            .await
+            .unwrap();
+        let out: Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(out["result"]["result"]["value"], 2);
+        assert!(out.get("truncated").is_none());
+
+        // Params are forwarded to the bridge untouched.
+        let params = host.endpoint.params_of(METHOD_EXECUTE_CDP);
+        assert_eq!(params.len(), 1);
+        assert_eq!(params[0]["tabId"], 7);
+        assert_eq!(params[0]["method"], "Runtime.evaluate");
+        assert_eq!(params[0]["params"]["expression"], "1+1");
+    }
+
+    #[tokio::test]
+    async fn cdp_raw_rejects_hard_denied_methods() {
+        let endpoint = MockEndpoint::new().script(METHOD_ATTACH, vec![ok(json!({}))]);
+        let host = BrowserToolHost::new(endpoint);
+        let err = host
+            .call(
+                TOOL_CDP_RAW,
+                r#"{"tabId": 7, "method": "Storage.getCookies"}"#,
+            )
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("blocked by policy"));
+        assert!(err.to_string().contains("Storage.getCookies"));
+        assert_eq!(
+            host.endpoint.count(METHOD_EXECUTE_CDP),
+            0,
+            "denied calls must never reach the bridge"
+        );
+    }
+
+    #[tokio::test]
+    async fn cdp_raw_allows_conservative_only_methods_in_full_access() {
+        let endpoint = MockEndpoint::new()
+            .script(METHOD_ATTACH, vec![ok(json!({}))])
+            .script(
+                "cdp:Page.setDownloadBehavior",
+                vec![ok(json!({"result": {}}))],
+            );
+        let host = BrowserToolHost::new(endpoint);
+        let out = host
+            .call(
+                TOOL_CDP_RAW,
+                r#"{"tabId": 7, "method": "Page.setDownloadBehavior", "params": {"behavior": "allow"}}"#,
+            )
+            .await
+            .unwrap();
+        let out: Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(out["result"], json!({}));
+    }
+
+    #[tokio::test]
+    async fn cdp_raw_truncates_oversized_output() {
+        let big = "x".repeat(5000);
+        let endpoint = MockEndpoint::new()
+            .script(METHOD_ATTACH, vec![ok(json!({}))])
+            .script(
+                "cdp:Runtime.evaluate",
+                vec![ok(json!({"result": {"data": big}}))],
+            );
+        let host = BrowserToolHost::new(endpoint);
+        let out = host
+            .call(
+                TOOL_CDP_RAW,
+                r#"{"tabId": 7, "method": "Runtime.evaluate"}"#,
+            )
+            .await
+            .unwrap();
+        let out: Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(out["truncated"], true);
+        let result = out["result"].as_str().unwrap();
+        assert!(
+            result.contains("… [truncated at 4000 chars]"),
+            "truncated output must carry the marker: {result}"
+        );
+        assert!(result.len() <= 4100);
+    }
+
+    #[tokio::test]
+    async fn cdp_raw_validates_method_and_tab_id() {
+        let host = BrowserToolHost::new(MockEndpoint::new());
+        for bad in [
+            "",
+            "runtime.evaluate",
+            "RuntimeEvaluate",
+            "Runtime.eval.u8",
+            "Runtime.",
+            "A.b",
+        ] {
+            let input = json!({"tabId": 7, "method": bad}).to_string();
+            let err = host.call(TOOL_CDP_RAW, &input).await.unwrap_err();
+            assert!(err.to_string().contains("invalid 'method'"), "{bad}: {err}");
+        }
+        for bad_tab in [
+            json!({}),
+            json!({"tabId": 0}),
+            json!({"tabId": -3}),
+            json!({"tabId": "7"}),
+        ] {
+            let mut input = bad_tab;
+            input["method"] = json!("Runtime.evaluate");
+            let err = host
+                .call(TOOL_CDP_RAW, &input.to_string())
+                .await
+                .unwrap_err();
+            assert!(err.to_string().contains("tabId"), "{input}: {err}");
+        }
+        // Validation failures must never reach the bridge.
+        assert_eq!(host.endpoint.count(METHOD_EXECUTE_CDP), 0);
+        assert_eq!(host.endpoint.count(METHOD_ATTACH), 0);
     }
 }
