@@ -118,7 +118,7 @@ export function createCloudProjectPlaybooksEventSource(
                 scope: {
                   tenant_id: currentScope.tenantId,
                   project_id: currentScope.projectId,
-                  workspace_id: runtimeConfig.workspaceId.trim() || null,
+                  workspace_id: null,
                   conversation_id: null,
                 },
               },

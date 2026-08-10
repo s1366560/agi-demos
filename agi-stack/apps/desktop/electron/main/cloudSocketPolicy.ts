@@ -523,10 +523,13 @@ async function observeWorkspaceContext(
   return Object.freeze({
     tenantId: identifier(value.context.tenant_id, 'cloud socket tenant scope is invalid'),
     projectId: identifier(value.context.project_id, 'cloud socket project scope is invalid'),
-    workspaceId: nullableIdentifier(
-      value.context.workspace_id,
-      'cloud socket workspace scope is invalid'
-    ),
+    workspaceId:
+      value.context.workspace_id === undefined
+        ? null
+        : nullableIdentifier(
+            value.context.workspace_id,
+            'cloud socket workspace scope is invalid'
+          ),
   });
 }
 

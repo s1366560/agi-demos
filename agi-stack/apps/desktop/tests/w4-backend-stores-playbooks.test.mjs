@@ -1850,17 +1850,20 @@ test('Project Playbooks Local-online event source uses the trusted Cloud origin 
       });
     },
   };
-  const source = createCloudProjectPlaybooksEventSource(localConfig, {
-    projectionClient: {
-      async load(signal) {
-        projectionLoads += 1;
-        assert.equal(signal.aborted, false);
-        return { apiBaseUrl: 'https://cloud.memstack.test' };
+  const source = createCloudProjectPlaybooksEventSource(
+    { ...localConfig, workspaceId: 'local-workspace-must-not-cross-authority' },
+    {
+      projectionClient: {
+        async load(signal) {
+          projectionLoads += 1;
+          assert.equal(signal.aborted, false);
+          return { apiBaseUrl: 'https://cloud.memstack.test' };
+        },
       },
+      transport: () => transport,
+      sessionId: () => 'playbooks_cloud_session_1',
     },
-    transport: () => transport,
-    sessionId: () => 'playbooks_cloud_session_1',
-  });
+  );
   const unsubscribe = source.subscribe(projectScope, () => {
     refreshes += 1;
   });
@@ -2105,7 +2108,6 @@ function cloudSocketDependencies() {
         context: {
           tenant_id: 'tenant-1',
           project_id: 'project-1',
-          workspace_id: null,
         },
       });
     },
