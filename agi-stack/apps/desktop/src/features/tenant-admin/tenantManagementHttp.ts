@@ -10,6 +10,7 @@ import {
 import type { DesktopRuntimeConfig } from '../../types';
 import {
   requireIdentifier,
+  requireNonnegativeInteger,
   tenantAdminError,
   type TenantAdminRequestOptions,
   type TenantAdminRole,
@@ -27,6 +28,7 @@ export type TenantManagementAuthoritySnapshot<
   TData,
 > = Readonly<{
   scope: TScope;
+  scopeRevision: number;
   authority: TenantManagementAuthority;
   availability: 'available' | 'degraded';
   reasonCode: string | null;
@@ -36,6 +38,10 @@ export type TenantManagementAuthoritySnapshot<
 }>;
 
 export type TenantManagementRequestOptions = TenantAdminRequestOptions;
+export type TenantManagementScopeObservation = Readonly<{
+  membershipRole: TenantAdminRole;
+  scopeRevision: number;
+}>;
 
 type TenantManagementRequest = TenantManagementRequestOptions &
   Readonly<{
@@ -81,6 +87,14 @@ export async function observeTenantManagementRole(
   scope: TenantManagementScope,
   options?: TenantManagementRequestOptions,
 ): Promise<TenantAdminRole> {
+  return (await observeTenantManagementScope(config, scope, options)).membershipRole;
+}
+
+export async function observeTenantManagementScope(
+  config: DesktopRuntimeConfig,
+  scope: TenantManagementScope,
+  options?: TenantManagementRequestOptions,
+): Promise<TenantManagementScopeObservation> {
   const payload = await requestTenantManagementJson(
     config,
     '/api/v1/workspace-context',
@@ -93,14 +107,46 @@ export async function observeTenantManagementRole(
     payload.context.tenant_id,
     'tenant_management_workspace_context_contract_invalid',
   );
-  if (tenantId !== scope.tenantId) {
+  const projectId = requireIdentifier(
+    payload.context.project_id,
+    'tenant_management_workspace_context_contract_invalid',
+  );
+  const configuredProjectId = requireIdentifier(
+    config.projectId,
+    'tenant_management_configured_project_invalid',
+  );
+  if (tenantId !== scope.tenantId || projectId !== configuredProjectId) {
     throw tenantAdminError('tenant_management_workspace_context_scope_conflict', 409);
   }
   const role = payload.membership_role;
   if (typeof role !== 'string' || !TENANT_ROLES.has(role as TenantAdminRole)) {
     throw tenantAdminError('tenant_management_membership_role_contract_invalid', 502);
   }
-  return role as TenantAdminRole;
+  return Object.freeze({
+    membershipRole: role as TenantAdminRole,
+    scopeRevision: requireNonnegativeInteger(
+      payload.context.revision,
+      'tenant_management_workspace_context_contract_invalid',
+    ),
+  });
+}
+
+export async function withStableTenantManagementAuthority<T>(
+  config: DesktopRuntimeConfig,
+  scope: TenantManagementScope,
+  options: TenantManagementRequestOptions | undefined,
+  load: (authority: TenantManagementScopeObservation) => Promise<T>,
+): Promise<TenantManagementScopeObservation & Readonly<{ value: T }>> {
+  const before = await observeTenantManagementScope(config, scope, options);
+  const value = await load(before);
+  const after = await observeTenantManagementScope(config, scope, options);
+  if (
+    before.scopeRevision !== after.scopeRevision ||
+    before.membershipRole !== after.membershipRole
+  ) {
+    throw tenantAdminError('tenant_management_authority_stale', 409);
+  }
+  return Object.freeze({ ...before, value });
 }
 
 export async function requestTenantManagementJson(

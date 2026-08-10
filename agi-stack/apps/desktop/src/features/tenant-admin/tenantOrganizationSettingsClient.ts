@@ -17,6 +17,7 @@ import {
   requireRecord,
   requireRole,
   requireTenantManagementScope,
+  withStableTenantManagementAuthority,
   type TenantManagementAuthoritySnapshot,
   type TenantManagementRequestOptions,
   type TenantManagementScope,
@@ -169,16 +170,23 @@ export function createTenantOrganizationSettingsClient(
   return Object.freeze({
     async load(scope, options) {
       const currentScope = scopeFor(scope);
-      const membershipRole = await observeTenantManagementRole(runtimeConfig, currentScope, options);
       const path = tenantPath(currentScope);
+      const observation = await withStableTenantManagementAuthority(
+        runtimeConfig,
+        currentScope,
+        options,
+        () =>
+          Promise.all([
+            requestTenantManagementJson(runtimeConfig, path, options),
+            requestTenantManagementJson(runtimeConfig, `${path}/stats`, options),
+            requestTenantManagementJson(runtimeConfig, `${path}/registries`, options),
+            requestTenantManagementJson(runtimeConfig, `${path}/smtp-config`, options, true),
+            requestTenantManagementJson(runtimeConfig, `${path}/gene-policies`, options),
+          ]),
+      );
       const [tenantPayload, statsPayload, registriesPayload, smtpPayload, policiesPayload] =
-        await Promise.all([
-          requestTenantManagementJson(runtimeConfig, path, options),
-          requestTenantManagementJson(runtimeConfig, `${path}/stats`, options),
-          requestTenantManagementJson(runtimeConfig, `${path}/registries`, options),
-          requestTenantManagementJson(runtimeConfig, `${path}/smtp-config`, options, true),
-          requestTenantManagementJson(runtimeConfig, `${path}/gene-policies`, options),
-        ]);
+        observation.value;
+      const membershipRole = observation.membershipRole;
       if (!Array.isArray(registriesPayload) || !Array.isArray(policiesPayload)) {
         throw tenantAdminError('tenant_org_settings_collection_contract_invalid');
       }
@@ -196,6 +204,7 @@ export function createTenantOrganizationSettingsClient(
       });
       return Object.freeze({
         scope: currentScope,
+        scopeRevision: observation.scopeRevision,
         authority: authorityFor(runtimeConfig),
         availability: 'available',
         reasonCode: null,

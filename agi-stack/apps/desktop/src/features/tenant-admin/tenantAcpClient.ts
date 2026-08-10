@@ -18,6 +18,7 @@ import {
   requireRole,
   requireStringArray,
   requireTenantManagementScope,
+  withStableTenantManagementAuthority,
   type TenantManagementAuthoritySnapshot,
   type TenantManagementRequestOptions,
   type TenantManagementScope,
@@ -137,11 +138,22 @@ export function createTenantAcpClient(config: DesktopRuntimeConfig): TenantAcpCl
   return Object.freeze({
     async load(scope, options) {
       const currentScope = scopeFor(scope);
-      const membershipRole = await observeTenantManagementRole(runtimeConfig, currentScope, options);
-      const [statusPayload, poolPayload] = await Promise.all([
-        requestTenantManagementJson(runtimeConfig, `${root(currentScope)}/status`, options),
-        requestTenantManagementJson(runtimeConfig, `${root(currentScope)}/runner-pools`, options),
-      ]);
+      const observation = await withStableTenantManagementAuthority(
+        runtimeConfig,
+        currentScope,
+        options,
+        () =>
+          Promise.all([
+            requestTenantManagementJson(runtimeConfig, `${root(currentScope)}/status`, options),
+            requestTenantManagementJson(
+              runtimeConfig,
+              `${root(currentScope)}/runner-pools`,
+              options,
+            ),
+          ]),
+      );
+      const [statusPayload, poolPayload] = observation.value;
+      const membershipRole = observation.membershipRole;
       const data = Object.freeze({
         membershipRole,
         status: parseStatus(statusPayload),
@@ -149,6 +161,7 @@ export function createTenantAcpClient(config: DesktopRuntimeConfig): TenantAcpCl
       });
       return Object.freeze({
         scope: currentScope,
+        scopeRevision: observation.scopeRevision,
         authority: authorityFor(runtimeConfig),
         availability: 'available',
         reasonCode: null,

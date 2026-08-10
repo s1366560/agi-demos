@@ -420,8 +420,8 @@ function normalizeObservation(
     (input.availability === 'available' && reasonCode !== null) ||
     (input.availability === 'degraded' && !stableReasonCode(reasonCode)) ||
     input.contractVersion !== CONTRACT_VERSION ||
-    !Number.isSafeInteger(input.authorityRevision) ||
-    Number(input.authorityRevision) < 0 ||
+    !Number.isSafeInteger(input.scopeRevision) ||
+    Number(input.scopeRevision) < 0 ||
     !orderedActionSubset(id, input.allowedActions)
   ) {
     throw new AuthorityContractError();
@@ -433,7 +433,7 @@ function normalizeObservation(
     contract_version: CONTRACT_VERSION,
     allowed_actions: Object.freeze([...(input.allowedActions as string[])]),
     scope: capabilityScope(tenantId, workspaceId),
-    authority_revision: Number(input.authorityRevision),
+    authority_revision: Number(input.scopeRevision),
     authority_source: mode === 'local' ? 'sidecar' : 'cloud_service',
     provenance: 'observed',
   });

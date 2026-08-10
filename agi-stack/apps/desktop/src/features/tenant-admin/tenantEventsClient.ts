@@ -9,11 +9,11 @@ import {
 import {
   authorityFor,
   isRecord,
-  observeTenantManagementRole,
   requestNativeEquivalentJson,
   requireRecord,
   requireStringArray,
   requireTenantManagementScope,
+  withStableTenantManagementAuthority,
   type TenantManagementAuthoritySnapshot,
   type TenantManagementRequestOptions,
   type TenantManagementScope,
@@ -50,8 +50,7 @@ export type TenantEventsSnapshot = TenantManagementAuthoritySnapshot<
   TenantManagementScope,
   TenantEventsData
 > &
-  TenantEventsData &
-  Readonly<{ authorityRevision: number }>;
+  TenantEventsData;
 export type TenantEventsClient = Readonly<{
   load: (
     scope: TenantManagementScope,
@@ -71,40 +70,30 @@ export function createTenantEventsClient(config: DesktopRuntimeConfig): TenantEv
         'native_equivalent',
         TENANT_EVENTS_LOCAL_REASON,
       );
-      const cloudRole =
-        runtimeConfig.mode === 'cloud'
-          ? await observeTenantManagementRole(runtimeConfig, currentScope, options)
-          : null;
       const params = eventParams(currentScope, options?.filters);
-      const eventPayload = await requestNativeEquivalentJson(
+      const observation = await withStableTenantManagementAuthority(
         runtimeConfig,
-        `/api/v1/events?${params.toString()}`,
-        options ?? {},
-        TENANT_EVENTS_LOCAL_REASON,
+        currentScope,
+        options,
+        () =>
+          Promise.all([
+            requestNativeEquivalentJson(
+              runtimeConfig,
+              `/api/v1/events?${params.toString()}`,
+              options ?? {},
+              TENANT_EVENTS_LOCAL_REASON,
+            ),
+            requestNativeEquivalentJson(
+              runtimeConfig,
+              `/api/v1/events/types?${new URLSearchParams({ tenant_id: currentScope.tenantId })}`,
+              options ?? {},
+              TENANT_EVENTS_LOCAL_REASON,
+            ),
+          ]),
       );
-      const authorityRequest = hasSelectionFilters(options?.filters)
-        ? requestNativeEquivalentJson(
-            runtimeConfig,
-            `/api/v1/events?${eventAuthorityParams(currentScope).toString()}`,
-            options ?? {},
-            TENANT_EVENTS_LOCAL_REASON,
-          )
-        : Promise.resolve(eventPayload);
-      const [eventTypesPayload, authorityPayload] = await Promise.all([
-        requestNativeEquivalentJson(
-          runtimeConfig,
-          `/api/v1/events/types?${new URLSearchParams({ tenant_id: currentScope.tenantId })}`,
-          options ?? {},
-          TENANT_EVENTS_LOCAL_REASON,
-        ),
-        authorityRequest,
-      ]);
-      const membershipRole =
-        cloudRole ?? (await observeTenantManagementRole(runtimeConfig, currentScope, options));
+      const [eventPayload, eventTypesPayload] = observation.value;
+      const membershipRole = observation.membershipRole;
       const page = parseEvents(eventPayload, currentScope);
-      const authorityRevision = hasSelectionFilters(options?.filters)
-        ? parseEvents(authorityPayload, currentScope).total
-        : page.total;
       const data = Object.freeze({
         membershipRole,
         ...page,
@@ -112,12 +101,12 @@ export function createTenantEventsClient(config: DesktopRuntimeConfig): TenantEv
       });
       return Object.freeze({
         scope: currentScope,
+        scopeRevision: observation.scopeRevision,
         authority: authorityFor(runtimeConfig),
         availability: 'available',
         reasonCode: null,
         contractVersion: '4.0.0',
         allowedActions: ACTIONS,
-        authorityRevision,
         data,
         ...data,
       });
@@ -135,18 +124,6 @@ function eventParams(scope: TenantManagementScope, filters?: TenantEventFilters)
   if (filters?.dateFrom) params.set('date_from', filters.dateFrom);
   if (filters?.dateTo) params.set('date_to', filters.dateTo);
   return params;
-}
-
-function eventAuthorityParams(scope: TenantManagementScope): URLSearchParams {
-  return new URLSearchParams({
-    tenant_id: scope.tenantId,
-    page: '1',
-    page_size: '1',
-  });
-}
-
-function hasSelectionFilters(filters?: TenantEventFilters): boolean {
-  return Boolean(filters?.eventType || filters?.dateFrom || filters?.dateTo);
 }
 
 function parseEvents(

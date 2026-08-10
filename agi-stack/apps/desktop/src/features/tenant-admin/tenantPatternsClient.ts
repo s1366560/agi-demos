@@ -17,6 +17,7 @@ import {
   requestTenantManagementNoContent,
   requireRecord,
   requireTenantManagementScope,
+  withStableTenantManagementAuthority,
   type TenantManagementAuthoritySnapshot,
   type TenantManagementRequestOptions,
   type TenantManagementScope,
@@ -76,27 +77,29 @@ export function createTenantPatternsClient(config: DesktopRuntimeConfig): Tenant
         'native_equivalent',
         TENANT_PATTERNS_LOCAL_REASON,
       );
-      const cloudRole =
-        runtimeConfig.mode === 'cloud'
-          ? await observeTenantManagementRole(runtimeConfig, currentScope, options)
-          : null;
       const params = new URLSearchParams({
         tenant_id: currentScope.tenantId,
         page: '1',
         page_size: '50',
       });
-      const payload = await requestNativeEquivalentJson(
+      const observation = await withStableTenantManagementAuthority(
         runtimeConfig,
-        `/api/v1/agent/workflows/patterns?${params.toString()}`,
-        options ?? {},
-        TENANT_PATTERNS_LOCAL_REASON,
+        currentScope,
+        options,
+        () =>
+          requestNativeEquivalentJson(
+            runtimeConfig,
+            `/api/v1/agent/workflows/patterns?${params.toString()}`,
+            options ?? {},
+            TENANT_PATTERNS_LOCAL_REASON,
+          ),
       );
-      const membershipRole =
-        cloudRole ?? (await observeTenantManagementRole(runtimeConfig, currentScope, options));
-      const page = parsePatterns(payload);
+      const membershipRole = observation.membershipRole;
+      const page = parsePatterns(observation.value);
       const data = Object.freeze({ membershipRole, ...page });
       return Object.freeze({
         scope: currentScope,
+        scopeRevision: observation.scopeRevision,
         authority: authorityFor(runtimeConfig),
         availability: 'available',
         reasonCode: null,

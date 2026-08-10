@@ -14,6 +14,7 @@ import {
   requireRecord,
   requireRole,
   requireTenantManagementScope,
+  withStableTenantManagementAuthority,
   type TenantManagementAuthoritySnapshot,
   type TenantManagementRequestOptions,
   type TenantManagementWorkspaceScope,
@@ -93,17 +94,24 @@ export function createTenantDecisionRecordsClient(
   return Object.freeze({
     async load(scope, options) {
       const currentScope = scopeFor(scope);
-      const membershipRole = await observeTenantManagementRole(runtimeConfig, currentScope, options);
       const params = new URLSearchParams({ workspace_id: currentScope.workspaceId });
       if (options?.filters?.agentId) params.set('agent_id', options.filters.agentId);
       if (options?.filters?.decisionType) {
         params.set('decision_type', options.filters.decisionType);
       }
-      const payload = await requestTenantManagementJson(
+      const observation = await withStableTenantManagementAuthority(
         runtimeConfig,
-        `${root(currentScope)}/decision-records?${params.toString()}`,
+        currentScope,
         options,
+        () =>
+          requestTenantManagementJson(
+            runtimeConfig,
+            `${root(currentScope)}/decision-records?${params.toString()}`,
+            options,
+          ),
       );
+      const membershipRole = observation.membershipRole;
+      const payload = observation.value;
       if (!isRecord(payload) || !Array.isArray(payload.items)) {
         throw tenantAdminError('tenant_decisions_list_contract_invalid');
       }
@@ -113,6 +121,7 @@ export function createTenantDecisionRecordsClient(
       });
       return Object.freeze({
         scope: currentScope,
+        scopeRevision: observation.scopeRevision,
         authority: authorityFor(runtimeConfig),
         availability: 'available',
         reasonCode: null,

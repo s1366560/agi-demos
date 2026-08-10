@@ -32,7 +32,10 @@ test('gene subresource actions keep tenant authority in a valid query string', a
     const method = init.method ?? 'GET';
     assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer trusted-session');
     if (parsed.pathname === '/api/v1/workspace-context') {
-      return json({ context: { tenant_id: 'tenant-1' }, membership_role: 'owner' });
+      return json({
+        context: { tenant_id: 'tenant-1', project_id: 'project-1', revision: 41 },
+        membership_role: 'owner',
+      });
     }
     calls.push(`${method} ${parsed.pathname}${parsed.search}`);
     if (method === 'DELETE') return new Response(null, { status: 204 });

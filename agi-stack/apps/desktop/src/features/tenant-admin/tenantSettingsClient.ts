@@ -16,6 +16,7 @@ import {
   requireRecord,
   requireRole,
   requireTenantManagementScope,
+  withStableTenantManagementAuthority,
   type TenantManagementAuthoritySnapshot,
   type TenantManagementRequestOptions,
   type TenantManagementScope,
@@ -86,11 +87,22 @@ export function createTenantSettingsClient(config: DesktopRuntimeConfig): Tenant
   return Object.freeze({
     async load(scope, options) {
       const currentScope = scopeFor(scope);
-      const membershipRole = await observeTenantManagementRole(runtimeConfig, currentScope, options);
-      const [tenantPayload, statsPayload] = await Promise.all([
-        requestTenantManagementJson(runtimeConfig, tenantPath(currentScope), options),
-        requestTenantManagementJson(runtimeConfig, `${tenantPath(currentScope)}/stats`, options),
-      ]);
+      const observation = await withStableTenantManagementAuthority(
+        runtimeConfig,
+        currentScope,
+        options,
+        () =>
+          Promise.all([
+            requestTenantManagementJson(runtimeConfig, tenantPath(currentScope), options),
+            requestTenantManagementJson(
+              runtimeConfig,
+              `${tenantPath(currentScope)}/stats`,
+              options,
+            ),
+          ]),
+      );
+      const [tenantPayload, statsPayload] = observation.value;
+      const membershipRole = observation.membershipRole;
       const data = Object.freeze({
         membershipRole,
         tenant: parseTenant(tenantPayload, currentScope),
@@ -98,6 +110,7 @@ export function createTenantSettingsClient(config: DesktopRuntimeConfig): Tenant
       });
       return Object.freeze({
         scope: currentScope,
+        scopeRevision: observation.scopeRevision,
         authority: authorityFor(runtimeConfig),
         availability: 'available',
         reasonCode: null,

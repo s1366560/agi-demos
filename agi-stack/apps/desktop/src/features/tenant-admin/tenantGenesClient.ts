@@ -19,6 +19,7 @@ import {
   requireRecord,
   requireRole,
   requireTenantManagementScope,
+  withStableTenantManagementAuthority,
   type TenantManagementAuthoritySnapshot,
   type TenantManagementRequestOptions,
   type TenantManagementScope,
@@ -183,22 +184,23 @@ export function createTenantGenesClient(config: DesktopRuntimeConfig): TenantGen
   return Object.freeze({
     async load(scope, options) {
       const currentScope = scopeFor(scope);
-      const cloudRole =
-        runtimeConfig.mode === 'cloud'
-          ? await observeTenantManagementRole(runtimeConfig, currentScope, options)
-          : null;
       const params = new URLSearchParams({
         tenant_id: currentScope.tenantId,
         page: '1',
         page_size: '20',
       });
-      const payload = await nativeJson(`/api/v1/genes/?${params.toString()}`, options);
-      const membershipRole =
-        cloudRole ?? (await observeTenantManagementRole(runtimeConfig, currentScope, options));
-      const page = parseGenePage(payload, currentScope);
+      const observation = await withStableTenantManagementAuthority(
+        runtimeConfig,
+        currentScope,
+        options,
+        () => nativeJson(`/api/v1/genes/?${params.toString()}`, options),
+      );
+      const membershipRole = observation.membershipRole;
+      const page = parseGenePage(observation.value, currentScope);
       const data = Object.freeze({ membershipRole, ...page });
       return Object.freeze({
         scope: currentScope,
+        scopeRevision: observation.scopeRevision,
         authority: authorityFor(runtimeConfig),
         availability: 'available',
         reasonCode: null,

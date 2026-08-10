@@ -175,7 +175,10 @@ test('Cloud clients use trusted session and exact tenant/workspace scope', async
     calls.push(`${init.method ?? 'GET'} ${parsed.pathname}${parsed.search}`);
     assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer trusted-session');
     if (parsed.pathname === '/api/v1/workspace-context') {
-      return json({ context: { tenant_id: 'tenant-1' }, membership_role: 'owner' });
+      return json({
+        context: { tenant_id: 'tenant-1', project_id: 'project-1', revision: 41 },
+        membership_role: 'owner',
+      });
     }
     if (parsed.pathname === '/api/v1/agent/workflows/patterns') {
       assert.equal(parsed.searchParams.get('tenant_id'), 'tenant-1');
@@ -242,6 +245,10 @@ test('Cloud clients use trusted session and exact tenant/workspace scope', async
     snapshots.every((snapshot) => snapshot.contractVersion === '4.0.0'),
     true,
   );
+  assert.equal(
+    snapshots.every((snapshot) => snapshot.scopeRevision === 41),
+    true,
+  );
   assert.deepEqual(snapshots[0].allowedActions, ['view', 'list', 'delete']);
   assert.deepEqual(snapshots[1].allowedActions, [
     'view',
@@ -270,7 +277,7 @@ test('Cloud clients use trusted session and exact tenant/workspace scope', async
     'paginate',
   ]);
   assert.equal(snapshots[4].total, 1);
-  assert.equal(snapshots[4].authorityRevision, 7);
+  assert.equal(snapshots[4].scopeRevision, 41);
   assert.deepEqual(snapshots[5].allowedActions, [
     'view',
     'list',
@@ -309,13 +316,16 @@ test('tenant management transport presents launch capability before Local sideca
   assert.equal(calls[1].headers.get('Authorization'), 'Bearer trusted-session');
 });
 
-test('Events pagination reuses the unfiltered page total as authority revision', async () => {
+test('Events uses context revision independently from the page total', async () => {
   const eventCalls = [];
   globalThis.fetch = async (url, init = {}) => {
     const parsed = new URL(String(url));
     assert.equal(new Headers(init.headers).get('X-Agistack-Launch'), null);
     if (parsed.pathname === '/api/v1/workspace-context') {
-      return json({ context: { tenant_id: 'tenant-1' }, membership_role: 'member' });
+      return json({
+        context: { tenant_id: 'tenant-1', project_id: 'project-1', revision: 41 },
+        membership_role: 'member',
+      });
     }
     if (parsed.pathname === '/api/v1/events/types') return json(['workspace.updated']);
     if (parsed.pathname === '/api/v1/events') {
@@ -331,8 +341,73 @@ test('Events pagination reuses the unfiltered page total as authority revision',
     filters: { page: 2, pageSize: 5 },
   });
   assert.equal(observed.total, 13);
-  assert.equal(observed.authorityRevision, 13);
+  assert.equal(observed.scopeRevision, 41);
+  assert.equal(Object.hasOwn(observed, 'authorityRevision'), false);
   assert.equal(eventCalls.length, 1);
+});
+
+test('Events fails closed when scope authority changes during resource observation', async () => {
+  let contextCalls = 0;
+  globalThis.fetch = async (url) => {
+    const parsed = new URL(String(url));
+    if (parsed.pathname === '/api/v1/workspace-context') {
+      contextCalls += 1;
+      return json({
+        context: {
+          tenant_id: 'tenant-1',
+          project_id: 'project-1',
+          revision: contextCalls === 1 ? 41 : 42,
+        },
+        membership_role: 'member',
+      });
+    }
+    if (parsed.pathname === '/api/v1/events/types') return json(['workspace.updated']);
+    if (parsed.pathname === '/api/v1/events') {
+      return json({ items: [eventPayload()], total: 13, page: 1, page_size: 20 });
+    }
+    throw new Error(`unexpected request ${parsed.pathname}`);
+  };
+
+  await assert.rejects(createTenantEventsClient(cloudConfig).load(cloudScope), (error) => {
+    assert.equal(error.status, 409);
+    assert.equal(error.message, 'tenant_management_authority_stale');
+    return true;
+  });
+  assert.equal(contextCalls, 2);
+});
+
+test('tenant scope observation rejects missing, negative, and cross-project revisions', async () => {
+  const cases = [
+    [
+      { tenant_id: 'tenant-1', project_id: 'project-1' },
+      502,
+      'tenant_management_workspace_context_contract_invalid',
+    ],
+    [
+      { tenant_id: 'tenant-1', project_id: 'project-1', revision: -1 },
+      502,
+      'tenant_management_workspace_context_contract_invalid',
+    ],
+    [
+      { tenant_id: 'tenant-1', project_id: 'project-2', revision: 41 },
+      409,
+      'tenant_management_workspace_context_scope_conflict',
+    ],
+  ];
+  for (const [context, status, reason] of cases) {
+    let calls = 0;
+    globalThis.fetch = async (url) => {
+      calls += 1;
+      assert.equal(new URL(String(url)).pathname, '/api/v1/workspace-context');
+      return json({ context, membership_role: 'member' });
+    };
+    await assert.rejects(createTenantEventsClient(cloudConfig).load(cloudScope), (error) => {
+      assert.equal(error.status, status);
+      assert.equal(error.message, reason);
+      return true;
+    });
+    assert.equal(calls, 1);
+  }
 });
 
 test('Local native clients probe sidecar and return stable unavailable reasons', async () => {
@@ -344,6 +419,12 @@ test('Local native clients probe sidecar and return stable unavailable reasons',
     assert.equal(headers.get('Authorization'), 'Bearer local-session');
     if (headers.get('X-Agistack-Launch') !== 'private-launch-capability') {
       return json({ detail: 'Launch capability required' }, 401);
+    }
+    if (parsed.pathname === '/api/v1/workspace-context') {
+      return json({
+        context: { tenant_id: 'local', project_id: 'project-1', revision: 41 },
+        membership_role: 'member',
+      });
     }
     return json({ detail: 'Not Found' }, 404);
   };
@@ -371,7 +452,11 @@ test('Local native clients probe sidecar and return stable unavailable reasons',
   assert.deepEqual(calls.sort(), [
     '/api/v1/agent/workflows/patterns',
     '/api/v1/events',
+    '/api/v1/events/types',
     '/api/v1/genes/',
+    '/api/v1/workspace-context',
+    '/api/v1/workspace-context',
+    '/api/v1/workspace-context',
   ]);
 });
 
@@ -601,7 +686,7 @@ test('remaining authority rejects mismatched authority and workspace scope', asy
   const missingRevisionDependencies = capabilityDependencies('cloud', []);
   missingRevisionDependencies.patterns = {
     async load(scope) {
-      const { authorityRevision: _authorityRevision, ...snapshot } = observedSnapshot(
+      const { scopeRevision: _scopeRevision, ...snapshot } = observedSnapshot(
         'cloud',
         scope,
         ACTIONS_BY_CAPABILITY['tenant-tenant-patterns'],
@@ -736,7 +821,7 @@ function observedSnapshot(authority, scope, allowedActions) {
     availability: 'available',
     reasonCode: null,
     contractVersion: '4.0.0',
-    authorityRevision: 41,
+    scopeRevision: 41,
     allowedActions,
     data: Object.freeze({}),
   });

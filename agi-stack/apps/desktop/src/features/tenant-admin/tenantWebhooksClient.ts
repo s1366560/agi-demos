@@ -16,6 +16,7 @@ import {
   requireRole,
   requireStringArray,
   requireTenantManagementScope,
+  withStableTenantManagementAuthority,
   type TenantManagementAuthoritySnapshot,
   type TenantManagementRequestOptions,
   type TenantManagementScope,
@@ -97,16 +98,24 @@ export function createTenantWebhooksClient(config: DesktopRuntimeConfig): Tenant
   return Object.freeze({
     async load(scope, options) {
       const currentScope = scopeFor(scope);
-      const membershipRole = await observeTenantManagementRole(runtimeConfig, currentScope, options);
-      requireRole(membershipRole, ['owner', 'admin'], 'tenant_webhooks_forbidden');
-      const [webhookPayload, eventTypesPayload] = await Promise.all([
-        requestTenantManagementJson(runtimeConfig, webhooksPath(currentScope), options),
-        requestTenantManagementJson(
-          runtimeConfig,
-          `/api/v1/events/types?${new URLSearchParams({ tenant_id: currentScope.tenantId })}`,
-          options,
-        ),
-      ]);
+      const observation = await withStableTenantManagementAuthority(
+        runtimeConfig,
+        currentScope,
+        options,
+        (authority) => {
+          requireRole(authority.membershipRole, ['owner', 'admin'], 'tenant_webhooks_forbidden');
+          return Promise.all([
+            requestTenantManagementJson(runtimeConfig, webhooksPath(currentScope), options),
+            requestTenantManagementJson(
+              runtimeConfig,
+              `/api/v1/events/types?${new URLSearchParams({ tenant_id: currentScope.tenantId })}`,
+              options,
+            ),
+          ]);
+        },
+      );
+      const membershipRole = observation.membershipRole;
+      const [webhookPayload, eventTypesPayload] = observation.value;
       if (!Array.isArray(webhookPayload)) {
         throw tenantAdminError('tenant_webhooks_list_contract_invalid');
       }
@@ -120,6 +129,7 @@ export function createTenantWebhooksClient(config: DesktopRuntimeConfig): Tenant
       });
       return Object.freeze({
         scope: currentScope,
+        scopeRevision: observation.scopeRevision,
         authority: authorityFor(runtimeConfig),
         availability: 'available',
         reasonCode: null,
