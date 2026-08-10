@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,7 +27,17 @@ const generatorFixtureFiles = [
   'parity-manifest.v4.json',
   'parity-manifest.v4.schema.json',
   'parity-structural-closure.mjs',
+  'production-entry-integrity.mjs',
   'schema-validator.mjs',
+];
+const browserSourcePaths = [
+  'agi-stack/apps/browser-extension/entrypoints/background.ts',
+  'agi-stack/apps/browser-extension/src/handlers.ts',
+  'agi-stack/apps/browser-extension/src/protocol.ts',
+  'agi-stack/crates/adapters-browser/src/lib.rs',
+  'agi-stack/apps/desktop/sidecar/src/local_runtime/browser_bridge.rs',
+  'agi-stack/apps/desktop/sidecar/src/native_host.rs',
+  'agi-stack/apps/desktop/src/features/settings/BrowserIntegrationSettingsPage.tsx',
 ];
 
 function readJson(relativePath) {
@@ -69,6 +86,61 @@ function runGenerator(fixture, args = ['--check']) {
 
 function output(result) {
   return `${result.stderr}\n${result.stdout}`;
+}
+
+function git(repositoryRoot, args) {
+  const result = spawnSync('git', args, {
+    cwd: repositoryRoot,
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, output(result));
+  return result.stdout.trim();
+}
+
+function setAuditedRevision(path, revision) {
+  const manifest = JSON.parse(readFileSync(path, 'utf8'));
+  manifest.references = {
+    ...manifest.references,
+    audit_revision: revision,
+    web_revision: revision,
+    desktop_revision: revision,
+  };
+  writeFileSync(path, `${JSON.stringify(manifest)}\n`);
+}
+
+function createGitBackedGeneratorFixture(t) {
+  const fixture = createGeneratorFixture(t);
+  rmSync(fixture.manifestPath, { force: true });
+  for (const sourcePath of browserSourcePaths) {
+    const target = resolve(fixture.fixtureRoot, sourcePath);
+    mkdirSync(resolve(target, '..'), { recursive: true });
+    copyFileSync(resolve(repositoryRoot, sourcePath), target);
+  }
+  git(fixture.fixtureRoot, ['init', '--quiet']);
+  git(fixture.fixtureRoot, ['config', 'user.name', 'MemStack Parity Test']);
+  git(fixture.fixtureRoot, ['config', 'user.email', 'parity-test@memstack.invalid']);
+  git(fixture.fixtureRoot, ['add', '.']);
+  git(fixture.fixtureRoot, ['commit', '--quiet', '-m', 'source baseline']);
+  const auditedRevision = git(fixture.fixtureRoot, ['rev-parse', 'HEAD']);
+  setAuditedRevision(
+    resolve(
+      fixture.fixtureRoot,
+      'agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v2.json',
+    ),
+    auditedRevision,
+  );
+  setAuditedRevision(
+    resolve(
+      fixture.fixtureRoot,
+      'agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v3.json',
+    ),
+    auditedRevision,
+  );
+  const generated = runGenerator(fixture, []);
+  assert.equal(generated.status, 0, output(generated));
+  git(fixture.fixtureRoot, ['add', '.']);
+  git(fixture.fixtureRoot, ['commit', '--quiet', '-m', 'generated contract']);
+  return { ...fixture, auditedRevision };
 }
 
 test('parity manifest v4 adds explicit primary and supporting authority roles', () => {
@@ -204,6 +276,48 @@ test('Browser Bridge is the 67th native-only compound-authority capability', () 
   ]) {
     assert.equal(paths.includes(path), true, path);
   }
+});
+
+test('v4 remains stable after its generated artifact is committed', (t) => {
+  const fixture = createGitBackedGeneratorFixture(t);
+  const artifactHead = git(fixture.fixtureRoot, ['rev-parse', 'HEAD']);
+  assert.notEqual(artifactHead, fixture.auditedRevision);
+
+  const result = runGenerator(fixture);
+  assert.equal(result.status, 0, output(result));
+  const manifest = JSON.parse(readFileSync(fixture.manifestPath, 'utf8'));
+  assert.equal(manifest.references.audit_revision, fixture.auditedRevision);
+  assert.equal(manifest.references.desktop_revision, fixture.auditedRevision);
+  const browserBridge = manifest.capabilities.find(
+    ({ id }) => id === 'browser-integration-browser-bridge',
+  );
+  assert.equal(browserBridge.source_revision, fixture.auditedRevision);
+  assert.equal(browserBridge.judgment.input.audited_revision, fixture.auditedRevision);
+});
+
+test('v4 rejects divergent historical revisions and Browser Bridge source drift', (t) => {
+  const divergent = createGeneratorFixture(t, {
+    mutateV3(manifest) {
+      manifest.references.desktop_revision = '0'.repeat(40);
+    },
+  });
+  assert.match(
+    output(runGenerator(divergent, [])),
+    /requires identical v2 and v3 references/iu,
+  );
+
+  const drifted = createGitBackedGeneratorFixture(t);
+  const driftedSource = resolve(drifted.fixtureRoot, browserSourcePaths[0]);
+  writeFileSync(
+    driftedSource,
+    `${readFileSync(driftedSource, 'utf8')}\n// fixture drift\n`,
+  );
+  const result = runGenerator(drifted);
+  assert.notEqual(result.status, 0, result.stdout);
+  assert.match(
+    output(result),
+    /current HEAD blob differs from live regular-file bytes/iu,
+  );
 });
 
 test('v4 check fails closed when the checked-in v3 artifact is invalid', (t) => {

@@ -1,9 +1,10 @@
-import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 
+import { bindProductionEntrySurfaces } from './production-entry-integrity.mjs';
 import { writeValidatedArtifactSync } from './parity-judgment-ledger.mjs';
 import {
   assertParityStructuralClosure,
@@ -40,17 +41,12 @@ const enrichedCapabilities = v3Manifest.capabilities.map((capability) =>
   }),
 );
 assertAllOverridesMatched(overrides, matchedOverrides);
-const sourceRevision = resolveGitRevision('HEAD');
+const sourceRevision = v3Manifest.references.audit_revision;
 const browserCapability = createBrowserBridgeCapability(sourceRevision);
 const manifest = downgradeStructurallyInvalidSurfaces({
   ...v3Manifest,
   $schema: './parity-manifest.v4.schema.json',
   schema_version: '4.0.0',
-  references: {
-    ...v3Manifest.references,
-    audit_revision: sourceRevision,
-    desktop_revision: sourceRevision,
-  },
   capabilities: [...enrichedCapabilities, browserCapability],
 });
 assertSchemaValid(schema, manifest);
@@ -88,6 +84,19 @@ function assertHistoricalInputs(v2, v3, schema) {
   assertParityStructuralClosure(v3);
   if (v2?.schema_version !== '2.0.0' || v3?.schema_version !== '3.0.0') {
     throw new Error('Parity manifest v4 requires historical manifest v2 and v3 inputs.');
+  }
+  if (!isDeepStrictEqual(v2.references, v3.references)) {
+    throw new Error('Parity manifest v4 requires identical v2 and v3 references.');
+  }
+  const {
+    audit_revision: auditRevision,
+    desktop_revision: desktopRevision,
+    web_revision: webRevision,
+  } = v3.references;
+  if (auditRevision !== desktopRevision || auditRevision !== webRevision) {
+    throw new Error(
+      'Parity manifest v4 requires one audited Web and Desktop source revision.',
+    );
   }
 }
 
@@ -531,27 +540,23 @@ function createBrowserBridgeCapability(sourceRevision) {
 }
 
 function bindSourceEntry(path, sourceRevision) {
-  const liveBytes = readFileSync(resolve(repositoryRoot, path));
-  const revisionBytes = execFileSync('git', ['show', `${sourceRevision}:${path}`], {
-    cwd: repositoryRoot,
-    maxBuffer: 32 * 1024 * 1024,
-  });
-  if (!liveBytes.equals(revisionBytes)) {
-    throw new Error(`Browser Bridge production entry ${path} differs from ${sourceRevision}.`);
-  }
-  return {
-    entry_type: 'source',
-    path,
-    sha256: `sha256:${createHash('sha256').update(liveBytes).digest('hex')}`,
-    declaration: null,
-  };
-}
-
-function resolveGitRevision(revision) {
-  return execFileSync('git', ['rev-parse', '--verify', `${revision}^{commit}`], {
-    cwd: repositoryRoot,
-    encoding: 'utf8',
-  }).trim();
+  return bindProductionEntrySurfaces(
+    {
+      desktop_cloud: [path],
+      desktop_local: [],
+      native_only: [],
+    },
+    {
+      repositoryRoot,
+      definitionSourcePath:
+        'agi-stack/apps/desktop/contracts/desktop-web-parity/generate-parity-manifest-v4.mjs',
+      forbiddenSourcePaths: [
+        'agi-stack/apps/desktop/contracts/desktop-web-parity/parity-manifest.v4.json',
+      ],
+      sourceRevision,
+      integrity: v3Manifest.production_entry_integrity,
+    },
+  ).desktop_cloud[0];
 }
 
 function createV4Schema(input) {
