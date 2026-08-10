@@ -4957,3 +4957,93 @@ test('project search transports every Web mode with the caller abort signal', as
     globalThis.fetch = originalFetch;
   }
 });
+
+test('browser origin grants list and revoke follow the sidecar contract', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const grants = [
+    {
+      id: 'grant-1',
+      host: 'example.com',
+      decision: 'site',
+      source_hitl_request_id: 'hitl-1',
+      created_at: '2026-08-01T00:00:00Z',
+    },
+    {
+      id: 'grant-2',
+      host: 'tracker.test',
+      decision: 'decline',
+      source_hitl_request_id: 'hitl-2',
+      created_at: '2026-08-02T00:00:00Z',
+    },
+  ];
+  globalThis.fetch = async (request, init) => {
+    calls.push({ request: String(request), init });
+    if (calls.length === 1) {
+      return new Response(JSON.stringify({ grants }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return new Response(
+      JSON.stringify({
+        success: true,
+        grant: { ...grants[1], revoked_at: '2026-08-03T00:00:00Z' },
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:47832',
+      apiKey: 'local-session',
+      localApiToken: 'launch-token',
+    });
+    const listed = await client.listBrowserOriginGrants();
+    assert.deepEqual(listed, grants);
+    const revoked = await client.revokeBrowserOriginGrant('grant-2');
+    assert.equal(revoked.id, 'grant-2');
+    assert.equal(revoked.decision, 'decline');
+
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].request, 'http://127.0.0.1:47832/api/v1/browser-bridge/origin-grants');
+    assert.equal(calls[0].init.method, 'GET');
+    assert.equal(calls[0].init.headers.get('Authorization'), 'Bearer local-session');
+    assert.equal(calls[0].init.headers.get('X-Agistack-Launch'), 'launch-token');
+    assert.equal(
+      calls[1].request,
+      'http://127.0.0.1:47832/api/v1/browser-bridge/origin-grants/grant-2',
+    );
+    assert.equal(calls[1].init.method, 'DELETE');
+    assert.equal(calls[1].init.headers.get('Authorization'), 'Bearer local-session');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('browser origin grant responses reject malformed payloads', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ grants: [{ id: 'grant-1', host: '', decision: 'bogus' }] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:47832',
+      apiKey: 'local-session',
+      localApiToken: 'launch-token',
+    });
+    await assert.rejects(
+      () => client.listBrowserOriginGrants(),
+      (error) => error instanceof DesktopApiError && error.status === 502,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

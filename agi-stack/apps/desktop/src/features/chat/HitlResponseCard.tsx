@@ -15,6 +15,8 @@ import {
 } from '../session/sessionDecisionModel';
 import type { A2UIActionView } from './a2uiAction';
 import {
+  browserOriginAllowResponseData,
+  browserOriginConsentView,
   buildDecisionResponse,
   buildEnvVarResponse,
   formatHitlRemaining,
@@ -85,6 +87,8 @@ export function HitlResponseCard({
   const responsePresentation = hitlResponsePresentation(item, hitlType);
   const parameterPreview =
     hitlType === 'permission' ? permissionParameterPreview(item) : null;
+  const browserOrigin =
+    hitlType === 'permission' ? browserOriginConsentView(item, approvalRequest) : null;
 
   useEffect(() => {
     if (answered || expiry.state !== 'active') return;
@@ -128,8 +132,18 @@ export function HitlResponseCard({
   return (
     <div className="timeline-details">
       <Text as="p" size="2" className="timeline-detail-summary">
-        {question}
+        {browserOrigin
+          ? t('chat.browserOrigin.title', { origin: browserOrigin.origin })
+          : question}
       </Text>
+      {browserOrigin ? (
+        <div className="agent-run-meta">
+          {browserOrigin.tool ? (
+            <span>{t('chat.browserOrigin.toolRequest', { tool: browserOrigin.tool })}</span>
+          ) : null}
+          {browserOrigin.reason ? <span>{browserOrigin.reason}</span> : null}
+        </div>
+      ) : null}
       <div className="agent-run-meta">
         <span>
           {t(
@@ -232,7 +246,7 @@ export function HitlResponseCard({
             })}
           </small>
         </div>
-      ) : !answered && (hitlType === 'permission' || hitlType === 'decision') ? (
+      ) : !answered && !browserOrigin && (hitlType === 'permission' || hitlType === 'decision') ? (
         <Text size="1" color="red">
           {t('approval.incomplete', {
             fields: 'action, target, data, reason, risk, reversibility, scope, evidence',
@@ -261,7 +275,56 @@ export function HitlResponseCard({
         </div>
       ) : null}
 
-      {!answered && hitlType === 'permission' ? (
+      {!answered && hitlType === 'permission' && browserOrigin ? (
+        <>
+          <Flex gap="2" wrap="wrap">
+            <Button
+              size="1"
+              color="green"
+              disabled={responseDisabled || !requestId || busy}
+              loading={busy}
+              onClick={() => void submit(browserOriginAllowResponseData('once'))}
+            >
+              {t('chat.browserOrigin.allowOnce')}
+            </Button>
+            <Button
+              size="1"
+              color="green"
+              variant="soft"
+              disabled={responseDisabled || !requestId || busy}
+              loading={busy}
+              onClick={() => void submit(browserOriginAllowResponseData('site'))}
+            >
+              {t('chat.browserOrigin.allowSite')}
+            </Button>
+            <Button
+              size="1"
+              color="amber"
+              variant="soft"
+              disabled={responseDisabled || !requestId || busy}
+              loading={busy}
+              onClick={() => void submit(browserOriginAllowResponseData('all'))}
+            >
+              {t('chat.browserOrigin.allowAll')}
+            </Button>
+            <Button
+              size="1"
+              color="red"
+              variant="soft"
+              disabled={responseDisabled || !requestId || busy}
+              loading={busy}
+              onClick={() => void submit(permissionDenialResponseData())}
+            >
+              {t('chat.deny')}
+            </Button>
+          </Flex>
+          <Text size="1" color="amber">
+            {t('chat.browserOrigin.allowAllWarning')}
+          </Text>
+        </>
+      ) : null}
+
+      {!answered && hitlType === 'permission' && !browserOrigin ? (
         <>
           <Flex gap="2" wrap="wrap">
             <Button

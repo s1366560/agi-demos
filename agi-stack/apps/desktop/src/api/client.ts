@@ -19,6 +19,7 @@ import type {
   AutomationRunListResponse,
   AutomationToggleInput,
   AutomationUpdateInput,
+  BrowserOriginGrant,
   ConversationMessagesResponse,
   ComposerContextItem,
   ChangeSnapshot,
@@ -796,6 +797,24 @@ export class DesktopApiClient {
       { method: 'DELETE' },
     );
     return normalizeWorkspaceToolGrant(payload);
+  }
+
+  async listBrowserOriginGrants(signal?: AbortSignal): Promise<BrowserOriginGrant[]> {
+    const payload = await this.request<unknown>('/api/v1/browser-bridge/origin-grants', {
+      signal,
+    });
+    return readArray<unknown>(payload, ['grants']).map(normalizeBrowserOriginGrant);
+  }
+
+  async revokeBrowserOriginGrant(grantId: string): Promise<BrowserOriginGrant> {
+    const payload = await this.request<unknown>(
+      `/api/v1/browser-bridge/origin-grants/${encodeURIComponent(
+        requireValue(grantId, 'grant id'),
+      )}`,
+      { method: 'DELETE' },
+    );
+    const grant = isRecord(payload) && isRecord(payload.grant) ? payload.grant : payload;
+    return normalizeBrowserOriginGrant(grant);
   }
 
   async createWorkspaceForProject(
@@ -3619,6 +3638,35 @@ function normalizeWorkspaceToolGrant(payload: unknown): WorkspaceToolGrant {
       : {}),
     revoked_by: readCompatString(payload, 'revoked_by', 'revokedBy') || null,
     revoked_at: readCompatString(payload, 'revoked_at', 'revokedAt') || null,
+  };
+}
+
+function normalizeBrowserOriginGrant(payload: unknown): BrowserOriginGrant {
+  if (!isRecord(payload)) {
+    throw new DesktopApiError('Invalid browser origin grant response', 502, payload);
+  }
+  const id = readCompatString(payload, 'id');
+  const host = readCompatString(payload, 'host');
+  const decision = readCompatString(payload, 'decision');
+  const createdAt = readCompatString(payload, 'created_at', 'createdAt');
+  if (
+    !id ||
+    !host ||
+    !createdAt ||
+    (decision !== 'site' && decision !== 'all' && decision !== 'decline')
+  ) {
+    throw new DesktopApiError('Invalid browser origin grant response', 502, payload);
+  }
+  return {
+    id,
+    host,
+    decision,
+    source_hitl_request_id: readCompatString(
+      payload,
+      'source_hitl_request_id',
+      'sourceHitlRequestId',
+    ),
+    created_at: createdAt,
   };
 }
 

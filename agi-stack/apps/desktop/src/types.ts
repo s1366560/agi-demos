@@ -50,6 +50,37 @@ export type WorkspaceRuntimeProvider = LocalRuntimeProvider & {
   workspace_id: string;
 };
 
+export type BrowserBridgeConfig = {
+  enabled: boolean;
+  port: number;
+  extension_ids: string[];
+};
+
+export type BrowserBridgeRuntimeStatus = {
+  enabled: boolean;
+  port: number;
+  broker_connected: boolean;
+  extension_ids: string[];
+};
+
+export type BrowserBridgeStatus = {
+  enabled: boolean;
+  port: number;
+  brokerConnected: boolean;
+  manifests: { browser: string; path: string; present: boolean }[];
+  registryPath: string;
+  extensionIds: string[];
+};
+
+export type BrowserBridgeInstallResult = {
+  installed: { browser: string; manifestPath: string }[];
+  skipped: string[];
+};
+
+export type BrowserBridgeUninstallResult = {
+  removed: string[];
+};
+
 export type LocalRuntimeStatus = {
   running: boolean;
   api_base_url: string;
@@ -59,7 +90,9 @@ export type LocalRuntimeStatus = {
   tools: string[];
   config: {
     workspace_root: string;
+    browser_bridge?: BrowserBridgeConfig;
   };
+  browser_bridge?: BrowserBridgeRuntimeStatus;
   runtime_providers: LocalRuntimeProvider[];
 };
 
@@ -976,6 +1009,16 @@ export type WorkspaceToolGrant = {
   created_at: string;
   revoked_by?: string | null;
   revoked_at?: string | null;
+};
+
+export type BrowserOriginGrantDecision = 'site' | 'all' | 'decline';
+
+export type BrowserOriginGrant = {
+  id: string;
+  host: string;
+  decision: BrowserOriginGrantDecision;
+  source_hitl_request_id: string;
+  created_at: string;
 };
 
 export type WorkspaceAgentPolicySelection = {

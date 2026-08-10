@@ -24,6 +24,7 @@ import type { DesktopRouteModuleLoader } from '../navigation/desktopRouteModule'
 import { RuntimeConfigPanel } from '../runtime/RuntimeConfigPanel';
 import { ProfileSettingsHost } from '../settings-routes/ProfileSettingsHost';
 import { AccountSessionSecurityPage } from './AccountSessionSecurityPage';
+import { BrowserIntegrationSettingsPage } from './BrowserIntegrationSettingsPage';
 import {
   ManagedResourceWorkspace,
   type ManagedResource,
@@ -401,6 +402,7 @@ export function SettingsWindow({
       appearance: [t(sectionMeta.appearance.label), t(sectionMeta.appearance.description)],
       notifications: [t(sectionMeta.notifications.label), t(sectionMeta.notifications.description)],
       shortcuts: [t(sectionMeta.shortcuts.label), t(sectionMeta.shortcuts.description)],
+      browser: [t(sectionMeta.browser.label), t(sectionMeta.browser.description)],
       models: [t(sectionMeta.models.label), t(sectionMeta.models.description)],
       skills: [t(sectionMeta.skills.label), t(sectionMeta.skills.description)],
       plugins: [t(sectionMeta.plugins.label), t(sectionMeta.plugins.description)],
@@ -624,6 +626,7 @@ export function SettingsWindow({
                 <PreferenceSummaryPage section={section} />
               ) : null}
               {section === 'shortcuts' ? <ShortcutSettingsPage /> : null}
+              {section === 'browser' ? <BrowserIntegrationSettingsPage config={config} /> : null}
 
               {section === 'connection' ? (
                 <SettingsPage

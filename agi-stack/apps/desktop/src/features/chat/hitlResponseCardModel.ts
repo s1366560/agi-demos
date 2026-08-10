@@ -42,6 +42,52 @@ export type HitlRequestExpiry = {
   canRespond: boolean;
 };
 
+export type BrowserOriginConsentView = {
+  origin: string;
+  tool: string | null;
+  reason: string | null;
+};
+
+export type BrowserOriginConsentScope = 'once' | 'site' | 'all';
+
+/**
+ * Browser-origin consent detection (M2). The sidecar persists the agent's
+ * permission HITL with `payload.decision` on the `permission_asked` timeline
+ * item (target kind `browser_origin`, target id = origin host, action name =
+ * gated browser tool). The decoded `approvalRequest.decision` is preferred
+ * when the projection validated the full DecisionContext shape; the raw
+ * payload is read loosely otherwise so the card still renders when the
+ * agent supplied a partial context.
+ */
+export function browserOriginConsentView(
+  item: AgentTimelineItem,
+  approvalRequest: DesktopApprovalRequest | undefined,
+): BrowserOriginConsentView | null {
+  const payload = recordValue(item.payload);
+  const decisions = [approvalRequest?.decision ?? null, recordValue(payload?.decision)];
+  for (const decision of decisions) {
+    if (!decision) continue;
+    const target = recordValue(decision.target);
+    if (!target || target.kind !== 'browser_origin') continue;
+    const origin = firstString(target.id);
+    if (!origin) continue;
+    const action = recordValue(decision.action);
+    return {
+      origin,
+      tool: firstString(action?.name, payload?.tool, payload?.tool_name, item.toolName),
+      reason: firstString(decision.reason, payload?.reason),
+    };
+  }
+  return null;
+}
+
+/** Browser-origin consent response contract: allow with once/site/all scopes. */
+export function browserOriginAllowResponseData(
+  scope: BrowserOriginConsentScope,
+): Record<string, unknown> {
+  return { action: 'allow', granted: true, scope };
+}
+
 const ENV_INPUT_TYPES = new Set<HitlEnvVarFieldView['inputType']>([
   'text',
   'password',

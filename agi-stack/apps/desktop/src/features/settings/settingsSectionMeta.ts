@@ -4,6 +4,7 @@ import {
   CubeIcon,
   FontStyleIcon,
   GearIcon,
+  GlobeIcon,
   IdCardIcon,
   KeyboardIcon,
   MagicWandIcon,
@@ -47,6 +48,11 @@ export const settingsSectionMeta = {
     label: 'settings.shortcuts',
     description: 'settings.shortcutsDescription',
     Icon: KeyboardIcon,
+  },
+  browser: {
+    label: 'settings.browser',
+    description: 'settings.browserDescription',
+    Icon: GlobeIcon,
   },
   models: {
     label: 'settings.models',

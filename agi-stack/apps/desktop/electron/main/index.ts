@@ -72,6 +72,9 @@ const SIDECAR_COMMANDS = new Set([
   'local_trusted_session_clear',
   'local_runtime_status',
   'local_runtime_configure',
+  'browser_bridge_install',
+  'browser_bridge_uninstall',
+  'browser_bridge_status',
 ]);
 const captureAuthorizationGate = new DisplayCaptureAuthorizationGate();
 const qaProfileDirectory = configureQaProfile({

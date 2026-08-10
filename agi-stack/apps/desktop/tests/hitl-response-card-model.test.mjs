@@ -5,6 +5,8 @@ import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const {
+  browserOriginAllowResponseData,
+  browserOriginConsentView,
   buildDecisionResponse,
   buildEnvVarResponse,
   formatHitlRemaining,
@@ -252,6 +254,103 @@ test('HITL card uses structured models for multi-select, field types, save, expi
     'chat.estimatedCost',
     'chat.saveEnvironmentValues',
     'chat.optionalField',
+  ]) {
+    assert.equal(i18nSource.split(`'${key}'`).length - 1, 2, `${key} must cover both locales`);
+  }
+});
+
+test('browser origin consent view reads the decision target from payload or approval request', () => {
+  const view = browserOriginConsentView(
+    item('permission_asked', {
+      decision: {
+        action: { name: 'browser_click', label: 'Click' },
+        target: { kind: 'browser_origin', id: 'Example.COM' },
+        reason: 'Need to read the page',
+      },
+    }),
+    undefined,
+  );
+  assert.deepEqual(view, {
+    origin: 'Example.COM',
+    tool: 'browser_click',
+    reason: 'Need to read the page',
+  });
+
+  const fromApproval = browserOriginConsentView(item('permission_asked', {}), {
+    decision: {
+      action: { name: 'browser_navigate' },
+      target: { kind: 'browser_origin', id: 'foo.test' },
+    },
+  });
+  assert.deepEqual(fromApproval, {
+    origin: 'foo.test',
+    tool: 'browser_navigate',
+    reason: null,
+  });
+
+  // Non-browser permissions keep the default card; missing origins fail closed.
+  assert.equal(
+    browserOriginConsentView(
+      item('permission_asked', { decision: { target: { kind: 'worktree', id: 'wt' } } }),
+      undefined,
+    ),
+    null,
+  );
+  assert.equal(
+    browserOriginConsentView(
+      item('permission_asked', { decision: { target: { kind: 'browser_origin' } } }),
+      undefined,
+    ),
+    null,
+  );
+  assert.equal(browserOriginConsentView(item('permission_asked', {}), undefined), null);
+});
+
+test('browser origin allow responses carry the sidecar scope contract', () => {
+  assert.deepEqual(browserOriginAllowResponseData('once'), {
+    action: 'allow',
+    granted: true,
+    scope: 'once',
+  });
+  assert.deepEqual(browserOriginAllowResponseData('site'), {
+    action: 'allow',
+    granted: true,
+    scope: 'site',
+  });
+  assert.deepEqual(browserOriginAllowResponseData('all'), {
+    action: 'allow',
+    granted: true,
+    scope: 'all',
+  });
+});
+
+test('browser origin card renders four consent actions with an elevated-risk flag', () => {
+  for (const contract of [
+    /browserOriginConsentView\(item, approvalRequest\)/,
+    /browserOriginAllowResponseData\('once'\)/,
+    /browserOriginAllowResponseData\('site'\)/,
+    /browserOriginAllowResponseData\('all'\)/,
+    /permissionDenialResponseData\(\)/,
+    /hitlType === 'permission' && !browserOrigin/,
+    /chat\.browserOrigin\.allowAllWarning/,
+  ]) {
+    assert.match(cardSource, contract);
+  }
+  for (const key of [
+    'chat.browserOrigin.title',
+    'chat.browserOrigin.toolRequest',
+    'chat.browserOrigin.allowOnce',
+    'chat.browserOrigin.allowSite',
+    'chat.browserOrigin.allowAll',
+    'chat.browserOrigin.allowAllWarning',
+    'settings.browserOriginGrants',
+    'settings.browserOriginGrantsDescription',
+    'settings.browserOriginGrantsLoading',
+    'settings.browserOriginGrantsEmpty',
+    'settings.browserOriginDecision.site',
+    'settings.browserOriginDecision.all',
+    'settings.browserOriginDecision.decline',
+    'settings.browserOriginRevoke',
   ]) {
     assert.equal(i18nSource.split(`'${key}'`).length - 1, 2, `${key} must cover both locales`);
   }

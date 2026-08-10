@@ -7,6 +7,7 @@ export type NavigableSettingsSection =
   | 'appearance'
   | 'notifications'
   | 'shortcuts'
+  | 'browser'
   | 'models'
   | 'mcp'
   | 'skills'
@@ -25,7 +26,7 @@ export type SettingsGroupDefinition = {
 
 export const SETTINGS_GROUPS: SettingsGroupDefinition[] = [
   { id: 'account_context', sections: ['account', 'workspace'] },
-  { id: 'preferences', sections: ['general', 'appearance', 'notifications', 'shortcuts'] },
+  { id: 'preferences', sections: ['general', 'appearance', 'notifications', 'shortcuts', 'browser'] },
   { id: 'ai_resources', sections: ['models', 'mcp', 'skills', 'plugins', 'agents', 'subagents'] },
 ];
 

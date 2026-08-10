@@ -1,0 +1,36 @@
+.settings-browser-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.settings-browser-error {
+  margin: 10px 0 0;
+  color: var(--red-11);
+  font-size: 12px;
+}
+
+.settings-browser-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.settings-browser-results .settings-row small {
+  word-break: break-all;
+}
+
+.settings-browser-hint {
+  margin: 10px 0 0;
+  color: var(--gray-11);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.settings-browser-grant-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
