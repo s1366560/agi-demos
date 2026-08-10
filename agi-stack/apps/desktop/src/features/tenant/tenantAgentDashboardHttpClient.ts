@@ -19,6 +19,7 @@ import type {
   TenantRuntimeHookCatalogEntry,
 } from './tenantAgentDashboardClient';
 
+const SERVICE_VERSION = '0.1.0';
 const CONTRACT_VERSION = '3.0.0';
 const READ_ACTIONS = Object.freeze<TenantAgentDashboardAction[]>([
   'view-config',
@@ -209,7 +210,7 @@ function projectSnapshot(
     authority: 'cloud',
     availability: 'available',
     reasonCode: null,
-    serviceVersion: 'cloud',
+    serviceVersion: SERVICE_VERSION,
     contractVersion: CONTRACT_VERSION,
     allowedActions: Object.freeze(allowedActions),
     authorityRevision: config.authorityRevision,
@@ -455,7 +456,7 @@ function localUnavailable(scope: TenantAgentDashboardScope): TenantAgentDashboar
     authority: 'local',
     availability: 'unavailable',
     reasonCode: 'local_agent_dashboard_authority_unavailable',
-    serviceVersion: '0.1.0',
+    serviceVersion: SERVICE_VERSION,
     contractVersion: CONTRACT_VERSION,
     allowedActions: Object.freeze([]),
     authorityRevision: null,

@@ -22,6 +22,8 @@ import {
 
 const CATALOG_ACTIONS = Object.freeze(['view', 'list']);
 const PROJECT_VIEW_ACTIONS = Object.freeze(['view']);
+const SERVICE_VERSION = '0.1.0';
+const CONTRACT_VERSION = '3.0.0';
 
 export function createTenantProjectsHttpClient(
   config: DesktopRuntimeConfig,
@@ -179,8 +181,8 @@ function projectListSnapshot(
       ownerIds: Object.freeze(optionalStringArray(payload.owner_ids, reason)),
       availability: 'available',
       reasonCode: null,
-      serviceVersion: 'cloud',
-      contractVersion: '3.0.0',
+      serviceVersion: SERVICE_VERSION,
+      contractVersion: CONTRACT_VERSION,
       allowedActions: cloudAuthority.allowedActions,
       authorityRevision: null,
     });

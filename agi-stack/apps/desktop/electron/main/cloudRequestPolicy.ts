@@ -315,7 +315,11 @@ async function loadProjectedIdentityCatalog(
   pathForPage: (page: number) => string,
   projectItem: (value: unknown) => Readonly<Record<string, unknown>>,
 ): Promise<readonly Readonly<Record<string, unknown>>[]> {
-  const responseKeys = new Set([...CATALOG_PAGE_KEYS, itemKey]);
+  const responseKeys = new Set([
+    ...CATALOG_PAGE_KEYS,
+    itemKey,
+    ...(itemKey === 'projects' ? ['owner_ids'] : []),
+  ]);
   const items: Readonly<Record<string, unknown>>[] = [];
   const seenIds = new Set<string>();
   let expectedTotal: number | null = null;
@@ -339,6 +343,7 @@ async function loadProjectedIdentityCatalog(
     ) {
       throw new Error('cloud session identity catalog is invalid');
     }
+    if (itemKey === 'projects') validateProjectCatalogOwnerIds(record.owner_ids);
     if (expectedTotal === null) expectedTotal = record.total as number;
     if (record.total !== expectedTotal) {
       throw new Error('cloud session identity catalog revision drift');
@@ -365,6 +370,18 @@ async function loadProjectedIdentityCatalog(
     }
   }
   throw new Error('cloud session identity catalog page limit exceeded');
+}
+
+function validateProjectCatalogOwnerIds(value: unknown): void {
+  if (!Array.isArray(value)) throw new Error('cloud session project owner catalog is invalid');
+  const seenOwnerIds = new Set<string>();
+  for (const candidate of value) {
+    const ownerId = identifier(candidate, 'cloud session project owner catalog is invalid');
+    if (seenOwnerIds.has(ownerId)) {
+      throw new Error('cloud session project owner catalog is invalid');
+    }
+    seenOwnerIds.add(ownerId);
+  }
 }
 
 function projectTenant(value: unknown): Readonly<Record<string, unknown>> {

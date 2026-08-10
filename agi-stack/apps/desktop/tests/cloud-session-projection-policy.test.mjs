@@ -58,6 +58,7 @@ test('vault-bound Cloud session projection returns identity and scope without th
         total: 1,
         page: 1,
         page_size: 100,
+        owner_ids: ['user-1'],
       });
     },
   });
@@ -100,6 +101,68 @@ test('vault-bound Cloud session projection returns null without touching the net
     },
   });
   assert.equal(projection, null);
+});
+
+test('vault-bound Cloud session projection validates project catalog metadata', async () => {
+  for (const projectCatalog of [
+    {
+      projects: [{ id: 'project-1', tenant_id: 'tenant-1', name: 'Project One' }],
+      total: 1,
+      page: 1,
+      page_size: 100,
+      owner_ids: [7],
+    },
+    {
+      projects: [{ id: 'project-1', tenant_id: 'tenant-1', name: 'Project One' }],
+      total: 1,
+      page: 1,
+      page_size: 100,
+      owner_ids: ['user-1', 'user-1'],
+    },
+    {
+      projects: [{ id: 'project-1', tenant_id: 'tenant-1', name: 'Project One' }],
+      total: 1,
+      page: 1,
+      page_size: 100,
+      owner_ids: ['user-1'],
+      unexpected: true,
+    },
+  ]) {
+    await assert.rejects(
+      () =>
+        projectVaultBoundCloudSession({
+          async loadTrustedSession() {
+            return trustedSession;
+          },
+          async fetch(url) {
+            const path = new URL(url).pathname;
+            if (path === '/api/v1/workspace-context') {
+              return jsonResponse({
+                context: {
+                  tenant_id: 'tenant-1',
+                  project_id: 'project-1',
+                  workspace_id: null,
+                  revision: 7,
+                },
+              });
+            }
+            if (path === '/api/v1/auth/me') {
+              return jsonResponse({ user_id: 'user-1', email: 'user@example.test', roles: [] });
+            }
+            if (path === '/api/v1/tenants') {
+              return jsonResponse({
+                tenants: [{ id: 'tenant-1', name: 'Tenant One' }],
+                total: 1,
+                page: 1,
+                page_size: 100,
+              });
+            }
+            return jsonResponse(projectCatalog);
+          },
+        }),
+      /cloud session (?:project owner|identity) catalog is invalid/u,
+    );
+  }
 });
 
 test('Electron exposes the sanitized projection as a main-owned cancellable command', () => {

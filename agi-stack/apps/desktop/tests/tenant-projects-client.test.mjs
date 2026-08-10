@@ -84,6 +84,7 @@ test('Cloud Projects client binds list, detail, create, update and delete to the
   await client.delete(scope, 'project-1');
 
   assert.equal(list.projects[0].tenantId, 'tenant-1');
+  assert.equal(list.serviceVersion, '0.1.0');
   assert.deepEqual(list.allowedActions, ['view', 'list', 'create', 'update', 'delete']);
   assert.deepEqual(list.projects[0].allowedActions, ['view', 'update', 'delete']);
   assert.equal(detail.id, 'project-1');

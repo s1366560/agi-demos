@@ -33,6 +33,7 @@ test('Cloud Agent Dashboard loads revisioned config, hooks and tenant traces', a
   const snapshot = await createTenantAgentDashboardHttpClient(runtimeConfig()).load(scope());
 
   assert.equal(snapshot.availability, 'available');
+  assert.equal(snapshot.serviceVersion, '0.1.0');
   assert.equal(snapshot.authorityRevision, 7);
   assert.equal(snapshot.canModify, true);
   assert.equal(snapshot.config?.llmModel, 'gpt-5.6');
